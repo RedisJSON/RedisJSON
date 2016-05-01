@@ -6,7 +6,7 @@
 
 #include "sds.h"
 
-RedisModuleString *RMUtils_CreateFormattedString(RedisModuleCtx *ctx, const char *fmt, ...) {
+RedisModuleString *RMUtil_CreateFormattedString(RedisModuleCtx *ctx, const char *fmt, ...) {
     sds s = sdsempty();
     
     va_list ap;
@@ -19,7 +19,7 @@ RedisModuleString *RMUtils_CreateFormattedString(RedisModuleCtx *ctx, const char
     return ret;
 }
 
-int RMUtils_StringEquals(RedisModuleString *s1, RedisModuleString *s2) {
+int RMUtil_StringEquals(RedisModuleString *s1, RedisModuleString *s2) {
     
     const char *c1, *c2;
     size_t l1, l2;
@@ -29,7 +29,7 @@ int RMUtils_StringEquals(RedisModuleString *s1, RedisModuleString *s2) {
     return strncasecmp(c1, c2, MIN(l1,l2)) == 0;
 }
 
-void RMUtils_StringToLower(RedisModuleString *s) {
+void RMUtil_StringToLower(RedisModuleString *s) {
     
     size_t l;
     char *c = (char *)RedisModule_StringPtrLen(s, &l);
@@ -41,7 +41,7 @@ void RMUtils_StringToLower(RedisModuleString *s) {
     
 }
 
-void RMUtils_StringToUpper(RedisModuleString *s) {
+void RMUtil_StringToUpper(RedisModuleString *s) {
     size_t l;
     char *c = (char *)RedisModule_StringPtrLen(s, &l);
     size_t i;
