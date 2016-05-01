@@ -1,6 +1,6 @@
-#include "../../redismodule.h"
-#include "../util.h"
-#include "../strings.h"
+#include "../redismodule.h"
+#include "../rmutil/util.h"
+#include "../rmutil/strings.h"
 
 /* EXAMPLE.PARSE [SUM <x> <y>] | [PROD <x> <y>] 
 *  Demonstrates the automatic arg parsing utility. 
@@ -13,6 +13,7 @@ int ParseCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc < 4) {
         return RedisModule_WrongArity(ctx);
     }
+
 
     // init auto memory for created strings
     RedisModule_AutoMemory(ctx);

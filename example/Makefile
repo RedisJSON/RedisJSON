@@ -1,6 +1,10 @@
 #set environment variable RM_INCLUDE_DIR to the location of redismodule.h
 ifndef RM_INCLUDE_DIR
-	RM_INCLUDE_DIR=../../
+	RM_INCLUDE_DIR=../
+endif
+
+ifndef RMUTIL_LIBDIR
+	RMUTIL_LIBDIR=../rmutil
 endif
 
 # find the OS
@@ -20,13 +24,13 @@ CC=gcc
 
 all: module.so 
 
-.c.xo:
-	$(CC) -I. $(CFLAGS) $(SHOBJ_CFLAGS) -fPIC -c $< -o $@
+#c.xo:
+#$(CC) -I. $(CFLAGS) $(SHOBJ_CFLAGS) -fPIC -c $< -o $@
 
 #mdma.xo: ./index.h
 
 module.so: module.o
-	$(LD) -o $@ module.o $(SHOBJ_LDFLAGS) $(LIBS) -L../ -lrmutil -lc 
+	$(LD) -o $@ module.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc 
 
 clean:
 	rm -rf *.xo *.so *.o
