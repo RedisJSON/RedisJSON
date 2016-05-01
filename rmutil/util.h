@@ -2,6 +2,7 @@
 #define __UTIL_H__
 
 #include <redismodule.h>
+#include <stdarg.h>
 
 // make sure the response is not NULL or an error, and if it is sends the error to the client and exit the current function
 #define  REDIS_ASSERT_NOERROR(r) \
@@ -18,8 +19,31 @@
 /* Return the offset of an arg if it exists in the arg list, or 0 if it's not there */
 int RMUtil_ArgExists(const char *arg, RedisModuleString **argv, int argc, int offset);
 
-// NOT IMPLEMENTED YET
-int RMUtil_ParseArgs(RedisModuleString **argv, int argc, const char *fmt, ...);
+/*
+Automatically conver the arg list to corresponding variable pointers according to a given format.
+You pass it the command arg list and count, the starting offset, a parsing format, and pointers to the variables.
+The format is a string consisting of the following identifiers:
+
+    c -- pointer to a Null terminated C string pointer.
+    s -- pointer to a RedisModuleString
+    l -- pointer to Long long integer.
+    d -- pointer to a Double
+    * -- do not parse this argument at all
+    
+Example: If I want to parse args[1], args[2] as a long long and double, I do:
+    double d;
+    long long l;
+    RMUtil_ParseArgs(argv, argc, 1, "ld", &l, &d);
+*/
+int RMUtil_ParseArgs(RedisModuleString **argv, int argc, int offset, const char *fmt, ...);
+
+/**
+Same as RMUtil_ParseArgs, but only parses the arguments after `token`, if it was found. 
+This is useful for optional stuff like [LIMIT [offset] [limit]]
+*/
+int RMUtil_ParseArgsAfter(const char *token, RedisModuleString **argv, int argc, const char *fmt, ...);
+
+int rmutil_vparseArgs(RedisModuleString **argv, int argc, int offset, const char *fmt, va_list ap);
 
 // A single key/value entry in a redis info map
 typedef struct {

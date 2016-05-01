@@ -50,4 +50,5 @@ void RMUtil_StringToUpper(RedisModuleString *s) {
         ++c;
     }
     
+    
 }

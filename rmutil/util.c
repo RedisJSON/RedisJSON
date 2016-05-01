@@ -3,8 +3,10 @@
 #include <math.h>
 #include <ctype.h>
 #include <sys/time.h>
+#include <stdarg.h>
 #include <limits.h>
 #include <string.h>
+#include <redismodule.h>
 #include "util.h"
 
 /**
@@ -34,6 +36,7 @@ RMUtilInfo *RMUtil_GetRedisInfo(RedisModuleCtx *ctx) {
     int cap = 100; // rough estimate of info lines
     RMUtilInfo *info = malloc(sizeof(RMUtilInfo));
     info->entries = calloc(cap, sizeof(RMUtilInfoEntry));
+    
     
     int i = 0;
     char *text = (char *)RedisModule_StringPtrLen(RedisModule_CreateStringFromCallReply(r), NULL);
@@ -114,4 +117,80 @@ int RMUtilInfo_GetDouble(RMUtilInfo *info, const char *key, double *d) {
      
     
     return 1;
+}
+
+
+/*
+c -- pointer to a Null terminated C string pointer.
+s -- pointer to a RedisModuleString
+l -- pointer to Long long integer.
+d -- pointer to a Double
+* -- do not parse this argument at all
+*/
+int RMUtil_ParseArgs(RedisModuleString **argv, int argc, int offset, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    int rc = rmutil_vparseArgs(argv, argc, offset, fmt, ap);
+    va_end(ap);
+    return rc;
+}
+    
+
+// Internal function that parses arguments based on the format described above
+int rmutil_vparseArgs(RedisModuleString **argv, int argc, int offset, const char *fmt, va_list ap) {
+    
+    int i = offset;
+    char *c = (char *)fmt;
+    while (*c && i < argc) {
+       
+       // read c string
+       if (*c == 'c') {
+            char **p = va_arg(ap, char**);
+            *p = (char *)RedisModule_StringPtrLen(argv[i], NULL);
+       } else if (*c == 's') { //read redis string
+           
+            RedisModuleString **s = va_arg(ap, void*);
+            *s = argv[i];
+            
+       } else if (*c == 'l') { //read long
+            long long *l = va_arg(ap, long long *);
+            
+            if (RedisModule_StringToLongLong(argv[i], l) != REDISMODULE_OK) {
+                return REDISMODULE_ERR; 
+            }
+       } else if (*c == 'd') { //read double
+            double *d = va_arg(ap, double *);
+            if (RedisModule_StringToDouble(argv[i], d) != REDISMODULE_OK) {
+                return REDISMODULE_ERR;                 
+            }
+       } else if (*c == '*') { //skip current arg
+           //do nothing
+       } else {
+            return REDISMODULE_ERR; //WAT?
+       }
+       c++;
+       i++;
+    }
+    // if the format is longer than argc, retun an error
+    if (*c != 0) {
+        return REDISMODULE_ERR;
+    }
+    return REDISMODULE_OK;
+
+    
+}
+
+int RMUtil_ParseArgsAfter(const char *token, RedisModuleString **argv, int argc, const char *fmt, ...) {
+    
+    int pos = RMUtil_ArgExists(token, argv, argc, 0);
+    if (pos == 0) {
+        return REDISMODULE_ERR;
+    }
+    
+    va_list ap;
+    va_start(ap, fmt);
+    int rc = rmutil_vparseArgs(argv, argc, pos+1, fmt, ap);
+    va_end(ap);
+    return rc;
+        
 }
