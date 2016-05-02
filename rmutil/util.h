@@ -94,5 +94,13 @@ int RMUtilInfo_GetString(RMUtilInfo *info, const char *key, const char **str);
 */
 int RMUtilInfo_GetDouble(RMUtilInfo *info, const char *key, double *d);
 
+/*
+* Returns a call reply array's element given by a space-delimited path. E.g.,
+* the path "1 2 3" will return the 3rd element from the 2 element of the 1st
+* element from an array (or NULL if not found)
+*/
+RedisModuleCallReply *RedisModule_CallReplyArrayElementByPath(
+    RedisModuleCallReply *rep, const char *path);
+
 
 #endif

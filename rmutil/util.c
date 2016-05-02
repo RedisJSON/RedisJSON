@@ -194,3 +194,30 @@ int RMUtil_ParseArgsAfter(const char *token, RedisModuleString **argv, int argc,
     return rc;
         
 }
+
+RedisModuleCallReply *RedisModule_CallReplyArrayElementByPath(
+    RedisModuleCallReply *rep, const char *path) {
+  if (rep == NULL) return NULL;
+
+  RedisModuleCallReply *ele = rep;
+  const char *s = path;
+  char *e;
+  long idx;
+  do {
+    errno = 0;
+    idx = strtol(s, &e, 10);
+
+    if ((errno == ERANGE && (idx == LONG_MAX || idx == LONG_MIN)) ||
+        (errno != 0 && idx == 0) ||
+        (REDISMODULE_REPLY_ARRAY != RedisModule_CallReplyType(ele)) ||
+        (s == e)) {
+      ele = NULL;
+      break;
+    }
+    s = e;
+    ele = RedisModule_CallReplyArrayElement(ele, idx - 1);
+
+  } while ((ele != NULL) && (*e != '\0'));
+
+  return ele;
+}
