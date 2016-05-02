@@ -14,12 +14,12 @@ Notice: The original file is in the Redis repo, this is an up to date copy of it
 
 A small library of utility functions and macros for module developers, Including:
 
-    * Easier argument parsing for your commands.
-    * Testing utilities that allow you to wrap your module's tests as a redis command.
-    * `RedisModuleString` utility functions (formatting, comparison, etc)
-    * The entire `sds` string library, lifted from Redis itself.
-    * A generic scalable Vector library. Not redis specific but we found it useful.
-    * A few other helpful macros and functions.
+* Easier argument parsing for your commands.
+* Testing utilities that allow you to wrap your module's tests as a redis command.
+* `RedisModuleString` utility functions (formatting, comparison, etc)
+* The entire `sds` string library, lifted from Redis itself.
+* A generic scalable Vector library. Not redis specific but we found it useful.
+* A few other helpful macros and functions.
 
 It can be found under the `rmutil` folder, and compiles into a static library you link your module against.    
 
