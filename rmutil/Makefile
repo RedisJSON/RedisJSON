@@ -6,7 +6,7 @@ endif
 CFLAGS = -g -fPIC -lc -lm -O3 -std=gnu99 -I$(RM_INCLUDE_DIR)
 CC=gcc
 
-OBJS=util.o strings.o sds.o
+OBJS=util.o strings.o sds.o vector.o
 
 all: librmutil.a
 
@@ -16,3 +16,8 @@ clean:
 librmutil.a: $(OBJS)
 	ar rcs $@ $^
 
+test_vector: test_vector.o vector.o
+	$(CC) -o test_vector vector.o test_vector.o -lc -O0
+	@(sh -c ./test_vector)
+
+	
