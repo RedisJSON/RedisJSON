@@ -1,6 +1,6 @@
 # RedisModulesSDK
 
-This little repo is here to help you write redis modules a bit more easily.
+This little repo is here to help you write Redis modules a bit more easily.
 
 ## What it includes:
 
@@ -8,11 +8,11 @@ This little repo is here to help you write redis modules a bit more easily.
 
 The only file you really need to start writing Redis modules. Either put this path into your module's include path, or copy it. 
 
-Notice: The original file is in the Redis repo, this is an up to date copy of it.
+Notice: The original file is from the Redis repo, this is an up-to-date copy of it.
 
 ### 2. LibRMUtil 
 
-A small library of utility functions and macros for module developers, Including:
+A small library of utility functions and macros for module developers, including:
 
 * Easier argument parsing for your commands.
 * Testing utilities that allow you to wrap your module's tests as a redis command.
