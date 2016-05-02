@@ -45,7 +45,7 @@ int Vector_Resize(Vector *v, int newcap) {
     v->cap = newcap;
     
     v->data = realloc(v->data, v->cap*v->elemSize);
-    int offset = v->top*v->elemSize;
+    int offset = oldcap*v->elemSize;
     // put all zeros at the newly realloc'd part of the vector
     memset(v->data + offset, 0, v->cap*v->elemSize - offset);
     return v->cap;

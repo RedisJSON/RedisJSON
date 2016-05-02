@@ -3,7 +3,7 @@ ifndef RM_INCLUDE_DIR
 	RM_INCLUDE_DIR=../
 endif
 
-CFLAGS = -g -fPIC -lc -lm -O3 -std=gnu99 -I$(RM_INCLUDE_DIR)
+CFLAGS = -g -fPIC -lc -lm -O3 -std=gnu99 -I$(RM_INCLUDE_DIR) -Wall
 CC=gcc
 
 OBJS=util.o strings.o sds.o vector.o
@@ -17,7 +17,7 @@ librmutil.a: $(OBJS)
 	ar rcs $@ $^
 
 test_vector: test_vector.o vector.o
-	$(CC) -o test_vector vector.o test_vector.o -lc -O0
+	$(CC) -Wall -o test_vector vector.o test_vector.o -lc -O0
 	@(sh -c ./test_vector)
 
 	
