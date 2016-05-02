@@ -13,7 +13,7 @@ typedef struct {
     int elemSize;
     int cap;
     int top;
-    int isPtr;
+
 } Vector;
 
 // Create a new vector with element size. This should generally be used internall by the NewVector macro
