@@ -5,7 +5,7 @@
 #include <stdarg.h>
 
 // make sure the response is not NULL or an error, and if it is sends the error to the client and exit the current function
-#define  REDIS_ASSERT_NOERROR(r) \
+#define  RMUTIL_ASSERT_NOERROR(r) \
     if (r == NULL) { \
         return RedisModule_ReplyWithError(ctx,"ERR reply is NULL"); \
     } else if (RedisModule_CallReplyType(r) == REDISMODULE_REPLY_ERROR) { \
@@ -13,6 +13,13 @@
         return REDISMODULE_ERR; \
     }
 
+
+#define __rmutil_register_cmd(ctx, cmd, f, mode) if (RedisModule_CreateCommand(ctx, cmd, f, mode, \
+                                                  1, 1, 1) == REDISMODULE_ERR) return REDISMODULE_ERR;
+                                                  
+#define RMUtil_RegisterReadCmd(ctx, cmd, f) __rmutil_register_cmd(ctx, cmd, f, "readonly")                                              }
+
+#define RMUtil_RegisterWriteCmd(ctx, cmd, f) __rmutil_register_cmd(ctx, cmd, f, "write")                                          
 
 /* RedisModule utilities. */
 
