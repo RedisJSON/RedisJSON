@@ -31,6 +31,8 @@ int __vector_PutPtr(Vector *v, int pos, void *elem) {
     if (pos > v->top) {
         v->top = pos;
     }
+    
+    //printf("v: %s",v->data);
     return 1;
 }
 
@@ -47,7 +49,7 @@ int Vector_Resize(Vector *v, int newcap) {
 
 
 Vector *__newVectorSize(size_t elemSize, size_t cap) {
-    printf("allocating %zd elems of %zd size\n", cap, elemSize);
+    
     Vector *vec = malloc(sizeof(Vector));
     vec->data = calloc(cap, elemSize);
     vec->top = 0;
