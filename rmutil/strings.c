@@ -21,6 +21,7 @@ RedisModuleString *RMUtil_CreateFormattedString(RedisModuleCtx *ctx, const char 
 
 int RMUtil_StringEquals(RedisModuleString *s1, RedisModuleString *s2) {
     
+    
     const char *c1, *c2;
     size_t l1, l2;
     c1 = RedisModule_StringPtrLen(s1, &l1);
