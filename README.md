@@ -4,13 +4,13 @@ This little repo is here to help you write redis modules a bit more easily.
 
 ## What it includes:
 
-### redismodule.h
+### 1. redismodule.h
 
 The only file you really need to start writing Redis modules. Either put this path into your module's include path, or copy it. 
 
 Notice: The original file is in the Redis repo, this is an up to date copy of it.
 
-### LibRMUtil 
+### 2. LibRMUtil 
 
 A small library of utility functions and macros for module developers, Including:
 
@@ -23,7 +23,7 @@ A small library of utility functions and macros for module developers, Including
 
 It can be found under the `rmutil` folder, and compiles into a static library you link your module against.    
 
-### An example Module
+### 3. An example Module
 
 A minimal module implementing a few commands and demonstarting both the Redis Module API, and use of rmutils.
 
@@ -35,7 +35,7 @@ You can treat it as a template for your module, and extned its code and makefile
 * `EXAMPLE.HGETSET` - an atomic HGET/HSET command, demonstrating the higher level Redis module API.
 * `EXAMPLE.TEST` - a unit test of the above commands, demonstrating use of the testing utilities of rmutils.  
   
-### Documentation Files:
+### 4. Documentation Files:
 
 1. [API.md](API.md) - The official manual for writing Redis modules, copied from the Redis repo. 
 Read this before starting, as it's more than an API reference.
@@ -43,7 +43,7 @@ Read this before starting, as it's more than an API reference.
 2. [FUNCTIONS.md](FUNCTIONS.md) - Generated API reference documentation for both the Redis module API, and LibRMUtil.
 
 
-## Quick Start
+# Quick Start Guide
 
 Here's what you need to do to build your first module:
 
