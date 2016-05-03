@@ -27,7 +27,7 @@ int RMUtil_StringEquals(RedisModuleString *s1, RedisModuleString *s2) {
     c1 = RedisModule_StringPtrLen(s1, &l1);
     c2 = RedisModule_StringPtrLen(s2, &l2);
     
-    return strncasecmp(c1, c2, MIN(l1,l2)) == 0;
+    return strcmp(c1, c2) == 0;
 }
 
 void RMUtil_StringToLower(RedisModuleString *s) {
