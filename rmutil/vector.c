@@ -45,9 +45,13 @@ int Vector_Resize(Vector *v, int newcap) {
     v->cap = newcap;
     
     v->data = realloc(v->data, v->cap*v->elemSize);
-    int offset = oldcap*v->elemSize;
+    
+    // If we grew:
     // put all zeros at the newly realloc'd part of the vector
-    memset(v->data + offset, 0, v->cap*v->elemSize - offset);
+    if (newcap > oldcap) {
+       int offset = oldcap*v->elemSize;
+       memset(v->data + offset, 0, v->cap*v->elemSize - offset);
+    }
     return v->cap;
 }
 
