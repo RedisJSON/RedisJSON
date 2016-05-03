@@ -25,6 +25,7 @@ int ParseCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_ReplyWithLongLong(ctx, x + y);
     return REDISMODULE_OK;
   }
+  
   // If we got PROD - return the product of 2 consecutive arguments
   if (RMUtil_ParseArgsAfter("PROD", argv, argc, "ll", &x, &y) ==
       REDISMODULE_OK) {

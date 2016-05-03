@@ -57,6 +57,8 @@
 
 * [RedisModule_ReplicateVerbatim](#redismodule_replicateverbatim)
 
+* [RedisModule_GetClientId](#redismodule_getclientid)
+
 * [RedisModule_GetSelectedDb](#redismodule_getselecteddb)
 
 * [RedisModule_SelectDb](#redismodule_selectdb)
@@ -560,6 +562,23 @@ int RedisModule_ReplicateVerbatim(RedisModuleCtx *ctx) {
  new state starting from the old one.
 
  The function always returns REDISMODULE_OK. 
+
+
+### RedisModule_GetClientId
+```
+unsigned long long RedisModule_GetClientId(RedisModuleCtx *ctx) {
+```
+ Return the ID of the current client calling the currently active module
+ command. The returned ID has a few guarantees:
+
+ 1. The ID is different for each different client, so if the same client
+    executes a module command multiple times, it can be recognized as
+    having the same ID, otherwise the ID will be different.
+ 2. The ID increases monotonically. Clients connecting to the server later
+    are guaranteed to get IDs greater than any past ID previously seen.
+
+ Valid IDs are from 1 to 2^64-1. If 0 is returned it means there is no way
+ to fetch the ID in the context the function was currently called. 
 
 
 ### RedisModule_GetSelectedDb
@@ -1241,5 +1260,4 @@ void Vector_Free(Vector *v);
 ```
  free the vector and the underlying data. Does not release its elements if
  they are pointers
-
 
