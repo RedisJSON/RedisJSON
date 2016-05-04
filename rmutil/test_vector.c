@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
     assert(Vector_Size(v) == N);
     assert(Vector_Cap(v) >= N);
     
-    for (int i = 0; i < Vector_Size(v); i++) {
+    for (size_t i = 0; i < Vector_Size(v); i++) {
         char *x;
         int rc = Vector_Get(v, i, &x);
         assert (rc == 1);

@@ -13,7 +13,7 @@ int __vector_PushPtr(Vector *v, void *elem) {
 }
 
 
-int Vector_Get(Vector *v, int pos, void *ptr) {
+int Vector_Get(Vector *v, size_t pos, void *ptr) {
     // return 0 if pos is out of bounds
     if (pos >= v->top) {
         return 0;
@@ -24,7 +24,7 @@ int Vector_Get(Vector *v, int pos, void *ptr) {
 }
 
 
-int __vector_PutPtr(Vector *v, int pos, void *elem) {
+int __vector_PutPtr(Vector *v, size_t pos, void *elem) {
     // resize if pos is out of bounds
     if (pos >= v->cap) {
         Vector_Resize(v, pos+1);
@@ -39,7 +39,7 @@ int __vector_PutPtr(Vector *v, int pos, void *elem) {
 }
 
 
-int Vector_Resize(Vector *v, int newcap) {
+int Vector_Resize(Vector *v, size_t newcap) {
     
     int oldcap = v->cap;
     v->cap = newcap;

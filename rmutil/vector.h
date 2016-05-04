@@ -11,9 +11,9 @@
 */
 typedef struct {
   char *data;
-  int elemSize;
-  int cap;
-  int top;
+  size_t elemSize;
+  size_t cap;
+  size_t top;
 
 } Vector;
 
@@ -22,7 +22,7 @@ typedef struct {
 Vector *__newVectorSize(size_t elemSize, size_t cap);
 
 // Put a pointer in the vector. To be used internall by the library
-int __vector_PutPtr(Vector *v, int pos, void *elem);
+int __vector_PutPtr(Vector *v, size_t pos, void *elem);
 
 /*
 * Create a new vector for a given type and a given capacity.
@@ -35,7 +35,7 @@ int __vector_PutPtr(Vector *v, int pos, void *elem);
 * the vector capacity, we return 0
 * otherwise 1
 */
-int Vector_Get(Vector *v, int pos, void *ptr);
+int Vector_Get(Vector *v, size_t pos, void *ptr);
 
 //#define Vector_Getx(v, pos, ptr) pos < v->cap ? 1 : 0; *ptr =
 //*(typeof(ptr))(v->data + v->elemSize*pos)
@@ -53,7 +53,7 @@ int Vector_Get(Vector *v, int pos, void *ptr);
 int __vector_PushPtr(Vector *v, void *elem);
 
 /* resize capacity of v */
-int Vector_Resize(Vector *v, int newcap);
+int Vector_Resize(Vector *v, size_t newcap);
 
 /* return the used size of the vector, regardless of capacity */
 inline int Vector_Size(Vector *v) { return v->top; }
@@ -65,6 +65,6 @@ inline int Vector_Cap(Vector *v) { return v->cap; }
  * they are pointers*/
 void Vector_Free(Vector *v);
 
-int __vecotr_PutPtr(Vector *v, int pos, void *elem);
+int __vecotr_PutPtr(Vector *v, size_t pos, void *elem);
 
 #endif
