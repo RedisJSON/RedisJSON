@@ -18,7 +18,7 @@ int RMUtil_ArgExists(const char *arg, RedisModuleString **argv, int argc, int of
     for (; offset < argc; offset++) {
         size_t l;
         const char *carg = RedisModule_StringPtrLen(argv[offset], &l);
-        if (carg != NULL && strncasecmp(carg, arg, l) == 0) {
+        if (carg != NULL && strcasecmp(carg, arg) == 0) {
             return offset;
         }
     }

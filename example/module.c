@@ -32,7 +32,7 @@ int ParseCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_ReplyWithLongLong(ctx, x * y);
     return REDISMODULE_ERR;
   }
-
+ 
   // something is fishy...
   RedisModule_ReplyWithError(ctx, "Invalid arguments");
 

@@ -20,14 +20,8 @@ else
 endif
 CFLAGS = -I$(RM_INCLUDE_DIR) -Wall -g -fPIC -lc -lm -Og -std=gnu99  
 CC=gcc
-.SUFFIXES: .c .so .xo .o
 
 all: module.so 
-
-#c.xo:
-#$(CC) -I. $(CFLAGS) $(SHOBJ_CFLAGS) -fPIC -c $< -o $@
-
-#mdma.xo: ./index.h
 
 module.so: module.o
 	$(LD) -o $@ module.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc 
