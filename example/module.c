@@ -25,14 +25,14 @@ int ParseCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_ReplyWithLongLong(ctx, x + y);
     return REDISMODULE_OK;
   }
-  
+
   // If we got PROD - return the product of 2 consecutive arguments
   if (RMUtil_ParseArgsAfter("PROD", argv, argc, "ll", &x, &y) ==
       REDISMODULE_OK) {
     RedisModule_ReplyWithLongLong(ctx, x * y);
     return REDISMODULE_ERR;
   }
- 
+
   // something is fishy...
   RedisModule_ReplyWithError(ctx, "Invalid arguments");
 
@@ -98,16 +98,17 @@ int testParse(RedisModuleCtx *ctx) {
 }
 
 // test the HGETSET command
-int testHgetSet(RedisModuleCtx *ctx)  {
-    RedisModuleCallReply *r = RedisModule_Call(ctx, "example.hgetset", "ccc", "foo", "bar", "baz");
-    RMUtil_Assert(RedisModule_CallReplyType(r) != REDISMODULE_REPLY_ERROR);
-    
-    r = RedisModule_Call(ctx, "example.hgetset", "ccc", "foo", "bar", "bag");
-    RMUtil_Assert(RedisModule_CallReplyType(r) == REDISMODULE_REPLY_STRING);
-    RMUtil_AssertReplyEquals(r, "baz");
-    r = RedisModule_Call(ctx, "example.hgetset", "ccc", "foo", "bar", "bang");
-    RMUtil_AssertReplyEquals(r, "bag");
-    return 0;
+int testHgetSet(RedisModuleCtx *ctx) {
+  RedisModuleCallReply *r =
+      RedisModule_Call(ctx, "example.hgetset", "ccc", "foo", "bar", "baz");
+  RMUtil_Assert(RedisModule_CallReplyType(r) != REDISMODULE_REPLY_ERROR);
+
+  r = RedisModule_Call(ctx, "example.hgetset", "ccc", "foo", "bar", "bag");
+  RMUtil_Assert(RedisModule_CallReplyType(r) == REDISMODULE_REPLY_STRING);
+  RMUtil_AssertReplyEquals(r, "baz");
+  r = RedisModule_Call(ctx, "example.hgetset", "ccc", "foo", "bar", "bang");
+  RMUtil_AssertReplyEquals(r, "bag");
+  return 0;
 }
 
 // Unit test entry point for the module
@@ -128,7 +129,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
       REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
-  
+
   // register example.parse - the default registration syntax
   if (RedisModule_CreateCommand(ctx, "example.parse", ParseCommand, "readonly",
                                 1, 1, 1) == REDISMODULE_ERR) {
@@ -137,7 +138,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
 
   // register example.hgetset - using the shortened utility registration macro
   RMUtil_RegisterWriteCmd(ctx, "example.hgetset", HGetSetCommand);
-  
+
   // register the unit test
   RMUtil_RegisterWriteCmd(ctx, "example.test", TestModule);
 
