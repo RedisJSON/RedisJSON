@@ -26,8 +26,20 @@ int RMUtil_StringEquals(RedisModuleString *s1, RedisModuleString *s2) {
     size_t l1, l2;
     c1 = RedisModule_StringPtrLen(s1, &l1);
     c2 = RedisModule_StringPtrLen(s2, &l2);
+    if (l1 != l2) return 0;
+
+    return strncmp(c1, c2, l1) == 0;
+}
+
+int RMUtil_StringEqualsC(RedisModuleString *s1, const char *s2) {
     
-    return strncmp(c1, c2, MAX(l1, l2)) == 0;
+    
+    const char *c1;
+    size_t l1, l2 = strlen(s2);
+    c1 = RedisModule_StringPtrLen(s1, &l1);
+    if (l1 != l2) return 0;
+    
+    return strncmp(c1, s2, l1) == 0;
 }
 
 void RMUtil_StringToLower(RedisModuleString *s) {
