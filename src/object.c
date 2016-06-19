@@ -1,5 +1,6 @@
 #include <sys/param.h>
 #include <string.h>
+#include <stdio.h>
 #include "object.h"
 
 Node *__newNode(NodeType t) {
@@ -29,7 +30,7 @@ Node *NewNumberNodeInt(int64_t val) {
 
 Node *NewStringNode(const char *s, u_int32_t len) {
   Node *ret = __newNode(N_STRING);
-  ret->value.strval.data = s;
+  ret->value.strval.data = strndup(s, len);
   ret->value.strval.len = len;
   return ret;
 }
@@ -75,6 +76,10 @@ void __node_FreeString(Node *n) {
 }
 
 void Node_Free(Node *n) {
+  
+  // ignore NULL nodes
+  if (!n) return;
+
   switch (n->type) {
   case N_ARRAY:
     __node_FreeArr(n);
@@ -97,7 +102,7 @@ int Node_ArrayAppend(Node *arr, Node *n) {
 
   t_array *a = &arr->value.arrval;
   if (a->len >= a->cap) {
-    a->cap = MIN(a->cap * 2, 1024 * 1024);
+    a->cap = a->cap ? MIN(a->cap * 2, 1024 * 1024) : 1;
     a->nodes = realloc(a->nodes, a->cap * sizeof(Node *));
   }
   a->nodes[a->len++] = n;
@@ -161,13 +166,15 @@ int Node_ObjSet(Node *obj, const char *key, Node *n) {
 
   // append another entry
   if (o->len >= o->cap) {
-    o->cap = MIN(o->cap * 2, 1024 * 1024);
+    o->cap = o->cap ? MIN(o->cap * 2, 1024 * 1024) : 1;
     o->entries = realloc(o->entries, o->cap * sizeof(t_keyval));
   }
 
   kv = __newNode(N_KEYVAL);
   kv->value.kv.key = strdup(key);
   kv->value.kv.val = n;
+
+  o->entries[o->len++] = kv;
 
   return OBJ_OK;
 }
@@ -179,17 +186,17 @@ int Node_ObjDel(Node *obj, const char *key) {
   t_object *o = &obj->value.object;
 
   int idx = -1;
-  t_keyval *kv = __obj_find(o, key, &idx);
+  Node *kv = __obj_find(o, key, &idx);
 
   // tried to delete a non existing node
   if (!kv)
     return OBJ_ERR;
 
   // let's delete the node's memory
-  if (kv->val) {
-    Node_Free(kv->val);
+  if (kv->value.kv.val) {
+    Node_Free(kv->value.kv.val);
   }
-  free((char *)kv->key);
+  free((char *)kv->value.kv.key);
 
   // replace the deleted entry and the top entry to avoid holes
   if (idx < o->len - 1) {
@@ -207,13 +214,13 @@ int Node_ObjGet(Node *obj, const char *key, Node **val) {
   t_object *o = &obj->value.object;
 
   int idx = -1;
-  t_keyval *kv = __obj_find(o, key, &idx);
+  Node *kv = __obj_find(o, key, &idx);
 
   // not found!
   if (!kv)
     return OBJ_ERR;
 
-  *val = kv->val;
+  *val = kv->value.kv.val;
   return OBJ_OK;
 }
 
@@ -235,11 +242,11 @@ void __arrTraverse(Node *n, NodeVisitor f, void *ctx) {
 }
 
 void Node_Traverse(Node *n, NodeVisitor f, void *ctx) {
- 
- // for null node - just call the callback
+
+  // for null node - just call the callback
   if (!n) {
-      f(n, ctx);
-      return;
+    f(n, ctx);
+    return;
   }
   switch (n->type) {
   case N_ARRAY:
@@ -252,5 +259,58 @@ void Node_Traverse(Node *n, NodeVisitor f, void *ctx) {
   default:
     f(n, ctx);
   }
+}
 
+#define __node_indent(depth)                                                   \
+  for (int i = 0; i < depth; i++) {                                            \
+    printf("  ");                                                              \
+  }
+
+
+/** Pretty print a JSON-like (but not compatible!) version of a node */
+void Node_Print(Node *n, int depth) {
+
+  if (n == NULL) {
+    printf("null");
+    return;
+  }
+  switch (n->type) {
+  case N_ARRAY: {
+    printf("[\n");
+    for (int i = 0; i < n->value.arrval.len; i++) {
+      __node_indent(depth + 1);
+      Node_Print(n->value.arrval.nodes[i], depth + 1);
+      if (i < n->value.arrval.len - 1)
+        printf(",");
+      printf("\n");
+    }
+    __node_indent(depth);
+    printf("]");
+  } break;
+
+  case N_OBJECT: {
+    printf("{\n");
+    for (int i = 0; i < n->value.object.len; i++) {
+      __node_indent(depth + 1);
+      Node_Print(n->value.object.entries[i], depth + 1);
+      if (i < n->value.object.len - 1)
+        printf(",");
+      printf("\n");
+    }
+    __node_indent(depth);
+    printf("}");
+  } break;
+  case N_BOOLEAN:
+    printf("%s", n->value.boolval ? "true" : "false");
+    break;
+  case N_NUMBER:
+    printf("%f", n->value.numval);
+    break;
+  case N_KEYVAL: {
+    printf("\"%s\": ", n->value.kv.key);
+    Node_Print(n->value.kv.val, depth);
+  } break;
+  case N_STRING:
+    printf("\"%.*s\"", n->value.strval.len, n->value.strval.data);
+  }
 }

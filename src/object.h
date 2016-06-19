@@ -30,7 +30,7 @@ typedef struct {
 
 typedef struct {
     const char *key;
-    t_node *val;
+    struct t_node *val;
 } t_keyval;
 
 typedef struct {
@@ -43,6 +43,7 @@ typedef struct t_node {
     union {
         int boolval;
         double numval;
+        int64_t intval;
         t_string strval;
         t_array arrval;
         t_object object;
@@ -64,6 +65,7 @@ Node *NewObjectNode(u_int32_t cap);
 
 void Node_Free(Node *n);
 
+void Node_Print(Node *n, int depth);
 int Node_ArrayAppend(Node *arr, Node *n);
 int Node_ArraySet(Node *arr, int index, Node *n);
 int Node_ArrayItem(Node *arr, int index, Node **n);
