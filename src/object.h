@@ -3,37 +3,40 @@
 
 #include <stdlib.h>
 
+#define OBJ_OK 0
+#define OBJ_ERR 1
+
 typedef enum {
     N_STRING,
     N_NUMBER,
     N_BOOLEAN,
     N_OBJECT,
     N_ARRAY,
-    N_NULL
+    N_KEYVAL,
 } NodeType;
 
 struct t_node;
 
 typedef struct {
-    char *data;
-    size_t len;
+    const char *data;
+    u_int32_t len;
 } t_string;
 
 typedef struct {
-    t_node **nodes;
-    size_t len;
-    size_t cap;
+    struct t_node **nodes;
+    u_int32_t len;
+    u_int32_t cap;
 } t_array;
 
 typedef struct {
-    char *key;
+    const char *key;
     t_node *val;
-} t_objectEntry;
+} t_keyval;
 
 typedef struct {
-    t_objectEntry **entries;
-    size_t len;
-    size_t cap;
+    struct t_node **entries;
+    u_int32_t len;
+    u_int32_t cap;
 } t_object;
 
 typedef struct t_node {
@@ -43,6 +46,7 @@ typedef struct t_node {
         t_string strval;
         t_array arrval;
         t_object object;
+        t_keyval kv;
     } value;
     NodeType type;
 } Node;
@@ -54,19 +58,24 @@ typedef struct {
 Node *NewBoolNode(int val);
 Node *NewNumberNode(double val);
 Node *NewNumberNodeInt(int64_t val);
-Node *NewStringNode(const char *s, size_t len);
-Node *NewArrayNode(size_t len, size_t cap);
-Node *NewObjectNode(size_t cap);
+Node *NewStringNode(const char *s, u_int32_t len);
+Node *NewArrayNode(u_int32_t len, u_int32_t cap);
+Node *NewObjectNode(u_int32_t cap);
 
 void Node_Free(Node *n);
 
-int Node_ArrayAppend(Node *n);
+int Node_ArrayAppend(Node *arr, Node *n);
 int Node_ArraySet(Node *arr, int index, Node *n);
+int Node_ArrayItem(Node *arr, int index, Node **n);
+
 int Node_ObjSet(Node *obj, const char *key, Node *n);
 int Node_ObjDel(Node *objm, const char *key);
+int Node_ObjGet(Node *obj, const char *key, Node **val);
 
 
 typedef void (*NodeVisitor)(Node *, void *);
+void __objTraverse(Node *n, NodeVisitor f, void *ctx);
+void __arrTraverse(Node *n, NodeVisitor f, void *ctx);
 
 void Node_Traverse(Node *n, NodeVisitor f, void *ctx);
 
