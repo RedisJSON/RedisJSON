@@ -9,6 +9,7 @@
 typedef enum {
     N_STRING,
     N_NUMBER,
+    N_INTEGER,
     N_BOOLEAN,
     N_OBJECT,
     N_ARRAY,
@@ -23,7 +24,7 @@ typedef struct {
 } t_string;
 
 typedef struct {
-    struct t_node **nodes;
+    struct t_node **entries;
     u_int32_t len;
     u_int32_t cap;
 } t_array;
@@ -46,8 +47,8 @@ typedef struct t_node {
         int64_t intval;
         t_string strval;
         t_array arrval;
-        t_object object;
-        t_keyval kv;
+        t_object objval;
+        t_keyval kvval;
     } value;
     NodeType type;
 } Node;
@@ -57,8 +58,8 @@ typedef struct {
 } Object;
 
 Node *NewBoolNode(int val);
-Node *NewNumberNode(double val);
-Node *NewNumberNodeInt(int64_t val);
+Node *NewDoubleNode(double val);
+Node *NewIntNode(int64_t val);
 Node *NewStringNode(const char *s, u_int32_t len);
 Node *NewArrayNode(u_int32_t len, u_int32_t cap);
 Node *NewObjectNode(u_int32_t cap);

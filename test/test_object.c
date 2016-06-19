@@ -23,9 +23,8 @@ MU_TEST(testObjCreate) {
     
     mu_check (arr != NULL);
 
-    
-    mu_assert_int_eq(Node_ArrayAppend(arr, NewNumberNode(3.141)), OBJ_OK);
-    mu_assert_int_eq(Node_ArrayAppend(arr, NewNumberNodeInt(1337)), OBJ_OK);
+    mu_assert_int_eq(Node_ArrayAppend(arr, NewDoubleNode(3.141)), OBJ_OK);
+    mu_assert_int_eq(Node_ArrayAppend(arr, NewIntNode(1337)), OBJ_OK);
     mu_assert_int_eq(Node_ArrayAppend(arr, NewStringNode("foo", 3)), OBJ_OK);
     mu_assert_int_eq(Node_ArrayAppend(arr, NULL), OBJ_OK);
 

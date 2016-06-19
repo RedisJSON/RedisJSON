@@ -16,15 +16,15 @@ Node *NewBoolNode(int val) {
   return ret;
 }
 
-Node *NewNumberNode(double val) {
+Node *NewDoubleNode(double val) {
   Node *ret = __newNode(N_NUMBER);
   ret->value.numval = val;
   return ret;
 }
 
-Node *NewNumberNodeInt(int64_t val) {
-  Node *ret = __newNode(N_NUMBER);
-  ret->value.numval = (double)val;
+Node *NewIntNode(int64_t val) {
+  Node *ret = __newNode(N_INTEGER);
+  ret->value.intval = val;
   return ret;
 }
 
@@ -39,35 +39,37 @@ Node *NewArrayNode(u_int32_t len, u_int32_t cap) {
   Node *ret = __newNode(N_ARRAY);
   ret->value.arrval.cap = cap;
   ret->value.arrval.len = 0;
-  ret->value.arrval.nodes = calloc(cap, sizeof(Node *));
+  ret->value.arrval.entries = calloc(cap, sizeof(Node *));
   return ret;
 }
 Node *NewObjectNode(u_int32_t cap) {
   Node *ret = __newNode(N_OBJECT);
-  ret->value.object.cap = cap;
-  ret->value.object.len = 0;
-  ret->value.object.entries = calloc(cap, sizeof(Node *));
+  ret->value.objval.cap = cap;
+  ret->value.objval.len = 0;
+  ret->value.objval.entries = calloc(cap, sizeof(Node *));
   return ret;
 }
 
 void __node_FreeKV(Node *n) {
-  Node_Free(n->value.kv.val);
-  free((char *)n->value.kv.key);
+  Node_Free(n->value.kvval.val);
+  free((char *)n->value.kvval.key);
   free(n);
 }
 
 void __node_FreeObj(Node *n) {
 
-  for (int i = 0; i < n->value.object.len; i++) {
-    Node_Free(n->value.object.entries[i]);
+  for (int i = 0; i < n->value.objval.len; i++) {
+    Node_Free(n->value.objval.entries[i]);
   }
+  free(n->value.objval.entries);
   free(n);
 }
 
 void __node_FreeArr(Node *n) {
   for (int i = 0; i < n->value.arrval.len; i++) {
-    Node_Free(n->value.arrval.nodes[i]);
+    Node_Free(n->value.arrval.entries[i]);
   }
+  free(n->value.arrval.entries);
   free(n);
 }
 void __node_FreeString(Node *n) {
@@ -103,9 +105,9 @@ int Node_ArrayAppend(Node *arr, Node *n) {
   t_array *a = &arr->value.arrval;
   if (a->len >= a->cap) {
     a->cap = a->cap ? MIN(a->cap * 2, 1024 * 1024) : 1;
-    a->nodes = realloc(a->nodes, a->cap * sizeof(Node *));
+    a->entries = realloc(a->entries, a->cap * sizeof(Node *));
   }
-  a->nodes[a->len++] = n;
+  a->entries[a->len++] = n;
   return OBJ_OK;
 }
 
@@ -116,7 +118,7 @@ int Node_ArraySet(Node *arr, int index, Node *n) {
   if (index < 0 || index >= a->len) {
     return OBJ_ERR;
   }
-  a->nodes[index] = n;
+  a->entries[index] = n;
 
   return OBJ_OK;
 }
@@ -129,14 +131,14 @@ int Node_ArrayItem(Node *arr, int index, Node **n) {
     *n = NULL;
     return OBJ_ERR;
   }
-  *n = a->nodes[index];
+  *n = a->entries[index];
   return OBJ_OK;
 }
 
 Node *__obj_find(t_object *o, const char *key, int *idx) {
 
   for (int i = 0; i < o->len; i++) {
-    if (!strcmp(key, o->entries[i]->value.kv.key)) {
+    if (!strcmp(key, o->entries[i]->value.kvval.key)) {
 
       if (idx)
         *idx = i;
@@ -148,7 +150,7 @@ Node *__obj_find(t_object *o, const char *key, int *idx) {
   return NULL;
 }
 int Node_ObjSet(Node *obj, const char *key, Node *n) {
-  t_object *o = &obj->value.object;
+  t_object *o = &obj->value.objval;
 
   if (key == NULL)
     return OBJ_ERR;
@@ -157,10 +159,10 @@ int Node_ObjSet(Node *obj, const char *key, Node *n) {
   Node *kv = __obj_find(o, key, &idx);
   // first find a replacement possiblity
   if (kv) {
-    if (kv->value.kv.val) {
-      Node_Free(kv->value.kv.val);
+    if (kv->value.kvval.val) {
+      Node_Free(kv->value.kvval.val);
     }
-    kv->value.kv.val = n;
+    kv->value.kvval.val = n;
     return OBJ_OK;
   }
 
@@ -171,8 +173,8 @@ int Node_ObjSet(Node *obj, const char *key, Node *n) {
   }
 
   kv = __newNode(N_KEYVAL);
-  kv->value.kv.key = strdup(key);
-  kv->value.kv.val = n;
+  kv->value.kvval.key = strdup(key);
+  kv->value.kvval.val = n;
 
   o->entries[o->len++] = kv;
 
@@ -183,7 +185,7 @@ int Node_ObjDel(Node *obj, const char *key) {
   if (key == NULL)
     return OBJ_ERR;
 
-  t_object *o = &obj->value.object;
+  t_object *o = &obj->value.objval;
 
   int idx = -1;
   Node *kv = __obj_find(o, key, &idx);
@@ -193,10 +195,10 @@ int Node_ObjDel(Node *obj, const char *key) {
     return OBJ_ERR;
 
   // let's delete the node's memory
-  if (kv->value.kv.val) {
-    Node_Free(kv->value.kv.val);
+  if (kv->value.kvval.val) {
+    Node_Free(kv->value.kvval.val);
   }
-  free((char *)kv->value.kv.key);
+  free((char *)kv->value.kvval.key);
 
   // replace the deleted entry and the top entry to avoid holes
   if (idx < o->len - 1) {
@@ -211,7 +213,7 @@ int Node_ObjGet(Node *obj, const char *key, Node **val) {
   if (key == NULL)
     return OBJ_ERR;
 
-  t_object *o = &obj->value.object;
+  t_object *o = &obj->value.objval;
 
   int idx = -1;
   Node *kv = __obj_find(o, key, &idx);
@@ -220,12 +222,12 @@ int Node_ObjGet(Node *obj, const char *key, Node **val) {
   if (!kv)
     return OBJ_ERR;
 
-  *val = kv->value.kv.val;
+  *val = kv->value.kvval.val;
   return OBJ_OK;
 }
 
 void __objTraverse(Node *n, NodeVisitor f, void *ctx) {
-  t_object *o = &n->value.object;
+  t_object *o = &n->value.objval;
 
   f(n, ctx);
   for (int i = 0; i < o->len; i++) {
@@ -237,7 +239,7 @@ void __arrTraverse(Node *n, NodeVisitor f, void *ctx) {
   f(n, ctx);
 
   for (int i = 0; i < a->len; i++) {
-    Node_Traverse(a->nodes[i], f, ctx);
+    Node_Traverse(a->entries[i], f, ctx);
   }
 }
 
@@ -279,7 +281,7 @@ void Node_Print(Node *n, int depth) {
     printf("[\n");
     for (int i = 0; i < n->value.arrval.len; i++) {
       __node_indent(depth + 1);
-      Node_Print(n->value.arrval.nodes[i], depth + 1);
+      Node_Print(n->value.arrval.entries[i], depth + 1);
       if (i < n->value.arrval.len - 1)
         printf(",");
       printf("\n");
@@ -290,10 +292,10 @@ void Node_Print(Node *n, int depth) {
 
   case N_OBJECT: {
     printf("{\n");
-    for (int i = 0; i < n->value.object.len; i++) {
+    for (int i = 0; i < n->value.objval.len; i++) {
       __node_indent(depth + 1);
-      Node_Print(n->value.object.entries[i], depth + 1);
-      if (i < n->value.object.len - 1)
+      Node_Print(n->value.objval.entries[i], depth + 1);
+      if (i < n->value.objval.len - 1)
         printf(",");
       printf("\n");
     }
@@ -306,9 +308,12 @@ void Node_Print(Node *n, int depth) {
   case N_NUMBER:
     printf("%f", n->value.numval);
     break;
+  case N_INTEGER:
+    printf("%ld", n->value.intval);
+    break;
   case N_KEYVAL: {
-    printf("\"%s\": ", n->value.kv.key);
-    Node_Print(n->value.kv.val, depth);
+    printf("\"%s\": ", n->value.kvval.key);
+    Node_Print(n->value.kvval.val, depth);
   } break;
   case N_STRING:
     printf("\"%.*s\"", n->value.strval.len, n->value.strval.data);
