@@ -31,6 +31,7 @@ typedef struct {
 } LookupPath;
 
 
-Node *Node_Find(Node *root, LookupPath *path, PathError *err);
+Node *__pathNode_eval(PathNode *pn, Node *n, PathError *err);
+PathError Node_Find(Node *root, LookupPath *path, Node **n);
 
 #endif
