@@ -4,6 +4,7 @@
 #include "minunit.h"
 #include "../src/path.h"
 #include "../src/object.h"
+#include "../src/json_path.h"
 
 MU_TEST(testObject) {
 
@@ -70,12 +71,45 @@ MU_TEST(testPath) {
 
 }
 
+MU_TEST(testPathParse) {
+
+    const char *path = "foo.bar[3][\"baz\"].bar[\"boo\"][\"\"]";
+    
+    SearchPath sp = NewSearchPath(0);
+    int rc = ParseJSONPath(path, strlen(path), &sp);
+    mu_assert_int_eq (rc, PARSE_OK);
+
+    mu_assert_int_eq(sp.len, 7);
+
+    mu_check(!strcmp(sp.nodes[0].value.key, "foo"));
+    mu_check(!strcmp(sp.nodes[1].value.key, "bar"));
+    mu_check(sp.nodes[2].value.index == 3);
+    mu_check(!strcmp(sp.nodes[3].value.key, "baz"));
+    mu_check(!strcmp(sp.nodes[4].value.key, "bar"));
+    mu_check(!strcmp(sp.nodes[5].value.key, "boo"));
+    mu_check(!strcmp(sp.nodes[6].value.key, ""));
+
+    const char *badpaths[] = {"3", "foo[bar]", "foo[]", "foo[3", "bar[\"]", "foo..bar", "foo['bar']", "foo/bar",  NULL};
+    
+    for (int idx = 0; badpaths[idx] != NULL; idx++) {
+        printf("%s\n", badpaths[idx]);
+        mu_check(ParseJSONPath(badpaths[idx], strlen(badpaths[idx]), &sp) == PARSE_ERR);
+            
+    }
+
+    
+    //mu_assert_int_eq (rc, PARSE_OK);
+    //printf("sp len: %zd\n", sp.len);
+
+}
+
 MU_TEST_SUITE(test_object) {
 	//MU_SUITE_CONFIGURE(&test_setup, &test_teardown);
 
-	MU_RUN_TEST(testObject);
-    MU_RUN_TEST(testPath);
-	
+	//MU_RUN_TEST(testObject);
+    //MU_RUN_TEST(testPath);
+
+	MU_RUN_TEST(testPathParse);
 }
 
 int main(int argc, char *argv[]) {
