@@ -102,7 +102,7 @@ Node *NewStringNode(const char *s, u_int32_t len);
 * Create a new string node from a NULL terminated c-string. #ifdef 0
 * NOTE: The string's value will be copied to a newly allocated string
 */
-Node *NewCStringNode(const char *s);
+Node *NewCStringNode(const char *su);
 
 /** Create a new zero length array node with the given capacity */
 Node *NewArrayNode(u_int32_t cap);

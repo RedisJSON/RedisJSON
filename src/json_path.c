@@ -11,7 +11,6 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
     while (offset < len) {
         char c = *pos;
         switch (st) {
-
             // initial state
             case S_NULL: {
                 switch (c) {
@@ -31,21 +30,20 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
                             tok.len++;
                             st = S_IDENT;
                             break;
-                        } 
-                        
+                        }
+
                         goto syntaxerror;
                 }
-            }
-            break;
+            } break;
 
             // we're after a square bracket opening
-            case S_BRACKET: // [
+            case S_BRACKET:  // [
                 // quote after brackets means dict key
                 if (c == '"') {
                     // skip to the beginnning of the key
                     tok.s++;
                     st = S_KEY;
-                // digit after bracket means numeric index
+                    // digit after bracket means numeric index
                 } else if (isdigit(c)) {
                     tok.len++;
                     st = S_NUMBER;
@@ -53,7 +51,7 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
                     goto syntaxerror;
                 }
                 break;
-                
+
             // we're after a dot
             case S_DOT:
                 // start of ident token
@@ -79,7 +77,7 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
                     goto tokenend;
                 }
                 goto syntaxerror;
-            
+
             // we're within an ident string
             case S_IDENT:
                 // end of ident
@@ -89,7 +87,6 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
                     pos++;
                     offset++;
                     goto tokenend;
-
                 }
                 // we only allow letters, numbers and underscores in identifiers
                 if (!isalnum(c) && c != '_') {
@@ -98,15 +95,15 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
                 // advance one
                 tok.len++;
                 break;
-            
-            // we're withing a bracketed string key 
+
+            // we're withing a bracketed string key
             case S_KEY:
                 // end of key
-                if ( c == '"') {
-                    if (offset < len - 1 && *(pos+1) == ']') {
+                if (c == '"') {
+                    if (offset < len - 1 && *(pos + 1) == ']') {
                         tok.type = T_KEY;
-                        pos+=2;
-                        offset+=2;
+                        pos += 2;
+                        offset += 2;
                         st = S_NULL;
                         goto tokenend;
                     } else {
@@ -119,25 +116,25 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
         offset++;
         pos++;
         continue;
-tokenend: {
-        
-            printf("token: %.*s\n", tok.len, tok.s);
-            if (tok.type == T_INDEX) {
-                // convert the string to int. we can't use atoi because it expects NULL
-                // termintated strings
-                int64_t num = 0;
-                for (int i = 0; i < tok.len; i++) {
-                    int digit = tok.s[i] - '0';
-                    num = num*10 + digit; 
-                }
-                
-                SearchPath_AppendIndex(path, num);
-            } else if (tok.type == T_KEY) {
-                SearchPath_AppendKey(path, strndup(tok.s, tok.len));
+    tokenend : {
+        printf("token: %.*s\n", tok.len, tok.s);
+        if (tok.type == T_INDEX) {
+            // convert the string to int. we can't use atoi because it expects
+            // NULL
+            // termintated strings
+            int64_t num = 0;
+            for (int i = 0; i < tok.len; i++) {
+                int digit = tok.s[i] - '0';
+                num = num * 10 + digit;
             }
-            tok.s = pos;
-            tok.len = 0;
+
+            SearchPath_AppendIndex(path, num);
+        } else if (tok.type == T_KEY) {
+            SearchPath_AppendKey(path, strndup(tok.s, tok.len));
         }
+        tok.s = pos;
+        tok.len = 0;
+    }
     }
 
     // these are the only legal states at the end of consuming the string
@@ -148,9 +145,6 @@ tokenend: {
 syntaxerror:
     printf("syntax error at offset %zd ('%c')\n", offset, json[offset]);
     return OBJ_ERR;
-    
-
-
 }
 
 int ParseJSONPath(const char *json, size_t len, SearchPath *path) {

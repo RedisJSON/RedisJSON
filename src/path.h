@@ -30,13 +30,13 @@ typedef struct {
         int index;
         const char *key;
     } value;
-} PathNode; 
+} PathNode;
 
 /** Evaluate a single path node against an object node */
 Node *__pathNode_eval(PathNode *pn, Node *n, PathError *err);
 
-/** 
-* A search path parsed from JSON or other formats, representing 
+/**
+* A search path parsed from JSON or other formats, representing
 * a lookup path in the object tree
 */
 typedef struct {
@@ -59,8 +59,8 @@ void SearchPath_Free(SearchPath *p);
 
 Node *__pathNode_eval(PathNode *pn, Node *n, PathError *err);
 
-/** 
-* Find a node in an object tree based on a parsed path. 
+/**
+* Find a node in an object tree based on a parsed path.
 * An error code is returned, and if a node matches the path, its value
 * is put into n's pointer. This can be NULL if the lookup matches a NULL node.
 */
