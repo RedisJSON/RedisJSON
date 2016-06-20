@@ -8,18 +8,18 @@
 
 MU_TEST(testObject) {
 
-    Node *root = NewObjectNode(1);
+    Node *root = NewDictNode(1);
     mu_check (root != NULL);
     
-    mu_check (OBJ_OK == Node_ObjSet(root, "foo", NewStringNode("bar", 3)));
-    mu_check (OBJ_OK == Node_ObjSet(root, "bar", NewBoolNode(0)));
-    mu_check (OBJ_OK == Node_ObjSet(root, "baz", NewArrayNode(0)));
+    mu_check (OBJ_OK == Node_DictSet(root, "foo", NewStringNode("bar", 3)));
+    mu_check (OBJ_OK == Node_DictSet(root, "bar", NewBoolNode(0)));
+    mu_check (OBJ_OK == Node_DictSet(root, "baz", NewArrayNode(0)));
 
     Node *arr, *n;
-    int rc =  Node_ObjGet(root, "non existing", &arr);
+    int rc =  Node_DictGet(root, "non existing", &arr);
     mu_assert_int_eq(OBJ_ERR, rc);
 
-    rc =  Node_ObjGet(root, "baz", &arr);
+    rc =  Node_DictGet(root, "baz", &arr);
     mu_assert_int_eq(OBJ_OK, rc);
     
     mu_check (arr != NULL);
@@ -42,17 +42,17 @@ MU_TEST(testObject) {
 
 MU_TEST(testPath) {
 
-    Node *root = NewObjectNode(1);
+    Node *root = NewDictNode(1);
     mu_check (root != NULL);
     
-    mu_check (OBJ_OK == Node_ObjSet(root, "foo", NewStringNode("bar", 3)));
-    mu_check (OBJ_OK == Node_ObjSet(root, "bar", NewBoolNode(0)));
+    mu_check (OBJ_OK == Node_DictSet(root, "foo", NewStringNode("bar", 3)));
+    mu_check (OBJ_OK == Node_DictSet(root, "bar", NewBoolNode(0)));
 
     Node *arr = NewArrayNode(0);
     Node_ArrayAppend(arr, NewStringNode("hello", 5));
     Node_ArrayAppend(arr, NewStringNode("world", 5));
 
-    mu_check (OBJ_OK == Node_ObjSet(root, "baz", arr));
+    mu_check (OBJ_OK == Node_DictSet(root, "baz", arr));
 
     SearchPath sp = NewSearchPath(2);
     SearchPath_AppendKey(&sp, "baz");

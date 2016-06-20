@@ -42,11 +42,11 @@ Node *NewArrayNode(u_int32_t cap) {
   ret->value.arrval.entries = calloc(cap, sizeof(Node *));
   return ret;
 }
-Node *NewObjectNode(u_int32_t cap) {
-  Node *ret = __newNode(N_OBJECT);
-  ret->value.objval.cap = cap;
-  ret->value.objval.len = 0;
-  ret->value.objval.entries = calloc(cap, sizeof(Node *));
+Node *NewDictNode(u_int32_t cap) {
+  Node *ret = __newNode(N_DICT);
+  ret->value.dictval.cap = cap;
+  ret->value.dictval.len = 0;
+  ret->value.dictval.entries = calloc(cap, sizeof(Node *));
   return ret;
 }
 
@@ -58,10 +58,10 @@ void __node_FreeKV(Node *n) {
 
 void __node_FreeObj(Node *n) {
 
-  for (int i = 0; i < n->value.objval.len; i++) {
-    Node_Free(n->value.objval.entries[i]);
+  for (int i = 0; i < n->value.dictval.len; i++) {
+    Node_Free(n->value.dictval.entries[i]);
   }
-  free(n->value.objval.entries);
+  free(n->value.dictval.entries);
   free(n);
 }
 
@@ -86,7 +86,7 @@ void Node_Free(Node *n) {
   case N_ARRAY:
     __node_FreeArr(n);
     break;
-  case N_OBJECT:
+  case N_DICT:
     __node_FreeObj(n);
     break;
   case N_STRING:
@@ -135,7 +135,7 @@ int Node_ArrayItem(Node *arr, int index, Node **n) {
   return OBJ_OK;
 }
 
-Node *__obj_find(t_object *o, const char *key, int *idx) {
+Node *__obj_find(t_dict *o, const char *key, int *idx) {
 
   for (int i = 0; i < o->len; i++) {
     if (!strcmp(key, o->entries[i]->value.kvval.key)) {
@@ -149,8 +149,8 @@ Node *__obj_find(t_object *o, const char *key, int *idx) {
 
   return NULL;
 }
-int Node_ObjSet(Node *obj, const char *key, Node *n) {
-  t_object *o = &obj->value.objval;
+int Node_DictSet(Node *obj, const char *key, Node *n) {
+  t_dict *o = &obj->value.dictval;
 
   if (key == NULL)
     return OBJ_ERR;
@@ -181,11 +181,11 @@ int Node_ObjSet(Node *obj, const char *key, Node *n) {
   return OBJ_OK;
 }
 
-int Node_ObjDel(Node *obj, const char *key) {
+int Node_DictDel(Node *obj, const char *key) {
   if (key == NULL)
     return OBJ_ERR;
 
-  t_object *o = &obj->value.objval;
+  t_dict *o = &obj->value.dictval;
 
   int idx = -1;
   Node *kv = __obj_find(o, key, &idx);
@@ -209,11 +209,11 @@ int Node_ObjDel(Node *obj, const char *key) {
   return OBJ_OK;
 }
 
-int Node_ObjGet(Node *obj, const char *key, Node **val) {
+int Node_DictGet(Node *obj, const char *key, Node **val) {
   if (key == NULL)
     return OBJ_ERR;
 
-  t_object *o = &obj->value.objval;
+  t_dict *o = &obj->value.dictval;
 
   int idx = -1;
   Node *kv = __obj_find(o, key, &idx);
@@ -227,7 +227,7 @@ int Node_ObjGet(Node *obj, const char *key, Node **val) {
 }
 
 void __objTraverse(Node *n, NodeVisitor f, void *ctx) {
-  t_object *o = &n->value.objval;
+  t_dict *o = &n->value.dictval;
 
   f(n, ctx);
   for (int i = 0; i < o->len; i++) {
@@ -254,7 +254,7 @@ void Node_Traverse(Node *n, NodeVisitor f, void *ctx) {
   case N_ARRAY:
     __arrTraverse(n, f, ctx);
     break;
-  case N_OBJECT:
+  case N_DICT:
     __objTraverse(n, f, ctx);
     break;
   // for all other types - just call the callback
@@ -290,12 +290,12 @@ void Node_Print(Node *n, int depth) {
     printf("]");
   } break;
 
-  case N_OBJECT: {
+  case N_DICT: {
     printf("{\n");
-    for (int i = 0; i < n->value.objval.len; i++) {
+    for (int i = 0; i < n->value.dictval.len; i++) {
       __node_indent(depth + 1);
-      Node_Print(n->value.objval.entries[i], depth + 1);
-      if (i < n->value.objval.len - 1)
+      Node_Print(n->value.dictval.entries[i], depth + 1);
+      if (i < n->value.dictval.len - 1)
         printf(",");
       printf("\n");
     }

@@ -18,12 +18,12 @@ Node *__pathNode_eval(PathNode *pn, Node *n, PathError *err) {
     }
     return rn;
   }
-  if (n->type == N_OBJECT) {
+  if (n->type == N_DICT) {
     if (pn->type != NT_KEY) {
       goto badtype;
     }
     Node *rn = NULL;
-    int rc = Node_ObjGet(n, pn->value.key, &rn);
+    int rc = Node_DictGet(n, pn->value.key, &rn);
     if (rc != OBJ_OK) {
       *err = E_NOKEY;
     }
