@@ -106,8 +106,8 @@ MU_TEST(testPathParse) {
 MU_TEST_SUITE(test_object) {
 	//MU_SUITE_CONFIGURE(&test_setup, &test_teardown);
 
-	//MU_RUN_TEST(testObject);
-    //MU_RUN_TEST(testPath);
+	MU_RUN_TEST(testObject);
+    MU_RUN_TEST(testPath);
 
 	MU_RUN_TEST(testPathParse);
 }
