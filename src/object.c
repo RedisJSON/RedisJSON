@@ -35,6 +35,10 @@ Node *NewStringNode(const char *s, u_int32_t len) {
   return ret;
 }
 
+Node *NewCStringNode(const char *s) {
+  return NewStringNode(s, strlen(s));
+}
+
 Node *NewArrayNode(u_int32_t cap) {
   Node *ret = __newNode(N_ARRAY);
   ret->value.arrval.cap = cap;
