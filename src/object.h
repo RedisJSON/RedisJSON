@@ -61,7 +61,7 @@ Node *NewBoolNode(int val);
 Node *NewDoubleNode(double val);
 Node *NewIntNode(int64_t val);
 Node *NewStringNode(const char *s, u_int32_t len);
-Node *NewArrayNode(u_int32_t len, u_int32_t cap);
+Node *NewArrayNode(u_int32_t cap);
 Node *NewObjectNode(u_int32_t cap);
 
 void Node_Free(Node *n);

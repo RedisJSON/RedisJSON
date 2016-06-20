@@ -26,12 +26,19 @@ typedef struct {
 Node *__pathNode_eval(PathNode *pn, Node *n, PathError *err);
 
 typedef struct {
-    PathNode *path;
+    PathNode *nodes;
     size_t len;
-} LookupPath;
+    size_t cap;
+} SearchPath;
 
+SearchPath NewSearchPath(size_t cap);
+
+void SearchPath_AppendIndex(SearchPath *p, int idx);
+void SearchPath_AppendKey(SearchPath *p, const char *key);
+void SearchPath_Free(SearchPath *p);
 
 Node *__pathNode_eval(PathNode *pn, Node *n, PathError *err);
-PathError Node_Find(Node *root, LookupPath *path, Node **n);
+
+PathError SearchPath_Find(SearchPath *path, Node *root, Node **n);
 
 #endif

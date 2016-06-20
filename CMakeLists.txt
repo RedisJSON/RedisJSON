@@ -3,7 +3,7 @@ project(rejson VERSION 0.0.0)
 
 include(CTest)
 enable_testing()
-add_executable(test_object test/test_object.c src/object.c)
+add_executable(test_object test/test_object.c src/object.c src/path.c)
 
 add_test(test_object test_object)
 
