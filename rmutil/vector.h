@@ -10,10 +10,10 @@
 * Works like C++ std::vector with an underlying resizable buffer
 */
 typedef struct {
-  char *data;
-  size_t elemSize;
-  size_t cap;
-  size_t top;
+    char *data;
+    size_t elemSize;
+    size_t cap;
+    size_t top;
 
 } Vector;
 
@@ -36,6 +36,9 @@ int __vector_PutPtr(Vector *v, size_t pos, void *elem);
 * otherwise 1
 */
 int Vector_Get(Vector *v, size_t pos, void *ptr);
+
+/* Get the element at the end of the vector, decreasing the size by one */
+int Vector_Pop(Vector *v, void *ptr);
 
 //#define Vector_Getx(v, pos, ptr) pos < v->cap ? 1 : 0; *ptr =
 //*(typeof(ptr))(v->data + v->elemSize*pos)
