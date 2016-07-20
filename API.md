@@ -1,55 +1,52 @@
 Redis Modules API reference manual
 ===
 
-Redis modules make possible to extend Redis functionality using external
-modules, implementing new Redis commands at a speed and with features
-similar to what can be done inside the core itself.
+Redis modules make possible the extension of Redis functionality using 
+external modules, by creating new Redis commands with performance and 
+features similar to what can be done inside the core itself.
 
-Redis modules are dynamic libraries, that can be loaded into Redis at
-startup or using the `MODULE LOAD` command. Redis exports a C API, in the
+Redis modules are dynamic libraries loaded into Redis at startup or 
+using the `MODULE LOAD` command. Redis exports a C API, in the
 form of a single C header file called `redismodule.h`. Modules are meant
-to be written in C, however it will be possible to use C++ or other languages
-that have C binding functionalities.
+to be written in C, or any language with C binding functionality 
+like C++.
 
-Modules are designed in order to be loaded into different versions of Redis,
-so a given module does not need to be designed, or recompiled, in order to
-run with a specific version of Redis. For this reason, the module will
-register to the Redis core using a specific API version. The current API
-version is "1".
+Modules are Redis-version agnostic: a given module does not need to be 
+designed, or recompiled, in order to run with a specific version of 
+Redis. In addition, they are registered using a specific Redis modules
+API version. The current API version is "1".
 
-This document is about an alpha version of Redis modules. API, functionalities
-and other details may change in the future.
+This document describes the  alpha version of Redis modules. API, 
+functionality and other details may change in the future.
 
 # Loading modules
 
-In order to test the module you are developing, you can load the module
-using the following `redis.conf` configuration directive:
+In order to test a new Redis module, use the following `redis.conf` 
+configuration directive:
 
     loadmodule /path/to/mymodule.so
 
-It is also possible to load a module at runtime using the following command:
+Load a module at runtime with the following command:
 
     MODULE LOAD /path/to/mymodule.so
 
-In order to list all loaded modules, use:
+To list all loaded modules, use:
 
     MODULE LIST
 
-Finally, you can unload (and later reload if you wish) a module using the
-following command:
+Finally, unload (or reload) a module using the following command:
 
     MODULE UNLOAD mymodule
 
-Note that `mymodule` above is not the filename without the `.so` suffix, but
-instead, the name the module used to register itself into the Redis core.
-The name can be obtained using `MODULE LIST`. However it is good practice
-that the filename of the dynamic library is the same as the name the module
-uses to register itself into the Redis core.
+Note that `mymodule` is the name the module used to register itself 
+with the Redis core, and **is not** the filename without the 
+`.so` suffix. The name can be obtained using `MODULE LIST`. It is 
+recommended to use the same filename for the dynamic library and module.
 
-# The simplest module you can write
+# A Hello World module
 
-In order to show the different parts of a module, here we'll show a very
-simple module that implements a command that outputs a random number.
+In order illustrate the basic components of a module, the following 
+implements a command that outputs a random number.
 
     #include "redismodule.h"
     #include <stdlib.h>
@@ -71,21 +68,17 @@ simple module that implements a command that outputs a random number.
     }
 
 The example module has two functions. One implements a command called
-HELLOWORLD.RAND. This function is specific of that module. However the
-other function called `RedisModule_OnLoad()` must be present in each
-Redis module. It is the entry point for the module to be initialized,
-register its commands, and potentially other private data structures
-it uses.
+`HELLOWORLD.RAND`. This function is specific to that module. In 
+addition, `RedisModule_OnLoad()` must be present in each Redis module. 
+It is the entry point for module initialization, and registers its 
+commands and other private data structures.
 
-Note that it is a good idea for modules to call commands with the
-name of the module followed by a dot, and finally the command name,
-like in the case of `HELLOWORLD.RAND`. This way it is less likely to
-have collisions.
+In order to avoid namespace collisions, module commands should use the 
+dot-notation, for example, `HELLOWORLD.RAND`.
 
-Note that if different modules have colliding commands, they'll not be
-able to work in Redis at the same time, since the function
-`RedisModule_CreateCommand` will fail in one of the modules, so the module
-loading will abort returning an error condition.
+Namespace collisions will cause `RedisModule_CreateCommand` to fail in 
+one or more modules. Loading will abort and an error condition
+returned.
 
 # Module initialization
 
@@ -96,9 +89,9 @@ The following is the function prototype:
     int RedisModule_Init(RedisModuleCtx *ctx, const char *modulename,
                          int module_version, int api_version);
 
-The `Init` function announces the Redis core that the module has a given
-name, its version (that is reported by `MODULE LIST`), and that is willing
-to use a specific version of the API.
+The `Init` function announces to the Redis core that the module has a 
+given name, its version (reported by `MODULE LIST`), and that it uses 
+a specific version of the API.
 
 If the API version is wrong, the name is already taken, or there are other
 similar errors, the function will return `REDISMODULE_ERR`, and the module
@@ -107,15 +100,15 @@ similar errors, the function will return `REDISMODULE_ERR`, and the module
 Before the `Init` function is called, no other API function can be called,
 otherwise the module will segfault and the Redis instance will crash.
 
-The second function called, `RedisModule_CreateCommand`, is used in order
-to register commands into the Redis core. The following is the prototype:
+The second function called, `RedisModule_CreateCommand`, registers 
+commands with the Redis core. The following is the prototype:
 
     int RedisModule_CreateCommand(RedisModuleCtx *ctx, const char *cmdname,
                                   RedisModuleCmdFunc cmdfunc);
 
-As you can see, most Redis modules API calls all take as first argument
-the `context` of the module, so that they have a reference to the module
-calling it, to the command and client executing a given command, and so forth.
+Most Redis modules API calls have the `context` of the module 
+as first argument, in order to reference the calling module's context
+and the client executing a given command.
 
 To create a new command, the above function needs the context, the command
 name, and the function pointer of the function implementing the command,
@@ -128,9 +121,9 @@ The command function arguments are just the context, that will be passed
 to all the other API calls, the command argument vector, and total number
 of arguments, as passed by the user.
 
-As you can see, the arguments are provided as pointers to a specific data
-type, the `RedisModuleString`. This is an opaque data type you have API
-functions to access and use, direct access to its fields is never needed.
+The arguments are provided as pointers to a specific data type, the 
+`RedisModuleString`. This is an opaque data type with API functions 
+enabling access and use. Direct access to its fields is never needed.
 
 Zooming into the example command implementation, we can find another call:
 
@@ -141,12 +134,11 @@ exactly like other Redis commands do, like for example `INCR` or `SCARD`.
 
 # Setup and dependencies of a Redis module
 
-Redis modules don't depend on Redis or some other library, nor they
+Redis modules do not depend on Redis or 3rd party libraries, nor do they
 need to be compiled with a specific `redismodule.h` file. In order
 to create a new module, just copy a recent version of `redismodule.h`
 in your source tree, link all the libraries you want, and create
-a dynamic library having the `RedisModule_OnLoad()` function symbol
-exported.
+a dynamic library and export the `RedisModule_OnLoad()` function symbol.
 
 The module will be able to load into different versions of Redis.
 
@@ -155,20 +147,16 @@ The module will be able to load into different versions of Redis.
 The command argument vector `argv` passed to module commands, and the
 return value of other module APIs functions, are of type `RedisModuleString`.
 
-Usually you directly pass module strings to other API calls, however sometimes
-you may need to directly access the string object.
-
-There are a few functions in order to work with string objects:
+Most often Redis module strings are passed directly to other API calls.
+However, a number of API functions enable direct access to the string 
+object. For example, 
 
     const char *RedisModule_StringPtrLen(RedisModuleString *string, size_t *len);
 
-The above function accesses a string by returning its pointer and setting its 
-length in `len`.
-You should never write to a string object pointer, as you can see from the
-`const` pointer qualifier.
+returns a pointer to `string` and sets its length in `len`. The `const` 
+modifier prevents direct modification.
 
-However, if you want, you can create new string objects using the following
-API:
+New string objects are created using the following API:
 
     RedisModuleString *RedisModule_CreateString(RedisModuleCtx *ctx, const char *ptr, size_t len);
 
@@ -177,14 +165,12 @@ call to `RedisModule_FreeString()`:
 
     void RedisModule_FreeString(RedisModuleString *str);
 
-However if you want to avoid having to free strings, the automatic memory
-management, covered later in this document, can be a good alternative, by
-doing it for you.
+Alternatively, the automatic memory management API, covered later in 
+this document, can be employed to automatically free string handles.
 
 Note that the strings provided via the argument vector `argv` never need
-to be freed. You only need to free new strings you create, or new strings
-returned by other APIs, where it is specified that the returned string must
-be freed.
+to be freed. Only strings created within a module need to be freed, or 
+new strings returned by other APIs where specified.
 
 ## Creating strings from numbers or parsing strings as numbers
 
@@ -203,46 +189,44 @@ Similarly in order to parse a string as a number:
 ## Accessing Redis keys from modules
 
 Most Redis modules, in order to be useful, have to interact with the Redis
-data space (this is not always true, for example an ID generator may
-never touch Redis keys). Redis modules have two different APIs in order to
-access the Redis data space, one is a low level API that provides very
+data space. An exception would be an ID generator that never accesses 
+Redis keys. Redis modules have two different APIs in order to
+access the Redis data space. A **low level API** providing very
 fast access and a set of functions to manipulate Redis data structures.
-The other API is more high level, and allows to call Redis commands and
-fetch the result, similarly to how Lua scripts access Redis.
+A **high level API** is provided to allow calling Redis commands and
+retrieving results, similar to how Lua scripts access Redis.
 
 The high level API is also useful in order to access Redis functionalities
 that are not available as APIs.
 
-In general modules developers should prefer the low level API, because commands
+In general, module developers should prefer the low level API, because commands
 implemented using the low level API run at a speed comparable to the speed
 of native Redis commands. However there are definitely use cases for the
 higher level API. For example often the bottleneck could be processing the
 data and not accessing it.
 
-Also note that sometimes using the low level API is not harder compared to
-the higher level one.
+Also note that in some cases the low level API is is as simple as the 
+high level API.
 
 # Calling Redis commands
 
-The high level API to access Redis is the sum of the `RedisModule_Call()`
-function, together with the functions needed in order to access the
-reply object returned by `Call()`.
+The high level API to access Redis combines the `RedisModule_Call()`
+function with the functions needed to access the reply object returned 
+by `Call()`.
 
-`RedisModule_Call` uses a special calling convention, with a format specifier
-that is used to specify what kind of objects you are passing as arguments
-to the function.
+`RedisModule_Call` uses a special calling convention, with a format 
+specifier used to define the types of objects passed as arguments.
 
-Redis commands are invoked just using a command name and a list of arguments.
-However when calling commands, the arguments may originate from different
+Redis commands are invoked using a command name and a list of arguments.
+However, when calling commands, the arguments may originate from different
 kind of strings: null-terminated C strings, RedisModuleString objects as
 received from the `argv` parameter in the command implementation, binary
 safe C buffers with a pointer and a length, and so forth.
 
-For example if I want to call `INCRBY` using a first argument (the key)
-a string received in the argument vector `argv`, which is an array
-of RedisModuleString object pointers, and a C string representing the
-number "10" as second argument (the increment), I'll use the following
-function call:
+To call `INCRBY` using as first argument (the key) a string received in 
+the argument vector `argv`, which is an array of RedisModuleString 
+object pointers, and a C string representing the number "10" as a second 
+argument (the increment), use the following function call:
 
     RedisModuleCallReply *reply;
     reply = RedisModule_Call(ctx,"INCR","sc",argv[1],"10");
@@ -264,13 +248,15 @@ This is the full list of format specifiers:
 * **v** -- Array of RedisModuleString objects.
 * **!** -- This modifier just tells the function to replicate the command to slaves and AOF. It is ignored from the point of view of arguments parsing.
 
-The function returns a `RedisModuleCallReply` object on success, on
-error NULL is returned.
+The function returns either a `RedisModuleCallReply` object on success, 
+or NULL on error.
 
-NULL is returned when the command name is invalid, the format specifier uses
-characters that are not recognized, or when the command is called with the
-wrong number of arguments. In the above cases the `errno` var is set to `EINVAL`. NULL is also returned when, in an instance with Cluster enabled, the target
-keys are about non local hash slots. In this case `errno` is set to `EPERM`.
+NULL is returned when the command name is invalid, the format specifier 
+uses characters that are not recognized, or when the command is called 
+with the wrong number of arguments. In the above cases the `errno` var 
+is set to `EINVAL`. NULL is also returned when, in an instance with 
+Cluster enabled, the target keys are non local hash slots. In this
+case `errno` is set to `EPERM`.
 
 ## Working with RedisModuleCallReply objects.
 
@@ -302,7 +288,8 @@ is used:
 
     size_t reply_len = RedisModule_CallReplyLength(reply);
 
-In order to obtain the value of an integer reply, the following function is used, as already shown in the example above:
+In order to obtain the value of an integer reply, the following function
+is used, as already shown in the example above:
 
     long long reply_integer_val = RedisModule_CallReplyInteger(reply);
 
@@ -317,53 +304,51 @@ Sub elements of array replies are accessed this way:
 The above function returns NULL if you try to access out of range elements.
 
 Strings and errors (which are like strings but with a different type) can
-be accessed using in the following way, making sure to never write to
-the resulting pointer (that is returned as as `const` pointer so that
-misusing must be pretty explicit):
+be accessed in the following way, making sure to never write to
+the resulting pointer (that is returned as as const pointer so that 
+misusing must be pretty explicit)::
 
     size_t len;
-    char *ptr = RedisModule_CallReplyStringPtr(reply,&len);
+    const char *ptr = RedisModule_CallReplyStringPtr(reply,&len);
 
 If the reply type is not a string or an error, NULL is returned.
 
 RedisCallReply objects are not the same as module string objects
-(RedisModuleString types). However sometimes you may need to pass replies
-of type string or integer, to API functions expecting a module string.
-
-When this is the case, you may want to evaluate if using the low level
-API could be a simpler way to implement your command, or you can use
-the following function in order to create a new string object from a
-call reply of type string, error or integer:
+(RedisModuleString types). When an API function expects a module string, 
+the following function can be employed to create a new 
+`RedisModuleString` object from a call reply of type string, error or 
+integer:
 
     RedisModuleString *mystr = RedisModule_CreateStringFromCallReply(myreply);
 
-If the reply is not of the right type, NULL is returned.
-The returned string object should be released with `RedisModule_FreeString()`
-as usually, or by enabling automatic memory management (see corresponding
-section).
+Alternatively, one could evaluate whether using the low level API is as 
+simple (and potentially faster).
+
+If the reply is not of the right type, NULL is returned. The returned 
+string object should be released with `RedisModule_FreeString()`, or by 
+enabling automatic memory management (see section below).
 
 # Releasing call reply objects
 
 Reply objects must be freed using `RedisModule_FreeCallRelpy`. For arrays,
-you need to free only the top level reply, not the nested replies.
-Currently the module implementation provides a protection in order to avoid
-crashing if you free a nested reply object for error, however this feature
-is not guaranteed to be here forever, so should not be considered part
-of the API.
+only the top level reply needs to be freed, but not the nested replies.
+Currently, the module implementation provides protection in order to avoid
+crashing if a nested reply object is freed on error--however, *this 
+protective feature may not be available in future versions, and should 
+not be considered part of the API*.
 
-If you use automatic memory management (explained later in this document)
-you don't need to free replies (but you still could if you wish to release
-memory ASAP).
+Automatic memory management can take care of freeing replies (see 
+section below). Alternatively, memory can be released ASAP.
 
 ## Returning values from Redis commands
 
 Like normal Redis commands, new commands implemented via modules must be
-able to return values to the caller. The API exports a set of functions for
-this goal, in order to return the usual types of the Redis protocol, and
-arrays of such types as elemented. Also errors can be returned with any
-error string and code (the error code is the initial uppercase letters in
-the error message, like the "BUSY" string in the "BUSY the sever is busy" error
-message).
+able to return values to the caller. Towards this end, The API exports a
+set of functions in order to return the usual Redis protocol types, and
+arrays of such types (as elemented). Also, errors can be returned with any
+error code and string, where the error code is the initial uppercase 
+letters in the error message--for example, the "BUSY" string in the 
+"BUSY the sever is busy" error message.
 
 All the functions to send a reply to the client are called
 `RedisModule_ReplyWith<something>`.
@@ -384,8 +369,8 @@ We already saw how to reply with a long long in the examples above:
 
     RedisModule_ReplyWithLongLong(ctx,12345);
 
-To reply with a simple string, that can't contain binary values or newlines,
-(so it's suitable to send small words, like "OK") we use:
+To reply with a simple string like "OK", that can't contain binary 
+values or newlines, use:
 
     RedisModule_ReplyWithSimpleString(ctx,"OK");
 
@@ -396,18 +381,18 @@ two different functions:
 
     int RedisModule_ReplyWithString(RedisModuleCtx *ctx, RedisModuleString *str);
 
-The first function gets a C pointer and length. The second a RedisMoudleString
+The first function gets a C pointer and length. The second a RedisModuleString
 object. Use one or the other depending on the source type you have at hand.
 
-In order to reply with an array, you just need to use a function to emit the
-array length, followed by as many calls to the above functions as the number
-of elements of the array are:
+In order to reply with an array, use a function to emit the array 
+length, followed by as many calls to the above functions as there are
+elements in the array:
 
     RedisModule_ReplyWithArray(ctx,2);
     RedisModule_ReplyWithStringBuffer(ctx,"age",3);
     RedisModule_ReplyWithLongLong(ctx,22);
 
-To return nested arrays is easy, your nested array element just uses another
+Returning nested arrays is easy--the nested array element just uses another
 call to `RedisModule_ReplyWithArray()` followed by the calls to emit the
 sub array elements.
 
@@ -416,16 +401,16 @@ sub array elements.
 Sometimes it is not possible to know beforehand the number of items of
 an array. As an example, think of a Redis module implementing a FACTOR
 command that given a number outputs the prime factors. Instead of
-factorializing the number, storing the prime factors into an array, and
-later produce the command reply, a better solution is to start an array
+factorializing the number, storing the prime factors in an array, and
+then producing the command reply, a better solution is to start an array
 reply where the length is not known, and set it later. This is accomplished
 with a special argument to `RedisModule_ReplyWithArray()`:
 
     RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
 
-The above call starts an array reply so we can use other `ReplyWith` calls
-in order to produce the array items. Finally in order to set the length
-se use the following call:
+The above call starts an array reply, and more `ReplyWith` calls can 
+then be used to produce the array items. Finally in order to set the 
+length use the following call:
 
     RedisModule_ReplySetArrayLength(ctx, number_of_items);
 
@@ -443,7 +428,7 @@ to this:
 Another common use case for this feature is iterating over the arrays of
 some collection and only returning the ones passing some kind of filtering.
 
-It is possible to have multiple nested arrays with postponed reply.
+It is possible to have multiple nested arrays with a postponed reply.
 Each call to `SetArray()` will set the length of the latest corresponding
 call to `ReplyWithArray()`:
 
@@ -459,8 +444,7 @@ This creates a 100 items array having as last element a 10 items array.
 # Arity and type checks
 
 Often commands need to check that the number of arguments and type of the key
-is correct. In order to report a wrong arity, there is a specific function
-called `RedisModule_WrongArity()`. The usage is trivial:
+is correct. To report a wrong arity, use `RedisModule_WrongArity()`:
 
     if (argc != 2) return RedisModule_WrongArity(ctx);
 
@@ -482,8 +466,8 @@ is of the expected type, or if it's empty.
 
 ## Low level access to keys
 
-Low level access to keys allow to perform operations on value objects associated
-to keys directly, with a speed similar to what Redis uses internally to
+Low level access to keys enable operations on value objects associated
+with keys directly, with a speed similar to what Redis uses internally to
 implement the built-in commands.
 
 Once a key is opened, a key pointer is returned that will be used with all the
@@ -493,39 +477,44 @@ associated value.
 Because the API is meant to be very fast, it cannot do too many run-time
 checks, so the user must be aware of certain rules to follow:
 
-* Opening the same key multiple times where at least one instance is opened for writing, is undefined and may lead to crashes.
-* While a key is open, it should only be accessed via the low level key API. For example opening a key, then calling DEL on the same key using the `RedisModule_Call()` API will result into a crash. However it is safe to open a key, perform some operation with the low level API, closing it, then using other APIs to manage the same key, and later opening it again to do some more work.
+* Opening the same key multiple times where at least one instance is 
+opened for writing, is undefined and may lead to crashes.
+* While a key is open, it should only be accessed via the low level key 
+API. For example opening a key, then calling DEL on the same key using 
+the `RedisModule_Call()` API will result in a crash. However it is safe 
+to open a key, perform some operation with the low level API, close it, 
+then use other APIs to manage the same key, and later opening it again 
+to do some more work.
 
-In order to open a key the `RedisModule_OpenKey` function is used. It returns
-a key pointer, that we'll use with all the next calls to access and modify
+In order to open a key the `RedisModule_OpenKey` function is used. It 
+returns a key pointer, used in subsequent calls to access and modify
 the value:
 
     RedisModuleKey *key;
     key = RedisModule_OpenKey(ctx,argv[1],REDISMODULE_READ);
 
-The second argument is the key name, that must be a `RedisModuleString` object.
-The third argument is the mode: `REDISMODULE_READ` or `REDISMODULE_WRITE`.
-It is possible to use `|` to bitwise OR the two modes to open the key in
-both modes. Currently a key opened for writing can also be accessed for reading
-but this is to be considered an implementation detail. The right mode should
-be used in sane modules.
+The second argument is the key name, and must be a `RedisModuleString` 
+object. The third argument is the mode: `REDISMODULE_READ` or 
+`REDISMODULE_WRITE`. It is possible to use `|` to bitwise OR the two 
+modes to open the key in both modes. Currently, a key opened for writing
+can also be accessed for reading but this is to be considered an 
+implementation detail. The right mode should be used in sane modules.
 
-You can open non exisitng keys for writing, since the keys will be created
-when an attempt to write to the key is performed. However when opening keys
-just for reading, `RedisModule_OpenKey` will return NULL if the key does not
-exist.
+You can open non-existent keys for writing, and the keys will be created
+when an attempt to write to the key is performed. However when opening 
+keys just for reading, `RedisModule_OpenKey` will return NULL if the key
+does not exist.
 
-Once you are done using a key, you can close it with:
+A key is closed by calling:
 
     RedisModule_CloseKey(key);
 
-Note that if automatic memory management is enabled, you are not forced to
-close keys. When the module function returns, Redis will take care to close
-all the keys which are still open.
+With automatic memory management enabled, Redis will close all open keys 
+when the module function returns
 
 ## Getting the key type
 
-In order to obtain the value of a key, use the `RedisModule_KeyType()` function:
+In order to obtain the value of a key, use `RedisModule_KeyType()`:
 
     int keytype = RedisModule_KeyType(key);
 
@@ -538,9 +527,9 @@ It returns one of the following values:
     REDISMODULE_KEYTYPE_SET
     REDISMODULE_KEYTYPE_ZSET
 
-The above are just the usual Redis key types, with the addition of an empty
-type, that signals the key pointer is associated with an empty key that
-does not yet exists.
+The above are standard Redis key types, with the addition of an empty
+type signalling the key pointer is associated with an empty key that
+does not exist yet.
 
 ## Creating new keys
 
@@ -561,9 +550,9 @@ Just use:
 
 The function returns `REDISMODULE_ERR` if the key is not open for writing.
 Note that after a key gets deleted, it is setup in order to be targeted
-by new key commands. For example `RedisModule_KeyType()` will return it is
-an empty key, and writing to it will create a new key, possibly of another
-type (depending on the API used).
+by new key commands. For example `RedisModule_KeyType()` will return it 
+as an empty key, and writing to it will create a new key, possibly of 
+another type (depending on the API used).
 
 ## Managing key expires (TTLs)
 
@@ -600,7 +589,7 @@ performed.
 ## Obtaining the length of values
 
 There is a single function in order to retrieve the length of the value
-associated to an open key. The returned length is value-specific, and is
+associated with an open key. The returned length is value-specific, and is
 the string length for strings, and the number of elements for the aggregated
 data types (how many elements there is in a list, set, sorted set, hash).
 
@@ -619,8 +608,8 @@ The function works exactly like the Redis `SET` command itself, that is, if
 there is a prior value (of any type) it will be deleted.
 
 Accessing existing string values is performed using DMA (direct memory
-access) for speed. The API will return a pointer and a length, so that's
-possible to access and, if needed, modify the string directly.
+access) for speed. The API will return a pointer and a length, so that
+it's possible to access and, if needed, modify the string directly.
 
     size_t len, j;
     char *myptr = RedisModule_StringDMA(key,REDISMODULE_WRITE,&len);
@@ -653,31 +642,31 @@ It's possible to push and pop values from list values:
     int RedisModule_ListPush(RedisModuleKey *key, int where, RedisModuleString *ele);
     RedisModuleString *RedisModule_ListPop(RedisModuleKey *key, int where);
 
-In both the APIs the `where` argument specifies if to push or pop from tail
+The `where` argument specifies whether to push or pop from the tail
 or head, using the following macros:
 
     REDISMODULE_LIST_HEAD
     REDISMODULE_LIST_TAIL
 
-Elements returned by `RedisModule_ListPop()` are like strings craeted with
+Elements returned by `RedisModule_ListPop()` are like strings created with
 `RedisModule_CreateString()`, they must be released with
 `RedisModule_FreeString()` or by enabling automatic memory management.
 
 ## Set type API
 
-Work in progress.
+See [FUNCTIONS.md](FUNCTIONS.md)
 
 ## Sorted set type API
 
-Work in progress.
+See [FUNCTIONS.md](FUNCTIONS.md)
 
 ## Hash type API
 
-Work in progress.
+See [FUNCTIONS.md](FUNCTIONS.md)
 
 ## Iterating aggregated values
 
-Work in progress.
+See [FUNCTIONS.md](FUNCTIONS.md)
 
 # Replicating commands
 
@@ -687,43 +676,41 @@ it is important for module commands to handle their replication in a consistent
 way.
 
 When using the higher level APIs to invoke commands, replication happens
-automatically if you use the "!" modifier in the format string of
+automatically when using the "!" modifier in the format string of
 `RedisModule_Call()` as in the following example:
 
     reply = RedisModule_Call(ctx,"INCR","!sc",argv[1],"10");
 
-As you can see the format specifier is `"!sc"`. The bang is not parsed as a
-format specifier, but it internally flags the command as "must replicate".
+The bang is not parsed as a format specifier, but it internally flags 
+the command as "must replicate".
 
-If you use the above programming style, there are no problems.
-However sometimes things are more complex than that, and you use the low level
-API. In this case, if there are no side effects in the command execution, and
-it consistently always performs the same work, what is possible to do is to
-replicate the command verbatim as the user executed it. To do that, you just
-need to call the following function:
+For more complex scenarios than that, use the low level API. In this 
+case, if there are no side effects in the command execution, and
+it always consistently performs the same work, it is possible 
+to replicate the command verbatim as the user executed it. To do that, 
+call the following function:
 
     RedisModule_ReplicateVerbatim(ctx);
 
-When you use the above API, you should not use any other replication function
+When you using the above API, do not use any other replication function
 since they are not guaranteed to mix well.
 
-However this is not the only option. It's also possible to exactly tell
-Redis what commands to replicate as the effect of the command execution, using
-an API similar to `RedisModule_Call()` but that instead of calling the command
-sends it to the AOF / slaves stream. Example:
+An alternative is to tell Redis exactly which commands to replicate as 
+the effect of the command execution, using an API similar to 
+`RedisModule_Call()`. Instead of calling the command they are sent to 
+the AOF / slaves stream. For example:
 
     RedisModule_Replicate(ctx,"INCRBY","cl","foo",my_increment);
 
 It's possible to call `RedisModule_Replicate` multiple times, and each
-will emit a command. All the sequence emitted is wrapped between a
+will emit a command. The entire sequence emitted is wrapped in a
 `MULTI/EXEC` transaction, so that the AOF and replication effects are the
 same as executing a single command.
 
-Note that `Call()` replication and `Replicate()` replication have a rule,
-in case you want to mix both forms of replication (not necessarily a good
-idea if there are simpler approaches). Commands replicated with `Call()`
-are always the first emitted in the final `MULTI/EXEC` block, while all
-the commands emitted with `Replicate()` will follow.
+It is not a good idea to mix both forms of replication if there are 
+simpler alternatives. However, when mixing note that commands replicated
+with `Call()` are always the first emitted in the final `MULTI/EXEC` 
+block, while all the commands emitted with `Replicate()` will follow.
 
 # Automatic memory management
 
@@ -731,20 +718,20 @@ Normally when writing programs in the C language, programmers need to manage
 memory manually. This is why the Redis modules API has functions to release
 strings, close open keys, free replies, and so forth.
 
-However given that commands are executed in a contained environment and
-with a set of strict APIs, Redis is able to provide automatic memory management
-to modules, at the cost of some performance (most of the time, a very low
-cost).
+However since commands are executed in a contained environment and
+with a set of strict APIs, Redis is able to provide automatic memory 
+management to modules, at the cost of some performance (most of the 
+time, a very low cost).
 
-When automatic memory management is enabled:
+When automatic memory management is enabled, there is **no need to**:
 
-1. You don't need to close open keys.
-2. You don't need to free replies.
-3. You don't need to free RedisModuleString objects.
+1. Close open keys.
+2. Free replies.
+3. Free RedisModuleString objects.
 
-However you can still do it, if you want. For example, automatic memory
-management may be active, but inside a loop allocating a lot of strings,
-you may still want to free strings no longer used.
+Automatic and manual memory management can be combined. For example, 
+automatic memory management may be active, but inside a loop allocating 
+a lot of strings, you may still want to free strings no longer used.
 
 In order to enable automatic memory management, just call the following
 function at the start of the command implementation:
@@ -757,7 +744,7 @@ benefit.
 
 # Writing commands compatible with Redis Cluster
 
-Work in progress. Implement and document the following API:
+Work in progress, see [FUNCTIONS.md](FUNCTIONS.md) for the following API:
 
     RedisModule_IsKeysPositionRequest(ctx);
     RedisModule_KeyAtPos(ctx,pos);

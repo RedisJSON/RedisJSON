@@ -8,7 +8,7 @@ This little repo is here to help you write Redis modules a bit more easily.
 
 The only file you really need to start writing Redis modules. Either put this path into your module's include path, or copy it. 
 
-Notice: The original file is from the Redis repo, this is an up-to-date copy of it.
+Notice: This is an up-to-date copy of it from the Redis repo.
 
 ### 2. LibRMUtil 
 
@@ -41,6 +41,9 @@ You can treat it as a template for your module, and extned its code and makefile
 Read this before starting, as it's more than an API reference.
 
 2. [FUNCTIONS.md](FUNCTIONS.md) - Generated API reference documentation for both the Redis module API, and LibRMUtil.
+
+3. [TYPES.md](TYPES.md) - Describes the API for creating new data structures inside Redis modules, 
+copied from the Redis repo.
 
 
 # Quick Start Guide
