@@ -30,13 +30,13 @@ int ParseCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   if (RMUtil_ParseArgsAfter("PROD", argv, argc, "ll", &x, &y) ==
       REDISMODULE_OK) {
     RedisModule_ReplyWithLongLong(ctx, x * y);
-    return REDISMODULE_ERR;
+    return REDISMODULE_OK;
   }
 
   // something is fishy...
   RedisModule_ReplyWithError(ctx, "Invalid arguments");
 
-  return REDISMODULE_OK;
+  return REDISMODULE_ERR;
 }
 
 /*
