@@ -6,7 +6,7 @@ inline int __vector_PushPtr(Vector *v, void *elem) {
     Vector_Resize(v, v->cap ? v->cap * 2 : 1);
   }
 
-  __vector_PutPtr(v, v->top++, elem);
+  __vector_PutPtr(v, v->top, elem);
   return v->top;
 }
 
@@ -43,9 +43,9 @@ inline int __vector_PutPtr(Vector *v, size_t pos, void *elem) {
   } else {
     memset(v->data + pos * v->elemSize, 0, v->elemSize);
   }
-  // move the end offset to pos if we grew
-  if (pos > v->top) {
-    v->top = pos;
+  // move the end offset to pos + 1 if we grew
+  if (pos >= v->top) {
+    v->top = pos + 1;
   }
   return 1;
 }
