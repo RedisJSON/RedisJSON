@@ -20,6 +20,7 @@ A small library of utility functions and macros for module developers, including
 * The entire `sds` string library, lifted from Redis itself.
 * A generic scalable Vector library. Not redis specific but we found it useful.
 * A few other helpful macros and functions.
+* `alloc.h`, an include file that allows modules implementing data types to implicitly replace the `malloc()` function family with the Redis special allocation wrappers.
 
 It can be found under the `rmutil` folder, and compiles into a static library you link your module against.    
 
