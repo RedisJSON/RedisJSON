@@ -17,7 +17,7 @@
 #define __rmutil_register_cmd(ctx, cmd, f, mode) if (RedisModule_CreateCommand(ctx, cmd, f, mode, \
                                                   1, 1, 1) == REDISMODULE_ERR) return REDISMODULE_ERR;
                                                   
-#define RMUtil_RegisterReadCmd(ctx, cmd, f) __rmutil_register_cmd(ctx, cmd, f, "readonly")                                              }
+#define RMUtil_RegisterReadCmd(ctx, cmd, f) __rmutil_register_cmd(ctx, cmd, f, "readonly")
 
 #define RMUtil_RegisterWriteCmd(ctx, cmd, f) __rmutil_register_cmd(ctx, cmd, f, "write")                                          
 
