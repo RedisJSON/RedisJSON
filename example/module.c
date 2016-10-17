@@ -137,7 +137,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
   }
 
   // register example.hgetset - using the shortened utility registration macro
-  RMUtil_RegisterWriteCmd(ctx, "example.hgetset", HGetSetCommand);
+  RMUtil_RegisterWriteCmd(ctx, "example.hgetset", HGetSetCommand, "fast");
 
   // register the unit test
   RMUtil_RegisterWriteCmd(ctx, "example.test", TestModule);
