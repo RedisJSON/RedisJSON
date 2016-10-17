@@ -13,13 +13,15 @@
         return REDISMODULE_ERR; \
     }
 
-
-#define __rmutil_register_cmd(ctx, cmd, f, mode) if (RedisModule_CreateCommand(ctx, cmd, f, mode, \
-                                                  1, 1, 1) == REDISMODULE_ERR) return REDISMODULE_ERR;
+#define __rmutil_register_cmd(ctx, cmd, f, mode) \
+    if (RedisModule_CreateCommand(ctx, cmd, f, \
+        (!strcmp(mode, "readonly ")) ? "readonly" : \
+        (!strcmp(mode, "write ")) ? "write" : mode, \
+        1, 1, 1) == REDISMODULE_ERR) return REDISMODULE_ERR;
                                                   
-#define RMUtil_RegisterReadCmd(ctx, cmd, f) __rmutil_register_cmd(ctx, cmd, f, "readonly")
+#define RMUtil_RegisterReadCmd(ctx, cmd, f, ...) __rmutil_register_cmd(ctx, cmd, f, "readonly " __VA_ARGS__)
 
-#define RMUtil_RegisterWriteCmd(ctx, cmd, f) __rmutil_register_cmd(ctx, cmd, f, "write")                                          
+#define RMUtil_RegisterWriteCmd(ctx, cmd, f, ...) __rmutil_register_cmd(ctx, cmd, f, "write " __VA_ARGS__)
 
 /* RedisModule utilities. */
 
