@@ -21,7 +21,10 @@ endif
 CFLAGS = -I$(RM_INCLUDE_DIR) -Wall -g -fPIC -lc -lm -Og -std=gnu99  
 CC=gcc
 
-all: module.so 
+all: rmutil module.so
+
+rmutil: FORCE
+	$(MAKE) -C $(RMUTIL_LIBDIR)
 
 module.so: module.o
 	$(LD) -o $@ module.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc 
@@ -29,3 +32,4 @@ module.so: module.o
 clean:
 	rm -rf *.xo *.so *.o
 
+FORCE:
