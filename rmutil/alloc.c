@@ -1,8 +1,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
-
-#include "../redismodule.h"
 #include "alloc.h"
 
 /* A patched implementation of strdup that will use our patched calloc */
