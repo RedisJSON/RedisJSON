@@ -6,7 +6,6 @@
 #include <stdarg.h>
 #include <limits.h>
 #include <string.h>
-#include <redismodule.h>
 #include "util.h"
 
 /**

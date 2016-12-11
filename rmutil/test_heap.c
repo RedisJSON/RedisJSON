@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
     assert(99 == n);
 
     Vector_Free(v);
-    printf("PASS!");
+    printf("PASS!\n");
     return 0;
 }
 

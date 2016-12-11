@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
     assert (rc == 0);
     
     Vector_Free(v);
-    printf("PASS!");
+    printf("PASS!\n");
     
     return 0;
     //Vector_Push(v, "hello");

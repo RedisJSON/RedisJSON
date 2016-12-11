@@ -1,4 +1,4 @@
-#include <printf.h>
+#include <stdio.h>
 #include "assert.h"
 #include "priority_queue.h"
 
@@ -32,6 +32,6 @@ int main(int argc, char **argv) {
     assert(15 == n);
 
     Priority_Queue_Free(pq);
-    printf("PASS!");
+    printf("PASS!\n");
     return 0;
 }

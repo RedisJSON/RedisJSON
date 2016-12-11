@@ -17,7 +17,7 @@
  */
 
 #include <stdlib.h>
-#include "../redismodule.h"
+#include <redismodule.h>
 
 char *rmalloc_strndup(const char *s, size_t n);
 
