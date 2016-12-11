@@ -52,9 +52,8 @@ copied from the Redis repo.
 Here's what you need to do to build your first module:
 
 0. Build Redis in a build supporting modules.
-1. Build librmutil: `cd rmutil && make`
-2. Build the example module: `cd example && make`
-3. Run redis loading the module: `/path/to/redis-server --loadmodule ./example/module.so`
+1. Build librmutil and the module by running `make`. (you can also build them seperatly by running `make` in their respective dirs)
+2. Run redis loading the module: `/path/to/redis-server --loadmodule ./module.so`
 
 Now run `redis-cli` and try the commands:
 
