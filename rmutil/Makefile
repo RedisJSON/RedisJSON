@@ -26,4 +26,4 @@ test_heap: test_heap.o heap.o vector.o
 
 test_priority_queue: test_priority_queue.o priority_queue.o heap.o vector.o
 	$(CC) -Wall -o test_priority_queue priority_queue.o heap.o vector.o test_priority_queue.o -lc -O0
-	@(sh -c ./test_heap)
+	@(sh -c ./test_priority_queue)
