@@ -6,18 +6,18 @@
 
 #include "sds.h"
 
-RedisModuleString *RMUtil_CreateFormattedString(RedisModuleCtx *ctx, const char *fmt, ...) {
-    sds s = sdsempty();
+// RedisModuleString *RMUtil_CreateFormattedString(RedisModuleCtx *ctx, const char *fmt, ...) {
+//     sds s = sdsempty();
     
-    va_list ap;
-    va_start(ap, fmt);
-    s = sdscatvprintf(s, fmt, ap);
-    va_end(ap);
+//     va_list ap;
+//     va_start(ap, fmt);
+//     s = sdscatvprintf(s, fmt, ap);
+//     va_end(ap);
     
-    RedisModuleString *ret = RedisModule_CreateString(ctx, (const char *)s, sdslen(s));
-    sdsfree(s);
-    return ret;
-}
+//     RedisModuleString *ret = RedisModule_CreateString(ctx, (const char *)s, sdslen(s));
+//     sdsfree(s);
+//     return ret;
+// }
 
 int RMUtil_StringEquals(RedisModuleString *s1, RedisModuleString *s2) {
     
