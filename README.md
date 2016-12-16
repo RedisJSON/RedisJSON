@@ -46,6 +46,8 @@ Read this before starting, as it's more than an API reference.
 3. [TYPES.md](TYPES.md) - Describes the API for creating new data structures inside Redis modules, 
 copied from the Redis repo.
 
+4. [BLOCK.md](BLOCK.md) - Describes the API for blocking a client while performing asynchronous tasks on a separate thread.
+
 
 # Quick Start Guide
 
