@@ -22,35 +22,6 @@ namely XML and BSON.
 * We will not implement our own JSON parser and composer, but use existing libraries.
 * The code apart from the implementation of the redis commands will not depend on redis and will be testable without being compiled as a module.
 
-## External API
-
-Proposed API for the module:
-
-```
-JSON.SET <key> <path> <json> [SCHEMA <schema_key>]
-
-JSON.GET <key> [<path>]
-
-JSON.MGET <path> <key> [<key> ...]
-
-JSON.DEL <key> <path>
-
-JSON.SETSCHEMA <key> <json> 
-  Notes:
-    1. not sure if needed, we can add a modifier on the generic SET
-    2. indexing will be specified in the schema
-
-JSON.VALIDATE <schema_key> <json>
-
-Optional commands:
-
-JSON.INCREMENTBY <key> <path> <num>
-    (Might be an overkill ;)
-
-JSON.EXPIRE <key> <path> <ttl>    
-
-```
-
 ## Object Data Type
 
 The internal representation of JSON objects will be stored in a redis data type called Object [TBD].
@@ -65,7 +36,29 @@ When updating, reading and deleting parts of json objects, we'll use path specif
 
 These too will have internal representation disconnected from their JSON path representation. 
 
-## Secondary Indexes
+## JSONPath syntax compatability
+
+We only support a limited subset of it. Furthermore, jsonsl's jpr implementation may be worth looking into.
+
+| JSONPath         | rejson      | Description |
+| ---------------- | ----------- | ----------------------------------------------------------------- |
+| `$`              | key name    | the root element                                                  |
+| `*`              | N/A #1      | wildcard, can be used instead of name or index                    |
+| `..`             | N/A #2      | recursive descent a.k.a deep scan, can be used instead of name    |
+| `.` or `[]`      | `.` or `[]` | child operator                                                    |
+| `[]`             | `[]`        | subscript operator                                                |
+| `[,]`            | N/A #3      | Union operator. Allows alternate names or array indices as a set. |
+| `@`              | N/A #4      | the current element being proccessed by a filter predicate        |
+| [start:end:step] | N/A #3      | array slice operator                                              |
+| ?()              | N/A #4      | applies a filter (script) expression                              |
+| ()               | N/A #4      | script expression, using the underlying script engine             |
+
+ref: http://goessner.net/articles/JsonPath/
+
+1.  Wildcard should be added, but mainly useful for filters
+1.  Deep scan should be added
+1.  Union and slice operators should be added to ARR*, GET, MGET, DEL...
+1.  Filtering and scripting (min,max,...) should wait until some indexing is supported
 
 ## Connecting a JSON parser / writer
 

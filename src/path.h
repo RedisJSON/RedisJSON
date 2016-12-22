@@ -1,6 +1,30 @@
+/*
+* Copyright (C) 2016 Redis Labs
+*
+* This program is free software: you can redistribute it and/or modify
+* it under the terms of the GNU Affero General Public License as
+* published by the Free Software Foundation, either version 3 of the
+* License, or (at your option) any later version.
+*
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+* GNU Affero General Public License for more details.
+*
+* You should have received a copy of the GNU Affero General Public License
+* along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
 #ifndef __PATH_H__
 #define __PATH_H__
+
+#include <string.h>
+#include <sys/param.h>
 #include "object.h"
+
+#ifdef REDIS_MODULE_TARGET
+#include <alloc.h>
+#endif
 
 /* The type of a path node */
 typedef enum {
@@ -52,12 +76,15 @@ SearchPath NewSearchPath(size_t cap);
 void SearchPath_AppendIndex(SearchPath *p, int idx);
 
 /* Append a string key lookup node to the search path */
-void SearchPath_AppendKey(SearchPath *p, const char *key);
+void SearchPath_AppendKey(SearchPath *p, const char *key, const size_t len);
+
+/* Appends a root node to the search path (makes sense only as the first append)  */
+void SearchPath_AppendRoot(SearchPath *p);
 
 /* Free a search path and all its nodes */
 void SearchPath_Free(SearchPath *p);
 
-Node *__pathNode_eval(PathNode *pn, Node *n, PathError *err);
+// Node *__pathNode_eval(PathNode *pn, Node *n, PathError *err);
 
 /**
 * Find a node in an object tree based on a parsed path.
@@ -65,5 +92,11 @@ Node *__pathNode_eval(PathNode *pn, Node *n, PathError *err);
 * is put into n's pointer. This can be NULL if the lookup matches a NULL node.
 */
 PathError SearchPath_Find(SearchPath *path, Node *root, Node **n);
+
+/**
+* Like SearchPath_Find, but sets p to the parent container of n. In case of E_NOKEY, E_NOINDEX,
+* and E_INFINDEX returns the path level of the error in errnode.
+*/
+PathError SearchPath_FindEx(SearchPath *path, Node *root, Node **n, Node **p, int *errnode);
 
 #endif

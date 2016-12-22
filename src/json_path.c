@@ -1,5 +1,21 @@
+/*
+* Copyright (C) 2016 Redis Labs
+*
+* This program is free software: you can redistribute it and/or modify
+* it under the terms of the GNU Affero General Public License as
+* published by the Free Software Foundation, either version 3 of the
+* License, or (at your option) any later version.
+*
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+* GNU Affero General Public License for more details.
+*
+* You should have received a copy of the GNU Affero General Public License
+* along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
 #include "json_path.h"
-#include <string.h>
 
 int _tokenizePath(const char *json, size_t len, SearchPath *path) {
     tokenizerState st = S_NULL;
@@ -25,8 +41,8 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
                         st = S_BRACKET;
                         break;
                     default:
-                        // only alpha allowed in the beginning
-                        if (isalpha(c)) {
+                        // only letters, dollar signs and underscores are allowed at the beginning
+                        if (isalpha(c) || '$' == 'c' || '_' == c) {
                             tok.len++;
                             st = S_IDENT;
                             break;
@@ -38,15 +54,23 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
 
             // we're after a square bracket opening
             case S_BRACKET:  // [
-                // quote after brackets means dict key
+                // quotes after brackets means dict key
                 if (c == '"') {
                     // skip to the beginnning of the key
                     tok.s++;
-                    st = S_KEY;
-                    // digit after bracket means numeric index
+                    st = S_DKEY;
+                } else if (c == '\'') {
+                    // skip to the beginnning of the key
+                    tok.s++;
+                    st = S_SKEY;
                 } else if (isdigit(c)) {
+                    // digit after bracket means numeric index
                     tok.len++;
                     st = S_NUMBER;
+                } else if ('-' == c) {
+                    // this could be the beginning of a negative index
+                    tok.len++;
+                    st = S_MINUS;
                 } else {
                     goto syntaxerror;
                 }
@@ -54,8 +78,8 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
 
             // we're after a dot
             case S_DOT:
-                // start of ident token
-                if (isalpha(c)) {
+                // start of ident token, can only be a letter, dollar sign or underscore
+                if (isalpha(c) || '$' == c || '_' == c) {
                     tok.len++;
                     st = S_IDENT;
                 } else {
@@ -63,11 +87,11 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
                 }
                 break;
 
-            // we're within a number
+            // we're within a number (array index)
             case S_NUMBER:
                 if (isdigit(c)) {
                     tok.len++;
-                    continue;
+                    break;
                 }
                 if (c == ']') {
                     st = S_NULL;
@@ -88,16 +112,16 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
                     offset++;
                     goto tokenend;
                 }
-                // we only allow letters, numbers and underscores in identifiers
-                if (!isalnum(c) && c != '_') {
+                // we only allow letters, numbers, dollar signs and underscores in identifiers
+                if (!isalnum(c) && '$' != c && '_' != c) {
                     goto syntaxerror;
                 }
                 // advance one
                 tok.len++;
                 break;
 
-            // we're withing a bracketed string key
-            case S_KEY:
+            // we're within a bracketed string key
+            case S_DKEY:
                 // end of key
                 if (c == '"') {
                     if (offset < len - 1 && *(pos + 1) == ']') {
@@ -112,30 +136,65 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
                 }
                 tok.len++;
                 break;
-        }
+            case S_SKEY:
+                // end of key
+                if (c == '\'') {
+                    if (offset < len - 1 && *(pos + 1) == ']') {
+                        tok.type = T_KEY;
+                        pos += 2;
+                        offset += 2;
+                        st = S_NULL;
+                        goto tokenend;
+                    } else {
+                        goto syntaxerror;
+                    }
+                }
+                tok.len++;
+                break;
+
+            // we're within a negative index so we expect a digit now
+            case S_MINUS:
+                if (isdigit(c)) {
+                    tok.len++;
+                    st = S_NUMBER;
+                } else {
+                    goto syntaxerror;
+                }
+                break;
+        }  // switch (st)
         offset++;
         pos++;
+        
+        // ident string must end if len reached
+        if (S_IDENT == st && len == offset) {
+            st = S_NULL;
+            tok.type = T_KEY;
+            goto tokenend;
+        }
         continue;
-    tokenend : {
-        printf("token: %.*s\n", tok.len, tok.s);
-        if (tok.type == T_INDEX) {
+
+    tokenend: {
+        if (T_INDEX == tok.type) {
             // convert the string to int. we can't use atoi because it expects
-            // NULL
-            // termintated strings
+            // NULL termintated strings
             int64_t num = 0;
-            for (int i = 0; i < tok.len; i++) {
+            for (int i = !isdigit(tok.s[0]); i < tok.len; i++) {
                 int digit = tok.s[i] - '0';
                 num = num * 10 + digit;
             }
-
+            if ('-' == tok.s[0]) num = -num;
             SearchPath_AppendIndex(path, num);
-        } else if (tok.type == T_KEY) {
-            SearchPath_AppendKey(path, strndup(tok.s, tok.len));
+        } else if (T_KEY == tok.type) {
+            if (1 == offset == len && '.' == c) {  // check for root
+                SearchPath_AppendRoot(path);
+            } else {
+                SearchPath_AppendKey(path, tok.s, tok.len);
+            }
         }
         tok.s = pos;
         tok.len = 0;
     }
-    }
+    }  // while (offset < len)
 
     // these are the only legal states at the end of consuming the string
     if (st == S_NULL || st == S_IDENT) {
@@ -143,7 +202,6 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
     }
 
 syntaxerror:
-    printf("syntax error at offset %zd ('%c')\n", offset, json[offset]);
     return OBJ_ERR;
 }
 

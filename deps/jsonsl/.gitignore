@@ -1,0 +1,54 @@
+# Copying and distribution of this file, with or without modification,
+# are permitted in any medium without royalty provided this notice is
+# preserved.  This file is offered as-is, without any warranty.
+# Names of contributors must not be used to endorse or promote products
+# derived from this file without specific prior written permission.
+
+
+# Temp files
+*~
+*.bak
+*.backup
+\#*
+.\#*
+*\#
+*.swp
+*.sav
+*.save
+*.autosav
+*.autosave
+
+# Generated binaries
+*.o
+*.so
+*.dll
+*.exe
+*.dylib
+*.dSYM
+share
+
+# Generated folders
+## Generated binary folders
+bin/
+binaries/
+obj/
+objects/
+build*/
+Build*/
+release*/
+Release*/
+dbg*/
+debug*/
+Debug*/
+## Generated documentation
+/doc/
+docs/
+documentation/
+Documentation/
+doc-html/
+
+# Tests
+tests/jpr_test
+tests/json_test
+tests/unescape
+tests/cxxtest

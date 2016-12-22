@@ -1,0 +1,100 @@
+{
+   "web-app" : {
+      "servlet-mapping" : {
+         "cofaxTools" : "/tools/*",
+         "cofaxCDS" : "/",
+         "fileServlet" : "/static/*",
+         "cofaxAdmin" : "/admin/*",
+         "cofaxEmail" : "/cofaxutil/aemail/*"
+      },
+      "taglib" : {
+         "taglib-uri" : "cofax.tld",
+         "taglib-location" : "/WEB-INF/tlds/cofax.tld"
+      },
+      "servlet" : [
+         {
+            "servlet-class" : "org.cofax.cds.CDSServlet",
+            "init-param" : {
+               "maxUrlLength" : 500,
+               "useJSP" : false,
+               "dataStoreMaxConns" : 100,
+               "dataStoreConnUsageLimit" : 100,
+               "cachePackageTagsTrack" : 200,
+               "dataStoreUrl" : "jdbc:microsoft:sqlserver://LOCALHOST:1433;DatabaseName=goon",
+               "searchEngineFileTemplate" : "forSearchEngines.htm",
+               "templateProcessorClass" : "org.cofax.WysiwygTemplate",
+               "dataStoreUser" : "sa",
+               "useDataStore" : true,
+               "templateOverridePath" : "",
+               "dataStoreLogLevel" : "debug",
+               "jspFileTemplate" : "articleTemplate.jsp",
+               "dataStoreInitConns" : 10,
+               "templateLoaderClass" : "org.cofax.FilesTemplateLoader",
+               "cacheTemplatesRefresh" : 15,
+               "jspListTemplate" : "listTemplate.jsp",
+               "dataStoreName" : "cofax",
+               "searchEngineRobotsDb" : "WEB-INF/robots.db",
+               "cachePagesDirtyRead" : 10,
+               "configGlossary:installationAt" : "Philadelphia, PA",
+               "configGlossary:poweredBy" : "Cofax",
+               "dataStoreTestQuery" : "SET NOCOUNT ON;select test='test';",
+               "cacheTemplatesStore" : 50,
+               "cachePagesRefresh" : 10,
+               "dataStorePassword" : "dataStoreTestQuery",
+               "searchEngineListTemplate" : "forSearchEnginesList.htm",
+               "dataStoreClass" : "org.cofax.SqlDataStore",
+               "dataStoreDriver" : "com.microsoft.jdbc.sqlserver.SQLServerDriver",
+               "cachePagesStore" : 100,
+               "templatePath" : "templates",
+               "dataStoreLogFile" : "/usr/local/tomcat/logs/datastore.log",
+               "defaultFileTemplate" : "articleTemplate.htm",
+               "configGlossary:staticPath" : "/content/static",
+               "configGlossary:adminEmail" : "ksm@pobox.com",
+               "redirectionClass" : "org.cofax.SqlRedirection",
+               "cachePackageTagsRefresh" : 60,
+               "configGlossary:poweredByIcon" : "/images/cofax.gif",
+               "cachePackageTagsStore" : 200,
+               "defaultListTemplate" : "listTemplate.htm",
+               "cachePagesTrack" : 200,
+               "cacheTemplatesTrack" : 100
+            },
+            "servlet-name" : "cofaxCDS"
+         },
+         {
+            "servlet-class" : "org.cofax.cds.EmailServlet",
+            "init-param" : {
+               "mailHostOverride" : "mail2",
+               "mailHost" : "mail1"
+            },
+            "servlet-name" : "cofaxEmail"
+         },
+         {
+            "servlet-class" : "org.cofax.cds.AdminServlet",
+            "servlet-name" : "cofaxAdmin"
+         },
+         {
+            "servlet-class" : "org.cofax.cds.FileServlet",
+            "servlet-name" : "fileServlet"
+         },
+         {
+            "servlet-class" : "org.cofax.cms.CofaxToolsServlet",
+            "init-param" : {
+               "betaServer" : true,
+               "dataLogMaxSize" : "",
+               "adminGroupID" : 4,
+               "removePageCache" : "/content/admin/remove?cache=pages&id=",
+               "logLocation" : "/usr/local/tomcat/logs/CofaxTools.log",
+               "dataLog" : 1,
+               "dataLogLocation" : "/usr/local/tomcat/logs/dataLog.log",
+               "lookInContext" : 1,
+               "removeTemplateCache" : "/content/admin/remove?cache=templates&id=",
+               "templatePath" : "toolstemplates/",
+               "log" : 1,
+               "fileTransferFolder" : "/usr/local/tomcat/webapps/content/fileTransferFolder",
+               "logMaxSize" : ""
+            },
+            "servlet-name" : "cofaxTools"
+         }
+      ]
+   }
+}

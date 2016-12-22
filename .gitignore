@@ -32,5 +32,10 @@
 *.dSYM/
 *.su
 
+# Python
+venv/
+*.pyc
+
 /build
 /Testing
+/.vscode
