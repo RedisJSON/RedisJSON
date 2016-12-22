@@ -24,6 +24,7 @@
     *   [`JSON.OBJKEYS`](#objkeys) returns the keys in an object
     *   [`JSON.OBJLEN`](#objlen) reports the number of keys in an object
 *   [Other commands](#other-commands)
+    *   [`JSON.MEMORY`](#memory) returns the memory usage of a ReJSON key
     *   [`JSON.RESP`](#resp) returns a JSON value using Redis Serialization Protocol
 
 ## JSON
@@ -323,6 +324,17 @@ If the `key` does not exist, null is returned
 ### <a name="forget" />`JSON.FORGET <key> <path>`
 
 This command is an alias for [`JSON.DEL`](#del).
+
+### <a name="memory" />`JSON.MEMORY <key>`
+
+> **Available since 1.0.0.**  
+> **Time complexity:**  O(N), where N is the size of the JSON value.
+
+Compute the size in bytes of a JSON value.
+
+#### Return value
+
+[Integer][2], specifically the size in bytes of the value.
 
 ### <a name="resp" />`JSON.RESP <key>`
 

@@ -135,7 +135,8 @@ int NodeFromJSONPath(Node *root, const RedisModuleString *path, JSONPathNode_t *
 }
 
 void ReplyWithPathTypeError(RedisModuleCtx *ctx, NodeType expected, NodeType actual) {
-    sds err = sdscatfmt(sdsempty(), REJSON_ERROR_PATH_WRONGTYPE, NodeTypeStr(expected), NodeTypeStr(actual));
+    sds err = sdscatfmt(sdsempty(), REJSON_ERROR_PATH_WRONGTYPE, NodeTypeStr(expected),
+                        NodeTypeStr(actual));
     RedisModule_ReplyWithError(ctx, err);
     sdsfree(err);
 }
@@ -152,23 +153,22 @@ void ReplyWithPathError(RedisModuleCtx *ctx, const JSONPathNode_t *jpn) {
         case E_BADTYPE:
             if (NT_KEY == epn->type) {
                 err = sdscatfmt(err, "ERR invalid index '[\"%s\"]' at level %i in path",
-                              epn->value.key, jpn->errlevel);
+                                epn->value.key, jpn->errlevel);
             } else {
-                err = sdscatfmt(err, "ERR invalid key '[%i]' at level %i in path",
-                              epn->value.index, jpn->errlevel);
+                err = sdscatfmt(err, "ERR invalid key '[%i]' at level %i in path", epn->value.index,
+                                jpn->errlevel);
             }
             break;
         case E_NOINDEX:
             err = sdscatfmt(err, "ERR index '[%i]' out of range at level %i in path",
-                              epn->value.index, jpn->errlevel);
+                            epn->value.index, jpn->errlevel);
             break;
         case E_NOKEY:
-            err = sdscatfmt(err, "ERR key '%s' does not exist at level %i in path",
-                              epn->value.key, jpn->errlevel);
+            err = sdscatfmt(err, "ERR key '%s' does not exist at level %i in path", epn->value.key,
+                            jpn->errlevel);
             break;
         default:
-            err = sdscatfmt(err, "ERR unknown path error at level %i in path",
-                              jpn->errlevel);
+            err = sdscatfmt(err, "ERR unknown path error at level %i in path", jpn->errlevel);
             break;
     }  // switch (err)
     RedisModule_ReplyWithError(ctx, err);
@@ -224,7 +224,10 @@ void JSONTypeAofRewrite(RedisModuleIO *aof, RedisModuleString *key, void *value)
 * Reply: Array, specifically the JSON's RESP form.
 */
 int JSONResp_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    if ((argc != 2)) return RedisModule_WrongArity(ctx);
+    if ((argc != 2)) {
+        RedisModule_WrongArity(ctx);
+        return REDISMODULE_ERR;
+    }
     RedisModule_AutoMemory(ctx);
 
     // key must be empty (reply with null) or a JSON type
@@ -234,11 +237,41 @@ int JSONResp_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
         RedisModule_ReplyWithNull(ctx);
         return REDISMODULE_OK;
     } else if (RedisModule_ModuleTypeGetType(key) != JSONType) {
-        return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+        {
+            RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+            return REDISMODULE_ERR;
+        }
     }
 
     Object *objRoot = RedisModule_ModuleTypeGetValue(key);
     ObjectTypeToRespReply(ctx, objRoot);
+    return REDISMODULE_OK;
+}
+
+/**
+ * JSON.MEMORY <key>
+ * Reply: Integer, specifically the memory usage of the key
+*/
+int JSONMemory_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if ((argc != 2)) {
+        RedisModule_WrongArity(ctx);
+        return REDISMODULE_ERR;
+    }
+    RedisModule_AutoMemory(ctx);
+
+    // key must be empty (reply with null) or a JSON type
+    RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
+    int type = RedisModule_KeyType(key);
+    if (REDISMODULE_KEYTYPE_EMPTY == type) {
+        RedisModule_ReplyWithNull(ctx);
+        return REDISMODULE_OK;
+    } else if (RedisModule_ModuleTypeGetType(key) != JSONType) {
+        RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+        return REDISMODULE_ERR;
+    }
+
+    Object *objRoot = RedisModule_ModuleTypeGetValue(key);
+    RedisModule_ReplyWithLongLong(ctx, ObjectTypeMemoryUsage(objRoot));
     return REDISMODULE_OK;
 }
 
@@ -250,7 +283,10 @@ int JSONResp_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
 */
 int JSONType_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // check args
-    if (argc != 3) return RedisModule_WrongArity(ctx);
+    if (argc != 3) {
+        RedisModule_WrongArity(ctx);
+        return REDISMODULE_ERR;
+    }
     RedisModule_AutoMemory(ctx);
 
     // key must be empty or a JSON type
@@ -304,7 +340,10 @@ error:
 */
 int JSONLen_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // check args
-    if (argc != 3) return RedisModule_WrongArity(ctx);
+    if (argc != 3) {
+        RedisModule_WrongArity(ctx);
+        return REDISMODULE_ERR;
+    }
     RedisModule_AutoMemory(ctx);
 
     // the actual command
@@ -371,7 +410,10 @@ error:
 */
 int JSONObjKeys_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // check args
-    if (argc != 3) return RedisModule_WrongArity(ctx);
+    if (argc != 3) {
+        RedisModule_WrongArity(ctx);
+        return REDISMODULE_ERR;
+    }
     RedisModule_AutoMemory(ctx);
 
     // key must be empty or a JSON type
@@ -430,16 +472,19 @@ error:
 /**
  * JSON.SET <key> <path> <json>
  * Sets the JSON value at `path` in `key`
- * 
+ *
  * For new keys the `path` must be the root. For existing keys, when the entire `path` exists, the
  * value that it contains is replaced with the `json` value. A key (with its respective value) is
  * added to a JSON Object only if it is the last child in the `path`.
- * 
+ *
  * Reply: Simple string, OK.
 */
 int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // check args
-    if (argc != 4) return RedisModule_WrongArity(ctx);
+    if (argc != 4) {
+        RedisModule_WrongArity(ctx);
+        return REDISMODULE_ERR;
+    }
     RedisModule_AutoMemory(ctx);
 
     // key must be empty or a JSON type
@@ -553,9 +598,9 @@ error:
  * JSON.GET <key> [INDENT indentation-string] [NEWLINE newline-string] [SPACE space-string]
  *                [path ...]
  * Return the value at `path` in JSON serialized form.
- * 
+ *
  * This command accepts multiple `path`s, and defaults to the value's root when none are given.
- * 
+ *
  * The following subcommands change the reply's and are all set to the empty string by default:
  *   - `INDENT` sets the indentation string for nested levels
  *   - `NEWLINE` sets the string that's printed at the end of each line
@@ -567,7 +612,10 @@ error:
  * is a key.
 */
 int JSONGet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    if ((argc < 2)) return RedisModule_WrongArity(ctx);
+    if ((argc < 2)) {
+        RedisModule_WrongArity(ctx);
+        return REDISMODULE_ERR;
+    }
     RedisModule_AutoMemory(ctx);
 
     // key must be empty (reply with null) or an object type
@@ -683,10 +731,14 @@ error:
  * JSON.MGET <path> <key> [<key> ...]
  * Returns the values at `path` from multiple `key`s. Non-existing keys and non-existing paths are
  * reported as null.
- * Reply: Array of Bulk Strings, specifically the JSON serialization of the value at each key's path.
+ * Reply: Array of Bulk Strings, specifically the JSON serialization of the value at each key's
+ * path.
 */
 int JSONMGet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    if ((argc < 2)) return RedisModule_WrongArity(ctx);
+    if ((argc < 2)) {
+        RedisModule_WrongArity(ctx);
+        return REDISMODULE_ERR;
+    }
     if (RedisModule_IsKeysPositionRequest(ctx)) {
         for (int i = 2; i < argc - 2; i++) RedisModule_KeyAtPos(ctx, i);
         return REDISMODULE_OK;
@@ -767,7 +819,10 @@ error:
 */
 int JSONDel_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // check args
-    if (argc != 3) return RedisModule_WrongArity(ctx);
+    if (argc != 3) {
+        RedisModule_WrongArity(ctx);
+        return REDISMODULE_ERR;
+    }
     RedisModule_AutoMemory(ctx);
 
     // key must be empty or a JSON type
@@ -838,7 +893,10 @@ error:
  * Reply: String, specifically the resulting JSON number value
 */
 int JSONNum_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    if ((argc < 4)) return RedisModule_WrongArity(ctx);
+    if ((argc < 4)) {
+        RedisModule_WrongArity(ctx);
+        return REDISMODULE_ERR;
+    }
     RedisModule_AutoMemory(ctx);
 
     const char *cmd = RedisModule_StringPtrLen(argv[0], NULL);
@@ -960,7 +1018,10 @@ error:
 */
 int JSONStrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // check args
-    if (argc != 4) return RedisModule_WrongArity(ctx);
+    if (argc != 4) {
+        RedisModule_WrongArity(ctx);
+        return REDISMODULE_ERR;
+    }
     RedisModule_AutoMemory(ctx);
 
     // key can't be empty and must be a JSON type
@@ -1016,7 +1077,7 @@ int JSONStrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
     // the value must be a string
     if (N_STRING != NODETYPE(jo)) {
         sds err = sdscatfmt(sdsempty(), "ERR wrong type of value - expected %s but found %s",
-                          NodeTypeStr(N_STRING), NodeTypeStr(NODETYPE(jpn.n)));
+                            NodeTypeStr(N_STRING), NodeTypeStr(NODETYPE(jpn.n)));
         RedisModule_ReplyWithError(ctx, err);
         sdsfree(err);
     }
@@ -1044,7 +1105,10 @@ error:
 */
 int JSONArrInsert_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // check args
-    if (argc < 5) return RedisModule_WrongArity(ctx);
+    if (argc < 5) {
+        RedisModule_WrongArity(ctx);
+        return REDISMODULE_ERR;
+    }
     RedisModule_AutoMemory(ctx);
 
     // key can't be empty and must be a JSON type
@@ -1152,7 +1216,10 @@ error:
 */
 int JSONArrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // check args
-    if (argc < 4) return RedisModule_WrongArity(ctx);
+    if (argc < 4) {
+        RedisModule_WrongArity(ctx);
+        return REDISMODULE_ERR;
+    }
     RedisModule_AutoMemory(ctx);
 
     // key can't be empty and must be a JSON type
@@ -1252,7 +1319,10 @@ error:
 */
 int JSONArrIndex_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // check args
-    if ((argc < 4) || (argc > 6)) return RedisModule_WrongArity(ctx);
+    if ((argc < 4) || (argc > 6)) {
+        RedisModule_WrongArity(ctx);
+        return REDISMODULE_ERR;
+    }
     RedisModule_AutoMemory(ctx);
 
     // key can't be empty and must be a JSON type
@@ -1343,7 +1413,10 @@ error:
 */
 int JSONArrTrim_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // check args
-    if (argc != 5) return RedisModule_WrongArity(ctx);
+    if (argc != 5) {
+        RedisModule_WrongArity(ctx);
+        return REDISMODULE_ERR;
+    }
     RedisModule_AutoMemory(ctx);
 
     // key can't be empty and must be a JSON type
@@ -1434,6 +1507,10 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
         REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
+    if (RedisModule_CreateCommand(ctx, "json.memory", JSONMemory_RedisCommand, "readonly", 1, 1,
+                                  1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
+
     if (RedisModule_CreateCommand(ctx, "json.type", JSONType_RedisCommand, "readonly", 1, 1, 1) ==
         REDISMODULE_ERR)
         return REDISMODULE_ERR;
@@ -1472,8 +1549,8 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
                                   1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
-    if (RedisModule_CreateCommand(ctx, "json.strappend", JSONStrAppend_RedisCommand, "write deny-oom", 1,
-                                  1, 1) == REDISMODULE_ERR)
+    if (RedisModule_CreateCommand(ctx, "json.strappend", JSONStrAppend_RedisCommand,
+                                  "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     /* JSON array commands matey. */

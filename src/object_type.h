@@ -29,6 +29,9 @@ void ObjectTypeRdbSave(RedisModuleIO *rdb, void *value);
 void ObjectTypeFree(void *value);
 
 /* Replies with a RESP representation of the node. */
-void ObjectTypeToRespReply(RedisModuleCtx *ctx, Node *node);
+void ObjectTypeToRespReply(RedisModuleCtx *ctx, const Node *node);
+
+/* Reports the memory usage (in bytes) of the node. */
+long long ObjectTypeMemoryUsage(const Node *node);
 
 #endif

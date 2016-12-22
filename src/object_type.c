@@ -215,10 +215,54 @@ void _ObjectTypeToResp_Begin(Node *n, void *ctx) {
     }
 }
 
-void ObjectTypeToRespReply(RedisModuleCtx *ctx, Node *node) {
+void ObjectTypeToRespReply(RedisModuleCtx *ctx, const Node *node) {
     NodeSerializerOpt nso = {0};
 
     nso.fBegin = _ObjectTypeToResp_Begin;
     nso.xBegin = 0xff;  // mask for all basic types
     Node_Serializer(node, &nso, ctx);
+}
+
+void _ObjectTypeMemoryUsage(Node *n, void *ctx) {
+    long long *memory = (long long *)ctx;
+
+    if (!n) {
+        // the null node takes no memory
+        return;
+    } else {
+        // account for the struct's size
+        *memory += sizeof(Node);
+        switch (n->type) {
+            case N_BOOLEAN:
+            case N_INTEGER:
+            case N_NUMBER:
+            case N_NULL:  // keeps the compiler from complaining
+                // these are stored in the node itself
+                return;
+            case N_STRING:
+                *memory += n->value.strval.len;
+                return;
+            case N_KEYVAL:
+                *memory += strlen(n->value.kvval.key);
+                return;
+            case N_DICT:
+                *memory += n->value.dictval.cap * sizeof(Node *);
+                return;
+            case N_ARRAY:
+                *memory += n->value.arrval.cap * sizeof(Node *);
+                return;
+        }
+    }
+}
+
+long long ObjectTypeMemoryUsage(const Node *node) {
+
+    NodeSerializerOpt nso = {0};
+    long long memory = 0;
+
+    nso.fBegin = _ObjectTypeMemoryUsage;
+    nso.xBegin = 0xff;  // mask for all basic types
+    Node_Serializer(node, &nso, &memory);
+
+    return memory;
 }
