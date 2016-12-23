@@ -88,10 +88,10 @@ be optimized. This is planned for a future version.
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(N), where N is the size of the deleted value.
 
-Delete the value at `path`.
+Delete a value.
 
-Non-existing keys as well as non-existing paths are ignored. Deleting an object's root is
-equivalent to deleting the key from Redis.
+`path` defaults to root in not provided. Non-existing keys as well as non-existing paths are
+ignored. Deleting an object's root is equivalent to deleting the key from Redis.
 
 #### Return value
 
@@ -155,14 +155,14 @@ added to a JSON Object only if it is the last child in the `path`.
 
 [Simple String][1]: `OK`.
 
-### <a name="type" />`JSON.TYPE <key> <path>`
+### <a name="type" />`JSON.TYPE <key> [path]`
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(1).
 
 Report the type of JSON value at `path`.
 
-If the key or path do not exist, null is returned.
+`path` defaults to root in not provided. If the `key` or `path` do not exist, null is returned.
 
 Increments the number value stored at `path` by `number`.
 
@@ -195,24 +195,26 @@ Multiplies the number value stored at `path` by `number`.
 
 ## String operations
 
-### <a name="strappend" />`JSON.STRAPPEND <key> <path> <json-string>`
+### <a name="strappend" />`JSON.STRAPPEND <key> [path] <json-string>`
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(N), where N is the new string's length.
 
 Append the `json-string` value(s) the string at `path`.
 
+`path` defaults to root in not provided.
+
 #### Return value
 [Integer][2], specifically the string's new length.
 
-### <a name="strlen" />`JSON.STRLEN <key> <path>`
+### <a name="strlen" />`JSON.STRLEN <key> [path]`
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(1).
 
 Report the length of the JSON String at `path` in `key`.
 
-If the `key` does not exist, null is returned
+`path` defaults to root if not provided. If the `key` or `path` do not exist, null is returned.
 
 #### Return value
 
@@ -262,14 +264,14 @@ index values are interpreted as starting from the end.
 
 [Integer][2], specifically the array's new size.
 
-### <a name="arrlen" />`JSON.ARRLEN <key> <path>`
+### <a name="arrlen" />`JSON.ARRLEN <key> [path]`
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(1).
 
 Report the length of the JSON Array at `path` in `key`.
 
-If the `key` does not exist, null is returned
+`path` defaults to root if not provided. If the `key` or `path` do not exist, null is returned.
 
 #### Return value
 
@@ -293,27 +295,28 @@ it will be treated like the last element in it.
 
 ## Object operations
 
-### <a name="objkeys" />`JSON.OBJKEYS <key> <path>`
+### <a name="objkeys" />`JSON.OBJKEYS <key> [path]`
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(N), where N is the number of keys in the object.
 
 Return the keys in the object that's referenced by `path`.
 
-If the object is empty, or either key or path do not exist then null is returned.
+`path` defaults to root if not provided. If the object is empty, or either `key` or `path` do not
+exist then null is returned.
 
 #### Return value
 
 [Array][4], specifically the key names in the object as [Bulk Strings][3].
 
-### <a name="objlen" />`JSON.OBJLEN <key> <path>`
+### <a name="objlen" />`JSON.OBJLEN <key> [path]`
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(1).
 
 Report the number of keys in the JSON Object at `path` in `key`.
 
-If the `key` does not exist, null is returned
+`path` defaults to root if not provided. If the `key` or `path` do not exist, null is returned.
 
 #### Return value
 

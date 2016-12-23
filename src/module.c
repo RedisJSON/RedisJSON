@@ -276,14 +276,14 @@ int JSONMemory_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int a
 }
 
 /**
- * JSON.TYPE <key> <path>
+ * JSON.TYPE <key> [path]
  * Reports the type of JSON value at `path`.
- * If the key or path do not exist, null is returned.
+ * `path` defaults to root if not provided. If the `key` or `path` do not exist, null is returned.
  * Reply: Simple string, specifically the type.
 */
 int JSONType_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // check args
-    if (argc != 3) {
+    if ((argc < 2) || (argc > 3)) {
         RedisModule_WrongArity(ctx);
         return REDISMODULE_ERR;
     }
@@ -304,7 +304,9 @@ int JSONType_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
     // validate path
     JSONPathNode_t jpn;
     Object *objRoot = RedisModule_ModuleTypeGetValue(key);
-    if (PARSE_OK != NodeFromJSONPath(objRoot, argv[2], &jpn)) {
+    RedisModuleString *spath =
+        (3 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
+    if (PARSE_OK != NodeFromJSONPath(objRoot, spath, &jpn)) {
         RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
         return REDISMODULE_ERR;
     }
@@ -329,18 +331,18 @@ error:
 }
 
 /**
- * JSON.ARRLEN <key> <path>
- * JSON.OBJLEN <key> <path>
- * JSON.STRLEN <key> <path>
+ * JSON.ARRLEN <key> [path]
+ * JSON.OBJLEN <key> [path]
+ * JSON.STRLEN <key> [path]
  * Report the length of the JSON value at `path` in `key`.
  *
- * If the `key` does not exist, null is returned.
+ * `path` defaults to root if not provided. If the `key` or `path` do not exist, null is returned.
  *
  * Reply: Integer, specifically the length of the value.
 */
 int JSONLen_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // check args
-    if (argc != 3) {
+    if ((argc < 2) || (argc > 3)) {
         RedisModule_WrongArity(ctx);
         return REDISMODULE_ERR;
     }
@@ -364,7 +366,9 @@ int JSONLen_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
     // validate path
     JSONPathNode_t jpn;
     Object *objRoot = RedisModule_ModuleTypeGetValue(key);
-    if (PARSE_OK != NodeFromJSONPath(objRoot, argv[2], &jpn)) {
+    RedisModuleString *spath =
+        (3 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
+    if (PARSE_OK != NodeFromJSONPath(objRoot, spath, &jpn)) {
         RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
         return REDISMODULE_ERR;
     }
@@ -401,16 +405,17 @@ error:
 }
 
 /**
- * JSON.OBJKEYS <key> <path>
+ * JSON.OBJKEYS <key> [path]
  * Return the keys in the object that's referenced by `path`.
  *
- * If the object is empty, or either key or path do not exist then null is returned.
+ * `path` defaults to root if not provided. If the object is empty, or either `key` or `path` do not
+ * exist then null is returned.
  *
  * Reply: Array, specifically the key names as bulk strings.
 */
 int JSONObjKeys_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // check args
-    if (argc != 3) {
+    if ((argc < 3) || (argc > 3)) {
         RedisModule_WrongArity(ctx);
         return REDISMODULE_ERR;
     }
@@ -431,7 +436,9 @@ int JSONObjKeys_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int 
     // validate path
     JSONPathNode_t jpn;
     Object *objRoot = RedisModule_ModuleTypeGetValue(key);
-    if (PARSE_OK != NodeFromJSONPath(objRoot, argv[2], &jpn)) {
+    RedisModuleString *spath =
+        (3 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
+    if (PARSE_OK != NodeFromJSONPath(objRoot, spath, &jpn)) {
         RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
         return REDISMODULE_ERR;
     }
@@ -809,17 +816,17 @@ error:
 }
 
 /**
- * JSON.DEL <key> <path>
- * Delete the value at `path`.
+ * JSON.DEL <key> [path]
+ * Delete a value.
  *
- * Non-existing keys as well as non-existing paths are ignored. Deleting an object's root is
- * equivalent to deleting the key from Redis.
+ * `path` defaults to root in not provided. Non-existing keys as well as non-existing paths are
+ * ignored. Deleting an object's root is equivalent to deleting the key from Redis.
  *
- * Reply: Integer], specifically the number of paths deleted (0 or 1).
+ * Reply: Integer, specifically the number of paths deleted (0 or 1).
 */
 int JSONDel_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // check args
-    if (argc != 3) {
+    if ((argc < 2) || (argc > 3)) {
         RedisModule_WrongArity(ctx);
         return REDISMODULE_ERR;
     }
@@ -839,7 +846,9 @@ int JSONDel_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     // validate path
     JSONPathNode_t jpn;
     Object *objRoot = RedisModule_ModuleTypeGetValue(key);
-    if (PARSE_OK != NodeFromJSONPath(objRoot, argv[2], &jpn)) {
+    RedisModuleString *spath =
+        (3 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
+    if (PARSE_OK != NodeFromJSONPath(objRoot, spath, &jpn)) {
         RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
         return REDISMODULE_ERR;
     }
@@ -886,14 +895,14 @@ error:
 }
 
 /**
- * JSON.NUMINCRBY <key> <path> <value>
- * JSON.NUMMULTBY <key> <path> <value>
+ * JSON.NUMINCRBY <key> [path] <value>
+ * JSON.NUMMULTBY <key> [path] <value>
  * Increments/multiplies the value stored under `path` by `value`.
  * `path` must exist path and must be a number value.
  * Reply: String, specifically the resulting JSON number value
 */
 int JSONNum_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    if ((argc < 4)) {
+    if ((argc < 3) || (argc > 4)) {
         RedisModule_WrongArity(ctx);
         return REDISMODULE_ERR;
     }
@@ -914,7 +923,9 @@ int JSONNum_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
     // validate path
     JSONPathNode_t jpn;
     Object *objRoot = RedisModule_ModuleTypeGetValue(key);
-    if (PARSE_OK != NodeFromJSONPath(objRoot, argv[2], &jpn)) {
+    RedisModuleString *spath =
+        (4 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
+    if (PARSE_OK != NodeFromJSONPath(objRoot, spath, &jpn)) {
         RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
         return REDISMODULE_ERR;
     }
@@ -936,7 +947,7 @@ int JSONNum_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
 
     // we use the json parser to convert the bval arg into a value to catch all of JSON's syntices
     size_t vallen;
-    const char *val = RedisModule_StringPtrLen(argv[3], &vallen);
+    const char *val = RedisModule_StringPtrLen(argv[(4 == argc ? 3 : 2)], &vallen);
     char *jerr = NULL;
     if (JSONOBJECT_OK != CreateNodeFromJSON(val, vallen, &joval, &jerr)) {
         if (jerr) {
@@ -1013,13 +1024,14 @@ error:
 }
 
 /**
- * JSON.STRAPPEND <key> <path> <json-string>
+ * JSON.STRAPPEND <key> [path] <json-string>
  * Append the `json-string` value(s) the string at `path`.
+ * `path` defaults to root in not provided.
  * Reply: Integer, specifically the string's new length.
 */
 int JSONStrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // check args
-    if (argc != 4) {
+    if ((argc < 3) || (argc > 4)) {
         RedisModule_WrongArity(ctx);
         return REDISMODULE_ERR;
     }
@@ -1036,7 +1048,9 @@ int JSONStrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
     // validate path
     JSONPathNode_t jpn;
     Object *objRoot = RedisModule_ModuleTypeGetValue(key);
-    if (PARSE_OK != NodeFromJSONPath(objRoot, argv[2], &jpn)) {
+    RedisModuleString *spath =
+        (4 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
+    if (PARSE_OK != NodeFromJSONPath(objRoot, spath, &jpn)) {
         RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
         return REDISMODULE_ERR;
     }
@@ -1055,7 +1069,7 @@ int JSONStrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
 
     // JSON must be valid
     size_t jsonlen;
-    const char *json = RedisModule_StringPtrLen(argv[3], &jsonlen);
+    const char *json = RedisModule_StringPtrLen(argv[(4 == argc ? 3 : 2)], &jsonlen);
     if (!jsonlen) {
         RedisModule_ReplyWithError(ctx, REJSON_ERROR_EMPTY_STRING);
         goto error;
@@ -1584,9 +1598,8 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
                                   1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
-    RM_LOG_WARNING(ctx, "%s - v%d.%d.%d [encver %d]", RLMODULE_DESC,
-                   PROJECT_VERSION_MAJOR, PROJECT_VERSION_MINOR, PROJECT_VERSION_PATCH,
-                   JSONTYPE_ENCODING_VERSION);
+    RM_LOG_WARNING(ctx, "%s - v%d.%d.%d [encver %d]", RLMODULE_DESC, PROJECT_VERSION_MAJOR,
+                   PROJECT_VERSION_MINOR, PROJECT_VERSION_PATCH, JSONTYPE_ENCODING_VERSION);
 
     return REDISMODULE_OK;
 }
