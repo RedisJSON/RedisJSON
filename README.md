@@ -1,9 +1,9 @@
 # ReJSON - a JSON data type for Redis
 
-ReJSON is a Redis module that implements
-[ECMA-404 The JSON Data Interchange Standard](http://json.org/) as a native data type. It allows
-storing, updating and fetching JSON values from Redis keys (documents). The JSON values are managed
-as binary objects, thus allowing Redis-blazing performance. 
+ReJSON is a [Redis][1] module that implements
+[ECMA-404 The JSON Data Interchange Standard][2] as a native data type. It allows storing, updating
+and fetching JSON values from Redis keys (documents). The JSON values are managed as binary objects,
+thus allowing Redis-blazing performance. 
 
 ## Quickstart
 
@@ -30,17 +30,20 @@ OK
 * Alpha quality
 * AOF rewrite will fail for documents with serialization over 0.5GB?
 * Searching for object keys is O(N)
+* Unicode should be totally unsupported and is definitely untested
 
 ## Building the module library
 
+### Linux
+
 Prerequirements:
 
-* devtools
-* cmake
-* rejson repository (e.g. `git clone https://github.com/RedisLabsModules/rejson.git`)
+* The `build-essential` and `cmake` packages: `apt-get install build-essential cmake`
+* The ReJSON repository: `git clone https://github.com/RedisLabsModules/rejson.git`
 
-Assuming that the repository's directory is at `~/rejson`, navigate to it and run the script
-`bootstrap.sh` followed by `cmake`. This should look something like:
+This module employs standard CMake tooling. Assuming that the repository's directory is at
+`~/rejson`, navigate to it and run the script [`bootstrap.sh`](bootstrap.sh) followed by `cmake`.
+The output should look something like:
 
 ```
 ~/rejson$ ./bootstrap.sh
@@ -71,7 +74,7 @@ Yeah, right :)
 
 Prerequirements:
 
-* Redis v4.0 or above (see ...)
+* [Redis v4.0 or above][3]
 
 The recommended way have Redis load the module is during startup by by adding the following to the
 `redis.conf` file:
@@ -88,24 +91,165 @@ syntax:
 ~/$ redis-server --loadmodule /path/to/module/rejson.so
 ```
 
-Lastly, you can also use the [`MODULE LOAD`](http://redis.io/commands/module-load) command. Note,
-however, that `MODULE LOAD` is a dangerous command and may be blocked/deprecated in the future due
-to security considerations.
+Lastly, you can also use the [`MODULE LOAD`][4] command. Note, however, that `MODULE LOAD` is a
+dangerous command and may be blocked/deprecated in the future due to security considerations.
+
+Once the module has been loaded successfully, the Redis log should have lines similar to:
+
+```
+1877:M 23 Dec 02:02:59.725 # <ReJSON> JSON data type for Redis - v1.0.0 [encver 0]
+1877:M 23 Dec 02:02:59.725 * Module 'ReJSON' loaded from /foo/bar/rejson/lib/rejson.so
+```
 
 ## Using ReJSON
 
-Link to docs/commands
-Basic Python and Node examples to illustrate the use of a raw command.
+Before using ReJSON you should familiarize yourself with its commands and syntax as detailed in the
+[commands refernce](docs/commands) document. However, to quickly get started just review this
+section and get these two things:
+
+1.  A Redis server running the the module (see [building](#building-the-module-library) and
+    [loading](#loading-the-module-to-Redis) for instructions)
+1.  Any [Redis client][5]
+
+### Using `redis-cli`
+
+This example will use `redis-cli` as a client. The first ReJSON command to try out is
+[`JSON.SET`](docs/commands.md#set), which sets a Redis key with a JSON value. All JSON values can be
+used, for example a [string](docs/commands.md#string-operations):
+
+```
+127.0.0.1:6379> JSON.SET foo . '"bar"'
+OK
+127.0.0.1:6379> JSON.GET foo
+"\"bar\""
+127.0.0.1:6379> JSON.TYPE foo .
+string
+```
+
+[`JSON.GET`](docs/commands.md#get) and [`JSON.TYPE`](#docs/commands.md#type) do literally that
+regardless of the value's type, but you should really check out `JSON.GET` prettifying powers. Note
+how the commands are given the period character, i.e. `.`. This is the
+[path](docs/commmands.md#path) to the value in the ReJSON data type and in this case it just means
+the root. A couple more of [string operations](docs/commands.md#string-operations):
+
+```
+127.0.0.1:6379> JSON.STRLEN foo .
+3
+127.0.0.1:6379> JSON.STRAPPEND foo . '"baz"'
+6
+127.0.0.1:6379> JSON.GET foo
+"\"barbaz\""
+
+``` 
+
+[`JSON.STRLEN`](docs/commands.md#strlen) tells you the length of the string, and you can append
+another string to it with [`JSON.STRAPPEND`](docs/commands.md#strappend). Numbers can be
+[incremented](docs/commands.md#numincrby) and [multiplied](docs/commands.md#nummultby):
+
+```
+127.0.0.1:6379> JSON.SET num . 0
+OK
+127.0.0.1:6379> JSON.NUMINCRBY num . 1
+"1"
+127.0.0.1:6379> JSON.NUMINCRBY num . 1.5
+"2.5"
+127.0.0.1:6379> JSON.NUMINCRBY num . -0.75
+"1.75"
+127.0.0.1:6379> JSON.NUMMULTBY num . 24
+"42"
+```
+
+Of course, a more interesting example would involve an array or maybe an object. Because or isn't
+xor here goes:
+
+```
+127.0.0.1:6379> JSON.SET amoreinterestingexample . '[ true, { "answer": 42 }, null ]'
+OK
+127.0.0.1:6379> JSON.GET amoreinterestingexample
+"[true,{\"answer\":42},null]"
+127.0.0.1:6379> JSON.GET amoreinterestingexample [1].answer
+"42"
+127.0.0.1:6379> JSON.DEL amoreinterestingexample [-1]
+1
+127.0.0.1:6379> JSON.GET amoreinterestingexample
+"[true,{\"answer\":42}]"
+```
+
+The handy [`JSON.DEL`](docs/commands.md#del) command deletes anything you tell it to. Arrays can be
+manipulated with a [dedicated subset](docs/commands.md#array-operations) of ReJSON commands:
+
+```
+127.0.0.1:6379> JSON.SET arr . []
+OK
+127.0.0.1:6379> JSON.ARRAPPEND arr . 0
+(integer) 1
+127.0.0.1:6379> JSON.GET arr
+"[0]"
+127.0.0.1:6379> JSON.ARRINSERT arr . 0 -2 -1
+(integer) 3
+127.0.0.1:6379> JSON.GET arr
+"[-2,-1,0]"
+127.0.0.1:6379> JSON.ARRTRIM arr . 1 1
+1
+127.0.0.1:6379> JSON.GET arr
+"[-1]"
+```
+
+And objects have their [own commands](docs/commands.md#object-operations) too:
+
+```
+127.0.0.1:6379> JSON.SET obj . '{ "name": "Cohen, Leonard", "lastSeen": 1478476800, "loggedOut": true }'
+OK
+127.0.0.1:6379> JSON.OBJLEN obj .
+(integer) 3
+127.0.0.1:6379> JSON.OBJKEYS obj .
+1) "name"
+2) "lastSeen"
+3) "loggedOut"
+```
+
+### Using any other client
+
+Unless your [Redis client][5] already supports Redis modules (unlikely) or ReJSON specifically (even
+unlikelier), you should be ok using its ability to send raw Redis commands. Depending on your client
+of choice the exact method for doing that may vary.
+
+#### Python example
+
+This code snippet shows how to use ReJSON from Python with
+[redis-py][https://github.com/andymccurdy/redis-py]:
+
+```Python
+import redis
+import json
+
+data = {
+    'foo': 'bar'
+}
+
+r = redis.StrictRedis()
+r.execute_command('JSON.SET', 'doc', '.', json.dumps(data))
+reply = json.loads(r.execute_command('JSON.GET', 'doc'))
+```
+
+# Node.js example
+
+TODO
 
 ## Testing and development
 
-Link to docs/design.md
+You can find some information abouth ReJSON's design at [docs/design.md](docs/design.md).
 
-Setting the path to the Redis server executable for unit testing: `REDIS_SERVER_PATH` CMake variable
-
-`valgrind --tool=memcheck --suppressions=../redis/src/valgrind.sup ../redis/src/redis-server --loadmodule ./lib/rejson.so`
+The module's testS requires a path to the `redis-server` executable. This is set in the file
+[test/CMakeFiles.txt](test/CMakeFiles.txt) as the CMake variable `REDIS_SERVER_PATH`.
 
 ## Contributing
 
 ## License
 AGPLv3 - see [LICENSE](LICENSE)
+
+  [1]:  http://redis.io/
+  [2]:  http://json.org/
+  [3]:  http://redis.io/download
+  [4]:  http://redis.io/commands/module-load
+  [5]:  http://redis.io/clients
