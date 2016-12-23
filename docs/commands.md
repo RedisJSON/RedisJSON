@@ -25,7 +25,7 @@
     *   [`JSON.OBJKEYS`](#objkeys) returns the keys in an object
     *   [`JSON.OBJLEN`](#objlen) reports the number of keys in an object
 *   [Other commands](#other-commands)
-    *   [`JSON.MEMORY`](#memory) returns the memory usage of a ReJSON key
+    *   [`JSON.MEMORY`](#memory) returns the memory usage in bytes for a value
     *   [`JSON.RESP`](#resp) returns a JSON value using Redis Serialization Protocol
 
 ## JSON
@@ -372,25 +372,27 @@ Report the number of keys in the JSON Object at `path` in `key`.
 
 This command is an alias for [`JSON.DEL`](#del).
 
-### <a name="memory" />`JSON.MEMORY <key>`
+### <a name="memory" />`JSON.MEMORY <key> [path]`
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(N), where N is the size of the JSON value.
 
-Compute the size in bytes of a JSON value.
+Report the memory usage in bytes of a value.
+
+`path` defaults to root if not provided.
 
 #### Return value
 
 [Integer][2], specifically the size in bytes of the value.
 
-### <a name="resp" />`JSON.RESP <key>`
+### <a name="resp" />`JSON.RESP <key> [path]`
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(N), where N is the size of the JSON value.
 
 Return the JSON in `key` in [Redis Serialization Protocol (RESP)][5].
 
-This command uses the following mapping from JSON to RESP:
+`path` defaults to root if not provided. This command uses the following mapping from JSON to RESP:
 -   JSON Null is mapped to the [RESP Null Bulk String][5]
 -   JSON `false` and `true` values are mapped to the respective [RESP Simple Strings][1]
 -   JSON Numbers are mapped to [RESP Integers][2] or [RESP Bulk Strings][3], depending on type

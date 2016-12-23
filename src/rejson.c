@@ -32,7 +32,7 @@
 #include "redismodule.h"
 
 #define JSONTYPE_ENCODING_VERSION 0
-#define JSONTYPE_NAME "OBJECT-RL"
+#define JSONTYPE_NAME "ReJSON-RL"
 #define RLMODULE_NAME "ReJSON"
 #define RLMODULE_DESC "JSON data type for Redis"
 
@@ -209,9 +209,10 @@ void JSONTypeAofRewrite(RedisModuleIO *aof, RedisModuleString *key, void *value)
 // == Module JSON commands ==
 
 /**
-* JSON.RESP <key>
+* JSON.RESP <key> [path]
 * Return the JSON in `key` in RESP.
 *
+* `path` defaults to root if not provided.
 * This command uses the following mapping from JSON to RESP:
 * - JSON Null is mapped to the RESP Null Bulk String
 * - JSON `false` and `true` values are mapped to the respective RESP Simple Strings
@@ -225,7 +226,7 @@ void JSONTypeAofRewrite(RedisModuleIO *aof, RedisModuleString *key, void *value)
 * Reply: Array, specifically the JSON's RESP form.
 */
 int JSONResp_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    if ((argc != 2)) {
+    if ((argc < 2) || (argc > 3)) {
         RedisModule_WrongArity(ctx);
         return REDISMODULE_ERR;
     }
@@ -244,17 +245,36 @@ int JSONResp_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
         }
     }
 
+    // validate path
+    JSONPathNode_t jpn;
     Object *objRoot = RedisModule_ModuleTypeGetValue(key);
-    ObjectTypeToRespReply(ctx, objRoot);
-    return REDISMODULE_OK;
+    RedisModuleString *spath =
+        (3 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
+    if (PARSE_OK != NodeFromJSONPath(objRoot, spath, &jpn)) {
+        RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
+        return REDISMODULE_ERR;
+    }
+
+    if (E_OK == jpn.err) {
+        ObjectTypeToRespReply(ctx, jpn.n);
+        JSONPathNode_Free(&jpn);
+        return REDISMODULE_OK;
+    } else {
+        ReplyWithPathError(ctx, &jpn);
+        JSONPathNode_Free(&jpn);
+        return REDISMODULE_ERR;
+    }
+    return REDISMODULE_OK;  // this is never reached
 }
 
 /**
- * JSON.MEMORY <key>
- * Reply: Integer, specifically the memory usage of the key
+ * JSON.MEMORY <key> [path]
+ * Report the memory usage in bytes of a value.
+ * `path` defaults to root if not provided.
+ * Reply: Integer, specifically the memory usage in bytes of the value.
 */
 int JSONMemory_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    if ((argc != 2)) {
+    if ((argc < 2) || (argc > 3)) {
         RedisModule_WrongArity(ctx);
         return REDISMODULE_ERR;
     }
@@ -271,9 +291,26 @@ int JSONMemory_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int a
         return REDISMODULE_ERR;
     }
 
+    // validate path
+    JSONPathNode_t jpn;
     Object *objRoot = RedisModule_ModuleTypeGetValue(key);
-    RedisModule_ReplyWithLongLong(ctx, ObjectTypeMemoryUsage(objRoot));
-    return REDISMODULE_OK;
+    RedisModuleString *spath =
+        (3 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
+    if (PARSE_OK != NodeFromJSONPath(objRoot, spath, &jpn)) {
+        RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
+        return REDISMODULE_ERR;
+    }
+
+    if (E_OK == jpn.err) {
+        RedisModule_ReplyWithLongLong(ctx, ObjectTypeMemoryUsage(jpn.n));
+        JSONPathNode_Free(&jpn);
+        return REDISMODULE_OK;
+    } else {
+        ReplyWithPathError(ctx, &jpn);
+        JSONPathNode_Free(&jpn);
+        return REDISMODULE_ERR;
+    }
+    return REDISMODULE_OK;  // this is never reached
 }
 
 /**
