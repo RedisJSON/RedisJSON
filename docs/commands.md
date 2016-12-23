@@ -82,6 +82,25 @@ and M is the number of parent object keys.
 <sup>&#8224;</sup> while this is acceptable for objects where N is small, access in larger ones can
 be optimized. This is planned for a future version.
 
+## ReJSON API
+
+Each of the module's commands is described in detail in the sections below. Each command section's
+header is the syntax for the command, where:
+
+*   Command and subcommand names are in uppercase, for example `JSON.SET` or `INDENT`
+*   Mandatory arguments are enclosed in angle brackets, e.g. `<path>`
+*   Optional arguments are enclosed in square brackets, e.g. `[index]`
+*   Additional optional arguments are indicated by three periods, i.e. `...`
+
+Commands usually require a key's name as their first argument and the path is generally assumed to
+be the root if not specified.
+
+The time complexity of the command does not include that of the
+[path](#time-complexity-of-path-evaluation). The size - usually denoted _N_ - of a value is:
+
+*   1 for scalar values
+*   The sum of sizes items in a container
+
 ## ReJSON data type commands
 
 ### <a name="del" />`JSON.DEL <key> <path>`
