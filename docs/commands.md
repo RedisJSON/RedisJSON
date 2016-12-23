@@ -19,6 +19,7 @@
     *   [`JSON.ARRINDEX`](#arrindex) searches for the first occurance of a value in an array
     *   [`JSON.ARRINSERT`](#arrinsert) inserts values in an array
     *   [`JSON.ARRLEN`](#arrlen) reports the array's length
+    *   [`JSON.ARRPOP`](#arrpop) pops a value from an array
     *   [`JSON.ARRTRIM`](#arrtrim) trims an array to contain only a range of elements
 *   [Object operations](#object-operations)
     *   [`JSON.OBJKEYS`](#objkeys) returns the keys in an object
@@ -90,7 +91,7 @@ be optimized. This is planned for a future version.
 
 Delete a value.
 
-`path` defaults to root in not provided. Non-existing keys as well as non-existing paths are
+`path` defaults to root if not provided. Non-existing keys as well as non-existing paths are
 ignored. Deleting an object's root is equivalent to deleting the key from Redis.
 
 #### Return value
@@ -162,7 +163,7 @@ added to a JSON Object only if it is the last child in the `path`.
 
 Report the type of JSON value at `path`.
 
-`path` defaults to root in not provided. If the `key` or `path` do not exist, null is returned.
+`path` defaults to root if not provided. If the `key` or `path` do not exist, null is returned.
 
 Increments the number value stored at `path` by `number`.
 
@@ -202,7 +203,7 @@ Multiplies the number value stored at `path` by `number`.
 
 Append the `json-string` value(s) the string at `path`.
 
-`path` defaults to root in not provided.
+`path` defaults to root if not provided.
 
 #### Return value
 [Integer][2], specifically the string's new length.
@@ -233,7 +234,7 @@ Append the `json` value(s) into the array at `path` after the last element in it
 
 [Integer][2], specifically the array's new size.
 
-### <a name="arrindex" />`JSON.ARRINDEX <key> <path> <json-scalar> [start] [stop]`
+### <a name="arrindex" />`JSON.ARRINDEX <key> <path> <json-scalar> [start [stop]]`
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(N), where N is the array's size.
@@ -276,6 +277,22 @@ Report the length of the JSON Array at `path` in `key`.
 #### Return value
 
 [Integer][2], specifically the array's length.
+
+### <a name="arrpop" />`JSON.ARRPOP <key> [path [index]]`
+
+> **Available since 1.0.0.**  
+> **Time complexity:**  O(N), where N is the array's size for `index` other than the last element,
+O(1) otherwise.
+
+Remove and return element from the index in the array.
+
+`path` defaults to root if not provided. `index` is the position in the array to start popping
+from (defaults to -1, meaning the last element). Out of range indices are rounded to their
+respective array ends. Popping an empty array yields null.
+
+#### Return value
+
+[Bulk String][3], specifically the popped JSON value.
 
 ### <a name="arrtrim" />`JSON.ARRTRIM <key> <path> <start> <stop>`
 

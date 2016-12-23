@@ -25,12 +25,14 @@ OK
 
 ## What is ReJSON
 
+TODO
+
 ## Limitations and known issues
 
 * Alpha quality
 * AOF rewrite will fail for documents with serialization over 0.5GB?
 * Searching for object keys is O(N)
-* Unicode should be totally unsupported and is definitely untested
+* Unicode is assumed to be totally unsupported and is definitely untested
 
 ## Building the module library
 
@@ -97,8 +99,10 @@ dangerous command and may be blocked/deprecated in the future due to security co
 Once the module has been loaded successfully, the Redis log should have lines similar to:
 
 ```
+...
 1877:M 23 Dec 02:02:59.725 # <ReJSON> JSON data type for Redis - v1.0.0 [encver 0]
 1877:M 23 Dec 02:02:59.725 * Module 'ReJSON' loaded from /foo/bar/rejson/lib/rejson.so
+...
 ```
 
 ## Using ReJSON
@@ -193,12 +197,16 @@ OK
 1
 127.0.0.1:6379> JSON.GET arr
 "[-1]"
+127.0.0.1:6379> JSON.ARRPOP arr
+"-1"
+127.0.0.1:6379> JSON.ARRPOP arr
+(nil)
 ```
 
 And objects have their [own commands](docs/commands.md#object-operations) too:
 
 ```
-127.0.0.1:6379> JSON.SET obj . '{ "name": "Cohen, Leonard", "lastSeen": 1478476800, "loggedOut": true }'
+127.0.0.1:6379> JSON.SET obj . '{"name":"Leonard Cohen","lastSeen":1478476800,"loggedOut": true}'
 OK
 127.0.0.1:6379> JSON.OBJLEN obj .
 (integer) 3

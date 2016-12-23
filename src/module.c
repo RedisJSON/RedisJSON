@@ -769,7 +769,7 @@ int JSONMGet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
     for (int i = 2; i < argc; i++) {
         RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[i], REDISMODULE_READ);
 
-        // key must an object type, empties and others return null like MGET
+        // key must an object type, empties and others return null like Redis' MGET
         int type = RedisModule_KeyType(key);
         if (REDISMODULE_KEYTYPE_EMPTY == type) goto null;
         if (RedisModule_ModuleTypeGetType(key) != JSONType) goto null;
@@ -819,7 +819,7 @@ error:
  * JSON.DEL <key> [path]
  * Delete a value.
  *
- * `path` defaults to root in not provided. Non-existing keys as well as non-existing paths are
+ * `path` defaults to root if not provided. Non-existing keys as well as non-existing paths are
  * ignored. Deleting an object's root is equivalent to deleting the key from Redis.
  *
  * Reply: Integer, specifically the number of paths deleted (0 or 1).
@@ -1026,7 +1026,7 @@ error:
 /**
  * JSON.STRAPPEND <key> [path] <json-string>
  * Append the `json-string` value(s) the string at `path`.
- * `path` defaults to root in not provided.
+ * `path` defaults to root if not provided.
  * Reply: Integer, specifically the string's new length.
 */
 int JSONStrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -1321,7 +1321,7 @@ error:
 }
 
 /**
- * JSON.ARRINDEX <key> <path> <scalar> [start] [stop]
+ * JSON.ARRINDEX <key> <path> <scalar> [start [stop]]
  * Search for the first occurance of a scalar JSON value in an array.
  *
  * The optional inclusive `start` (default 0) and exclusive `stop` (default 0, meaning that the last
@@ -1407,6 +1407,104 @@ int JSONArrIndex_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int
 
     RedisModule_ReplyWithLongLong(ctx, Node_ArrayIndex(jpn.n, jo, (int)start, (int)stop));
 
+    JSONPathNode_Free(&jpn);
+    return REDISMODULE_OK;
+
+error:
+    JSONPathNode_Free(&jpn);
+    return REDISMODULE_ERR;
+}
+
+/**
+* JSON.ARRPOP <key> [path [index]]
+* Remove and return element from the index in the array.
+*
+* `path` defaults to root if not provided. `index` is the position in the array to start popping
+* from (defaults to -1, meaning the last element). Out of range indices are rounded to their
+* respective array ends. Popping an empty array yields null.
+*
+* Reply: Bulk String, specifically the popped JSON value.
+*/
+int JSONArrPop_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    // check args
+    if ((argc < 2) || (argc > 4)) {
+        RedisModule_WrongArity(ctx);
+        return REDISMODULE_ERR;
+    }
+    RedisModule_AutoMemory(ctx);
+
+    // key can't be empty and must be a JSON type
+    RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
+    int type = RedisModule_KeyType(key);
+    if (REDISMODULE_KEYTYPE_EMPTY == type || RedisModule_ModuleTypeGetType(key) != JSONType) {
+        RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+        return REDISMODULE_ERR;
+    }
+
+    // validate path
+    JSONPathNode_t jpn;
+    Object *objRoot = RedisModule_ModuleTypeGetValue(key);
+    RedisModuleString *spath =
+        (argc > 2 ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
+    if (PARSE_OK != NodeFromJSONPath(objRoot, spath, &jpn)) {
+        RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
+        return REDISMODULE_ERR;
+    }
+
+    // deal with path errors
+    if (E_OK != jpn.err) {
+        ReplyWithPathError(ctx, &jpn);
+        goto error;
+    }
+
+    // verify that the target's type is an array
+    if (N_ARRAY != NODETYPE(jpn.n)) {
+        ReplyWithPathTypeError(ctx, N_ARRAY, NODETYPE(jpn.n));
+        goto error;
+    }
+
+    // nothing to do
+    long long len = Node_Length(jpn.n);
+    if (!len) {
+        RedisModule_ReplyWithNull(ctx);
+        goto ok;
+    }
+
+    // get the index
+    long long index = -1;
+    if (argc > 3 && REDISMODULE_OK != RedisModule_StringToLongLong(argv[3], &index)) {
+        RedisModule_ReplyWithError(ctx, REJSON_ERROR_INDEX_INVALID);
+        goto error;
+    }
+
+    // convert negative index
+    if (index < 0) index = len + index;
+    if (index < 0) index = 0;
+    if (index >= len) index = len - 1;
+
+    // get and serialize the popped array item
+    JSONSerializeOpt jsopt = {0};
+    sds json = sdsempty();
+    Node *item;
+    Node_ArrayItem(jpn.n, index, &item);
+    SerializeNodeToJSON(item, &jsopt, &json);
+
+    // check whether serialization had succeeded
+    if (!sdslen(json)) {
+        sdsfree(json);
+        RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_SERIALIZE);
+        RedisModule_ReplyWithError(ctx, REJSON_ERROR_SERIALIZE);
+        goto error;
+    }
+
+    // delete the item from the array
+    Node_ArrayDelRange(jpn.n, index, 1);
+
+    // reply with the serialization
+    RedisModule_ReplyWithStringBuffer(ctx, json, sdslen(json));
+    sdsfree(json);
+
+ok:
     JSONPathNode_Free(&jpn);
     return REDISMODULE_OK;
 
@@ -1582,6 +1680,10 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
         return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx, "json.arrindex", JSONArrIndex_RedisCommand, "readonly", 1, 1,
+                                  1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
+
+    if (RedisModule_CreateCommand(ctx, "json.arrpop", JSONArrPop_RedisCommand, "write", 1, 1,
                                   1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 

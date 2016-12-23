@@ -375,6 +375,24 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
             self.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', '.arr', 99, 2), 0)
             self.assertListEqual(json.loads(r.execute_command('JSON.GET', 'test', '.arr')), [])
 
+    def testArrPopCommand(self):
+        """Test JSON.ARRPOP command"""
+
+        with self.redis() as r:
+            r.delete('test')
+            self.assertOk(r.execute_command('JSON.SET', 'test',
+                                            '.', '[1,2,3,4,5,6,7,8,9]'))
+            self.assertEqual('9', r.execute_command('JSON.ARRPOP', 'test'))
+            self.assertEqual('8', r.execute_command('JSON.ARRPOP', 'test', '.'))
+            self.assertEqual('7', r.execute_command('JSON.ARRPOP', 'test', '.', -1))
+            self.assertEqual('5', r.execute_command('JSON.ARRPOP', 'test', '.', -2))
+            self.assertEqual('1', r.execute_command('JSON.ARRPOP', 'test', '.', 0))
+            self.assertEqual('4', r.execute_command('JSON.ARRPOP', 'test', '.', 2))
+            self.assertEqual('6', r.execute_command('JSON.ARRPOP', 'test', '.', 99))
+            self.assertEqual('2', r.execute_command('JSON.ARRPOP', 'test', '.', -99))
+            self.assertEqual('3', r.execute_command('JSON.ARRPOP', 'test'))
+            self.assertIsNone(r.execute_command('JSON.ARRPOP', 'test'))
+
     def testTypeCommand(self):
         """Test JSON.TYPE command"""
 
