@@ -904,7 +904,7 @@ int JSONNum_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
     Object *joval = NULL;   // the by value as a JSON object
 
     // key must be an object type
-    RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
+    RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ | REDISMODULE_WRITE);
     int type = RedisModule_KeyType(key);
     if (RedisModule_ModuleTypeGetType(key) != JSONType) {
         RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
@@ -964,17 +964,18 @@ int JSONNum_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
     }
 
     // make an object out of the result per its type
-    Node *orz;
+    Object *orz;
     // the result is an integer only if both values were
     if (N_INTEGER == NODETYPE(jpn.n) && N_INTEGER == NODETYPE(joval))
-        orz = NewIntNode((int)rz);
+        orz = NewIntNode((int64_t)rz);
     else
         orz = NewDoubleNode(rz);
 
     // replace the original value with the result depending on the parent container's type
     if (SearchPath_IsRootPath(&jpn.sp)) {
         RedisModule_DeleteKey(key);
-        RedisModule_ModuleTypeSetValue(key, JSONType, orz);
+        objRoot = orz;
+        RedisModule_ModuleTypeSetValue(key, JSONType, objRoot);
     } else if (N_DICT == NODETYPE(jpn.p)) {
         if (OBJ_OK != Node_DictSet(jpn.p, jpn.sp.nodes[jpn.sp.len - 1].value.key, orz)) {
             RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_DICT_SET);
@@ -1583,7 +1584,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
                                   1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
-    RM_LOG_WARNING(ctx, "%s - v%d.%d.%d [encver %d] is standing by.", RLMODULE_DESC,
+    RM_LOG_WARNING(ctx, "%s - v%d.%d.%d [encver %d]", RLMODULE_DESC,
                    PROJECT_VERSION_MAJOR, PROJECT_VERSION_MINOR, PROJECT_VERSION_PATCH,
                    JSONTYPE_ENCODING_VERSION);
 

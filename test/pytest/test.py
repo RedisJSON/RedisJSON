@@ -445,6 +445,7 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
             r.delete('test')
             self.assertOk(r.execute_command('JSON.SET', 'test', '.', '{ "foo": 0, "bar": "baz" }'))
             self.assertEqual('1', r.execute_command('JSON.NUMINCRBY', 'test', '.foo', 1))
+            self.assertEqual('1', r.execute_command('JSON.GET', 'test', '.foo'))
             self.assertEqual('3', r.execute_command('JSON.NUMINCRBY', 'test', '.foo', 2))
             self.assertEqual('3.5', r.execute_command('JSON.NUMINCRBY', 'test', '.foo', .5))
 
