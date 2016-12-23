@@ -17,7 +17,7 @@
 */
 
 #ifndef REDIS_MODULE_TARGET
-#pragma GCC error "ReJSON must be compiled as a Redis module"
+// #pragma GCC error "ReJSON must be compiled as a Redis module"
 #endif
 
 #include <logging.h>
@@ -37,6 +37,7 @@
 #define RLMODULE_DESC "JSON data type for Redis"
 
 #define RM_LOGLEVEL_WARNING "warning"
+#define RM_ERRORMSG_SYNTAX "ERR syntax error"
 
 #define OBJECT_ROOT_PATH "."
 
@@ -145,7 +146,7 @@ void ReplyWithPathTypeError(RedisModuleCtx *ctx, NodeType expected, NodeType act
 void ReplyWithPathError(RedisModuleCtx *ctx, const JSONPathNode_t *jpn) {
     // TODO: report actual position in path & literal token
     PathNode *epn = &jpn->sp.nodes[jpn->errlevel];
-    sds err = sdsnew("ERR ");
+    sds err = sdsempty();
     switch (jpn->err) {
         case E_OK:
             err = sdscat(err, "ERR nothing wrong with path");
@@ -477,18 +478,24 @@ error:
 }
 
 /**
- * JSON.SET <key> <path> <json>
+ * JSON.SET <key> <path> <json> [NX|XX]
  * Sets the JSON value at `path` in `key`
  *
- * For new keys the `path` must be the root. For existing keys, when the entire `path` exists, the
- * value that it contains is replaced with the `json` value. A key (with its respective value) is
- * added to a JSON Object only if it is the last child in the `path`.
+ * For new Redis keys the `path` must be the root. For existing keys, when the entire `path` exists,
+ * the value that it contains is replaced with the `json` value.
  *
- * Reply: Simple string, OK.
+ * A key (with its respective value) is added to a JSON Object (in a Redis ReJSON data type key) if
+ * and only if it is the last child in the `path`. The optional subcommands modify this behavior for
+ * both new Redis ReJSON data type keys as well as JSON Object keys in them:
+ *   `NX` - only set the key if it does not already exists
+ *   `XX` - only set the key if it already exists
+ *
+ * Reply: Simple String `OK` if executed correctly, or Null Bulk if the specified `NX` or `XX`
+ * conditions were not met.
 */
 int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // check args
-    if (argc != 4) {
+    if ((argc < 4) || (argc > 5)) {
         RedisModule_WrongArity(ctx);
         return REDISMODULE_ERR;
     }
@@ -524,75 +531,116 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
         return REDISMODULE_ERR;
     }
 
-    // validate path against the existing object root, and pretend that the new object is the root
-    // if the key is empty
+    // subcommand for key creation behavior modifiers NX and XX
+    int subnx = 0, subxx = 0;
+    if (argc > 4) {
+        const char *subcmd = RedisModule_StringPtrLen(argv[4], NULL);
+        if (!strcasecmp("nx", subcmd)) {
+            subnx = 1;
+        } else if (!strcasecmp("xx", subcmd)) {
+            subxx = 1;
+        } else {
+            RedisModule_ReplyWithError(ctx, RM_ERRORMSG_SYNTAX);
+            goto error;
+        }
+    }
+
+    /* Validate path against the existing object root, and pretend that the new object is the root
+     * if the key is empty. This will be caught immediately afterwards because new keys must be
+     * created at the root.
+    */
     JSONPathNode_t jpn;
     Object *objRoot =
         (REDISMODULE_KEYTYPE_EMPTY == type ? jo : RedisModule_ModuleTypeGetValue(key));
     if (PARSE_OK != NodeFromJSONPath(objRoot, argv[2], &jpn)) {
         RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
-        return REDISMODULE_ERR;
+        goto error;
     }
     int isRootPath = SearchPath_IsRootPath(&jpn.sp);
 
+    // handle an empty key
     if (REDISMODULE_KEYTYPE_EMPTY == type) {
         // new keys must be created at the root
         if (E_OK != jpn.err || !isRootPath) {
             RedisModule_ReplyWithError(ctx, REJSON_ERROR_NEW_NOT_ROOT);
             goto error;
         }
+
+        // new keys can be created only if the XX flag is off
+        if (subxx) goto null;
+
         RedisModule_ModuleTypeSetValue(key, JSONType, jo);
-    } else {
-        // deal with path errors
-        switch (jpn.err) {
-            case E_OK:
-                // this means we're good to go so set the value according the parent container
-                if (isRootPath) {
-                    // replacing the root is easy
-                    RedisModule_DeleteKey(key);
-                    RedisModule_ModuleTypeSetValue(key, JSONType, jo);
-                } else if (N_DICT == NODETYPE(jpn.p)) {
-                    if (OBJ_OK != Node_DictSet(jpn.p, jpn.sp.nodes[jpn.sp.len - 1].value.key, jo)) {
-                        RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_DICT_SET);
-                        RedisModule_ReplyWithError(ctx, REJSON_ERROR_DICT_SET);
-                        goto error;
-                    }
-                } else {  // must be an array
-                    int index = jpn.sp.nodes[jpn.sp.len - 1].value.index;
-                    if (index < 0) index = Node_Length(jpn.p) + index;
-                    if (OBJ_OK != Node_ArraySet(jpn.p, index, jo)) {
-                        RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_ARRAY_SET);
-                        RedisModule_ReplyWithError(ctx, REJSON_ERROR_ARRAY_SET);
-                        goto error;
-                    }
-                    // unlike DictSet, ArraySet does not free so we need to call it explicitly
-                    Node_Free(jpn.n);
-                }
-                break;
-            case E_NOKEY:
-                // only allow inserting at terminal
-                if (jpn.errlevel != jpn.sp.len - 1) {
-                    RedisModule_ReplyWithError(ctx, REJSON_ERROR_PATH_NONTERMINAL_KEY);
-                    goto error;
-                }
-                if (OBJ_OK != Node_DictSet(jpn.p, jpn.sp.nodes[jpn.sp.len - 1].value.key, jo)) {
-                    RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_DICT_SET);
-                    RedisModule_ReplyWithError(ctx, REJSON_ERROR_DICT_SET);
-                    goto error;
-                }
-                break;
-            case E_NOINDEX:
-            case E_BADTYPE:
-            default:
-                ReplyWithPathError(ctx, &jpn);
-                goto error;
-        }  // switch (err)
+        goto ok;
+    }
+    
+    // handle an existing key, first make sure there weren't any obvious path errors
+    if (E_OK != jpn.err && E_NOKEY != jpn.err) {
+        ReplyWithPathError(ctx, &jpn);
+        goto error;
     }
 
-    JSONPathNode_Free(&jpn);
-    RedisModule_ReplyWithSimpleString(ctx, "OK");
+    // verify that we're dealing with the last child in case of an object
+    if (E_NOKEY == jpn.err && jpn.errlevel != jpn.sp.len - 1) {
+        RedisModule_ReplyWithError(ctx, REJSON_ERROR_PATH_NONTERMINAL_KEY);
+        goto error;
+    }
 
+    // replace a value according to its container type
+    if (E_OK == jpn.err) {
+        NodeType ntp = NODETYPE(jpn.p);
+
+        // an existing value in the root or an object can be replaced only if the NX is off
+        if (subnx && (isRootPath || N_DICT == ntp)) {
+            goto null;
+        } 
+
+        // other containers, i.e. arrays, do not sport the NX or XX behavioral modification agents
+        if (N_ARRAY == ntp && (subnx || subxx)) {
+            RedisModule_ReplyWithError(ctx, RM_ERRORMSG_SYNTAX);
+            goto error;
+        }
+
+        if (isRootPath) {
+            // replacing the root is easy
+            RedisModule_DeleteKey(key);
+            RedisModule_ModuleTypeSetValue(key, JSONType, jo);
+        } else if (N_DICT == NODETYPE(jpn.p)) {
+            if (OBJ_OK != Node_DictSet(jpn.p, jpn.sp.nodes[jpn.sp.len - 1].value.key, jo)) {
+                RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_DICT_SET);
+                RedisModule_ReplyWithError(ctx, REJSON_ERROR_DICT_SET);
+                goto error;
+            }
+        } else {  // must be an array
+            int index = jpn.sp.nodes[jpn.sp.len - 1].value.index;
+            if (index < 0) index = Node_Length(jpn.p) + index;
+            if (OBJ_OK != Node_ArraySet(jpn.p, index, jo)) {
+                RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_ARRAY_SET);
+                RedisModule_ReplyWithError(ctx, REJSON_ERROR_ARRAY_SET);
+                goto error;
+            }
+            // unlike DictSet, ArraySet does not free so we need to call it explicitly
+            Node_Free(jpn.n);
+        }
+    } else {    // must be E_NOKEY
+        // new keys in the dictionary can be created only if the XX flag is off
+        if (subxx) goto null;
+       
+        if (OBJ_OK != Node_DictSet(jpn.p, jpn.sp.nodes[jpn.sp.len - 1].value.key, jo)) {
+            RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_DICT_SET);
+            RedisModule_ReplyWithError(ctx, REJSON_ERROR_DICT_SET);
+            goto error;
+        }
+    }
+
+ok:
+    RedisModule_ReplyWithSimpleString(ctx, "OK");
     RedisModule_ReplicateVerbatim(ctx);
+    JSONPathNode_Free(&jpn);
+    return REDISMODULE_OK;
+
+null:
+    RedisModule_ReplyWithNull(ctx);
+    JSONPathNode_Free(&jpn);
     return REDISMODULE_OK;
 
 error:
@@ -1683,8 +1731,8 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
                                   1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
-    if (RedisModule_CreateCommand(ctx, "json.arrpop", JSONArrPop_RedisCommand, "write", 1, 1,
-                                  1) == REDISMODULE_ERR)
+    if (RedisModule_CreateCommand(ctx, "json.arrpop", JSONArrPop_RedisCommand, "write", 1, 1, 1) ==
+        REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx, "json.arrtrim", JSONArrTrim_RedisCommand, "write", 1, 1,

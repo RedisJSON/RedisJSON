@@ -90,7 +90,8 @@ header is the syntax for the command, where:
 *   Command and subcommand names are in uppercase, for example `JSON.SET` or `INDENT`
 *   Mandatory arguments are enclosed in angle brackets, e.g. `<path>`
 *   Optional arguments are enclosed in square brackets, e.g. `[index]`
-*   Additional optional arguments are indicated by three periods, i.e. `...`
+*   Additional optional arguments are indicated by three period characters, i.e. `...`
+*   The pipe character, `|`, means an exclusive or
 
 Commands usually require a key's name as their first argument and the path is generally assumed to
 be the root if not specified.
@@ -159,7 +160,7 @@ reported as null.
 [Array][4] of [Bulk Strings][3], specifically the JSON serialization of the value at each key's
 path.
 
-### <a name="set" />`JSON.SET <key> <path> <json>`
+### <a name="set" />`JSON.SET <key> <path> <json> [NX|XX]`
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(M+N), where M is the size of the original value (if it exists) and N is
@@ -167,13 +168,20 @@ path.
 
 Sets the JSON value at `path` in `key`
 
-For new keys the `path` must be the root. For existing keys, when the entire `path` exists, the
-value that it contains is replaced with the `json` value. A key (with its respective value) is
-added to a JSON Object only if it is the last child in the `path`.
+For new Redis keys the `path` must be the root. For existing keys, when the entire `path` exists,
+the value that it contains is replaced with the `json` value.
+
+A key (with its respective value) is added to a JSON Object (in a Redis ReJSON data type key) if
+and only if it is the last child in the `path`. The optional subcommands modify this behavior for
+both new Redis ReJSON data type keys as well as JSON Object keys in them:
+
+*   `NX` - only set the key if it does not already exists
+*   `XX` - only set the key if it already exists
 
 #### Return value
 
-[Simple String][1]: `OK`.
+[Simple String][1] `OK` if executed correctly, or [Null Bulk][3] if the specified `NX` or `XX`
+conditions were not met.
 
 ### <a name="type" />`JSON.TYPE <key> [path]`
 
