@@ -353,10 +353,8 @@ void SerializeNodeToJSON(const Node *node, const JSONSerializeOpt *opt, sds *jso
                              .xDelim = (N_DICT | N_ARRAY)};
 
     // the real work
-    // b->buf = *json; <- this causes memory crap???
-    b->buf = sdsdup(*json);
+    b->buf = *json;
     Node_Serializer(node, &nso, b);
-    sdsfree(*json);
     *json = b->buf;
 
     sdsfree(b->indentstr);
