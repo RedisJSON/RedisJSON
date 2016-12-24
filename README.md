@@ -41,8 +41,8 @@ TODO
 
 Prerequirements:
 
-* The `build-essential` and `cmake` packages: `apt-get install build-essential cmake`
 * The ReJSON repository: `git clone https://github.com/RedisLabsModules/rejson.git`
+* The `build-essential` and `cmake` packages: `apt-get install build-essential cmake`
 
 This module employs standard CMake tooling. Assuming that the repository's directory is at
 `~/rejson`, navigate to it and run the script [`bootstrap.sh`](bootstrap.sh) followed by `cmake`.
@@ -328,12 +328,25 @@ OK
 Note: in the current version, deleting values from containers **does not** free the container's
 allocated memory.
 
-## Testing and development
+## Design
 
 You can find some information abouth ReJSON's design at [docs/design.md](docs/design.md).
 
-The module's testS requires a path to the `redis-server` executable. This is set in the file
-[test/CMakeFiles.txt](test/CMakeFiles.txt) as the CMake variable `REDIS_SERVER_PATH`.
+## Testing
+
+Python is required for ReJSON's module test. Install it with `apt-get install python`.
+
+Also, the module's test requires a path to the `redis-server` executable. The path is provided in
+the [test/CMakeFiles.txt](test/CMakeFiles.txt) file as the CMake variable `REDIS_SERVER_PATH`. By
+default it set to `${PROJECT_SOURCE_DIR}/../redis/src`.
+
+To run the tests:
+
+```
+~/rejson$ cd build
+~/rejson/build$ ctest
+...
+```
 
 ## Contributing
 
