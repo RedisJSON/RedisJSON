@@ -302,6 +302,8 @@ OK
 ```
 
 A 3-item (each 24 bytes) container will be allocated with capacity for 4 items, i.e. 56 bytes:
+
+```
 127.0.0.1:6379> JSON.SET arr . '["", "", ""]'
 OK
 127.0.0.1:6379> JSON.MEMORY arr
