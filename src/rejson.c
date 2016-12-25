@@ -446,7 +446,7 @@ error:
 */
 int JSONObjKeys_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // check args
-    if ((argc < 3) || (argc > 3)) {
+    if ((argc < 2) || (argc > 3)) {
         RedisModule_WrongArity(ctx);
         return REDISMODULE_ERR;
     }
