@@ -352,20 +352,13 @@ int JSONType_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
     // make the type-specifc reply, or deal with path errors
     if (E_OK == jpn.err) {
         RedisModule_ReplyWithSimpleString(ctx, NodeTypeStr(NODETYPE(jpn.n)));
-    } else if (E_NOINDEX == jpn.err || E_NOKEY == jpn.err) {
+    } else {
         // reply with null if there are **any** non-existing elements along the path
         RedisModule_ReplyWithNull(ctx);
-    } else {  // report the path error
-        ReplyWithPathError(ctx, &jpn);
-        goto error;
     }
 
     JSONPathNode_Free(&jpn);
     return REDISMODULE_OK;
-
-error:
-    JSONPathNode_Free(&jpn);
-    return REDISMODULE_ERR;
 }
 
 /**
