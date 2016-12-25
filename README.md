@@ -11,17 +11,7 @@ thus allowing Redis-blazing performance.
 1.  [Load ReJSON to Redis](#loading-the-module-to-redis)
 1.  [Use it from **any** Redis client](#using-rejson), e.g.:
 
-````
-~$/ redis-cli
-127.0.0.1:6379> JSON.SET doc . '{ "foo": "bar", "baz": [42, true] }'
-OK
-127.0.0.1:6379> JSON.GET doc .baz[0]
-"42"
-127.0.0.1:6379> JSON.DEL doc .foo
-(integer) 1
-127.0.0.1:6379> JSON.OBJKEYS doc .
-1) "baz"
-````
+![ReJSON with `redis-cli`](demo.gif)
 
 ## What is ReJSON
 
