@@ -192,8 +192,6 @@ Report the type of JSON value at `path`.
 
 `path` defaults to root if not provided. If the `key` or `path` do not exist, null is returned.
 
-Increments the number value stored at `path` by `number`.
-
 #### Return value
 
 [Simple String][1], specifically the type of value.

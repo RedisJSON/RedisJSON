@@ -241,6 +241,9 @@ r.execute_command('JSON.SET', 'doc', '.', json.dumps(data))
 reply = json.loads(r.execute_command('JSON.GET', 'doc'))
 ```
 
+For a more comprehensive example, including a simple Python wrapper for ReJSON, see
+[examples/python](examples/python).
+
 #### Node.js example
 
 TODO
