@@ -1,7 +1,7 @@
 # ReJSON - a JSON data type for Redis
 
-ReJSON is a [Redis][1] module that implements
-[ECMA-404 The JSON Data Interchange Standard][2] as a native data type. It allows storing, updating
+ReJSON is a [Redis](1) module that implements
+[ECMA-404 The JSON Data Interchange Standard](2) as a native data type. It allows storing, updating
 and fetching JSON values from Redis keys (documents). The JSON values are managed as binary objects,
 thus allowing Redis-blazing performance. 
 
@@ -42,10 +42,11 @@ The output should look something like:
 ~/rejson$ ./bootstrap.sh
 -- The C compiler identification is GNU 5.4.0
 ...
+!! 'REDIS_SERVER_PATH' variable not defined (use cmake -D) - module unit test will not be run
 -- Configuring done
 -- Generating done
 -- Build files have been written to: rejson/build
-rejson$ cmake --build build --target rejson
+~/rejson$ cmake --build build --target rejson
 Scanning dependencies of target rmobject
 ...
 [100%] Linking C shared library rejson/lib/rejson.so
@@ -67,7 +68,7 @@ Yeah, right :)
 
 Prerequirements:
 
-* [Redis v4.0 or above][3]
+* [Redis v4.0 or above](3)
 
 The recommended way have Redis load the module is during startup by by adding the following to the
 `redis.conf` file:
@@ -84,7 +85,7 @@ syntax:
 ~/$ redis-server --loadmodule /path/to/module/rejson.so
 ```
 
-Lastly, you can also use the [`MODULE LOAD`][4] command. Note, however, that `MODULE LOAD` is a
+Lastly, you can also use the [`MODULE LOAD`](4) command. Note, however, that `MODULE LOAD` is a
 dangerous command and may be blocked/deprecated in the future due to security considerations.
 
 Once the module has been loaded successfully, the Redis log should have lines similar to:
@@ -104,11 +105,11 @@ section and get these two things:
 
 1.  A Redis server running the the module (see [building](#building-the-module-library) and
     [loading](#loading-the-module-to-Redis) for instructions)
-1.  Any [Redis client][5]
+1.  Any [Redis client](5)
 
 ### Using `redis-cli`
 
-This example will use `redis-cli` as a client. The first ReJSON command to try out is
+This example will use [`redis-cli`](6) as a the Redis client. The first ReJSON command to try out is
 [`JSON.SET`](docs/commands.md#set), which sets a Redis key with a JSON value. All JSON values can be
 used, for example a [string](docs/commands.md#string-operations):
 
@@ -209,14 +210,14 @@ OK
 
 ### Using any other client
 
-Unless your [Redis client][5] already supports Redis modules (unlikely) or ReJSON specifically (even
+Unless your [Redis client](5) already supports Redis modules (unlikely) or ReJSON specifically (even
 unlikelier), you should be ok using its ability to send raw Redis commands. Depending on your client
 of choice the exact method for doing that may vary.
 
 #### Python example
 
 This code snippet shows how to use ReJSON from Python with
-[redis-py][https://github.com/andymccurdy/redis-py]:
+[redis-py](https://github.com/andymccurdy/redis-py):
 
 ```Python
 import redis
@@ -329,11 +330,14 @@ You can find some information abouth ReJSON's design at [docs/design.md](docs/de
 
 Python is required for ReJSON's module test. Install it with `apt-get install python`.
 
-Also, the module's test requires a path to the `redis-server` executable. The path is provided in
-the [test/CMakeFiles.txt](test/CMakeFiles.txt) file as the CMake variable `REDIS_SERVER_PATH`. By
-default it set to `${PROJECT_SOURCE_DIR}/../redis/src`.
+Also, the module's test requires a path to the `redis-server` executable. The path is stored in the
+`REDIS_SERVER_PATH` variable and can be set CMake's `-D` switch as follows:
 
-To run the tests:
+```
+~/rejson$ cmake -D REDIS_SERVER_PATH=/path/to/redis-server --build build
+```
+
+And then run the tests:
 
 ```
 ~/rejson$ cd build
@@ -351,3 +355,4 @@ AGPLv3 - see [LICENSE](LICENSE)
   [3]:  http://redis.io/download
   [4]:  http://redis.io/commands/module-load
   [5]:  http://redis.io/clients
+  [6]:  http://redis.io/topics/rediscli
