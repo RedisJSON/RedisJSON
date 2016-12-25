@@ -38,7 +38,7 @@ This module employs standard CMake tooling. Assuming that the repository's direc
 `~/rejson`, navigate to it and run the script [`bootstrap.sh`](bootstrap.sh) followed by `cmake`.
 The output should look something like:
 
-```
+```bash
 ~/rejson$ ./bootstrap.sh
 -- The C compiler identification is GNU 5.4.0
 ...
@@ -51,7 +51,6 @@ Scanning dependencies of target rmobject
 ...
 [100%] Linking C shared library rejson/lib/rejson.so
 [100%] Built target rejson
-rejson$ 
 ```
 
 Congratulations! You can find the compiled module library at `lib/rejson.so`.
@@ -81,7 +80,7 @@ In the line above replace `/path/to/module/rejson.so` with the actual path to th
 Alternatively you, you can have Redis load the module using the following command line argument
 syntax:
 
-```
+```bash
 ~/$ redis-server --loadmodule /path/to/module/rejson.so
 ```
 
@@ -336,15 +335,15 @@ You can find some information abouth ReJSON's design at [docs/design.md](docs/de
 Python is required for ReJSON's module test. Install it with `apt-get install python`.
 
 Also, the module's test requires a path to the `redis-server` executable. The path is stored in the
-`REDIS_SERVER_PATH` variable and can be set CMake's `-D` switch as follows:
+`REDIS_SERVER_PATH` variable and can be set using CMake's `-D` switch as follows:
 
-```
+```bash
 ~/rejson$ cmake -D REDIS_SERVER_PATH=/path/to/redis-server --build build
 ```
 
 And then run the tests:
 
-```
+```bash
 ~/rejson$ cd build
 ~/rejson/build$ ctest
 ...
