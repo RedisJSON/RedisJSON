@@ -294,6 +294,7 @@ OK
 
 A container with two scalars requires 40 bytes for the container (each pointer to an entry in the
 container is 8 bytes), and 2 * 24 bytes for the values themselves:
+```
 127.0.0.1:6379> JSON.SET arr . '["", ""]'
 OK
 127.0.0.1:6379> JSON.MEMORY arr
@@ -309,6 +310,8 @@ OK
 
 The next item will not require an allocation in the container so usage will increase only by that
 scalar's requirement, but another value will scale the container again:
+
+```
 127.0.0.1:6379> JSON.SET arr . '["", "", "", ""]'
 OK
 127.0.0.1:6379> JSON.MEMORY arr
