@@ -59,10 +59,12 @@ void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct jsonsl_state_st *s
             break;
         case JSONSL_T_SPECIAL:
             if (state->special_flags & JSONSL_SPECIALf_NUMERIC) {
-                if (state->special_flags & JSONSL_SPECIALf_FLOAT) {
-                    _pushNode(joctx, NewDoubleNode(atof(jsn->base + state->pos_begin)));
+                if (state->special_flags & (JSONSL_SPECIALf_FLOAT | JSONSL_SPECIALf_EXPONENT)) {
+                    double d = atof(jsn->base + state->pos_begin);
+                    _pushNode(joctx, NewDoubleNode(d));
                 } else {
-                    _pushNode(joctx, NewIntNode(atoi(jsn->base + state->pos_begin)));
+                    int i = atoi(jsn->base + state->pos_begin);
+                    _pushNode(joctx, NewIntNode(i));
                 }
             } else if (state->special_flags & JSONSL_SPECIALf_BOOLEAN) {
                 _pushNode(joctx, NewBoolNode(state->special_flags & JSONSL_SPECIALf_TRUE));
@@ -153,14 +155,15 @@ int CreateNodeFromJSON(const char *buf, size_t len, Node **node, char **err) {
 
     /* Verify that parsing had ended at level 0. */
     if (jsn->level) {
-        serr = sdscatprintf(serr, "ERR JSON value incomplete - %u containers unterminated", jsn->level);
+        serr = sdscatprintf(serr, "ERR JSON value incomplete - %u containers unterminated",
+                            jsn->level);
         goto error;
     }
 
     /* Verify that an element. */
     if (!jsn->stack[0].nelem) {
         serr = sdscatprintf(serr, "ERR JSON value not found");
-        goto error;        
+        goto error;
     }
 
     /* Finalize. */
@@ -188,8 +191,7 @@ error:
     }
 
     // free any nodes that are in the stack
-    while (joctx->nlen)
-        Node_Free(_popNode(joctx));
+    while (joctx->nlen) Node_Free(_popNode(joctx));
 
     sdsfree(serr);
     free(joctx->nodes);
