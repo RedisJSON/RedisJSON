@@ -4,6 +4,15 @@ import unittest
 import json
 import os
 
+# TODO: print nice error if not found
+# Path to module
+module_path = os.environ['REDIS_MODULE_PATH']
+# Path to redis-server executable
+redis_path = os.environ['REDIS_SERVER_PATH']
+# Path to JSON test case files
+json_path = os.path.abspath(os.path.join(os.getcwd(), os.environ['JSON_PATH']))
+
+# Some basic documents to use in the tests
 docs = {
     'simple': {
         'foo': 'bar',
@@ -47,9 +56,6 @@ docs = {
         'array':    [],
     },
 }
-
-module_path = os.environ['REDIS_MODULE_PATH']
-redis_path = os.environ['REDIS_SERVER_PATH']
 
 
 class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_path)):
@@ -124,7 +130,7 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
             self.assertOk(r.execute_command('JSON.SET', 'test', '.', '{}', 'NX'))
             self.assertIsNone(r.execute_command('JSON.SET', 'test', '.', '{}', 'NX'))
             self.assertOk(r.execute_command('JSON.SET', 'test', '.', '{}', 'XX'))
-            
+
             # test an object key
             self.assertIsNone(r.execute_command('JSON.SET', 'test', '.foo', '[]', 'XX'))
             self.assertOk(r.execute_command('JSON.SET', 'test', '.foo', '[]', 'NX'))
@@ -539,6 +545,21 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
             self.assertEqual(1, resp[1])
             self.assertEqual(2, resp[2])
 
+    def testJSONCaseFiles(self):
+        """Test using JSON test case files"""
+
+        with self.redis() as r:
+            for file in os.listdir(json_path):
+                if file.endswith('.json'):
+                    path = '{}/{}'.format(json_path, file)
+                    r.delete('test')
+                    with open(path) as f:
+                        value = f.read()
+                        if file.startswith('pass-'):
+                            self.assertOk(r.execute_command('JSON.SET', 'test', '.', value))
+                        elif file.startswith('fail-'):
+                            with self.assertRaises(redis.exceptions.ResponseError) as cm:
+                                r.execute_command('JSON.SET', 'test', '.', value)
 
 if __name__ == '__main__':
     unittest.main()
