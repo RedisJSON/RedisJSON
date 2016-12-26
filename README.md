@@ -247,12 +247,12 @@ RAM.
 ReJSON stores JSON values as binary data after deserializing them. This representation is often more
 expensive, size-wize, than the serialized form. The ReJSON data type uses at least 24 bytes (on
 64-bit architectures) for every value, as can be seen by sampling an empty string with the
-[`JSON.MEMORY`](docs/commands.md#memory) command:
+[`JSON.DEBUG MEMORY`](docs/commands.md#debug) command:
 
 ```
 127.0.0.1:6379> JSON.SET emptystring . '""'
 OK
-127.0.0.1:6379> JSON.MEMORY emptystring
+127.0.0.1:6379> JSON.DEBUG MEMORY emptystring
 (integer) 24
 ```
 
@@ -262,7 +262,7 @@ depending on their actual length. For example, a 3-character string will use 3 a
 ```
 127.0.0.1:6379> JSON.SET foo . '"bar"'
 OK
-127.0.0.1:6379> JSON.MEMORY foo
+127.0.0.1:6379> JSON.DEBUG MEMORY foo
 (integer) 27
 ```
 
@@ -271,11 +271,11 @@ Empty containers take up 32 bytes to set up:
 ```
 127.0.0.1:6379> JSON.SET arr . '[]'
 OK
-127.0.0.1:6379> JSON.MEMORY arr
+127.0.0.1:6379> JSON.DEBUG MEMORY arr
 (integer) 32
 127.0.0.1:6379> JSON.SET obj . '{}'
 OK
-127.0.0.1:6379> JSON.MEMORY obj
+127.0.0.1:6379> JSON.DEBUG MEMORY obj
 (integer) 32
 ```
 
@@ -287,7 +287,7 @@ A container with a single scalar is made up of 32 and 24 bytes, respectively:
 ```
 127.0.0.1:6379> JSON.SET arr . '[""]'
 OK
-127.0.0.1:6379> JSON.MEMORY arr
+127.0.0.1:6379> JSON.DEBUG MEMORY arr
 (integer) 56
 ```
 
@@ -296,7 +296,7 @@ container is 8 bytes), and 2 * 24 bytes for the values themselves:
 ```
 127.0.0.1:6379> JSON.SET arr . '["", ""]'
 OK
-127.0.0.1:6379> JSON.MEMORY arr
+127.0.0.1:6379> JSON.DEBUG MEMORY arr
 (integer) 88
 ```
 
@@ -305,7 +305,7 @@ A 3-item (each 24 bytes) container will be allocated with capacity for 4 items, 
 ```
 127.0.0.1:6379> JSON.SET arr . '["", "", ""]'
 OK
-127.0.0.1:6379> JSON.MEMORY arr
+127.0.0.1:6379> JSON.DEBUG MEMORY arr
 (integer) 128
 ```
 
@@ -315,11 +315,11 @@ scalar's requirement, but another value will scale the container again:
 ```
 127.0.0.1:6379> JSON.SET arr . '["", "", "", ""]'
 OK
-127.0.0.1:6379> JSON.MEMORY arr
+127.0.0.1:6379> JSON.DEBUG MEMORY arr
 (integer) 152
 127.0.0.1:6379> JSON.SET arr . '["", "", "", "", ""]'
 OK
-127.0.0.1:6379> JSON.MEMORY arr
+127.0.0.1:6379> JSON.DEBUG MEMORY arr
 (integer) 208
 ```
 

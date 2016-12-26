@@ -268,46 +268,85 @@ int JSONResp_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
 }
 
 /**
- * JSON.MEMORY <key> [path]
- * Report the memory usage in bytes of a value.
- * `path` defaults to root if not provided.
- * Reply: Integer, specifically the memory usage in bytes of the value.
+ * JSON.DEBUG <subcommand & arguments>
+ * Report information.
+ *
+ * Supported subcommands are:
+ *   `MEMORY <key> [path]` - report the memory usage in bytes of a value. `path` defaults to root if
+ *   not provided.
+ *  `HELP` - replies with a helpful message
+ *
+ * Reply: depends on the subcommand used:
+ *   `MEMORY` returns an integer, specifically the size in bytes of the value
+ *   `HELP` returns an array, specifically with the help message
 */
-int JSONMemory_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    if ((argc < 2) || (argc > 3)) {
+int JSONDebug_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    // check for minimal arity
+    if (argc < 2) {
         RedisModule_WrongArity(ctx);
         return REDISMODULE_ERR;
     }
     RedisModule_AutoMemory(ctx);
 
-    // key must be empty (reply with null) or a JSON type
-    RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
-    int type = RedisModule_KeyType(key);
-    if (REDISMODULE_KEYTYPE_EMPTY == type) {
-        RedisModule_ReplyWithNull(ctx);
-        return REDISMODULE_OK;
-    } else if (RedisModule_ModuleTypeGetType(key) != JSONType) {
-        RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
-        return REDISMODULE_ERR;
-    }
+    size_t subcmdlen;
+    const char *subcmd = RedisModule_StringPtrLen(argv[1], &subcmdlen);
+    if (!strncasecmp("memory", subcmd, subcmdlen)) {
+        // verify we have enough arguments
+        if ((argc < 3) || (argc > 4)) {
+            RedisModule_WrongArity(ctx);
+            return REDISMODULE_ERR;
+        }
+        
+        // reply to getkeys-api requests
+        if (RedisModule_IsKeysPositionRequest(ctx)) {
+            RedisModule_KeyAtPos(ctx, 2);
+            return REDISMODULE_OK;
+        }
 
-    // validate path
-    JSONPathNode_t jpn;
-    Object *objRoot = RedisModule_ModuleTypeGetValue(key);
-    RedisModuleString *spath =
-        (3 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
-    if (PARSE_OK != NodeFromJSONPath(objRoot, spath, &jpn)) {
-        RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
-        return REDISMODULE_ERR;
-    }
+        // key must be empty (reply with null) or a JSON type
+        RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[2], REDISMODULE_READ);
+        int type = RedisModule_KeyType(key);
+        if (REDISMODULE_KEYTYPE_EMPTY == type) {
+            RedisModule_ReplyWithNull(ctx);
+            return REDISMODULE_OK;
+        } else if (RedisModule_ModuleTypeGetType(key) != JSONType) {
+            RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+            return REDISMODULE_ERR;
+        }
 
-    if (E_OK == jpn.err) {
-        RedisModule_ReplyWithLongLong(ctx, ObjectTypeMemoryUsage(jpn.n));
-        JSONPathNode_Free(&jpn);
+        // validate path
+        JSONPathNode_t jpn;
+        Object *objRoot = RedisModule_ModuleTypeGetValue(key);
+        RedisModuleString *spath =
+            (4 == argc ? argv[3] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
+        if (PARSE_OK != NodeFromJSONPath(objRoot, spath, &jpn)) {
+            RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
+            return REDISMODULE_ERR;
+        }
+
+        if (E_OK == jpn.err) {
+            RedisModule_ReplyWithLongLong(ctx, ObjectTypeMemoryUsage(jpn.n));
+            JSONPathNode_Free(&jpn);
+            return REDISMODULE_OK;
+        } else {
+            ReplyWithPathError(ctx, &jpn);
+            JSONPathNode_Free(&jpn);
+            return REDISMODULE_ERR;
+        }
+    } else if (!strncasecmp("help", subcmd, subcmdlen)) {
+        const char *help[] = {"MEMORY <key> [path] - reports memory usage",
+                              "HELP                - this message", NULL};
+
+        RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
+        int i = 0;
+        for (; NULL != help[i]; i++) {
+            RedisModule_ReplyWithStringBuffer(ctx, help[i], strlen(help[i]));
+        }
+        RedisModule_ReplySetArrayLength(ctx, i);
+
         return REDISMODULE_OK;
-    } else {
-        ReplyWithPathError(ctx, &jpn);
-        JSONPathNode_Free(&jpn);
+    } else {  // unknown subcommand
+        RedisModule_ReplyWithError(ctx, "ERR unknown subcommand - try `JSON.DEBUG HELP`");
         return REDISMODULE_ERR;
     }
     return REDISMODULE_OK;  // this is never reached
@@ -602,7 +641,7 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
         RedisModule_ModuleTypeSetValue(key, JSONType, jo);
         goto ok;
     }
-    
+
     // handle an existing key, first make sure there weren't any obvious path errors
     if (E_OK != jpn.err && E_NOKEY != jpn.err) {
         ReplyWithPathError(ctx, &jpn);
@@ -622,7 +661,7 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
         // an existing value in the root or an object can be replaced only if the NX is off
         if (subnx && (isRootPath || N_DICT == ntp)) {
             goto null;
-        } 
+        }
 
         // other containers, i.e. arrays, do not sport the NX or XX behavioral modification agents
         if (N_ARRAY == ntp && (subnx || subxx)) {
@@ -651,10 +690,10 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
             // unlike DictSet, ArraySet does not free so we need to call it explicitly
             Node_Free(jpn.n);
         }
-    } else {    // must be E_NOKEY
+    } else {  // must be E_NOKEY
         // new keys in the dictionary can be created only if the XX flag is off
         if (subxx) goto null;
-       
+
         if (OBJ_OK != Node_DictSet(jpn.p, jpn.sp.nodes[jpn.sp.len - 1].value.key, jo)) {
             RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_DICT_SET);
             RedisModule_ReplyWithError(ctx, REJSON_ERROR_DICT_SET);
@@ -1698,8 +1737,8 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
         REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
-    if (RedisModule_CreateCommand(ctx, "json.memory", JSONMemory_RedisCommand, "readonly", 1, 1,
-                                  1) == REDISMODULE_ERR)
+    if (RedisModule_CreateCommand(ctx, "json.debug", JSONDebug_RedisCommand, "readonly getkeys-api",
+                                  1, 1, 1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx, "json.type", JSONType_RedisCommand, "readonly", 1, 1, 1) ==

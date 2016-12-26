@@ -25,7 +25,7 @@
     *   [`JSON.OBJKEYS`](#objkeys) returns the keys in an object
     *   [`JSON.OBJLEN`](#objlen) reports the number of keys in an object
 *   [Other commands](#other-commands)
-    *   [`JSON.MEMORY`](#memory) returns the memory usage in bytes for a value
+    *   [`JSON.DEBUG`](#debug-memory) is an introspective utility method
     *   [`JSON.RESP`](#resp) returns a JSON value using Redis Serialization Protocol
 
 ## JSON
@@ -366,22 +366,29 @@ Report the number of keys in the JSON Object at `path` in `key`.
 
 ## Other commands
 
-### <a name="forget" />`JSON.FORGET <key> <path>`
-
-This command is an alias for [`JSON.DEL`](#del).
-
-### <a name="memory" />`JSON.MEMORY <key> [path]`
+### <a name="debug" />`JSON.DEBUG <subcommand & arguments>`
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(N), where N is the size of the JSON value.
 
-Report the memory usage in bytes of a value.
+Report information.
 
-`path` defaults to root if not provided.
+Supported subcommands are:
+
+*   `MEMORY <key> [path]` - report the memory usage in bytes of a value. `path` defaults to root if
+    not provided.
+*   `HELP` - replies with a helpful message
 
 #### Return value
 
-[Integer][2], specifically the size in bytes of the value.
+Depends on the subcommand used.
+
+*   `MEMORY` returns an [integer][2], specifically the size in bytes of the value
+*   `HELP` returns an [array][4], specifically with the help message
+
+### <a name="forget" />`JSON.FORGET <key> <path>`
+
+This command is an alias for [`JSON.DEL`](#del).
 
 ### <a name="resp" />`JSON.RESP <key> [path]`
 
