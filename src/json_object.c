@@ -143,44 +143,60 @@ int CreateNodeFromJSON(const char *buf, size_t len, Node **node, char **err) {
     /* Feed the lexer. */
     jsonsl_feed(jsn, _buf, _len);
 
-    /* Finalize. */
-    int rc = JSONOBJECT_OK;
-    // success alone isn't an assurance, verify there's something in there too
-    if (JSONSL_ERROR_SUCCESS == joctx->err && jsn->stack[jsn->level].nelem) {
-        // extract the scalar and discard the wrapper array
-        if (is_scalar) {
-            Node_ArrayItem(joctx->nodes[0], 0, node);
-            Node_ArraySet(joctx->nodes[0], 0, NULL);
-            Node_Free(_popNode(joctx));
-            free(_buf);
-        } else {
-            *node = _popNode(joctx);
-        }
-    } else {
-        // report the error if the optional arg is passed
-        rc = JSONOBJECT_ERROR;
-        if (err) {
-            sds serr = sdsempty();
-            // TODO: trim buf to relevant position and show it, careful about returning \n in err!
-            if (JSONSL_ERROR_SUCCESS != joctx->err) {
-                // if we have a lexer error lets return it
-                serr = sdscatprintf(serr, "ERR JSON lexer %s error at position %zd",
-                                    jsonsl_strerror(joctx->err), joctx->errpos + 1);
-            } else if (!jsn->stack[jsn->level].nelem) {
-                // parsing went ok so far but it didn't yield anything substantial at the end
-                serr = sdscatprintf(serr, "ERR JSON lexer found no elements in level %d position %zd",
-                                    jsn->level, jsn->pos);
-            }
-            *err = strdup(serr);
-            sdsfree(serr);
-        }
+    /* Check for lexer errors. */
+    sds serr = sdsempty();
+    if (JSONSL_ERROR_SUCCESS != joctx->err) {
+        serr = sdscatprintf(serr, "ERR JSON lexer error %s at position %zd",
+                            jsonsl_strerror(joctx->err), joctx->errpos + 1);
+        goto error;
     }
 
+    /* Verify that parsing had ended at level 0. */
+    if (jsn->level) {
+        serr = sdscatprintf(serr, "ERR JSON value incomplete - %u containers unterminated", jsn->level);
+        goto error;
+    }
+
+    /* Verify that an element. */
+    if (!jsn->stack[0].nelem) {
+        serr = sdscatprintf(serr, "ERR JSON value not found");
+        goto error;        
+    }
+
+    /* Finalize. */
+    if (is_scalar) {
+        // extract the scalar and discard the wrapper array
+        Node_ArrayItem(joctx->nodes[0], 0, node);
+        Node_ArraySet(joctx->nodes[0], 0, NULL);
+        Node_Free(_popNode(joctx));
+        free(_buf);
+    } else {
+        *node = _popNode(joctx);
+    }
+
+    sdsfree(serr);
     free(joctx->nodes);
     free(joctx);
     jsonsl_destroy(jsn);
 
-    return rc;
+    return JSONOBJECT_OK;
+
+error:
+    // set error string, if one has be passed
+    if (err) {
+        *err = strdup(serr);
+    }
+
+    // free any nodes that are in the stack
+    while (joctx->nlen)
+        Node_Free(_popNode(joctx));
+
+    sdsfree(serr);
+    free(joctx->nodes);
+    free(joctx);
+    jsonsl_destroy(jsn);
+
+    return JSONOBJECT_ERROR;
 }
 
 /* === JSON serializer === */
