@@ -70,7 +70,7 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
             for i in invalid:
                 with self.assertRaises(redis.exceptions.ResponseError) as cm:
                     r.execute_command('JSON.SET', 'test', '.', i)
-                self.assertNotExists(r, 'test')
+                self.assertNotExists(r, 'test', i)
 
     def testSetInvalidPathShouldFail(self):
         """Test that invalid paths fail"""
@@ -82,16 +82,16 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
             for i in invalid:
                 with self.assertRaises(redis.exceptions.ResponseError) as cm:
                     r.execute_command('JSON.SET', 'test', i, 'null')
-                self.assertNotExists(r, 'test')
+                self.assertNotExists(r, 'test', i)
 
     def testSetRootWithJSONValuesShouldSucceed(self):
         """Test that the root of a JSON key can be set with any valid JSON"""
         with self.redis() as r:
             for v in ['"string"', '1', '-2', '3.14', 'null', 'true', 'false', '[]', '{}']:
                 r.delete('test')
-                self.assertOk(r.execute_command('JSON.SET', 'test', '.', v))
+                self.assertOk(r.execute_command('JSON.SET', 'test', '.', v), v)
                 self.assertExists(r, 'test')
-                self.assertEqual(r.execute_command('JSON.GET', 'test'), v)
+                self.assertEqual(r.execute_command('JSON.GET', 'test'), v, v)
 
     def testSetReplaceRootShouldSucceed(self):
         """Test replacing the root of an existing key with a valid object succeeds"""
@@ -103,9 +103,9 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
             raw = r.execute_command('JSON.GET', 'test', '.')
             self.assertDictEqual(json.loads(raw), docs['simple'])
             for k, v in docs['values'].iteritems():
-                self.assertOk(r.execute_command('JSON.SET', 'test', '.', json.dumps(v)))
+                self.assertOk(r.execute_command('JSON.SET', 'test', '.', json.dumps(v)), k)
                 data = json.loads(r.execute_command('JSON.GET', 'test', '.'))
-                self.assertEqual(str(type(data)), '<type \'{}\'>'.format(k))
+                self.assertEqual(str(type(data)), '<type \'{}\'>'.format(k), k)
                 self.assertEqual(data, v)
 
     def testSetGetWholeBasicDocumentShouldBeEqual(self):
@@ -170,8 +170,8 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
                                             '.', json.dumps(docs['values'])))
             for k, v in docs['values'].iteritems():
                 data = json.loads(r.execute_command('JSON.GET', 'test', '.{}'.format(k)))
-                self.assertEqual(str(type(data)), '<type \'{}\'>'.format(k))
-                self.assertEqual(data, v)
+                self.assertEqual(str(type(data)), '<type \'{}\'>'.format(k), k)
+                self.assertEqual(data, v, k)
 
     def testGetPartsOfValuesDocumentMultiple(self):
         """Test correctnes of an object returned by JSON.GET"""
@@ -191,14 +191,14 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
             for d in range(0, 5):
                 key = 'doc:{}'.format(d)
                 r.delete(key)
-                self.assertOk(r.execute_command('JSON.SET', key, '.', json.dumps(docs['basic'])))
+                self.assertOk(r.execute_command('JSON.SET', key, '.', json.dumps(docs['basic'])), d)
 
             # Test an MGET that succeeds on all keys
             raw = r.execute_command('JSON.MGET', '.', *['doc:{}'.format(d) for d in range(0, 5)])
             self.assertEqual(len(raw), 5)
             for d in range(0, 5):
                 key = 'doc:{}'.format(d)
-                self.assertDictEqual(json.loads(raw[d]), docs['basic'])
+                self.assertDictEqual(json.loads(raw[d]), docs['basic'], d)
 
             # Test an MGET that fails for one key
             r.delete('test')
@@ -436,7 +436,6 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
     def testLenCommands(self):
         """Test the JSON.ARRLEN, JSON.OBJLEN and JSON.STRLEN commands"""
 
-        # TODO: this needs to be a part of each value type test suite instead
         with self.redis() as r:
             r.delete('test')
 
@@ -480,7 +479,7 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
             data = r.execute_command('JSON.OBJKEYS', 'test', '.')
             self.assertEqual(len(data), len(docs['types']))
             for k in data:
-                self.assertTrue(k in docs['types'])
+                self.assertTrue(k in docs['types'], k)
 
             # test a wrong type
             with self.assertRaises(redis.exceptions.ResponseError) as cm:
@@ -556,11 +555,11 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
                     with open(path) as f:
                         value = f.read()
                         if file.startswith('pass-'):
-                            self.assertOk(r.execute_command('JSON.SET', 'test', '.', value))
+                            self.assertOk(r.execute_command('JSON.SET', 'test', '.', value), path)
                         elif file.startswith('fail-'):
                             with self.assertRaises(redis.exceptions.ResponseError) as cm:
                                 r.execute_command('JSON.SET', 'test', '.', value)
-                            self.assertNotExists(r, 'test')
+                            self.assertNotExists(r, 'test', path)
 
     def testSetGetComparePassJSONCaseFiles(self):
         """Test setting, getting and comparing passable JSON test case files"""
@@ -576,7 +575,6 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
 
         ]
 
-        self.maxDiff = None
         with self.redis() as r:
             for file in os.listdir(json_path):
                 if file.startswith('pass-') and file.endswith('.json') and file not in ignore:
@@ -584,16 +582,16 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
                     r.delete('test')
                     with open(path) as f:
                         value = f.read()
-                        self.assertOk(r.execute_command('JSON.SET', 'test', '.', value))
+                        self.assertOk(r.execute_command('JSON.SET', 'test', '.', value), path)
                         raw = r.execute_command('JSON.GET', 'test')
                         d1 = json.loads(value)
                         d2 = json.loads(raw)
                         if type(d1) is dict:
-                            self.assertDictEqual(d1, d2)
+                            self.assertDictEqual(d1, d2, path)
                         elif type(d1) is list:
-                            self.assertListEqual(d1, d2)
+                            self.assertListEqual(d1, d2, path)
                         else:
-                            self.assertEqual(d1, d2)
+                            self.assertEqual(d1, d2, path)
 
 if __name__ == '__main__':
     unittest.main()

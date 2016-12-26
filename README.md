@@ -24,7 +24,7 @@ TODO
 * Searching for object keys is O(N)
 * Unicode is assumed to be totally unsupported and is definitely untested
 * Containers are not scaled down after deleting items
-* Floats are doubles
+* Numbers are stored using 64 bits
 
 ## Building the module library
 
@@ -349,6 +349,13 @@ And then run the tests:
 ~/rejson/build$ ctest
 ...
 ```
+
+## Acknowledgements
+
+ReJSON is made possible only because of the existance of these amazing open source projects:
+
+* [jsonsl](https://github.com/mnunberg/jsonsl)
+* [redis](https://github.com/antirez/redis)
 
 ## Contributing
 

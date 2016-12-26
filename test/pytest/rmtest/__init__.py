@@ -11,14 +11,14 @@ def ModuleTestCase(module_path, redis_path = './redis-server'):
         def redis(self, port=None):
             return DisposableRedis(port=port, path = self._redis_path, loadmodule = self._module_path)  
             
-        def assertOk(self, x):
-            self.assertEquals("OK", x)
+        def assertOk(self, x, msg=None):
+            self.assertEquals("OK", x, msg)
         
-        def assertExists(self, r, key):
-            self.assertTrue(r.exists(key))  
+        def assertExists(self, r, key, msg=None):
+            self.assertTrue(r.exists(key), msg)
 
-        def assertNotExists(self, r, key):
-            self.assertFalse(r.exists(key))  
+        def assertNotExists(self, r, key, msg=None):
+            self.assertFalse(r.exists(key), msg)  
 
     return _ModuleTestCase
     
