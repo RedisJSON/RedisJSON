@@ -545,9 +545,9 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
             self.assertEqual(1, resp[1])
             self.assertEqual(2, resp[2])
 
-    def testJSONCaseFiles(self):
-        """Test using JSON test case files"""
-
+    def testAllJSONCaseFiles(self):
+        """Test using all JSON test case files"""
+        self.maxDiff = None
         with self.redis() as r:
             for file in os.listdir(json_path):
                 if file.endswith('.json'):
@@ -560,6 +560,40 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
                         elif file.startswith('fail-'):
                             with self.assertRaises(redis.exceptions.ResponseError) as cm:
                                 r.execute_command('JSON.SET', 'test', '.', value)
+                            self.assertNotExists(r, 'test')
+
+    def testSetGetComparePassJSONCaseFiles(self):
+        """Test setting, getting and comparing passable JSON test case files"""
+
+        # TODO: these are currently note supported so ignore them
+        ignore = [
+            'pass-json-parser-0002.json',   # \u
+            'pass-json-parser-0005.json',   # bigger than double float
+            'pass-json-parser-0006.json',   # \u
+            'pass-json-parser-0007.json',   # \u
+            'pass-json-parser-0012.json',   # \u
+            'pass-jsonsl-1.json',           # \u and big floats
+
+        ]
+
+        self.maxDiff = None
+        with self.redis() as r:
+            for file in os.listdir(json_path):
+                if file.startswith('pass-') and file.endswith('.json') and file not in ignore:
+                    path = '{}/{}'.format(json_path, file)
+                    r.delete('test')
+                    with open(path) as f:
+                        value = f.read()
+                        self.assertOk(r.execute_command('JSON.SET', 'test', '.', value))
+                        raw = r.execute_command('JSON.GET', 'test')
+                        d1 = json.loads(value)
+                        d2 = json.loads(raw)
+                        if type(d1) is dict:
+                            self.assertDictEqual(d1, d2)
+                        elif type(d1) is list:
+                            self.assertListEqual(d1, d2)
+                        else:
+                            self.assertEqual(d1, d2)
 
 if __name__ == '__main__':
     unittest.main()

@@ -24,6 +24,7 @@ TODO
 * Searching for object keys is O(N)
 * Unicode is assumed to be totally unsupported and is definitely untested
 * Containers are not scaled down after deleting items
+* Floats are doubles
 
 ## Building the module library
 
