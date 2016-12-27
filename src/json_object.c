@@ -30,7 +30,17 @@ typedef struct {
 #define _popNode(ctx) ctx->nodes[--ctx->nlen]
 
 /* Decalre it. */
+static int _AllowedEscapes[];
 static int _IsAllowedWhitespace(unsigned c);
+
+int errorCallback(jsonsl_t jsn, jsonsl_error_t err, struct jsonsl_state_st *state, char *errat) {
+    JsonObjectContext *joctx = (JsonObjectContext *)jsn->data;
+
+    joctx->err = err;
+    joctx->errpos = state->pos_cur;
+    jsonsl_stop(jsn);
+    return 0;
+}
 
 void pushCallback(jsonsl_t jsn, jsonsl_action_t action, struct jsonsl_state_st *state,
                   const jsonsl_char_t *at) {
@@ -50,36 +60,56 @@ void pushCallback(jsonsl_t jsn, jsonsl_action_t action, struct jsonsl_state_st *
 void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct jsonsl_state_st *state,
                  const jsonsl_char_t *at) {
     JsonObjectContext *joctx = (JsonObjectContext *)jsn->data;
+    const char *pos = jsn->base + state->pos_begin;  // element starting position
+    size_t len = state->pos_cur - state->pos_begin;  // element length
+    char *buffer = NULL;                             // a temporary buffer for unescaped strings
 
-    // This is a good time to create scalars and hashkeys on the stack
-    switch (state->type) {
-        case JSONSL_T_STRING:
-            _pushNode(joctx, NewStringNode(jsn->base + state->pos_begin + 1,
-                                           state->pos_cur - state->pos_begin - 1));
-            break;
-        case JSONSL_T_SPECIAL:
-            if (state->special_flags & JSONSL_SPECIALf_NUMERIC) {
-                if (state->special_flags & (JSONSL_SPECIALf_FLOAT | JSONSL_SPECIALf_EXPONENT)) {
-                    double d = atof(jsn->base + state->pos_begin);
-                    _pushNode(joctx, NewDoubleNode(d));
-                } else {
-                    int i = atoi(jsn->base + state->pos_begin);
-                    _pushNode(joctx, NewIntNode(i));
-                }
-            } else if (state->special_flags & JSONSL_SPECIALf_BOOLEAN) {
-                _pushNode(joctx, NewBoolNode(state->special_flags & JSONSL_SPECIALf_TRUE));
-            } else if (state->special_flags & JSONSL_SPECIALf_NULL) {
-                _pushNode(joctx, NULL);
+    // strings and keys need some preprocessing
+    if (JSONSL_T_STRING == state->type || JSONSL_T_HKEY == state->type) {
+        // ignore the quote marks
+        pos++;
+        len--;
+
+        // deal with escapes
+        if (state->nescapes) {
+            buffer = calloc(len, sizeof(char));
+            jsonsl_error_t err;
+            size_t newlen;
+            newlen = jsonsl_util_unescape(pos, buffer, len, _AllowedEscapes, &err);
+            if (!newlen) {
+                free(buffer);
+                errorCallback(jsn, err, state, NULL);
+                return;
             }
-            break;
-        case JSONSL_T_HKEY:
-            _pushNode(joctx, NewKeyValNode(jsn->base + state->pos_begin + 1,
-                                           state->pos_cur - state->pos_begin - 1, NULL));
-            break;
+            pos = buffer;
+            len = newlen;
+        }
     }
 
-    // Basically anything that pops from the JSON lexer needs to be set in its parent, except the
-    // root element
+    // this is a good time to create scalars and hashkeys on the stack
+    if (JSONSL_T_STRING == state->type) {
+        _pushNode(joctx, NewStringNode(pos, len));
+        if (buffer) free(buffer);
+    } else if (JSONSL_T_SPECIAL == state->type) {
+        if (state->special_flags & JSONSL_SPECIALf_NUMERIC) {
+            if (state->special_flags & (JSONSL_SPECIALf_FLOAT | JSONSL_SPECIALf_EXPONENT)) {
+                double d = atof(pos);
+                _pushNode(joctx, NewDoubleNode(d));
+            } else {
+                int i = atoi(pos);
+                _pushNode(joctx, NewIntNode(i));
+            }
+        } else if (state->special_flags & JSONSL_SPECIALf_BOOLEAN) {
+            _pushNode(joctx, NewBoolNode(state->special_flags & JSONSL_SPECIALf_TRUE));
+        } else if (state->special_flags & JSONSL_SPECIALf_NULL) {
+            _pushNode(joctx, NULL);
+        }
+    } else if (JSONSL_T_HKEY == state->type) {
+        _pushNode(joctx, NewKeyValNode(pos, len, NULL));  // NULL is a placeholder for now
+        if (buffer) free(buffer);
+    }
+
+    // anything that pops needs to be set in its parent, except the root element and keys
     if (joctx->nlen > 1 && state->type != JSONSL_T_HKEY) {
         NodeType p = joctx->nodes[joctx->nlen - 2]->type;
         switch (p) {
@@ -97,15 +127,6 @@ void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct jsonsl_state_st *s
                 break;
         }
     }
-}
-
-int errorCallback(jsonsl_t jsn, jsonsl_error_t err, struct jsonsl_state_st *state, char *errat) {
-    JsonObjectContext *joctx = (JsonObjectContext *)jsn->data;
-
-    joctx->err = err;
-    joctx->errpos = state->pos_cur;
-    jsonsl_stop(jsn);
-    return 0;
 }
 
 int CreateNodeFromJSON(const char *buf, size_t len, Node **node, char **err) {
@@ -220,46 +241,43 @@ typedef struct {
 void _JSONSerialize_StringValue(Node *n, void *ctx) {
     _JSONBuilderContext *b = (_JSONBuilderContext *)ctx;
     size_t len = n->value.strval.len;
-    const char *c = n->value.strval.data;
+    const char *p = n->value.strval.data;
 
     sds s = sdsnewlen("\"", 1);
     while (len--) {
-        if ((unsigned char)*c > 31 && *c != '\"' && *c != '\\' && *c != '/') {
-            s = sdscatlen(s, c, 1);
-        } else {
-            s = sdscatlen(s, "\\", 1);  // escape it
-            switch (*c) {
-                case '\"':  // quotation mark
-                    s = sdscatlen(s, "\"", 1);
-                    break;
-                case '\\':  // solidus
-                    s = sdscatlen(s, "\\", 1);
-                    break;
-                case '/':  // reverse solidus
-                    s = sdscatlen(s, "/", 1);
-                    break;
-                case '\b':  // backspace
-                    s = sdscatlen(s, "b", 1);
-                    break;
-                case '\f':  // formfeed
-                    s = sdscatlen(s, "f", 1);
-                    break;
-                case '\n':  // newline
-                    s = sdscatlen(s, "n", 1);
-                    break;
-                case '\r':  // carriage return
-                    s = sdscatlen(s, "r", 1);
-                    break;
-                case '\t':  // tab
-                    s = sdscatlen(s, "t", 1);
-                    break;
-                default:  // anything between 0 and 31
-                    s = sdscatprintf(s, "u%04x", (unsigned char)*c);
-                    break;
-            }  // switch (*chr)
+        switch (*p) {
+            case '"':   // quotation mark
+            case '\\':  // reverse solidus
+                s = sdscatprintf(s, "\\%c", *p);
+                break;
+            case '/':   // the standard is clear wrt solidus so we're zealous
+                s = sdscatlen(s, "\\/", 2);
+                break;            
+            case '\b':  // backspace
+                s = sdscatlen(s, "\\b", 2);
+                break;
+            case '\f':  // formfeed
+                s = sdscatlen(s, "\\f", 2);
+                break;
+            case '\n':  // newline
+                s = sdscatlen(s, "\\n", 2);
+                break;
+            case '\r':  // carriage return
+                s = sdscatlen(s, "\\r", 2);
+                break;
+            case '\t':  // horizontal tab
+                s = sdscatlen(s, "\\t", 2);
+                break;
+            default:
+                if ((unsigned char)*p > 31)
+                    s = sdscatprintf(s, "%c", *p);
+                else
+                    s = sdscatprintf(s, "\\u%04x", (unsigned char)*p);
+                break;
         }
-        c++;
+        p++;
     }
+
     s = sdscatlen(s, "\"", 1);
     b->buf = sdscatsds(b->buf, s);
     sdsfree(s);
@@ -384,6 +402,7 @@ void SerializeNodeToJSON(const Node *node, const JSONSerializeOpt *opt, sds *jso
 
 // clang-format off
 // from jsonsl.c
+
 /**
  * This table contains entries for the allowed whitespace as per RFC 4627
  */
@@ -404,5 +423,33 @@ static int _AllowedWhitespace[0x100] = {
     /* 0xe1 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0      /* 0xfe */
 };
 
+// adapted for use with jsonsl_util_unescape_ex
+/**
+ * Allowable two-character 'common' escapes:
+ */
+static int _AllowedEscapes[0x80] = {
+        /* 0x00 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 0x1f */
+        /* 0x20 */ 0,0,                                                             /* 0x21 */
+        /* 0x22 */ 1 /* <"> */,                                                     /* 0x22 */
+        /* 0x23 */ 0,0,0,0,0,0,0,0,0,0,0,0,                                         /* 0x2e */
+        /* 0x2f */ 1 /* </> */,                                                     /* 0x2f */
+        /* 0x30 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 0x4f */
+        /* 0x50 */ 0,0,0,0,0,0,0,0,0,0,0,0,                                         /* 0x5b */
+        /* 0x5c */ 1 /* <\> */,                                                     /* 0x5c */
+        /* 0x5d */ 0,0,0,0,0,                                                       /* 0x61 */
+        /* 0x62 */ 1 /* <b> */,                                                     /* 0x62 */
+        /* 0x63 */ 0,0,0,                                                           /* 0x65 */
+        /* 0x66 */ 1 /* <f> */,                                                     /* 0x66 */
+        /* 0x67 */ 0,0,0,0,0,0,0,                                                   /* 0x6d */
+        /* 0x6e */ 1 /* <n> */,                                                     /* 0x6e */
+        /* 0x6f */ 0,0,0,                                                           /* 0x71 */
+        /* 0x72 */ 1 /* <r> */,                                                     /* 0x72 */
+        /* 0x73 */ 0,                                                               /* 0x73 */
+        /* 0x74 */ 1 /* <t> */,                                                     /* 0x74 */
+        /* 0x75 */ 1 /* <u> */,                                                     /* 0x75 */
+        /* 0x76 */ 0,0,0,0,0,                                                       /* 0x80 */
+};
+
 static int _IsAllowedWhitespace(unsigned c) { return c == ' ' || _AllowedWhitespace[c & 0xff]; }
+
 // clang-format on

@@ -566,12 +566,8 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
 
         # TODO: these are currently note supported so ignore them
         ignore = [
-            'pass-json-parser-0002.json',   # \u
-            'pass-json-parser-0005.json',   # bigger than double float
-            'pass-json-parser-0006.json',   # \u
-            'pass-json-parser-0007.json',   # \u
-            'pass-json-parser-0012.json',   # \u
-            'pass-jsonsl-1.json',           # \u and big floats
+            'pass-json-parser-0005.json',   # big numbers
+            'pass-jsonsl-1.json',           # big numbers
 
         ]
 
