@@ -564,9 +564,13 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
     def testSetGetComparePassJSONCaseFiles(self):
         """Test setting, getting and comparing passable JSON test case files"""
 
-        # TODO: these are currently note supported so ignore them
+        # TODO: these are currently not supported so ignore them
         ignore = [
+            'pass-json-parser-0002.json',   # UTF-8 to Unicode
             'pass-json-parser-0005.json',   # big numbers
+            'pass-json-parser-0006.json',   # UTF-8 to Unicode
+            'pass-json-parser-0007.json',   # UTF-8 to Unicode
+            'pass-json-parser-0012.json',   # UTF-8 to Unicode
             'pass-jsonsl-1.json',           # big numbers
 
         ]

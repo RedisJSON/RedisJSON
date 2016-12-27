@@ -62,51 +62,82 @@ void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct jsonsl_state_st *s
     JsonObjectContext *joctx = (JsonObjectContext *)jsn->data;
     const char *pos = jsn->base + state->pos_begin;  // element starting position
     size_t len = state->pos_cur - state->pos_begin;  // element length
-    char *buffer = NULL;                             // a temporary buffer for unescaped strings
 
-    // strings and keys need some preprocessing
+    // popping string and key values means addingg them to the node stack
     if (JSONSL_T_STRING == state->type || JSONSL_T_HKEY == state->type) {
+        char *buffer = NULL;  // a temporary buffer for unescaped strings
+
         // ignore the quote marks
         pos++;
         len--;
 
         // deal with escapes
         if (state->nescapes) {
-            buffer = calloc(len, sizeof(char));
             jsonsl_error_t err;
             size_t newlen;
+
+            buffer = calloc(len, sizeof(char));
             newlen = jsonsl_util_unescape(pos, buffer, len, _AllowedEscapes, &err);
             if (!newlen) {
                 free(buffer);
                 errorCallback(jsn, err, state, NULL);
                 return;
             }
+
             pos = buffer;
             len = newlen;
         }
+
+        // push it
+        Node *n;
+        if (JSONSL_T_STRING == state->type) n = NewStringNode(pos, len);
+        else n = NewKeyValNode(pos, len, NULL);  // NULL is a placeholder for now
+        _pushNode(joctx, n);
+
+        if (buffer) free(buffer);
     }
 
-    // this is a good time to create scalars and hashkeys on the stack
-    if (JSONSL_T_STRING == state->type) {
-        _pushNode(joctx, NewStringNode(pos, len));
-        if (buffer) free(buffer);
-    } else if (JSONSL_T_SPECIAL == state->type) {
+    // popped special values are also added to the node stack
+    if (JSONSL_T_SPECIAL == state->type) {
         if (state->special_flags & JSONSL_SPECIALf_NUMERIC) {
             if (state->special_flags & (JSONSL_SPECIALf_FLOAT | JSONSL_SPECIALf_EXPONENT)) {
-                double d = atof(pos);
-                _pushNode(joctx, NewDoubleNode(d));
+                // convert to double
+                double value;
+                char *eptr;
+printf("%f\n", HUGE_VAL);
+                errno = 0;
+                value = strtod (pos, &eptr);
+                // in lieu of "ERR value is not a double or out of range"
+                if ((errno == ERANGE && (value == HUGE_VAL || value == -HUGE_VAL)) || 
+                    (errno != 0 && value == 0) ||
+                    isnan(value) ||
+                    (eptr != pos + len)) {
+                        errorCallback(jsn, JSONSL_ERROR_INVALID_NUMBER, state, NULL);
+                        return;
+                }
+                _pushNode(joctx, NewDoubleNode(value));
             } else {
-                int i = atoi(pos);
-                _pushNode(joctx, NewIntNode(i));
+                // convert long long (int64_t)
+                long long value;
+                char *eptr;
+
+                errno = 0;
+                value = strtoll(pos, &eptr, 10);
+                // in lieu of "ERR value is not an integer or out of range"
+                if ((errno == ERANGE && (value == LLONG_MAX || value == LLONG_MIN)) ||
+                    (errno != 0 && value == 0) ||
+                    (eptr != pos + len)) {
+                        errorCallback(jsn, JSONSL_ERROR_INVALID_NUMBER, state, NULL);
+                        return;
+                }
+
+                _pushNode(joctx, NewIntNode((int64_t)value));
             }
         } else if (state->special_flags & JSONSL_SPECIALf_BOOLEAN) {
             _pushNode(joctx, NewBoolNode(state->special_flags & JSONSL_SPECIALf_TRUE));
         } else if (state->special_flags & JSONSL_SPECIALf_NULL) {
             _pushNode(joctx, NULL);
         }
-    } else if (JSONSL_T_HKEY == state->type) {
-        _pushNode(joctx, NewKeyValNode(pos, len, NULL));  // NULL is a placeholder for now
-        if (buffer) free(buffer);
     }
 
     // anything that pops needs to be set in its parent, except the root element and keys
@@ -206,7 +237,7 @@ int CreateNodeFromJSON(const char *buf, size_t len, Node **node, char **err) {
     return JSONOBJECT_OK;
 
 error:
-    // set error string, if one has be passed
+    // set error string, if one has been passed
     if (err) {
         *err = strdup(serr);
     }
@@ -250,9 +281,9 @@ void _JSONSerialize_StringValue(Node *n, void *ctx) {
             case '\\':  // reverse solidus
                 s = sdscatprintf(s, "\\%c", *p);
                 break;
-            case '/':   // the standard is clear wrt solidus so we're zealous
+            case '/':  // the standard is clear wrt solidus so we're zealous
                 s = sdscatlen(s, "\\/", 2);
-                break;            
+                break;
             case '\b':  // backspace
                 s = sdscatlen(s, "\\b", 2);
                 break;
@@ -269,7 +300,7 @@ void _JSONSerialize_StringValue(Node *n, void *ctx) {
                 s = sdscatlen(s, "\\t", 2);
                 break;
             default:
-                if ((unsigned char)*p > 31)
+                if ((unsigned char)*p > 31 && isprint(*p))
                     s = sdscatprintf(s, "%c", *p);
                 else
                     s = sdscatprintf(s, "\\u%04x", (unsigned char)*p);

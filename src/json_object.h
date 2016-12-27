@@ -18,6 +18,8 @@
 #ifndef __JSON_OBJECT_H__
 #define __JSON_OBJECT_H__
 
+#include <ctype.h>
+#include <errno.h>
 #include <float.h>
 #include <jsonsl.h>
 #include <math.h>
