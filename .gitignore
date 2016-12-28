@@ -39,3 +39,4 @@ venv/
 /build
 /Testing
 /.vscode
+/site

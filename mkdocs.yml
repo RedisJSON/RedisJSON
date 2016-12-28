@@ -1,0 +1,13 @@
+site_name: ReJSON Documentation
+site_url: https://redislabsmodules.github.io/ReJSON/
+canonical_url: https://redislabsmodules.github.io/ReJSON/
+repo_url: https://github.com/RedisLabsModules/ReJSON
+theme: material
+pages:
+    - 'Quickstart': 'index.md'
+    - 'Commands': 'commands.md'
+    - 'Path syntax': 'path.md'
+    - 'RAM usage': 'ram.md'
+    - 'Developer notes': 'developer.md'
+
+google_analytics: ['UA-89559992-1', 'rejson']
