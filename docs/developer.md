@@ -1,21 +1,19 @@
 # Developer notes
 
-## Design
-
-You can find some information about ReJSON's design in [design.md](design.md).
-
 ## Testing
 
-Python is required for ReJSON's module test. Install it with `apt-get install python`.
+Python is required for ReJSON's module test. Install it with `apt-get install python`. You'll also
+need to have [redis-py](https://github.com/andymccurdy/redis-py) installed. The easiest way to get
+it is using pip and running `pip install redis`.
 
-Also, the module's test requires a path to the `redis-server` executable. The path is stored in the
-`REDIS_SERVER_PATH` variable and can be set using CMake's `-D` switch as follows:
+Lastly, the module's test requires a path to the `redis-server` executable. The path is stored
+in the `REDIS_SERVER_PATH` variable and can be set using CMake's `-D` switch as follows:
 
 ```bash
 ~/rejson$ cmake -D REDIS_SERVER_PATH=/path/to/redis-server --build build
 ```
 
-And then run the tests:
+Now, you can run the tests:
 
 ```bash
 ~/rejson$ cmake --build build --target test
