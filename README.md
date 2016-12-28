@@ -7,7 +7,7 @@ as binary objects, thus allowing Redis-blazing performance.
 
 ## Quickstart
 
-1.  [Build the ReJSON module library](https://redislabsmodules.github.io/rejson/#building-the-module-library)
+1.  [Build the ReJSON module library](https://redislabsmodules.github.io/rejson/#building-the-module)
 1.  [Load ReJSON to Redis](https://redislabsmodules.github.io/rejson/#loading-the-module-to-redis)
 1.  [Use it from **any** Redis client](https://redislabsmodules.github.io/rejson/#using-rejson), e.g.:
 
