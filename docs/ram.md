@@ -83,5 +83,13 @@ OK
 (integer) 208
 ```
 
-Note: in the current version, deleting values from containers **does not** free the container's
+This table gives the size (in bytes) of a few of the test files on disk and in RAM:
+
+| File | Size on disk | JSON.DEBUG MEMORY |
+| ---- | ------------ | ----------------- |
+| /test/files/pass-100.json | 380 | 1079 |
+| /test/files/pass-jsonsl-1.json | 1441 | 3666 |
+| /test/files/pass-json-parser-0000.json | 3468 | 7209 |
+
+> Note: in the current version, deleting values from containers **does not** free the container's
 allocated memory.

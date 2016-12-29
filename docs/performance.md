@@ -11,47 +11,9 @@ All tests are non-pipelined.
 > NOTE: the results below are measured using the preview version of ReJSON, which is still very much
 unoptimized :)
 
-## Baseline
-
-To establish a baseline we'll use the Redis [`PING`](https://redis.io/commands/ping) command.
-First, lets see what `redis-benchmark` reports:
-
-```
-~$ redis/src/redis-benchmark -n 1000000 ping
-====== ping ======
-  1000000 requests completed in 7.11 seconds
-  50 parallel clients
-  3 bytes payload
-  keep alive: 1
-
-99.99% <= 1 milliseconds
-100.00% <= 1 milliseconds
-140587.66 requests per second
-```
-
-ReJSONBenchmark's concurrency is configurable, so we'll test a few settings to find a good one. Here
-are the results, which indicate that 16 workers yield the best throughput:
-
-![ReJSONBenchmark PING](images/bench_ping.png)
-
-![ReJSONBenchmark PING percentiles](images/bench_ping_p.png)
-
-Note how our benchmarking tool does slightly worse in PINGing producing only 116K ops, compared to
-`redis-cli`'s 140K.
-
-## The empty string
-
-The first ReJSON benchmark is that of setting and getting an empty string - a value that's only two
-bytes long (i.e. `""`). Granted, that's not very useful, but it teaches us something about the basic
-performance of the module:
-
-![ReJSONBenchmark empty string](images/bench_empty_string.png)
-
-![ReJSONBenchmark empty string percentiles](images/bench_empty_string_p.png)
-
 ## An smallish object
 
-Next we test a value that, while purely synthetic, is more interesting. The test subject is
+We test a JSON value that, while purely synthetic, is interesting. The test subject is
 [/test/files/pass-100.json](/test/files/pass-100.json), who weighs in at 380 bytes and is nested.
 We first test SETting it, then GETting it using several different paths:
 
@@ -84,6 +46,44 @@ Last but not least, some adding and multiplying:
 ![ReJSONBenchmark number operations](images/bench_numbers.png)
 
 ![ReJSONBenchmark number operations percentiles](images/bench_numbers_p.png)
+
+## Baseline
+
+To establish a baseline we'll use the Redis [`PING`](https://redis.io/commands/ping) command.
+First, lets see what `redis-benchmark` reports:
+
+```
+~$ redis/src/redis-benchmark -n 1000000 ping
+====== ping ======
+  1000000 requests completed in 7.11 seconds
+  50 parallel clients
+  3 bytes payload
+  keep alive: 1
+
+99.99% <= 1 milliseconds
+100.00% <= 1 milliseconds
+140587.66 requests per second
+```
+
+ReJSONBenchmark's concurrency is configurable, so we'll test a few settings to find a good one. Here
+are the results, which indicate that 16 workers yield the best throughput:
+
+![ReJSONBenchmark PING](images/bench_ping.png)
+
+![ReJSONBenchmark PING percentiles](images/bench_ping_p.png)
+
+Note how our benchmarking tool does slightly worse in PINGing producing only 116K ops, compared to
+`redis-cli`'s 140K.
+
+## The empty string
+
+Another ReJSON benchmark is that of setting and getting an empty string - a value that's only two
+bytes long (i.e. `""`). Granted, that's not very useful, but it teaches us something about the basic
+performance of the module:
+
+![ReJSONBenchmark empty string](images/bench_empty_string.png)
+
+![ReJSONBenchmark empty string percentiles](images/bench_empty_string_p.png)
 
 ## Raw results
 
