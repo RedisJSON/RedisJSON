@@ -104,7 +104,7 @@ void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct jsonsl_state_st *s
                 // convert to double
                 double value;
                 char *eptr;
-printf("%f\n", HUGE_VAL);
+
                 errno = 0;
                 value = strtod (pos, &eptr);
                 // in lieu of "ERR value is not a double or out of range"
