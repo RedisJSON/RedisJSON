@@ -7,6 +7,7 @@ pages:
     - 'Quickstart': 'index.md'
     - 'Commands': 'commands.md'
     - 'Path syntax': 'path.md'
+    - 'Performance': 'performance.md'
     - 'RAM usage': 'ram.md'
     - 'Developer notes': 'developer.md'
 

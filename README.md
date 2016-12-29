@@ -22,7 +22,7 @@ Read the docs at https://redislabsmodules.github.io/rejson
 * Alpha stage
 * AOF rewrite will probably fail for documents with serialization over 0.5GB
 * Searching for object keys is O(N)
-* Containers are not scaled down after deleting items
+* Containers are not scaled down after deleting items (i.e. free memory isn't reclaimed)
 * Numbers are stored using 64 bits integers or doubles, out of range values are not accepted
 
 ## Acknowledgements
