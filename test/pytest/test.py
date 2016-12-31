@@ -572,11 +572,13 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
             'pass-json-parser-0007.json',   # UTF-8 to Unicode
             'pass-json-parser-0012.json',   # UTF-8 to Unicode
             'pass-jsonsl-1.json',           # big numbers
+            'pass-jsonsl-yelp.json',        # float percision
 
         ]
 
         with self.redis() as r:
             for file in os.listdir(json_path):
+                self.maxDiff = None
                 if file.startswith('pass-') and file.endswith('.json') and file not in ignore:
                     path = '{}/{}'.format(json_path, file)
                     r.delete('test')
