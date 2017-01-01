@@ -1817,8 +1817,9 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
                                   1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
-    RM_LOG_WARNING(ctx, "%s - v%d.%d.%d [encver %d]", RLMODULE_DESC, PROJECT_VERSION_MAJOR,
-                   PROJECT_VERSION_MINOR, PROJECT_VERSION_PATCH, JSONTYPE_ENCODING_VERSION);
+    RM_LOG_WARNING(ctx, "%s - %s v%d.%d.%d [encver %d]", RLMODULE_DESC, PROJECT_BUILD_TYPE,
+                   PROJECT_VERSION_MAJOR, PROJECT_VERSION_MINOR, PROJECT_VERSION_PATCH,
+                   JSONTYPE_ENCODING_VERSION);
 
     return REDISMODULE_OK;
 }
