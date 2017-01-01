@@ -274,44 +274,43 @@ void _JSONSerialize_StringValue(Node *n, void *ctx) {
     size_t len = n->value.strval.len;
     const char *p = n->value.strval.data;
 
-    sds s = sdsnewlen("\"", 1);
+    b->buf = sdsMakeRoomFor(b->buf, len + 2);  // we'll need at least as much room as the original
+    b->buf = sdscatlen(b->buf, "\"", 1);
     while (len--) {
         switch (*p) {
             case '"':   // quotation mark
             case '\\':  // reverse solidus
-                s = sdscatprintf(s, "\\%c", *p);
+                b->buf = sdscatprintf(b->buf, "\\%c", *p);
                 break;
             case '/':  // the standard is clear wrt solidus so we're zealous
-                s = sdscatlen(s, "\\/", 2);
+                b->buf = sdscatlen(b->buf, "\\/", 2);
                 break;
             case '\b':  // backspace
-                s = sdscatlen(s, "\\b", 2);
+                b->buf = sdscatlen(b->buf, "\\b", 2);
                 break;
             case '\f':  // formfeed
-                s = sdscatlen(s, "\\f", 2);
+                b->buf = sdscatlen(b->buf, "\\f", 2);
                 break;
             case '\n':  // newline
-                s = sdscatlen(s, "\\n", 2);
+                b->buf = sdscatlen(b->buf, "\\n", 2);
                 break;
             case '\r':  // carriage return
-                s = sdscatlen(s, "\\r", 2);
+                b->buf = sdscatlen(b->buf, "\\r", 2);
                 break;
             case '\t':  // horizontal tab
-                s = sdscatlen(s, "\\t", 2);
+                b->buf = sdscatlen(b->buf, "\\t", 2);
                 break;
             default:
                 if ((unsigned char)*p > 31 && isprint(*p))
-                    s = sdscatprintf(s, "%c", *p);
+                    b->buf = sdscatprintf(b->buf, "%c", *p);
                 else
-                    s = sdscatprintf(s, "\\u%04x", (unsigned char)*p);
+                    b->buf = sdscatprintf(b->buf, "\\u%04x", (unsigned char)*p);
                 break;
         }
         p++;
     }
 
-    s = sdscatlen(s, "\"", 1);
-    b->buf = sdscatsds(b->buf, s);
-    sdsfree(s);
+    b->buf = sdscatlen(b->buf, "\"", 1);
 }
 
 void _JSONSerialize_BeginValue(Node *n, void *ctx) {
