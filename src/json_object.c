@@ -33,7 +33,7 @@ typedef struct {
 static int _AllowedEscapes[];
 static int _IsAllowedWhitespace(unsigned c);
 
-static int errorCallback(jsonsl_t jsn, jsonsl_error_t err, struct jsonsl_state_st *state, char *errat) {
+inline static int errorCallback(jsonsl_t jsn, jsonsl_error_t err, struct jsonsl_state_st *state, char *errat) {
     JsonObjectContext *joctx = (JsonObjectContext *)jsn->data;
 
     joctx->err = err;
@@ -42,7 +42,7 @@ static int errorCallback(jsonsl_t jsn, jsonsl_error_t err, struct jsonsl_state_s
     return 0;
 }
 
-static void pushCallback(jsonsl_t jsn, jsonsl_action_t action, struct jsonsl_state_st *state,
+inline static void pushCallback(jsonsl_t jsn, jsonsl_action_t action, struct jsonsl_state_st *state,
                   const jsonsl_char_t *at) {
     JsonObjectContext *joctx = (JsonObjectContext *)jsn->data;
 
@@ -59,7 +59,7 @@ static void pushCallback(jsonsl_t jsn, jsonsl_action_t action, struct jsonsl_sta
     }
 }
 
-static void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct jsonsl_state_st *state,
+inline static void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct jsonsl_state_st *state,
                  const jsonsl_char_t *at) {
     JsonObjectContext *joctx = (JsonObjectContext *)jsn->data;
     const char *pos = jsn->base + state->pos_begin;  // element starting position
@@ -271,7 +271,7 @@ typedef struct {
     if (b->indent)               \
         for (int i = 0; i < b->depth; i++) b->buf = sdscatsds(b->buf, b->indentstr);
 
-static void _JSONSerialize_StringValue(Node *n, void *ctx) {
+inline static void _JSONSerialize_StringValue(Node *n, void *ctx) {
     _JSONBuilderContext *b = (_JSONBuilderContext *)ctx;
     size_t len = n->value.strval.len;
     const char *p = n->value.strval.data;
@@ -315,7 +315,7 @@ static void _JSONSerialize_StringValue(Node *n, void *ctx) {
     b->buf = sdscatlen(b->buf, "\"", 1);
 }
 
-static void _JSONSerialize_BeginValue(Node *n, void *ctx) {
+inline static void _JSONSerialize_BeginValue(Node *n, void *ctx) {
     _JSONBuilderContext *b = (_JSONBuilderContext *)ctx;
 
     if (!n) {  // NULL nodes are literal nulls
@@ -369,7 +369,7 @@ static void _JSONSerialize_BeginValue(Node *n, void *ctx) {
     }
 }
 
-static void _JSONSerialize_EndValue(Node *n, void *ctx) {
+inline static void _JSONSerialize_EndValue(Node *n, void *ctx) {
     _JSONBuilderContext *b = (_JSONBuilderContext *)ctx;
     if (n) {
         switch (n->type) {
@@ -395,7 +395,7 @@ static void _JSONSerialize_EndValue(Node *n, void *ctx) {
     }
 }
 
-static void _JSONSerialize_ContainerDelimiter(void *ctx) {
+inline static void _JSONSerialize_ContainerDelimiter(void *ctx) {
     _JSONBuilderContext *b = (_JSONBuilderContext *)ctx;
     b->buf = sdscat(b->buf, b->delimstr);
     _JSONSerialize_Indent(b);
