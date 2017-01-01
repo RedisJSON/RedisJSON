@@ -19,3 +19,10 @@ Now, you can run the tests:
 ~/rejson$ cmake --build build --target test
 ...
 ```
+
+## Making the docs
+
+1. You'll need `mkdocs`, install it with: `pip install mkdocs`
+1. You'll also need the theme so: `pip install mkdocs-material`
+1. To serve locally do: `mkdocs build && mkdocs serve`
+1. To upload to GitHub Pages do: `mkdocs gh-deploy`
