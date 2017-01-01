@@ -83,13 +83,17 @@ OK
 (integer) 208
 ```
 
-This table gives the size (in bytes) of a few of the test files on disk and in RAM:
+This table gives the size (in bytes) of a few of the test files on disk and when stored using
+ReJSON. The _MessagePack_ column is for reference purposes and reflects the length of the value
+when stored using MessagePack.
 
-| File | Size on disk | JSON.DEBUG MEMORY |
-| ---- | ------------ | ----------------- |
-| /test/files/pass-100.json | 380 | 1079 |
-| /test/files/pass-jsonsl-1.json | 1441 | 3666 |
-| /test/files/pass-json-parser-0000.json | 3468 | 7209 |
+| File                                   | Filesize  | ReJSON | MessagePack |
+| -------------------------------------- | --------- | ------ | ----------- |
+| /test/files/pass-100.json              | 380       | 1079   | 140         |
+| /test/files/pass-jsonsl-1.json         | 1441      | 3666   | 753         |
+| /test/files/pass-json-parser-0000.json | 3468      | 7209   | 2393        |
+| /test/files/pass-jsonsl-yahoo2.json    | 18446     | 37469  | 16869       |
+| /test/files/pass-jsonsl-yelp.json      | 39491     | 75341  | 35469       |
 
 > Note: in the current version, deleting values from containers **does not** free the container's
 allocated memory.
