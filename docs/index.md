@@ -18,7 +18,7 @@ from: https://github.com/RedisLabsModules/ReJSON
 
 ## Building the module
 
-### Linux
+### Linux Ubuntu 16.04
 
 Prerequirements:
 
