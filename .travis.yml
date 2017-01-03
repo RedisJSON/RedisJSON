@@ -1,14 +1,25 @@
+language: c
+
 branches:
   only:
     - master
 
+addons:
+  apt:
+    sources:
+      - george-edison55-precise-backports
+    packages:
+      - cmake
+      - cmake-data
+
 before_install:
+  - sudo apt-get install cmake
   - git clone https://github.com/antirez/redis.git
   - cd redis
   - make
   - cd ..
   - sudo apt-get install python python-pip
-  - sudo pip install redis
+  - sudo -H pip install redis
 
 install:
   - ./bootstrap.sh
