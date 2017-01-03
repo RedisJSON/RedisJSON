@@ -28,4 +28,4 @@ install:
 
 script:
   - cd build
-  - ctest -V -j 1
+  - ctest
