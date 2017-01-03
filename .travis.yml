@@ -1,14 +1,20 @@
-language: c
-compiler: gcc
+branches:
+  only:
+    - master
+
 before_install:
   - git clone https://github.com/antirez/redis.git
   - cd redis
   - make
   - cd ..
+  - sudo apt-get install python python-pip
+  - sudo pip install redis
+
 install:
   - ./bootstrap.sh
   - cmake -DREDIS_SERVER_PATH:FILEPATH=./redis/src/redis-server --build build
   - cmake --build build --target all --config Release
+
 script:
   - cd build
-  - ctest -V
+  - ctest
