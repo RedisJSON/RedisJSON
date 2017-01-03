@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/RedisLabsModules/rejson.svg?branch=master)](https://travis-ci.org/RedisLabsModules/rejson)
+
 # ReJSON - a JSON data type for Redis
 
 ReJSON is a [Redis](http://redis.io/) module that implements
