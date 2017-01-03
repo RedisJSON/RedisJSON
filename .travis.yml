@@ -23,7 +23,7 @@ before_install:
 
 install:
   - ./bootstrap.sh
-  - cmake -DREDIS_SERVER_PATH:FILEPATH=redis/src/redis-server --build build
+  - cmake -DREDIS_SERVER_PATH:FILEPATH=$PWD/redis/src/redis-server --build build
   - cmake --build build --target all --config Release
 
 script:
