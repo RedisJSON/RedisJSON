@@ -27,6 +27,9 @@ char *rmalloc_strndup(const char *s, size_t n);
 #define calloc(count, size) RedisModule_Calloc(count, size)
 #define realloc(ptr, size) RedisModule_Realloc(ptr, size)
 #define free(ptr) RedisModule_Free(ptr)
+#ifdef strdup
+#undef strdup
+#endif
 #define strdup(ptr) RedisModule_Strdup(ptr)
 
 // /* More overriding */

@@ -16,11 +16,11 @@ int main(int argc, char **argv) {
     len = ftell(f);
     fseek(f, 0, SEEK_SET);
     json = (char *)malloc(len + 1);
-    fread(json, 1, len, f);
+    size_t read = fread(json, 1, len, f);
     json[len] = '\0';
     fclose(f);
 
-    Node *n;
+    Node *n = NULL;
     char *err = NULL;
     int ret = CreateNodeFromJSON(json, len, &n, &err);
 
