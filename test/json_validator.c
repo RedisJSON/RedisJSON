@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     json[len] = '\0';
     fclose(f);
 
-    Node *n;
+    Node *n = NULL;
     char *err = NULL;
     int ret = CreateNodeFromJSON(json, len, &n, &err);
 
