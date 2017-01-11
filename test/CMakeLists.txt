@@ -5,14 +5,14 @@ add_test(test_object test_object)
 
 # JSON object tests
 add_executable(json_printer json_printer.c)
-target_link_libraries(json_printer json_object m rt)
+target_link_libraries(json_printer json_object m)
 add_executable(test_json_object test_json_object.c)
 target_link_libraries(test_json_object json_object m rt)
 add_test(test_json_object test_json_object)
 
 # Test against JSON files
 add_executable(json_validator json_validator.c)
-target_link_libraries(json_validator json_object m rt)
+target_link_libraries(json_validator json_object m)
 
 set(TEST_FILES_PATH "${CMAKE_CURRENT_SOURCE_DIR}/files")
 file(GLOB PASS "${TEST_FILES_PATH}/pass-*.json")
