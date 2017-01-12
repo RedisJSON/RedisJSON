@@ -255,8 +255,8 @@ void _ObjectTypeMemoryUsage(Node *n, void *ctx) {
     }
 }
 
-size_t ObjectTypeMemoryUsage(void *value) {
-    Node *node = value;
+size_t ObjectTypeMemoryUsage(const void *value) {
+    const Node *node = value;
     NodeSerializerOpt nso = {0};
     size_t memory = 0;
 

@@ -32,6 +32,6 @@ void ObjectTypeFree(void *value);
 void ObjectTypeToRespReply(RedisModuleCtx *ctx, const Node *node);
 
 /* Reports the memory usage (in bytes) of the node. */
-size_t ObjectTypeMemoryUsage(void *value);
+size_t ObjectTypeMemoryUsage(const void *value);
 
 #endif
