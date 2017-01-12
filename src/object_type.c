@@ -224,7 +224,7 @@ void ObjectTypeToRespReply(RedisModuleCtx *ctx, const Node *node) {
 }
 
 void _ObjectTypeMemoryUsage(Node *n, void *ctx) {
-    long long *memory = (long long *)ctx;
+    size_t *memory = (size_t *)ctx;
 
     if (!n) {
         // the null node takes no memory
@@ -255,10 +255,10 @@ void _ObjectTypeMemoryUsage(Node *n, void *ctx) {
     }
 }
 
-long long ObjectTypeMemoryUsage(const Node *node) {
-
+size_t ObjectTypeMemoryUsage(void *value) {
+    Node *node = value;
     NodeSerializerOpt nso = {0};
-    long long memory = 0;
+    size_t memory = 0;
 
     nso.fBegin = _ObjectTypeMemoryUsage;
     nso.xBegin = 0xff;  // mask for all basic types

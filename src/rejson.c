@@ -326,7 +326,7 @@ int JSONDebug_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
         }
 
         if (E_OK == jpn.err) {
-            RedisModule_ReplyWithLongLong(ctx, ObjectTypeMemoryUsage(jpn.n));
+            RedisModule_ReplyWithLongLong(ctx, (long long)ObjectTypeMemoryUsage(jpn.n));
             JSONPathNode_Free(&jpn);
             return REDISMODULE_OK;
         } else {
@@ -1107,7 +1107,7 @@ int JSONNum_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
     } else {
         orz = NewDoubleNode(rz);
     }
-    
+
     // replace the original value with the result depending on the parent container's type
     if (SearchPath_IsRootPath(&jpn.sp)) {
         RedisModule_DeleteKey(key);
@@ -1733,11 +1733,12 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
         return REDISMODULE_ERR;
 
     // Register the JSON data type
-    RedisModuleTypeMethods tm = {.version = REDISMODULE_TYPE_METHOD_VERSION,
-                                 .rdb_load = JSONTypeRdbLoad,
-                                 .rdb_save = ObjectTypeRdbSave,
-                                 .aof_rewrite = JSONTypeAofRewrite,
-                                 .free = ObjectTypeFree};
+    RedisModuleTypeMethods tm = { .version = REDISMODULE_TYPE_METHOD_VERSION,
+                                  .rdb_load = JSONTypeRdbLoad,
+                                  .rdb_save = ObjectTypeRdbSave,
+                                  .aof_rewrite = JSONTypeAofRewrite,
+                                  .mem_usage = ObjectTypeMemoryUsage,
+                                  .free = ObjectTypeFree };
     JSONType = RedisModule_CreateDataType(ctx, JSONTYPE_NAME, JSONTYPE_ENCODING_VERSION, &tm);
 
     /* Module commands. */
