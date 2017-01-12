@@ -52,6 +52,7 @@
 #define REJSON_ERROR_INDEX_INVALID "ERR array index must be an integer"
 #define REJSON_ERROR_INDEX_OUTOFRANGE "ERR index out of range"
 #define REJSON_ERROR_VALUE_NAN "ERR value is not a number type"
+#define REJSON_ERROR_RESULT_NAN_OR_INF "ERR result is not a number or an infinty"
 #define REJSON_ERROR_DICT_SET "ERR could not set key in dictionary"
 #define REJSON_ERROR_ARRAY_SET "ERR could not set item in array"
 #define REJSON_ERROR_ARRAY_GET "ERR could not get item from array"
@@ -1091,14 +1092,22 @@ int JSONNum_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
         rz = oval * bval;
     }
 
+    // check that the result is valid
+    if (isnan(rz) || isinf(rz)) {
+        RedisModule_ReplyWithError(ctx, REJSON_ERROR_RESULT_NAN_OR_INF);
+        goto error;
+    }
+
     // make an object out of the result per its type
     Object *orz;
-    // the result is an integer only if both values were
-    if (N_INTEGER == NODETYPE(jpn.n) && N_INTEGER == NODETYPE(joval))
+    // the result is an integer only if both values were, and providing an int64 can hold it
+    if (N_INTEGER == NODETYPE(jpn.n) && N_INTEGER == NODETYPE(joval) && 
+        rz <= (double)INT64_MAX && rz >= (double)INT64_MIN) {
         orz = NewIntNode((int64_t)rz);
-    else
+    } else {
         orz = NewDoubleNode(rz);
-
+    }
+    
     // replace the original value with the result depending on the parent container's type
     if (SearchPath_IsRootPath(&jpn.sp)) {
         RedisModule_DeleteKey(key);
