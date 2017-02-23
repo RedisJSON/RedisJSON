@@ -1740,6 +1740,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
                                   .mem_usage = ObjectTypeMemoryUsage,
                                   .free = ObjectTypeFree };
     JSONType = RedisModule_CreateDataType(ctx, JSONTYPE_NAME, JSONTYPE_ENCODING_VERSION, &tm);
+    if (NULL == JSONType) return REDISMODULE_ERR;
 
     /* Module commands. */
     /* Generic JSON type commands. */
