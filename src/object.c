@@ -337,7 +337,7 @@ Node *__obj_find(t_dict *o, const char *key, int *idx) {
 
 #define __obj_insert(o, n)                                             \
     if (o->len >= o->cap) {                                            \
-        o->cap = o->cap ? MIN(o->cap * 2, 1024 * 1024) : 1;            \
+        o->cap += o->cap ? MIN(o->cap, 1024 * 1024) : 1;               \
         o->entries = realloc(o->entries, o->cap * sizeof(t_keyval *)); \
     }                                                                  \
     o->entries[o->len++] = n;
