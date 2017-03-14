@@ -1,4 +1,6 @@
 language: c
+compiler: gcc
+dist: trusty
 
 branches:
   only:
