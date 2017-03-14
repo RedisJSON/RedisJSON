@@ -17,8 +17,7 @@ before_install:
   - cd redis
   - make
   - cd ..
-  - sudo apt-get install python python-pip
-  - sudo -H pip install redis
+  - pip install redis
 
 install:
   - ./bootstrap.sh
