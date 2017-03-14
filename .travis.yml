@@ -27,4 +27,4 @@ install:
 
 script:
   - cd build
-  - ctest
+  - ctest -VV
