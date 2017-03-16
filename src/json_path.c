@@ -42,7 +42,7 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
                         break;
                     default:
                         // only letters, dollar signs and underscores are allowed at the beginning
-                        if (isalpha(c) || '$' == 'c' || '_' == c) {
+                        if (isalpha(c) || '$' == c || '_' == c) {
                             tok.len++;
                             st = S_IDENT;
                             break;
