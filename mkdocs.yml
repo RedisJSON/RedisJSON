@@ -1,8 +1,20 @@
 site_name: ReJSON Documentation
 site_url: https://redislabsmodules.github.io/ReJSON/
-canonical_url: https://redislabsmodules.github.io/ReJSON/
 repo_url: https://github.com/RedisLabsModules/ReJSON
+repo_name: RedisLabsModules/ReJSON
 theme: material
+
+extra:
+  palette:
+    primary: 'grey'
+    accent: 'red'
+  logo: 'images/logo.svg'
+  social:
+    - type: 'github'
+      link: 'https://github.com/redislabs'
+    - type: 'twitter'
+      link: 'https://twitter.com/redislabs'
+
 pages:
     - 'Quickstart': 'index.md'
     - 'Commands': 'commands.md'
