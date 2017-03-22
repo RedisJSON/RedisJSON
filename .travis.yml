@@ -17,7 +17,7 @@ before_install:
   - cd redis
   - make
   - cd ..
-  - pip install redis
+  - pip install redis rmtest
 
 install:
   - ./bootstrap.sh

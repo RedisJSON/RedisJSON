@@ -61,6 +61,15 @@ docs = {
 class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_path)):
     """Tests ReJSON Redis module in vitro"""
 
+    def assertNotExists(self, r, key, msg=None):
+        self.assertFalse(r.exists(key), msg)  
+
+    def assertOk(self, x, msg=None):
+        self.assertEquals("OK", x, msg)
+    
+    def assertExists(self, r, key, msg=None):
+        self.assertTrue(r.exists(key), msg)
+
     def testSetRootWithInvalidJSONValuesShouldFail(self):
         """Test that setting the root of a ReJSON key with invalid JSON values fails"""
         with self.redis() as r:
