@@ -23,4 +23,6 @@ pages:
     - 'RAM usage': 'ram.md'
     - 'Developer notes': 'developer.md'
 
-google_analytics: ['UA-89559992-1', 'rejson']
+google_analytics:
+    - 'UA-89559992-1'
+    - 'auto'
