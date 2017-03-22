@@ -601,6 +601,20 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
         return REDISMODULE_ERR;
     }
 
+    /* Validate path against the existing object root, and pretend that the new object is the root
+     * if the key is empty. This will be caught immediately afterwards because new keys must be
+     * created at the root.
+    */
+    JSONPathNode_t jpn;
+    Object *objRoot =
+        (REDISMODULE_KEYTYPE_EMPTY == type ? jo : RedisModule_ModuleTypeGetValue(key));
+    if (PARSE_OK != NodeFromJSONPath(objRoot, argv[2], &jpn)) {
+        RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
+        goto error;
+    }
+    int isRootPath = SearchPath_IsRootPath(&jpn.sp);
+
+
     // subcommand for key creation behavior modifiers NX and XX
     int subnx = 0, subxx = 0;
     if (argc > 4) {
@@ -614,19 +628,6 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
             goto error;
         }
     }
-
-    /* Validate path against the existing object root, and pretend that the new object is the root
-     * if the key is empty. This will be caught immediately afterwards because new keys must be
-     * created at the root.
-    */
-    JSONPathNode_t jpn;
-    Object *objRoot =
-        (REDISMODULE_KEYTYPE_EMPTY == type ? jo : RedisModule_ModuleTypeGetValue(key));
-    if (PARSE_OK != NodeFromJSONPath(objRoot, argv[2], &jpn)) {
-        RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
-        goto error;
-    }
-    int isRootPath = SearchPath_IsRootPath(&jpn.sp);
 
     // handle an empty key
     if (REDISMODULE_KEYTYPE_EMPTY == type) {
