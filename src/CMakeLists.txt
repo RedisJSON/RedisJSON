@@ -17,7 +17,7 @@ configure_file("config.h.in" "${PROJECT_BINARY_DIR}/config.h")
 include_directories("${PROJECT_BINARY_DIR}")
 
 # the module itself
-add_library(rejson SHARED rejson.c object_type.c ${RMUTIL_DIR}/util.c)
+add_library(rejson SHARED rejson.c object_type.c json_type.c ${RMUTIL_DIR}/util.c)
 set_target_properties(rejson PROPERTIES PREFIX "" C_VISIBILITY_PRESET hidden LINK_FLAGS "-Bsymbolic")
 target_compile_definitions(rejson PUBLIC REDIS_MODULE_TARGET)
 target_link_libraries(rejson rmjson_object m)
