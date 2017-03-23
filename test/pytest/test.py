@@ -4,13 +4,23 @@ import unittest
 import json
 import os
 
-# TODO: print nice error if not found
 # Path to module
 module_path = os.environ['REDIS_MODULE_PATH']
 # Path to redis-server executable
 redis_path = os.environ['REDIS_SERVER_PATH']
 # Path to JSON test case files
 json_path = os.path.abspath(os.path.join(os.getcwd(), os.environ['JSON_PATH']))
+
+# TODO: these are currently not supported so ignore them
+json_ignore = [
+    'pass-json-parser-0002.json',   # UTF-8 to Unicode
+    'pass-json-parser-0005.json',   # big numbers
+    'pass-json-parser-0006.json',   # UTF-8 to Unicode
+    'pass-json-parser-0007.json',   # UTF-8 to Unicode
+    'pass-json-parser-0012.json',   # UTF-8 to Unicode
+    'pass-jsonsl-1.json',           # big numbers
+    'pass-jsonsl-yelp.json',        # float percision
+]
 
 # Some basic documents to use in the tests
 docs = {
@@ -571,38 +581,28 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
                             self.assertNotExists(r, 'test', path)
 
     def testSetGetComparePassJSONCaseFiles(self):
-        """Test setting, getting and comparing passable JSON test case files"""
-
-        # TODO: these are currently not supported so ignore them
-        ignore = [
-            'pass-json-parser-0002.json',   # UTF-8 to Unicode
-            'pass-json-parser-0005.json',   # big numbers
-            'pass-json-parser-0006.json',   # UTF-8 to Unicode
-            'pass-json-parser-0007.json',   # UTF-8 to Unicode
-            'pass-json-parser-0012.json',   # UTF-8 to Unicode
-            'pass-jsonsl-1.json',           # big numbers
-            'pass-jsonsl-yelp.json',        # float percision
-
-        ]
+        """Test setting, getting, saving and loading passable JSON test case files"""
 
         with self.redis() as r:
-            for file in os.listdir(json_path):
+            for jsonfile in os.listdir(json_path):
                 self.maxDiff = None
-                if file.startswith('pass-') and file.endswith('.json') and file not in ignore:
-                    path = '{}/{}'.format(json_path, file)
-                    r.delete('test')
+                if jsonfile.startswith('pass-') and jsonfile.endswith('.json') and jsonfile not in json_ignore:
+                    path = '{}/{}'.format(json_path, jsonfile)
+                    r.flushdb()
                     with open(path) as f:
                         value = f.read()
-                        self.assertOk(r.execute_command('JSON.SET', 'test', '.', value), path)
-                        raw = r.execute_command('JSON.GET', 'test')
+                        self.assertOk(r.execute_command('JSON.SET', jsonfile, '.', value), path)
                         d1 = json.loads(value)
-                        d2 = json.loads(raw)
-                        if type(d1) is dict:
-                            self.assertDictEqual(d1, d2, path)
-                        elif type(d1) is list:
-                            self.assertListEqual(d1, d2, path)
-                        else:
-                            self.assertEqual(d1, d2, path)
+                        for _ in r.retry_with_rdb_reload():
+                            self.assertExists(r, jsonfile)
+                            raw = r.execute_command('JSON.GET', jsonfile)
+                            d2 = json.loads(raw)
+                            if type(d1) is dict:
+                                self.assertDictEqual(d1, d2, path)
+                            elif type(d1) is list:
+                                self.assertListEqual(d1, d2, path)
+                            else:
+                                self.assertEqual(d1, d2, path)
 
 if __name__ == '__main__':
     unittest.main()
