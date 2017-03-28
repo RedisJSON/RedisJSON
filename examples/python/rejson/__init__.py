@@ -40,13 +40,13 @@ class ReJSON(object):
         ser = self._redis.execute_command('JSON.GET', name, path, *paths)
         return json.loads(ser)
 
-    def mget(self, path, *keys):
+    def mget(self, *keys, path):
         """
         Gets a value from a ``path`` in multiple ``keys``
 
         Returns a dictionary of found ``keys`` and their respective path values.
         """
-        resp = self._redis.execute_command('JSON.MGET', path, *keys)
+        resp = self._redis.execute_command('JSON.MGET', *keys, path)
         rep = dict()
         for i, v in enumerate(resp):
             if v is not None:

@@ -797,7 +797,7 @@ error:
 }
 
 /**
- * JSON.MGET <path> <key> [<key> ...]
+ * JSON.MGET <key> [<key> ...] <path>
  * Returns the values at `path` from multiple `key`s. Non-existing keys and non-existing paths are
  * reported as null.
  * Reply: Array of Bulk Strings, specifically the JSON serialization of the value at each key's
@@ -809,14 +809,14 @@ int JSONMGet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
         return REDISMODULE_ERR;
     }
     if (RedisModule_IsKeysPositionRequest(ctx)) {
-        for (int i = 2; i < argc - 2; i++) RedisModule_KeyAtPos(ctx, i);
+        for (int i = 1; i < argc - 1; i++) RedisModule_KeyAtPos(ctx, i);
         return REDISMODULE_OK;
     }
     RedisModule_AutoMemory(ctx);
 
     // validate search path
     size_t spathlen;
-    const char *spath = RedisModule_StringPtrLen(argv[1], &spathlen);
+    const char *spath = RedisModule_StringPtrLen(argv[argc-1], &spathlen);
     JSONPathNode_t jpn;
     jpn.sp = NewSearchPath(0);
     if (PARSE_ERR == ParseJSONPath(spath, spathlen, &jpn.sp)) {
@@ -828,7 +828,7 @@ int JSONMGet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
     RedisModule_ReplyWithArray(ctx, argc - 2);
     int isRootPath = SearchPath_IsRootPath(&jpn.sp);
     JSONSerializeOpt jsopt = {0};
-    for (int i = 2; i < argc; i++) {
+    for (int i = 1; i < argc - 1; i++) {
         RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[i], REDISMODULE_READ);
 
         // key must an object type, empties and others return null like Redis' MGET

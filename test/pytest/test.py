@@ -213,7 +213,7 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
                 self.assertOk(r.execute_command('JSON.SET', key, '.', json.dumps(docs['basic'])), d)
 
             # Test an MGET that succeeds on all keys
-            raw = r.execute_command('JSON.MGET', '.', *['doc:{}'.format(d) for d in range(0, 5)])
+            raw = r.execute_command('JSON.MGET', *['doc:{}'.format(d) for d in range(0, 5)] + ['.'])
             self.assertEqual(len(raw), 5)
             for d in range(0, 5):
                 key = 'doc:{}'.format(d)
@@ -222,7 +222,7 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
             # Test an MGET that fails for one key
             r.delete('test')
             self.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"bool":false}'))
-            raw = r.execute_command('JSON.MGET', '.bool', 'test', 'doc:0', 'foo')
+            raw = r.execute_command('JSON.MGET', 'test', 'doc:0', 'foo', '.bool')
             self.assertEqual(len(raw), 3)
             self.assertFalse(json.loads(raw[0]))
             self.assertTrue(json.loads(raw[1]))
