@@ -339,7 +339,7 @@ inline static void _JSONSerialize_BeginValue(Node *n, void *ctx) {
                 else if (fabs(n->value.numval) < 1.0e-6 || fabs(n->value.numval) > 1.0e9)
                     b->buf = sdscatprintf(b->buf, "%e", n->value.numval);
                 else
-                    b->buf = sdscatprintf(b->buf, "%g", n->value.numval);
+                    b->buf = sdscatprintf(b->buf, "%.17g", n->value.numval);
                 break;
             case N_STRING:
                 _JSONSerialize_StringValue(n, b);
