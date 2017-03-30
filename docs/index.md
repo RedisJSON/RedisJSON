@@ -10,7 +10,7 @@ from: https://github.com/RedisLabsModules/ReJSON
 
 ## Quickstart
 
-1.  [Build the ReJSON module library](#building-the-module-library)
+1.  [Build the ReJSON module library](#building-the-module)
 1.  [Load ReJSON to Redis](#loading-the-module-to-redis)
 1.  [Use it from **any** Redis client](#using-rejson), e.g.:
 
@@ -27,7 +27,7 @@ Prerequirements:
 * CMake (v3.0.0 or greater): `apt-get install cmake`
 
 This module employs standard CMake tooling. Assuming that the repository's directory is at
-`~/rejson`, navigate to it and run the script [`/bootstrap.sh`](/bootstrap.sh):
+`~/rejson`, navigate to it and run the script `bootstrap.sh` from the project's root:
 
 ```bash
 ~/rejson$ ./bootstrap.sh
@@ -104,7 +104,7 @@ section and get these two things:
 
 1.  A Redis server running the the module (see [building](#building-the-module-library) and
     [loading](#loading-the-module-to-Redis) for instructions)
-1.  Any [Redis client](http://redis.io/clients)
+1.  Any [Redis](http://redis.io/clients) or [ReJSON client](#rejson-clients)
 
 ### With `redis-cli`
 
@@ -232,4 +232,10 @@ reply = json.loads(r.execute_command('JSON.GET', 'doc'))
 ```
 
 For a more comprehensive example, including a simple Python wrapper for ReJSON, see
-[/examples/python](/examples/python).
+[https://github.com/RedisLabsModules/rejson/tree/master/examples/python](/examples/python).
+
+### ReJSON clients
+
+| Project | Language | URL | Author |
+| ------- | -------- | --- | ------ |
+| iorejson | Node.js | [npm](https://www.npmjs.com/package/iorejson) | [Evan Huang @evanhuang8](https://github.com/evanhuang8) |
