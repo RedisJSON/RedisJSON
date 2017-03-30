@@ -106,11 +106,18 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
     def testSetRootWithJSONValuesShouldSucceed(self):
         """Test that the root of a JSON key can be set with any valid JSON"""
         with self.redis() as r:
-            for v in ['"string"', '1', '-2', '3.14', 'null', 'true', 'false', '[]', '{}']:
+            for v in ['string', 1, -2, 3.14, None, True, False, [], {}]:
                 r.delete('test')
-                self.assertOk(r.execute_command('JSON.SET', 'test', '.', v), v)
+                j = json.dumps(v)
+                self.assertOk(r.execute_command('JSON.SET', 'test', '.', j), v)
                 self.assertExists(r, 'test')
-                self.assertEqual(r.execute_command('JSON.GET', 'test'), v, v)
+                s = json.loads(r.execute_command('JSON.GET', 'test'))
+                if type(v) is dict:
+                    self.assertDictEqual(v, s, v)
+                elif type(v) is list:
+                    self.assertListEqual(v, s, v)
+                else:
+                    self.assertEqual(v, s, v)
 
     def testSetReplaceRootShouldSucceed(self):
         """Test replacing the root of an existing key with a valid object succeeds"""
