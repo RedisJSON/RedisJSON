@@ -1055,6 +1055,7 @@ int JSONNum_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
     // replace the original value with the result depending on the parent container's type
     if (SearchPath_IsRootPath(&jpn.sp)) {
         RedisModule_DeleteKey(key);
+        jt = calloc(1, sizeof(JSONType_t));
         jt->root = orz;
         RedisModule_ModuleTypeSetValue(key, JSONType, jt);
     } else if (N_DICT == NODETYPE(jpn.p)) {

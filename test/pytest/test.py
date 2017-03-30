@@ -530,6 +530,11 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
             with self.assertRaises(redis.exceptions.ResponseError) as cm:
                 r.execute_command('JSON.NUMINCRBY', 'test', '.fuzz', 1)
 
+            # test issue #9
+            self.assertOk(r.execute_command('JSON.SET', 'num', '.', '0'))
+            self.assertEqual('1', r.execute_command('JSON.NUMINCRBY', 'num', '.', 1))
+            self.assertEqual('2.5', r.execute_command('JSON.NUMINCRBY', 'num', '.', 1.5))            
+
     def testStrCommands(self):
         """Test JSON.STRAPPEND and JSON.STRLEN commands"""
 
