@@ -1,7 +1,7 @@
 # ReJSON - a JSON data type for Redis
 
-ReJSON is a [Redis](1) module that implements
-[ECMA-404 The JSON Data Interchange Standard](2) as a native data type. It allows storing, updating
+ReJSON is a [Redis](https://redis.io/) module that implements
+[ECMA-404 The JSON Data Interchange Standard](http://json.org/) as a native data type. It allows storing, updating
 and fetching JSON values from Redis keys (documents). The JSON values are managed as binary objects,
 thus allowing Redis-blazing performance. 
 
@@ -66,7 +66,7 @@ Yeah, right :)
 
 Prerequirements:
 
-* [Redis v4.0 or above](3)
+* [Redis v4.0 or above](http://redis.io/download)
 
 The recommended way have Redis load the module is during startup by by adding the following to the
 `redis.conf` file:
@@ -83,8 +83,9 @@ syntax:
 ~/$ redis-server --loadmodule /path/to/module/rejson.so
 ```
 
-Lastly, you can also use the [`MODULE LOAD`](4) command. Note, however, that `MODULE LOAD` is a
-dangerous command and may be blocked/deprecated in the future due to security considerations.
+Lastly, you can also use the [`MODULE LOAD`](http://redis.io/commands/module-load) command. Note,
+however, that `MODULE LOAD` is a dangerous command and may be blocked/deprecated in the future due
+to security considerations.
 
 Once the module has been loaded successfully, the Redis log should have lines similar to:
 
@@ -103,13 +104,13 @@ section and get these two things:
 
 1.  A Redis server running the the module (see [building](#building-the-module-library) and
     [loading](#loading-the-module-to-Redis) for instructions)
-1.  Any [Redis client](5)
+1.  Any [Redis client](http://redis.io/clients)
 
 ### With `redis-cli`
 
-This example will use [`redis-cli`](6) as the Redis client. The first ReJSON command to try out is
-[`JSON.SET`](commands.md#jsonset), which sets a Redis key with a JSON value. All JSON values can be
-used, for example a string:
+This example will use [`redis-cli`](http://redis.io/topics/rediscli) as the Redis client. The first
+ReJSON command to try out is [`JSON.SET`](commands.md#jsonset), which sets a Redis key with a JSON
+value. All JSON values can be used, for example a string:
 
 ```
 127.0.0.1:6379> JSON.SET foo . '"bar"'
@@ -208,9 +209,9 @@ OK
 
 ### With any other client
 
-Unless your [Redis client](5) already supports Redis modules (unlikely) or ReJSON specifically (even
-unlikelier), you should be ok using its ability to send raw Redis commands. Depending on your client
-of choice the exact method for doing that may vary.
+Unless your [Redis client](http://redis.io/clients) already supports Redis modules (unlikely) or
+ReJSON specifically (even unlikelier), you should be ok using its ability to send raw Redis
+commands. Depending on your client of choice the exact method for doing that may vary.
 
 #### Python example
 
@@ -232,10 +233,3 @@ reply = json.loads(r.execute_command('JSON.GET', 'doc'))
 
 For a more comprehensive example, including a simple Python wrapper for ReJSON, see
 [/examples/python](/examples/python).
-
-  [1]:  http://redis.io/
-  [2]:  http://json.org/
-  [3]:  http://redis.io/download
-  [4]:  http://redis.io/commands/module-load
-  [5]:  http://redis.io/clients
-  [6]:  http://redis.io/topics/rediscli
