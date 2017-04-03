@@ -348,7 +348,7 @@ MU_TEST(testPathParse) {
     const char *path = "foo.bar[3][\"baz\"].bar[\"boo\"][''][6379][-17].$nake_ca$e____";
 
     SearchPath sp = NewSearchPath(0);
-    int rc = ParseJSONPath(path, strlen(path), &sp);
+    int rc = ParseJSONPath(path, strlen(path), &sp, NULL);
     mu_assert_int_eq(rc, PARSE_OK);
 
     mu_assert_int_eq(sp.len, 10);
@@ -369,7 +369,7 @@ MU_TEST(testPathParse) {
         "1foo",     "f?oo",        "foo\n",    "foo\tbar",      "foobar[-i]",   NULL};
 
     for (int idx = 0; badpaths[idx] != NULL; idx++) {
-        mu_check(ParseJSONPath(badpaths[idx], strlen(badpaths[idx]), &sp) == PARSE_ERR);
+        mu_check(ParseJSONPath(badpaths[idx], strlen(badpaths[idx]), &sp, NULL) == PARSE_ERR);
     }
 
     SearchPath_Free(&sp);
@@ -379,7 +379,7 @@ MU_TEST(testPathParseRoot) {
     const char *path = ".";
 
     SearchPath sp = NewSearchPath(0);
-    int rc = ParseJSONPath(path, strlen(path), &sp);
+    int rc = ParseJSONPath(path, strlen(path), &sp, NULL);
     mu_assert_int_eq(rc, PARSE_OK);
     mu_assert_int_eq(sp.len, 1);
     mu_check(NT_ROOT == sp.nodes[0].type);
