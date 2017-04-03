@@ -17,13 +17,14 @@
 
 #include "json_path.h"
 
-int _tokenizePath(const char *json, size_t len, SearchPath *path) {
+int _tokenizePath(const char *json, size_t len, SearchPath *path, JSONSearchPathError_t *err) {
     tokenizerState st = S_NULL;
     size_t offset = 0;
     char *pos = (char *)json;
     token tok;
     tok.s = pos;
     tok.len = 0;
+    char *jsperr = NULL;
     while (offset < len) {
         char c = *pos;
         switch (st) {
@@ -33,7 +34,7 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
                     // . at the beginning means "root"
                     case '.':
                         tok.s++;
-                        st = S_IDENT;
+                        st = S_ROOT;
                         break;
                     // start of key/index specifier
                     case '[':
@@ -48,6 +49,7 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
                             break;
                         }
 
+                        jsperr = JSON_PATH_IDENT_FIRST_CHAR_ERR;
                         goto syntaxerror;
                 }
             } break;
@@ -72,17 +74,20 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
                     tok.len++;
                     st = S_MINUS;
                 } else {
+                    jsperr = JSON_PATH_BRACKET_FIRST_CHAR_ERR;
                     goto syntaxerror;
                 }
                 break;
 
             // we're after a dot
+            case S_ROOT:
             case S_DOT:
                 // start of ident token, can only be a letter, dollar sign or underscore
                 if (isalpha(c) || '$' == c || '_' == c) {
                     tok.len++;
                     st = S_IDENT;
                 } else {
+                    jsperr = JSON_PATH_IDENT_FIRST_CHAR_ERR;
                     goto syntaxerror;
                 }
                 break;
@@ -100,6 +105,7 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
                     offset++;
                     goto tokenend;
                 }
+                jsperr = JSON_PATH_NUMBER_ERR;
                 goto syntaxerror;
 
             // we're within an ident string
@@ -114,6 +120,7 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
                 }
                 // we only allow letters, numbers, dollar signs and underscores in identifiers
                 if (!isalnum(c) && '$' != c && '_' != c) {
+                    jsperr = JSON_PATH_IDENT_ERR;
                     goto syntaxerror;
                 }
                 // advance one
@@ -131,6 +138,7 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
                         st = S_NULL;
                         goto tokenend;
                     } else {
+                        jsperr = JSON_PATH_MISSING_BRACKET_ERR;
                         goto syntaxerror;
                     }
                 }
@@ -146,6 +154,7 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
                         st = S_NULL;
                         goto tokenend;
                     } else {
+                        jsperr = JSON_PATH_MISSING_BRACKET_ERR;                        
                         goto syntaxerror;
                     }
                 }
@@ -158,6 +167,7 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
                     tok.len++;
                     st = S_NUMBER;
                 } else {
+                    jsperr = JSON_PATH_NEGATIVE_NUMBER_ERR;
                     goto syntaxerror;
                 }
                 break;
@@ -165,8 +175,8 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
         offset++;
         pos++;
         
-        // ident string must end if len reached
-        if (S_IDENT == st && len == offset) {
+        // root or ident string must end if len reached
+        if (len == offset && (S_IDENT == st || S_ROOT == st)) {
             st = S_NULL;
             tok.type = T_KEY;
             goto tokenend;
@@ -197,14 +207,18 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path) {
     }  // while (offset < len)
 
     // these are the only legal states at the end of consuming the string
-    if (st == S_NULL || st == S_IDENT) {
-        return OBJ_OK;
+    if (st == S_NULL || st == S_IDENT || st == S_ROOT) {
+        return PARSE_OK;
     }
 
 syntaxerror:
-    return OBJ_ERR;
+    if (err) {
+        err->errmsg = jsperr;
+        err->offset = offset;
+    }
+    return PARSE_ERR;
 }
 
-int ParseJSONPath(const char *json, size_t len, SearchPath *path) {
-    return _tokenizePath(json, len, path);
+int ParseJSONPath(const char *json, size_t len, SearchPath *path, JSONSearchPathError_t *err) {
+    return _tokenizePath(json, len, path, err);
 }

@@ -34,7 +34,6 @@
 
 #define RM_ERRORMSG_SYNTAX "ERR syntax error"
 
-#define REJSON_ERROR_PARSE_PATH "ERR error parsing path"
 #define REJSON_ERROR_EMPTY_STRING "ERR the empty string is not a valid JSON value"
 #define REJSON_ERROR_JSONOBJECT_ERROR "ERR unspecified json_object error (probably OOM)"
 #define REJSON_ERROR_SERIALIZE "ERR object serialization to JSON failed"

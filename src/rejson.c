@@ -56,6 +56,8 @@ typedef struct {
     Node *n;            // the referenced node
     Node *p;            // its parent
     SearchPath sp;      // the search path
+    char *sperrmsg;     // the search path error message
+    size_t sperroffset; // the search path error offset
     PathError err;      // set in case of path error
     int errlevel;       // indicates the level of the error in the path
 } JSONPathNode_t;
@@ -69,17 +71,18 @@ void JSONPathNode_Free(JSONPathNode_t *jpn) { SearchPath_Free(&jpn->sp); }
 */
 int NodeFromJSONPath(Node *root, const RedisModuleString *path, JSONPathNode_t *jpn) {
     // initialize everything
-    jpn->n = NULL;
-    jpn->p = NULL;
-    jpn->err = E_OK;
+    *jpn = (JSONPathNode_t){ 0 };
     jpn->errlevel = -1;
+    JSONSearchPathError_t jsperr = { 0 };
 
     // path must be valid from the root or it's an error
     jpn->sp = NewSearchPath(0);
     jpn->spath = RedisModule_StringPtrLen(path, &jpn->spathlen);
-    if (PARSE_ERR == ParseJSONPath(jpn->spath, jpn->spathlen, &jpn->sp)) {
+    if (PARSE_ERR == ParseJSONPath(jpn->spath, jpn->spathlen, &jpn->sp, &jsperr)) {
         SearchPath_Free(&jpn->sp);
         jpn->sp.nodes = NULL;   // in case someone tries to free it later
+        jpn->sperrmsg = jsperr.errmsg;
+        jpn->sperroffset = jsperr.offset;
         return PARSE_ERR;
     }
 
@@ -94,6 +97,15 @@ int NodeFromJSONPath(Node *root, const RedisModuleString *path, JSONPathNode_t *
     return PARSE_OK;
 }
 
+/* Replies with an error about a search path */
+void ReplyWithSearchPathError(RedisModuleCtx *ctx, JSONPathNode_t *jpn) {
+    sds err = sdscatfmt(sdsempty(), "ERR Search path error at offset %I: %s",
+                        (long long)jpn->sperroffset + 1, jpn->sperrmsg);
+    RedisModule_ReplyWithError(ctx, err);
+    sdsfree(err);    
+}
+
+/* Replies with an error about a wrong type of node in a path */
 void ReplyWithPathTypeError(RedisModuleCtx *ctx, NodeType expected, NodeType actual) {
     sds err = sdscatfmt(sdsempty(), REJSON_ERROR_PATH_WRONGTYPE, NodeTypeStr(expected),
                         NodeTypeStr(actual));
@@ -112,10 +124,10 @@ void ReplyWithPathError(RedisModuleCtx *ctx, const JSONPathNode_t *jpn) {
             break;
         case E_BADTYPE:
             if (NT_KEY == epn->type) {
-                err = sdscatfmt(err, "ERR invalid index '[\"%s\"]' at level %i in path",
+                err = sdscatfmt(err, "ERR invalid key '[\"%s\"]' at level %i in path",
                                 epn->value.key, jpn->errlevel);
             } else {
-                err = sdscatfmt(err, "ERR invalid key '[%i]' at level %i in path", epn->value.index,
+                err = sdscatfmt(err, "ERR invalid index '[%i]' at level %i in path", epn->value.index,
                                 jpn->errlevel);
             }
             break;
@@ -183,7 +195,7 @@ int JSONResp_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
     RedisModuleString *spath =
         (3 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
     if (PARSE_OK != NodeFromJSONPath(jt->root, spath, &jpn)) {
-        RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
+        ReplyWithSearchPathError(ctx, &jpn);
         return REDISMODULE_ERR;
     }
 
@@ -252,7 +264,7 @@ int JSONDebug_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
         RedisModuleString *spath =
             (4 == argc ? argv[3] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
         if (PARSE_OK != NodeFromJSONPath(jt->root, spath, &jpn)) {
-            RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
+            ReplyWithSearchPathError(ctx, &jpn);
             return REDISMODULE_ERR;
         }
 
@@ -316,7 +328,7 @@ int JSONType_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
     RedisModuleString *spath =
         (3 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
     if (PARSE_OK != NodeFromJSONPath(jt->root, spath, &jpn)) {
-        RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
+        ReplyWithSearchPathError(ctx, &jpn);
         return REDISMODULE_ERR;
     }
 
@@ -371,7 +383,7 @@ int JSONLen_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
     RedisModuleString *spath =
         (3 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
     if (PARSE_OK != NodeFromJSONPath(jt->root, spath, &jpn)) {
-        RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
+        ReplyWithSearchPathError(ctx, &jpn);
         return REDISMODULE_ERR;
     }
 
@@ -441,7 +453,7 @@ int JSONObjKeys_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int 
     RedisModuleString *spath =
         (3 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
     if (PARSE_OK != NodeFromJSONPath(jt->root, spath, &jpn)) {
-        RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
+        ReplyWithSearchPathError(ctx, &jpn);
         return REDISMODULE_ERR;
     }
 
@@ -548,7 +560,7 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     */
     JSONPathNode_t jpn;
     if (PARSE_OK != NodeFromJSONPath(jt->root, argv[2], &jpn)) {
-        RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
+        ReplyWithSearchPathError(ctx, &jpn);
         goto error;
     }
     int isRootPath = SearchPath_IsRootPath(&jpn.sp);
@@ -741,7 +753,7 @@ int JSONGet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
         while (jpnslen < npaths) {
             // validate path correctness
             if (PARSE_OK != NodeFromJSONPath(jt->root, argv[pathpos + jpnslen], &jpns[jpnslen])) {
-                RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
+                ReplyWithSearchPathError(ctx, &jpns[jpnslen]);
                 goto error;
             }
 
@@ -819,8 +831,8 @@ int JSONMGet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
     const char *spath = RedisModule_StringPtrLen(argv[argc-1], &spathlen);
     JSONPathNode_t jpn;
     jpn.sp = NewSearchPath(0);
-    if (PARSE_ERR == ParseJSONPath(spath, spathlen, &jpn.sp)) {
-        RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
+    if (PARSE_ERR == ParseJSONPath(spath, spathlen, &jpn.sp, NULL)) {
+        ReplyWithSearchPathError(ctx, &jpn);
         goto error;
     }
 
@@ -911,7 +923,7 @@ int JSONDel_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     RedisModuleString *spath =
         (3 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
     if (PARSE_OK != NodeFromJSONPath(jt->root, spath, &jpn)) {
-        RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
+        ReplyWithSearchPathError(ctx, &jpn);
         return REDISMODULE_ERR;
     }
 
@@ -988,7 +1000,7 @@ int JSONNum_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
     RedisModuleString *spath =
         (4 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
     if (PARSE_OK != NodeFromJSONPath(jt->root, spath, &jpn)) {
-        RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
+        ReplyWithSearchPathError(ctx, &jpn);
         return REDISMODULE_ERR;
     }
 
@@ -1123,7 +1135,7 @@ int JSONStrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
     RedisModuleString *spath =
         (4 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
     if (PARSE_OK != NodeFromJSONPath(jt->root, spath, &jpn)) {
-        RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
+        ReplyWithSearchPathError(ctx, &jpn);
         return REDISMODULE_ERR;
     }
 
@@ -1210,7 +1222,7 @@ int JSONArrInsert_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
     JSONType_t *jt = RedisModule_ModuleTypeGetValue(key);
     JSONPathNode_t jpn;
     if (PARSE_OK != NodeFromJSONPath(jt->root, argv[2], &jpn)) {
-        RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
+        ReplyWithSearchPathError(ctx, &jpn);
         return REDISMODULE_ERR;
     }
 
@@ -1321,7 +1333,7 @@ int JSONArrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
     JSONType_t *jt = RedisModule_ModuleTypeGetValue(key);
     JSONPathNode_t jpn;
     if (PARSE_OK != NodeFromJSONPath(jt->root, argv[2], &jpn)) {
-        RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
+        ReplyWithSearchPathError(ctx, &jpn);
         return REDISMODULE_ERR;
     }
 
@@ -1424,7 +1436,7 @@ int JSONArrIndex_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int
     JSONType_t *jt = RedisModule_ModuleTypeGetValue(key);
     JSONPathNode_t jpn;
     if (PARSE_OK != NodeFromJSONPath(jt->root, argv[2], &jpn)) {
-        RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
+        ReplyWithSearchPathError(ctx, &jpn);
         return REDISMODULE_ERR;
     }
 
@@ -1519,7 +1531,7 @@ int JSONArrPop_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int a
     RedisModuleString *spath =
         (argc > 2 ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
     if (PARSE_OK != NodeFromJSONPath(jt->root, spath, &jpn)) {
-        RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
+        ReplyWithSearchPathError(ctx, &jpn);
         return REDISMODULE_ERR;
     }
 
@@ -1616,7 +1628,7 @@ int JSONArrTrim_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int 
     JSONType_t *jt = RedisModule_ModuleTypeGetValue(key);
     JSONPathNode_t jpn;
     if (PARSE_OK != NodeFromJSONPath(jt->root, argv[2], &jpn)) {
-        RedisModule_ReplyWithError(ctx, REJSON_ERROR_PARSE_PATH);
+        ReplyWithSearchPathError(ctx, &jpn);
         return REDISMODULE_ERR;
     }
 
