@@ -45,9 +45,8 @@ void JSONTypeAofRewrite(RedisModuleIO *aof, RedisModuleString *key, void *value)
 
     // serialize it
     JSONSerializeOpt jsopt = {.indentstr = "", .newlinestr = "", .spacestr = ""};
-    sds json = sdsnewlen("\"", 1);
+    sds json = sdsempty();
     SerializeNodeToJSON(jt->root, &jsopt, &json);
-    json = sdscatlen(json, "\"", 1);
     RedisModule_EmitAOF(aof, "JSON.SET", "scb", key, OBJECT_ROOT_PATH, json, sdslen(json));
     sdsfree(json);
 }
