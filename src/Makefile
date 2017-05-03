@@ -51,7 +51,7 @@ rmutil:
 
 
 rejson.so: jsonsl rmutil $(CC_OBJECTS)
-	$(LD) -o $@ $(CC_OBJECTS) $(LIBS) $(SHOBJ_LDFLAGS) -lc -lm
+	$(LD) -o $@ $(CC_OBJECTS)  $(LIBS) $(SHOBJ_LDFLAGS) -lc -lm
 
 
 librejson.a: jsonsl rmutil $(CC_OBJECTS)
