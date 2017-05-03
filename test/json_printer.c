@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <alloc.h>
 #include "../src/json_object.h"
 
 int main(int argc, char **argv) {
@@ -6,6 +7,7 @@ int main(int argc, char **argv) {
         printf("usage: %s filename\n", argv[0]);
         exit(1);
     }
+    RMUTil_InitAlloc();
 
     FILE *f;
     long len;

@@ -4,6 +4,7 @@
 #include <dirent.h>
 #include "minunit.h"
 #include "../src/json_object.h"
+#include <alloc.h>
 
 #define _JSTR(e) "\"" #e "\""
 
@@ -395,6 +396,7 @@ MU_TEST_SUITE(test_object_to_json) {
 }
 
 int main(int argc, char *argv[]) {
+    RMUTil_InitAlloc();
     MU_RUN_SUITE(test_json_literals);
     MU_RUN_SUITE(test_json_object);
     MU_RUN_SUITE(test_object_to_json);

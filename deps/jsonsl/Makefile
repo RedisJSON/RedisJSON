@@ -71,6 +71,10 @@ bench:
 $(LIB_FQNAME): jsonsl.c
 	$(CC) $(CFLAGS) $(LIBFLAGS) -o $@ $^
 
+static: jsonsl.c
+	$(CC) $(CFLAGS) $(LIBFLAGS) -o jsonsl.o $^
+	ar rcs libjsonsl.a jsonsl.o
+
 .PHONY: doc
 
 
