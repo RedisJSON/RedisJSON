@@ -657,8 +657,8 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 
 ok:
     RedisModule_ReplyWithSimpleString(ctx, "OK");
-    RedisModule_ReplicateVerbatim(ctx);
     JSONPathNode_Free(&jpn);
+    RedisModule_ReplicateVerbatim(ctx);
     return REDISMODULE_OK;
 
 null:
@@ -1102,6 +1102,8 @@ int JSONNum_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
 
     Node_Free(joval);
     JSONPathNode_Free(&jpn);
+
+    RedisModule_ReplicateVerbatim(ctx);
     return REDISMODULE_OK;
 
 error:
@@ -1188,8 +1190,9 @@ int JSONStrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
     // actually concatenate the strings
     Node_StringAppend(jpn.n, jo);
     RedisModule_ReplyWithLongLong(ctx, (long long)Node_Length(jpn.n));
-
     JSONPathNode_Free(&jpn);
+    
+    RedisModule_ReplicateVerbatim(ctx);
     return REDISMODULE_OK;
 
 error:
@@ -1304,8 +1307,9 @@ int JSONArrInsert_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
     }
 
     RedisModule_ReplyWithLongLong(ctx, Node_Length(jpn.n));
-
     JSONPathNode_Free(&jpn);
+
+    RedisModule_ReplicateVerbatim(ctx);
     return REDISMODULE_OK;
 
 error:
@@ -1399,8 +1403,9 @@ int JSONArrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
     }
 
     RedisModule_ReplyWithLongLong(ctx, Node_Length(jpn.n));
-
     JSONPathNode_Free(&jpn);
+
+    RedisModule_ReplicateVerbatim(ctx);
     return REDISMODULE_OK;
 
 error:
@@ -1594,6 +1599,7 @@ int JSONArrPop_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int a
 
 ok:
     JSONPathNode_Free(&jpn);
+    RedisModule_ReplicateVerbatim(ctx);
     return REDISMODULE_OK;
 
 error:
@@ -1679,8 +1685,9 @@ int JSONArrTrim_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int 
     Node_ArrayDelRange(jpn.n, -right, right);
 
     RedisModule_ReplyWithLongLong(ctx, (long long)Node_Length(jpn.n));
-
     JSONPathNode_Free(&jpn);
+    
+    RedisModule_ReplicateVerbatim(ctx);
     return REDISMODULE_OK;
 
 error:
