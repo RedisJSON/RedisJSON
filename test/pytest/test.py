@@ -616,5 +616,15 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
                             else:
                                 self.assertEqual(d1, d2, path)
 
+    def testIssue_13(self):
+        """https://github.com/RedisLabsModules/rejson/issues/13"""
+
+        with self.redis() as r:
+            r.delete('test')
+            self.assertOk(r.execute_command('JSON.SET', 'test', '.', json.dumps(docs['simple'])))
+            # This shouldn't crash Redis
+            r.execute_command('JSON.GET', 'test', 'foo', 'foo')
+
+
 if __name__ == '__main__':
     unittest.main()

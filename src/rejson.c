@@ -773,7 +773,11 @@ int JSONGet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     } else {
         Node *objReply = NewDictNode(jpnslen);
         for (int i = 0; i < jpnslen; i++) {
-            Node_DictSet(objReply, jpns[i].spath, jpns[i].n);
+            // add the path to the reply only if it isn't there already
+            Node *target;
+            int ret = Node_DictGet(objReply, jpns[i].spath, &target);
+            if (OBJ_ERR == ret)
+                Node_DictSet(objReply, jpns[i].spath, jpns[i].n);
         }
         SerializeNodeToJSON(objReply, &jsopt, &json);
 
