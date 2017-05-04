@@ -113,10 +113,10 @@ reported as null.
 path.
 
 ## JSON.SET
- 
+
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(M+N), where M is the size of the original value (if it exists) and N is
-the size of the new value.
+> the size of the new value.
 
 ### Syntax
 
@@ -143,7 +143,7 @@ both new Redis ReJSON data type keys as well as JSON Object keys in them:
 [Simple String][1] `OK` if executed correctly, or [Null Bulk][3] if the specified `NX` or `XX`
 conditions were not met.
 
-### JSON.TYPE
+## JSON.TYPE
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(1).
@@ -331,7 +331,7 @@ Report the length of the JSON Array at `path` in `key`.
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(N), where N is the array's size for `index` other than the last element,
-O(1) otherwise.
+> O(1) otherwise.
 
 ### Syntax
 
