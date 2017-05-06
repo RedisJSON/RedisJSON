@@ -22,7 +22,7 @@ char *rmalloc_strndup(const char *s, size_t n) {
  * replaces all malloc functions in redis with the RM_Alloc family of functions,
  * when running that code outside of redis, your app will crash. This function
  * patches the RM_Alloc functions back to the original mallocs. */
-void RMUTil_InitAlloc() {
+void RMUtil_InitAlloc() {
 
   RedisModule_Alloc = malloc;
   RedisModule_Realloc = realloc;
