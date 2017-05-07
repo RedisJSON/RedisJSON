@@ -3,10 +3,10 @@ ifndef RM_INCLUDE_DIR
 	RM_INCLUDE_DIR=../
 endif
 
-CFLAGS ?= -g -fPIC -lc -lm -O3 -std=gnu99 -I$(RM_INCLUDE_DIR) -Wall -Wno-unused-function
+CFLAGS = -g -fPIC -lc -lm -O3 -std=gnu99 -I$(RM_INCLUDE_DIR) -Wall -Wno-unused-function
 CC=gcc
 
-OBJS=util.o strings.o sds.o vector.o heap.o priority_queue.o alloc.o
+OBJS=util.o strings.o sds.o vector.o heap.o priority_queue.o
 
 all: librmutil.a
 

@@ -27,13 +27,14 @@ char *rmalloc_strndup(const char *s, size_t n);
 #define calloc(count, size) RedisModule_Calloc(count, size)
 #define realloc(ptr, size) RedisModule_Realloc(ptr, size)
 #define free(ptr) RedisModule_Free(ptr)
+
 #ifdef strdup
 #undef strdup
 #endif
 #define strdup(ptr) RedisModule_Strdup(ptr)
 
-// /* More overriding */
-// // needed to avoid calling strndup->malloc
+/* More overriding */
+// needed to avoid calling strndup->malloc
 #ifdef strndup
 #undef strndup
 #endif
@@ -43,7 +44,7 @@ char *rmalloc_strndup(const char *s, size_t n);
 /* This function shold be called if you are working with malloc-patched code
  * ouside of redis, usually for unit tests. Call it once when entering your unit
  * tests' main() */
-void RMUTil_InitAlloc();
+void RMUtil_InitAlloc();
 #endif /* REDIS_MODULE_TARGET */
 
 #endif /* __RMUTIL_ALLOC__ */
