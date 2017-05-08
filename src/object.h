@@ -24,10 +24,8 @@
 #include <string.h>
 #include <sys/param.h>
 #include <vector.h>
-
-#ifdef REDIS_MODULE_TARGET
 #include <alloc.h>
-#endif
+#include "redismodule.h"
 
 // Return code from successful ops
 #define OBJ_OK 0

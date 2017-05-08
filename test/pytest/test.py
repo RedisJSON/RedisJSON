@@ -4,13 +4,6 @@ import unittest
 import json
 import os
 
-# Path to module
-module_path = os.environ['REDIS_MODULE_PATH']
-# Path to redis-server executable
-redis_path = os.environ['REDIS_SERVER_PATH']
-# Path to JSON test case files
-json_path = os.path.abspath(os.path.join(os.getcwd(), os.environ['JSON_PATH']))
-
 # TODO: these are currently not supported so ignore them
 json_ignore = [
     'pass-json-parser-0002.json',   # UTF-8 to Unicode
@@ -68,7 +61,7 @@ docs = {
 }
 
 
-class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_path)):
+class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
     """Tests ReJSON Redis module in vitro"""
 
     def assertNotExists(self, r, key, msg=None):
@@ -579,15 +572,15 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
         """Test using all JSON test case files"""
         self.maxDiff = None
         with self.redis() as r:
-            for file in os.listdir(json_path):
-                if file.endswith('.json'):
-                    path = '{}/{}'.format(json_path, file)
+            for jsonfile in os.listdir('../files'):
+                if jsonfile.endswith('.json'):
+                    path = '{}/{}'.format(json_path, jsonfile)
                     r.delete('test')
                     with open(path) as f:
                         value = f.read()
-                        if file.startswith('pass-'):
+                        if jsonfile.startswith('pass-'):
                             self.assertOk(r.execute_command('JSON.SET', 'test', '.', value), path)
-                        elif file.startswith('fail-'):
+                        elif jsonfile.startswith('fail-'):
                             with self.assertRaises(redis.exceptions.ResponseError) as cm:
                                 r.execute_command('JSON.SET', 'test', '.', value)
                             self.assertNotExists(r, 'test', path)
@@ -596,7 +589,7 @@ class ReJSONTestCase(ModuleTestCase(module_path=module_path, redis_path=redis_pa
         """Test setting, getting, saving and loading passable JSON test case files"""
 
         with self.redis() as r:
-            for jsonfile in os.listdir(json_path):
+            for jsonfile in os.listdir('../files'):
                 self.maxDiff = None
                 if jsonfile.startswith('pass-') and jsonfile.endswith('.json') and jsonfile not in json_ignore:
                     path = '{}/{}'.format(json_path, jsonfile)

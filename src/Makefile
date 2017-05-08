@@ -1,4 +1,4 @@
-#set environment variable RM_INCLUDE_DIR to the location of redismodule.h
+# Set environment variable RM_INCLUDE_DIR to the location of redismodule.h
 ifndef RM_INCLUDE_DIR
 	RM_INCLUDE_DIR=$(shell pwd)
 endif
@@ -14,12 +14,10 @@ ifeq ($(DEBUG), 1)
 	DEBUGFLAGS = -g -ggdb -O0
 endif
 
-
-
-# find the OS
+# Find the OS
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
 INCLUDE_DIRS = -I"$(RM_INCLUDE_DIR)" -I"$(DEPS_DIR)/jsonsl"  -I"$(DEPS_DIR)/RedisModuleSDK/rmutil"
-CFLAGS =  $(INCLUDE_DIRS) -Wall $(DEBUGFLAGS) -fPIC -std=gnu99  -D_GNU_SOURCE -DREDIS_MODULE_TARGET
+CFLAGS =  $(INCLUDE_DIRS) -Wall $(DEBUGFLAGS) -fPIC -std=gnu99  -D_GNU_SOURCE
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
 
 # Compile flags for linux / osx
@@ -47,12 +45,11 @@ jsonsl:
 
 rmutil:
 	$(MAKE) -C $(DEPS_DIR)/RedisModuleSDK/rmutil all
+
 .PHONY: rmutil
 
-
 rejson.so: jsonsl rmutil $(CC_OBJECTS)
-	$(LD) -o $@ $(CC_OBJECTS)  $(LIBS) $(SHOBJ_LDFLAGS) -lc -lm
-
+	$(LD) -o $@ $(CC_OBJECTS) $(LIBS) $(SHOBJ_LDFLAGS) -lc -lm
 
 librejson.a: jsonsl rmutil $(CC_OBJECTS)
 	ar rcs $@ $(CC_OBJECTS) $(LIBS)
@@ -63,4 +60,3 @@ clean:
 deepclean:
 	find ./ -name "*.[oa]" -exec rm {} \; -print
 	find ./ -name "*.so" -exec rm {} \; -print
-

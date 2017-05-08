@@ -17,16 +17,12 @@
 
 #include "object_type.h"
 
-#ifndef REDIS_MODULE_TARGET
-#pragma GCC error "object_type must be compiled as a Redis module"
-#endif
-
 #define Vector_Last(v) Vector_Size(v) - 1
 
 void *ObjectTypeRdbLoad(RedisModuleIO *rdb) {
     // IMPORTANT: no encoding version check here, this is up to the calller
-    Vector *nodes;
-    Vector *indices;
+    Vector *nodes = NULL;
+    Vector *indices = NULL;
     Node *node;
     uint64_t len;
     uint64_t type;
@@ -182,32 +178,32 @@ void _ObjectTypeToResp_Begin(Node *n, void *ctx) {
     RedisModuleCtx *rctx = (RedisModuleCtx *)ctx;
 
     if (!n) {
-        RedisModule_ReplyWithNull(ctx);
+        RedisModule_ReplyWithNull(rctx);
     } else {
         switch (n->type) {
             case N_BOOLEAN:
-                RedisModule_ReplyWithSimpleString(ctx, n->value.boolval ? "true" : "false");
+                RedisModule_ReplyWithSimpleString(rctx, n->value.boolval ? "true" : "false");
                 break;
             case N_INTEGER:
-                RedisModule_ReplyWithLongLong(ctx, n->value.intval);
+                RedisModule_ReplyWithLongLong(rctx, n->value.intval);
                 break;
             case N_NUMBER:
-                RedisModule_ReplyWithDouble(ctx, n->value.numval);
+                RedisModule_ReplyWithDouble(rctx, n->value.numval);
                 break;
             case N_STRING:
-                RedisModule_ReplyWithStringBuffer(ctx, n->value.strval.data, n->value.strval.len);
+                RedisModule_ReplyWithStringBuffer(rctx, n->value.strval.data, n->value.strval.len);
                 break;
             case N_KEYVAL:
-                RedisModule_ReplyWithArray(ctx, 2);
-                RedisModule_ReplyWithStringBuffer(ctx, n->value.kvval.key, strlen(n->value.kvval.key));
+                RedisModule_ReplyWithArray(rctx, 2);
+                RedisModule_ReplyWithStringBuffer(rctx, n->value.kvval.key, strlen(n->value.kvval.key));
                 break;
             case N_DICT:
-                RedisModule_ReplyWithArray(ctx, n->value.dictval.len + 1);
-                RedisModule_ReplyWithSimpleString(ctx, "{");
+                RedisModule_ReplyWithArray(rctx, n->value.dictval.len + 1);
+                RedisModule_ReplyWithSimpleString(rctx, "{");
                 break;
             case N_ARRAY:
-                RedisModule_ReplyWithArray(ctx, n->value.arrval.len + 1);
-                RedisModule_ReplyWithSimpleString(ctx, "[");
+                RedisModule_ReplyWithArray(rctx, n->value.arrval.len + 1);
+                RedisModule_ReplyWithSimpleString(rctx, "[");
                 break;
             case N_NULL:  // keeps the compiler from complaining
                 break;

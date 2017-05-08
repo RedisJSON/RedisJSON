@@ -20,11 +20,9 @@
 
 #include <string.h>
 #include <sys/param.h>
-#include "object.h"
-
-#ifdef REDIS_MODULE_TARGET
 #include <alloc.h>
-#endif
+#include "object.h"
+#include "redismodule.h"
 
 /* The type of a path node */
 typedef enum {

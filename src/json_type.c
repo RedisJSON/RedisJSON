@@ -26,7 +26,7 @@ void *JSONTypeRdbLoad(RedisModuleIO *rdb, int encver) {
         return NULL;
     }
 
-    JSONType_t *jt = calloc(1, sizeof(JSONType_t));
+    JSONType_t *jt = RedisModule_Calloc(1, sizeof(JSONType_t));
     jt->root = ObjectTypeRdbLoad(rdb);
     return jt;
 }
@@ -55,7 +55,7 @@ void JSONTypeFree(void *value) {
     JSONType_t *jt = (JSONType_t *)value;
     if (jt) {
         Node_Free(jt->root);
-        free(jt);
+        RedisModule_Free(jt);
     }
 }
 

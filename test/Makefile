@@ -17,7 +17,7 @@ endif
 # find the OS
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
 INCLUDE_DIRS = -I"$(RM_INCLUDE_DIR)" -I"$(DEPS_DIR)/jsonsl"  -I"$(DEPS_DIR)/RedisModuleSDK/rmutil"
-CFLAGS =  $(INCLUDE_DIRS) -Wall $(DEBUGFLAGS) -fPIC -std=gnu99  -D_GNU_SOURCE  -D_REDIS_MODULE_TARGET
+CFLAGS =  $(INCLUDE_DIRS) -Wall $(DEBUGFLAGS) -fPIC -std=gnu99 -D_GNU_SOURCE
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
 
 # Compile flags for linux / osx
@@ -29,29 +29,36 @@ export CFLAGS
 export DEBUGFLAGS
 
 all: build test
-test:  test_object test_json_object test_json_printer
+test:  test_object test_json_object test_json_printer unittest
 build: object json_object json_printer
 
 # Build jsonsl library
 jsonsl:
-	$(MAKE) -C $(DEPS_DIR)/jsonsl static
+	$(MAKE) -C $(DEPS_DIR)/jsonsl clean static
 .PHONY: jsonsl
 
-# build rmutil library
+# Build rmutil library
 rmutil:
 	$(MAKE) -C $(DEPS_DIR)/RedisModuleSDK/rmutil clean all
 .PHONY: rmutil
 
+# Build rejson library
 librejson:
 	$(MAKE) -C $(RM_INCLUDE_DIR) $@.a
 .PHONY: librejson
 
+# Build rejson module
+rejson:
+	$(MAKE) -C $(RM_INCLUDE_DIR) $@.so
+.PHONY: rejson
+
 # Dependency libraries
-LIBS = $(DEPS_DIR)/jsonsl/libjsonsl.a $(DEPS_DIR)/RedisModuleSDK/rmutil/librmutil.a $(RM_INCLUDE_DIR)/librejson.a
+LIBS_DIRS = -L$(DEPS_DIR)/jsonsl -L$(DEPS_DIR)/RedisModuleSDK/rmutil -L$(RM_INCLUDE_DIR)
+LIBS = -ljsonsl -lrmutil -lrejson
 
 #building of json printer test
 json_printer:
-	$(CC) $(CFLAGS) -o test_$@ $(LIBS) json_printer.c
+	$(CC) $(CFLAGS) -o test_$@ json_printer.c $$(LIBS_DIRS) (LIBS)
 
 # execute json_printer test
 test_json_printer: json_printer
@@ -59,8 +66,9 @@ test_json_printer: json_printer
 .PHONY: test_json_printer
 
 # Build test_object
-object: jsonsl rmutil librejson
-	$(CC) $(CFLAGS) -o test_$@ $(LIBS) test_$@.c
+object: jsonsl rmutil librejson 
+	$(CC) $(CFLAGS) -o test_$@ test_$@.c $(LIBS_DIRS) $(LIBS)
+
 # Run test_object
 test_object: object
 	./$@
@@ -68,13 +76,17 @@ test_object: object
 
 # Buid json_object
 json_object: jsonsl rmutil librejson
-	$(CC) $(CFLAGS) -o test_$@ $(LIBS) test_$@.c
+	$(CC) $(CFLAGS) -o test_$@ test_$@.c $(LIBS) $(LIBS_DIRS)
+
 # Run test_json_object
 test_json_object: json_object
 	./$@
 .PHONY: test_json_object
 
+# Unit testing
+unittest: rejson
+	$(MAKE) -C pytest
+
 clean:
 	rm -rvf *.xo *.so *.o *.a
-
-
+	rm -rvf json_printer test_json_object test_object

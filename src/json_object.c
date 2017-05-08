@@ -26,8 +26,15 @@ typedef struct {
     int nlen;            // size of node stack
 } JsonObjectContext;
 
-#define _pushNode(ctx, n) ctx->nodes[ctx->nlen++] = n
-#define _popNode(ctx) ctx->nodes[--ctx->nlen]
+inline void _pushNode(JsonObjectContext *ctx, Node *n) {
+    ctx->nodes[ctx->nlen] = n;
+    ctx->nlen++;
+}
+
+inline Node *_popNode(JsonObjectContext *ctx) {
+    ctx->nlen--;
+    return ctx->nodes[ctx->nlen+1];
+}
 
 /* Decalre it. */
 static int _AllowedEscapes[];
@@ -78,10 +85,10 @@ inline static void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct json
             jsonsl_error_t err;
             size_t newlen;
 
-            buffer = calloc(len, sizeof(char));
+            buffer = RedisModule_Calloc(len, sizeof(char));
             newlen = jsonsl_util_unescape(pos, buffer, len, _AllowedEscapes, &err);
             if (!newlen) {
-                free(buffer);
+                RedisModule_Free(buffer);
                 errorCallback(jsn, err, state, NULL);
                 return;
             }
@@ -96,7 +103,7 @@ inline static void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct json
         else n = NewKeyValNode(pos, len, NULL);  // NULL is a placeholder for now
         _pushNode(joctx, n);
 
-        if (buffer) free(buffer);
+        if (buffer) RedisModule_Free(buffer);
     }
 
     // popped special values are also added to the node stack
@@ -162,7 +169,7 @@ inline static void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct json
     }
 }
 
-int CreateNodeFromJSON(const char *buf, size_t len, Node **node, char **err) {
+int CreateNodeFromJSON(const char *buf, size_t len, Node **node, sds *err) {
     int levels = JSONSL_MAX_LEVELS;  // TODO: heur levels from len since we're not really streaming?
 
     size_t _off = 0, _len = len;
@@ -178,7 +185,7 @@ int CreateNodeFromJSON(const char *buf, size_t len, Node **node, char **err) {
     */
     if ((is_scalar = ('{' != _buf[_off]) && ('[' != _buf[_off]) && _off < _len)) {
         _len = _len - _off + 2;
-        _buf = malloc(_len * sizeof(char));
+        _buf = RedisModule_Alloc(_len * sizeof(char));
         _buf[0] = '[';
         _buf[_len - 1] = ']';
         memcpy(&_buf[1], &buf[_off], len - _off);
@@ -192,8 +199,8 @@ int CreateNodeFromJSON(const char *buf, size_t len, Node **node, char **err) {
     jsonsl_enable_all_callbacks(jsn);
 
     /* Set up our custom context. */
-    JsonObjectContext *joctx = calloc(1, sizeof(JsonObjectContext));
-    joctx->nodes = calloc(levels, sizeof(Node *));
+    JsonObjectContext *joctx = RedisModule_Calloc(1, sizeof(JsonObjectContext));
+    joctx->nodes = RedisModule_Calloc(levels, sizeof(Node *));
     jsn->data = joctx;
 
     /* Feed the lexer. */
@@ -226,14 +233,14 @@ int CreateNodeFromJSON(const char *buf, size_t len, Node **node, char **err) {
         Node_ArrayItem(joctx->nodes[0], 0, node);
         Node_ArraySet(joctx->nodes[0], 0, NULL);
         Node_Free(_popNode(joctx));
-        free(_buf);
+        RedisModule_Free(_buf);
     } else {
         *node = _popNode(joctx);
     }
 
     sdsfree(serr);
-    free(joctx->nodes);
-    free(joctx);
+    RedisModule_Free(joctx->nodes);
+    RedisModule_Free(joctx);
     jsonsl_destroy(jsn);
 
     return JSONOBJECT_OK;
@@ -248,8 +255,8 @@ error:
     while (joctx->nlen) Node_Free(_popNode(joctx));
 
     sdsfree(serr);
-    free(joctx->nodes);
-    free(joctx);
+    RedisModule_Free(joctx->nodes);
+    RedisModule_Free(joctx);
     jsonsl_destroy(jsn);
 
     return JSONOBJECT_ERROR;
@@ -402,10 +409,9 @@ inline static void _JSONSerialize_ContainerDelimiter(void *ctx) {
 }
 
 void SerializeNodeToJSON(const Node *node, const JSONSerializeOpt *opt, sds *json) {
-    int levels = JSONSL_MAX_LEVELS;
 
     // set up the builder
-    _JSONBuilderContext *b = calloc(1, sizeof(_JSONBuilderContext));
+    _JSONBuilderContext *b = RedisModule_Calloc(1, sizeof(_JSONBuilderContext));
     b->indentstr = opt->indentstr ? sdsnew(opt->indentstr) : sdsempty();
     b->newlinestr = opt->newlinestr ? sdsnew(opt->newlinestr) : sdsempty();
     b->spacestr = opt->spacestr ? sdsnew(opt->spacestr) : sdsempty();
@@ -429,7 +435,7 @@ void SerializeNodeToJSON(const Node *node, const JSONSerializeOpt *opt, sds *jso
     sdsfree(b->newlinestr);
     sdsfree(b->spacestr);
     sdsfree(b->delimstr);
-    free(b);
+    RedisModule_Free(b);
 }
 
 // clang-format off

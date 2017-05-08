@@ -40,6 +40,8 @@ static inline char *NodeTypeStr(const NodeType nt) {
             return types[5];
         case N_ARRAY:
             return types[6];
+        case N_KEYVAL:
+            return NULL;    // this **should** never be reached
     }
     return NULL;  // this is never reached
 }
@@ -532,11 +534,11 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 
     // Create object from json
     Object *jo = NULL;
-    char *jerr = NULL;
+    sds jerr = NULL;
     if (JSONOBJECT_OK != CreateNodeFromJSON(json, jsonlen, &jo, &jerr)) {
         if (jerr) {
             RedisModule_ReplyWithError(ctx, jerr);
-            free(jerr);
+            sdsfree(jerr);
         } else {
             RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_JSONOBJECT_ERROR);
             RedisModule_ReplyWithError(ctx, REJSON_ERROR_JSONOBJECT_ERROR);
@@ -547,7 +549,7 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     // initialize or get JSON type container
     JSONType_t *jt;
     if (REDISMODULE_KEYTYPE_EMPTY == type) {
-        jt = calloc(1, sizeof(JSONType_t));
+        jt = RedisModule_Calloc(1, sizeof(JSONType_t));
         jt->root = jo;
     }
     else {
@@ -624,7 +626,7 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
         if (isRootPath) {
             // replacing the root is easy
             RedisModule_DeleteKey(key);
-            jt = calloc(1, sizeof(JSONType_t));
+            jt = RedisModule_Calloc(1, sizeof(JSONType_t));
             jt->root = jo;
             RedisModule_ModuleTypeSetValue(key, JSONType, jt);
         } else if (N_DICT == NODETYPE(jpn.p)) {
@@ -669,7 +671,7 @@ null:
 error:
     JSONPathNode_Free(&jpn);
     if (REDISMODULE_KEYTYPE_EMPTY == type) {
-        free(jt);
+        RedisModule_Free(jt);
     }
     if (jo) Node_Free(jo);
     return REDISMODULE_ERR;
@@ -989,7 +991,10 @@ int JSONNum_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
     // key must be an object type
     RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ | REDISMODULE_WRITE);
     int type = RedisModule_KeyType(key);
-    if (RedisModule_ModuleTypeGetType(key) != JSONType) {
+    if (REDISMODULE_KEYTYPE_EMPTY == type) {
+        RedisModule_ReplyWithError(ctx, REJSON_ERROR_KEY_REQUIRED);
+        return REDISMODULE_ERR;
+    } else if (RedisModule_ModuleTypeGetType(key) != JSONType) {
         RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
         return REDISMODULE_ERR;
     }
@@ -1022,11 +1027,11 @@ int JSONNum_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
     // we use the json parser to convert the bval arg into a value to catch all of JSON's syntices
     size_t vallen;
     const char *val = RedisModule_StringPtrLen(argv[(4 == argc ? 3 : 2)], &vallen);
-    char *jerr = NULL;
+    sds jerr = NULL;
     if (JSONOBJECT_OK != CreateNodeFromJSON(val, vallen, &joval, &jerr)) {
         if (jerr) {
             RedisModule_ReplyWithError(ctx, jerr);
-            free(jerr);
+            sdsfree(jerr);
         } else {
             RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_JSONOBJECT_ERROR);
             RedisModule_ReplyWithError(ctx, REJSON_ERROR_JSONOBJECT_ERROR);
@@ -1067,7 +1072,7 @@ int JSONNum_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
     // replace the original value with the result depending on the parent container's type
     if (SearchPath_IsRootPath(&jpn.sp)) {
         RedisModule_DeleteKey(key);
-        jt = calloc(1, sizeof(JSONType_t));
+        jt = RedisModule_Calloc(1, sizeof(JSONType_t));
         jt->root = orz;
         RedisModule_ModuleTypeSetValue(key, JSONType, jt);
     } else if (N_DICT == NODETYPE(jpn.p)) {
@@ -1131,7 +1136,6 @@ int JSONStrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
     // validate path
     JSONType_t *jt = RedisModule_ModuleTypeGetValue(key);
     JSONPathNode_t jpn;
-    Object *objRoot = RedisModule_ModuleTypeGetValue(key);
     RedisModuleString *spath =
         (4 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
     if (PARSE_OK != NodeFromJSONPath(jt->root, spath, &jpn)) {
@@ -1161,11 +1165,11 @@ int JSONStrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
 
     // make an object from the JSON value
     Object *jo = NULL;
-    char *jerr = NULL;
+    sds jerr = NULL;
     if (JSONOBJECT_OK != CreateNodeFromJSON(json, jsonlen, &jo, &jerr)) {
         if (jerr) {
             RedisModule_ReplyWithError(ctx, jerr);
-            free(jerr);
+            sdsfree(jerr);
         } else {
             RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_JSONOBJECT_ERROR);
             RedisModule_ReplyWithError(ctx, REJSON_ERROR_JSONOBJECT_ERROR);
@@ -1268,12 +1272,12 @@ int JSONArrInsert_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
 
         // create object from json
         Object *jo = NULL;
-        char *jerr = NULL;
+        sds jerr = NULL;
         if (JSONOBJECT_OK != CreateNodeFromJSON(json, jsonlen, &jo, &jerr)) {
             Node_Free(sub);
             if (jerr) {
                 RedisModule_ReplyWithError(ctx, jerr);
-                free(jerr);
+                sdsfree(jerr);
             } else {
                 RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_JSONOBJECT_ERROR);
                 RedisModule_ReplyWithError(ctx, REJSON_ERROR_JSONOBJECT_ERROR);
@@ -1363,12 +1367,12 @@ int JSONArrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
 
         // create object from json
         Object *jo = NULL;
-        char *jerr = NULL;
+        sds jerr = NULL;
         if (JSONOBJECT_OK != CreateNodeFromJSON(json, jsonlen, &jo, &jerr)) {
             Node_Free(sub);
             if (jerr) {
                 RedisModule_ReplyWithError(ctx, jerr);
-                free(jerr);
+                sdsfree(jerr);
             } else {
                 RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_JSONOBJECT_ERROR);
                 RedisModule_ReplyWithError(ctx, REJSON_ERROR_JSONOBJECT_ERROR);
@@ -1462,11 +1466,11 @@ int JSONArrIndex_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int
 
     // create an object from json
     Object *jo = NULL;
-    char *jerr = NULL;
+    sds jerr = NULL;
     if (JSONOBJECT_OK != CreateNodeFromJSON(json, jsonlen, &jo, &jerr)) {
         if (jerr) {
             RedisModule_ReplyWithError(ctx, jerr);
-            free(jerr);
+            sdsfree(jerr);
         } else {
             RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_JSONOBJECT_ERROR);
             RedisModule_ReplyWithError(ctx, REJSON_ERROR_JSONOBJECT_ERROR);
@@ -1684,7 +1688,6 @@ error:
     return REDISMODULE_ERR;
 }
 
-int RedisModule_OnLoad(RedisModuleCtx *ctx) __attribute__((visibility("default")));
 int RedisModule_OnLoad(RedisModuleCtx *ctx) {
     // Register the module
     if (RedisModule_Init(ctx, RLMODULE_NAME, 1, REDISMODULE_APIVER_1) == REDISMODULE_ERR)

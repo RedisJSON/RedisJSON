@@ -26,10 +26,7 @@
 #include <sds.h>
 #include <stdlib.h>
 #include "object.h"
-
-#ifdef REDIS_MODULE_TARGET
-#include <alloc.h>
-#endif
+#include "redismodule.h"
 
 #define JSONOBJECT_OK 0
 #define JSONOBJECT_ERROR 1
