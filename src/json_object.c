@@ -26,14 +26,14 @@ typedef struct {
     int nlen;            // size of node stack
 } JsonObjectContext;
 
-inline void _pushNode(JsonObjectContext *ctx, Node *n) {
+static inline void _pushNode(JsonObjectContext *ctx, Node *n) {
     ctx->nodes[ctx->nlen] = n;
     ctx->nlen++;
 }
 
-inline Node *_popNode(JsonObjectContext *ctx) {
+static inline Node *_popNode(JsonObjectContext *ctx) {
     ctx->nlen--;
-    return ctx->nodes[ctx->nlen+1];
+    return ctx->nodes[ctx->nlen];
 }
 
 /* Decalre it. */
@@ -185,7 +185,7 @@ int CreateNodeFromJSON(const char *buf, size_t len, Node **node, sds *err) {
     */
     if ((is_scalar = ('{' != _buf[_off]) && ('[' != _buf[_off]) && _off < _len)) {
         _len = _len - _off + 2;
-        _buf = RedisModule_Alloc(_len * sizeof(char));
+        _buf = RedisModule_Calloc(_len, sizeof(char));
         _buf[0] = '[';
         _buf[_len - 1] = ']';
         memcpy(&_buf[1], &buf[_off], len - _off);

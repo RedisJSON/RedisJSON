@@ -52,7 +52,7 @@ rejson.so: jsonsl rmutil $(CC_OBJECTS)
 	$(LD) -o $@ $(CC_OBJECTS) $(LIBS) $(SHOBJ_LDFLAGS) -lc -lm
 
 librejson.a: jsonsl rmutil $(CC_OBJECTS)
-	ar rcs $@ $(CC_OBJECTS) $(LIBS)
+	ar rcs $@ $(LIBS) $(CC_OBJECTS)
 
 clean:
 	rm -rvf *.xo *.so *.o *.a

@@ -29,64 +29,55 @@ export CFLAGS
 export DEBUGFLAGS
 
 all: build test
-test:  test_object test_json_object test_json_printer unittest
-build: object json_object json_printer
-
-# Build jsonsl library
-jsonsl:
-	$(MAKE) -C $(DEPS_DIR)/jsonsl clean static
-.PHONY: jsonsl
-
-# Build rmutil library
-rmutil:
-	$(MAKE) -C $(DEPS_DIR)/RedisModuleSDK/rmutil clean all
-.PHONY: rmutil
-
-# Build rejson library
-librejson:
-	$(MAKE) -C $(RM_INCLUDE_DIR) $@.a
-.PHONY: librejson
-
-# Build rejson module
-rejson:
-	$(MAKE) -C $(RM_INCLUDE_DIR) $@.so
-.PHONY: rejson
+test: test_object test_json_object test_json_validator test_json_printer unittest
+build: object json_object json_printer json_validator
 
 # Dependency libraries
-LIBS_DIRS = -L$(DEPS_DIR)/jsonsl -L$(DEPS_DIR)/RedisModuleSDK/rmutil -L$(RM_INCLUDE_DIR)
-LIBS = -ljsonsl -lrmutil -lrejson
+# LIBS_DIRS = -L$(RM_INCLUDE_DIR) -L$(DEPS_DIR)/jsonsl -L$(DEPS_DIR)/RedisModuleSDK/rmutil
+# LIBS = -lrejson -lrmutil -ljsonsl -lm
 
-#building of json printer test
+LIBS = $(RM_INCLUDE_DIR)/librejson.a $(DEPS_DIR)/RedisModuleSDK/rmutil/librmutil.a $(DEPS_DIR)/jsonsl/libjsonsl.a -lm
+
+# Building of json printer test
 json_printer:
-	$(CC) $(CFLAGS) -o test_$@ json_printer.c $$(LIBS_DIRS) (LIBS)
+	$(CC) $(CFLAGS) -o $@.out json_printer.c $(LIBS)
 
-# execute json_printer test
+# Execute json_printer test
 test_json_printer: json_printer
 	./$@
 .PHONY: test_json_printer
 
+# Building of json validator test
+json_validator: 
+	$(CC) $(CFLAGS) -o $@.out json_printer.c $(LIBS)
+
+# Execute json_printer test
+test_json_validator: json_validator
+	./$@
+.PHONY: test_json_validator
+
 # Build test_object
-object: jsonsl rmutil librejson 
-	$(CC) $(CFLAGS) -o test_$@ test_$@.c $(LIBS_DIRS) $(LIBS)
+object: 
+	$(CC) $(CFLAGS) -o test_$@.out test_$@.c $(LIBS)
 
 # Run test_object
 test_object: object
-	./$@
+	./$@.out
 .PHONY: test_object
 
 # Buid json_object
-json_object: jsonsl rmutil librejson
-	$(CC) $(CFLAGS) -o test_$@ test_$@.c $(LIBS) $(LIBS_DIRS)
+json_object:
+	$(CC) $(CFLAGS) -o test_$@.out test_$@.c $(LIBS)
 
 # Run test_json_object
 test_json_object: json_object
-	./$@
+	./$@.out
 .PHONY: test_json_object
 
 # Unit testing
-unittest: rejson
+unittest:
 	$(MAKE) -C pytest
 
 clean:
-	rm -rvf *.xo *.so *.o *.a
+	rm -rvf *.xo *.so *.o *.a *.out
 	rm -rvf json_printer test_json_object test_object
