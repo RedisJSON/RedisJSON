@@ -113,7 +113,7 @@ void SearchPath_AppendIndex(SearchPath *p, int idx) {
 void SearchPath_AppendKey(SearchPath *p, const char *key, const size_t len) {
     PathNode pn;
     pn.type = NT_KEY;
-    pn.value.key = rmalloc_strndup(key, len);
+    pn.value.key = rmstrndup(key, len);
     __searchPath_append(p, pn);
 }
 

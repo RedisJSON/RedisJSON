@@ -26,6 +26,7 @@
 #include <sds.h>
 #include <stdlib.h>
 #include "object.h"
+#include "rmstrndup.h"
 #include "redismodule.h"
 
 #define JSONOBJECT_OK 0

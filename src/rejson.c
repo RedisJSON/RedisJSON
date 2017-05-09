@@ -534,11 +534,11 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 
     // Create object from json
     Object *jo = NULL;
-    sds jerr = NULL;
+    char *jerr = NULL;
     if (JSONOBJECT_OK != CreateNodeFromJSON(json, jsonlen, &jo, &jerr)) {
         if (jerr) {
             RedisModule_ReplyWithError(ctx, jerr);
-            sdsfree(jerr);
+            RedisModule_Free(jerr);
         } else {
             RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_JSONOBJECT_ERROR);
             RedisModule_ReplyWithError(ctx, REJSON_ERROR_JSONOBJECT_ERROR);
@@ -1027,11 +1027,11 @@ int JSONNum_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
     // we use the json parser to convert the bval arg into a value to catch all of JSON's syntices
     size_t vallen;
     const char *val = RedisModule_StringPtrLen(argv[(4 == argc ? 3 : 2)], &vallen);
-    sds jerr = NULL;
+    char *jerr = NULL;
     if (JSONOBJECT_OK != CreateNodeFromJSON(val, vallen, &joval, &jerr)) {
         if (jerr) {
             RedisModule_ReplyWithError(ctx, jerr);
-            sdsfree(jerr);
+            RedisModule_Free(jerr);
         } else {
             RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_JSONOBJECT_ERROR);
             RedisModule_ReplyWithError(ctx, REJSON_ERROR_JSONOBJECT_ERROR);
@@ -1165,11 +1165,11 @@ int JSONStrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
 
     // make an object from the JSON value
     Object *jo = NULL;
-    sds jerr = NULL;
+    char *jerr = NULL;
     if (JSONOBJECT_OK != CreateNodeFromJSON(json, jsonlen, &jo, &jerr)) {
         if (jerr) {
             RedisModule_ReplyWithError(ctx, jerr);
-            sdsfree(jerr);
+            RedisModule_Free(jerr);
         } else {
             RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_JSONOBJECT_ERROR);
             RedisModule_ReplyWithError(ctx, REJSON_ERROR_JSONOBJECT_ERROR);
@@ -1272,12 +1272,12 @@ int JSONArrInsert_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
 
         // create object from json
         Object *jo = NULL;
-        sds jerr = NULL;
+        char *jerr = NULL;
         if (JSONOBJECT_OK != CreateNodeFromJSON(json, jsonlen, &jo, &jerr)) {
             Node_Free(sub);
             if (jerr) {
                 RedisModule_ReplyWithError(ctx, jerr);
-                sdsfree(jerr);
+                RedisModule_Free(jerr);
             } else {
                 RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_JSONOBJECT_ERROR);
                 RedisModule_ReplyWithError(ctx, REJSON_ERROR_JSONOBJECT_ERROR);
@@ -1367,12 +1367,12 @@ int JSONArrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
 
         // create object from json
         Object *jo = NULL;
-        sds jerr = NULL;
+        char *jerr = NULL;
         if (JSONOBJECT_OK != CreateNodeFromJSON(json, jsonlen, &jo, &jerr)) {
             Node_Free(sub);
             if (jerr) {
                 RedisModule_ReplyWithError(ctx, jerr);
-                sdsfree(jerr);
+                RedisModule_Free(jerr);
             } else {
                 RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_JSONOBJECT_ERROR);
                 RedisModule_ReplyWithError(ctx, REJSON_ERROR_JSONOBJECT_ERROR);
@@ -1466,11 +1466,11 @@ int JSONArrIndex_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int
 
     // create an object from json
     Object *jo = NULL;
-    sds jerr = NULL;
+    char *jerr = NULL;
     if (JSONOBJECT_OK != CreateNodeFromJSON(json, jsonlen, &jo, &jerr)) {
         if (jerr) {
             RedisModule_ReplyWithError(ctx, jerr);
-            sdsfree(jerr);
+            RedisModule_Free(jerr);
         } else {
             RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_JSONOBJECT_ERROR);
             RedisModule_ReplyWithError(ctx, REJSON_ERROR_JSONOBJECT_ERROR);

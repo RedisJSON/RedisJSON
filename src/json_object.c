@@ -169,7 +169,7 @@ inline static void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct json
     }
 }
 
-int CreateNodeFromJSON(const char *buf, size_t len, Node **node, sds *err) {
+int CreateNodeFromJSON(const char *buf, size_t len, Node **node, char **err) {
     int levels = JSONSL_MAX_LEVELS;  // TODO: heur levels from len since we're not really streaming?
 
     size_t _off = 0, _len = len;
@@ -248,7 +248,7 @@ int CreateNodeFromJSON(const char *buf, size_t len, Node **node, sds *err) {
 error:
     // set error string, if one has been passed
     if (err) {
-        *err = strdup(serr);
+        *err = rmstrndup(serr, strlen(serr));
     }
 
     // free any nodes that are in the stack

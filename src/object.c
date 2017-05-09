@@ -43,7 +43,7 @@ Node *NewIntNode(int64_t val) {
 
 Node *NewStringNode(const char *s, uint32_t len) {
     Node *ret = __newNode(N_STRING);
-    ret->value.strval.data = rmalloc_strndup(s, len);
+    ret->value.strval.data = rmstrndup(s, len);
     ret->value.strval.len = len;
     return ret;
 }
@@ -52,7 +52,7 @@ Node *NewCStringNode(const char *s) { return NewStringNode(s, strlen(s)); }
 
 Node *NewKeyValNode(const char *key, uint32_t len, Node *n) {
     Node *ret = __newNode(N_KEYVAL);
-    ret->value.kvval.key = rmalloc_strndup(key, len);
+    ret->value.kvval.key = rmstrndup(key, len);
     ret->value.kvval.val = n;
     return ret;
 }

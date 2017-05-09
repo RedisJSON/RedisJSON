@@ -29,8 +29,8 @@ export CFLAGS
 export DEBUGFLAGS
 
 all: build test
-test: test_object test_json_object test_json_validator test_json_printer unittest
-build: object json_object json_printer json_validator
+test: test_object test_json_object test_json_validator unittest
+build: object json_object json_validator
 
 # Dependency libraries
 # LIBS_DIRS = -L$(RM_INCLUDE_DIR) -L$(DEPS_DIR)/jsonsl -L$(DEPS_DIR)/RedisModuleSDK/rmutil
@@ -38,20 +38,12 @@ build: object json_object json_printer json_validator
 
 LIBS = $(RM_INCLUDE_DIR)/librejson.a $(DEPS_DIR)/RedisModuleSDK/rmutil/librmutil.a $(DEPS_DIR)/jsonsl/libjsonsl.a -lm
 
-# Building of json printer test
-json_printer:
-	$(CC) $(CFLAGS) -o $@.out json_printer.c $(LIBS)
-
-# Execute json_printer test
-test_json_printer: json_printer
-	./$@
-.PHONY: test_json_printer
-
+# TODO: add a test that uses json_printer on a JSON file and then validates the output
 # Building of json validator test
 json_validator: 
 	$(CC) $(CFLAGS) -o $@.out json_printer.c $(LIBS)
 
-# Execute json_printer test
+# Execute json validator test
 test_json_validator: json_validator
 	./$@.sh
 .PHONY: test_json_validator

@@ -4,6 +4,9 @@ import unittest
 import json
 import os
 
+# Path to JSON test case files
+json_path = os.path.abspath(os.path.join(os.getcwd(), '../files'))
+
 # TODO: these are currently not supported so ignore them
 json_ignore = [
     'pass-json-parser-0002.json',   # UTF-8 to Unicode

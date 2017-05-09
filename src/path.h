@@ -20,9 +20,9 @@
 
 #include <string.h>
 #include <sys/param.h>
-#include <alloc.h>
 #include "object.h"
 #include "redismodule.h"
+#include "rmstrndup.h"
 
 /* The type of a path node */
 typedef enum {
