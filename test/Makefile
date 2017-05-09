@@ -53,7 +53,7 @@ json_validator:
 
 # Execute json_printer test
 test_json_validator: json_validator
-	./$@
+	./$@.sh
 .PHONY: test_json_validator
 
 # Build test_object
