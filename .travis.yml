@@ -13,7 +13,7 @@ matrix:
     - os: osx
   include:
     - os: linux
-      dist: trusty
+      dist: xenial
       sudo: required
     - os: osx
       osx_image: xcode8.3
