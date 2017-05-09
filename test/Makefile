@@ -36,7 +36,7 @@ build: object json_object json_validator
 # LIBS_DIRS = -L$(RM_INCLUDE_DIR) -L$(DEPS_DIR)/jsonsl -L$(DEPS_DIR)/RedisModuleSDK/rmutil
 # LIBS = -lrejson -lrmutil -ljsonsl -lm
 
-LIBS = $(RM_INCLUDE_DIR)/librejson.a $(DEPS_DIR)/RedisModuleSDK/rmutil/librmutil.a $(DEPS_DIR)/jsonsl/libjsonsl.a -lm
+LIBS = $(RM_INCLUDE_DIR)/librejson.a $(DEPS_DIR)/RedisModuleSDK/rmutil/librmutil.a $(DEPS_DIR)/jsonsl/libjsonsl.a -lm -lrt
 
 # TODO: add a test that uses json_printer on a JSON file and then validates the output
 # Building of json validator test
