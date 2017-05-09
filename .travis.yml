@@ -27,7 +27,7 @@ before_install:
   - cd redis
   - make
   - cd ..
-  - pip install redis rmtest
+  - sudo pip install redis rmtest
 
 install:
   - make all
