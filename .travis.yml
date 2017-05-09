@@ -23,6 +23,7 @@ branches:
     - master
 
 before_install:
+  - sudo apt-get install build-essential
   - git clone --depth 1 https://github.com/antirez/redis.git
   - cd redis
   - make
