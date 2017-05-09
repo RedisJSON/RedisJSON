@@ -73,7 +73,6 @@ PathError SearchPath_Find(SearchPath *path, Node *root, Node **n) {
 PathError SearchPath_FindEx(SearchPath *path, Node *root, Node **n, Node **p, int *errnode) {
     Node *current = root;
     Node *prev = NULL;
-    Node *next;
     PathError ret;
 
     for (int i = 0; i < path->len; i++) {
@@ -91,12 +90,14 @@ PathError SearchPath_FindEx(SearchPath *path, Node *root, Node **n, Node **p, in
     return E_OK;
 }
 
-SearchPath NewSearchPath(size_t cap) { return (SearchPath){calloc(cap, sizeof(PathNode)), 0, cap}; }
+SearchPath NewSearchPath(size_t cap) { 
+    return (SearchPath){RedisModule_Calloc(cap, sizeof(PathNode)), 0, cap};
+}
 
 void __searchPath_append(SearchPath *p, PathNode pn) {
     if (p->len >= p->cap) {
         p->cap = p->cap ? MIN(p->cap * 2, 1024) : 1;
-        p->nodes = realloc(p->nodes, p->cap * sizeof(PathNode));
+        p->nodes = RedisModule_Realloc(p->nodes, p->cap * sizeof(PathNode));
     }
 
     p->nodes[p->len++] = pn;
@@ -112,7 +113,7 @@ void SearchPath_AppendIndex(SearchPath *p, int idx) {
 void SearchPath_AppendKey(SearchPath *p, const char *key, const size_t len) {
     PathNode pn;
     pn.type = NT_KEY;
-    pn.value.key = strndup(key, len);
+    pn.value.key = rmstrndup(key, len);
     __searchPath_append(p, pn);
 }
 
@@ -126,10 +127,10 @@ void SearchPath_Free(SearchPath *p) {
     if (p->nodes) {
         for (int i = 0; i < p->len; i++) {
             if (p->nodes[i].type == NT_KEY) {
-                free((char *)p->nodes[i].value.key);
+                RedisModule_Free((char *)p->nodes[i].value.key);
             }
         }
     }
 
-    free(p->nodes);
+    RedisModule_Free(p->nodes);
 }

@@ -21,10 +21,8 @@
 #include <string.h>
 #include <sys/param.h>
 #include "object.h"
-
-#ifdef REDIS_MODULE_TARGET
-#include <alloc.h>
-#endif
+#include "redismodule.h"
+#include "rmstrndup.h"
 
 /* The type of a path node */
 typedef enum {

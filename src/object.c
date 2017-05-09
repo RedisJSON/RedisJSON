@@ -18,7 +18,7 @@
 #include "object.h"
 
 Node *__newNode(NodeType t) {
-    Node *ret = malloc(sizeof(Node));
+    Node *ret = RedisModule_Calloc(1, sizeof(Node));
     ret->type = t;
     return ret;
 }
@@ -43,7 +43,7 @@ Node *NewIntNode(int64_t val) {
 
 Node *NewStringNode(const char *s, uint32_t len) {
     Node *ret = __newNode(N_STRING);
-    ret->value.strval.data = strndup(s, len);
+    ret->value.strval.data = rmstrndup(s, len);
     ret->value.strval.len = len;
     return ret;
 }
@@ -52,7 +52,7 @@ Node *NewCStringNode(const char *s) { return NewStringNode(s, strlen(s)); }
 
 Node *NewKeyValNode(const char *key, uint32_t len, Node *n) {
     Node *ret = __newNode(N_KEYVAL);
-    ret->value.kvval.key = strndup(key, len);
+    ret->value.kvval.key = rmstrndup(key, len);
     ret->value.kvval.val = n;
     return ret;
 }
@@ -61,7 +61,7 @@ Node *NewArrayNode(uint32_t cap) {
     Node *ret = __newNode(N_ARRAY);
     ret->value.arrval.cap = cap;
     ret->value.arrval.len = 0;
-    ret->value.arrval.entries = calloc(cap, sizeof(Node *));
+    ret->value.arrval.entries = RedisModule_Calloc(cap, sizeof(Node *));
     return ret;
 }
 
@@ -69,35 +69,35 @@ Node *NewDictNode(uint32_t cap) {
     Node *ret = __newNode(N_DICT);
     ret->value.dictval.cap = cap;
     ret->value.dictval.len = 0;
-    ret->value.dictval.entries = calloc(cap, sizeof(Node *));
+    ret->value.dictval.entries = RedisModule_Calloc(cap, sizeof(Node *));
     return ret;
 }
 
 void __node_FreeKV(Node *n) {
     Node_Free(n->value.kvval.val);
-    free((char *)n->value.kvval.key);
-    free(n);
+    RedisModule_Free((char *)n->value.kvval.key);
+    RedisModule_Free(n);
 }
 
 void __node_FreeObj(Node *n) {
     for (int i = 0; i < n->value.dictval.len; i++) {
         Node_Free(n->value.dictval.entries[i]);
     }
-    if (n->value.dictval.entries) free(n->value.dictval.entries);
-    free(n);
+    if (n->value.dictval.entries) RedisModule_Free(n->value.dictval.entries);
+    RedisModule_Free(n);
 }
 
 void __node_FreeArr(Node *n) {
     for (int i = 0; i < n->value.arrval.len; i++) {
         Node_Free(n->value.arrval.entries[i]);
     }
-    free(n->value.arrval.entries);
-    free(n);
+    RedisModule_Free(n->value.arrval.entries);
+    RedisModule_Free(n);
 }
 
 void __node_FreeString(Node *n) {
-    free((char *)n->value.strval.data);
-    free(n);
+    RedisModule_Free((char *)n->value.strval.data);
+    RedisModule_Free(n);
 }
 
 void Node_Free(Node *n) {
@@ -118,7 +118,7 @@ void Node_Free(Node *n) {
             __node_FreeKV(n);
             break;
         default:
-            free(n);
+            RedisModule_Free(n);
     }
 }
 
@@ -147,11 +147,11 @@ int Node_StringAppend(Node *dst, Node *src) {
     t_string *d = &dst->value.strval;
     t_string *s = &src->value.strval;
 
-    char *newval = calloc(d->len + s->len, sizeof(char));
+    char *newval = RedisModule_Calloc(d->len + s->len, sizeof(char));
     strncpy(newval, d->data, d->len);
     strncpy(&newval[d->len], s->data, s->len);
 
-    free((char *)d->data);
+    RedisModule_Free((char *)d->data);
     d->data = newval;
     d->len += s->len;
 
@@ -207,7 +207,7 @@ void __node_ArrayMakeRoomFor(Node *arr, uint32_t addlen) {
     }
 
     a->cap = nextcap;
-    a->entries = realloc(a->entries, a->cap * sizeof(Node *));
+    a->entries = RedisModule_Realloc(a->entries, a->cap * sizeof(Node *));
 }
 
 int Node_ArrayInsert(Node *arr, int index, Node *sub) {
@@ -327,7 +327,6 @@ Node *__obj_find(t_dict *o, const char *key, int *idx) {
     for (int i = 0; i < o->len; i++) {
         if (!strcmp(key, o->entries[i]->value.kvval.key)) {
             if (idx) *idx = i;
-
             return o->entries[i];
         }
     }
@@ -335,11 +334,11 @@ Node *__obj_find(t_dict *o, const char *key, int *idx) {
     return NULL;
 }
 
-#define __obj_insert(o, n)                                             \
-    if (o->len >= o->cap) {                                            \
-        o->cap += o->cap ? MIN(o->cap, 1024 * 1024) : 1;               \
-        o->entries = realloc(o->entries, o->cap * sizeof(t_keyval *)); \
-    }                                                                  \
+#define __obj_insert(o, n)                                                          \
+    if (o->len >= o->cap) {                                                         \
+        o->cap += o->cap ? MIN(o->cap, 1024 * 1024) : 1;                            \
+        o->entries = RedisModule_Realloc(o->entries, o->cap * sizeof(t_keyval *));  \
+    }                                                                               \
     o->entries[o->len++] = n;
 
 int Node_DictSet(Node *obj, const char *key, Node *n) {
@@ -399,7 +398,7 @@ int Node_DictDel(Node *obj, const char *key) {
     if (kv->value.kvval.val) {
         Node_Free(kv->value.kvval.val);
     }
-    free((char *)kv->value.kvval.key);
+    RedisModule_Free((char *)kv->value.kvval.key);
 
     // replace the deleted entry and the top entry to avoid holes
     if (idx < o->len - 1) {

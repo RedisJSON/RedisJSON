@@ -14,8 +14,13 @@
 * You should have received a copy of the GNU Affero General Public License
 * along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include <stddef.h>
+#include <string.h>
+#include "redismodule.h"
 
-#define PROJECT_VERSION_MAJOR 1
-#define PROJECT_VERSION_MINOR 0 
-#define PROJECT_VERSION_PATCH 0
-##define PROJECT_BUILD_TYPE "@CMAKE_BUILD_TYPE@
+#ifndef __RMSTRNDUP_H__
+#define __RMSTRNDUP_H__
+
+char *rmstrndup(const char *s, size_t n);
+
+#endif

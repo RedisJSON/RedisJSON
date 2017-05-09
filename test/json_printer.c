@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <alloc.h>
 #include "../src/json_object.h"
 
 int main(int argc, char **argv) {
@@ -6,6 +7,7 @@ int main(int argc, char **argv) {
         printf("usage: %s filename\n", argv[0]);
         exit(1);
     }
+    RMUtil_InitAlloc();
 
     FILE *f;
     long len;
@@ -17,6 +19,7 @@ int main(int argc, char **argv) {
     fseek(f, 0, SEEK_SET);
     json = (char *)malloc(len + 1);
     size_t read = fread(json, 1, len, f);
+    (void) read;    // stop compiler from complaining
     json[len] = '\0';
     fclose(f);
 

@@ -195,7 +195,7 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path, JSONSearchPath
             if ('-' == tok.s[0]) num = -num;
             SearchPath_AppendIndex(path, num);
         } else if (T_KEY == tok.type) {
-            if (1 == offset == len && '.' == c) {  // check for root
+            if ((1 == offset) && (1 == len) && '.' == c) {  // check for root
                 SearchPath_AppendRoot(path);
             } else {
                 SearchPath_AppendKey(path, tok.s, tok.len);

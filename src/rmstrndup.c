@@ -14,8 +14,15 @@
 * You should have received a copy of the GNU Affero General Public License
 * along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include <stddef.h>
+#include <string.h>
+#include "redismodule.h"
+#include "rmstrndup.h"
 
-#define PROJECT_VERSION_MAJOR 1
-#define PROJECT_VERSION_MINOR 0 
-#define PROJECT_VERSION_PATCH 0
-##define PROJECT_BUILD_TYPE "@CMAKE_BUILD_TYPE@
+/* A patched implementation of strdup that will use our patched calloc */
+char *rmstrndup(const char *s, size_t n) {
+  char *ret = RedisModule_Calloc(n + 1, sizeof(char));
+  if (ret)
+    memcpy(ret, s, n);
+  return ret;
+}

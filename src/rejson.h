@@ -52,5 +52,6 @@
 #define REJSON_ERROR_ARRAY_DEL "ERR could not delete from array"
 #define REJSON_ERROR_INSERT "ERR could not insert into array"
 #define REJSON_ERROR_INSERT_SUBARRY "ERR could not prepare the insert operation"
+#define REJSON_ERROR_KEY_REQUIRED "ERR could not perform this operation on a key that doesn't exist"
 
 #endif

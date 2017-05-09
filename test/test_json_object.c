@@ -4,6 +4,7 @@
 #include <dirent.h>
 #include "minunit.h"
 #include "../src/json_object.h"
+#include <alloc.h>
 
 #define _JSTR(e) "\"" #e "\""
 
@@ -105,7 +106,6 @@ MU_TEST(test_jo_create_literal_double) {
 
 MU_TEST(test_jo_create_literal_string) {
     Node *n;
-    char err[4096];
     const char *json = "\"foo\"";
 
     mu_check(JSONOBJECT_OK == CreateNodeFromJSON(json, strlen(json), &n, NULL));
@@ -395,6 +395,7 @@ MU_TEST_SUITE(test_object_to_json) {
 }
 
 int main(int argc, char *argv[]) {
+    RMUtil_InitAlloc();
     MU_RUN_SUITE(test_json_literals);
     MU_RUN_SUITE(test_json_object);
     MU_RUN_SUITE(test_object_to_json);

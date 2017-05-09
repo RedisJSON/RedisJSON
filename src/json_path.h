@@ -23,10 +23,6 @@
 #include <string.h>
 #include "path.h"
 
-#ifdef REDIS_MODULE_TARGET
-#include <alloc.h>
-#endif
-
 #define PARSE_OK 0
 #define PARSE_ERR 1
 

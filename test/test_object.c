@@ -5,6 +5,7 @@
 #include "../src/object.h"
 #include "../src/path.h"
 #include "minunit.h"
+#include <alloc.h>
 
 MU_TEST(testNodeString) {
     // Test creation of an empty C string
@@ -33,7 +34,7 @@ MU_TEST(testNodeString) {
 }
 
 MU_TEST(testNodeArray) {
-    Node *arr, *arr2, *n;
+    Node *arr, *n;
 
     // Test creation of a typical empty array
     arr = NewArrayNode(0);
@@ -401,6 +402,7 @@ MU_TEST_SUITE(test_object) {
 }
 
 int main(int argc, char *argv[]) {
+    RMUtil_InitAlloc();
     MU_RUN_SUITE(test_object);
     MU_REPORT();
     return minunit_fail;
