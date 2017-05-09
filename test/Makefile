@@ -17,7 +17,7 @@ endif
 # find the OS
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
 INCLUDE_DIRS = -I"$(RM_INCLUDE_DIR)" -I"$(DEPS_DIR)/jsonsl"  -I"$(DEPS_DIR)/RedisModuleSDK/rmutil"
-CFLAGS =  $(INCLUDE_DIRS) -Wall $(DEBUGFLAGS) -fPIC -std=gnu99 -D_GNU_SOURCE
+CFLAGS =  $(INCLUDE_DIRS) -Wall $(DEBUGFLAGS)  -std=gnu99 -D_GNU_SOURCE
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
 
 # Compile flags for linux / osx
@@ -50,7 +50,7 @@ test_json_validator: json_validator
 
 # Build test_object
 object: 
-	$(CC) $(CFLAGS) -o test_$@.out test_$@.c $(LIBS)
+	$(CC) $(CFLAGS) -o test_$@.out test_$@.c $(LIBS) 
 
 # Run test_object
 test_object: object

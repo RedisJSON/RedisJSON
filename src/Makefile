@@ -17,7 +17,7 @@ endif
 # Find the OS
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
 INCLUDE_DIRS = -I"$(RM_INCLUDE_DIR)" -I"$(DEPS_DIR)/jsonsl"  -I"$(DEPS_DIR)/RedisModuleSDK/rmutil"
-CFLAGS =  $(INCLUDE_DIRS) -Wall $(DEBUGFLAGS) -fPIC -std=gnu99  -D_GNU_SOURCE
+CFLAGS = $(INCLUDE_DIRS) -Wall $(DEBUGFLAGS) -fPIC -std=gnu99  -D_GNU_SOURCE
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
 
 # Compile flags for linux / osx
@@ -35,7 +35,7 @@ export DEBUGFLAGS
 SOURCEDIR=$(shell pwd -P)
 CC_SOURCES = $(wildcard $(SOURCEDIR)/*.c) $(wildcard $(SOURCEDIR)/dep/*.c) 
 CC_OBJECTS = $(patsubst $(SOURCEDIR)/%.c, $(SOURCEDIR)/%.o, $(CC_SOURCES))
-LIBS = $(DEPS_DIR)/jsonsl/libjsonsl.a $(DEPS_DIR)/RedisModuleSDK/rmutil/librmutil.a
+LIBS = $(DEPS_DIR)/jsonsl/jsonsl.o $(DEPS_DIR)/RedisModuleSDK/rmutil/librmutil.a
 
 all: rejson.so librejson.a
 
