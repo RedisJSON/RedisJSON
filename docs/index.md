@@ -207,6 +207,7 @@ For a more comprehensive example, including a simple Python wrapper for ReJSON, 
 
 ### ReJSON clients
 
-| Project | Language | URL | Author |
-| ------- | -------- | --- | ------ |
-| iorejson | Node.js | [npm](https://www.npmjs.com/package/iorejson) | [Evan Huang @evanhuang8](https://github.com/evanhuang8) |
+| Project | Language | License | Author | URL |
+| ------- | -------- | ------- | ------ | --- |
+| iorejson | Node.js | [Evan Huang @evanhuang8](https://github.com/evanhuang8) | [git](https://github.com/evanhuang8/iorejson) [npm](https://www.npmjs.com/package/iorejson) |
+| JReJSON | Java | [Redis Labs](https://redislabs.com) | [git](https://github.com/RedisLabs/JReJSON/) |
