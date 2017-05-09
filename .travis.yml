@@ -1,18 +1,28 @@
 language: c
-compiler: gcc
-dist: trusty
+
+os:
+  - linux
+  - osx
+
+compiler:
+  - gcc
+  - clang
+
+matrix:
+  allow_failures:
+    - os: osx
+  include:
+    - os: linux
+      dist: trusty
+      sudo: required
+    - os: osx
+      osx_image: xcode8.3
 
 branches:
   only:
     - master
 
-addons:
-    packages:
-      - cmake
-      - cmake-data
-
 before_install:
-  - sudo apt-get install cmake
   - git clone --depth 1 https://github.com/antirez/redis.git
   - cd redis
   - make
@@ -20,10 +30,7 @@ before_install:
   - pip install redis rmtest
 
 install:
-  - ./bootstrap.sh
-  - cmake -DREDIS_SERVER_PATH:FILEPATH=$PWD/redis/src/redis-server --build build
-  - cmake --build build --target all --config Release
+  - make all
 
 script:
-  - cd build
-  - ctest -VV
+  - make test
