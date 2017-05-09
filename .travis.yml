@@ -1,37 +1,16 @@
 language: c
+compiler: gcc
+dist: trusty
+install: make clean && make
 
-os:
-  - linux
-  - osx
-
-compiler:
-  - gcc
-  - clang
-
-matrix:
-  allow_failures:
-    - os: osx
-  include:
-    - os: linux
-      sudo: required
-    - os: osx
-      osx_image: xcode8.3
-
-branches:
-  only:
-    - master
-
-before_install:
-  - sudo apt-get install build-essential
+before_script:
   - git clone --depth 1 https://github.com/antirez/redis.git
   - cd redis
-  - make distclean
   - make
   - cd ..
-  - sudo pip install redis rmtest
+  - pip install redis
 
-install:
-  - make all
+env:
+  - REDIS_MODULE_PATH=$TRAVIS_BUILD_DIR/src/rejson.so REDIS_PATH=$TRAVIS_BUILD_DIR/redis/src/redis-server
 
-script:
-  - make test
+script: make test
