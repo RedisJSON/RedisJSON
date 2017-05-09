@@ -24,43 +24,14 @@ Prerequirements:
 
 * The ReJSON repository: `git clone https://github.com/RedisLabsModules/rejson.git`
 * The `build-essential` package: `apt-get install build-essential`
-* CMake (v3.0.0 or greater): `apt-get install cmake`
 
-This module employs standard CMake tooling. Assuming that the repository's directory is at
-`~/rejson`, navigate to it and run the script `bootstrap.sh` from the project's root:
+To build the module, run `make` in the project's directory.
 
-```bash
-~/rejson$ ./bootstrap.sh
--- The C compiler identification is GNU 5.4.0
-...
-!! 'REDIS_SERVER_PATH' variable not defined (use cmake -D) - module unit test will not be run
--- Configuring done
--- Generating done
--- Build files have been written to: rejson/build
-```
-
-The bootstrapping will initialize the build directory `build`. Optionally, you may [configure the
-path to a Redis server executable](developer.md#testing) to enable unit testing.
-
-Now you can build the module's library itself:
-
-```bash
-~/rejson$ cmake --build build --target rejson
-Scanning dependencies of target rmobject
-...
-[100%] Linking C shared library rejson/lib/rejson.so
-[100%] Built target rejson
-```
-
-Congratulations! You can find the compiled module library at `lib/rejson.so`.
+Congratulations! You can find the compiled module library at `src/rejson.so`.
 
 ### MacOSX
 
-TBD
-
-### Windows
-
-Yeah, right :)
+WIP
 
 ## Loading the module to Redis
 
