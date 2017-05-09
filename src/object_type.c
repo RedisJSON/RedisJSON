@@ -23,11 +23,11 @@ void *ObjectTypeRdbLoad(RedisModuleIO *rdb) {
     // IMPORTANT: no encoding version check here, this is up to the calller
     Vector *nodes = NULL;
     Vector *indices = NULL;
-    Node *node;
-    uint64_t len;
-    uint64_t type;
-    size_t strlen;
-    char *str;
+    Node *node = NULL;
+    uint64_t len = 0;
+    uint64_t type = 0;
+    size_t strlen = 0;
+    char *str = NULL;
     enum { S_INIT, S_BEGIN_VALUE, S_END_VALUE, S_CONTAINER, S_END } state = S_INIT;
 
     while (S_END != state) {
