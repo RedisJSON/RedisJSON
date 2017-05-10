@@ -551,7 +551,7 @@ typedef enum {
 } NodeSerializerState;
 
 void Node_Serializer(const Node *n, const NodeSerializerOpt *o, void *ctx) {
-    Node *curr_node = null;
+    Node *curr_node = NULL;
     int curr_len = 0;
     int curr_index = 0;
     Node **curr_entries;
