@@ -79,6 +79,6 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path, JSONSearchPath
 * `err` is an optional error container.
 * Note: string keys right now need to be ascii, we do not support unicode keys
 */
-int ParseJSONPath(const char *json, size_t len, SearchPath *path, JSONSearchPathError_t *err);
+int ParseJSONPath(const char *jsonPath, size_t len, SearchPath *path, JSONSearchPathError_t *err);
 
 #endif

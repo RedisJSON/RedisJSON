@@ -219,6 +219,6 @@ syntaxerror:
     return PARSE_ERR;
 }
 
-int ParseJSONPath(const char *json, size_t len, SearchPath *path, JSONSearchPathError_t *err) {
-    return _tokenizePath(json, len, path, err);
+int ParseJSONPath(const char *jsonPath, size_t len, SearchPath *path, JSONSearchPathError_t *err) {
+    return _tokenizePath(jsonPath, len, path, err);
 }
