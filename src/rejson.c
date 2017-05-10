@@ -835,9 +835,12 @@ int JSONMGet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
     // validate search path
     size_t spathlen;
     const char *spath = RedisModule_StringPtrLen(argv[argc-1], &spathlen);
-    JSONPathNode_t jpn;
+    JSONPathNode_t jpn = { 0 };
+    JSONSearchPathError_t jsperr = { 0 };
     jpn.sp = NewSearchPath(0);
-    if (PARSE_ERR == ParseJSONPath(spath, spathlen, &jpn.sp, NULL)) {
+    if (PARSE_ERR == ParseJSONPath(spath, spathlen, &jpn.sp, &jsperr)) {
+        jpn.sperrmsg = jsperr.errmsg;
+        jpn.sperroffset = jsperr.offset;
         ReplyWithSearchPathError(ctx, &jpn);
         goto error;
     }
