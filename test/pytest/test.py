@@ -231,6 +231,10 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
             self.assertTrue(json.loads(raw[1]))
             self.assertEqual(raw[2], None)
 
+            # Test that MGET fails on path errors
+            with self.assertRaises(redis.exceptions.ResponseError) as cm:
+                r.execute_command('JSON.MGET', 'doc:0', 'doc:1', '42isnotapath')
+
     def testDelCommand(self):
         """Test REJSON.DEL command"""
 
