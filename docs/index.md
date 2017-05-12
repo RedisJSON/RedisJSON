@@ -202,12 +202,13 @@ r.execute_command('JSON.SET', 'doc', '.', json.dumps(data))
 reply = json.loads(r.execute_command('JSON.GET', 'doc'))
 ```
 
-For a more comprehensive example, including a simple Python wrapper for ReJSON, see
-[https://github.com/RedisLabsModules/rejson/tree/master/examples/python](/examples/python).
-
 ### ReJSON clients
+
+Some languages have client libraries that provide support for ReJSON's commands.
+The following is a list of these:
 
 | Project | Language | License | Author | URL |
 | ------- | -------- | ------- | ------ | --- |
 | iorejson | Node.js | [Evan Huang @evanhuang8](https://github.com/evanhuang8) | [git](https://github.com/evanhuang8/iorejson) [npm](https://www.npmjs.com/package/iorejson) |
 | JReJSON | Java | [Redis Labs](https://redislabs.com) | [git](https://github.com/RedisLabs/JReJSON/) |
+| rejson-py | Python | [Redis Labs](https://redislabs.com) | [git](https://github.com/RedisLabs/redis-py/) [pypi](https://pypi.python.org/pypi/rejson) |
