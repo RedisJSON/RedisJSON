@@ -31,6 +31,8 @@ MU_TEST(testNodeString) {
     mu_check(NULL != n1);
     mu_assert_int_eq(6, Node_Length(n1));
     mu_check(!strncmp(n1->value.strval.data, "foobar", Node_Length(n1)));
+    Node_Free(n1);
+    Node_Free(n2);
 }
 
 MU_TEST(testNodeArray) {
