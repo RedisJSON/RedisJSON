@@ -254,6 +254,10 @@ error:
     // free any nodes that are in the stack
     while (joctx->nlen) Node_Free(_popNode(joctx));
 
+    // if this is a scalar, we need to release the temporary buffer
+    if (is_scalar)
+        RedisModule_Free(_buf);    
+
     sdsfree(serr);
     RedisModule_Free(joctx->nodes);
     RedisModule_Free(joctx);
