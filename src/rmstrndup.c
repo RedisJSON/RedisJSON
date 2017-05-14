@@ -21,7 +21,7 @@
 
 /* A patched implementation of strdup that will use our patched calloc */
 char *rmstrndup(const char *s, size_t n) {
-  char *ret = RedisModule_Calloc(n, sizeof(char));
+  char *ret = RedisModule_Calloc(n + 1, sizeof(char));
   if (ret)
     memcpy(ret, s, n);
   return ret;
