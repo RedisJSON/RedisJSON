@@ -25,7 +25,7 @@ void *ObjectTypeRdbLoad(RedisModuleIO *rdb) {
     Vector *indices = NULL;
     Node *node = NULL;
     uint64_t len = 0;
-    uint64_t type = 0;
+    NodeType type;
     size_t strlen = 0;
     char *str = NULL;
     enum { S_INIT, S_BEGIN_VALUE, S_END_VALUE, S_CONTAINER, S_END } state = S_INIT;
@@ -35,7 +35,7 @@ void *ObjectTypeRdbLoad(RedisModuleIO *rdb) {
             case S_INIT:  // Initial state
                 nodes = NewVector(Node *, 1);
                 indices = NewVector(uint64_t, 1);
-                type = RedisModule_LoadUnsigned(rdb);
+                type = (NodeType)RedisModule_LoadUnsigned(rdb);
                 state = S_BEGIN_VALUE;
                 break;
             case S_BEGIN_VALUE:
@@ -47,6 +47,7 @@ void *ObjectTypeRdbLoad(RedisModuleIO *rdb) {
                     case N_BOOLEAN:
                         str = RedisModule_LoadStringBuffer(rdb, &strlen);
                         node = NewBoolNode('1' == str[0]);
+                        RedisModule_Free(str);
                         state = S_END_VALUE;
                         break;
                     case N_INTEGER:
@@ -60,12 +61,14 @@ void *ObjectTypeRdbLoad(RedisModuleIO *rdb) {
                     case N_STRING:
                         str = RedisModule_LoadStringBuffer(rdb, &strlen);
                         node = NewStringNode(str, strlen);
+                        RedisModule_Free(str);
                         state = S_END_VALUE;
                         break;
                     case N_KEYVAL:
                         str = RedisModule_LoadStringBuffer(rdb, &strlen);
                         Vector_Push(nodes, NewKeyValNode(str, strlen, NULL));
                         Vector_Push(indices, (uint64_t)1);
+                        RedisModule_Free(str);
                         state = S_CONTAINER;
                         break;
                     case N_DICT:
@@ -107,7 +110,7 @@ void *ObjectTypeRdbLoad(RedisModuleIO *rdb) {
                 Vector_Get(indices, Vector_Last(indices), &len);
                 if (len) {  // move to next child node
                     Vector_Put(indices, Vector_Last(indices), len - 1);
-                    type = RedisModule_LoadUnsigned(rdb);
+                    type = (NodeType)RedisModule_LoadUnsigned(rdb);
                     state = S_BEGIN_VALUE;
                 } else {
                     Vector_Pop(indices, NULL);

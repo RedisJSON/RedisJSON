@@ -524,6 +524,27 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
         return REDISMODULE_ERR;
     }
 
+    JSONPathNode_t jpn = { 0 };
+    Object *jo = NULL;
+    char *jerr = NULL;
+
+    // subcommand for key creation behavior modifiers NX and XX
+    int subnx = 0, subxx = 0;
+    if (argc > 4) {
+        const char *subcmd = RedisModule_StringPtrLen(argv[4], NULL);
+        if (!strcasecmp("nx", subcmd)) {
+            subnx = 1;
+        } else if (!strcasecmp("xx", subcmd)) {
+            // new keys can be created only if the XX flag is off
+            if (REDISMODULE_KEYTYPE_EMPTY == type)
+                goto null;
+            subxx = 1;
+        } else {
+            RedisModule_ReplyWithError(ctx, RM_ERRORMSG_SYNTAX);
+            return REDISMODULE_ERR;
+        }
+    }
+
     // JSON must be valid
     size_t jsonlen;
     const char *json = RedisModule_StringPtrLen(argv[3], &jsonlen);
@@ -533,8 +554,6 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     }
 
     // Create object from json
-    Object *jo = NULL;
-    char *jerr = NULL;
     if (JSONOBJECT_OK != CreateNodeFromJSON(json, jsonlen, &jo, &jerr)) {
         if (jerr) {
             RedisModule_ReplyWithError(ctx, jerr);
@@ -547,7 +566,7 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     }
 
     // initialize or get JSON type container
-    JSONType_t *jt;
+    JSONType_t *jt = NULL;
     if (REDISMODULE_KEYTYPE_EMPTY == type) {
         jt = RedisModule_Calloc(1, sizeof(JSONType_t));
         jt->root = jo;
@@ -560,26 +579,11 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
      * if the key is empty. This will be caught immediately afterwards because new keys must be
      * created at the root.
     */
-    JSONPathNode_t jpn;
     if (PARSE_OK != NodeFromJSONPath(jt->root, argv[2], &jpn)) {
         ReplyWithSearchPathError(ctx, &jpn);
         goto error;
     }
     int isRootPath = SearchPath_IsRootPath(&jpn.sp);
-
-    // subcommand for key creation behavior modifiers NX and XX
-    int subnx = 0, subxx = 0;
-    if (argc > 4) {
-        const char *subcmd = RedisModule_StringPtrLen(argv[4], NULL);
-        if (!strcasecmp("nx", subcmd)) {
-            subnx = 1;
-        } else if (!strcasecmp("xx", subcmd)) {
-            subxx = 1;
-        } else {
-            RedisModule_ReplyWithError(ctx, RM_ERRORMSG_SYNTAX);
-            goto error;
-        }
-    }
 
     // handle an empty key
     if (REDISMODULE_KEYTYPE_EMPTY == type) {
@@ -588,10 +592,6 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
             RedisModule_ReplyWithError(ctx, REJSON_ERROR_NEW_NOT_ROOT);
             goto error;
         }
-
-        // new keys can be created only if the XX flag is off
-        if (subxx) goto null;
-
         RedisModule_ModuleTypeSetValue(key, JSONType, jt);
         goto ok;
     }
@@ -648,8 +648,9 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
         }
     } else {  // must be E_NOKEY
         // new keys in the dictionary can be created only if the XX flag is off
-        if (subxx) goto null;
-
+        if (subxx) {
+            goto null;
+        }
         if (OBJ_OK != Node_DictSet(jpn.p, jpn.sp.nodes[jpn.sp.len - 1].value.key, jo)) {
             RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_DICT_SET);
             RedisModule_ReplyWithError(ctx, REJSON_ERROR_DICT_SET);
@@ -666,11 +667,12 @@ ok:
 null:
     RedisModule_ReplyWithNull(ctx);
     JSONPathNode_Free(&jpn);
+    if (jo) Node_Free(jo);
     return REDISMODULE_OK;
 
 error:
     JSONPathNode_Free(&jpn);
-    if (REDISMODULE_KEYTYPE_EMPTY == type) {
+    if (jt && REDISMODULE_KEYTYPE_EMPTY == type) {
         RedisModule_Free(jt);
     }
     if (jo) Node_Free(jo);
@@ -1197,6 +1199,7 @@ int JSONStrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
     // actually concatenate the strings
     Node_StringAppend(jpn.n, jo);
     RedisModule_ReplyWithLongLong(ctx, (long long)Node_Length(jpn.n));
+    Node_Free(jo);
     JSONPathNode_Free(&jpn);
     
     RedisModule_ReplicateVerbatim(ctx);
@@ -1508,10 +1511,12 @@ int JSONArrIndex_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int
     RedisModule_ReplyWithLongLong(ctx, Node_ArrayIndex(jpn.n, jo, (int)start, (int)stop));
 
     JSONPathNode_Free(&jpn);
+    Node_Free(jo);
     return REDISMODULE_OK;
 
 error:
     JSONPathNode_Free(&jpn);
+    if (jo) Node_Free(jo);
     return REDISMODULE_ERR;
 }
 
