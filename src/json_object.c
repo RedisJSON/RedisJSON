@@ -52,14 +52,16 @@ inline static int errorCallback(jsonsl_t jsn, jsonsl_error_t err, struct jsonsl_
 inline static void pushCallback(jsonsl_t jsn, jsonsl_action_t action, struct jsonsl_state_st *state,
                   const jsonsl_char_t *at) {
     JsonObjectContext *joctx = (JsonObjectContext *)jsn->data;
-
+    Node *n = NULL;
     // only objects (dictionaries) and lists (arrays) create a container on push
     switch (state->type) {
         case JSONSL_T_OBJECT:
-            _pushNode(joctx, NewDictNode(1));
+            n = NewDictNode(1);
+            _pushNode(joctx, n);
             break;
         case JSONSL_T_LIST:
-            _pushNode(joctx, NewArrayNode(1));
+            n = NewArrayNode(1);
+            _pushNode(joctx, n);
             break;
         default:
             break;
@@ -152,16 +154,21 @@ inline static void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct json
     // anything that pops needs to be set in its parent, except the root element and keys
     if (joctx->nlen > 1 && state->type != JSONSL_T_HKEY) {
         NodeType p = joctx->nodes[joctx->nlen - 2]->type;
+        Node *n = NULL;
         switch (p) {
             case N_DICT:
-                Node_DictSetKeyVal(joctx->nodes[joctx->nlen - 1], _popNode(joctx));
+                n = _popNode(joctx);
+                Node_DictSetKeyVal(joctx->nodes[joctx->nlen - 1], n);
                 break;
             case N_ARRAY:
-                Node_ArrayAppend(joctx->nodes[joctx->nlen - 1], _popNode(joctx));
+                n = _popNode(joctx);
+                Node_ArrayAppend(joctx->nodes[joctx->nlen - 1], n);
                 break;
             case N_KEYVAL:
-                joctx->nodes[joctx->nlen - 2]->value.kvval.val = _popNode(joctx);
-                Node_DictSetKeyVal(joctx->nodes[joctx->nlen - 1], _popNode(joctx));
+                n = _popNode(joctx);                
+                joctx->nodes[joctx->nlen - 2]->value.kvval.val = n;
+                n = _popNode(joctx);
+                Node_DictSetKeyVal(joctx->nodes[joctx->nlen - 1], n);
                 break;
             default:
                 break;

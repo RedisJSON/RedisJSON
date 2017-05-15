@@ -33,7 +33,7 @@ test: test_object test_json_object test_json_validator unittest
 build: object json_object json_validator
 
 # Dependency libraries
-LIBS = $(RM_INCLUDE_DIR)/librejson.a $(DEPS_DIR)/RedisModuleSDK/rmutil/librmutil.a $(DEPS_DIR)/jsonsl/libjsonsl.a -lm -lrt
+LIBS = $(RM_INCLUDE_DIR)/librejson.a $(DEPS_DIR)/RedisModuleSDK/rmutil/librmutil.a $(DEPS_DIR)/jsonsl/libjsonsl.a -lm
 # Compile flags for linux / osx
 ifeq ($(uname_S),Linux)
 	LIBS += -lrt
