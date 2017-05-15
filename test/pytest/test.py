@@ -79,7 +79,8 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
     def testSetRootWithInvalidJSONValuesShouldFail(self):
         """Test that setting the root of a ReJSON key with invalid JSON values fails"""
         with self.redis() as r:
-            r.delete('test')
+            r.client_setname(self._testMethodName)
+            r.flushdb()
             invalid = ['{', '}', '[', ']', '{]', '[}', '\\', '\\\\', '',
                        ' ', '\\"', '\'', '\[', '\x00', '\x0a', '\x0c', '\xff']
             for i in invalid:
@@ -90,7 +91,9 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
     def testSetInvalidPathShouldFail(self):
         """Test that invalid paths fail"""
         with self.redis() as r:
-            r.delete('test')
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
             invalid = ['', ' ', '\x00', '\x0a', '\x0c', '\xff',
                        '."', '.\x00', '.\x0a\x0c', '.-foo', '.43',
                        '.foo\n.bar']
@@ -102,6 +105,9 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
     def testSetRootWithJSONValuesShouldSucceed(self):
         """Test that the root of a JSON key can be set with any valid JSON"""
         with self.redis() as r:
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
             for v in ['string', 1, -2, 3.14, None, True, False, [], {}]:
                 r.delete('test')
                 j = json.dumps(v)
@@ -119,7 +125,9 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
         """Test replacing the root of an existing key with a valid object succeeds"""
 
         with self.redis() as r:
-            r.delete('test')
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
             self.assertOk(r.execute_command('JSON.SET', 'test', '.', json.dumps(docs['basic'])))
             self.assertOk(r.execute_command('JSON.SET', 'test', '.', json.dumps(docs['simple'])))
             raw = r.execute_command('JSON.GET', 'test', '.')
@@ -134,7 +142,9 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
         """Test basic JSON.GET/JSON.SET"""
 
         with self.redis() as r:
-            r.delete('test')
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
             data = json.dumps(docs['basic'])
             self.assertOk(r.execute_command('JSON.SET', 'test', '.', data))
             self.assertExists(r, 'test')
@@ -145,7 +155,8 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
         """Test JSON.SET's NX and XX subcommands"""
 
         with self.redis() as r:
-            r.delete('test')
+            r.client_setname(self._testMethodName)
+            r.flushdb()
 
             # test against the root
             self.assertIsNone(r.execute_command('JSON.SET', 'test', '.', '{}', 'XX'))
@@ -169,7 +180,9 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
         """Test failure of getting non-existing values"""
 
         with self.redis() as r:
-            r.delete('test')
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
             self.assertOk(r.execute_command('JSON.SET', 'test',
                                             '.', json.dumps(docs['scalars'])))
 
@@ -187,7 +200,9 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
         """Test type and value returned by JSON.GET"""
 
         with self.redis() as r:
-            r.delete('test')
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
             self.assertOk(r.execute_command('JSON.SET', 'test',
                                             '.', json.dumps(docs['values'])))
             for k, v in docs['values'].iteritems():
@@ -199,7 +214,9 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
         """Test correctness of an object returned by JSON.GET"""
 
         with self.redis() as r:
-            r.delete('test')
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
             self.assertOk(r.execute_command('JSON.SET', 'test',
                                             '.', json.dumps(docs['values'])))
             data = json.loads(r.execute_command('JSON.GET', 'test', *docs['values'].keys()))
@@ -209,6 +226,9 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
         """Test REJSON.MGET command"""
 
         with self.redis() as r:
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
             # Set up a few keys
             for d in range(0, 5):
                 key = 'doc:{}'.format(d)
@@ -239,7 +259,8 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
         """Test REJSON.DEL command"""
 
         with self.redis() as r:
-            r.delete('test')
+            r.client_setname(self._testMethodName)
+            r.flushdb()
 
             # Test deleting an empty object
             self.assertOk(r.execute_command('JSON.SET', 'test', '.', '{}'))
@@ -274,7 +295,8 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
     def testObjectCRUD(self):
         """Test JSON Object CRUDness"""
         with self.redis() as r:
-            r.delete('test')
+            r.client_setname(self._testMethodName)
+            r.flushdb()
 
             # Create an object
             self.assertOk(r.execute_command('JSON.SET', 'test', '.', '{ }'))
@@ -328,7 +350,8 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
         """Test JSON Array CRUDness"""
 
         with self.redis() as r:
-            r.delete('test')
+            r.client_setname(self._testMethodName)
+            r.flushdb()
 
             # Test creation of an empty array
             self.assertOk(r.execute_command('JSON.SET', 'test', '.', '[]'))
@@ -393,7 +416,9 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
     def testArrIndexCommand(self):
         """Test JSON.ARRINDEX command"""
         with self.redis() as r:
-            r.delete('test')
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
             self.assertOk(r.execute_command('JSON.SET', 'test',
                                             '.', '{ "arr": [0, 1, 2, 3, 2, 1, 0] }'))
             self.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0), 0)
@@ -416,7 +441,9 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
         """Test JSON.ARRTRIM command"""
 
         with self.redis() as r:
-            r.delete('test')
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
             self.assertOk(r.execute_command('JSON.SET', 'test',
                                             '.', '{ "arr": [0, 1, 2, 3, 2, 1, 0] }'))
             self.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', '.arr', 1, -2), 5)
@@ -435,7 +462,9 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
         """Test JSON.ARRPOP command"""
 
         with self.redis() as r:
-            r.delete('test')
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
             self.assertOk(r.execute_command('JSON.SET', 'test',
                                             '.', '[1,2,3,4,5,6,7,8,9]'))
             self.assertEqual('9', r.execute_command('JSON.ARRPOP', 'test'))
@@ -453,6 +482,9 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
         """Test JSON.TYPE command"""
 
         with self.redis() as r:
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
             for k, v in docs['types'].iteritems():
                 r.delete('test')
                 self.assertOk(r.execute_command('JSON.SET', 'test', '.', json.dumps(v)))
@@ -463,7 +495,8 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
         """Test the JSON.ARRLEN, JSON.OBJLEN and JSON.STRLEN commands"""
 
         with self.redis() as r:
-            r.delete('test')
+            r.client_setname(self._testMethodName)
+            r.flushdb()
 
             # test that nothing is returned for empty keys
             self.assertEqual(r.execute_command('JSON.ARRLEN', 'foo', '.bar'), None)
@@ -500,7 +533,9 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
         """Test JSON.OBJKEYS command"""
 
         with self.redis() as r:
-            r.delete('test')
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
             self.assertOk(r.execute_command('JSON.SET', 'test', '.', json.dumps(docs['types'])))
             data = r.execute_command('JSON.OBJKEYS', 'test', '.')
             self.assertEqual(len(data), len(docs['types']))
@@ -515,7 +550,9 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
         """Test JSON.NUMINCRBY command"""
 
         with self.redis() as r:
-            r.delete('test')
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
             self.assertOk(r.execute_command('JSON.SET', 'test', '.', '{ "foo": 0, "bar": "baz" }'))
             self.assertEqual('1', r.execute_command('JSON.NUMINCRBY', 'test', '.foo', 1))
             self.assertEqual('1', r.execute_command('JSON.GET', 'test', '.foo'))
@@ -539,7 +576,9 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
         """Test JSON.STRAPPEND and JSON.STRLEN commands"""
 
         with self.redis() as r:
-            r.delete('test')
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
             self.assertOk(r.execute_command('JSON.SET', 'test', '.', '"foo"'))
             self.assertEqual('string', r.execute_command('JSON.TYPE', 'test', '.'))
             self.assertEqual(3, r.execute_command('JSON.STRLEN', 'test', '.'))
@@ -550,7 +589,9 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
         """Test JSON.RESP command"""
 
         with self.redis() as r:
-            r.delete('test')
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
             self.assertOk(r.execute_command('JSON.SET', 'test', '.', 'null'))
             self.assertIsNone(r.execute_command('JSON.RESP', 'test'))
             self.assertOk(r.execute_command('JSON.SET', 'test', '.', 'true'))
@@ -579,23 +620,28 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
         """Test using all JSON test case files"""
         self.maxDiff = None
         with self.redis() as r:
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
             for jsonfile in os.listdir('../files'):
                 if jsonfile.endswith('.json'):
                     path = '{}/{}'.format(json_path, jsonfile)
-                    r.delete('test')
                     with open(path) as f:
                         value = f.read()
                         if jsonfile.startswith('pass-'):
-                            self.assertOk(r.execute_command('JSON.SET', 'test', '.', value), path)
+                            self.assertOk(r.execute_command('JSON.SET', jsonfile, '.', value), path)
                         elif jsonfile.startswith('fail-'):
                             with self.assertRaises(redis.exceptions.ResponseError) as cm:
-                                r.execute_command('JSON.SET', 'test', '.', value)
-                            self.assertNotExists(r, 'test', path)
+                                r.execute_command('JSON.SET', jsonfile, '.', value)
+                            self.assertNotExists(r, jsonfile, path)
 
     def testSetGetComparePassJSONCaseFiles(self):
         """Test setting, getting, saving and loading passable JSON test case files"""
 
         with self.redis() as r:
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
             for jsonfile in os.listdir('../files'):
                 self.maxDiff = None
                 if jsonfile.startswith('pass-') and jsonfile.endswith('.json') and jsonfile not in json_ignore:
@@ -620,7 +666,9 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
         """https://github.com/RedisLabsModules/rejson/issues/13"""
 
         with self.redis() as r:
-            r.delete('test')
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
             self.assertOk(r.execute_command('JSON.SET', 'test', '.', json.dumps(docs['simple'])))
             # This shouldn't crash Redis
             r.execute_command('JSON.GET', 'test', 'foo', 'foo')

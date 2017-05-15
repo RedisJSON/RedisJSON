@@ -334,12 +334,13 @@ Node *__obj_find(t_dict *o, const char *key, int *idx) {
     return NULL;
 }
 
-#define __obj_insert(o, n)                                                          \
-    if (o->len >= o->cap) {                                                         \
-        o->cap += o->cap ? MIN(o->cap, 1024 * 1024) : 1;                            \
-        o->entries = RedisModule_Realloc(o->entries, o->cap * sizeof(t_keyval *));  \
-    }                                                                               \
-    o->entries[o->len++] = n;
+void __obj_insert(t_dict *o, Node *n) {
+    if (o->len >= o->cap) {
+        o->cap += o->cap ? MIN(o->cap, 1024 * 1024) : 1;
+        o->entries = RedisModule_Realloc(o->entries, o->cap * sizeof(t_keyval *));
+    }
+    o->entries[o->len++] = n;    
+}
 
 int Node_DictSet(Node *obj, const char *key, Node *n) {
     t_dict *o = &obj->value.dictval;
@@ -395,11 +396,8 @@ int Node_DictDel(Node *obj, const char *key) {
     // tried to delete a non existing node
     if (!kv) return OBJ_ERR;
 
-    // let's delete the node's memory
-    if (kv->value.kvval.val) {
-        Node_Free(kv->value.kvval.val);
-    }
-    RedisModule_Free((char *)kv->value.kvval.key);
+    // free the kv node
+    Node_Free(kv);
 
     // replace the deleted entry and the top entry to avoid holes
     if (idx < o->len - 1) {

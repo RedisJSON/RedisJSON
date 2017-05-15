@@ -65,37 +65,44 @@ typedef struct {
 } JSONPathNode_t;
 
 /* Call this to free the struct's contents. */
-void JSONPathNode_Free(JSONPathNode_t *jpn) { SearchPath_Free(&jpn->sp); }
+void JSONPathNode_Free(JSONPathNode_t *jpn) { 
+    if (jpn) {
+        SearchPath_Free(&jpn->sp);
+        RedisModule_Free(jpn);
+    }
+}
 
 /* Sets n to the target node by path.
  * p is n's parent, errors are set into err and level is the error's depth
  * Returns PARSE_OK if parsing successful
 */
-int NodeFromJSONPath(Node *root, const RedisModuleString *path, JSONPathNode_t *jpn) {
+int NodeFromJSONPath(Node *root, const RedisModuleString *path, JSONPathNode_t **jpn) {
     // initialize everything
-    *jpn = (JSONPathNode_t){ 0 };
-    jpn->errlevel = -1;
+    JSONPathNode_t *_jpn = RedisModule_Calloc(1, sizeof(JSONPathNode_t));
+    _jpn->errlevel = -1;
     JSONSearchPathError_t jsperr = { 0 };
 
     // path must be valid from the root or it's an error
-    jpn->sp = NewSearchPath(0);
-    jpn->spath = RedisModule_StringPtrLen(path, &jpn->spathlen);
-    if (PARSE_ERR == ParseJSONPath(jpn->spath, jpn->spathlen, &jpn->sp, &jsperr)) {
-        SearchPath_Free(&jpn->sp);
-        jpn->sp.nodes = NULL;   // in case someone tries to free it later
-        jpn->sperrmsg = jsperr.errmsg;
-        jpn->sperroffset = jsperr.offset;
+    _jpn->sp = NewSearchPath(0);
+    _jpn->spath = RedisModule_StringPtrLen(path, &_jpn->spathlen);
+    if (PARSE_ERR == ParseJSONPath(_jpn->spath, _jpn->spathlen, &_jpn->sp, &jsperr)) {
+        SearchPath_Free(&_jpn->sp);
+        _jpn->sp.nodes = NULL;   // in case someone tries to free it later
+        _jpn->sperrmsg = jsperr.errmsg;
+        _jpn->sperroffset = jsperr.offset;
+        *jpn = _jpn;
         return PARSE_ERR;
     }
 
     // if there are any errors return them
-    if (!SearchPath_IsRootPath(&jpn->sp)) {
-        jpn->err = SearchPath_FindEx(&jpn->sp, root, &jpn->n, &jpn->p, &jpn->errlevel);
+    if (!SearchPath_IsRootPath(&_jpn->sp)) {
+        _jpn->err = SearchPath_FindEx(&_jpn->sp, root, &_jpn->n, &_jpn->p, &_jpn->errlevel);
     } else {
         // deal with edge case of setting root's parent
-        jpn->n = root;
+        _jpn->n = root;
     }
 
+    *jpn = _jpn;
     return PARSE_OK;
 }
 
@@ -193,24 +200,27 @@ int JSONResp_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
 
     // validate path
     JSONType_t *jt = RedisModule_ModuleTypeGetValue(key);
-    JSONPathNode_t jpn;
+    JSONPathNode_t *jpn = NULL;
     RedisModuleString *spath =
         (3 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
     if (PARSE_OK != NodeFromJSONPath(jt->root, spath, &jpn)) {
-        ReplyWithSearchPathError(ctx, &jpn);
-        return REDISMODULE_ERR;
+        ReplyWithSearchPathError(ctx, jpn);
+        goto error;
     }
 
-    if (E_OK == jpn.err) {
-        ObjectTypeToRespReply(ctx, jpn.n);
-        JSONPathNode_Free(&jpn);
-        return REDISMODULE_OK;
+    if (E_OK == jpn->err) {
+        ObjectTypeToRespReply(ctx, jpn->n);
     } else {
-        ReplyWithPathError(ctx, &jpn);
-        JSONPathNode_Free(&jpn);
-        return REDISMODULE_ERR;
+        ReplyWithPathError(ctx, jpn);
+        goto error;
     }
-    return REDISMODULE_OK;  // this is never reached
+
+    JSONPathNode_Free(jpn);
+    return REDISMODULE_OK;
+
+error:
+    JSONPathNode_Free(jpn);
+    return REDISMODULE_ERR;
 }
 
 /**
@@ -262,21 +272,22 @@ int JSONDebug_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
 
         // validate path
         JSONType_t *jt = RedisModule_ModuleTypeGetValue(key);
-        JSONPathNode_t jpn;
+        JSONPathNode_t *jpn = NULL;
         RedisModuleString *spath =
             (4 == argc ? argv[3] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
         if (PARSE_OK != NodeFromJSONPath(jt->root, spath, &jpn)) {
-            ReplyWithSearchPathError(ctx, &jpn);
+            ReplyWithSearchPathError(ctx, jpn);
+            JSONPathNode_Free(jpn);
             return REDISMODULE_ERR;
         }
 
-        if (E_OK == jpn.err) {
-            RedisModule_ReplyWithLongLong(ctx, (long long)ObjectTypeMemoryUsage(jpn.n));
-            JSONPathNode_Free(&jpn);
+        if (E_OK == jpn->err) {
+            RedisModule_ReplyWithLongLong(ctx, (long long)ObjectTypeMemoryUsage(jpn->n));
+            JSONPathNode_Free(jpn);
             return REDISMODULE_OK;
         } else {
-            ReplyWithPathError(ctx, &jpn);
-            JSONPathNode_Free(&jpn);
+            ReplyWithPathError(ctx, jpn);
+            JSONPathNode_Free(jpn);
             return REDISMODULE_ERR;
         }
     } else if (!strncasecmp("help", subcmd, subcmdlen)) {
@@ -326,23 +337,24 @@ int JSONType_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
 
     // validate path
     JSONType_t *jt = RedisModule_ModuleTypeGetValue(key);
-    JSONPathNode_t jpn;
+    JSONPathNode_t *jpn = NULL;
     RedisModuleString *spath =
         (3 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
     if (PARSE_OK != NodeFromJSONPath(jt->root, spath, &jpn)) {
-        ReplyWithSearchPathError(ctx, &jpn);
+        ReplyWithSearchPathError(ctx, jpn);
+        JSONPathNode_Free(jpn);
         return REDISMODULE_ERR;
     }
 
     // make the type-specifc reply, or deal with path errors
-    if (E_OK == jpn.err) {
-        RedisModule_ReplyWithSimpleString(ctx, NodeTypeStr(NODETYPE(jpn.n)));
+    if (E_OK == jpn->err) {
+        RedisModule_ReplyWithSimpleString(ctx, NodeTypeStr(NODETYPE(jpn->n)));
     } else {
         // reply with null if there are **any** non-existing elements along the path
         RedisModule_ReplyWithNull(ctx);
     }
 
-    JSONPathNode_Free(&jpn);
+    JSONPathNode_Free(jpn);
     return REDISMODULE_OK;
 }
 
@@ -381,22 +393,22 @@ int JSONLen_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
 
     // validate path
     JSONType_t *jt = RedisModule_ModuleTypeGetValue(key);
-    JSONPathNode_t jpn;
+    JSONPathNode_t *jpn = NULL;
     RedisModuleString *spath =
         (3 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
     if (PARSE_OK != NodeFromJSONPath(jt->root, spath, &jpn)) {
-        ReplyWithSearchPathError(ctx, &jpn);
-        return REDISMODULE_ERR;
+        ReplyWithSearchPathError(ctx, jpn);
+        goto error;
     }
 
     // deal with path errors
-    if (E_OK != jpn.err) {
-        ReplyWithPathError(ctx, &jpn);
+    if (E_OK != jpn->err) {
+        ReplyWithPathError(ctx, jpn);
         goto error;
     }
 
     // determine the type of target value based on command name
-    NodeType expected, actual = NODETYPE(jpn.n);
+    NodeType expected, actual = NODETYPE(jpn->n);
     if (!strcasecmp("json.arrlen", cmd))
         expected = N_ARRAY;
     else if (!strcasecmp("json.objlen", cmd))
@@ -406,17 +418,17 @@ int JSONLen_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
 
     // reply with the length per type, or with an error if the wrong type is encountered
     if (actual == expected) {
-        RedisModule_ReplyWithLongLong(ctx, Node_Length(jpn.n));
+        RedisModule_ReplyWithLongLong(ctx, Node_Length(jpn->n));
     } else {
         ReplyWithPathTypeError(ctx, expected, actual);
         goto error;
     }
 
-    JSONPathNode_Free(&jpn);
+    JSONPathNode_Free(jpn);
     return REDISMODULE_OK;
 
 error:
-    JSONPathNode_Free(&jpn);
+    JSONPathNode_Free(jpn);
     return REDISMODULE_ERR;
 }
 
@@ -451,44 +463,44 @@ int JSONObjKeys_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int 
 
     // validate path
     JSONType_t *jt = RedisModule_ModuleTypeGetValue(key);
-    JSONPathNode_t jpn;
+    JSONPathNode_t *jpn = NULL;
     RedisModuleString *spath =
         (3 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
     if (PARSE_OK != NodeFromJSONPath(jt->root, spath, &jpn)) {
-        ReplyWithSearchPathError(ctx, &jpn);
-        return REDISMODULE_ERR;
+        ReplyWithSearchPathError(ctx, jpn);
+        goto error;
     }
 
     // deal with path errors
-    if (E_NOINDEX == jpn.err || E_NOKEY == jpn.err) {
+    if (E_NOINDEX == jpn->err || E_NOKEY == jpn->err) {
         // reply with null if there are **any** non-existing elements along the path
         RedisModule_ReplyWithNull(ctx);
         goto ok;
-    } else if (E_OK != jpn.err) {
-        ReplyWithPathError(ctx, &jpn);
+    } else if (E_OK != jpn->err) {
+        ReplyWithPathError(ctx, jpn);
         goto error;
     }
 
     // reply with the object's keys if it is a dictionary, error otherwise
-    if (N_DICT == NODETYPE(jpn.n)) {
-        int len = Node_Length(jpn.n);
+    if (N_DICT == NODETYPE(jpn->n)) {
+        int len = Node_Length(jpn->n);
         RedisModule_ReplyWithArray(ctx, len);
         for (int i = 0; i < len; i++) {
             // TODO: need an iterator for keys in dict
-            const char *k = jpn.n->value.dictval.entries[i]->value.kvval.key;
+            const char *k = jpn->n->value.dictval.entries[i]->value.kvval.key;
             RedisModule_ReplyWithStringBuffer(ctx, k, strlen(k));
         }
     } else {
-        ReplyWithPathTypeError(ctx, N_DICT, NODETYPE(jpn.n));
+        ReplyWithPathTypeError(ctx, N_DICT, NODETYPE(jpn->n));
         goto error;
     }
 
 ok:
-    JSONPathNode_Free(&jpn);
+    JSONPathNode_Free(jpn);
     return REDISMODULE_OK;
 
 error:
-    JSONPathNode_Free(&jpn);
+    JSONPathNode_Free(jpn);
     return REDISMODULE_ERR;
 }
 
@@ -524,7 +536,7 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
         return REDISMODULE_ERR;
     }
 
-    JSONPathNode_t jpn = { 0 };
+    JSONPathNode_t *jpn = NULL;
     Object *jo = NULL;
     char *jerr = NULL;
 
@@ -580,15 +592,15 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
      * created at the root.
     */
     if (PARSE_OK != NodeFromJSONPath(jt->root, argv[2], &jpn)) {
-        ReplyWithSearchPathError(ctx, &jpn);
+        ReplyWithSearchPathError(ctx, jpn);
         goto error;
     }
-    int isRootPath = SearchPath_IsRootPath(&jpn.sp);
+    int isRootPath = SearchPath_IsRootPath(&jpn->sp);
 
     // handle an empty key
     if (REDISMODULE_KEYTYPE_EMPTY == type) {
         // new keys must be created at the root
-        if (E_OK != jpn.err || !isRootPath) {
+        if (E_OK != jpn->err || !isRootPath) {
             RedisModule_ReplyWithError(ctx, REJSON_ERROR_NEW_NOT_ROOT);
             goto error;
         }
@@ -597,20 +609,20 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     }
 
     // handle an existing key, first make sure there weren't any obvious path errors
-    if (E_OK != jpn.err && E_NOKEY != jpn.err) {
-        ReplyWithPathError(ctx, &jpn);
+    if (E_OK != jpn->err && E_NOKEY != jpn->err) {
+        ReplyWithPathError(ctx, jpn);
         goto error;
     }
 
     // verify that we're dealing with the last child in case of an object
-    if (E_NOKEY == jpn.err && jpn.errlevel != jpn.sp.len - 1) {
+    if (E_NOKEY == jpn->err && jpn->errlevel != jpn->sp.len - 1) {
         RedisModule_ReplyWithError(ctx, REJSON_ERROR_PATH_NONTERMINAL_KEY);
         goto error;
     }
 
     // replace a value according to its container type
-    if (E_OK == jpn.err) {
-        NodeType ntp = NODETYPE(jpn.p);
+    if (E_OK == jpn->err) {
+        NodeType ntp = NODETYPE(jpn->p);
 
         // an existing value in the root or an object can be replaced only if the NX is off
         if (subnx && (isRootPath || N_DICT == ntp)) {
@@ -629,29 +641,29 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
             jt = RedisModule_Calloc(1, sizeof(JSONType_t));
             jt->root = jo;
             RedisModule_ModuleTypeSetValue(key, JSONType, jt);
-        } else if (N_DICT == NODETYPE(jpn.p)) {
-            if (OBJ_OK != Node_DictSet(jpn.p, jpn.sp.nodes[jpn.sp.len - 1].value.key, jo)) {
+        } else if (N_DICT == NODETYPE(jpn->p)) {
+            if (OBJ_OK != Node_DictSet(jpn->p, jpn->sp.nodes[jpn->sp.len - 1].value.key, jo)) {
                 RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_DICT_SET);
                 RedisModule_ReplyWithError(ctx, REJSON_ERROR_DICT_SET);
                 goto error;
             }
         } else {  // must be an array
-            int index = jpn.sp.nodes[jpn.sp.len - 1].value.index;
-            if (index < 0) index = Node_Length(jpn.p) + index;
-            if (OBJ_OK != Node_ArraySet(jpn.p, index, jo)) {
+            int index = jpn->sp.nodes[jpn->sp.len - 1].value.index;
+            if (index < 0) index = Node_Length(jpn->p) + index;
+            if (OBJ_OK != Node_ArraySet(jpn->p, index, jo)) {
                 RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_ARRAY_SET);
                 RedisModule_ReplyWithError(ctx, REJSON_ERROR_ARRAY_SET);
                 goto error;
             }
             // unlike DictSet, ArraySet does not free so we need to call it explicitly
-            Node_Free(jpn.n);
+            Node_Free(jpn->n);
         }
     } else {  // must be E_NOKEY
         // new keys in the dictionary can be created only if the XX flag is off
         if (subxx) {
             goto null;
         }
-        if (OBJ_OK != Node_DictSet(jpn.p, jpn.sp.nodes[jpn.sp.len - 1].value.key, jo)) {
+        if (OBJ_OK != Node_DictSet(jpn->p, jpn->sp.nodes[jpn->sp.len - 1].value.key, jo)) {
             RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_DICT_SET);
             RedisModule_ReplyWithError(ctx, REJSON_ERROR_DICT_SET);
             goto error;
@@ -660,18 +672,18 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 
 ok:
     RedisModule_ReplyWithSimpleString(ctx, "OK");
-    JSONPathNode_Free(&jpn);
+    JSONPathNode_Free(jpn);
     RedisModule_ReplicateVerbatim(ctx);
     return REDISMODULE_OK;
 
 null:
     RedisModule_ReplyWithNull(ctx);
-    JSONPathNode_Free(&jpn);
+    JSONPathNode_Free(jpn);
     if (jo) Node_Free(jo);
     return REDISMODULE_OK;
 
 error:
-    JSONPathNode_Free(&jpn);
+    JSONPathNode_Free(jpn);
     if (jt && REDISMODULE_KEYTYPE_EMPTY == type) {
         RedisModule_Free(jt);
     }
@@ -749,7 +761,7 @@ int JSONGet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     JSONType_t *jt = RedisModule_ModuleTypeGetValue(key);
     int npaths = argc - pathpos;
     int jpnslen = 0;
-    JSONPathNode_t jpns[MAX(npaths, 1)];  // if no paths then the root
+    JSONPathNode_t **jpns = RedisModule_Calloc(MAX(npaths, 1), sizeof(JSONPathNode_t *));  
     if (!npaths) {  // default to root
         NodeFromJSONPath(jt->root, RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1), &jpns[0]);
         jpnslen = 1;
@@ -757,13 +769,15 @@ int JSONGet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
         while (jpnslen < npaths) {
             // validate path correctness
             if (PARSE_OK != NodeFromJSONPath(jt->root, argv[pathpos + jpnslen], &jpns[jpnslen])) {
-                ReplyWithSearchPathError(ctx, &jpns[jpnslen]);
+                ReplyWithSearchPathError(ctx, jpns[jpnslen]);
+                jpnslen++;
                 goto error;
             }
 
             // deal with path errors
-            if (E_OK != jpns[jpnslen].err) {
-                ReplyWithPathError(ctx, &jpns[jpnslen]);
+            if (E_OK != jpns[jpnslen]->err) {
+                ReplyWithPathError(ctx, jpns[jpnslen]);
+                jpnslen++;
                 goto error;
             }
 
@@ -773,15 +787,15 @@ int JSONGet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 
     // return the single path's JSON value, or wrap all paths-values as an object
     if (1 == jpnslen) {
-        SerializeNodeToJSON(jpns[0].n, &jsopt, &json);
+        SerializeNodeToJSON(jpns[0]->n, &jsopt, &json);
     } else {
         Node *objReply = NewDictNode(jpnslen);
         for (int i = 0; i < jpnslen; i++) {
             // add the path to the reply only if it isn't there already
             Node *target;
-            int ret = Node_DictGet(objReply, jpns[i].spath, &target);
+            int ret = Node_DictGet(objReply, jpns[i]->spath, &target);
             if (OBJ_ERR == ret)
-                Node_DictSet(objReply, jpns[i].spath, jpns[i].n);
+                Node_DictSet(objReply, jpns[i]->spath, jpns[i]->n);
         }
         SerializeNodeToJSON(objReply, &jsopt, &json);
 
@@ -803,15 +817,17 @@ int JSONGet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     RedisModule_ReplyWithStringBuffer(ctx, json, sdslen(json));
 
     for (int i = 0; i < jpnslen; i++) {
-        JSONPathNode_Free(&jpns[i]);
+        JSONPathNode_Free(jpns[i]);
     }
+    RedisModule_Free(jpns);
     sdsfree(json);
     return REDISMODULE_OK;
 
 error:
     for (int i = 0; i < jpnslen; i++) {
-        JSONPathNode_Free(&jpns[i]);
+        JSONPathNode_Free(jpns[i]);
     }
+    RedisModule_Free(jpns);   
     sdsfree(json);
     return REDISMODULE_ERR;
 }
@@ -930,37 +946,37 @@ int JSONDel_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 
     // validate path
     JSONType_t *jt = RedisModule_ModuleTypeGetValue(key);
-    JSONPathNode_t jpn;
+    JSONPathNode_t *jpn = NULL;
     RedisModuleString *spath =
         (3 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
     if (PARSE_OK != NodeFromJSONPath(jt->root, spath, &jpn)) {
-        ReplyWithSearchPathError(ctx, &jpn);
-        return REDISMODULE_ERR;
+        ReplyWithSearchPathError(ctx, jpn);
+        goto error;
     }
 
     // deal with path errors
-    if (E_NOINDEX == jpn.err || E_NOKEY == jpn.err) {
+    if (E_NOINDEX == jpn->err || E_NOKEY == jpn->err) {
         // reply with 0 if there are **any** non-existing elements along the path
         RedisModule_ReplyWithLongLong(ctx, 0);
         goto ok;
-    } else if (E_OK != jpn.err) {
-        ReplyWithPathError(ctx, &jpn);
+    } else if (E_OK != jpn->err) {
+        ReplyWithPathError(ctx, jpn);
         goto error;
     }
 
     // if it is the root then delete the key, otherwise delete the target from parent container
-    if (SearchPath_IsRootPath(&jpn.sp)) {
+    if (SearchPath_IsRootPath(&jpn->sp)) {
         RedisModule_DeleteKey(key);
-    } else if (N_DICT == NODETYPE(jpn.p)) {  // delete from a dict
-        const char *dictkey = jpn.sp.nodes[jpn.sp.len - 1].value.key;
-        if (OBJ_OK != Node_DictDel(jpn.p, dictkey)) {
+    } else if (N_DICT == NODETYPE(jpn->p)) {  // delete from a dict
+        const char *dictkey = jpn->sp.nodes[jpn->sp.len - 1].value.key;
+        if (OBJ_OK != Node_DictDel(jpn->p, dictkey)) {
             RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_DICT_DEL);
             RedisModule_ReplyWithError(ctx, REJSON_ERROR_DICT_DEL);
             goto error;
         }
     } else {  // container must be an array
-        int index = jpn.sp.nodes[jpn.sp.len - 1].value.index;
-        if (OBJ_OK != Node_ArrayDelRange(jpn.p, index, 1)) {
+        int index = jpn->sp.nodes[jpn->sp.len - 1].value.index;
+        if (OBJ_OK != Node_ArrayDelRange(jpn->p, index, 1)) {
             RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_ARRAY_DEL);
             RedisModule_ReplyWithError(ctx, REJSON_ERROR_ARRAY_DEL);
             goto error;
@@ -970,12 +986,12 @@ int JSONDel_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     RedisModule_ReplyWithLongLong(ctx, (long long)argc - 2);
 
 ok:
-    JSONPathNode_Free(&jpn);
+    JSONPathNode_Free(jpn);
     RedisModule_ReplicateVerbatim(ctx);
     return REDISMODULE_OK;
 
 error:
-    JSONPathNode_Free(&jpn);
+    JSONPathNode_Free(jpn);
     return REDISMODULE_ERR;
 }
 
@@ -1010,28 +1026,28 @@ int JSONNum_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
 
     // validate path
     JSONType_t *jt = RedisModule_ModuleTypeGetValue(key);
-    JSONPathNode_t jpn;
+    JSONPathNode_t *jpn = NULL;
     RedisModuleString *spath =
         (4 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
     if (PARSE_OK != NodeFromJSONPath(jt->root, spath, &jpn)) {
-        ReplyWithSearchPathError(ctx, &jpn);
-        return REDISMODULE_ERR;
+        ReplyWithSearchPathError(ctx, jpn);
+        goto error;
     }
 
     // deal with path errors
-    if (E_OK != jpn.err) {
-        ReplyWithPathError(ctx, &jpn);
+    if (E_OK != jpn->err) {
+        ReplyWithPathError(ctx, jpn);
         goto error;
     }
 
     // verify that the target value is a number
-    if (N_INTEGER != NODETYPE(jpn.n) && N_NUMBER != NODETYPE(jpn.n)) {
-        sds err = sdscatfmt(sdsempty(), REJSON_ERROR_PATH_NANTYPE, NodeTypeStr(NODETYPE(jpn.n)));
+    if (N_INTEGER != NODETYPE(jpn->n) && N_NUMBER != NODETYPE(jpn->n)) {
+        sds err = sdscatfmt(sdsempty(), REJSON_ERROR_PATH_NANTYPE, NodeTypeStr(NODETYPE(jpn->n)));
         RedisModule_ReplyWithError(ctx, err);
         sdsfree(err);
         goto error;
     }
-    oval = NODEVALUE_AS_DOUBLE(jpn.n);
+    oval = NODEVALUE_AS_DOUBLE(jpn->n);
 
     // we use the json parser to convert the bval arg into a value to catch all of JSON's syntices
     size_t vallen;
@@ -1071,7 +1087,7 @@ int JSONNum_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
     // make an object out of the result per its type
     Object *orz;
     // the result is an integer only if both values were, and providing an int64 can hold it
-    if (N_INTEGER == NODETYPE(jpn.n) && N_INTEGER == NODETYPE(joval) && 
+    if (N_INTEGER == NODETYPE(jpn->n) && N_INTEGER == NODETYPE(joval) && 
         rz <= (double)INT64_MAX && rz >= (double)INT64_MIN) {
         orz = NewIntNode((int64_t)rz);
     } else {
@@ -1079,46 +1095,46 @@ int JSONNum_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
     }
 
     // replace the original value with the result depending on the parent container's type
-    if (SearchPath_IsRootPath(&jpn.sp)) {
+    if (SearchPath_IsRootPath(&jpn->sp)) {
         RedisModule_DeleteKey(key);
         jt = RedisModule_Calloc(1, sizeof(JSONType_t));
         jt->root = orz;
         RedisModule_ModuleTypeSetValue(key, JSONType, jt);
-    } else if (N_DICT == NODETYPE(jpn.p)) {
-        if (OBJ_OK != Node_DictSet(jpn.p, jpn.sp.nodes[jpn.sp.len - 1].value.key, orz)) {
+    } else if (N_DICT == NODETYPE(jpn->p)) {
+        if (OBJ_OK != Node_DictSet(jpn->p, jpn->sp.nodes[jpn->sp.len - 1].value.key, orz)) {
             RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_DICT_SET);
             RedisModule_ReplyWithError(ctx, REJSON_ERROR_DICT_SET);
             goto error;
         }
     } else {  // container must be an array
-        int index = jpn.sp.nodes[jpn.sp.len - 1].value.index;
-        if (index < 0) index = Node_Length(jpn.p) + index;
-        if (OBJ_OK != Node_ArraySet(jpn.p, index, orz)) {
+        int index = jpn->sp.nodes[jpn->sp.len - 1].value.index;
+        if (index < 0) index = Node_Length(jpn->p) + index;
+        if (OBJ_OK != Node_ArraySet(jpn->p, index, orz)) {
             RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_ARRAY_SET);
             RedisModule_ReplyWithError(ctx, REJSON_ERROR_ARRAY_SET);
             goto error;
         }
         // unlike DictSet, ArraySet does not free so we need to call it explicitly
-        Node_Free(jpn.n);
+        Node_Free(jpn->n);
     }
-    jpn.n = orz;
+    jpn->n = orz;
 
     // reply with the serialization of the new value
     JSONSerializeOpt jsopt = {0};
     sds json = sdsempty();
-    SerializeNodeToJSON(jpn.n, &jsopt, &json);
+    SerializeNodeToJSON(jpn->n, &jsopt, &json);
     RedisModule_ReplyWithStringBuffer(ctx, json, sdslen(json));
     sdsfree(json);
 
     Node_Free(joval);
-    JSONPathNode_Free(&jpn);
+    JSONPathNode_Free(jpn);
 
     RedisModule_ReplicateVerbatim(ctx);
     return REDISMODULE_OK;
 
 error:
     Node_Free(joval);
-    JSONPathNode_Free(&jpn);
+    JSONPathNode_Free(jpn);
     return REDISMODULE_ERR;
 }
 
@@ -1146,23 +1162,23 @@ int JSONStrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
 
     // validate path
     JSONType_t *jt = RedisModule_ModuleTypeGetValue(key);
-    JSONPathNode_t jpn;
+    JSONPathNode_t *jpn = NULL;
     RedisModuleString *spath =
         (4 == argc ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
     if (PARSE_OK != NodeFromJSONPath(jt->root, spath, &jpn)) {
-        ReplyWithSearchPathError(ctx, &jpn);
-        return REDISMODULE_ERR;
+        ReplyWithSearchPathError(ctx, jpn);
+        goto error;
     }
 
     // deal with path errors
-    if (E_OK != jpn.err) {
-        ReplyWithPathError(ctx, &jpn);
+    if (E_OK != jpn->err) {
+        ReplyWithPathError(ctx, jpn);
         goto error;
     }
 
     // the target must be a string
-    if (N_STRING != NODETYPE(jpn.n)) {
-        ReplyWithPathTypeError(ctx, N_STRING, NODETYPE(jpn.n));
+    if (N_STRING != NODETYPE(jpn->n)) {
+        ReplyWithPathTypeError(ctx, N_STRING, NODETYPE(jpn->n));
         goto error;
     }
 
@@ -1191,22 +1207,22 @@ int JSONStrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
     // the value must be a string
     if (N_STRING != NODETYPE(jo)) {
         sds err = sdscatfmt(sdsempty(), "ERR wrong type of value - expected %s but found %s",
-                            NodeTypeStr(N_STRING), NodeTypeStr(NODETYPE(jpn.n)));
+                            NodeTypeStr(N_STRING), NodeTypeStr(NODETYPE(jpn->n)));
         RedisModule_ReplyWithError(ctx, err);
         sdsfree(err);
     }
 
     // actually concatenate the strings
-    Node_StringAppend(jpn.n, jo);
-    RedisModule_ReplyWithLongLong(ctx, (long long)Node_Length(jpn.n));
+    Node_StringAppend(jpn->n, jo);
+    RedisModule_ReplyWithLongLong(ctx, (long long)Node_Length(jpn->n));
     Node_Free(jo);
-    JSONPathNode_Free(&jpn);
+    JSONPathNode_Free(jpn);
     
     RedisModule_ReplicateVerbatim(ctx);
     return REDISMODULE_OK;
 
 error:
-    JSONPathNode_Free(&jpn);
+    JSONPathNode_Free(jpn);
     return REDISMODULE_ERR;
 }
 
@@ -1237,21 +1253,21 @@ int JSONArrInsert_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
 
     // validate path
     JSONType_t *jt = RedisModule_ModuleTypeGetValue(key);
-    JSONPathNode_t jpn;
+    JSONPathNode_t *jpn = NULL;
     if (PARSE_OK != NodeFromJSONPath(jt->root, argv[2], &jpn)) {
-        ReplyWithSearchPathError(ctx, &jpn);
-        return REDISMODULE_ERR;
+        ReplyWithSearchPathError(ctx, jpn);
+        goto error;
     }
 
     // deal with path errors
-    if (E_OK != jpn.err) {
-        ReplyWithPathError(ctx, &jpn);
+    if (E_OK != jpn->err) {
+        ReplyWithPathError(ctx, jpn);
         goto error;
     }
 
     // the target must be an array
-    if (N_ARRAY != NODETYPE(jpn.n)) {
-        ReplyWithPathTypeError(ctx, N_ARRAY, NODETYPE(jpn.n));
+    if (N_ARRAY != NODETYPE(jpn->n)) {
+        ReplyWithPathTypeError(ctx, N_ARRAY, NODETYPE(jpn->n));
         goto error;
     }
 
@@ -1263,10 +1279,10 @@ int JSONArrInsert_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
     }
 
     // convert negative values
-    if (index < 0) index = Node_Length(jpn.n) + index;
+    if (index < 0) index = Node_Length(jpn->n) + index;
 
     // check for out of range
-    if (index < 0 || index > Node_Length(jpn.n)) {
+    if (index < 0 || index > Node_Length(jpn->n)) {
         RedisModule_ReplyWithError(ctx, REJSON_ERROR_INDEX_OUTOFRANGE);
         goto error;
     }
@@ -1309,21 +1325,21 @@ int JSONArrInsert_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
     }
 
     // insert the sub array to the target array
-    if (OBJ_OK != Node_ArrayInsert(jpn.n, index, sub)) {
+    if (OBJ_OK != Node_ArrayInsert(jpn->n, index, sub)) {
         Node_Free(sub);
         RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_INSERT);
         RedisModule_ReplyWithError(ctx, REJSON_ERROR_INSERT);
         goto error;
     }
 
-    RedisModule_ReplyWithLongLong(ctx, Node_Length(jpn.n));
-    JSONPathNode_Free(&jpn);
+    RedisModule_ReplyWithLongLong(ctx, Node_Length(jpn->n));
+    JSONPathNode_Free(jpn);
 
     RedisModule_ReplicateVerbatim(ctx);
     return REDISMODULE_OK;
 
 error:
-    JSONPathNode_Free(&jpn);
+    JSONPathNode_Free(jpn);
     return REDISMODULE_ERR;
 }
 
@@ -1349,21 +1365,21 @@ int JSONArrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
 
     // validate path
     JSONType_t *jt = RedisModule_ModuleTypeGetValue(key);
-    JSONPathNode_t jpn;
+    JSONPathNode_t *jpn = NULL;
     if (PARSE_OK != NodeFromJSONPath(jt->root, argv[2], &jpn)) {
-        ReplyWithSearchPathError(ctx, &jpn);
-        return REDISMODULE_ERR;
+        ReplyWithSearchPathError(ctx, jpn);
+        goto error;
     }
 
     // deal with path errors
-    if (E_OK != jpn.err) {
-        ReplyWithPathError(ctx, &jpn);
+    if (E_OK != jpn->err) {
+        ReplyWithPathError(ctx, jpn);
         goto error;
     }
 
     // the target must be an array
-    if (N_ARRAY != NODETYPE(jpn.n)) {
-        ReplyWithPathTypeError(ctx, N_ARRAY, NODETYPE(jpn.n));
+    if (N_ARRAY != NODETYPE(jpn->n)) {
+        ReplyWithPathTypeError(ctx, N_ARRAY, NODETYPE(jpn->n));
         goto error;
     }
 
@@ -1405,21 +1421,21 @@ int JSONArrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
     }
 
     // insert the sub array to the target array
-    if (OBJ_OK != Node_ArrayInsert(jpn.n, Node_Length(jpn.n), sub)) {
+    if (OBJ_OK != Node_ArrayInsert(jpn->n, Node_Length(jpn->n), sub)) {
         Node_Free(sub);
         RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_INSERT);
         RedisModule_ReplyWithError(ctx, REJSON_ERROR_INSERT);
         goto error;
     }
 
-    RedisModule_ReplyWithLongLong(ctx, Node_Length(jpn.n));
-    JSONPathNode_Free(&jpn);
+    RedisModule_ReplyWithLongLong(ctx, Node_Length(jpn->n));
+    JSONPathNode_Free(jpn);
 
     RedisModule_ReplicateVerbatim(ctx);
     return REDISMODULE_OK;
 
 error:
-    JSONPathNode_Free(&jpn);
+    JSONPathNode_Free(jpn);
     return REDISMODULE_ERR;
 }
 
@@ -1453,21 +1469,21 @@ int JSONArrIndex_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int
 
     // validate path
     JSONType_t *jt = RedisModule_ModuleTypeGetValue(key);
-    JSONPathNode_t jpn;
+    JSONPathNode_t *jpn = NULL;
     if (PARSE_OK != NodeFromJSONPath(jt->root, argv[2], &jpn)) {
-        ReplyWithSearchPathError(ctx, &jpn);
-        return REDISMODULE_ERR;
+        ReplyWithSearchPathError(ctx, jpn);
+        goto error;
     }
 
     // deal with path errors
-    if (E_OK != jpn.err) {
-        ReplyWithPathError(ctx, &jpn);
+    if (E_OK != jpn->err) {
+        ReplyWithPathError(ctx, jpn);
         goto error;
     }
 
     // verify that the target's type is an array
-    if (N_ARRAY != NODETYPE(jpn.n)) {
-        ReplyWithPathTypeError(ctx, N_ARRAY, NODETYPE(jpn.n));
+    if (N_ARRAY != NODETYPE(jpn->n)) {
+        ReplyWithPathTypeError(ctx, N_ARRAY, NODETYPE(jpn->n));
         goto error;
     }
 
@@ -1508,14 +1524,14 @@ int JSONArrIndex_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int
         }
     }
 
-    RedisModule_ReplyWithLongLong(ctx, Node_ArrayIndex(jpn.n, jo, (int)start, (int)stop));
+    RedisModule_ReplyWithLongLong(ctx, Node_ArrayIndex(jpn->n, jo, (int)start, (int)stop));
 
-    JSONPathNode_Free(&jpn);
+    JSONPathNode_Free(jpn);
     Node_Free(jo);
     return REDISMODULE_OK;
 
 error:
-    JSONPathNode_Free(&jpn);
+    JSONPathNode_Free(jpn);
     if (jo) Node_Free(jo);
     return REDISMODULE_ERR;
 }
@@ -1548,28 +1564,28 @@ int JSONArrPop_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int a
 
     // validate path
     JSONType_t *jt = RedisModule_ModuleTypeGetValue(key);
-    JSONPathNode_t jpn;
+    JSONPathNode_t *jpn = NULL;
     RedisModuleString *spath =
         (argc > 2 ? argv[2] : RedisModule_CreateString(ctx, OBJECT_ROOT_PATH, 1));
     if (PARSE_OK != NodeFromJSONPath(jt->root, spath, &jpn)) {
-        ReplyWithSearchPathError(ctx, &jpn);
-        return REDISMODULE_ERR;
+        ReplyWithSearchPathError(ctx, jpn);
+        goto error;
     }
 
     // deal with path errors
-    if (E_OK != jpn.err) {
-        ReplyWithPathError(ctx, &jpn);
+    if (E_OK != jpn->err) {
+        ReplyWithPathError(ctx, jpn);
         goto error;
     }
 
     // verify that the target's type is an array
-    if (N_ARRAY != NODETYPE(jpn.n)) {
-        ReplyWithPathTypeError(ctx, N_ARRAY, NODETYPE(jpn.n));
+    if (N_ARRAY != NODETYPE(jpn->n)) {
+        ReplyWithPathTypeError(ctx, N_ARRAY, NODETYPE(jpn->n));
         goto error;
     }
 
     // nothing to do
-    long long len = Node_Length(jpn.n);
+    long long len = Node_Length(jpn->n);
     if (!len) {
         RedisModule_ReplyWithNull(ctx);
         goto ok;
@@ -1591,7 +1607,7 @@ int JSONArrPop_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int a
     JSONSerializeOpt jsopt = {0};
     sds json = sdsempty();
     Node *item;
-    Node_ArrayItem(jpn.n, index, &item);
+    Node_ArrayItem(jpn->n, index, &item);
     SerializeNodeToJSON(item, &jsopt, &json);
 
     // check whether serialization had succeeded
@@ -1603,19 +1619,19 @@ int JSONArrPop_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int a
     }
 
     // delete the item from the array
-    Node_ArrayDelRange(jpn.n, index, 1);
+    Node_ArrayDelRange(jpn->n, index, 1);
 
     // reply with the serialization
     RedisModule_ReplyWithStringBuffer(ctx, json, sdslen(json));
     sdsfree(json);
 
 ok:
-    JSONPathNode_Free(&jpn);
+    JSONPathNode_Free(jpn);
     RedisModule_ReplicateVerbatim(ctx);
     return REDISMODULE_OK;
 
 error:
-    JSONPathNode_Free(&jpn);
+    JSONPathNode_Free(jpn);
     return REDISMODULE_ERR;
 }
 
@@ -1648,27 +1664,27 @@ int JSONArrTrim_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int 
 
     // validate path
     JSONType_t *jt = RedisModule_ModuleTypeGetValue(key);
-    JSONPathNode_t jpn;
+    JSONPathNode_t *jpn = NULL;
     if (PARSE_OK != NodeFromJSONPath(jt->root, argv[2], &jpn)) {
-        ReplyWithSearchPathError(ctx, &jpn);
-        return REDISMODULE_ERR;
+        ReplyWithSearchPathError(ctx, jpn);
+        goto error;
     }
 
     // deal with path errors
-    if (E_OK != jpn.err) {
-        ReplyWithPathError(ctx, &jpn);
+    if (E_OK != jpn->err) {
+        ReplyWithPathError(ctx, jpn);
         goto error;
     }
 
     // verify that the target's type is an array
-    if (N_ARRAY != NODETYPE(jpn.n)) {
-        ReplyWithPathTypeError(ctx, N_ARRAY, NODETYPE(jpn.n));
+    if (N_ARRAY != NODETYPE(jpn->n)) {
+        ReplyWithPathTypeError(ctx, N_ARRAY, NODETYPE(jpn->n));
         goto error;
     }
 
     // get start & stop
     long long start, stop, left, right;
-    long long len = (long long)Node_Length(jpn.n);
+    long long len = (long long)Node_Length(jpn->n);
     if (REDISMODULE_OK != RedisModule_StringToLongLong(argv[3], &start)) {
         RedisModule_ReplyWithError(ctx, REJSON_ERROR_INDEX_INVALID);
         goto error;
@@ -1693,17 +1709,17 @@ int JSONArrTrim_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int 
     }
 
     // trim the array
-    Node_ArrayDelRange(jpn.n, 0, left);
-    Node_ArrayDelRange(jpn.n, -right, right);
+    Node_ArrayDelRange(jpn->n, 0, left);
+    Node_ArrayDelRange(jpn->n, -right, right);
 
-    RedisModule_ReplyWithLongLong(ctx, (long long)Node_Length(jpn.n));
-    JSONPathNode_Free(&jpn);
+    RedisModule_ReplyWithLongLong(ctx, (long long)Node_Length(jpn->n));
+    JSONPathNode_Free(jpn);
     
     RedisModule_ReplicateVerbatim(ctx);
     return REDISMODULE_OK;
 
 error:
-    JSONPathNode_Free(&jpn);
+    JSONPathNode_Free(jpn);
     return REDISMODULE_ERR;
 }
 
