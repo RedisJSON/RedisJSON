@@ -33,10 +33,10 @@
 *.su
 
 # Python
-venv/
+.env/
 *.pyc
 
-/build
-/Testing
-/.vscode
-/site
+# mkdocs
+site/
+
+.vscode/
