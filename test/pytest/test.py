@@ -196,7 +196,7 @@ class ReJSONTestCase(ModuleTestCase(module_path='../../src/rejson.so')):
                 self.assertEqual(data, v, k)
 
     def testGetPartsOfValuesDocumentMultiple(self):
-        """Test correctnes of an object returned by JSON.GET"""
+        """Test correctness of an object returned by JSON.GET"""
 
         with self.redis() as r:
             r.delete('test')

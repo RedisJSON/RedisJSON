@@ -66,20 +66,23 @@ void *ObjectTypeRdbLoad(RedisModuleIO *rdb) {
                         break;
                     case N_KEYVAL:
                         str = RedisModule_LoadStringBuffer(rdb, &strlen);
-                        Vector_Push(nodes, NewKeyValNode(str, strlen, NULL));
+                        node = NewKeyValNode(str, strlen, NULL);
+                        Vector_Push(nodes, node);
                         Vector_Push(indices, (uint64_t)1);
                         RedisModule_Free(str);
                         state = S_CONTAINER;
                         break;
                     case N_DICT:
                         len = RedisModule_LoadUnsigned(rdb);
-                        Vector_Push(nodes, NewDictNode(len));
+                        node = NewDictNode(len);
+                        Vector_Push(nodes, node);
                         Vector_Push(indices, len);
                         state = S_CONTAINER;
                         break;
                     case N_ARRAY:
                         len = RedisModule_LoadUnsigned(rdb);
-                        Vector_Push(nodes, NewArrayNode(len));
+                        node = NewArrayNode(len);
+                        Vector_Push(nodes, node);
                         Vector_Push(indices, len);
                         state = S_CONTAINER;
                         break;

@@ -358,7 +358,8 @@ int Node_DictSet(Node *obj, const char *key, Node *n) {
     }
 
     // append another entry
-    __obj_insert(o, NewKeyValNode(key, strlen(key), n));
+    kv = NewKeyValNode(key, strlen(key), n);
+    __obj_insert(o, kv);
 
     return OBJ_OK;
 }
