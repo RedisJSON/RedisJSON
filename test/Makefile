@@ -33,10 +33,11 @@ test: test_object test_json_object test_json_validator unittest
 build: object json_object json_validator
 
 # Dependency libraries
-# LIBS_DIRS = -L$(RM_INCLUDE_DIR) -L$(DEPS_DIR)/jsonsl -L$(DEPS_DIR)/RedisModuleSDK/rmutil
-# LIBS = -lrejson -lrmutil -ljsonsl -lm
-
 LIBS = $(RM_INCLUDE_DIR)/librejson.a $(DEPS_DIR)/RedisModuleSDK/rmutil/librmutil.a $(DEPS_DIR)/jsonsl/libjsonsl.a -lm -lrt
+# Compile flags for linux / osx
+ifeq ($(uname_S),Linux)
+	LIBS += -lrt
+endif
 
 # TODO: add a test that uses json_printer on a JSON file and then validates the output
 # Building of json validator test
