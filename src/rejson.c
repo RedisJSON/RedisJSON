@@ -1470,6 +1470,7 @@ int JSONArrIndex_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int
     // validate path
     JSONType_t *jt = RedisModule_ModuleTypeGetValue(key);
     JSONPathNode_t *jpn = NULL;
+    Object *jo = NULL;
     if (PARSE_OK != NodeFromJSONPath(jt->root, argv[2], &jpn)) {
         ReplyWithSearchPathError(ctx, jpn);
         goto error;
@@ -1496,7 +1497,6 @@ int JSONArrIndex_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int
     }
 
     // create an object from json
-    Object *jo = NULL;
     char *jerr = NULL;
     if (JSONOBJECT_OK != CreateNodeFromJSON(json, jsonlen, &jo, &jerr)) {
         if (jerr) {
