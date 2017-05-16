@@ -166,7 +166,7 @@ inline static void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct json
                 break;
             case N_KEYVAL:
                 n = _popNode(joctx);                
-                joctx->nodes[joctx->nlen - 2]->value.kvval.val = n;
+                joctx->nodes[joctx->nlen - 1]->value.kvval.val = n;
                 n = _popNode(joctx);
                 Node_DictSetKeyVal(joctx->nodes[joctx->nlen - 1], n);
                 break;
