@@ -17,21 +17,16 @@
 
 #include "json_object.h"
 
-/* === Parser === */
-/* A custom context for the JSON lexer. */
-typedef struct {
-    jsonsl_error_t err;  // lexer error
-    size_t errpos;       // error position
-    Node **nodes;        // stack of created nodes
-    int nlen;            // size of node stack
-} JsonObjectContext;
+/* === JSONObjectCtx === */
+void resetJSONObjectCtx(JSONObjectCtx *ctx);
 
-static inline void _pushNode(JsonObjectContext *ctx, Node *n) {
+/* === Parser === */
+static inline void _pushNode(_JsonParserContext *ctx, Node *n) {
     ctx->nodes[ctx->nlen] = n;
     ctx->nlen++;
 }
 
-static inline Node *_popNode(JsonObjectContext *ctx) {
+static inline Node *_popNode(_JsonParserContext *ctx) {
     ctx->nlen--;
     return ctx->nodes[ctx->nlen];
 }
@@ -41,27 +36,27 @@ static int _AllowedEscapes[];
 static int _IsAllowedWhitespace(unsigned c);
 
 inline static int errorCallback(jsonsl_t jsn, jsonsl_error_t err, struct jsonsl_state_st *state, char *errat) {
-    JsonObjectContext *joctx = (JsonObjectContext *)jsn->data;
+    _JsonParserContext *jpctx = (_JsonParserContext *)jsn->data;
 
-    joctx->err = err;
-    joctx->errpos = state->pos_cur;
+    jpctx->err = err;
+    jpctx->errpos = state->pos_cur;
     jsonsl_stop(jsn);
     return 0;
 }
 
 inline static void pushCallback(jsonsl_t jsn, jsonsl_action_t action, struct jsonsl_state_st *state,
                   const jsonsl_char_t *at) {
-    JsonObjectContext *joctx = (JsonObjectContext *)jsn->data;
+    _JsonParserContext *jpctx = (_JsonParserContext *)jsn->data;
     Node *n = NULL;
     // only objects (dictionaries) and lists (arrays) create a container on push
     switch (state->type) {
         case JSONSL_T_OBJECT:
             n = NewDictNode(1);
-            _pushNode(joctx, n);
+            _pushNode(jpctx, n);
             break;
         case JSONSL_T_LIST:
             n = NewArrayNode(1);
-            _pushNode(joctx, n);
+            _pushNode(jpctx, n);
             break;
         default:
             break;
@@ -70,7 +65,7 @@ inline static void pushCallback(jsonsl_t jsn, jsonsl_action_t action, struct jso
 
 inline static void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct jsonsl_state_st *state,
                  const jsonsl_char_t *at) {
-    JsonObjectContext *joctx = (JsonObjectContext *)jsn->data;
+    _JsonParserContext *jpctx = (_JsonParserContext *)jsn->data;
     const char *pos = jsn->base + state->pos_begin;  // element starting position
     size_t len = state->pos_cur - state->pos_begin;  // element length
 
@@ -103,7 +98,7 @@ inline static void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct json
         Node *n;
         if (JSONSL_T_STRING == state->type) n = NewStringNode(pos, len);
         else n = NewKeyValNode(pos, len, NULL);  // NULL is a placeholder for now
-        _pushNode(joctx, n);
+        _pushNode(jpctx, n);
 
         if (buffer) RedisModule_Free(buffer);
     }
@@ -126,7 +121,7 @@ inline static void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct json
                         errorCallback(jsn, JSONSL_ERROR_INVALID_NUMBER, state, NULL);
                         return;
                 }
-                _pushNode(joctx, NewDoubleNode(value));
+                _pushNode(jpctx, NewDoubleNode(value));
             } else {
                 // convert long long (int64_t)
                 long long value;
@@ -142,33 +137,33 @@ inline static void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct json
                         return;
                 }
 
-                _pushNode(joctx, NewIntNode((int64_t)value));
+                _pushNode(jpctx, NewIntNode((int64_t)value));
             }
         } else if (state->special_flags & JSONSL_SPECIALf_BOOLEAN) {
-            _pushNode(joctx, NewBoolNode(state->special_flags & JSONSL_SPECIALf_TRUE));
+            _pushNode(jpctx, NewBoolNode(state->special_flags & JSONSL_SPECIALf_TRUE));
         } else if (state->special_flags & JSONSL_SPECIALf_NULL) {
-            _pushNode(joctx, NULL);
+            _pushNode(jpctx, NULL);
         }
     }
 
     // anything that pops needs to be set in its parent, except the root element and keys
-    if (joctx->nlen > 1 && state->type != JSONSL_T_HKEY) {
-        NodeType p = joctx->nodes[joctx->nlen - 2]->type;
+    if (jpctx->nlen > 1 && state->type != JSONSL_T_HKEY) {
+        NodeType p = jpctx->nodes[jpctx->nlen - 2]->type;
         Node *n = NULL;
         switch (p) {
             case N_DICT:
-                n = _popNode(joctx);
-                Node_DictSetKeyVal(joctx->nodes[joctx->nlen - 1], n);
+                n = _popNode(jpctx);
+                Node_DictSetKeyVal(jpctx->nodes[jpctx->nlen - 1], n);
                 break;
             case N_ARRAY:
-                n = _popNode(joctx);
-                Node_ArrayAppend(joctx->nodes[joctx->nlen - 1], n);
+                n = _popNode(jpctx);
+                Node_ArrayAppend(jpctx->nodes[jpctx->nlen - 1], n);
                 break;
             case N_KEYVAL:
-                n = _popNode(joctx);                
-                joctx->nodes[joctx->nlen - 1]->value.kvval.val = n;
-                n = _popNode(joctx);
-                Node_DictSetKeyVal(joctx->nodes[joctx->nlen - 1], n);
+                n = _popNode(jpctx);                
+                jpctx->nodes[jpctx->nlen - 1]->value.kvval.val = n;
+                n = _popNode(jpctx);
+                Node_DictSetKeyVal(jpctx->nodes[jpctx->nlen - 1], n);
                 break;
             default:
                 break;
@@ -176,9 +171,7 @@ inline static void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct json
     }
 }
 
-int CreateNodeFromJSON(const char *buf, size_t len, Node **node, char **err) {
-    int levels = JSONSL_MAX_LEVELS;  // TODO: heur levels from len since we're not really streaming?
-
+int CreateNodeFromJSON(JSONObjectCtx *ctx, const char *buf, size_t len, Node **node, char **err) {
     size_t _off = 0, _len = len;
     char *_buf = (char *)buf;
     int is_scalar = 0;
@@ -198,38 +191,27 @@ int CreateNodeFromJSON(const char *buf, size_t len, Node **node, char **err) {
         memcpy(&_buf[1], &buf[_off], len - _off);
     }
 
-    /* The lexer. */
-    jsonsl_t jsn = jsonsl_new(levels);
-    jsn->error_callback = errorCallback;
-    jsn->action_callback_POP = popCallback;
-    jsn->action_callback_PUSH = pushCallback;
-    jsonsl_enable_all_callbacks(jsn);
-
-    /* Set up our custom context. */
-    JsonObjectContext *joctx = RedisModule_Calloc(1, sizeof(JsonObjectContext));
-    joctx->nodes = RedisModule_Calloc(levels, sizeof(Node *));
-    jsn->data = joctx;
-
-    /* Feed the lexer. */
-    jsonsl_feed(jsn, _buf, _len);
+    /* Reset all and feed the lexer. */
+    resetJSONObjectCtx(ctx);
+    jsonsl_feed(ctx->parser, _buf, _len);
 
     /* Check for lexer errors. */
     sds serr = sdsempty();
-    if (JSONSL_ERROR_SUCCESS != joctx->err) {
+    if (JSONSL_ERROR_SUCCESS != ctx->pctx->err) {
         serr = sdscatprintf(serr, "ERR JSON lexer error %s at position %zd",
-                            jsonsl_strerror(joctx->err), joctx->errpos + 1);
+                            jsonsl_strerror(ctx->pctx->err), ctx->pctx->errpos + 1);
         goto error;
     }
 
     /* Verify that parsing had ended at level 0. */
-    if (jsn->level) {
+    if (ctx->parser->level) {
         serr = sdscatprintf(serr, "ERR JSON value incomplete - %u containers unterminated",
-                            jsn->level);
+                            ctx->parser->level);
         goto error;
     }
 
     /* Verify that an element. */
-    if (!jsn->stack[0].nelem) {
+    if (!ctx->parser->stack[0].nelem) {
         serr = sdscatprintf(serr, "ERR JSON value not found");
         goto error;
     }
@@ -237,18 +219,15 @@ int CreateNodeFromJSON(const char *buf, size_t len, Node **node, char **err) {
     /* Finalize. */
     if (is_scalar) {
         // extract the scalar and discard the wrapper array
-        Node_ArrayItem(joctx->nodes[0], 0, node);
-        Node_ArraySet(joctx->nodes[0], 0, NULL);
-        Node_Free(_popNode(joctx));
+        Node_ArrayItem(ctx->pctx->nodes[0], 0, node);
+        Node_ArraySet(ctx->pctx->nodes[0], 0, NULL);
+        Node_Free(_popNode(ctx->pctx));
         RedisModule_Free(_buf);
     } else {
-        *node = _popNode(joctx);
+        *node = _popNode(ctx->pctx);
     }
 
     sdsfree(serr);
-    RedisModule_Free(joctx->nodes);
-    RedisModule_Free(joctx);
-    jsonsl_destroy(jsn);
 
     return JSONOBJECT_OK;
 
@@ -259,16 +238,13 @@ error:
     }
 
     // free any nodes that are in the stack
-    while (joctx->nlen) Node_Free(_popNode(joctx));
+    while (ctx->pctx->nlen) Node_Free(_popNode(ctx->pctx));
 
     // if this is a scalar, we need to release the temporary buffer
     if (is_scalar)
         RedisModule_Free(_buf);    
 
     sdsfree(serr);
-    RedisModule_Free(joctx->nodes);
-    RedisModule_Free(joctx);
-    jsonsl_destroy(jsn);
 
     return JSONOBJECT_ERROR;
 }
@@ -447,6 +423,49 @@ void SerializeNodeToJSON(const Node *node, const JSONSerializeOpt *opt, sds *jso
     sdsfree(b->spacestr);
     sdsfree(b->delimstr);
     RedisModule_Free(b);
+}
+
+/* JSONObjectContext */
+JSONObjectCtx *NewJSONObjectCtx(int levels) {
+    JSONObjectCtx *ret = RedisModule_Calloc(1, sizeof(JSONObjectCtx));
+
+    // Parser setup
+    if (0 >= levels || JSONSL_MAX_LEVELS < levels) {
+        // default to maximium if given a negative, 0 or a value greater than maximum
+        ret->levels = JSONSL_MAX_LEVELS;
+    } else {
+        ret->levels = levels;
+    }
+    ret->parser = jsonsl_new(ret->levels);
+    ret->parser->error_callback = errorCallback;
+    ret->parser->action_callback_POP = popCallback;
+    ret->parser->action_callback_PUSH = pushCallback;
+    jsonsl_enable_all_callbacks(ret->parser);
+
+    // Parser context setup
+    ret->pctx = RedisModule_Calloc(1, sizeof(_JsonParserContext));
+    ret->pctx->nodes = RedisModule_Calloc(ret->levels, sizeof(Node *));
+    ret->parser->data = ret->pctx;
+
+    return ret;
+}
+
+void resetJSONObjectCtx(JSONObjectCtx *ctx) {
+    _JsonParserContext *jpctx = (_JsonParserContext *)ctx->pctx;
+    jpctx->err = JSONSL_ERROR_SUCCESS;
+    jpctx->errpos = 0;
+    jpctx->nlen = 0;
+    ctx->parser->stack[0].nelem = 0;
+    jsonsl_reset(ctx->parser);
+}
+
+void FreeJSONObjectCtx(JSONObjectCtx *ctx) {
+    if (ctx) {
+        RedisModule_Free(ctx->pctx->nodes);
+        RedisModule_Free(ctx->pctx);      
+        jsonsl_destroy(ctx->parser);
+        RedisModule_Free(ctx);
+    }
 }
 
 // clang-format off

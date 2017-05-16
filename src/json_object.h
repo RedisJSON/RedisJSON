@@ -34,6 +34,24 @@
 
 #define JSONOBJECT_MAX_ERROR_STRING_LENGTH 256
 
+/* A custom context for the JSON parser. */
+typedef struct {
+    jsonsl_error_t err;  // parser error
+    size_t errpos;       // error position
+    Node **nodes;        // stack of created nodes
+    int nlen;            // size of node stack
+} _JsonParserContext;
+
+/* A context for JSON objects. */
+typedef struct {
+    int levels;                 // the maximum number of levels up to JSONSL_MAX_LEVELS, 0 for that
+    jsonsl_t parser;            // the parser
+    _JsonParserContext *pctx;   // the parser's custom context
+} JSONObjectCtx;
+
+JSONObjectCtx *NewJSONObjectCtx(int levels);
+void FreeJSONObjectCtx(JSONObjectCtx *ctx);
+
 /**
 * Parses a JSON stored in `buf` of size `len` and creates an object.
 * The resulting object tree is stored in `node` and in case of error the optional `err` is set with
@@ -42,7 +60,7 @@
 * Note: the JSONic 'null' is represented internally as NULL, so `node` can be NULL even when the
 *       return code is JSONOBJECT_OK.
 */
-int CreateNodeFromJSON(const char *buf, size_t len, Node **node, char **err);
+int CreateNodeFromJSON(JSONObjectCtx *ctx, const char *buf, size_t len, Node **node, char **err);
 
 typedef struct {
     char *indentstr;   // indentation string

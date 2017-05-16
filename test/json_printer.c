@@ -25,7 +25,8 @@ int main(int argc, char **argv) {
 
     Node *n = NULL;
     char *err = NULL;
-    int ret = CreateNodeFromJSON(json, len, &n, &err);
+    JSONObjectCtx *joctx = NewJSONObjectCtx(0);
+    int ret = CreateNodeFromJSON(joctx, json, len, &n, &err);
 
     if (ret || err) {
         ret = 1;
@@ -49,5 +50,6 @@ int main(int argc, char **argv) {
     if (err) free(err);
     if (n) Node_Free(n);
     free(json);
+    FreeJSONObjectCtx(joctx);
     return ret;
 }

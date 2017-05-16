@@ -11,124 +11,143 @@
 MU_TEST(test_jo_create_literal_null) {
     Node *n;
     const char *json = "null";
+    JSONObjectCtx *joctx = NewJSONObjectCtx(0);
 
-    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(json, strlen(json), &n, NULL));
+    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(joctx, json, strlen(json), &n, NULL));
     mu_check(NULL == n);
+
+    FreeJSONObjectCtx(joctx);
 }
 
 MU_TEST(test_jo_create_literal_true) {
     Node *n;
     const char *json = "true";
+    JSONObjectCtx *joctx = NewJSONObjectCtx(0);
 
-    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(json, strlen(json), &n, NULL));
+    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(joctx, json, strlen(json), &n, NULL));
     mu_check(N_BOOLEAN == n->type);
     mu_check(n->value.boolval);
+
+    FreeJSONObjectCtx(joctx);
     Node_Free(n);
 }
 
 MU_TEST(test_jo_create_literal_false) {
     Node *n;
     const char *json = "false";
+    JSONObjectCtx *joctx = NewJSONObjectCtx(0);
 
-    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(json, strlen(json), &n, NULL));
+    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(joctx, json, strlen(json), &n, NULL));
     mu_check(N_BOOLEAN == n->type);
     mu_check(!n->value.boolval);
+
+    FreeJSONObjectCtx(joctx);
     Node_Free(n);
 }
 
 MU_TEST(test_jo_create_literal_integer) {
     Node *n;
     const char *json;
+    JSONObjectCtx *joctx = NewJSONObjectCtx(0);
 
     json = "0";
-    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(json, strlen(json), &n, NULL));
+    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(joctx, json, strlen(json), &n, NULL));
     mu_check(NULL != n);
     mu_check(N_INTEGER == n->type);
     mu_assert_int_eq(0, n->value.intval);
     Node_Free(n);
 
     json = "-0";
-    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(json, strlen(json), &n, NULL));
+    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(joctx, json, strlen(json), &n, NULL));
     mu_check(NULL != n);
     mu_check(N_INTEGER == n->type);
     mu_assert_int_eq(0, n->value.intval);
     Node_Free(n);
 
     json = "6379";
-    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(json, strlen(json), &n, NULL));
+    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(joctx, json, strlen(json), &n, NULL));
     mu_check(NULL != n);
     mu_check(N_INTEGER == n->type);
     mu_assert_int_eq(6379, n->value.intval);
     Node_Free(n);
 
     json = "-42";
-    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(json, strlen(json), &n, NULL));
+    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(joctx, json, strlen(json), &n, NULL));
     mu_check(NULL != n);
     mu_check(N_INTEGER == n->type);
     mu_assert_int_eq(-42, n->value.intval);
+
+    FreeJSONObjectCtx(joctx);
     Node_Free(n);
 }
 
 MU_TEST(test_jo_create_literal_double) {
     Node *n;
     const char *json;
+    JSONObjectCtx *joctx = NewJSONObjectCtx(0);
 
     json = "0.0";
-    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(json, strlen(json), &n, NULL));
+    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(joctx, json, strlen(json), &n, NULL));
     mu_check(NULL != n);
     mu_check(N_NUMBER == n->type);
     mu_assert_double_eq(0, n->value.numval);
     Node_Free(n);
 
     json = "-0.0";
-    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(json, strlen(json), &n, NULL));
+    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(joctx, json, strlen(json), &n, NULL));
     mu_check(NULL != n);
     mu_check(N_NUMBER == n->type);
     mu_assert_double_eq(0, n->value.numval);
     Node_Free(n);
 
     json = "63.79";
-    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(json, strlen(json), &n, NULL));
+    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(joctx, json, strlen(json), &n, NULL));
     mu_check(NULL != n);
     mu_check(N_NUMBER == n->type);
     mu_assert_double_eq(63.79, n->value.numval);
     Node_Free(n);
 
     json = "-4.2";
-    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(json, strlen(json), &n, NULL));
+    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(joctx, json, strlen(json), &n, NULL));
     mu_check(NULL != n);
     mu_check(N_NUMBER == n->type);
     mu_assert_double_eq(-4.2, n->value.numval);
     Node_Free(n);
 
     // TODO: check more notations
+
+    FreeJSONObjectCtx(joctx);
 }
 
 MU_TEST(test_jo_create_literal_string) {
     Node *n;
     const char *json = "\"foo\"";
+    JSONObjectCtx *joctx = NewJSONObjectCtx(0);
 
-    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(json, strlen(json), &n, NULL));
+    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(joctx, json, strlen(json), &n, NULL));
     mu_check(NULL != n);
     mu_check(N_STRING == n->type);
     mu_check(0 == strncmp("foo", n->value.strval.data, n->value.strval.len));
     Node_Free(n);
 
     // TODO: more weird chars
+
+    FreeJSONObjectCtx(joctx);
 }
 
 MU_TEST(test_jo_create_literal_dict) {
     Node *n;
     const char *json = "{}";
+    JSONObjectCtx *joctx = NewJSONObjectCtx(0);
 
-    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(json, strlen(json), &n, NULL));
+    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(joctx, json, strlen(json), &n, NULL));
     mu_check(NULL != n);
     mu_check(N_DICT == n->type);
     mu_assert_int_eq(0, n->value.dictval.len);
     Node_Free(n);
 
     json = "{" _JSTR(foo) ": " _JSTR(bar) "}";
-    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(json, strlen(json), &n, NULL));
+    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(joctx, json, strlen(json), &n, NULL));
     mu_check(NULL != n);
     mu_check(N_DICT == n->type);
     mu_assert_int_eq(1, n->value.dictval.len);
@@ -138,29 +157,34 @@ MU_TEST(test_jo_create_literal_dict) {
                 _JSTR(foo) ": " _JSTR(bar) ", "
                 _JSTR(baz) ": " "42"
             "}";
-    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(json, strlen(json), &n, NULL));
+    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(joctx, json, strlen(json), &n, NULL));
     mu_check(NULL != n);
     mu_check(N_DICT == n->type);
     mu_assert_int_eq(2, n->value.dictval.len);
     Node_Free(n);
+
+    FreeJSONObjectCtx(joctx);
 }
 
 MU_TEST(test_jo_create_literal_array) {
     Node *n;
     const char *json = "[]";
+    JSONObjectCtx *joctx = NewJSONObjectCtx(0);
 
-    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(json, strlen(json), &n, NULL));
+    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(joctx, json, strlen(json), &n, NULL));
     mu_check(NULL != n);
     mu_check(N_ARRAY == n->type);
     mu_assert_int_eq(0, n->value.arrval.len);
     Node_Free(n);
 
     json = "[" _JSTR(foo) ", " _JSTR(bar) ", 42]";
-    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(json, strlen(json), &n, NULL));
+    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(joctx, json, strlen(json), &n, NULL));
     mu_check(NULL != n);
     mu_check(N_ARRAY == n->type);
     mu_assert_int_eq(3, n->value.dictval.len);
     Node_Free(n);
+
+    FreeJSONObjectCtx(joctx);
 }
 
 MU_TEST(test_jo_create_object) {
@@ -178,7 +202,9 @@ MU_TEST(test_jo_create_object) {
         "}";
 
     Node *n1, *n2, *n3, *n4;
-    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(SampleJSON, strlen(SampleJSON), &n1, NULL));
+    JSONObjectCtx *joctx = NewJSONObjectCtx(0);
+
+    mu_check(JSONOBJECT_OK == CreateNodeFromJSON(joctx, SampleJSON, strlen(SampleJSON), &n1, NULL));
     mu_check(n1);
     mu_check(N_DICT == n1->type);
     mu_check(1 == n1->value.dictval.len);
@@ -211,6 +237,8 @@ MU_TEST(test_jo_create_object) {
     mu_check(0 == strncmp("qux", n4->value.strval.data, n4->value.strval.len));
 
     Node_Free(n1);
+
+    FreeJSONObjectCtx(joctx);
 }
 
 MU_TEST(test_oj_null) {

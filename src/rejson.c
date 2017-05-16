@@ -18,6 +18,13 @@
 
 #include "rejson.h"
 
+// A struct to keep module the module context
+typedef struct {
+    JSONObjectCtx *joctx;
+} ModuleCtx;
+
+static ModuleCtx JSONCtx = (ModuleCtx){ 0 };
+
 // == Helpers ==
 #define NODEVALUE_AS_DOUBLE(n) (N_INTEGER == n->type ? (double)n->value.intval : n->value.numval)
 #define NODETYPE(n) (n ? n->type : N_NULL)
@@ -566,7 +573,7 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     }
 
     // Create object from json
-    if (JSONOBJECT_OK != CreateNodeFromJSON(json, jsonlen, &jo, &jerr)) {
+    if (JSONOBJECT_OK != CreateNodeFromJSON(JSONCtx.joctx, json, jsonlen, &jo, &jerr)) {
         if (jerr) {
             RedisModule_ReplyWithError(ctx, jerr);
             RedisModule_Free(jerr);
@@ -1053,7 +1060,7 @@ int JSONNum_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
     size_t vallen;
     const char *val = RedisModule_StringPtrLen(argv[(4 == argc ? 3 : 2)], &vallen);
     char *jerr = NULL;
-    if (JSONOBJECT_OK != CreateNodeFromJSON(val, vallen, &joval, &jerr)) {
+    if (JSONOBJECT_OK != CreateNodeFromJSON(JSONCtx.joctx, val, vallen, &joval, &jerr)) {
         if (jerr) {
             RedisModule_ReplyWithError(ctx, jerr);
             RedisModule_Free(jerr);
@@ -1193,7 +1200,7 @@ int JSONStrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
     // make an object from the JSON value
     Object *jo = NULL;
     char *jerr = NULL;
-    if (JSONOBJECT_OK != CreateNodeFromJSON(json, jsonlen, &jo, &jerr)) {
+    if (JSONOBJECT_OK != CreateNodeFromJSON(JSONCtx.joctx, json, jsonlen, &jo, &jerr)) {
         if (jerr) {
             RedisModule_ReplyWithError(ctx, jerr);
             RedisModule_Free(jerr);
@@ -1302,7 +1309,7 @@ int JSONArrInsert_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
         // create object from json
         Object *jo = NULL;
         char *jerr = NULL;
-        if (JSONOBJECT_OK != CreateNodeFromJSON(json, jsonlen, &jo, &jerr)) {
+        if (JSONOBJECT_OK != CreateNodeFromJSON(JSONCtx.joctx, json, jsonlen, &jo, &jerr)) {
             Node_Free(sub);
             if (jerr) {
                 RedisModule_ReplyWithError(ctx, jerr);
@@ -1398,7 +1405,7 @@ int JSONArrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
         // create object from json
         Object *jo = NULL;
         char *jerr = NULL;
-        if (JSONOBJECT_OK != CreateNodeFromJSON(json, jsonlen, &jo, &jerr)) {
+        if (JSONOBJECT_OK != CreateNodeFromJSON(JSONCtx.joctx, json, jsonlen, &jo, &jerr)) {
             Node_Free(sub);
             if (jerr) {
                 RedisModule_ReplyWithError(ctx, jerr);
@@ -1498,7 +1505,7 @@ int JSONArrIndex_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int
 
     // create an object from json
     char *jerr = NULL;
-    if (JSONOBJECT_OK != CreateNodeFromJSON(json, jsonlen, &jo, &jerr)) {
+    if (JSONOBJECT_OK != CreateNodeFromJSON(JSONCtx.joctx, json, jsonlen, &jo, &jerr)) {
         if (jerr) {
             RedisModule_ReplyWithError(ctx, jerr);
             RedisModule_Free(jerr);
@@ -1723,22 +1730,8 @@ error:
     return REDISMODULE_ERR;
 }
 
-int RedisModule_OnLoad(RedisModuleCtx *ctx) {
-    // Register the module
-    if (RedisModule_Init(ctx, RLMODULE_NAME, 1, REDISMODULE_APIVER_1) == REDISMODULE_ERR)
-        return REDISMODULE_ERR;
-
-    // Register the JSON data type
-    RedisModuleTypeMethods tm = { .version = REDISMODULE_TYPE_METHOD_VERSION,
-                                  .rdb_load = JSONTypeRdbLoad,
-                                  .rdb_save = JSONTypeRdbSave,
-                                  .aof_rewrite = JSONTypeAofRewrite,
-                                  .mem_usage = JSONTypeMemoryUsage,
-                                  .free = JSONTypeFree };
-    JSONType = RedisModule_CreateDataType(ctx, JSONTYPE_NAME, JSONTYPE_ENCODING_VERSION, &tm);
-    if (NULL == JSONType) return REDISMODULE_ERR;
-
-    /* Module commands. */
+/* Creates the module's commands. */
+int Module_CreateCommands(RedisModuleCtx *ctx) {
     /* Generic JSON type commands. */
     if (RedisModule_CreateCommand(ctx, "json.resp", JSONResp_RedisCommand, "readonly", 1, 1, 1) ==
         REDISMODULE_ERR)
@@ -1822,6 +1815,31 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
 
     if (RedisModule_CreateCommand(ctx, "json.objkeys", JSONObjKeys_RedisCommand, "readonly", 1, 1,
                                   1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
+
+    return REDISMODULE_OK;
+}
+
+int RedisModule_OnLoad(RedisModuleCtx *ctx) {
+    // Register the module
+    if (RedisModule_Init(ctx, RLMODULE_NAME, 1, REDISMODULE_APIVER_1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
+
+    // Register the JSON data type
+    RedisModuleTypeMethods tm = { .version = REDISMODULE_TYPE_METHOD_VERSION,
+                                  .rdb_load = JSONTypeRdbLoad,
+                                  .rdb_save = JSONTypeRdbSave,
+                                  .aof_rewrite = JSONTypeAofRewrite,
+                                  .mem_usage = JSONTypeMemoryUsage,
+                                  .free = JSONTypeFree };
+    JSONType = RedisModule_CreateDataType(ctx, JSONTYPE_NAME, JSONTYPE_ENCODING_VERSION, &tm);
+    if (NULL == JSONType) return REDISMODULE_ERR;
+
+    // Initialize the module's context
+    JSONCtx.joctx = NewJSONObjectCtx(0); 
+
+    // Create the commands
+    if (REDISMODULE_ERR == Module_CreateCommands(ctx))
         return REDISMODULE_ERR;
 
     RM_LOG_WARNING(ctx, "%s v%d.%d.%d [encver %d]", RLMODULE_DESC, PROJECT_VERSION_MAJOR,
