@@ -22,8 +22,7 @@
 typedef struct {
     JSONObjectCtx *joctx;
 } ModuleCtx;
-
-static ModuleCtx JSONCtx = (ModuleCtx){ 0 };
+static ModuleCtx JSONCtx;
 
 // == Helpers ==
 #define NODEVALUE_AS_DOUBLE(n) (N_INTEGER == n->type ? (double)n->value.intval : n->value.numval)
@@ -1836,6 +1835,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
     if (NULL == JSONType) return REDISMODULE_ERR;
 
     // Initialize the module's context
+    JSONCtx = (ModuleCtx){0};
     JSONCtx.joctx = NewJSONObjectCtx(0); 
 
     // Create the commands
