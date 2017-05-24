@@ -2,10 +2,14 @@
 
 # ReJSON - a JSON data type for Redis
 
-ReJSON is a [Redis](http://redis.io/) module that implements
-[ECMA-404 The JSON Data Interchange Standard](http://json.org/) as a native data type. It allows
-storing, updating and fetching JSON values from Redis keys (documents). JSON values are managed
-as binary objects, thus allowing Redis-blazing performance. 
+ReJSON is a [Redis](http://redis.io/) module that implements [ECMA-404 The JSON Data Interchange Standard](http://json.org/) as a native data type. It allows storing, updating and fetching JSON values from Redis keys (documents).
+
+Primary features:
+
+* Full support of the JSON standard
+* [JSONPath](http://goessner.net/articles/JsonPath/)-like syntax for selecting element inside documents
+* Documents are stored as binary data in a tree structure, allowing fast access to sub-elements
+* Typed atomic operations for all JSON values types
 
 ## Quickstart
 

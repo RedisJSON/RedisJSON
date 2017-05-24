@@ -4,17 +4,13 @@
 
 ### Supported JSON
 
-ReJSON aims at providing full support for
-[ECMA-404 The JSON Data Interchange Standard](http://json.org/).
+ReJSON aims at providing full support for [ECMA-404 The JSON Data Interchange Standard](http://json.org/).
 
-In the below, the term _JSON Value_ refers to any of the valid values. A _Container_ is either a
-_JSON Array_ or a _JSON Object_. A _JSON Scalar_ is a _JSON Number_, a _JSON String_ or a literal
-(_JSON False_, _JSON True_ or _JSON Null_).
+In the below, the term _JSON Value_ refers to any of the valid values. A _Container_ is either a _JSON Array_ or a _JSON Object_. A _JSON Scalar_ is a _JSON Number_, a _JSON String_ or a literal (_JSON False_, _JSON True_ or _JSON Null_).
 
 ### ReJSON API
 
-Each of the module's commands is described in detail in the sections below. Each command section's
-header is the syntax for the command, where:
+Each of the module's commands is described in detail in the sections below. Each command section's header is the syntax for the command, where:
 
 *   Command and subcommand names are in uppercase, for example `JSON.SET` or `INDENT`
 *   Mandatory arguments are enclosed in angle brackets, e.g. `<path>`
@@ -22,11 +18,9 @@ header is the syntax for the command, where:
 *   Additional optional arguments are indicated by three period characters, i.e. `...`
 *   The pipe character, `|`, means an exclusive or
 
-Commands usually require a key's name as their first argument and the [path](path.md) is generally
-assumed to be the root if not specified.
+Commands usually require a key's name as their first argument and the [path](path.md) is generally assumed to be the root if not specified.
 
-The time complexity of the command does not include that of the
-[path](path.md#time-complexity-of-path-evaluation). The size - usually denoted _N_ - of a value is:
+The time complexity of the command does not include that of the [path](path.md#time-complexity-of-path-evaluation). The size - usually denoted _N_ - of a value is:
 
 *   1 for scalar values
 *   The sum of sizes items in a container
@@ -47,8 +41,7 @@ JSON.DEL <key> <path>
 
 Delete a value.
 
-`path` defaults to root if not provided. Non-existing keys as well as non-existing paths are
-ignored. Deleting an object's root is equivalent to deleting the key from Redis.
+`path` defaults to root if not provided. Non-existing keys as well as non-existing paths are ignored. Deleting an object's root is equivalent to deleting the key from Redis.
 
 ### Return value
 
@@ -62,7 +55,11 @@ ignored. Deleting an object's root is equivalent to deleting the key from Redis.
 ### Syntax
 
 ```
-JSON.GET <key> [INDENT indentation-string] [NEWLINE line-break-string] [SPACE space-string] [path ...]
+JSON.GET <key>
+         [INDENT indentation-string]
+         [NEWLINE line-break-string]
+         [SPACE space-string]
+         [path ...]
 ```
 
 ### Description
@@ -87,9 +84,7 @@ Pretty-formatted JSON is producable with `redis-cli` by following this example:
 
 [Bulk String][3], specifically the JSON serialization.
 
-The reply's structure depends on the on the number of paths. A single path results in the value
-being itself is returned, whereas multiple paths are returned as a JSON object in which each path
-is a key.
+The reply's structure depends on the on the number of paths. A single path results in the value being itself is returned, whereas multiple paths are returned as a JSON object in which each path is a key.
 
 ## JSON.MGET
 
@@ -104,8 +99,7 @@ JSON.MGET <key> [key ...] <path>
 
 ### Description
 
-Returns the values at `path` from multiple `key`s. Non-existing keys and non-existing paths are
-reported as null.
+Returns the values at `path` from multiple `key`s. Non-existing keys and non-existing paths are reported as null.
 
 ### Return value
 
@@ -121,19 +115,17 @@ path.
 ### Syntax
 
 ```
-JSON.SET <key> <path> <json> [NX|XX]
+JSON.SET <key> <path> <json>
+         [NX | XX]
 ```
 
 ### Description
 
 Sets the JSON value at `path` in `key`
 
-For new Redis keys the `path` must be the root. For existing keys, when the entire `path` exists,
-the value that it contains is replaced with the `json` value.
+For new Redis keys the `path` must be the root. For existing keys, when the entire `path` exists, the value that it contains is replaced with the `json` value.
 
-A key (with its respective value) is added to a JSON Object (in a Redis ReJSON data type key) if
-and only if it is the last child in the `path`. The optional subcommands modify this behavior for
-both new Redis ReJSON data type keys as well as JSON Object keys in them:
+A key (with its respective value) is added to a JSON Object (in a Redis ReJSON data type key) if and only if it is the last child in the `path`. The optional subcommands modify this behavior for both new Redis ReJSON data type keys as well as JSON Object keys in them:
 
 *   `NX` - only set the key if it does not already exists
 *   `XX` - only set the key if it already exists
@@ -276,11 +268,9 @@ JSON.ARRINDEX <key> <path> <json-scalar> [start [stop]]
 
 Search for the first occurance of a scalar JSON value in an array.
 
-The optional inclusive `start` (default 0) and exclusive `stop` (default 0, meaning that the last
-element is included) specify a slice of the array to search.
+The optional inclusive `start` (default 0) and exclusive `stop` (default 0, meaning that the last element is included) specify a slice of the array to search.
 
-Note: out of range errors are treated by rounding the index to the array's start and end. An
-inverse index range (e.g, from 1 to 0) will return unfound.
+Note: out of range errors are treated by rounding the index to the array's start and end. An inverse index range (e.g, from 1 to 0) will return unfound.
 
 ### Return value
 
@@ -301,8 +291,7 @@ JSON.ARRINSERT <key> <path> <index> <json> [json ...]
 
 Insert the `json` value(s) into the array at `path` before the `index` (shifts to the right).
 
-The index must be in the array's range. Inserting at `index` 0 prepends to the array. Negative
-index values are interpreted as starting from the end.
+The index must be in the array's range. Inserting at `index` 0 prepends to the array. Negative index values are interpreted as starting from the end.
 
 ### Return value
 
@@ -343,9 +332,7 @@ JSON.ARRPOP <key> [path [index]]
 
 Remove and return element from the index in the array.
 
-`path` defaults to root if not provided. `index` is the position in the array to start popping
-from (defaults to -1, meaning the last element). Out of range indices are rounded to their
-respective array ends. Popping an empty array yields null.
+`path` defaults to root if not provided. `index` is the position in the array to start popping from (defaults to -1, meaning the last element). Out of range indices are rounded to their respective array ends. Popping an empty array yields null.
 
 ### Return value
 
@@ -366,10 +353,7 @@ JSON.ARRTRIM <key> <path> <start> <stop>
 
 Trim an array so that it contains only the specified inclusive range of elements.
 
-This command is extremely forgiving and using it with out of range indexes will not produce an
-error. If `start` is larger than the array's size or `start` > `stop`, the result will be an empty
-array. If `start` is < 0 then it will be treated as 0. If end is larger than the end of the array,
-it will be treated like the last element in it.
+This command is extremely forgiving and using it with out of range indexes will not produce an error. If `start` is larger than the array's size or `start` > `stop`, the result will be an empty array. If `start` is < 0 then it will be treated as 0. If end is larger than the end of the array, it will be treated like the last element in it.
 
 ### Return value
 
@@ -390,8 +374,7 @@ JSON.OBJKEYS <key> [path]
 
 Return the keys in the object that's referenced by `path`.
 
-`path` defaults to root if not provided. If the object is empty, or either `key` or `path` do not
-exist then null is returned.
+`path` defaults to root if not provided. If the object is empty, or either `key` or `path` do not exist then null is returned.
 
 ### Return value
 
@@ -470,11 +453,8 @@ Return the JSON in `key` in [Redis Serialization Protocol (RESP)][5].
 -   JSON `false` and `true` values are mapped to the respective [RESP Simple Strings][1]
 -   JSON Numbers are mapped to [RESP Integers][2] or [RESP Bulk Strings][3], depending on type
 -   JSON Strings are mapped to [RESP Bulk Strings][3]
--   JSON Arrays are represented as [RESP Arrays][4] in which first element is the
-          [simple string][1] `[` followed by the array's elements
--   JSON Objects are represented as [RESP Arrays][4] in which first element is the
-          [simple string][1] `{`. Each successive entry represents a key-value pair as a two-entries
-          [array][4] of [bulk strings][3].
+-   JSON Arrays are represented as [RESP Arrays][4] in which first element is the [simple string][1] `[` followed by the array's elements
+-   JSON Objects are represented as [RESP Arrays][4] in which first element is the [simple string][1] `{`. Each successive entry represents a key-value pair as a two-entries [array][4] of [bulk strings][3].
 
 ### Return value
 
