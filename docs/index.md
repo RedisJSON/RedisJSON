@@ -10,7 +10,7 @@ Primary features:
 * Typed atomic operations for all JSON values types
 
 ReJSON is developed with <3 at [Redis Labs](https://redislabs.com). The source code is available
-from: https://github.com/RedisLabsModules/ReJSON
+at: https://github.com/RedisLabsModules/ReJSON
 
 ## Quickstart
 
@@ -24,7 +24,7 @@ from: https://github.com/RedisLabsModules/ReJSON
 
 ### Linux Ubuntu 16.04
 
-Prerequirements:
+Requirements:
 
 * The ReJSON repository: `git clone https://github.com/RedisLabsModules/rejson.git`
 * The `build-essential` package: `apt-get install build-essential`
@@ -41,17 +41,17 @@ Congratulations! You can find the compiled module library at `src/rejson.so`.
 
 ## Loading the module to Redis
 
-Prerequirements:
+Requirements:
 
 * [Redis v4.0 or above](http://redis.io/download)
 
-The recommended way have Redis load the module is during startup by by adding the following to the `redis.conf` file:
+We recommend you have Redis load the module during startup by adding the following to your `redis.conf` file:
 
 ```
 loadmodule /path/to/module/rejson.so
 ```
 
-In the line above replace `/path/to/module/rejson.so` with the actual path to the module's library. Alternatively you, you can have Redis load the module using the following command line argument syntax:
+In the line above replace `/path/to/module/rejson.so` with the actual path to the module's library. Alternatively, you can have Redis load the module using the following command line argument syntax:
 
 ```bash
 ~/$ redis-server --loadmodule /path/to/module/rejson.so
@@ -70,9 +70,9 @@ Once the module has been loaded successfully, the Redis log should have lines si
 
 ## Using ReJSON
 
-Before using ReJSON you should familiarize yourself with its commands and syntax as detailed in the [commands refernce](/commands) document. However, to quickly get started just review this section and get these two things:
+Before using ReJSON, you should familiarize yourself with its commands and syntax as detailed in the [commands reference](commands.md) document. However, to quickly get started just review this section and get:
 
-1.  A Redis server running the the module (see [building](#building-the-module-library) and [loading](#loading-the-module-to-Redis) for instructions)
+1.  A Redis server running the module (see [building](#building-the-module-library) and [loading](#loading-the-module-to-Redis) for instructions)
 1.  Any [Redis](http://redis.io/clients) or [ReJSON client](#rejson-clients)
 
 ### With `redis-cli`
@@ -88,7 +88,7 @@ OK
 string
 ```
 
-[`JSON.GET`](/commands#jsonget) and [`JSON.TYPE`](/commands#jsontype) do literally that regardless of the value's type, but you should really check out `JSON.GET` prettifying powers. Note how the commands are given the period character, i.e. `.`. This is the [path](path.md) to the value in the ReJSON data type and in this case it just means the root. A couple more of string operations:
+[`JSON.GET`](commands.md#jsonget) and [`JSON.TYPE`](commands.md#jsontype) do literally that regardless of the value's type, but you should really check out `JSON.GET` prettifying powers. Note how the commands are given the period character, i.e. `.`. This is the [path](path.md) to the value in the ReJSON data type (in this case it just means the root). A couple more string operations:
 
 ```
 127.0.0.1:6379> JSON.STRLEN foo .
@@ -115,7 +115,7 @@ OK
 "42"
 ```
 
-Of course, a more interesting example would involve an array or maybe an object. Because or isn't xor here goes:
+Of course, a more interesting example would involve an array or maybe an object:
 
 ```
 127.0.0.1:6379> JSON.SET amoreinterestingexample . '[ true, { "answer": 42 }, null ]'
@@ -168,7 +168,7 @@ OK
 
 ### With any other client
 
-Unless your [Redis client](http://redis.io/clients) already provides automatic integation with Redis modules (unlikely), or ReJSON's specifically (even unlikelier), you should be OK using the client's ability to send raw Redis commands. Depending on your client of choice the exact method for doing that may vary.
+Unless your [Redis client](http://redis.io/clients) already supports Redis modules (unlikely) or ReJSON specifically (even more unlikely), you should be okay using its ability to send raw Redis commands. Depending on your client of choice, the exact method for doing that may vary.
 
 #### Python example
 
@@ -189,10 +189,10 @@ reply = json.loads(r.execute_command('JSON.GET', 'doc'))
 
 ### Client libraries
 
-Some languages have client libraries that provide support for ReJSON's commands. The following is the list of these:
+Some languages have client libraries that provide support for ReJSON's commands:
 
 | Project | Language | License | Author | URL |
 | ------- | -------- | ------- | ------ | --- |
-| iorejson | Node.js | MIT | [Evan Huang @evanhuang8](https://github.com/evanhuang8) | [git](https://github.com/evanhuang8/iorejson) [npm](https://www.npmjs.com/package/iorejson) |
-| JReJSON | Java | BSD-2-Clause | [Redis Labs](https://redislabs.com) | [git](https://github.com/RedisLabs/JReJSON/) |
-| rejson-py | Python | BSD-2-Clause | [Redis Labs](https://redislabs.com) | [git](https://github.com/RedisLabs/rejson-py/) [pypi](https://pypi.python.org/pypi/rejson) |
+| iorejson | Node.js | [Evan Huang @evanhuang8](https://github.com/evanhuang8) | [git](https://github.com/evanhuang8/iorejson) [npm](https://www.npmjs.com/package/iorejson) |
+| JReJSON | Java | [Redis Labs](https://redislabs.com) | [git](https://github.com/RedisLabs/JReJSON/) |
+| rejson-py | Python | [Redis Labs](https://redislabs.com) | [git](https://github.com/RedisLabs/redis-py/) [pypi](https://pypi.python.org/pypi/rejson) |

@@ -1,16 +1,17 @@
-# ReJSON commands
+# ReJSON Commands
 
 ## Overview
 
 ### Supported JSON
 
-ReJSON aims at providing full support for [ECMA-404 The JSON Data Interchange Standard](http://json.org/).
+ReJSON aims to provide full support for [ECMA-404 The JSON Data Interchange Standard](http://json.org/).
 
-In the below, the term _JSON Value_ refers to any of the valid values. A _Container_ is either a _JSON Array_ or a _JSON Object_. A _JSON Scalar_ is a _JSON Number_, a _JSON String_ or a literal (_JSON False_, _JSON True_ or _JSON Null_).
+Below, the term _JSON Value_ refers to any of the valid values. A _Container_ is either a _JSON Array_ or a _JSON Object_. A _JSON Scalar_ is a _JSON Number_, a _JSON String_ or a literal (_JSON False_, _JSON True_ or _JSON Null_).
 
 ### ReJSON API
 
-Each of the module's commands is described in detail in the sections below. Each command section's header is the syntax for the command, where:
+Each of the module's commands is described below. Each section
+header shows the syntax for the command, where:
 
 *   Command and subcommand names are in uppercase, for example `JSON.SET` or `INDENT`
 *   Mandatory arguments are enclosed in angle brackets, e.g. `<path>`
@@ -18,12 +19,12 @@ Each of the module's commands is described in detail in the sections below. Each
 *   Additional optional arguments are indicated by three period characters, i.e. `...`
 *   The pipe character, `|`, means an exclusive or
 
-Commands usually require a key's name as their first argument and the [path](path.md) is generally assumed to be the root if not specified.
+Commands usually require a key's name as their first argument. The [path](path.md) is generally assumed to be the root if not specified.
 
 The time complexity of the command does not include that of the [path](path.md#time-complexity-of-path-evaluation). The size - usually denoted _N_ - of a value is:
 
 *   1 for scalar values
-*   The sum of sizes items in a container
+*   The sum of sizes of items in a container
 
 
 ## JSON.DEL
@@ -41,7 +42,7 @@ JSON.DEL <key> <path>
 
 Delete a value.
 
-`path` defaults to root if not provided. Non-existing keys as well as non-existing paths are ignored. Deleting an object's root is equivalent to deleting the key from Redis.
+`path` defaults to root if not provided. Non-existing keys and paths are ignored. Deleting an object's root is equivalent to deleting the key from Redis.
 
 ### Return value
 
@@ -68,12 +69,12 @@ Return the value at `path` in JSON serialized form.
 
 This command accepts multiple `path`s, and defaults to the value's root when none are given.
 
-The following subcommands change the reply's and are all set to the empty string by default:
+The following subcommands change the reply's format and are all set to the empty string by default:
 *   `INDENT` sets the indentation string for nested levels
 *   `NEWLINE` sets the string that's printed at the end of each line
 *   `SPACE` sets the string that's put between a key and a value
 
-Pretty-formatted JSON is producable with `redis-cli` by following this example:
+Pretty-formatted JSON is producible with `redis-cli` by following this example:
 
 ```
 ~/$ redis-cli --raw
@@ -84,7 +85,7 @@ Pretty-formatted JSON is producable with `redis-cli` by following this example:
 
 [Bulk String][3], specifically the JSON serialization.
 
-The reply's structure depends on the on the number of paths. A single path results in the value being itself is returned, whereas multiple paths are returned as a JSON object in which each path is a key.
+The reply's structure depends on the number of paths. A single path results in the value itself being returned, whereas multiple paths are returned as a JSON object in which each path is a key.
 
 ## JSON.MGET
 
@@ -125,9 +126,9 @@ Sets the JSON value at `path` in `key`
 
 For new Redis keys the `path` must be the root. For existing keys, when the entire `path` exists, the value that it contains is replaced with the `json` value.
 
-A key (with its respective value) is added to a JSON Object (in a Redis ReJSON data type key) if and only if it is the last child in the `path`. The optional subcommands modify this behavior for both new Redis ReJSON data type keys as well as JSON Object keys in them:
+A key (with its respective value) is added to a JSON Object (in a Redis ReJSON data type key) if and only if it is the last child in the `path`. The optional subcommands modify this behavior for both new Redis ReJSON data type keys as well as the JSON Object keys in them:
 
-*   `NX` - only set the key if it does not already exists
+*   `NX` - only set the key if it does not already exist
 *   `XX` - only set the key if it already exists
 
 ### Return value
@@ -266,15 +267,15 @@ Append the `json` value(s) into the array at `path` after the last element in it
 JSON.ARRINDEX <key> <path> <json-scalar> [start [stop]]
 ```
 
-Search for the first occurance of a scalar JSON value in an array.
+Search for the first occurrence of a scalar JSON value in an array.
 
 The optional inclusive `start` (default 0) and exclusive `stop` (default 0, meaning that the last element is included) specify a slice of the array to search.
 
-Note: out of range errors are treated by rounding the index to the array's start and end. An inverse index range (e.g, from 1 to 0) will return unfound.
+Note: out of range errors are treated by rounding the index to the array's start and end. An inverse index range (e.g. from 1 to 0) will return unfound.
 
 ### Return value
 
-[Integer][2], specifically the position of the scalar value in the array or -1 if unfound.
+[Integer][2], specifically the position of the scalar value in the array, or -1 if unfound.
 
 ## JSON.ARRINSERT
 
@@ -374,7 +375,7 @@ JSON.OBJKEYS <key> [path]
 
 Return the keys in the object that's referenced by `path`.
 
-`path` defaults to root if not provided. If the object is empty, or either `key` or `path` do not exist then null is returned.
+`path` defaults to root if not provided. If the object is empty, or either `key` or `path` do not exist, then null is returned.
 
 ### Return value
 
@@ -420,7 +421,7 @@ Supported subcommands are:
 
 *   `MEMORY <key> [path]` - report the memory usage in bytes of a value. `path` defaults to root if
     not provided.
-*   `HELP` - replies with a helpful message
+*   `HELP` - reply with a helpful message
 
 ### Return value
 
@@ -431,7 +432,7 @@ Depends on the subcommand used.
 
 ## JSON.FORGET
 
-This command is an alias for [`JSON.DEL`](#jsondel).
+An alias for [`JSON.DEL`](#jsondel).
 
 ## JSON.RESP
 
@@ -453,8 +454,8 @@ Return the JSON in `key` in [Redis Serialization Protocol (RESP)][5].
 -   JSON `false` and `true` values are mapped to the respective [RESP Simple Strings][1]
 -   JSON Numbers are mapped to [RESP Integers][2] or [RESP Bulk Strings][3], depending on type
 -   JSON Strings are mapped to [RESP Bulk Strings][3]
--   JSON Arrays are represented as [RESP Arrays][4] in which first element is the [simple string][1] `[` followed by the array's elements
--   JSON Objects are represented as [RESP Arrays][4] in which first element is the [simple string][1] `{`. Each successive entry represents a key-value pair as a two-entries [array][4] of [bulk strings][3].
+-   JSON Arrays are represented as [RESP Arrays][4] in which the first element is the [simple string][1] `[` followed by the array's elements
+-   JSON Objects are represented as [RESP Arrays][4] in which the first element is the [simple string][1] `{`. Each successive entry represents a key-value pair as a two-entries [array][4] of [bulk strings][3].
 
 ### Return value
 
