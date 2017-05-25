@@ -1,19 +1,22 @@
 site_name: ReJSON - a JSON data type for Redis
 site_url: http://rejson.io
+site_favicon: 'images/favicon.png'
 repo_url: https://github.com/RedisLabsModules/ReJSON
 repo_name: RedisLabsModules/ReJSON
 theme: material
 
 extra:
   palette:
-    primary: 'grey'
-    accent: 'red'
+    primary: 'indigo'
   logo: 'images/logo.svg'
   social:
     - type: 'github'
       link: 'https://github.com/redislabs'
     - type: 'twitter'
       link: 'https://twitter.com/redislabs'
+
+markdown_extensions:
+  - codehilite
 
 pages:
     - 'Quickstart': 'index.md'

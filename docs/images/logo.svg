@@ -14,8 +14,11 @@
    viewBox="0 0 33.866666 33.866668"
    version="1.1"
    id="svg8"
-   inkscape:version="0.92.0 unknown"
-   sodipodi:docname="logo.svg">
+   inkscape:version="0.92.1 unknown"
+   sodipodi:docname="logo.svg"
+   inkscape:export-filename="/home/itamar/Downloads/favicon.png"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96">
   <title
      id="title4517">ReJSON logo</title>
   <defs
@@ -27,11 +30,11 @@
      borderopacity="1.0"
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
-     inkscape:zoom="5.015625"
-     inkscape:cx="70.121315"
-     inkscape:cy="75.413098"
+     inkscape:zoom="4.4466622"
+     inkscape:cx="49.804887"
+     inkscape:cy="74.285258"
      inkscape:document-units="mm"
-     inkscape:current-layer="layer2"
+     inkscape:current-layer="layer1"
      showgrid="false"
      units="px"
      inkscape:pagecheckerboard="true"
@@ -64,29 +67,31 @@
      inkscape:label="Layer 1"
      inkscape:groupmode="layer"
      id="layer1"
-     transform="translate(0,-263.13332)">
+     transform="translate(1.1920929e-6,-263.13332)"
+     style="display:inline">
     <circle
-       style="fill:#ffffff;fill-opacity:1;stroke:#b62411;stroke-width:1.05833333;stroke-opacity:1;stroke-miterlimit:4;stroke-dasharray:none"
+       style="fill:#ffffff;fill-opacity:1;stroke:#b62411;stroke-width:3.31519747;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
        id="path4485"
        cx="16.933332"
        cy="280.06665"
-       r="16.127266" />
+       r="15.275735" />
   </g>
   <g
      inkscape:groupmode="layer"
      id="layer2"
-     inkscape:label="Layer 2">
+     inkscape:label="Layer 2"
+     transform="translate(1.1920929e-6,-1.2152948e-6)"
+     style="display:inline">
     <text
        xml:space="preserve"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:10.58333302px;line-height:5.30499983px;font-family:Quicksand;-inkscape-font-specification:Quicksand;letter-spacing:0px;word-spacing:0px;fill:#b62411;fill-opacity:1;stroke:none;stroke-width:0.26458332"
-       x="16.930752"
-       y="19.083864"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:10.58333302px;line-height:5.30499983px;font-family:Quicksand;-inkscape-font-specification:Quicksand;letter-spacing:0px;word-spacing:0px;opacity:1;fill:#b62411;fill-opacity:1;stroke:none;stroke-width:0.2;stroke-miterlimit:4;stroke-dasharray:none"
+       x="16.926453"
+       y="22.555197"
        id="text4509"><tspan
          sodipodi:role="line"
          id="tspan4507"
-         x="16.930752"
-         y="19.083864"
-         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:8.46666813px;font-family:Quicksand;-inkscape-font-specification:'Quicksand Bold';text-align:center;letter-spacing:0px;text-anchor:middle;fill:#b62411;fill-opacity:1;stroke-width:0.26458332"
-         dy="0 0.69999963 0 0 0 -0.69999963">{JSON}</tspan></text>
+         x="16.926453"
+         y="22.555197"
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:22.57777786px;font-family:Quicksand;-inkscape-font-specification:'Quicksand Bold';text-align:center;letter-spacing:0px;word-spacing:-4.23333311px;text-anchor:middle;fill:#b62411;fill-opacity:1;stroke-width:0.2;stroke-miterlimit:4;stroke-dasharray:none">{ }</tspan></text>
   </g>
 </svg>
