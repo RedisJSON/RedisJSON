@@ -1,4 +1,4 @@
-# ReJSON RAM usage
+# ReJSON RAM Usage
 
 Every key in Redis takes memory and requires at least the amount of RAM to store the key name, as
 well as some per-key overhead that Redis uses. On top of that, the value in the key also requires
@@ -39,9 +39,9 @@ OK
 (integer) 32
 ```
 
-The actual size of a the container is the sum of sizes of all items in it on top of its own
+The actual size of a container is the sum of sizes of all items in it on top of its own
 overhead. To avoid expensive memory reallocations, containers' capacity is scaled by multiples of 2
-until they a treshold size is reached, from which they grow by fixed chunks.
+until a treshold size is reached, from which they grow by fixed chunks.
 
 A container with a single scalar is made up of 32 and 24 bytes, respectively:
 ```
@@ -69,7 +69,7 @@ OK
 (integer) 128
 ```
 
-The next item will not require an allocation in the container so usage will increase only by that
+The next item will not require an allocation in the container, so usage will increase only by that
 scalar's requirement, but another value will scale the container again:
 
 ```
@@ -95,5 +95,5 @@ when stored using MessagePack.
 | /test/files/pass-jsonsl-yahoo2.json    | 18446     | 37469  | 16869       |
 | /test/files/pass-jsonsl-yelp.json      | 39491     | 75341  | 35469       |
 
-> Note: in the current version, deleting values from containers **does not** free the container's
+> Note: In the current version, deleting values from containers **does not** free the container's
 allocated memory.

@@ -15,7 +15,7 @@ Primary features:
 
 1.  [Build the ReJSON module library](https://redislabsmodules.github.io/rejson/#building-the-module)
 1.  [Load ReJSON to Redis](https://redislabsmodules.github.io/rejson/#loading-the-module-to-redis)
-1.  [Use it from **any** Redis client](https://redislabsmodules.github.io/rejson/#using-rejson), e.g.:
+1.  [Use ReJSON from **any** Redis client](https://redislabsmodules.github.io/rejson/#using-rejson), e.g.:
 
 ![ReJSON with `redis-cli`](docs/images/demo.gif)
 
@@ -23,12 +23,12 @@ Primary features:
 
 Read the docs at https://redislabsmodules.github.io/rejson
 
-## Limitations and known issues
+## Current limitations and known issues
 
 * Beta quality
 * Searching for object keys is O(N)
 * Containers are not scaled down after deleting items (i.e. free memory isn't reclaimed)
-* Numbers are stored using 64 bits integers or doubles, out of range values are not accepted
+* Numbers are stored using 64-bit integers or doubles, and out of range values are not accepted
 
 ## Acknowledgements
 
