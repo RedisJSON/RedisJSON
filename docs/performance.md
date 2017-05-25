@@ -1,15 +1,15 @@
 # Performance
 
 To get an early sense of what ReJSON is capable of, you can test it with `redis-benchmark` just like
-any other Redis command. However, in order to have more control over the tests, we'll be using a 
+any other Redis command. However, in order to have more control over the tests, we'll use a 
 a tool written in Go called _ReJSONBenchmark_ that we expect to release in the near future.
 
 The following figures were obtained from an AWS EC2 c4.8xlarge instance that ran both the Redis
 server as well the as the benchmarking tool. Connections to the server are via the networking stack.
 All tests are non-pipelined.
 
-> NOTE: the results below are measured using the preview version of ReJSON, which is still very much
-unoptimized :)
+> NOTE: The results below are measured using the preview version of ReJSON, which is still very much
+unoptimized.
 
 ## ReJSON baseline
 
@@ -52,7 +52,7 @@ Last but not least, some adding and multiplying:
 
 ### Baseline
 
-To establish a baseline we'll use the Redis [`PING`](https://redis.io/commands/ping) command.
+To establish a baseline, we'll use the Redis [`PING`](https://redis.io/commands/ping) command.
 First, lets see what `redis-benchmark` reports:
 
 ```
@@ -75,7 +75,7 @@ are the results, which indicate that 16 workers yield the best throughput:
 
 ![ReJSONBenchmark PING percentiles](images/bench_ping_p.png)
 
-Note how our benchmarking tool does slightly worse in PINGing producing only 116K ops, compared to
+Note how our benchmarking tool does slightly worse in PINGing - producing only 116K ops, compared to
 `redis-cli`'s 140K.
 
 ### The empty string
@@ -90,7 +90,7 @@ performance of the module:
 
 ## Comparison vs. server-side Lua scripting
 
-We compare ReJSON's performance with Redis' embedded Lua engine. For this purpose we use the Lua
+We compare ReJSON's performance with Redis' embedded Lua engine. For this purpose, we use the Lua
 scripts at [/benchmarks/lua](https://github.com/RedisLabsModules/rejson/tree/master/benchmarks/lua).
 These scripts provide ReJSON's GET and SET functionality on values stored in JSON or MessagePack
 formats. Each of the different operations (set root, get root, set path and get path) is executed
@@ -117,11 +117,11 @@ further improved.
 
 ### Setting and getting parts of objects
 
-This test shows why ReJSON is. Not only does it outperform the Lua variants, it retains constant
+This test shows why ReJSON exists. Not only does it outperform the Lua variants, it retains constant
 rates and latencies regardless the object's overall size. There's no magic here - ReJSON keeps the
-value desrialized so accessing parts of it is a relatively inexpensive operation. In deep contrast
-are both raw JSON as well as MessagePack who require decoding the entire object before anything can
-be done with it, a process which becomes more expensive the larger the object is.
+value deserialized so that accessing parts of it is a relatively inexpensive operation. In deep contrast
+are both raw JSON as well as MessagePack, which require decoding the entire object before anything can
+be done with it (a process that becomes more expensive the larger the object is).
 
 ![VS. Lua set path to scalar](images/bench_lua_set_path.png)
 
@@ -133,7 +133,7 @@ be done with it, a process which becomes more expensive the larger the object is
 
 ### Even more charts
 
-These charts are more of the same but independently for each file (value):
+These charts are more of the same but independent for each file (value):
 
 ![VS. Lua pass-100.json rate](images/bench_lua_pass_100.png)
 
