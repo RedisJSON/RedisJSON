@@ -1,5 +1,5 @@
-site_name: ReJSON Documentation
-site_url: https://redislabsmodules.github.io/ReJSON/
+site_name: ReJSON - a JSON data type for Redis
+site_url: http://rejson.io
 repo_url: https://github.com/RedisLabsModules/ReJSON
 repo_name: RedisLabsModules/ReJSON
 theme: material
