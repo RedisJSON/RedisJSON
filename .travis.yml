@@ -9,11 +9,10 @@ before_script:
   - cd redis
   - make
   - cd ..
-  - pip install redis ramp-packer rmtest
+  - pip install redis rmtest ramp-packer
 
 env:
-  - REDIS_MODULE_PATH=$TRAVIS_BUILD_DIR/src/rejson.so
-  - REDIS_PATH=$TRAVIS_BUILD_DIR/redis/src/redis-server
+  - REDIS_MODULE_PATH=$TRAVIS_BUILD_DIR/src/rejson.so REDIS_PATH=$TRAVIS_BUILD_DIR/redis/src/redis-server
 
 script:
   - make test
