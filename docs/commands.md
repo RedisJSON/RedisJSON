@@ -354,7 +354,7 @@ JSON.ARRTRIM <key> <path> <start> <stop>
 
 Trim an array so that it contains only the specified inclusive range of elements.
 
-This command is extremely forgiving and using it with out of range indexes will not produce an error. If `start` is larger than the array's size or `start` > `stop`, the result will be an empty array. If `start` is < 0 then it will be treated as 0. If end is larger than the end of the array, it will be treated like the last element in it.
+This command is extremely forgiving and using it with out of range indexes will not produce an error. If `start` is larger than the array's size or `start` > `stop`, the result will be an empty array. If `start` is < 0 then it will be treated as 0. If `stop` is larger than the end of the array, it will be treated like the last element in it.
 
 ### Return value
 

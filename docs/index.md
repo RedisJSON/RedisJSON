@@ -73,7 +73,7 @@ Once the module has been loaded successfully, the Redis log should have lines si
 Before using ReJSON, you should familiarize yourself with its commands and syntax as detailed in the [commands reference](commands.md) document. However, to quickly get started just review this section and get:
 
 1.  A Redis server running the module (see [building](#building-the-module-library) and [loading](#loading-the-module-to-Redis) for instructions)
-1.  Any [Redis](http://redis.io/clients) or [ReJSON client](#rejson-clients)
+1.  Any [Redis](http://redis.io/clients) or [ReJSON client](#client-libraries)
 
 ### With `redis-cli`
 
@@ -193,6 +193,6 @@ Some languages have client libraries that provide support for ReJSON's commands:
 
 | Project | Language | License | Author | URL |
 | ------- | -------- | ------- | ------ | --- |
-| iorejson | Node.js | [Evan Huang @evanhuang8](https://github.com/evanhuang8) | [git](https://github.com/evanhuang8/iorejson) [npm](https://www.npmjs.com/package/iorejson) |
-| JReJSON | Java | [Redis Labs](https://redislabs.com) | [git](https://github.com/RedisLabs/JReJSON/) |
-| rejson-py | Python | [Redis Labs](https://redislabs.com) | [git](https://github.com/RedisLabs/redis-py/) [pypi](https://pypi.python.org/pypi/rejson) |
+| iorejson | Node.js | MIT | [Evan Huang @evanhuang8](https://github.com/evanhuang8) | [git](https://github.com/evanhuang8/iorejson) [npm](https://www.npmjs.com/package/iorejson) |
+| JReJSON | Java | BSD-2-Clause | [Redis Labs](https://redislabs.com) | [git](https://github.com/RedisLabs/JReJSON/) |
+| rejson-py | Python | BSD-2-Clause | [Redis Labs](https://redislabs.com) | [git](https://github.com/RedisLabs/redis-py/) [pypi](https://pypi.python.org/pypi/rejson) |
