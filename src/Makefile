@@ -60,3 +60,9 @@ clean:
 deepclean:
 	find ./ -name "*.[oa]" -exec rm {} \; -print
 	find ./ -name "*.so" -exec rm {} \; -print
+
+package: rejson.so
+	mkdir -p ../build
+	module_packer -v \
+		-o "../build/rejson.{os}-{architecture}.latest.zip" \
+		"`pwd`/rejson.so"
