@@ -9,7 +9,7 @@ before_script:
   - cd redis
   - make
   - cd ..
-  - pip install redis rmtest ramp-packer
+  - pip install redis rmtest ramp-packer mkdocs mkdocs-material
 
 env:
   - REDIS_MODULE_PATH=$TRAVIS_BUILD_DIR/src/rejson.so REDIS_PATH=$TRAVIS_BUILD_DIR/redis/src/redis-server
@@ -17,6 +17,7 @@ env:
 script:
   - make test
   - make package
+  - make docs
 
 deploy:
   - provider: s3
@@ -36,5 +37,5 @@ deploy:
     acl: public_read
     bucket: rejson.io
     on:
-      branch: gh-pages
-    local_dir: $TRAVIS_BUILD_DIR/
+      branch: master
+    local_dir: $TRAVIS_BUILD_DIR/site

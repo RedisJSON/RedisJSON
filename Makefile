@@ -10,8 +10,15 @@ docker:
 	docker pull ubuntu:xenial
 	docker build . -t rejson:latest
 
+.PHONY: docker
+
 package:
 	$(MAKE) -C ./src package
+
+docs:
+	mkdocs build
+
+.PHONY: docs
 
 clean:
 	find ./ -name "*.[oa]" -exec rm {} \; -print
