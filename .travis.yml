@@ -1,6 +1,6 @@
 language: c
 compiler: gcc
-dist: xenial
+dist: trusty
 install:
   - make clean && make
 
@@ -9,7 +9,7 @@ before_script:
   - cd redis
   - make
   - cd ..
-  - sudo pip install redis ramp-packer rmtest
+  - pip install redis ramp-packer rmtest
 
 env:
   - REDIS_MODULE_PATH=$TRAVIS_BUILD_DIR/src/rejson.so
@@ -38,4 +38,4 @@ deploy:
     bucket: rejson.io
     on:
       branch: gh-pages
-    local_dir: $TRAVIS_BUILD_DIR/site
+    local_dir: $TRAVIS_BUILD_DIR/
