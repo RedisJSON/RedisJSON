@@ -34,6 +34,7 @@
 
 # Python
 .env/
+.env
 *.pyc
 
 # mkdocs
