@@ -3,7 +3,10 @@ compiler: gcc
 dist: trusty
 
 env:
-  - MODULE_NAME=rejson REDIS_MODULE_PATH=$TRAVIS_BUILD_DIR/src/rejson.so REDIS_PATH=$TRAVIS_BUILD_DIR/redis/src/redis-server
+  global:
+    - MODULE_NAME=rejson
+    - REDIS_MODULE_PATH=$TRAVIS_BUILD_DIR/src/rejson.so
+    - REDIS_PATH=$TRAVIS_BUILD_DIR/redis/src/redis-server
 
 install:
   - make clean && make
