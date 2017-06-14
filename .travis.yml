@@ -1,6 +1,12 @@
 language: c
 compiler: gcc
 dist: trusty
+
+env:
+  - MODULE_NAME=rejson
+  - REDIS_MODULE_PATH=$TRAVIS_BUILD_DIR/src/rejson.so
+  - REDIS_PATH=$TRAVIS_BUILD_DIR/redis/src/redis-server
+
 install:
   - make clean && make
 
@@ -11,31 +17,32 @@ before_script:
   - cd ..
   - pip install redis rmtest ramp-packer mkdocs mkdocs-material
 
-env:
-  - REDIS_MODULE_PATH=$TRAVIS_BUILD_DIR/src/rejson.so REDIS_PATH=$TRAVIS_BUILD_DIR/redis/src/redis-server
-
 script:
   - make test
+
+before_deploy:
   - make package
   - make docs
 
 deploy:
+  # Module latest artifact
   - provider: s3
     access_key_id: $AWS_ACCESS_KEY
     secret_access_key: $AWS_SECRET
     skip_cleanup: true
     acl: public_read
     bucket: redismodules
-    upload-dir: rejson
+    upload-dir: $MODULE_NAME
     on:
       branch: master
     local_dir: $TRAVIS_BUILD_DIR/build
+  # Website deployment
   - provider: s3
     access_key_id: $AWS_ACCESS_KEY
     secret_access_key: $AWS_SECRET
     skip_cleanup: true
     acl: public_read
-    bucket: rejson.io
+    bucket: $MODULE_NAME.io
     on:
       branch: master
     local_dir: $TRAVIS_BUILD_DIR/site
