@@ -63,8 +63,7 @@ docs = {
     },
 }
 
-
-class ReJSONTestCase(ModuleTestCase(None)):
+class ReJSONTestCase(ModuleTestCase('../../src/rejson.so')):
     """Tests ReJSON Redis module in vitro"""
 
     def assertNotExists(self, r, key, msg=None):
