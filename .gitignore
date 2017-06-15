@@ -43,4 +43,8 @@ site/
 # packaging
 build/
 
+# IDE
 .vscode/
+
+# Mac
+.DS_Store
