@@ -15,11 +15,6 @@ docker:
 package:
 	$(MAKE) -C ./src package
 
-docs:
-	mkdocs build
-
-.PHONY: docs
-
 clean:
 	find ./ -name "*.[oa]" -exec rm {} \; -print
 	find ./ -name "*.so" -exec rm {} \; -print

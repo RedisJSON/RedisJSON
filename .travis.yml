@@ -16,14 +16,13 @@ before_script:
   - cd redis
   - make
   - cd ..
-  - pip install redis rmtest ramp-packer mkdocs mkdocs-material
+  - pip install redis rmtest ramp-packer
 
 script:
   - make test
 
 before_deploy:
   - make package
-  - make docs
 
 deploy:
   # Module latest artifact
@@ -37,13 +36,3 @@ deploy:
     on:
       branch: master
     local_dir: $TRAVIS_BUILD_DIR/build
-  # Website deployment
-  - provider: s3
-    access_key_id: $AWS_ACCESS_KEY
-    secret_access_key: $AWS_SECRET
-    skip_cleanup: true
-    acl: public_read
-    bucket: $MODULE_NAME.io
-    on:
-      branch: master
-    local_dir: $TRAVIS_BUILD_DIR/site
