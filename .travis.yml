@@ -2,6 +2,11 @@ language: c
 compiler: gcc
 dist: trusty
 
+branches:
+  only:
+   - master
+   - gh-pages
+
 env:
   global:
     - MODULE_NAME=rejson
