@@ -1,5 +1,10 @@
 # Developer notes
 
+## Debugging
+
+Compile after settting the environment variable `DEBUG`, e.g. `export DEBUG=1`, to include the
+debugging information.
+
 ## Testing
 
 Python is required for ReJSON's module test. Install it with `apt-get install python`. You'll also
@@ -23,9 +28,8 @@ $ # use an existing local Redis instance for testing the module
 $ REDIS_PORT=6379 make test
 ```
 
-## Making the docs
+## Documentation
 
-1. You'll need `mkdocs`, install it with: `pip install mkdocs`
-1. You'll also need the theme so: `pip install mkdocs-material`
-1. To serve locally do: `mkdocs build && mkdocs serve`
-1. To upload to GitHub Pages do: `mkdocs gh-deploy`
+1. Prerequisites: `pip install mkdocs mkdocs-material s3cmd`
+1. To build and serve locally: `mkdocs build && mkdocs serve`
+1. To deploy to the website: `make deploydocs`
