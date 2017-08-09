@@ -30,6 +30,6 @@ $ REDIS_PORT=6379 make test
 
 ## Documentation
 
-1. Prerequisites: `pip install mkdocs mkdocs-material s3cmd`
-1. To build and serve locally: `mkdocs build && mkdocs serve`
+1. Prerequisites: `pip install mkdocs mkdocs-material`
+1. To build and serve locally: `make localdocs`
 1. To deploy to the website: `make deploydocs`

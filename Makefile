@@ -14,13 +14,18 @@ docker:
 package:
 	$(MAKE) -C ./src package
 
-deploydocs:
+builddocs:
 	mkdocs build
-	s3cmd sync site/ s3://rejson.io
-.PHONY: deploydocs
+
+localdocs: builddocs
+	mkdocs serve
+
+deploydocs: builddocs
+	mkdocs gh-deploy
 
 clean:
 	find ./ -name "*.[oa]" -exec rm {} \; -print
 	find ./ -name "*.so" -exec rm {} \; -print
 	find ./ -name "*.out" -exec rm {} \; -print
 	rm -rf ./build
+
