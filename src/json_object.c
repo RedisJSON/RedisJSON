@@ -265,6 +265,49 @@ typedef struct {
     if (b->indent)               \
         for (int i = 0; i < b->depth; i++) b->buf = sdscatsds(b->buf, b->indentstr);
 
+inline static int _get_unicode(const char *p, int *step, int length) {
+  int unicode_char_length = 0;
+  unsigned char c = (unsigned char) *p;
+  // 0x04000000 - 0x7FFFFFFF:
+  if ((c >> 1) == 0x7E)
+    unicode_char_length = 6;
+  // 0x00200000 - 0x03FFFFFF:
+  else if ((c >> 2) == 0x3E)
+    unicode_char_length = 5;
+  // 0x00010000 - 0x001FFFFF:
+  else if ((c >> 3) == 0x1E)
+    unicode_char_length = 4;
+  // 0x00000800 - 0x0000FFFF:
+  else if ((c >> 4) == 0xE)
+    unicode_char_length = 3;
+  // 0x00000080 - 0x000007FF:
+  else if ((c >> 5) == 0x6)
+    unicode_char_length = 2;
+  // not unicode
+  else {
+    *step = 1;
+    return 0;
+  }
+
+  // length in not enough
+  if (unicode_char_length > length) {
+    *step = 1;
+    return 0;
+  }
+  *step = unicode_char_length;
+  // check continued char is vaild unicode (b10xx xxxx)
+  while (--unicode_char_length) {
+    p ++;
+    c = (unsigned char) *p;
+    if ((c >> 6) != 2)
+      *step = 0;
+      return 0;
+  }
+
+  return 1;
+}
+
+
 inline static void _JSONSerialize_StringValue(Node *n, void *ctx) {
     _JSONBuilderContext *b = (_JSONBuilderContext *)ctx;
     size_t len = n->value.strval.len;
@@ -272,7 +315,9 @@ inline static void _JSONSerialize_StringValue(Node *n, void *ctx) {
 
     b->buf = sdsMakeRoomFor(b->buf, len + 2);  // we'll need at least as much room as the original
     b->buf = sdscatlen(b->buf, "\"", 1);
-    while (len--) {
+    int step = 0;
+    while (len) {
+        step = 1;
         switch (*p) {
             case '"':   // quotation mark
             case '\\':  // reverse solidus
@@ -299,16 +344,19 @@ inline static void _JSONSerialize_StringValue(Node *n, void *ctx) {
             default:
                 if ((unsigned char)*p > 31 && isprint(*p))
                     b->buf = sdscatprintf(b->buf, "%c", *p);
+                // for unicode
+                else if (_get_unicode(p, &step, len) == 0)
+                  b->buf = sdscatlen(b->buf, p, step);
                 else
                     b->buf = sdscatprintf(b->buf, "\\u%04x", (unsigned char)*p);
                 break;
         }
-        p++;
+        len -= step;
+        while(step--) p ++;
     }
 
     b->buf = sdscatlen(b->buf, "\"", 1);
 }
-
 inline static void _JSONSerialize_BeginValue(Node *n, void *ctx) {
     _JSONBuilderContext *b = (_JSONBuilderContext *)ctx;
 
