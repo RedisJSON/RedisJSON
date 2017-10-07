@@ -393,7 +393,6 @@ MU_TEST(test_oj_special_characters) {
     mu_check(n);
     SerializeNodeToJSON(n, &opt, &str);
     mu_check(str);
-    printf("%s", json);
     mu_check(0 == strncmp(json, str, strlen(str)));
     sdsfree(str);
     Node_Free(n);

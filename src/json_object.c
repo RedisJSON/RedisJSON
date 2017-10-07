@@ -345,7 +345,7 @@ inline static void _JSONSerialize_StringValue(Node *n, void *ctx) {
                 if ((unsigned char)*p > 31 && isprint(*p))
                     b->buf = sdscatprintf(b->buf, "%c", *p);
                 // for unicode
-                else if (_get_unicode(p, &step, len) == 0)
+                else if (_get_unicode(p, &step, len))
                   b->buf = sdscatlen(b->buf, p, step);
                 else
                     b->buf = sdscatprintf(b->buf, "\\u%04x", (unsigned char)*p);
