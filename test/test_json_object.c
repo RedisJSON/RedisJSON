@@ -410,8 +410,6 @@ MU_TEST(test_oj_unicode_characters) {
     mu_check(n);
     SerializeNodeToJSON(n, &opt, &str);
     mu_check(str);
-    printf("\n%s\n", json);
-    printf("\n%s\n", str);
     mu_check(0 == strncmp(json, str, strlen(str)));
     sdsfree(str);
     Node_Free(n);
