@@ -398,6 +398,25 @@ MU_TEST(test_oj_special_characters) {
     Node_Free(n);
 }
 
+MU_TEST(test_oj_unicode_characters) {
+    Node *n;
+    sds str = sdsempty();
+    JSONSerializeOpt opt = {"", "", ""};
+    // unicode string do not need to convert to hex
+    char *json = "\"\xe6\x88\x91\xe8\x83\xbd\xe5\x90\x9e\xe4\xb8\x8b\xe7\x8e\xbb\xe7\x92\x83\xe8\x80\x8c\xe4\xb8\x8d\xe4\xbc\xa4\xe8\xba\xab\xe4\xbd\x93\"\x00";
+    char *unicodes = "\xe6\x88\x91\xe8\x83\xbd\xe5\x90\x9e\xe4\xb8\x8b\xe7\x8e\xbb\xe7\x92\x83\xe8\x80\x8c\xe4\xb8\x8d\xe4\xbc\xa4\xe8\xba\xab\xe4\xbd\x93\x00";
+
+    n = NewStringNode(unicodes, strlen(unicodes));
+    mu_check(n);
+    SerializeNodeToJSON(n, &opt, &str);
+    mu_check(str);
+    printf("\n%s\n", json);
+    printf("\n%s\n", str);
+    mu_check(0 == strncmp(json, str, strlen(str)));
+    sdsfree(str);
+    Node_Free(n);
+}
+
 MU_TEST_SUITE(test_json_literals) {
     MU_RUN_TEST(test_jo_create_literal_null);
     MU_RUN_TEST(test_jo_create_literal_true);
@@ -420,6 +439,7 @@ MU_TEST_SUITE(test_object_to_json) {
     MU_RUN_TEST(test_oj_dict);
     MU_RUN_TEST(test_oj_array);
     MU_RUN_TEST(test_oj_special_characters);
+    MU_RUN_TEST(test_oj_unicode_characters);
 }
 
 int main(int argc, char *argv[]) {
