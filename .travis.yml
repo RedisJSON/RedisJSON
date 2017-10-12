@@ -16,7 +16,7 @@ before_script:
   - cd redis
   - make
   - cd ..
-  - pip install redis rmtest ramp-packer
+  - pip install --user redis rmtest ramp-packer
 
 script:
   - make test
