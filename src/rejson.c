@@ -708,6 +708,7 @@ error:
  *   - `INDENT` sets the indentation string for nested levels
  *   - `NEWLINE` sets the string that's printed at the end of each line
  *   - `SPACE` sets the string that's put between a key and a value
+ *   - `NOESCAPE` Don't escape any JSON characters.
  *
  * Reply: Bulk String, specifically the JSON serialization.
  * The reply's structure depends on the on the number of paths. A single path results in the value
@@ -758,6 +759,10 @@ int JSONGet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
         } else {
             jsopt.spacestr = "";
         }
+    }
+    if (RMUtil_ArgExists("noescape", argv,argc, 2)) {
+        jsopt.noescape = 1;
+        pathpos++;
     }
 
     // initialize the reply

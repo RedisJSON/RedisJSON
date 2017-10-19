@@ -255,6 +255,7 @@ typedef struct {
     sds buf;         // serialization buffer
     int depth;       // current tree depth
     int indent;      // indentation string length
+    int noescape;    // Don't \u-escape non-printable characters (whose escape is not required)
     sds indentstr;   // indentaion string
     sds newlinestr;  // newline string
     sds spacestr;    // space string
@@ -297,7 +298,7 @@ inline static void _JSONSerialize_StringValue(Node *n, void *ctx) {
                 b->buf = sdscatlen(b->buf, "\\t", 2);
                 break;
             default:
-                if ((unsigned char)*p > 31 && isprint(*p))
+                if (b->noescape || ((unsigned char)*p > 31 && isprint(*p)))
                     b->buf = sdscatprintf(b->buf, "%c", *p);
                 else
                     b->buf = sdscatprintf(b->buf, "\\u%04x", (unsigned char)*p);
@@ -405,6 +406,7 @@ void SerializeNodeToJSON(const Node *node, const JSONSerializeOpt *opt, sds *jso
     b->indent = sdslen(b->indentstr);
     b->delimstr = sdsnewlen(",", 1);
     b->delimstr = sdscat(b->delimstr, b->newlinestr);
+    b->noescape = opt->noescape;
 
     NodeSerializerOpt nso = {.fBegin = _JSONSerialize_BeginValue,
                              .xBegin = 0xffff,

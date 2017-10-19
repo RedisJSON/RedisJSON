@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 from rmtest import ModuleTestCase
 import redis
 import unittest
@@ -672,6 +674,13 @@ class ReJSONTestCase(ModuleTestCase('../../src/rejson.so')):
             # This shouldn't crash Redis
             r.execute_command('JSON.GET', 'test', 'foo', 'foo')
 
+    def testNoescape(self):
+        # Store a path and see if it acts appropriately with NOESCAPE
+        self.cmd('JSON.SET', 'escapeTest', '.', '{"key":"שלום"}')
+        rv = self.cmd('JSON.GET', 'escapeTest', '.')
+        self.assertEqual('{"key":"\u00d7\u00a9\u00d7\u009c\u00d7\u0095\u00d7\u009d"}', rv)
+        rv = self.cmd('JSON.GET', 'escapeTest', 'NOESCAPE', '.')
+        self.assertEqual('{"key":"שלום"}', rv)
 
 if __name__ == '__main__':
     unittest.main()
