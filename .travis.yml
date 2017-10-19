@@ -1,38 +1,34 @@
 language: c
 compiler: gcc
 dist: trusty
-
 env:
   global:
-    - MODULE_NAME=rejson
-    - REDIS_MODULE_PATH=$TRAVIS_BUILD_DIR/src/rejson.so
-    - REDIS_PATH=$TRAVIS_BUILD_DIR/redis/src/redis-server
-
+  - MODULE_NAME=rejson
+  - REDIS_MODULE_PATH=$TRAVIS_BUILD_DIR/src/rejson.so
+  - REDIS_PATH=$TRAVIS_BUILD_DIR/redis/src/redis-server
 install:
-  - make clean && make
-
+- make clean && make
 before_script:
-  - git clone --depth 1 https://github.com/antirez/redis.git
-  - cd redis
-  - make
-  - cd ..
-  - pip install --user redis rmtest ramp-packer==1.2.3
-
+- git clone --depth 1 https://github.com/antirez/redis.git
+- cd redis
+- make
+- cd ..
+- pip install --user redis rmtest ramp-packer==1.2.3
 script:
-  - make test
-
+- make test
 before_deploy:
-  - make package
-
+- make package
 deploy:
-  # Module latest artifact
-  - provider: s3
-    access_key_id: $AWS_ACCESS_KEY
-    secret_access_key: $AWS_SECRET
-    skip_cleanup: true
-    acl: public_read
-    bucket: redismodules
-    upload-dir: $MODULE_NAME
-    on:
-      branch: master
-    local_dir: $TRAVIS_BUILD_DIR/build
+- provider: s3
+  access_key_id: "$AWS_ACCESS_KEY"
+  secret_access_key: "$AWS_SECRET"
+  skip_cleanup: true
+  acl: public_read
+  bucket: redismodules
+  upload-dir: "$MODULE_NAME"
+  on:
+    branch: master
+  local_dir: "$TRAVIS_BUILD_DIR/build"
+notifications:
+  slack:
+    secure: sw+ekNmwa+gglEajS6Eveucy7ujQw6RVVUcsD1WnGw0qThHYTKCNd5u0+iONv3dT7YnOwvs0CEoQfOfetNP7sC+kk4qcGwIAaAmHQ8TpKuFK5NX944lCbYNDyW9YQ+S/DlM2WFJcrNGF32FTPcIIwhkK8vL0UY7Ffs08oapleUP9F7jLBQ+rsjpdFN7nwxqdmXJweqVmEu0helt4hoOGDAC0C31IyLijUu4nULFpY/nOTjLtvFWIHwCiQRT+1uf4a+3jzxMLezOU09+Oa1PRAaTQtZMIP2pqmuZPGoOjqJ45kF9VhdIo6rc1Z3qGG0xQaTPM/mMETnwUv2NqmbJK++PTdvzLiFsYLTlV9sND/L9aHkuchahxPhVh+/w/vfC6z+o8qHb83AmrsK50zmQ+MT+ktCr1hBdN2Qqdblh6OVIuWLAdSC2MGQG+S+O9qmGYmEP9yTggXz4j31LNjPEYRyWP0U/pxZ4Lg+CPHDXQzYMNVLF65aE50N1hTkbHu7Oax76BXeLyjMLCDipO21pFYvm5nR3CcLXtYBWivKf85U4Y3ZL763KTzrOwP7iCZX+g0KftiCs6lrl5hDs3WQD4v1hEVPEmYtsXj4s8fuxTBeZr8xdOYhE2EgUM5peqmC+Ow+Tlczscd+Zp4wNguVsgv3KHIEhUQShquiV7W1laX5U=
