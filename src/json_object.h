@@ -66,6 +66,7 @@ typedef struct {
     char *indentstr;   // indentation string
     char *newlinestr;  // linebreak string
     char *spacestr;    // spacing before/after element in size=1 containers, and after keys
+    int noescape;      // Don't return escape in output
 } JSONSerializeOpt;
 
 /**
