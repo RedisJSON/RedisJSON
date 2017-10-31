@@ -11,6 +11,12 @@ docker:
 	docker build . -t rejson:latest
 .PHONY: docker
 
+docker_dist:
+	docker build --rm -f Dockerfile_Dist . -t redislabs/rejson
+
+docker_push: docker_dist
+	docker push redislabs/rejson:latest
+
 package:
 	$(MAKE) -C ./src package
 
