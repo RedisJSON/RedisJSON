@@ -503,7 +503,7 @@ void Node_Print(Node *n, int depth) {
             printf("%f", n->value.numval);
             break;
         case N_INTEGER:
-            printf("%ld", n->value.intval);
+            printf("%lld", n->value.intval);
             break;
         case N_KEYVAL: {
             printf("\"%s\": ", n->value.kvval.key);

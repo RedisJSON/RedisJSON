@@ -115,7 +115,7 @@ int NodeFromJSONPath(Node *root, const RedisModuleString *path, JSONPathNode_t *
 /* Replies with an error about a search path */
 void ReplyWithSearchPathError(RedisModuleCtx *ctx, JSONPathNode_t *jpn) {
     sds err = sdscatfmt(sdsempty(), "ERR Search path error at offset %I: %s",
-                        (long long)jpn->sperroffset + 1, jpn->sperrmsg);
+                        (long long)jpn->sperroffset + 1, jpn->sperrmsg ? jpn->sperrmsg : "(null)");
     RedisModule_ReplyWithError(ctx, err);
     sdsfree(err);    
 }
