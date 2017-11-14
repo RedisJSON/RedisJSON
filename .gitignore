@@ -1,3 +1,5 @@
+*.rdb
+*.d
 # Object files
 *.o
 *.ko

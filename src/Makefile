@@ -36,8 +36,9 @@ SOURCEDIR=$(shell pwd -P)
 CC_SOURCES = $(wildcard $(SOURCEDIR)/*.c) $(wildcard $(SOURCEDIR)/dep/*.c) 
 CC_OBJECTS = $(patsubst $(SOURCEDIR)/%.c, $(SOURCEDIR)/%.o, $(CC_SOURCES))
 LIBS = $(DEPS_DIR)/jsonsl/jsonsl.o $(DEPS_DIR)/RedisModuleSDK/rmutil/librmutil.a
+MODULE=rejson.so
 
-all: rejson.so librejson.a
+all: $(MODULE) librejson.a
 
 jsonsl:
 	$(MAKE) -C $(DEPS_DIR)/jsonsl static
@@ -48,7 +49,7 @@ rmutil:
 
 .PHONY: rmutil
 
-rejson.so: jsonsl rmutil $(CC_OBJECTS)
+$(MODULE): jsonsl rmutil $(CC_OBJECTS)
 	$(LD) -o $@ $(CC_OBJECTS) $(LIBS) $(SHOBJ_LDFLAGS) -lc -lm
 
 librejson.a: jsonsl rmutil $(CC_OBJECTS)
@@ -61,8 +62,21 @@ deepclean:
 	find ./ -name "*.[oa]" -exec rm {} \; -print
 	find ./ -name "*.so" -exec rm {} \; -print
 
-package: rejson.so
-	mkdir -p ../build
-	module_packer -v \
-		-o "../build/rejson.{os}-{architecture}.latest.zip" \
-		"`pwd`/rejson.so"
+RAMP_COMMAND=ramp-packer -v -m ramp.yml
+PACKAGE_NAME=rejson
+## Package the module into a RAMP package on master builds and version tag builds
+package: $(MODULE)
+	@mkdir -p ../build
+	@# On release tags (v1.2.3) - package with the version, and package the latest-stable
+	@set -e; if (expr "$$TRAVIS_TAG" : "^v[0-9]"); then\
+		$(RAMP_COMMAND) --output "../build/$(PACKAGE_NAME).{os}-{architecture}.`./print_version`.zip" "`pwd`/$(MODULE)";\
+		$(RAMP_COMMAND) --output "../build/$(PACKAGE_NAME).{os}-{architecture}.latest.zip" "`pwd`/$(MODULE)";\
+	fi
+	
+	@# On master builds - package the master latest
+	@set -e; if [ "$$TRAVIS_BRANCH" = "master" ]; then\
+		$(RAMP_COMMAND) --output "../build/$(PACKAGE_NAME).{os}-{architecture}.master.zip" "`pwd`/$(MODULE)";\
+	fi
+# Compile an executable that prints the current version
+print_version: version.h print_version.c
+	@$(CC) -o $@ -DPRINT_VERSION_TARGET $@.c

@@ -1826,7 +1826,7 @@ int Module_CreateCommands(RedisModuleCtx *ctx) {
 
 int RedisModule_OnLoad(RedisModuleCtx *ctx) {
     // Register the module
-    if (RedisModule_Init(ctx, RLMODULE_NAME, 1, REDISMODULE_APIVER_1) == REDISMODULE_ERR)
+    if (RedisModule_Init(ctx, RLMODULE_NAME, REJSON_MODULE_VERSION, REDISMODULE_APIVER_1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     // Register the JSON data type
@@ -1847,8 +1847,8 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
     if (REDISMODULE_ERR == Module_CreateCommands(ctx))
         return REDISMODULE_ERR;
 
-    RM_LOG_WARNING(ctx, "%s v%d.%d.%d [encver %d]", RLMODULE_DESC, PROJECT_VERSION_MAJOR,
-                   PROJECT_VERSION_MINOR, PROJECT_VERSION_PATCH, JSONTYPE_ENCODING_VERSION);
+    RM_LOG_WARNING(ctx, "%s v%d.%d.%d [encver %d]", RLMODULE_DESC, REJSON_VERSION_MAJOR,
+                   REJSON_VERSION_MINOR, REJSON_VERSION_PATCH, JSONTYPE_ENCODING_VERSION);
 
     return REDISMODULE_OK;
 }
