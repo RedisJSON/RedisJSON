@@ -13,7 +13,7 @@ before_script:
 - cd redis
 - make
 - cd ..
-- pip install --user redis rmtest ramp-packer==1.2.3
+- pip install --user redis rmtest ramp-packer>=1.3.7
 script:
 - make test
 before_deploy:
