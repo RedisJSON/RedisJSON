@@ -28,6 +28,7 @@ deploy:
   upload-dir: "$MODULE_NAME"
   on:
     branch: master
+    tags: true
   local_dir: "$TRAVIS_BUILD_DIR/build"
 notifications:
   slack:
