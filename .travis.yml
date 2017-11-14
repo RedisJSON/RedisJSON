@@ -27,8 +27,7 @@ deploy:
   bucket: redismodules
   upload-dir: "$MODULE_NAME"
   on:
-    branch: master
-    tags: true
+    condition: $TRAVIS_BRANCH = 'master' || $TRAVIS_TAG =~ ^v[0-9]
   local_dir: "$TRAVIS_BUILD_DIR/build"
 notifications:
   slack:

@@ -64,18 +64,19 @@ deepclean:
 
 RAMP_COMMAND=ramp-packer -v -m ramp.yml
 PACKAGE_NAME=rejson
+BUILD_DIR=../build
 ## Package the module into a RAMP package on master builds and version tag builds
-package: $(MODULE)
-	@mkdir -p ../build
+package: $(MODULE) print_version
+	@mkdir -p $(BUILD_DIR) && rm -f $(BUILD_DIR)/*
 	@# On release tags (v1.2.3) - package with the version, and package the latest-stable
 	@set -e; if (expr "$$TRAVIS_TAG" : "^v[0-9]"); then\
-		$(RAMP_COMMAND) --output "../build/$(PACKAGE_NAME).{os}-{architecture}.`./print_version`.zip" "`pwd`/$(MODULE)";\
-		$(RAMP_COMMAND) --output "../build/$(PACKAGE_NAME).{os}-{architecture}.latest.zip" "`pwd`/$(MODULE)";\
+		$(RAMP_COMMAND) --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}.`./print_version`.zip" "`pwd`/$(MODULE)";\
+		$(RAMP_COMMAND) --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}.latest.zip" "`pwd`/$(MODULE)";\
 	fi
 	
 	@# On master builds - package the master latest
 	@set -e; if [ "$$TRAVIS_BRANCH" = "master" ]; then\
-		$(RAMP_COMMAND) --output "../build/$(PACKAGE_NAME).{os}-{architecture}.master.zip" "`pwd`/$(MODULE)";\
+		$(RAMP_COMMAND) --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}.master.zip" "`pwd`/$(MODULE)";\
 	fi
 # Compile an executable that prints the current version
 print_version: version.h print_version.c
