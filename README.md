@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/RedisLabsModules/rejson.svg?branch=master)](https://travis-ci.org/RedisLabsModules/rejson)
+[![CircleCI](https://circleci.com/gh/RedisLabsModules/rejson/tree/master.svg?style=svg)](https://circleci.com/gh/RedisLabsModules/rejson/tree/master)
 
 # ReJSON - a JSON data type for Redis
 
