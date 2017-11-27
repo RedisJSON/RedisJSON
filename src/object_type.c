@@ -25,7 +25,7 @@ void *ObjectTypeRdbLoad(RedisModuleIO *rdb) {
     Vector *indices = NULL;
     Node *node = NULL;
     uint64_t len = 0;
-    NodeType type;
+    NodeType type = 0;
     size_t strlen = 0;
     char *str = NULL;
     enum { S_INIT, S_BEGIN_VALUE, S_END_VALUE, S_CONTAINER, S_END } state = S_INIT;

@@ -553,7 +553,7 @@ void Node_Serializer(const Node *n, const NodeSerializerOpt *o, void *ctx) {
     Node *curr_node = NULL;
     int curr_len = 0;
     int curr_index = 0;
-    Node **curr_entries;
+    Node **curr_entries = NULL;
     NodeSerializerStack stack = {0};
     NodeSerializerState state = S_INIT;
 
