@@ -177,7 +177,7 @@ int CreateNodeFromJSON(JSONObjectCtx *ctx, const char *buf, size_t len, Node **n
     int is_scalar = 0;
 
     // munch any leading whitespaces
-    while (_IsAllowedWhitespace(_buf[_off]) && _off < _len) _off++;
+    while (_off < _len && _IsAllowedWhitespace(_buf[_off])) _off++;
 
     /* Embed scalars in a list (also avoids JSONSL_ERROR_STRING_OUTSIDE_CONTAINER).
      * Copying is necc. evil to avoid messing w/ non-standard string implementations (e.g. sds), but
