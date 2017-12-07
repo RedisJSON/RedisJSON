@@ -682,5 +682,11 @@ class ReJSONTestCase(ModuleTestCase('../../src/rejson.so')):
         rv = self.cmd('JSON.GET', 'escapeTest', 'NOESCAPE', '.')
         self.assertEqual('{"key":"שלום"}', rv)
 
+    def testDoubleParse(self):
+        self.cmd('JSON.SET', 'dblNum', '.', '[1512060373.222988]')
+        res = self.cmd('JSON.GET', 'dblNum', '[0]')
+        self.assertEqual(1512060373.222988, float(res))
+        # self.assertEqual('1512060373.222988', res)
+
 if __name__ == '__main__':
     unittest.main()
