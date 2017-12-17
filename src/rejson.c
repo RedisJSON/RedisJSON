@@ -17,6 +17,7 @@
  */
 
 #include "rejson.h"
+#include "cache.h"
 
 // A struct to keep module the module context
 typedef struct {
@@ -27,7 +28,8 @@ static ModuleCtx JSONCtx;
 // == Helpers ==
 #define NODEVALUE_AS_DOUBLE(n) (N_INTEGER == n->type ? (double)n->value.intval : n->value.numval)
 #define NODETYPE(n) (n ? n->type : N_NULL)
-
+struct JSONPathNode_t;
+static void maybeClearPathCache(JSONType_t *jt, const struct JSONPathNode_t *pn);
 /* Returns the string representation of a the node's type. */
 static inline char *NodeTypeStr(const NodeType nt) {
     static char *types[] = {"null", "boolean", "integer", "number", "string", "object", "array"};
@@ -58,7 +60,7 @@ static inline int SearchPath_IsRootPath(const SearchPath *sp) {
 }
 
 /* Stores everything about a resolved path. */
-typedef struct {
+typedef struct JSONPathNode_t {
     const char *spath;   // the path's string
     size_t spathlen;     // the path's string length
     Node *n;             // the referenced node
@@ -675,6 +677,7 @@ int JSONSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     }
 
 ok:
+    maybeClearPathCache(jt, jpn);
     RedisModule_ReplyWithSimpleString(ctx, "OK");
     JSONPathNode_Free(jpn);
     RedisModule_ReplicateVerbatim(ctx);
@@ -695,6 +698,131 @@ error:
     return REDISMODULE_ERR;
 }
 
+static void maybeClearPathCache(JSONType_t *jt, const JSONPathNode_t *pn) {
+    if (!jt->lruEntries) {
+        return;
+    }
+
+    const char *pathStr = pn->spath;
+    size_t pathLen = pn->spathlen;
+    if (pn->sp.hasLeadingDot) {
+        pathStr++;
+        pathLen--;
+    }
+
+    if (pathLen == 0) {
+        LruCache_ClearKey(REJSON_LRUCACHE_GLOBAL, jt);
+    } else {
+        LruCache_ClearValues(REJSON_LRUCACHE_GLOBAL, jt, pathStr, pathLen);
+    }
+}
+
+static sds getSerializedJson(JSONType_t *jt, const JSONPathNode_t *pathInfo,
+                             const JSONSerializeOpt *opts, int *wasFound, sds *target) {
+    // printf("Requesting value for path %.*s\n", (int)pathLen, path);
+
+    // Normalize the path. If the original path begins with a dot, strip it
+    const char *pathStr = pathInfo->spath;
+    size_t pathLen = pathInfo->spathlen;
+    if (pathInfo->sp.hasLeadingDot) {
+        pathStr++;
+        pathLen--;
+    }
+
+    sds ret = LruCache_GetValue(REJSON_LRUCACHE_GLOBAL, jt, pathStr, pathLen);
+    if (ret) {
+        *wasFound = 1;
+        if (target) {
+            *target = sdscatsds(*target, ret);
+        }
+        return ret;
+    }
+
+    // Otherwise, serialize
+    if (target) {
+        ret = *target;
+    } else {
+        ret = sdsempty();
+    }
+    SerializeNodeToJSON(pathInfo->n, opts, &ret);
+    LruCache_AddValue(REJSON_LRUCACHE_GLOBAL, jt, pathStr, pathLen, ret, sdslen(ret));
+    *wasFound = 0;
+    if (target) {
+        *target = ret;
+    }
+    return ret;
+}
+
+static int isCachableOptions(const JSONSerializeOpt *opts) {
+    return (!opts->indentstr || *opts->indentstr == 0) &&
+           (!opts->newlinestr || *opts->newlinestr == 0) &&
+           (!opts->spacestr || *opts->spacestr) == 0 && (opts->noescape == 0);
+}
+
+static void sendSingleResponse(RedisModuleCtx *ctx, JSONType_t *jt, const JSONPathNode_t *pn,
+                               const JSONSerializeOpt *options) {
+    sds json = NULL;
+    if (!isCachableOptions(options)) {
+        json = sdsempty();
+        SerializeNodeToJSON(pn->n, options, &json);
+        RedisModule_ReplyWithStringBuffer(ctx, json, sdslen(json));
+        sdsfree(json);
+        return;
+    }
+
+    int isFromCache = 0;
+    json = getSerializedJson(jt, pn, options, &isFromCache, NULL);
+    // Send the response now
+    RedisModule_ReplyWithStringBuffer(ctx, json, sdslen(json));
+    if (!isFromCache) {
+        sdsfree(json);
+    }
+}
+
+static void sendMultiResponse(RedisModuleCtx *ctx, JSONType_t *jt, JSONPathNode_t **pns,
+                              size_t npns, const JSONSerializeOpt *options) {
+    sds json = NULL;
+    if (!isCachableOptions(options)) {
+        // Use legacy behavior
+        json = sdsempty();
+        Node *objReply = NewDictNode(npns);
+        for (int i = 0; i < npns; i++) {
+            // add the path to the reply only if it isn't there already
+            Node *target;
+            int ret = Node_DictGet(objReply, pns[i]->spath, &target);
+            if (OBJ_ERR == ret) {
+                Node_DictSet(objReply, pns[i]->spath, pns[i]->n);
+            }
+        }
+        SerializeNodeToJSON(objReply, options, &json);
+        RedisModule_ReplyWithStringBuffer(ctx, json, sdslen(json));
+        sdsfree(json);
+
+        // avoid removing the actual data by resetting the reply dict
+        // TODO: need a non-freeing Del
+        for (int i = 0; i < objReply->value.dictval.len; i++) {
+            objReply->value.dictval.entries[i]->value.kvval.val = NULL;
+        }
+        Node_Free(objReply);
+        return;
+    }
+
+    json = sdsempty();
+    json = sdscat(json, "{");
+    for (int i = 0; i < npns; i++) {
+        json = sdscatprintf(json, "\"%.*s\":", (int)pns[i]->spathlen, pns[i]->spath);
+        // Append to the buffer
+        int dummy;
+        getSerializedJson(jt, pns[i], options, &dummy, &json);
+        if (i < npns - 1) {
+            json = sdscat(json, ",");
+        }
+    }
+    json = sdscat(json, "}");
+    RedisModule_ReplyWithStringBuffer(ctx, json, sdslen(json));
+    sdsfree(json);
+}
+
 /**
  * JSON.GET <key> [INDENT indentation-string] [NEWLINE newline-string] [SPACE space-string]
  *                [path ...]
@@ -709,9 +837,9 @@ error:
  *   - `NOESCAPE` Don't escape any JSON characters.
  *
  * Reply: Bulk String, specifically the JSON serialization.
- * The reply's structure depends on the on the number of paths. A single path results in the value
- * being itself is returned, whereas multiple paths are returned as a JSON object in which each path
- * is a key.
+ * The reply's structure depends on the on the number of paths. A single path results in the
+ * value being itself is returned, whereas multiple paths are returned as a JSON object in which
+ * each path is a key.
  */
 int JSONGet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if ((argc < 2)) {
@@ -758,13 +886,11 @@ int JSONGet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
             jsopt.spacestr = "";
         }
     }
+
     if (RMUtil_ArgExists("noescape", argv, argc, 2)) {
         jsopt.noescape = 1;
         pathpos++;
     }
-
-    // initialize the reply
-    sds json = sdsempty();
 
     // validate paths, if none provided default to root
     JSONType_t *jt = RedisModule_ModuleTypeGetValue(key);
@@ -794,41 +920,35 @@ int JSONGet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
         }  // while (jpnslen < npaths)
     }
 
+    /**
+     * TODO:
+     * (1) Manually open preamble with {
+     * (2) For each path, see if we can get the preserialized version or if
+     *     we need to serialize anew.
+     * (3) Ensure that serialize *appends* to the sds and doesn't overwrite it
+     * (4) Append commas between each.
+     * (5) Ensure key names are properly escaped
+     */
+
     // return the single path's JSON value, or wrap all paths-values as an object
     if (1 == jpnslen) {
-        SerializeNodeToJSON(jpns[0]->n, &jsopt, &json);
+        sendSingleResponse(ctx, jt, jpns[0], &jsopt);
     } else {
-        Node *objReply = NewDictNode(jpnslen);
-        for (int i = 0; i < jpnslen; i++) {
-            // add the path to the reply only if it isn't there already
-            Node *target;
-            int ret = Node_DictGet(objReply, jpns[i]->spath, &target);
-            if (OBJ_ERR == ret) Node_DictSet(objReply, jpns[i]->spath, jpns[i]->n);
-        }
-        SerializeNodeToJSON(objReply, &jsopt, &json);
-
-        // avoid removing the actual data by resetting the reply dict
-        // TODO: need a non-freeing Del
-        for (int i = 0; i < objReply->value.dictval.len; i++) {
-            objReply->value.dictval.entries[i]->value.kvval.val = NULL;
-        }
-        Node_Free(objReply);
+        sendMultiResponse(ctx, jt, jpns, jpnslen, &jsopt);
     }
 
     // check whether serialization had succeeded
-    if (!sdslen(json)) {
-        RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_SERIALIZE);
-        RedisModule_ReplyWithError(ctx, REJSON_ERROR_SERIALIZE);
-        goto error;
-    }
-
-    RedisModule_ReplyWithStringBuffer(ctx, json, sdslen(json));
+    // if (!sdslen(json)) {
+    //     RM_LOG_WARNING(ctx, "%s", REJSON_ERROR_SERIALIZE);
+    //     RedisModule_ReplyWithError(ctx, REJSON_ERROR_SERIALIZE);
+    //     goto error;
+    // }
 
     for (int i = 0; i < jpnslen; i++) {
         JSONPathNode_Free(jpns[i]);
     }
+
     RedisModule_Free(jpns);
-    sdsfree(json);
     return REDISMODULE_OK;
 
 error:
@@ -836,16 +956,14 @@ error:
         JSONPathNode_Free(jpns[i]);
     }
     RedisModule_Free(jpns);
-    sdsfree(json);
     return REDISMODULE_ERR;
 }
 
 /**
  * JSON.MGET <key> [<key> ...] <path>
- * Returns the values at `path` from multiple `key`s. Non-existing keys and non-existing paths are
- * reported as null.
- * Reply: Array of Bulk Strings, specifically the JSON serialization of the value at each key's
- * path.
+ * Returns the values at `path` from multiple `key`s. Non-existing keys and non-existing paths
+ * are reported as null. Reply: Array of Bulk Strings, specifically the JSON serialization of
+ * the value at each key's path.
  */
 int JSONMGet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if ((argc < 2)) {
@@ -972,6 +1090,9 @@ int JSONDel_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
         goto error;
     }
 
+    // Delete from the LRU cache, if needed
+    maybeClearPathCache(jt, jpn);
+
     // if it is the root then delete the key, otherwise delete the target from parent container
     if (SearchPath_IsRootPath(&jpn->sp)) {
         RedisModule_DeleteKey(key);
@@ -1057,7 +1178,8 @@ int JSONNum_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
     }
     oval = NODEVALUE_AS_DOUBLE(jpn->n);
 
-    // we use the json parser to convert the bval arg into a value to catch all of JSON's syntices
+    // we use the json parser to convert the bval arg into a value to catch all of JSON's
+    // syntices
     size_t vallen;
     const char *val = RedisModule_StringPtrLen(argv[(4 == argc ? 3 : 2)], &vallen);
     char *jerr = NULL;
@@ -1238,8 +1360,8 @@ error:
  * JSON.ARRINSERT <key> <path> <index> <json> [<json> ...]
  * Insert the `json` value(s) into the array at `path` before the `index` (shifts to the right).
  *
- * The index must be in the array's range. Inserting at `index` 0 prepends to the array. Negative
- * index values are interpreted as starting from the end.
+ * The index must be in the array's range. Inserting at `index` 0 prepends to the array.
+ * Negative index values are interpreted as starting from the end.
  *
  * Reply: Integer, specifically the array's new size
  */
@@ -1341,8 +1463,8 @@ int JSONArrInsert_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
     }
 
     RedisModule_ReplyWithLongLong(ctx, Node_Length(jpn->n));
+    maybeClearPathCache(jt, jpn);
     JSONPathNode_Free(jpn);
-
     RedisModule_ReplicateVerbatim(ctx);
     return REDISMODULE_OK;
 
@@ -1437,8 +1559,8 @@ int JSONArrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
     }
 
     RedisModule_ReplyWithLongLong(ctx, Node_Length(jpn->n));
+    maybeClearPathCache(jt, jpn);
     JSONPathNode_Free(jpn);
-
     RedisModule_ReplicateVerbatim(ctx);
     return REDISMODULE_OK;
 
@@ -1451,8 +1573,8 @@ error:
  * JSON.ARRINDEX <key> <path> <scalar> [start [stop]]
  * Search for the first occurance of a scalar JSON value in an array.
  *
- * The optional inclusive `start` (default 0) and exclusive `stop` (default 0, meaning that the last
- * element is included) specify a slice of the array to search.
+ * The optional inclusive `start` (default 0) and exclusive `stop` (default 0, meaning that the
+ * last element is included) specify a slice of the array to search.
  *
  * Note: out of range errors are treated by rounding the index to the array's start and end. An
  * inverse index range (e.g, from 1 to 0) will return unfound.
@@ -1548,9 +1670,9 @@ error:
  * JSON.ARRPOP <key> [path [index]]
  * Remove and return element from the index in the array.
  *
- * `path` defaults to root if not provided. `index` is the position in the array to start popping
- * from (defaults to -1, meaning the last element). Out of range indices are rounded to their
- * respective array ends. Popping an empty array yields null.
+ * `path` defaults to root if not provided. `index` is the position in the array to start
+ * popping from (defaults to -1, meaning the last element). Out of range indices are rounded to
+ * their respective array ends. Popping an empty array yields null.
  *
  * Reply: Bulk String, specifically the popped JSON value.
  */
@@ -1647,10 +1769,10 @@ error:
  * JSON.ARRTRIM <key> <path> <start> <stop>
  * Trim an array so that it contains only the specified inclusive range of elements.
  *
- * This command is extremely forgiving and using it with out of range indexes will not produce an
- * error. If `start` is larger than the array's size or `start` > `stop`, the result will be an
- * empty array. If `start` is < 0 then it will be treated as 0. If end is larger than the end of the
- * array, it will be treated like the last element in it.
+ * This command is extremely forgiving and using it with out of range indexes will not produce
+ * an error. If `start` is larger than the array's size or `start` > `stop`, the result will be
+ * an empty array. If `start` is < 0 then it will be treated as 0. If end is larger than the end
+ * of the array, it will be treated like the last element in it.
  *
  * Reply: Integer, specifically the array's new size.
  */
@@ -1721,14 +1843,61 @@ int JSONArrTrim_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int 
     Node_ArrayDelRange(jpn->n, -right, right);
 
     RedisModule_ReplyWithLongLong(ctx, (long long)Node_Length(jpn->n));
+    maybeClearPathCache(jt, jpn);
     JSONPathNode_Free(jpn);
-
     RedisModule_ReplicateVerbatim(ctx);
     return REDISMODULE_OK;
 
 error:
     JSONPathNode_Free(jpn);
     return REDISMODULE_ERR;
+}
+
+int JSONCacheInfoCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    // Just dump and return the Cache Info
+    RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
+    size_t numElems = 0;
+
+    RedisModule_ReplyWithSimpleString(ctx, "bytes");
+    RedisModule_ReplyWithLongLong(ctx, REJSON_LRUCACHE_GLOBAL->numBytes);
+    numElems += 2;
+
+    RedisModule_ReplyWithSimpleString(ctx, "items");
+    RedisModule_ReplyWithLongLong(ctx, REJSON_LRUCACHE_GLOBAL->numEntries);
+    numElems += 2;
+
+    RedisModule_ReplyWithSimpleString(ctx, "max_bytes");
+    RedisModule_ReplyWithLongLong(ctx, REJSON_LRUCACHE_GLOBAL->maxBytes);
+    numElems += 2;
+
+    RedisModule_ReplyWithSimpleString(ctx, "max_entries");
+    RedisModule_ReplyWithLongLong(ctx, REJSON_LRUCACHE_GLOBAL->maxEntries);
+    numElems += 2;
+
+    RedisModule_ReplyWithSimpleString(ctx, "min_size");
+    RedisModule_ReplyWithLongLong(ctx, REJSON_LRUCACHE_GLOBAL->minSize);
+
+    numElems += 2;
+    RedisModule_ReplySetArrayLength(ctx, numElems);
+    return REDISMODULE_OK;
+}
+
+int JSONCacheInitCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    // Initialize the cache settings. This is temporary and used for tests
+    long long maxByte = LRUCACHE_DEFAULT_MAXBYTE, maxEnt = LRUCACHE_DEFAULT_MAXENT,
+              minSize = LRUCACHE_DEFAULT_MINSIZE;
+    if (argc == 4) {
+        if (RMUtil_ParseArgs(argv, argc, 1, "lll", &maxByte, &maxEnt, &minSize) != REDISMODULE_OK) {
+            return RedisModule_ReplyWithError(ctx, "Bad arguments");
+        }
+    } else if (argc != 1) {
+        return RedisModule_ReplyWithError(ctx, "USAGE: [MAXBYTES, MAXENTS, MINSIZE]");
+    }
+
+    REJSON_LRUCACHE_GLOBAL->maxBytes = maxByte;
+    REJSON_LRUCACHE_GLOBAL->maxEntries = maxEnt;
+    REJSON_LRUCACHE_GLOBAL->minSize = minSize;
+    return RedisModule_ReplyWithSimpleString(ctx, "OK");
 }
 
 /* Creates the module's commands. */
@@ -1817,6 +1986,15 @@ int Module_CreateCommands(RedisModuleCtx *ctx) {
     if (RedisModule_CreateCommand(ctx, "json.objkeys", JSONObjKeys_RedisCommand, "readonly", 1, 1,
                                   1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
+
+    if (RedisModule_CreateCommand(ctx, "json._cacheinfo", JSONCacheInfoCommand, "readonly", 1, 1,
+                                  1) == REDISMODULE_ERR) {
+        return REDISMODULE_ERR;
+    }
+    if (RedisModule_CreateCommand(ctx, "json._cacheinit", JSONCacheInitCommand, "write", 1, 1, 1) ==
+        REDISMODULE_ERR) {
+        return REDISMODULE_ERR;
+    }
 
     return REDISMODULE_OK;
 }

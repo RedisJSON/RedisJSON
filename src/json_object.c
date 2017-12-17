@@ -1,19 +1,19 @@
 /*
-* Copyright (C) 2016-2017 Redis Labs
-*
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU Affero General Public License as
-* published by the Free Software Foundation, either version 3 of the
-* License, or (at your option) any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU Affero General Public License for more details.
-*
-* You should have received a copy of the GNU Affero General Public License
-* along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ * Copyright (C) 2016-2017 Redis Labs
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 
 #include "json_object.h"
 
@@ -35,7 +35,8 @@ static inline Node *_popNode(_JsonParserContext *ctx) {
 static int _AllowedEscapes[];
 static int _IsAllowedWhitespace(unsigned c);
 
-inline static int errorCallback(jsonsl_t jsn, jsonsl_error_t err, struct jsonsl_state_st *state, char *errat) {
+inline static int errorCallback(jsonsl_t jsn, jsonsl_error_t err, struct jsonsl_state_st *state,
+                                char *errat) {
     _JsonParserContext *jpctx = (_JsonParserContext *)jsn->data;
 
     jpctx->err = err;
@@ -45,7 +46,7 @@ inline static int errorCallback(jsonsl_t jsn, jsonsl_error_t err, struct jsonsl_
 }
 
 inline static void pushCallback(jsonsl_t jsn, jsonsl_action_t action, struct jsonsl_state_st *state,
-                  const jsonsl_char_t *at) {
+                                const jsonsl_char_t *at) {
     _JsonParserContext *jpctx = (_JsonParserContext *)jsn->data;
     Node *n = NULL;
     // only objects (dictionaries) and lists (arrays) create a container on push
@@ -64,7 +65,7 @@ inline static void pushCallback(jsonsl_t jsn, jsonsl_action_t action, struct jso
 }
 
 inline static void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct jsonsl_state_st *state,
-                 const jsonsl_char_t *at) {
+                               const jsonsl_char_t *at) {
     _JsonParserContext *jpctx = (_JsonParserContext *)jsn->data;
     const char *pos = jsn->base + state->pos_begin;  // element starting position
     size_t len = state->pos_cur - state->pos_begin;  // element length
@@ -96,8 +97,10 @@ inline static void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct json
 
         // push it
         Node *n;
-        if (JSONSL_T_STRING == state->type) n = NewStringNode(pos, len);
-        else n = NewKeyValNode(pos, len, NULL);  // NULL is a placeholder for now
+        if (JSONSL_T_STRING == state->type)
+            n = NewStringNode(pos, len);
+        else
+            n = NewKeyValNode(pos, len, NULL);  // NULL is a placeholder for now
         _pushNode(jpctx, n);
 
         if (buffer) RedisModule_Free(buffer);
@@ -112,14 +115,12 @@ inline static void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct json
                 char *eptr;
 
                 errno = 0;
-                value = strtod (pos, &eptr);
+                value = strtod(pos, &eptr);
                 // in lieu of "ERR value is not a double or out of range"
-                if ((errno == ERANGE && (value == HUGE_VAL || value == -HUGE_VAL)) || 
-                    (errno != 0 && value == 0) ||
-                    isnan(value) ||
-                    (eptr != pos + len)) {
-                        errorCallback(jsn, JSONSL_ERROR_INVALID_NUMBER, state, NULL);
-                        return;
+                if ((errno == ERANGE && (value == HUGE_VAL || value == -HUGE_VAL)) ||
+                    (errno != 0 && value == 0) || isnan(value) || (eptr != pos + len)) {
+                    errorCallback(jsn, JSONSL_ERROR_INVALID_NUMBER, state, NULL);
+                    return;
                 }
                 _pushNode(jpctx, NewDoubleNode(value));
             } else {
@@ -131,10 +132,9 @@ inline static void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct json
                 value = strtoll(pos, &eptr, 10);
                 // in lieu of "ERR value is not an integer or out of range"
                 if ((errno == ERANGE && (value == LLONG_MAX || value == LLONG_MIN)) ||
-                    (errno != 0 && value == 0) ||
-                    (eptr != pos + len)) {
-                        errorCallback(jsn, JSONSL_ERROR_INVALID_NUMBER, state, NULL);
-                        return;
+                    (errno != 0 && value == 0) || (eptr != pos + len)) {
+                    errorCallback(jsn, JSONSL_ERROR_INVALID_NUMBER, state, NULL);
+                    return;
                 }
 
                 _pushNode(jpctx, NewIntNode((int64_t)value));
@@ -160,7 +160,7 @@ inline static void popCallback(jsonsl_t jsn, jsonsl_action_t action, struct json
                 Node_ArrayAppend(jpctx->nodes[jpctx->nlen - 1], n);
                 break;
             case N_KEYVAL:
-                n = _popNode(jpctx);                
+                n = _popNode(jpctx);
                 jpctx->nodes[jpctx->nlen - 1]->value.kvval.val = n;
                 n = _popNode(jpctx);
                 Node_DictSetKeyVal(jpctx->nodes[jpctx->nlen - 1], n);
@@ -182,7 +182,7 @@ int CreateNodeFromJSON(JSONObjectCtx *ctx, const char *buf, size_t len, Node **n
     /* Embed scalars in a list (also avoids JSONSL_ERROR_STRING_OUTSIDE_CONTAINER).
      * Copying is necc. evil to avoid messing w/ non-standard string implementations (e.g. sds), but
      * forgivable because most scalars are supposed to be short-ish.
-    */
+     */
     if ((is_scalar = ('{' != _buf[_off]) && ('[' != _buf[_off]) && _off < _len)) {
         _len = _len - _off + 2;
         _buf = RedisModule_Calloc(_len, sizeof(char));
@@ -241,8 +241,7 @@ error:
     while (ctx->pctx->nlen) Node_Free(_popNode(ctx->pctx));
 
     // if this is a scalar, we need to release the temporary buffer
-    if (is_scalar)
-        RedisModule_Free(_buf);    
+    if (is_scalar) RedisModule_Free(_buf);
 
     sdsfree(serr);
 
@@ -458,7 +457,7 @@ void resetJSONObjectCtx(JSONObjectCtx *ctx) {
 void FreeJSONObjectCtx(JSONObjectCtx *ctx) {
     if (ctx) {
         RedisModule_Free(ctx->pctx->nodes);
-        RedisModule_Free(ctx->pctx);      
+        RedisModule_Free(ctx->pctx);
         jsonsl_destroy(ctx->parser);
         RedisModule_Free(ctx);
     }

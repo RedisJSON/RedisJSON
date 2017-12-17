@@ -1,19 +1,19 @@
 /*
-* Copyright (C) 2016-2017 Redis Labs
-*
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU Affero General Public License as
-* published by the Free Software Foundation, either version 3 of the
-* License, or (at your option) any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU Affero General Public License for more details.
-*
-* You should have received a copy of the GNU Affero General Public License
-* along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ * Copyright (C) 2016-2017 Redis Labs
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 
 #include "json_path.h"
 
@@ -35,6 +35,9 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path, JSONSearchPath
                     case '.':
                         tok.s++;
                         st = S_ROOT;
+                        if (pos == json) {
+                            path->hasLeadingDot = 1;
+                        }
                         break;
                     // start of key/index specifier
                     case '[':
@@ -154,7 +157,7 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path, JSONSearchPath
                         st = S_NULL;
                         goto tokenend;
                     } else {
-                        jsperr = JSON_PATH_MISSING_BRACKET_ERR;                        
+                        jsperr = JSON_PATH_MISSING_BRACKET_ERR;
                         goto syntaxerror;
                     }
                 }
@@ -174,7 +177,7 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path, JSONSearchPath
         }  // switch (st)
         offset++;
         pos++;
-        
+
         // root or ident string must end if len reached
         if (len == offset && (S_IDENT == st || S_ROOT == st)) {
             st = S_NULL;
@@ -183,7 +186,7 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path, JSONSearchPath
         }
         continue;
 
-    tokenend: {
+    tokenend : {
         if (T_INDEX == tok.type) {
             // convert the string to int. we can't use atoi because it expects
             // NULL termintated strings

@@ -65,15 +65,16 @@ docs = {
     },
 }
 
+
 class ReJSONTestCase(ModuleTestCase('../../src/rejson.so')):
     """Tests ReJSON Redis module in vitro"""
 
     def assertNotExists(self, r, key, msg=None):
-        self.assertFalse(r.exists(key), msg)  
+        self.assertFalse(r.exists(key), msg)
 
     def assertOk(self, x, msg=None):
         self.assertEquals("OK", x, msg)
-    
+
     def assertExists(self, r, key, msg=None):
         self.assertTrue(r.exists(key), msg)
 
@@ -294,7 +295,6 @@ class ReJSONTestCase(ModuleTestCase('../../src/rejson.so')):
             self.assertIsNone(r.execute_command('JSON.GET', 'test'))
 
     def testObjectCRUD(self):
-        """Test JSON Object CRUDness"""
         with self.redis() as r:
             r.client_setname(self._testMethodName)
             r.flushdb()
@@ -571,7 +571,7 @@ class ReJSONTestCase(ModuleTestCase('../../src/rejson.so')):
             # test issue #9
             self.assertOk(r.execute_command('JSON.SET', 'num', '.', '0'))
             self.assertEqual('1', r.execute_command('JSON.NUMINCRBY', 'num', '.', 1))
-            self.assertEqual('2.5', r.execute_command('JSON.NUMINCRBY', 'num', '.', 1.5))            
+            self.assertEqual('2.5', r.execute_command('JSON.NUMINCRBY', 'num', '.', 1.5))
 
     def testStrCommands(self):
         """Test JSON.STRAPPEND and JSON.STRLEN commands"""
@@ -687,6 +687,85 @@ class ReJSONTestCase(ModuleTestCase('../../src/rejson.so')):
         res = self.cmd('JSON.GET', 'dblNum', '[0]')
         self.assertEqual(1512060373.222988, float(res))
         # self.assertEqual('1512060373.222988', res)
+
+    def getCacheInfo(self):
+        res = self.cmd('JSON._CACHEINFO')
+        ret = {}
+        for x in range(0, len(res), 2):
+            ret[res[x]] = res[x+1]
+        return ret
+
+
+    def testLruCache(self):
+        def cacheItems():
+            return self.getCacheInfo()['items']
+        def cacheBytes():
+            return self.getCacheInfo()['bytes']
+
+        self.cmd('JSON.SET', 'myDoc', '.', json.dumps({
+            'foo': 'fooValue',
+            'bar': 'barValue',
+            'baz': 'bazValue'
+        }))
+
+        res = self.cmd('JSON.GET', 'myDoc', 'foo')
+        self.assertEqual(1, cacheItems())
+        self.assertEqual('"fooValue"', res)
+        self.assertEqual('"fooValue"', self.cmd('JSON.GET', 'myDoc', 'foo'))
+        self.assertEqual('"fooValue"', self.cmd('JSON.GET', 'myDoc', '.foo'))
+        # Get it again - item count should be the same
+        self.cmd('JSON.GET', 'myDoc', 'foo')
+        self.assertEqual(1, cacheItems())
+
+        res = self.cmd('JSON.GET', 'myDoc', '.')
+        self.assertEqual({"baz":"bazValue","foo":"fooValue","bar":"barValue"}, json.loads(res))
+
+        self.cmd('JSON.DEL', 'myDoc', '.')
+        self.assertEqual(0, cacheItems())
+        self.assertEqual(0, cacheBytes())
+
+        # Try with an array document
+        self.cmd('JSON.SET', 'arr', '.', '[{}, 1,2,3,4]')
+        self.assertEqual('{}', self.cmd('JSON.GET', 'arr', '[0]'))
+        self.assertEqual(1, cacheItems())
+        self.assertEqual('{}', self.cmd('JSON.GET', 'arr', '[0]'))
+        self.assertEqual(1, cacheItems())
+        self.assertEqual('{}', self.cmd('JSON.GET', 'arr', '[0]'))
+
+        self.assertEqual('[{},1,2,3,4]', self.cmd('JSON.GET', 'arr', '.'))
+        self.assertEqual(2, cacheItems())
+
+        self.cmd('JSON.SET', 'arr', '[0].key', 'null')
+        self.assertEqual(0, cacheItems())
+
+        self.assertEqual('null', self.cmd('JSON.GET', 'arr', '[0].key'))
+        self.assertEqual(1, cacheItems())
+
+        # Try with a document that contains top level object with an array child
+        self.cmd('JSON.DEL', 'arr', '.')
+        self.cmd('JSON.SET', 'mixed', '.', '{"arr":[{},1,2,3,null]}')
+        self.assertEqual('1', self.cmd('JSON.GET', 'mixed', '.arr[1]'))
+        self.assertEqual(1, cacheItems())
+        self.cmd('JSON.ARRAPPEND', 'mixed', 'arr', '42')
+        self.assertEqual(0, cacheItems())
+        self.assertEqual('1', self.cmd('JSON.GET', 'mixed', 'arr[1]'))
+
+        # Test cache eviction
+        self.cmd('json._cacheinit', 4096, 20, 0)
+        keys = ['json_{}'.format(x) for x in range(10)]
+        paths = ['path_{}'.format(x) for x in xrange(100)]
+        doc = json.dumps({ p: None for p in paths})
+
+        # 100k different path/key combinations
+        for k in keys:
+            self.cmd('JSON.SET', k, '.', doc)
+        
+        # Now get 'em back all
+        for k in keys:
+            for p in paths:
+                self.cmd('JSON.GET', k, p)
+        
+        self.cmd('json._cacheinit')
 
 if __name__ == '__main__':
     unittest.main()
