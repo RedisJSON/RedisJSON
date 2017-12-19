@@ -265,47 +265,52 @@ typedef struct {
     if (b->indent)               \
         for (int i = 0; i < b->depth; i++) b->buf = sdscatsds(b->buf, b->indentstr);
 
+static const char twoCharEscape[256] = {0,
+                                        ['"'] = '"',
+                                        ['\\'] = '\\',
+                                        ['/'] = '/',
+                                        ['\b'] = 'b',
+                                        ['\f'] = 'f',
+                                        ['\n'] = 'n',
+                                        ['\r'] = 'r',
+                                        ['\t'] = 't'};
+
 inline static void _JSONSerialize_StringValue(Node *n, void *ctx) {
     _JSONBuilderContext *b = (_JSONBuilderContext *)ctx;
     size_t len = n->value.strval.len;
     const char *p = n->value.strval.data;
 
+    // Pointer to the beginning of the last 'simple' string. This allows to
+    // forego adding char-by-char for longer spans of non-special strings
+    const char *simpleBegin = NULL;
+#define FLUSH_SIMPLE()                                            \
+    if (simpleBegin != NULL) {                                    \
+        b->buf = sdscatlen(b->buf, simpleBegin, p - simpleBegin); \
+        simpleBegin = NULL;                                       \
+    }
+
     b->buf = sdsMakeRoomFor(b->buf, len + 2);  // we'll need at least as much room as the original
     b->buf = sdscatlen(b->buf, "\"", 1);
     while (len--) {
-        switch (*p) {
-            case '"':   // quotation mark
-            case '\\':  // reverse solidus
-                b->buf = sdscatprintf(b->buf, "\\%c", *p);
-                break;
-            case '/':  // the standard is clear wrt solidus so we're zealous
-                b->buf = sdscatlen(b->buf, "\\/", 2);
-                break;
-            case '\b':  // backspace
-                b->buf = sdscatlen(b->buf, "\\b", 2);
-                break;
-            case '\f':  // formfeed
-                b->buf = sdscatlen(b->buf, "\\f", 2);
-                break;
-            case '\n':  // newline
-                b->buf = sdscatlen(b->buf, "\\n", 2);
-                break;
-            case '\r':  // carriage return
-                b->buf = sdscatlen(b->buf, "\\r", 2);
-                break;
-            case '\t':  // horizontal tab
-                b->buf = sdscatlen(b->buf, "\\t", 2);
-                break;
-            default:
-                if (b->noescape || ((unsigned char)*p > 31 && isprint(*p)))
-                    b->buf = sdscatprintf(b->buf, "%c", *p);
-                else
-                    b->buf = sdscatprintf(b->buf, "\\u%04x", (unsigned char)*p);
-                break;
+        char escChr = 0;
+        if ((escChr = twoCharEscape[(uint8_t)*p])) {
+            FLUSH_SIMPLE();
+            char bufTmp[2] = {'\\', escChr};
+            b->buf = sdscatlen(b->buf, bufTmp, 2);
+        } else {
+            if (b->noescape || ((unsigned char)*p > 31 && isprint(*p))) {
+                if (!simpleBegin) {
+                    simpleBegin = p;
+                }
+            } else {
+                FLUSH_SIMPLE();
+                b->buf = sdscatprintf(b->buf, "\\u%04x", (unsigned char)*p);
+            }
         }
         p++;
     }
 
+    FLUSH_SIMPLE();
     b->buf = sdscatlen(b->buf, "\"", 1);
 }
 
