@@ -724,12 +724,35 @@ static sds getSerializedJson(JSONType_t *jt, const JSONPathNode_t *pathInfo,
     // Normalize the path. If the original path begins with a dot, strip it
     const char *pathStr = pathInfo->spath;
     size_t pathLen = pathInfo->spathlen;
+    int shouldCache = 1;
+    sds ret = NULL;
+
     if (pathInfo->sp.hasLeadingDot) {
         pathStr++;
         pathLen--;
     }
 
-    sds ret = LruCache_GetValue(REJSON_LRUCACHE_GLOBAL, jt, pathStr, pathLen);
+    if (pathInfo->n) {
+        switch (pathInfo->n->type) {
+            // Don't store trivial types in the cache - i.e. those which aren't
+            // costly to serialize.
+            case N_NULL:
+            case N_BOOLEAN:
+            case N_INTEGER:
+            case N_NUMBER:
+                shouldCache = 0;
+                break;
+            default:
+                shouldCache = 1;
+                break;
+        }
+    } else {
+        shouldCache = 0;
+    }
+
+    if (shouldCache) {
+        ret = LruCache_GetValue(REJSON_LRUCACHE_GLOBAL, jt, pathStr, pathLen);
+    }
     if (ret) {
         *wasFound = 1;
         if (target) {
@@ -745,7 +768,9 @@ static sds getSerializedJson(JSONType_t *jt, const JSONPathNode_t *pathInfo,
         ret = sdsempty();
     }
     SerializeNodeToJSON(pathInfo->n, opts, &ret);
-    LruCache_AddValue(REJSON_LRUCACHE_GLOBAL, jt, pathStr, pathLen, ret, sdslen(ret));
+    if (shouldCache) {
+        LruCache_AddValue(REJSON_LRUCACHE_GLOBAL, jt, pathStr, pathLen, ret, sdslen(ret));
+    }
     *wasFound = 0;
     if (target) {
         *target = ret;

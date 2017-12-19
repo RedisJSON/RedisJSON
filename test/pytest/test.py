@@ -739,22 +739,24 @@ class ReJSONTestCase(ModuleTestCase('../../src/rejson.so')):
         self.assertEqual(0, cacheItems())
 
         self.assertEqual('null', self.cmd('JSON.GET', 'arr', '[0].key'))
-        self.assertEqual(1, cacheItems())
+        # NULL is still not cached!
+        self.assertEqual(0, cacheItems())
 
         # Try with a document that contains top level object with an array child
         self.cmd('JSON.DEL', 'arr', '.')
-        self.cmd('JSON.SET', 'mixed', '.', '{"arr":[{},1,2,3,null]}')
-        self.assertEqual('1', self.cmd('JSON.GET', 'mixed', '.arr[1]'))
+        self.cmd('JSON.SET', 'mixed', '.', '{"arr":[{},\"Hello\",2,3,null]}')
+        self.assertEqual("\"Hello\"", self.cmd('JSON.GET', 'mixed', '.arr[1]'))
         self.assertEqual(1, cacheItems())
+
         self.cmd('JSON.ARRAPPEND', 'mixed', 'arr', '42')
         self.assertEqual(0, cacheItems())
-        self.assertEqual('1', self.cmd('JSON.GET', 'mixed', 'arr[1]'))
+        self.assertEqual("\"Hello\"", self.cmd('JSON.GET', 'mixed', 'arr[1]'))
 
         # Test cache eviction
         self.cmd('json._cacheinit', 4096, 20, 0)
         keys = ['json_{}'.format(x) for x in range(10)]
         paths = ['path_{}'.format(x) for x in xrange(100)]
-        doc = json.dumps({ p: None for p in paths})
+        doc = json.dumps({ p: "some string" for p in paths})
 
         # 100k different path/key combinations
         for k in keys:
@@ -764,7 +766,8 @@ class ReJSONTestCase(ModuleTestCase('../../src/rejson.so')):
         for k in keys:
             for p in paths:
                 self.cmd('JSON.GET', k, p)
-        
+        self.assertEqual(20, cacheItems())
+
         self.cmd('json._cacheinit')
 
 if __name__ == '__main__':
