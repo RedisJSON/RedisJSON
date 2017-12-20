@@ -15,10 +15,10 @@ static void pluckEntry(LruCache *cache, LruPathEntry *entry) {
         entry->lru_next->lru_prev = entry->lru_prev;
     }
     if (entry == cache->newest) {
-        cache->newest = entry->lru_next;
+        cache->newest = entry->lru_prev;
     }
     if (entry == cache->oldest) {
-        cache->oldest = entry->lru_prev;
+        cache->oldest = entry->lru_next;
     }
 }
 
@@ -35,6 +35,9 @@ static void touchEntry(LruCache *cache, LruPathEntry *entry) {
 // Don't free the purged entry, this entry will be reused
 #define PURGE_NOFREE 0x01
 
+// Don't change the item's key list
+#define PURGE_NOKEYCHECK 0x02
+
 // static size_t countKeyEntries(const LruPathEntry *ent) {
 //     size_t n = 0;
 //     for (; ent; ent = ent->key_next, n++) {
@@ -48,10 +51,11 @@ static LruPathEntry *purgeEntry(LruCache *cache, LruPathEntry *entry, int option
     cache->numBytes -= sdslen(entry->value);
 
     // Clear from the JSON's list
-    LruPathEntry *prev = NULL, *found = NULL;
+    int found;
+    LruPathEntry *prev = NULL;
     for (LruPathEntry *cur = entry->parent->lruEntries; cur; cur = cur->key_next) {
         if (cur == entry) {
-            found = cur;
+            found = 1;
             break;
         } else {
             prev = cur;
@@ -60,16 +64,16 @@ static LruPathEntry *purgeEntry(LruCache *cache, LruPathEntry *entry, int option
 
     assert(found);
     if (prev) {
-        prev->key_next = found->key_next;
+        prev->key_next = entry->key_next;
     } else {
-        entry->parent->lruEntries = found->key_next;
+        entry->parent->lruEntries = entry->key_next;
     }
 
-    found->key_next = NULL;
     if (!(options & PURGE_NOFREE)) {
         sdsfree(entry->path);
         sdsfree(entry->value);
         free(entry);
+        entry = NULL;
     }
     return entry;
 }
@@ -154,7 +158,6 @@ void LruCache_ClearValues(LruCache *cache, JSONType_t *json, const char *path, s
             ent = ent->key_next;
             continue;
         }
-
         // Otherwise, purge the entry
         LruPathEntry *next = ent->key_next;
         purgeEntry(cache, ent, 0);
