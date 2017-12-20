@@ -51,7 +51,7 @@ static LruPathEntry *purgeEntry(LruCache *cache, LruPathEntry *entry, int option
     cache->numBytes -= sdslen(entry->value);
 
     // Clear from the JSON's list
-    int found;
+    int found = 0;
     LruPathEntry *prev = NULL;
     for (LruPathEntry *cur = entry->parent->lruEntries; cur; cur = cur->key_next) {
         if (cur == entry) {
