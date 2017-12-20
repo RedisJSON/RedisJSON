@@ -275,43 +275,46 @@ static const char twoCharEscape[256] = {0,
                                         ['\r'] = 'r',
                                         ['\t'] = 't'};
 
-inline static void _JSONSerialize_StringValue(Node *n, void *ctx) {
-    _JSONBuilderContext *b = (_JSONBuilderContext *)ctx;
-    size_t len = n->value.strval.len;
-    const char *p = n->value.strval.data;
+sds JSONSerialize_String(sds buf, const char *s, size_t len, int noescape) {
 
     // Pointer to the beginning of the last 'simple' string. This allows to
     // forego adding char-by-char for longer spans of non-special strings
     const char *simpleBegin = NULL;
-#define FLUSH_SIMPLE()                                            \
-    if (simpleBegin != NULL) {                                    \
-        b->buf = sdscatlen(b->buf, simpleBegin, p - simpleBegin); \
-        simpleBegin = NULL;                                       \
+#define FLUSH_SIMPLE()                                      \
+    if (simpleBegin != NULL) {                              \
+        buf = sdscatlen(buf, simpleBegin, s - simpleBegin); \
+        simpleBegin = NULL;                                 \
     }
 
-    b->buf = sdsMakeRoomFor(b->buf, len + 2);  // we'll need at least as much room as the original
-    b->buf = sdscatlen(b->buf, "\"", 1);
+    buf = sdsMakeRoomFor(buf, len + 2);  // we'll need at least as much room as the original
+    buf = sdscatlen(buf, "\"", 1);
     while (len--) {
         char escChr = 0;
-        if ((escChr = twoCharEscape[(uint8_t)*p])) {
+        if ((escChr = twoCharEscape[(uint8_t)*s])) {
             FLUSH_SIMPLE();
             char bufTmp[2] = {'\\', escChr};
-            b->buf = sdscatlen(b->buf, bufTmp, 2);
+            buf = sdscatlen(buf, bufTmp, 2);
         } else {
-            if (b->noescape || ((unsigned char)*p > 31 && isprint(*p))) {
+            if (noescape || ((unsigned char)*s > 31 && isprint(*s))) {
                 if (!simpleBegin) {
-                    simpleBegin = p;
+                    simpleBegin = s;
                 }
             } else {
                 FLUSH_SIMPLE();
-                b->buf = sdscatprintf(b->buf, "\\u%04x", (unsigned char)*p);
+                buf = sdscatprintf(buf, "\\u%04x", (unsigned char)*s);
             }
         }
-        p++;
+        s++;
     }
 
     FLUSH_SIMPLE();
-    b->buf = sdscatlen(b->buf, "\"", 1);
+    buf = sdscatlen(buf, "\"", 1);
+    return buf;
+}
+
+inline static void _JSONSerialize_StringValue(Node *n, void *ctx) {
+    _JSONBuilderContext *b = (_JSONBuilderContext *)ctx;
+    b->buf = JSONSerialize_String(b->buf, n->value.strval.data, n->value.strval.len, b->noescape);
 }
 
 inline static void _JSONSerialize_BeginValue(Node *n, void *ctx) {
