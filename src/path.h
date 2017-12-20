@@ -1,19 +1,19 @@
 /*
-* Copyright (C) 2016-2017 Redis Labs
-*
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU Affero General Public License as
-* published by the Free Software Foundation, either version 3 of the
-* License, or (at your option) any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU Affero General Public License for more details.
-*
-* You should have received a copy of the GNU Affero General Public License
-* along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ * Copyright (C) 2016-2017 Redis Labs
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 
 #ifndef __PATH_H__
 #define __PATH_H__
@@ -26,7 +26,7 @@
 
 /* The type of a path node */
 typedef enum {
-    NT_ROOT,
+    NT_ROOT = 0,
     NT_KEY,
     NT_INDEX,
 } PathNodeType;
@@ -58,13 +58,14 @@ typedef struct {
 Node *__pathNode_eval(PathNode *pn, Node *n, PathError *err);
 
 /**
-* A search path parsed from JSON or other formats, representing
-* a lookup path in the object tree
-*/
+ * A search path parsed from JSON or other formats, representing
+ * a lookup path in the object tree
+ */
 typedef struct {
     PathNode *nodes;
-    size_t len;
-    size_t cap;
+    uint32_t len;
+    uint32_t cap;
+    int hasLeadingDot;
 } SearchPath;
 
 /* Create a new search path. cap can be 0 if you don't know it */
@@ -85,16 +86,16 @@ void SearchPath_Free(SearchPath *p);
 // Node *__pathNode_eval(PathNode *pn, Node *n, PathError *err);
 
 /**
-* Find a node in an object tree based on a parsed path.
-* An error code is returned, and if a node matches the path, its value
-* is put into n's pointer. This can be NULL if the lookup matches a NULL node.
-*/
+ * Find a node in an object tree based on a parsed path.
+ * An error code is returned, and if a node matches the path, its value
+ * is put into n's pointer. This can be NULL if the lookup matches a NULL node.
+ */
 PathError SearchPath_Find(SearchPath *path, Node *root, Node **n);
 
 /**
-* Like SearchPath_Find, but sets p to the parent container of n. In case of E_NOKEY, E_NOINDEX,
-* and E_INFINDEX returns the path level of the error in errnode.
-*/
+ * Like SearchPath_Find, but sets p to the parent container of n. In case of E_NOKEY, E_NOINDEX,
+ * and E_INFINDEX returns the path level of the error in errnode.
+ */
 PathError SearchPath_FindEx(SearchPath *path, Node *root, Node **n, Node **p, int *errnode);
 
 #endif

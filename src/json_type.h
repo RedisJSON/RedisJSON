@@ -30,9 +30,12 @@
 
 #define OBJECT_ROOT_PATH "."
 
+struct LruPathEntry;
+
 /* A wrapper for a JSON value. */
-typedef struct {
+typedef struct JSONType_t {
     Node *root;
+    struct LruPathEntry *lruEntries;
 } JSONType_t;
 
 void *JSONTypeRdbLoad(RedisModuleIO *rdb, int encver);
