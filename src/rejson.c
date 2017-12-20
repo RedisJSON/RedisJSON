@@ -835,7 +835,8 @@ static void sendMultiResponse(RedisModuleCtx *ctx, JSONType_t *jt, JSONPathNode_
     json = sdsempty();
     json = sdscat(json, "{");
     for (int i = 0; i < npns; i++) {
-        json = sdscatprintf(json, "\"%.*s\":", (int)pns[i]->spathlen, pns[i]->spath);
+        json = JSONSerialize_String(json, pns[i]->spath, pns[i]->spathlen, 1);
+        json = sdscatlen(json, ":", 1);
         // Append to the buffer
         int dummy;
         getSerializedJson(jt, pns[i], options, &dummy, &json);
@@ -944,16 +945,6 @@ int JSONGet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
             jpnslen++;
         }  // while (jpnslen < npaths)
     }
-
-    /**
-     * TODO:
-     * (1) Manually open preamble with {
-     * (2) For each path, see if we can get the preserialized version or if
-     *     we need to serialize anew.
-     * (3) Ensure that serialize *appends* to the sds and doesn't overwrite it
-     * (4) Append commas between each.
-     * (5) Ensure key names are properly escaped
-     */
 
     // return the single path's JSON value, or wrap all paths-values as an object
     if (1 == jpnslen) {
