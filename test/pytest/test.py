@@ -705,7 +705,8 @@ class ReJSONTestCase(ModuleTestCase('../../src/rejson.so')):
         self.cmd('JSON.SET', 'myDoc', '.', json.dumps({
             'foo': 'fooValue',
             'bar': 'barValue',
-            'baz': 'bazValue'
+            'baz': 'bazValue',
+            'key\\': 'escapedKey'
         }))
 
         res = self.cmd('JSON.GET', 'myDoc', 'foo')
@@ -718,7 +719,19 @@ class ReJSONTestCase(ModuleTestCase('../../src/rejson.so')):
         self.assertEqual(1, cacheItems())
 
         res = self.cmd('JSON.GET', 'myDoc', '.')
-        self.assertEqual({"baz":"bazValue","foo":"fooValue","bar":"barValue"}, json.loads(res))
+        # print repr(json.loads(res))
+        self.assertEqual({u'bar': u'barValue', u'foo': u'fooValue', u'baz': u'bazValue', u'key\\': u'escapedKey'},
+                         json.loads(res))
+
+        # Try to issue multiple gets
+        self.cmd('JSON.GET', 'myDoc', '.foo')
+        self.cmd('JSON.GET', 'myDoc', 'foo')
+        self.cmd('JSON.GET', 'myDoc', '.bar')
+        self.cmd('JSON.GET', 'myDoc', 'bar')
+
+        res = self.cmd('JSON.GET', 'myDoc', '.foo', 'foo', '.bar', 'bar', '["key\\"]')
+        # print repr(json.loads(res))
+        self.assertEqual({u'.foo': u'fooValue', u'foo': u'fooValue', u'bar': u'barValue', u'.bar': u'barValue', u'["key\\"]': u'escapedKey'}, json.loads(res))
 
         self.cmd('JSON.DEL', 'myDoc', '.')
         self.assertEqual(0, cacheItems())
