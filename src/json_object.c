@@ -341,7 +341,9 @@ inline static void _JSONSerialize_BeginValue(Node *n, void *ctx) {
                 _JSONSerialize_StringValue(n, b);
                 break;
             case N_KEYVAL:
-                b->buf = sdscatfmt(b->buf, "\"%s\":%s", n->value.kvval.key, b->spacestr);
+                b->buf = JSONSerialize_String(b->buf, n->value.kvval.key,
+                                              strlen(n->value.kvval.key), b->noescape);
+                b->buf = sdscatfmt(b->buf, ":%s", b->spacestr);
                 break;
             case N_DICT:
                 b->buf = sdscatlen(b->buf, "{", 1);
