@@ -14,58 +14,18 @@ at: https://github.com/RedisLabsModules/ReJSON
 
 ## Quickstart
 
-1.  [Build the ReJSON module library](#building-the-module)
-1.  [Load ReJSON to Redis](#loading-the-module-to-redis)
+1.  [Launch ReJSON with Docker](#launch-rejson-with-docker)
 1.  [Use it from **any** Redis client](#using-rejson), e.g.:
 
 ![ReJSON with `redis-cli`](images/demo.gif)
 
-## Building the module
+Alternatively, you can also build and load the module yourself. [Build and Load the ReJSON module library](#building-and-loading-the-module)
 
-### Linux Ubuntu 16.04
 
-Requirements:
-
-* The ReJSON repository: `git clone https://github.com/RedisLabsModules/rejson.git`
-* The `build-essential` package: `apt-get install build-essential`
-
-To build the module, run `make` in the project's directory.
-
-Congratulations! You can find the compiled module library at `src/rejson.so`.
-
-### MacOSX
-
-To build the module, run `make` in the project's directory.
-
-Congratulations! You can find the compiled module library at `src/rejson.so`.
-
-## Loading the module to Redis
-
-Requirements:
-
-* [Redis v4.0 or above](http://redis.io/download)
-
-We recommend you have Redis load the module during startup by adding the following to your `redis.conf` file:
-
+## Launch ReJSON with Docker
+Run the following on Windows, MacOS or Linux with Docker.
 ```
-loadmodule /path/to/module/rejson.so
-```
-
-In the line above replace `/path/to/module/rejson.so` with the actual path to the module's library. Alternatively, you can have Redis load the module using the following command line argument syntax:
-
-```bash
-~/$ redis-server --loadmodule /path/to/module/rejson.so
-```
-
-Lastly, you can also use the [`MODULE LOAD`](http://redis.io/commands/module-load) command. Note, however, that `MODULE LOAD` is a **dangerous command** and may be blocked/deprecated in the future due to security considerations.
-
-Once the module has been loaded successfully, the Redis log should have lines similar to:
-
-```
-...
-1877:M 23 Dec 02:02:59.725 # <ReJSON> JSON data type for Redis - v1.0.0 [encver 0]
-1877:M 23 Dec 02:02:59.725 * Module 'ReJSON' loaded from <redacted>/src/rejson.so
-...
+docker run -p 6379:6379 --name redis-rejson redislabs/rejson:latest
 ```
 
 ## Using ReJSON
@@ -186,6 +146,56 @@ r = redis.StrictRedis()
 r.execute_command('JSON.SET', 'doc', '.', json.dumps(data))
 reply = json.loads(r.execute_command('JSON.GET', 'doc'))
 ```
+
+
+## Building and Loading the Module
+
+### Linux Ubuntu 16.04
+
+Requirements:
+
+* The ReJSON repository: `git clone https://github.com/RedisLabsModules/rejson.git`
+* The `build-essential` package: `apt-get install build-essential`
+
+To build the module, run `make` in the project's directory.
+
+Congratulations! You can find the compiled module library at `src/rejson.so`.
+
+### MacOSX
+
+To build the module, run `make` in the project's directory.
+
+Congratulations! You can find the compiled module library at `src/rejson.so`.
+
+### Loading the module to Redis
+
+Requirements:
+
+* [Redis v4.0 or above](http://redis.io/download)
+
+We recommend you have Redis load the module during startup by adding the following to your `redis.conf` file:
+
+```
+loadmodule /path/to/module/rejson.so
+```
+
+In the line above replace `/path/to/module/rejson.so` with the actual path to the module's library. Alternatively, you can have Redis load the module using the following command line argument syntax:
+
+```bash
+~/$ redis-server --loadmodule /path/to/module/rejson.so
+```
+
+Lastly, you can also use the [`MODULE LOAD`](http://redis.io/commands/module-load) command. Note, however, that `MODULE LOAD` is a **dangerous command** and may be blocked/deprecated in the future due to security considerations.
+
+Once the module has been loaded successfully, the Redis log should have lines similar to:
+
+```
+...
+1877:M 23 Dec 02:02:59.725 # <ReJSON> JSON data type for Redis - v1.0.0 [encver 0]
+1877:M 23 Dec 02:02:59.725 * Module 'ReJSON' loaded from <redacted>/src/rejson.so
+...
+```
+
 
 ### Client libraries
 
