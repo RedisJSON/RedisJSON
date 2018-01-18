@@ -1270,6 +1270,8 @@ int JSONNum_GenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
     sds json = sdsempty();
     SerializeNodeToJSON(jpn->n, &jsopt, &json);
     RedisModule_ReplyWithStringBuffer(ctx, json, sdslen(json));
+    maybeClearPathCache(jt, jpn);
+
     sdsfree(json);
 
     Node_Free(joval);
