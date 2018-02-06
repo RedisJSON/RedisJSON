@@ -1,4 +1,5 @@
 [![CircleCI](https://circleci.com/gh/RedisLabsModules/rejson/tree/master.svg?style=svg)](https://circleci.com/gh/RedisLabsModules/rejson/tree/master)
+[![Open Source Helpers](https://www.codetriage.com/redislabsmodules/rejson/badges/users.svg)](https://www.codetriage.com/redislabsmodules/rejson)
 
 # ReJSON - a JSON data type for Redis
 
