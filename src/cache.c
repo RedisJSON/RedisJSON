@@ -8,24 +8,32 @@ LruCache jsonLruCache_g = {.maxEntries = LRUCACHE_DEFAULT_MAXENT,
                            .minSize = LRUCACHE_DEFAULT_MINSIZE};
 
 static void pluckEntry(LruCache *cache, LruPathEntry *entry) {
-    if (entry->lru_prev) {
-        entry->lru_prev->lru_next = entry->lru_next;
+    LruPathEntry *prev = entry->lru_prev, *next = entry->lru_next;
+    assert(entry->lru_prev != entry);
+    assert(entry->lru_next != entry);
+    if (next) {
+        next->lru_prev = prev;
     }
-    if (entry->lru_next) {
-        entry->lru_next->lru_prev = entry->lru_prev;
+    if (prev) {
+        prev->lru_next = next;
     }
+
     if (entry == cache->newest) {
-        cache->newest = entry->lru_prev;
+        cache->newest = prev;
     }
     if (entry == cache->oldest) {
-        cache->oldest = entry->lru_next;
+        cache->oldest = next;
     }
+
+    entry->lru_next = entry->lru_prev = NULL;
 }
 
 static void touchEntry(LruCache *cache, LruPathEntry *entry) {
     pluckEntry(cache, entry);
-    entry->lru_prev = NULL;
-    entry->lru_next = cache->newest;
+    if (cache->newest) {
+        cache->newest->lru_prev = entry;
+        entry->lru_next = cache->newest;
+    }
     cache->newest = entry;
     if (cache->oldest == NULL) {
         cache->oldest = entry;
