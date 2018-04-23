@@ -1,34 +1,29 @@
-FROM ubuntu:xenial
-LABEL Description="This image is used to Redis with ReJSON under valgrind" Vendor="Redis Labs" Version="1.0"
+FROM redis:latest as builder
 
-RUN apt-get -y update && \
-    apt-get -y install \
-        apt-utils \
-        build-essential \
-        wget \
-        zip \
-        valgrind
+ENV LIBDIR /usr/lib/redis/modules
+ENV DEPS "python python-setuptools python-pip wget unzip build-essential"
+# Set up a build environment
+RUN set -ex;\
+    deps="$DEPS";\
+    apt-get update; \
+	apt-get install -y --no-install-recommends $deps;\
+    pip install rmtest; 
 
-RUN mkdir /build
-WORKDIR /build
+# Build the source
+ADD . /REJSON
+WORKDIR /REJSON
+RUN set -ex;\
+    make clean; \
+    deps="$DEPS";\
+    make all -j 4; \
+    make test;
 
-RUN wget https://github.com/antirez/redis/archive/unstable.zip && \
-    unzip unstable.zip && \
-    rm unstable.zip && \
-    mv redis-unstable redis
+# Package the runner
+FROM redis:latest
+ENV LIBDIR /usr/lib/redis/modules
+WORKDIR /data
+RUN set -ex;\
+    mkdir -p "$LIBDIR";
+COPY --from=builder /REJSON/src/rejson.so  "$LIBDIR"
 
-WORKDIR /build/redis
-RUN make distclean
-RUN make valgrind
-
-WORKDIR /build/rejson
-COPY ./deps deps/
-COPY ./src src/
-COPY ./test test/
-COPY ./Makefile ./
-ENV DEBUG 1
-RUN make all
-
-EXPOSE 6379
-WORKDIR /build
- CMD ["valgrind", "--tool=memcheck", "--leak-check=full", "--track-origins=yes", "--show-reachable=no", "--show-possibly-lost=no", "--suppressions=redis/src/valgrind.sup", "redis/src/redis-server", "--protected-mode", "no", "--loadmodule", "/build/rejson/src/rejson.so"]
+CMD ["redis-server", "--loadmodule", "/usr/lib/redis/modules/rejson.so"]
