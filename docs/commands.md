@@ -35,7 +35,7 @@ The time complexity of the command does not include that of the [path](path.md#t
 ### Syntax
 
 ```
-JSON.DEL <key> <path>
+JSON.DEL <key> [path]
 ```
 
 ### Description
