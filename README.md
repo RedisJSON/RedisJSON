@@ -39,4 +39,5 @@ ReJSON is made possible only because of the existance of these amazing open sour
 
 ## License
 
-AGPLv3 - see [LICENSE](LICENSE)
+Apache 2.0 with Commons Clause - see [LICENSE](LICENSE)
+
