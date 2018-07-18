@@ -10,7 +10,7 @@ google_analytics:
 theme:
   name: 'material'
   language: 'en'
-  logo: 'images/logo_small.png'
+  logo: 'images/logo.svg'
   favicon: 'images/favicon.png'
   palette:
     primary: 'indigo'
