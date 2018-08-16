@@ -18,10 +18,10 @@
 #ifndef __REJSON_H__
 #define __REJSON_H__
 
-#include <logging.h>
-#include <sds.h>
+#include <rmutil/logging.h>
+#include <rmutil/sds.h>
 #include <string.h>
-#include <util.h>
+#include <rmutil/util.h>
 #include "json_object.h"
 #include "json_path.h"
 #include "object.h"

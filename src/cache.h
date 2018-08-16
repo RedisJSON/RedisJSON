@@ -20,7 +20,7 @@
  * LRU Entry, per path. Stored under keys
  */
 #include "rejson.h"
-#include <sds.h>
+#include <rmutil/sds.h>
 typedef struct LruPathEntry {
     // Prev/Next in the LRU itself
     struct LruPathEntry *lru_prev;

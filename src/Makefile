@@ -16,7 +16,7 @@ endif
 
 # Find the OS
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
-INCLUDE_DIRS = -I"$(RM_INCLUDE_DIR)" -I"$(DEPS_DIR)/jsonsl"  -I"$(DEPS_DIR)/RedisModuleSDK/rmutil"
+INCLUDE_DIRS = -I"$(RM_INCLUDE_DIR)" -I"$(DEPS_DIR)/jsonsl"  -I"$(DEPS_DIR)/RedisModuleSDK"
 CFLAGS = $(INCLUDE_DIRS) -Wall $(DEBUGFLAGS) -fPIC -std=gnu99  -D_GNU_SOURCE
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
 
@@ -33,7 +33,7 @@ export CFLAGS
 export DEBUGFLAGS
 
 SOURCEDIR=$(shell pwd -P)
-CC_SOURCES = $(wildcard $(SOURCEDIR)/*.c) $(wildcard $(SOURCEDIR)/dep/*.c) 
+CC_SOURCES = $(wildcard $(SOURCEDIR)/*.c) $(wildcard $(SOURCEDIR)/dep/*.c)
 CC_OBJECTS = $(patsubst $(SOURCEDIR)/%.c, $(SOURCEDIR)/%.o, $(CC_SOURCES))
 LIBS = $(DEPS_DIR)/jsonsl/jsonsl.o $(DEPS_DIR)/RedisModuleSDK/rmutil/librmutil.a
 MODULE=rejson.so
@@ -73,7 +73,7 @@ package: $(MODULE) print_version
 		$(RAMP_COMMAND) --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}.`./print_version`.zip" "`pwd`/$(MODULE)";\
 		$(RAMP_COMMAND) --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}.latest.zip" "`pwd`/$(MODULE)";\
 	fi
-	
+
 	@# On master builds - package the master latest
 	@set -e; if [ "$$TRAVIS_BRANCH" = "master" ]; then\
 		$(RAMP_COMMAND) --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}.master.zip" "`pwd`/$(MODULE)";\

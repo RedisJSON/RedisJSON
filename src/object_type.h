@@ -19,7 +19,7 @@
 #define __OBJECT_TYPE_H__
 
 #include <string.h>
-#include <vector.h>
+#include <rmutil/vector.h>
 #include "object.h"
 #include "redismodule.h"
 

@@ -23,7 +23,7 @@
 #include <float.h>
 #include <jsonsl.h>
 #include <math.h>
-#include <sds.h>
+#include <rmutil/sds.h>
 #include <stdlib.h>
 #include "object.h"
 #include "rmstrndup.h"
