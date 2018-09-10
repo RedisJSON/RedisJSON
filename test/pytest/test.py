@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from rmtest import ModuleTestCase
+from rmtest import BaseModuleTestCase
+import rmtest.config
 import redis
 import unittest
 import json
@@ -65,8 +66,20 @@ docs = {
     },
 }
 
+rmtest.config.REDIS_MODULE = '../../src/rejson.so'
 
-class ReJSONTestCase(ModuleTestCase('../../src/rejson.so')):
+class BaseReJSONTest(BaseModuleTestCase):
+    def getCacheInfo(self):
+        res = self.cmd('JSON._CACHEINFO')
+        ret = {}
+        for x in range(0, len(res), 2):
+            ret[res[x]] = res[x+1]
+        return ret
+
+
+
+
+class ReJSONTestCase(BaseReJSONTest):
     """Tests ReJSON Redis module in vitro"""
 
     def assertNotExists(self, r, key, msg=None):
@@ -699,14 +712,6 @@ class ReJSONTestCase(ModuleTestCase('../../src/rejson.so')):
         self.assertEqual(1512060373.222988, float(res))
         # self.assertEqual('1512060373.222988', res)
 
-    def getCacheInfo(self):
-        res = self.cmd('JSON._CACHEINFO')
-        ret = {}
-        for x in range(0, len(res), 2):
-            ret[res[x]] = res[x+1]
-        return ret
-
-
     def testLruCache(self):
         def cacheItems():
             return self.getCacheInfo()['items']
@@ -793,6 +798,28 @@ class ReJSONTestCase(ModuleTestCase('../../src/rejson.so')):
         self.assertEqual(20, cacheItems())
 
         self.cmd('json._cacheinit')
+
+
+class NoCacheTestCase(BaseReJSONTest):
+    @property
+    def module_args(self):
+        return ['NOCACHE']
+
+    def testNoCache(self):
+        def cacheItems():
+            return self.getCacheInfo()['items']
+        def cacheBytes():
+            return self.getCacheInfo()['bytes']
+
+        self.cmd('JSON.SET', 'myDoc', '.', json.dumps({
+            'foo': 'fooValue',
+            'bar': 'barValue',
+            'baz': 'bazValue',
+            'key\\': 'escapedKey'
+        }))
+
+        res = self.cmd('JSON.GET', 'myDoc', 'foo')
+        self.assertEqual(0, cacheItems())
 
 if __name__ == '__main__':
     unittest.main()

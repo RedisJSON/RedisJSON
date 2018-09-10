@@ -62,6 +62,8 @@ typedef struct {
 #define LRUCACHE_DEFAULT_MAXENT 20000
 
 extern LruCache jsonLruCache_g;
+extern int jsonLruCacheEnabled_g;
+
 #define REJSON_LRUCACHE_GLOBAL (&jsonLruCache_g)
 
 /**

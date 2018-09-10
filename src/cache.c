@@ -6,6 +6,7 @@
 LruCache jsonLruCache_g = {.maxEntries = LRUCACHE_DEFAULT_MAXENT,
                            .maxBytes = LRUCACHE_DEFAULT_MAXBYTE,
                            .minSize = LRUCACHE_DEFAULT_MINSIZE};
+int jsonLruCacheEnabled_g = 1;
 
 static void pluckEntry(LruCache *cache, LruPathEntry *entry) {
     LruPathEntry *prev = entry->lru_prev, *next = entry->lru_next;
@@ -87,6 +88,10 @@ static LruPathEntry *purgeEntry(LruCache *cache, LruPathEntry *entry, int option
 }
 
 const sds LruCache_GetValue(LruCache *cache, JSONType_t *json, const char *path, size_t pathLen) {
+    if (!jsonLruCacheEnabled_g) {
+        return NULL;
+    }
+
     LruPathEntry *ent = NULL;
     // printf("Root: %p\n", json->lruEntries);
     for (LruPathEntry *root = json->lruEntries; root; root = root->key_next) {
@@ -113,6 +118,9 @@ const sds LruCache_GetValue(LruCache *cache, JSONType_t *json, const char *path,
 
 void LruCache_AddValue(LruCache *cache, JSONType_t *json, const char *path, size_t pathLen,
                        const char *value, size_t valueLen) {
+    if (!jsonLruCacheEnabled_g) {
+        return;
+    }
     if (valueLen < cache->minSize) {
         return;
     }
@@ -158,6 +166,9 @@ static int shouldClearPath(const sds curPath, const char *path, size_t pathLen) 
 }
 
 void LruCache_ClearValues(LruCache *cache, JSONType_t *json, const char *path, size_t pathLen) {
+    if (!jsonLruCacheEnabled_g) {
+        return;
+    }
     // Remove all paths which are affected by this entry..
     LruPathEntry *ent = json->lruEntries;
     while (ent) {
@@ -174,5 +185,8 @@ void LruCache_ClearValues(LruCache *cache, JSONType_t *json, const char *path, s
 }
 
 void LruCache_ClearKey(LruCache *cache, JSONType_t *json) {
+    if (!jsonLruCacheEnabled_g) {
+        return;
+    }
     LruCache_ClearValues(cache, json, NULL, 0);
 }

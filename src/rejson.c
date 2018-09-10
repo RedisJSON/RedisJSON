@@ -2017,11 +2017,23 @@ int Module_CreateCommands(RedisModuleCtx *ctx) {
     return REDISMODULE_OK;
 }
 
-int RedisModule_OnLoad(RedisModuleCtx *ctx) {
+int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // Register the module
     if (RedisModule_Init(ctx, RLMODULE_NAME, REJSON_MODULE_VERSION, REDISMODULE_APIVER_1) ==
         REDISMODULE_ERR)
         return REDISMODULE_ERR;
+
+    // Scan the arguments
+    for (size_t ii = 0; ii < argc; ++ii) {
+        const char *s = RedisModule_StringPtrLen(argv[ii], NULL);
+        if (!strcasecmp(s, "NOCACHE")) {
+            RedisModule_Log(ctx, "notice", "REJSON LRU Caching disabled");
+            jsonLruCacheEnabled_g = 0;
+        } else {
+            RedisModule_Log(ctx, "warning", "Unknown option %s", s);
+            return REDISMODULE_ERR;
+        }
+    }
 
     // Register the JSON data type
     RedisModuleTypeMethods tm = {.version = REDISMODULE_TYPE_METHOD_VERSION,
