@@ -2026,9 +2026,18 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     // Scan the arguments
     for (size_t ii = 0; ii < argc; ++ii) {
         const char *s = RedisModule_StringPtrLen(argv[ii], NULL);
-        if (!strcasecmp(s, "NOCACHE")) {
-            RedisModule_Log(ctx, "notice", "REJSON LRU Caching disabled");
-            jsonLruCacheEnabled_g = 0;
+        if (!strcasecmp(s, "CACHE")) {
+            const char *v = RedisModule_StringPtrLen(argv[++ii], NULL);
+            if (!strcasecmp(v, "ON") || !strcasecmp(v, "TRUE")) {
+                RedisModule_Log(ctx, "notice", "LRU Caching enabled");
+                jsonLruCacheEnabled_g = 1;
+            } else if (!strcasecmp(v, "OFF") || !strcasecmp(v, "FALSE")) {
+                RedisModule_Log(ctx, "notice", "LRU Caching disabled");
+                jsonLruCacheEnabled_g = 0;
+            } else {
+                RedisModule_Log(ctx, "warning", "CACHE requires a value of ON|OFF");
+                return REDISMODULE_ERR;
+            }
         } else {
             RedisModule_Log(ctx, "warning", "Unknown option %s", s);
             return REDISMODULE_ERR;

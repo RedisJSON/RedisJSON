@@ -6,7 +6,7 @@
 LruCache jsonLruCache_g = {.maxEntries = LRUCACHE_DEFAULT_MAXENT,
                            .maxBytes = LRUCACHE_DEFAULT_MAXBYTE,
                            .minSize = LRUCACHE_DEFAULT_MINSIZE};
-int jsonLruCacheEnabled_g = 1;
+int jsonLruCacheEnabled_g = 0;
 
 static void pluckEntry(LruCache *cache, LruPathEntry *entry) {
     LruPathEntry *prev = entry->lru_prev, *next = entry->lru_next;

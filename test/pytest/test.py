@@ -712,6 +712,12 @@ class ReJSONTestCase(BaseReJSONTest):
         self.assertEqual(1512060373.222988, float(res))
         # self.assertEqual('1512060373.222988', res)
 
+
+class CacheTestCase(BaseReJSONTest):
+    @property
+    def module_args(self):
+        return ['CACHE', 'ON']
+
     def testLruCache(self):
         def cacheItems():
             return self.getCacheInfo()['items']
@@ -801,10 +807,6 @@ class ReJSONTestCase(BaseReJSONTest):
 
 
 class NoCacheTestCase(BaseReJSONTest):
-    @property
-    def module_args(self):
-        return ['NOCACHE']
-
     def testNoCache(self):
         def cacheItems():
             return self.getCacheInfo()['items']
