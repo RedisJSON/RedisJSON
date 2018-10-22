@@ -4,7 +4,7 @@ repo_url: https://github.com/RedisLabsModules/ReJSON
 repo_name: RedisLabsModules/ReJSON
 
 google_analytics:
-    - 'UA-92003007-8'
+    - 'UA-92003007-1'
     - 'auto'
 
 theme:
