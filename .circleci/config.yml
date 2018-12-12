@@ -86,7 +86,7 @@ jobs:
           command: >-
             aws s3 cp /workspace/build/ s3://redismodules/$PACKAGE_NAME/ --acl
             public-read --recursive --exclude "*" --include "*.zip"
-  
+
   deploy_docs:
     docker:
       - image: 'redislabsmodules/rmbuilder:latest'
@@ -99,7 +99,26 @@ jobs:
           name: Deploy Docs to S3
           command: >-
             aws s3 cp site s3://oss.redislabs.com/$WEBSITE_FOLDER/ --acl
-            public-read --recursive 
+            public-read --recursive
+  build_publish_docker_image:
+    environment:
+      DOCKER_IMAGE_TAG: redislabs/rejson
+    docker:
+      - image: 'docker'
+    steps:
+      - setup_remote_docker:
+          version: 18.05.0-ce
+      - attach_workspace:
+          at: /workspace
+      - run:
+          name: Build docker image
+          command: docker build -t $DOCKER_IMAGE_TAG ./workspace/
+      - run:
+          name: Login to Docker registry
+          command: docker login -u $DOCKER_REGISTRY_USERNAME -p $DOCKER_REGISTRY_PASSWORD
+      - run:
+          name: Push docker image
+          command: docker push $DOCKER_IMAGE_TAG
 workflows:
   version: 2
   build_and_package:
@@ -132,6 +151,10 @@ workflows:
           requires:
             - package_release
       - deploy_docs:
+          filters:
+            branches:
+              only: master
+      - build_publish_docker_image:
           filters:
             branches:
               only: master
