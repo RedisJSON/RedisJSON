@@ -1,3 +1,4 @@
+[![GitHub issues](https://img.shields.io/github/release/RedisLabsModules/rejson.svg)](https://github.com/RedisLabsModules/rejson/releases/latest)
 [![CircleCI](https://circleci.com/gh/RedisLabsModules/rejson/tree/master.svg?style=svg)](https://circleci.com/gh/RedisLabsModules/rejson/tree/master)
 
 # ReJSON - a JSON data type for Redis
