@@ -16,12 +16,13 @@ impl From<serde_json::Error> for Error {
     }
 }
 
-impl From<Error> for redismodule::error::Error {
+impl From<Error> for redismodule::RedisError {
     fn from(e: Error) -> Self {
-        redismodule::error::Error::generic(e.msg.as_str())
+        redismodule::RedisError::String(e.msg)
     }
 }
 
+#[derive(Debug)]
 pub struct RedisDoc {
     data: Value,
 }
