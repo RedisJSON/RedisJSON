@@ -30,8 +30,10 @@ pages:
     - 'Developer notes': 'developer.md'
     - 'Contributor agreement': 'contrib.md'
 
-   
+
 markdown_extensions:
   - admonition
-  - codehilite(guess_lang=false)
-  - toc(permalink=true)
+  - codehilite:
+      guess_lang: False
+  - toc:
+      permalink: True
