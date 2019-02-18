@@ -1,1 +1,1 @@
-# RedisDoc
+# RedisJSON

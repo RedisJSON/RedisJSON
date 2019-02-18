@@ -4,40 +4,41 @@ extern crate redismodule;
 use redismodule::{Context, RedisResult, NextArg};
 use redismodule::native_types::RedisType;
 
-mod redisdoc;
+mod redisjson;
 
-use crate::redisdoc::RedisDoc;
+use crate::redisjson::RedisJSON;
 
-static DOC_REDIS_TYPE: RedisType = RedisType::new("RedisDoc1");
+static REDIS_JSON_TYPE: RedisType = RedisType::new("RedisJSON");
 
-fn doc_set(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
+
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_string()?;
-    let value = args.next_string()?;
+      let value = args.next_string()?;
 
     let key = ctx.open_key_writable(&key);
 
-    match key.get_value::<RedisDoc>(&DOC_REDIS_TYPE)? {
+    match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
         Some(doc) => {
             doc.set_value(&value)?;
         }
         None => {
-            let doc = RedisDoc::from_str(&value)?;
-            key.set_value(&DOC_REDIS_TYPE, doc)?;
+            let doc = RedisJSON::from_str(&value)?;
+            key.set_value(&REDIS_JSON_TYPE, doc)?;
         }
     }
 
     Ok(().into())
 }
 
-fn doc_get(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_string()?;
 
     let key = ctx.open_key_writable(&key);
 
-    let value = match key.get_value::<RedisDoc>(&DOC_REDIS_TYPE)? {
+    let value = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
         Some(doc) => { doc.to_string()?.into() }
         None => ().into()
     };
@@ -48,13 +49,13 @@ fn doc_get(ctx: &Context, args: Vec<String>) -> RedisResult {
 //////////////////////////////////////////////////////
 
 redis_module! {
-    name: "redisdoc",
+    name: "redisjson",
     version: 1,
     data_types: [
-        DOC_REDIS_TYPE,
+        REDIS_JSON_TYPE,
     ],
     commands: [
-        ["doc.set", doc_set, "write"],
-        ["doc.get", doc_get, ""],
+        ["json.set", json_set, "write"],
+        ["json.get", json_get, ""],
     ],
 }
