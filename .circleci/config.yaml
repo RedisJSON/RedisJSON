@@ -1,0 +1,55 @@
+version: 2
+
+jobs:
+  build:
+    docker:
+      - image: circleci/rust
+
+    steps:
+      - checkout
+      - run:
+          name: Version information
+          command: rustc --version; cargo --version; rustup --version
+
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
+            # fallback to using the latest cache if no exact match is found
+            - v1-dependencies-
+      - run:
+          name: Check formatting
+          command: |
+            rustfmt --version
+            cargo fmt -- --write-mode=diff
+
+      - run:
+          name: Build all targets
+          command: cargo build --all --all-targets
+
+      #      - run:
+      #          name: Nightly Build
+      #          command: |
+      #            rustup run nightly rustc --version --verbose
+      #            rustup run nightly cargo --version --verbose
+      #            rustup run nightly cargo build
+      #      - run:
+      #          name: Stable Build
+      #          command: |
+      #            rustup run stable rustc --version --verbose
+      #            rustup run stable cargo --version --verbose
+      #            rustup run stable cargo build
+      #      - run:
+      #          name: Test
+      #          command: rustup run stable cargo test
+      #      - run:
+      #          name: Upload Coverage
+      #          command: ./scripts/codecov.sh
+      - save_cache:
+          key: v1-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
+          paths:
+            - "~/.cargo"
+            - "./target"
+
+      - run:
+          name: Run all tests
+          command: cargo test --all
