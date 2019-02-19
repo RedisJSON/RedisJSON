@@ -1,4 +1,4 @@
-// ReDoc Redis module.
+// RedisJSON Redis module.
 //
 // Translate between JSON and tree of Redis objects:
 // User-provided JSON is converted to a tree. This tree is stored transparently in Redis.
@@ -23,11 +23,11 @@ impl From<Error> for redismodule::RedisError {
 }
 
 #[derive(Debug)]
-pub struct RedisDoc {
+pub struct RedisJSON {
     data: Value,
 }
 
-impl RedisDoc {
+impl RedisJSON {
     pub fn from_str(data: &str) -> Result<Self, Error> {
         eprintln!("Parsing JSON from input '{}'", data);
 
