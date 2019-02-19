@@ -16,11 +16,11 @@ jobs:
             - v1-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
             # fallback to using the latest cache if no exact match is found
             - v1-dependencies-
-      - run:
-          name: Check formatting
-          command: |
-            rustfmt --version
-            cargo fmt -- --write-mode=diff
+     # - run:
+     #     name: Check formatting
+     #     command: |
+     #       rustfmt --version
+     #       cargo fmt -- --write-mode=diff
 
       - run:
           name: Build all targets
