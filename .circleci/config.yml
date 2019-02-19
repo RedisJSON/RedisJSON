@@ -8,6 +8,10 @@ jobs:
     steps:
       - checkout
       - run:
+          name: Install prerequisite
+          command: >-
+            apt-get update; apt-get install -y clang
+      - run:
           name: Install Submodules
           command: git submodule add  https://github.com/RedisLabsModules/redismodule-rs
       - run:
