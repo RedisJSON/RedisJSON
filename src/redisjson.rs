@@ -5,6 +5,7 @@
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
 use serde_json::Value;
+use jsonpath::Selector;
 
 pub struct Error {
     msg: String,
@@ -48,10 +49,19 @@ impl RedisJSON {
         Ok(())
     }
 
-    pub fn to_string(&self) -> Result<String, Error> {
+    pub fn to_string(&self, path: &str) -> Result<String, Error> {
         eprintln!("Serializing back to JSON");
 
-        let s = serde_json::to_string(&self.data)?;
+        // Create a JSONPath selector
+        let selector = Selector::new(path).map_err(|e| Error {
+            msg: format!("{}", e),
+        })?;
+
+        let s = match selector.find(&self.data).next() {
+            Some(doc) => serde_json::to_string(&doc)?,
+            None => String::new()
+        };
+
         return Ok(s)
     }
 }
