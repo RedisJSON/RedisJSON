@@ -52,16 +52,35 @@ impl RedisJSON {
     pub fn to_string(&self, path: &str) -> Result<String, Error> {
         eprintln!("Serializing back to JSON");
 
+        let s = match self.get_doc(path)? {
+            Some(doc) => serde_json::to_string(&doc)?,
+            None => String::new()
+        };
+
+        Ok(s)
+    }
+
+    pub fn str_len(&self, path: &str) -> Result<usize, Error> {
+        let s = match self.get_doc(path)? {
+            Some(doc) => {
+                if doc.is_string() {
+                    serde_json::to_string(&doc)?.len() - 2 // removes ""
+                } else {
+                    0 // the value is not a String
+                }
+            }
+            None => 0 // path not found
+        };
+        Ok(s)
+    }
+
+    pub fn get_doc(&self, path: &str) -> Result<Option<&Value>, Error> {
         // Create a JSONPath selector
         let selector = Selector::new(path).map_err(|e| Error {
             msg: format!("{}", e),
         })?;
 
-        let s = match selector.find(&self.data).next() {
-            Some(doc) => serde_json::to_string(&doc)?,
-            None => String::new()
-        };
-
-        return Ok(s)
+        Ok(selector.find(&self.data).next())
     }
+
 }
