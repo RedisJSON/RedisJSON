@@ -1,6 +1,6 @@
 # Performance
 
-To get an early sense of what ReJSON is capable of, you can test it with `redis-benchmark` just like
+To get an early sense of what RedisJSON is capable of, you can test it with `redis-benchmark` just like
 any other Redis command. However, in order to have more control over the tests, we'll use a 
 a tool written in Go called _ReJSONBenchmark_ that we expect to release in the near future.
 
@@ -8,15 +8,15 @@ The following figures were obtained from an AWS EC2 c4.8xlarge instance that ran
 server as well the as the benchmarking tool. Connections to the server are via the networking stack.
 All tests are non-pipelined.
 
-> NOTE: The results below are measured using the preview version of ReJSON, which is still very much
+> NOTE: The results below are measured using the preview version of RedisJSON, which is still very much
 unoptimized.
 
-## ReJSON baseline
+## RedisJSON baseline
 
 ### A smallish object
 
 We test a JSON value that, while purely synthetic, is interesting. The test subject is
-[/test/files/pass-100.json](https://github.com/RedisLabsModules/rejson/blob/master/test/files/pass-100.json),
+[/test/files/pass-100.json](https://github.com/RedisLabsModules/redisjson/blob/master/test/files/pass-100.json),
 who weighs in at 380 bytes and is nested. We first test SETting it, then GETting it using several
 different paths:
 
@@ -27,7 +27,7 @@ different paths:
 ### A bigger array
 
 Moving on to bigger values, we use the 1.4 kB array in
-[/test/files/pass-jsonsl-1.json](https://github.com/RedisLabsModules/rejson/blob/master/test/files/pass-jsonsl-1.json):
+[/test/files/pass-jsonsl-1.json](https://github.com/RedisLabsModules/redisjson/blob/master/test/files/pass-jsonsl-1.json):
 
 ![ReJSONBenchmark pass-jsonsl-1.json](images/bench_pass_jsonsl_1.png)
 
@@ -36,7 +36,7 @@ Moving on to bigger values, we use the 1.4 kB array in
 ### A largish object
 
 More of the same to wrap up, now we'll take on a behemoth of no less than 3.5 kB as given by
-[/test/files/pass-json-parser-0000.json](https://github.com/RedisLabsModules/rejson/blob/master/test/files/pass-json-parser-0000.json):
+[/test/files/pass-json-parser-0000.json](https://github.com/RedisLabsModules/redisjson/blob/master/test/files/pass-json-parser-0000.json):
 
 ![ReJSONBenchmark pass-json-parser-0000.json](images/bench_pass_json_parser_0000.png)
 
@@ -80,7 +80,7 @@ Note how our benchmarking tool does slightly worse in PINGing - producing only 1
 
 ### The empty string
 
-Another ReJSON benchmark is that of setting and getting an empty string - a value that's only two
+Another RedisJSON benchmark is that of setting and getting an empty string - a value that's only two
 bytes long (i.e. `""`). Granted, that's not very useful, but it teaches us something about the basic
 performance of the module:
 
@@ -90,9 +90,9 @@ performance of the module:
 
 ## Comparison vs. server-side Lua scripting
 
-We compare ReJSON's performance with Redis' embedded Lua engine. For this purpose, we use the Lua
-scripts at [/benchmarks/lua](https://github.com/RedisLabsModules/rejson/tree/master/benchmarks/lua).
-These scripts provide ReJSON's GET and SET functionality on values stored in JSON or MessagePack
+We compare RedisJSON's performance with Redis' embedded Lua engine. For this purpose, we use the Lua
+scripts at [/benchmarks/lua](https://github.com/RedisLabsModules/redisjson/tree/master/benchmarks/lua).
+These scripts provide RedisJSON's GET and SET functionality on values stored in JSON or MessagePack
 formats. Each of the different operations (set root, get root, set path and get path) is executed
 with each "engine" on objects of varying sizes. 
 
@@ -102,9 +102,9 @@ Storing raw JSON performs best in this test, but that isn't really surprising as
 serve unprocessed strings. While you can and should use Redis for caching opaque data, and JSON
 "blobs" are just one example, this does not allow any updates other than these of the entire value.
 
-A more meaningful comparison therefore is between ReJSON and the MessagePack variant, since both
+A more meaningful comparison therefore is between RedisJSON and the MessagePack variant, since both
 process the incoming JSON value before actually storing it. While the rates and latencies of these 
-two behave in a very similar way, the absolute measurements suggest that ReJSON's performance may be
+two behave in a very similar way, the absolute measurements suggest that RedisJSON's performance may be
 further improved.
 
 ![VS. Lua set root](images/bench_lua_set_root.png)
@@ -117,8 +117,8 @@ further improved.
 
 ### Setting and getting parts of objects
 
-This test shows why ReJSON exists. Not only does it outperform the Lua variants, it retains constant
-rates and latencies regardless the object's overall size. There's no magic here - ReJSON keeps the
+This test shows why RedisJSON exists. Not only does it outperform the Lua variants, it retains constant
+rates and latencies regardless the object's overall size. There's no magic here - RedisJSON keeps the
 value deserialized so that accessing parts of it is a relatively inexpensive operation. In deep contrast
 are both raw JSON as well as MessagePack, which require decoding the entire object before anything can
 be done with it (a process that becomes more expensive the larger the object is).
@@ -159,7 +159,7 @@ These charts are more of the same but independent for each file (value):
 
 The following are the raw results from the benchmark in CSV format.
 
-### ReJSON results
+### RedisJSON results
 
 ```
 title,concurrency,rate,average latency,50.00%-tile,90.00%-tile,95.00%-tile,99.00%-tile,99.50%-tile,100.00%-tile
