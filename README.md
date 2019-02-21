@@ -1,5 +1,6 @@
 [![GitHub issues](https://img.shields.io/github/release/RedisLabsModules/redisjson.svg)](https://github.com/RedisLabsModules/redisjson/releases/latest)
 [![CircleCI](https://circleci.com/gh/RedisLabsModules/redisjson/tree/master.svg?style=svg)](https://circleci.com/gh/RedisLabsModules/redisjson/tree/master)
+[![DockerHub](https://dockerbuildbadges.quelltext.eu/status.svg?organization=redislabs&repository=rejson)](https://hub.docker.com/r/redislabs/rejson/builds/) 
 
 # RedisJSON - a JSON data type for Redis
 
