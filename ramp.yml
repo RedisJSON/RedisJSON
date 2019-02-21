@@ -2,7 +2,7 @@ display_name: ReJSON
 author: Redis Labs
 email: redismodules@redislabs.com
 description: Native JSON Data Type for Redis
-homepage: http://rejson.io
+homepage: http://redisjson.io
 license: Redis Source Available License Agreement
 command_line_args: ""
 min_redis_version: "4.0"
