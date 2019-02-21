@@ -1,14 +1,14 @@
-# ReJSON Commands
+# RedisJSON Commands
 
 ## Overview
 
 ### Supported JSON
 
-ReJSON aims to provide full support for [ECMA-404 The JSON Data Interchange Standard](http://json.org/).
+RedisJSON aims to provide full support for [ECMA-404 The JSON Data Interchange Standard](http://json.org/).
 
 Below, the term _JSON Value_ refers to any of the valid values. A _Container_ is either a _JSON Array_ or a _JSON Object_. A _JSON Scalar_ is a _JSON Number_, a _JSON String_ or a literal (_JSON False_, _JSON True_ or _JSON Null_).
 
-### ReJSON API
+### RedisJSON API
 
 Each of the module's commands is described below. Each section
 header shows the syntax for the command, where:
@@ -132,7 +132,7 @@ Sets the JSON value at `path` in `key`
 
 For new Redis keys the `path` must be the root. For existing keys, when the entire `path` exists, the value that it contains is replaced with the `json` value.
 
-A key (with its respective value) is added to a JSON Object (in a Redis ReJSON data type key) if and only if it is the last child in the `path`. The optional subcommands modify this behavior for both new Redis ReJSON data type keys as well as the JSON Object keys in them:
+A key (with its respective value) is added to a JSON Object (in a Redis RedisJSON data type key) if and only if it is the last child in the `path`. The optional subcommands modify this behavior for both new Redis RedisJSON data type keys as well as the JSON Object keys in them:
 
 *   `NX` - only set the key if it does not already exist
 *   `XX` - only set the key if it already exists
