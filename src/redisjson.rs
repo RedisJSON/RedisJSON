@@ -72,15 +72,6 @@ impl RedisJSON {
         }
     }
 
-    pub fn get_doc(&self, path: &str) -> Result<Option<&Value>, Error> {
-        // Create a JSONPath selector
-        let selector = Selector::new(path).map_err(|e| Error {
-            msg: format!("{}", e),
-        })?;
-
-        Ok(selector.find(&self.data).next())
-    }
-
     pub fn get_type(&self, path: &str) -> Result<String, Error> {
         let s = match self.get_doc(path)? {
             Some(doc) => {
