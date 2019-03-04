@@ -62,13 +62,7 @@ impl RedisJSON {
 
     pub fn str_len(&self, path: &str) -> Result<usize, Error> {
         let s = match self.get_doc(path)? {
-            Some(doc) => {
-                if doc.is_string() {
-                    serde_json::to_string(&doc)?.len() - 2 // removes ""
-                } else {
-                    0 // the value is not a String
-                }
-            }
+            Some(doc) => doc.as_str().map_or(0, |d| d.len()),
             None => 0 // path not found
         };
         Ok(s)

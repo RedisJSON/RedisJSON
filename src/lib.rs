@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate redismodule;
 
-use redismodule::{Context, RedisResult, NextArg, RedisValue};
+use redismodule::{Context, RedisResult, NextArg};
 use redismodule::native_types::RedisType;
 
 mod redisjson;
@@ -55,7 +55,7 @@ fn json_strlen(ctx: &Context, args: Vec<String>) -> RedisResult {
     let key = ctx.open_key_writable(&key);
 
     let length = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
-        Some(doc) => RedisValue::Integer(doc.str_len(&path)? as i64),
+        Some(doc) => doc.str_len(&path)?.into(),
         None => ().into()
     };
 
