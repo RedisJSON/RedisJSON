@@ -68,8 +68,8 @@ impl RedisJSON {
     pub fn get_type(&self, path: &str) -> Result<String, Error> {
         let s = match self.get_doc(path)? {
             Some(doc) => {
-                match *doc {
-                    Value::Null => "Null",
+                match doc {
+                    Value::Null => "null",
                     Value::Bool(_) => "boolean",
                     Value::Number(_) => "number",
                     Value::String(_) => "string",
