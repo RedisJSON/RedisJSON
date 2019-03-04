@@ -61,11 +61,15 @@ impl RedisJSON {
     }
 
     pub fn str_len(&self, path: &str) -> Result<usize, Error> {
-        let s = match self.get_doc(path)? {
-            Some(doc) => doc.as_str().map_or(0, |d| d.len()),
-            None => 0 // path not found
-        };
-        Ok(s)
+        match self.get_doc(path)? {
+            Some(doc) => {
+                match doc.as_str() {
+                    Some(s) => Ok(s.len()),
+                    None => Err(Error{msg: "ERR wrong type of path value".to_string()})
+                }
+            }
+            None => Ok(0) // path not found
+        }
     }
 
     pub fn get_doc(&self, path: &str) -> Result<Option<&Value>, Error> {
