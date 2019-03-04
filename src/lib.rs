@@ -15,7 +15,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_string()?;
-      let value = args.next_string()?;
+    let value = args.next_string()?;
 
     let key = ctx.open_key_writable(&key);
 
@@ -40,22 +40,37 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
     let key = ctx.open_key_writable(&key);
 
     let value = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
-        Some(doc) => { doc.to_string(&path)?.into() }
+        Some(doc) => doc.to_string(&path)?.into(),
         None => ().into()
     };
 
     Ok(value)
 }
 
+fn json_strlen(ctx: &Context, args: Vec<String>) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+    let key = args.next_string()?;
+    let path = args.next_string()?;
+  
+    let key = ctx.open_key_writable(&key);  
+  
+    let length = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
+        Some(doc) => doc.str_len(&path)?.into(),
+        None => ().into()
+    };
+
+    Ok(length)
+}
+
 fn json_type(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_string()?;
     let path = args.next_string()?;
-
+  
     let key = ctx.open_key_writable(&key);
 
     let value = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
-        Some(doc) => { doc.get_type(&path)?.into() }
+        Some(doc) => doc.get_type(&path)?.into(),
         None => ().into()
     };
 
@@ -73,6 +88,7 @@ redis_module! {
     commands: [
         ["json.set", json_set, "write"],
         ["json.get", json_get, ""],
+        ["json.strlen", json_strlen, ""],
         ["json.type", json_type, ""],
     ],
 }
