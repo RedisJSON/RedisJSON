@@ -15,6 +15,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_string()?;
+    let _path = args.next_string()?; // TODO handle this path
     let value = args.next_string()?;
 
     let key = ctx.open_key_writable(&key);
@@ -29,13 +30,33 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
         }
     }
 
-    Ok(().into())
+    Ok("OK".into())
 }
 
 fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
+
     let key = args.next_string()?;
-    let path = args.next_string()?;
+
+    let mut path = loop {
+
+        let arg = match args.next_string() {
+            Ok(n) => n,
+            Err(_) => String::from("$") // path is optional
+        };
+
+        match arg.as_ref() {
+            "INDENT" => args.next(), // TODO add support
+            "NEWLINE" => args.next(), // TODO add support
+            "SPACE" => args.next(), // TODO add support
+            "NOESCAPE" => args.next(), // TODO add support
+            "." => break String::from("$"), // backward compatibility suuport
+            _ => break arg
+        };
+    };
+    if path.starts_with(".") { // backward compatibility
+        path.insert(0, '$');
+    }
 
     let key = ctx.open_key_writable(&key);
 
@@ -51,9 +72,9 @@ fn json_strlen(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_string()?;
     let path = args.next_string()?;
-  
-    let key = ctx.open_key_writable(&key);  
-  
+
+    let key = ctx.open_key_writable(&key);
+
     let length = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
         Some(doc) => doc.str_len(&path)?.into(),
         None => ().into()
@@ -66,7 +87,7 @@ fn json_type(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_string()?;
     let path = args.next_string()?;
-  
+
     let key = ctx.open_key_writable(&key);
 
     let value = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
