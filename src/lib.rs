@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate redismodule;
 
-use redismodule::{Context, RedisResult, NextArg};
+use redismodule::{Context, RedisResult, NextArg, REDIS_OK};
 use redismodule::native_types::RedisType;
 
 mod redisjson;
@@ -11,7 +11,6 @@ use crate::redisjson::RedisJSON;
 static REDIS_JSON_TYPE: RedisType = RedisType::new("RedisJSON");
 
 fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
-
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_string()?;
@@ -30,7 +29,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
         }
     }
 
-    Ok("OK".into())
+    REDIS_OK
 }
 
 fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
@@ -39,13 +38,12 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
     let key = args.next_string()?;
 
     let mut path = loop {
-
         let arg = match args.next_string() {
-            Ok(n) => n,
-            Err(_) => String::from("$") // path is optional
+            Ok(s) => s.to_uppercase(),
+            Err(_) => "$".to_owned() // path is optional
         };
 
-        match arg.as_ref() {
+        match arg.as_str() {
             "INDENT" => args.next(), // TODO add support
             "NEWLINE" => args.next(), // TODO add support
             "SPACE" => args.next(), // TODO add support
@@ -54,6 +52,7 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
             _ => break arg
         };
     };
+
     if path.starts_with(".") { // backward compatibility
         path.insert(0, '$');
     }
