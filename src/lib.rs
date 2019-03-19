@@ -47,7 +47,7 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
             "INDENT" => args.next(), // TODO add support
             "NEWLINE" => args.next(), // TODO add support
             "SPACE" => args.next(), // TODO add support
-            "NOESCAPE" => args.next(), // TODO add support
+            "NOESCAPE" => continue, // TODO add support
             "." => break String::from("$"), // backward compatibility suuport
             _ => break arg
         };
