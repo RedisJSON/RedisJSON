@@ -1,8 +1,8 @@
-# ReJSON Path
+# RedisJSON Path
 
-Since there does not exist a standard for path syntax, ReJSON implements its own. ReJSON's syntax is a subset of common best practices and resembles [JSONPath](http://goessner.net/articles/JsonPath/) not by accident.
+Since there does not exist a standard for path syntax, RedisJSON implements its own. RedisJSON's syntax is a subset of common best practices and resembles [JSONPath](http://goessner.net/articles/JsonPath/) not by accident.
 
-Paths always begin at the root of a ReJSON value. The root is denoted by the period character (`.`). For paths referencing the root's children, prefixing the path with the root is optional.
+Paths always begin at the root of a RedisJSON value. The root is denoted by the period character (`.`). For paths referencing the root's children, prefixing the path with the root is optional.
 
 Dotted- and square-bracketed, single-or-double-quoted-child notation are both supported for object keys, so the following paths all refer to _bar_, child of _foo_ under the root:
 
@@ -14,7 +14,7 @@ Array elements are accessed by their index enclosed by a pair of square brackets
 
 ## A note about JSON key names and path compatibility
 
-By definition, a JSON key can be any valid JSON String. Paths, on the other hand, are traditionally based on JavaScript's (and in Java in turn) variable naming conventions. Therefore, while it is possible to have ReJSON store objects containing arbitrary key names, accessing these keys via a path will only be possible if they respect these naming syntax rules:
+By definition, a JSON key can be any valid JSON String. Paths, on the other hand, are traditionally based on JavaScript's (and in Java in turn) variable naming conventions. Therefore, while it is possible to have RedisJSON store objects containing arbitrary key names, accessing these keys via a path will only be possible if they respect these naming syntax rules:
 
 1.  Names must begin with a letter, a dollar (`$`) or an underscore (`_`) character
 2.  Names can contain letters, digits, dollar signs and underscores

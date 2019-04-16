@@ -1,8 +1,10 @@
-[![CircleCI](https://circleci.com/gh/RedisLabsModules/rejson/tree/master.svg?style=svg)](https://circleci.com/gh/RedisLabsModules/rejson/tree/master)
+[![GitHub issues](https://img.shields.io/github/release/RedisLabsModules/redisjson.svg)](https://github.com/RedisLabsModules/redisjson/releases/latest)
+[![CircleCI](https://circleci.com/gh/RedisLabsModules/redisjson/tree/master.svg?style=svg)](https://circleci.com/gh/RedisLabsModules/redisjson/tree/master)
+<!--[![DockerHub](https://dockerbuildbadges.quelltext.eu/status.svg?organization=redislabs&repository=rejson)](https://hub.docker.com/r/redislabs/rejson/builds/) -->
 
-# ReJSON - a JSON data type for Redis
+# RedisJSON - a JSON data type for Redis
 
-ReJSON is a [Redis](http://redis.io/) module that implements [ECMA-404 The JSON Data Interchange Standard](http://json.org/) as a native data type. It allows storing, updating and fetching JSON values from Redis keys (documents).
+RedisJSON is a [Redis](http://redis.io/) module that implements [ECMA-404 The JSON Data Interchange Standard](http://json.org/) as a native data type. It allows storing, updating and fetching JSON values from Redis keys (documents).
 
 Primary features:
 
@@ -13,14 +15,14 @@ Primary features:
 
 ## Quickstart
 
-1.  [Launch ReJSON with Docker](https://redislabsmodules.github.io/rejson/#launch-rejson-with-docker)
-1.  [Use ReJSON from **any** Redis client](https://redislabsmodules.github.io/rejson/#using-rejson), e.g.:
+1.  [Launch RedisJSON with Docker](https://redislabsmodules.github.io/redisjson/#launch-redisjson-with-docker)
+1.  [Use RedisJSON from **any** Redis client](https://redislabsmodules.github.io/redisjson/#using-redisjson), e.g.:
 
-![ReJSON with `redis-cli`](docs/images/demo.gif)
+![RedisJSON with `redis-cli`](docs/images/demo.gif)
 
 ## Documentation
 
-Read the docs at https://redislabsmodules.github.io/rejson
+Read the docs at https://redislabsmodules.github.io/redisjson
 
 ## Current limitations and known issues
 
@@ -30,14 +32,14 @@ Read the docs at https://redislabsmodules.github.io/rejson
 
 ## Acknowledgements
 
-ReJSON is developed with <3 at [Redis Labs](https://redislabs.com).
+RedisJSON is developed with <3 at [Redis Labs](https://redislabs.com).
 
-ReJSON is made possible only because of the existance of these amazing open source projects:
+RedisJSON is made possible only because of the existance of these amazing open source projects:
 
 * [jsonsl](https://github.com/mnunberg/jsonsl)
 * [redis](https://github.com/antirez/redis)
 
 ## License
 
-Apache 2.0 with Commons Clause - see [LICENSE](LICENSE)
+Redis Source Available License Agreement - see [LICENSE](LICENSE)
 

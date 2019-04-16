@@ -1,7 +1,7 @@
-site_name: ReJSON - a JSON data type for Redis
-site_url: http://rejson.io
-repo_url: https://github.com/RedisLabsModules/ReJSON
-repo_name: RedisLabsModules/ReJSON
+site_name: RedisJSON - a JSON data type for Redis
+site_url: http://redisjson.io
+repo_url: https://github.com/RedisLabsModules/RedisJSON
+repo_name: RedisLabsModules/RedisJSON
 
 google_analytics:
     - 'UA-92003007-1'
@@ -30,8 +30,10 @@ pages:
     - 'Developer notes': 'developer.md'
     - 'Contributor agreement': 'contrib.md'
 
-   
+
 markdown_extensions:
   - admonition
-  - codehilite(guess_lang=false)
-  - toc(permalink=true)
+  - codehilite:
+      guess_lang: False
+  - toc:
+      permalink: True
