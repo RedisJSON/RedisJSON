@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate redismodule;
 
-use redismodule::{Context, RedisResult, NextArg};
+use redismodule::{Context, RedisResult, NextArg, REDIS_OK};
 use redismodule::native_types::RedisType;
 
 mod redisjson;
@@ -11,10 +11,10 @@ use crate::redisjson::RedisJSON;
 static REDIS_JSON_TYPE: RedisType = RedisType::new("RedisJSON");
 
 fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
-
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_string()?;
+    let _path = args.next_string()?; // TODO handle this path
     let value = args.next_string()?;
 
     let key = ctx.open_key_writable(&key);
@@ -29,13 +29,33 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
         }
     }
 
-    Ok(().into())
+    REDIS_OK
 }
 
 fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
+
     let key = args.next_string()?;
-    let path = args.next_string()?;
+
+    let mut path = loop {
+        let arg = match args.next_string() {
+            Ok(s) => s.to_uppercase(),
+            Err(_) => "$".to_owned() // path is optional
+        };
+
+        match arg.as_str() {
+            "INDENT" => args.next(), // TODO add support
+            "NEWLINE" => args.next(), // TODO add support
+            "SPACE" => args.next(), // TODO add support
+            "NOESCAPE" => continue, // TODO add support
+            "." => break String::from("$"), // backward compatibility suuport
+            _ => break arg
+        };
+    };
+
+    if path.starts_with(".") { // backward compatibility
+        path.insert(0, '$');
+    }
 
     let key = ctx.open_key_writable(&key);
 
@@ -51,9 +71,9 @@ fn json_strlen(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_string()?;
     let path = args.next_string()?;
-  
-    let key = ctx.open_key_writable(&key);  
-  
+
+    let key = ctx.open_key_writable(&key);
+
     let length = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
         Some(doc) => doc.str_len(&path)?.into(),
         None => ().into()
@@ -66,7 +86,7 @@ fn json_type(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_string()?;
     let path = args.next_string()?;
-  
+
     let key = ctx.open_key_writable(&key);
 
     let value = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
