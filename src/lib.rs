@@ -10,26 +10,46 @@ use crate::redisjson::RedisJSON;
 
 static REDIS_JSON_TYPE: RedisType = RedisType::new("RedisJSON");
 
+#[derive(Debug, PartialEq)]
+pub enum SetOptions {
+    NotExists,
+    AlreadyExists,
+    None
+}
+
 fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_string()?;
     let _path = args.next_string()?; // TODO handle this path
     let value = args.next_string()?;
+    let option = match args.next() {
+        Some(op) => {
+            match op.as_str() {
+                "NX" => SetOptions::NotExists,
+                "XX" => SetOptions::AlreadyExists,
+                _ => return Err("ERR syntax error".into())
+            }
+        }
+        None => {
+            SetOptions::None
+        }
+    };
 
     let key = ctx.open_key_writable(&key);
 
     match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
-        Some(doc) => {
+        Some(ref mut doc) if option != SetOptions::NotExists  => {
             doc.set_value(&value)?;
+            REDIS_OK
         }
-        None => {
+        None if option != SetOptions::AlreadyExists => {
             let doc = RedisJSON::from_str(&value)?;
             key.set_value(&REDIS_JSON_TYPE, doc)?;
+            REDIS_OK
         }
+        _ => Ok(().into())
     }
-
-    REDIS_OK
 }
 
 fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
