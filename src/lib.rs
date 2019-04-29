@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate redismodule;
 
-use redismodule::{Context, RedisResult, NextArg, REDIS_OK};
+use redismodule::{Context, RedisResult, NextArg, REDIS_OK, RedisError};
 use redismodule::native_types::RedisType;
 
 mod redisjson;
@@ -14,7 +14,6 @@ static REDIS_JSON_TYPE: RedisType = RedisType::new("RedisJSON");
 pub enum SetOptions {
     NotExists,
     AlreadyExists,
-    None
 }
 
 fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
@@ -23,32 +22,32 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     let key = args.next_string()?;
     let _path = args.next_string()?; // TODO handle this path
     let value = args.next_string()?;
-    let option = match args.next() {
-        Some(op) => {
-            match op.as_str() {
-                "NX" => SetOptions::NotExists,
-                "XX" => SetOptions::AlreadyExists,
-                _ => return Err("ERR syntax error".into())
+
+    let set_option = args.next()
+        .map(|op| {
+            match op.to_uppercase().as_str() {
+                "NX" => Ok(SetOptions::NotExists),
+                "XX" => Ok(SetOptions::AlreadyExists),
+                _ => Err(RedisError::Str("ERR syntax error")),
             }
-        }
-        None => {
-            SetOptions::None
-        }
-    };
+        })
+        .transpose()?;
 
     let key = ctx.open_key_writable(&key);
+    let current = key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?;
 
-    match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
-        Some(ref mut doc) if option != SetOptions::NotExists  => {
+    match (current, set_option) {
+        (Some(_), Some(SetOptions::NotExists)) => REDIS_OK,
+        (Some(ref mut doc), _) => {
             doc.set_value(&value)?;
             REDIS_OK
         }
-        None if option != SetOptions::AlreadyExists => {
+        (None, Some(SetOptions::AlreadyExists)) => REDIS_OK,
+        (None, _) => {
             let doc = RedisJSON::from_str(&value)?;
             key.set_value(&REDIS_JSON_TYPE, doc)?;
             REDIS_OK
         }
-        _ => Ok(().into())
     }
 }
 
