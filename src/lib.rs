@@ -37,12 +37,12 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     let current = key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?;
 
     match (current, set_option) {
-        (Some(_), Some(SetOptions::NotExists)) => REDIS_OK,
+        (Some(_), Some(SetOptions::NotExists)) => Ok(().into()),
         (Some(ref mut doc), _) => {
             doc.set_value(&value)?;
             REDIS_OK
         }
-        (None, Some(SetOptions::AlreadyExists)) => REDIS_OK,
+        (None, Some(SetOptions::AlreadyExists)) => Ok(().into()),
         (None, _) => {
             let doc = RedisJSON::from_str(&value)?;
             key.set_value(&REDIS_JSON_TYPE, doc)?;
