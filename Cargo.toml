@@ -10,5 +10,5 @@ crate-type = ["cdylib"]
 [dependencies]
 serde_json = "1.0"
 libc = "0.2"
-jsonpath = "0.1.1"
+jsonpath_lib = "0.1.11"
 redismodule = { path = "redismodule-rs", version = "0.1.0" }

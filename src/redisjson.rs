@@ -5,15 +5,21 @@
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
 use serde_json::Value;
-use jsonpath::Selector;
+use jsonpath_lib as jsonpath;
 
 pub struct Error {
     msg: String,
 }
 
+impl From<String> for Error {
+    fn from(e: String) -> Self {
+        Error { msg: e }
+    }
+}
+
 impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
-        Error { msg: format!("{}", e.to_string()) }
+        Error { msg: e.to_string() }
     }
 }
 
@@ -52,49 +58,31 @@ impl RedisJSON {
     pub fn to_string(&self, path: &str) -> Result<String, Error> {
         eprintln!("Serializing back to JSON");
 
-        let s = match self.get_doc(path)? {
-            Some(doc) => serde_json::to_string(&doc)?,
-            None => String::new()
-        };
-
-        Ok(s)
+        let results = self.get_doc(path)?;
+        Ok(serde_json::to_string(&results)?)
     }
 
     pub fn str_len(&self, path: &str) -> Result<usize, Error> {
-        match self.get_doc(path)? {
-            Some(doc) => {
-                match doc.as_str() {
-                    Some(s) => Ok(s.len()),
-                    None => Err(Error{msg: "ERR wrong type of path value".to_string()})
-                }
-            }
-            None => Ok(0) // path not found
+        match self.get_doc(path)?.as_str() {
+            Some(s) => Ok(s.len()),
+            None => Err(Error{msg: "ERR wrong type of path value".to_string()})
         }
     }
 
     pub fn get_type(&self, path: &str) -> Result<String, Error> {
         let s = match self.get_doc(path)? {
-            Some(doc) => {
-                match doc {
-                    Value::Null => "null",
-                    Value::Bool(_) => "boolean",
-                    Value::Number(_) => "number",
-                    Value::String(_) => "string",
-                    Value::Array(_) => "array",
-                    Value::Object(_) => "object",
-                }
-            }
-            None => ""
+            Value::Null => "null",
+            Value::Bool(_) => "boolean",
+            Value::Number(_) => "number",
+            Value::String(_) => "string",
+            Value::Array(_) => "array",
+            Value::Object(_) => "object",
         };
         Ok(s.to_string())
     }
 
-    pub fn get_doc(&self, path: &str) -> Result<Option<&Value>, Error> {
-        // Create a JSONPath selector
-        let selector = Selector::new(path).map_err(|e| Error {
-            msg: format!("{}", e),
-        })?;
-
-        Ok(selector.find(&self.data).next())
+    pub fn get_doc(&self, path: &str) -> Result<Value, Error> {
+        let results = jsonpath::select(&self.data, path)?;
+        Ok(results)
     }
 }
