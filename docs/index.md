@@ -10,7 +10,7 @@ Primary features:
 * Typed atomic operations for all JSON values types
 
 RedisJSON is developed with <3 at [Redis Labs](https://redislabs.com). The source code is available
-at: https://github.com/RedisLabsModules/RedisJSON
+at: https://github.com/RedisJSON/RedisJSON
 
 ## Quickstart
 
@@ -154,7 +154,7 @@ reply = json.loads(r.execute_command('JSON.GET', 'doc'))
 
 Requirements:
 
-* The RedisJSON repository: `git clone https://github.com/RedisLabsModules/redisjson.git`
+* The RedisJSON repository: `git clone https://github.com/RedisJSON/RedisJSON.git`
 * The `build-essential` package: `apt-get install build-essential`
 
 To build the module, run `make` in the project's directory.

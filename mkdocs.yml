@@ -1,7 +1,7 @@
 site_name: RedisJSON - a JSON data type for Redis
 site_url: http://redisjson.io
-repo_url: https://github.com/RedisLabsModules/RedisJSON
-repo_name: RedisLabsModules/RedisJSON
+repo_url: https://github.com/RedisJSON/RedisJSON
+repo_name: RedisJSON/RedisJSON
 
 google_analytics:
     - 'UA-92003007-1'
