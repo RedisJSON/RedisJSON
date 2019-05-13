@@ -1,6 +1,6 @@
-[![GitHub issues](https://img.shields.io/github/release/RedisLabsModules/redisjson.svg)](https://github.com/RedisLabsModules/redisjson/releases/latest)
-[![CircleCI](https://circleci.com/gh/RedisLabsModules/redisjson/tree/master.svg?style=svg)](https://circleci.com/gh/RedisLabsModules/redisjson/tree/master)
-<!--[![DockerHub](https://dockerbuildbadges.quelltext.eu/status.svg?organization=redislabs&repository=rejson)](https://hub.docker.com/r/redislabs/rejson/builds/) -->
+[![GitHub issues](https://img.shields.io/github/release/RedisJSON/RedisJSON.svg)](https://github.com/RedisJSON/RedisJSON/releases/latest)
+[![CircleCI](https://circleci.com/gh/RedisJSON/RedisJSON/tree/master.svg?style=svg)](https://circleci.com/gh/RedisJSON/RedisJSON/tree/master)
+[![Docker Cloud Build Status](https://img.shields.io/docker/cloud/build/redislabs/rejson.svg)](https://hub.docker.com/r/redislabs/rejson/builds/)
 
 # RedisJSON - a JSON data type for Redis
 
@@ -15,14 +15,14 @@ Primary features:
 
 ## Quickstart
 
-1.  [Launch RedisJSON with Docker](https://redislabsmodules.github.io/redisjson/#launch-redisjson-with-docker)
-1.  [Use RedisJSON from **any** Redis client](https://redislabsmodules.github.io/redisjson/#using-redisjson), e.g.:
+1.  [Launch RedisJSON with Docker](http://redisjson.io#launch-redisjson-with-docker)
+1.  [Use RedisJSON from **any** Redis client](http://redisjson.io#using-redisjson), e.g.:
 
 ![RedisJSON with `redis-cli`](docs/images/demo.gif)
 
 ## Documentation
 
-Read the docs at https://redislabsmodules.github.io/redisjson
+Read the docs at http://redisjson.io
 
 ## Current limitations and known issues
 
