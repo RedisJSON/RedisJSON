@@ -4,7 +4,7 @@
 
 # MVP milestone
 
-This is what ReJSON (https://github.com/redislabsmodules/rejson) currently has ready for the MVP:
+This is what ReJSON (https://github.com/RedisJSON/RedisJSON) currently has ready for the MVP:
 
 *  Code is under src/
 *  Building with CMake
