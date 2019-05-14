@@ -147,6 +147,9 @@ r.execute_command('JSON.SET', 'doc', '.', json.dumps(data))
 reply = json.loads(r.execute_command('JSON.GET', 'doc'))
 ```
 
+## Download 
+
+Prebuilt release of RedisJSON can be found here: [Download page](https://redislabs.com/redis-enterprise/software/downloads/#downloads)
 
 ## Building and Loading the Module
 
