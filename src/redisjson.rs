@@ -5,7 +5,7 @@
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
 use serde_json::Value;
-use jsonpath_lib as jsonpath;
+use jsonpath_lib::{JsonPathError};
 
 pub struct Error {
     msg: String,
@@ -20,6 +20,13 @@ impl From<String> for Error {
 impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
         Error { msg: e.to_string() }
+    }
+}
+
+
+impl From<JsonPathError> for Error {
+    fn from(e: JsonPathError) -> Self {
+        Error { msg: format!("{:?}", e) }
     }
 }
 
@@ -81,8 +88,11 @@ impl RedisJSON {
         Ok(s.to_string())
     }
 
-    pub fn get_doc(&self, path: &str) -> Result<Value, Error> {
-        let results = jsonpath::select(&self.data, path)?;
-        Ok(results)
+    fn get_doc<'a>(&'a self, path: &'a str) -> Result<&'a Value, Error> {
+        let results = jsonpath_lib::select(&self.data, path)?;
+        match results.first() {
+            Some(s) => Ok(s),
+            None => Ok(&Value::Null)
+        }
     }
 }
