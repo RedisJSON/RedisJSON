@@ -1,3 +1,5 @@
+<img src="images/logo.svg" alt="logo" width="200"/>
+
 # RedisJSON - a JSON data type for Redis
 
 RedisJSON is a [Redis](https://redis.io/) module that implements [ECMA-404 The JSON Data Interchange Standard](http://json.org/) as a native data type. It allows storing, updating and fetching JSON values from Redis keys (documents).
