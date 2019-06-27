@@ -43,28 +43,35 @@ pub struct RedisJSON {
 
 impl RedisJSON {
     pub fn from_str(data: &str) -> Result<Self, Error> {
-        eprintln!("Parsing JSON from input '{}'", data);
-
         // Parse the string of data into serde_json::Value.
         let v: Value = serde_json::from_str(data)?;
 
         Ok(Self { data: v })
     }
 
-    pub fn set_value(&mut self, data: &str) -> Result<(), Error> {
-        eprintln!("Parsing JSON from input '{}'", data);
-
+    pub fn set_value(&mut self, data: &str, path: &str) -> Result<(), Error> {
         // Parse the string of data into serde_json::Value.
-        let v: Value = serde_json::from_str(data)?;
+        let json: Value = serde_json::from_str(data)?;
 
+        let v = jsonpath_lib::replace_with(self.data.clone(), path, &mut |_v| {
+            json.clone()
+        })?;
         self.data = v;
 
         Ok(())
     }
 
-    pub fn to_string(&self, path: &str) -> Result<String, Error> {
-        eprintln!("Serializing back to JSON");
+    pub fn delete_path(&mut self, path: &str) -> Result<usize, Error> {
+        self.data = jsonpath_lib::delete(self.data.clone(), path)?;
 
+        let res : usize = match self.data {
+            Value::Null => 0,
+            _ => 1
+        };
+        Ok(res)
+    }
+
+    pub fn to_string(&self, path: &str) -> Result<String, Error> {
         let results = self.get_doc(path)?;
         Ok(serde_json::to_string(&results)?)
     }
