@@ -58,7 +58,7 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
 
     let mut path = loop {
         let arg = match args.next_string() {
-            Ok(s) => s.to_uppercase(),
+            Ok(s) => s,
             Err(_) => "$".to_owned() // path is optional
         };
 
@@ -85,6 +85,37 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
 
     Ok(value)
 }
+
+fn json_mget(ctx: &Context, args: Vec<String>) -> RedisResult {
+
+    if args.len() < 3 {
+        return Err(RedisError::WrongArity);
+    }
+    if let Some(path) = args.last() {
+        let mut path = path.clone();
+        if path.starts_with(".") { // backward compatibility
+            path.insert(0, '$');
+        }
+        let mut results: Vec<String> = Vec::with_capacity(args.len()-2);
+        for key in &args[1..args.len()-1] {
+            let redis_key = ctx.open_key_writable(&key);
+            match redis_key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
+                Some(doc) => {
+                    let result = doc.to_string(&path)?;
+                    results.push(result);
+                },
+                None => {}
+            };
+
+        }
+        Ok(results.into())
+    } else {
+        Err(RedisError::WrongArity)
+    }
+
+
+}
+
 
 fn json_strlen(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
@@ -127,6 +158,7 @@ redis_module! {
     commands: [
         ["json.set", json_set, "write"],
         ["json.get", json_get, ""],
+        ["json.mget", json_mget, ""],
         ["json.strlen", json_strlen, ""],
         ["json.type", json_type, ""],
     ],
