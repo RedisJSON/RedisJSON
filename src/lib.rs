@@ -16,11 +16,25 @@ pub enum SetOptions {
     AlreadyExists,
 }
 
+fn json_del(ctx: &Context, args: Vec<String>) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+
+    let key = args.next_string()?;
+    let path = args.next_string()?;
+
+    let key = ctx.open_key_writable(&key);
+    let deleted = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
+        Some(doc) => doc.delete_path(&path)?,
+        None => 0
+    };
+    Ok(deleted.into())
+}
+
 fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_string()?;
-    let _path = args.next_string()?; // TODO handle this path
+    let path = args.next_string()?;
     let value = args.next_string()?;
 
     let set_option = args.next()
@@ -39,7 +53,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     match (current, set_option) {
         (Some(_), Some(SetOptions::NotExists)) => Ok(().into()),
         (Some(ref mut doc), _) => {
-            doc.set_value(&value)?;
+            doc.set_value(&value, &path)?;
             REDIS_OK
         }
         (None, Some(SetOptions::AlreadyExists)) => Ok(().into()),
@@ -112,8 +126,6 @@ fn json_mget(ctx: &Context, args: Vec<String>) -> RedisResult {
     } else {
         Err(RedisError::WrongArity)
     }
-
-
 }
 
 
@@ -157,6 +169,7 @@ redis_module! {
     ],
     commands: [
         ["json.set", json_set, "write"],
+        ["json.del", json_del, "write"],
         ["json.get", json_get, ""],
         ["json.mget", json_mget, ""],
         ["json.strlen", json_strlen, ""],

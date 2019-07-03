@@ -3,7 +3,7 @@
 // Translate between JSON and tree of Redis objects:
 // User-provided JSON is converted to a tree. This tree is stored transparently in Redis.
 // It can be operated on (e.g. INCR) and serialized back to JSON.
-
+use std::mem;
 use serde_json::Value;
 use jsonpath_lib::{JsonPathError};
 
@@ -43,28 +43,37 @@ pub struct RedisJSON {
 
 impl RedisJSON {
     pub fn from_str(data: &str) -> Result<Self, Error> {
-        eprintln!("Parsing JSON from input '{}'", data);
-
         // Parse the string of data into serde_json::Value.
         let v: Value = serde_json::from_str(data)?;
 
         Ok(Self { data: v })
     }
 
-    pub fn set_value(&mut self, data: &str) -> Result<(), Error> {
-        eprintln!("Parsing JSON from input '{}'", data);
-
+    pub fn set_value(&mut self, data: &str, path: &str) -> Result<(), Error> {
         // Parse the string of data into serde_json::Value.
-        let v: Value = serde_json::from_str(data)?;
+        let json: Value = serde_json::from_str(data)?;
 
-        self.data = v;
+        let current_data = mem::replace(&mut self.data, Value::Null);
+        let new_data = jsonpath_lib::replace_with(current_data, path, &mut |_v| {
+            json.clone()
+        })?;
+        self.data = new_data;
 
         Ok(())
     }
 
-    pub fn to_string(&self, path: &str) -> Result<String, Error> {
-        eprintln!("Serializing back to JSON");
+    pub fn delete_path(&mut self, path: &str) -> Result<usize, Error> {
+        let current_value = mem::replace(&mut self.data, Value::Null);
+        self.data = jsonpath_lib::delete(current_value, path)?;
 
+        let res : usize = match self.data {
+            Value::Null => 0,
+            _ => 1
+        };
+        Ok(res)
+    }
+
+    pub fn to_string(&self, path: &str) -> Result<String, Error> {
         let results = self.get_doc(path)?;
         Ok(serde_json::to_string(&results)?)
     }
