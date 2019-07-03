@@ -102,7 +102,7 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
 
 fn json_mget(ctx: &Context, args: Vec<String>) -> RedisResult {
 
-    if args.len() < 2 {
+    if args.len() < 3 {
         return Err(RedisError::WrongArity);
     }
     if let Some(path) = args.last() {
@@ -110,14 +110,9 @@ fn json_mget(ctx: &Context, args: Vec<String>) -> RedisResult {
         if path.starts_with(".") { // backward compatibility
             path.insert(0, '$');
         }
-        let keys_len = args.len()-2;
-        let mut args_iter = args.into_iter().skip(1);
-        let mut results: Vec<String> = Vec::with_capacity(keys_len);
-        for _i in 0..keys_len {
-            let key = args_iter.next_string()?;
-
+        let mut results: Vec<String> = Vec::with_capacity(args.len()-2);
+        for key in &args[1..args.len()-1] {
             let redis_key = ctx.open_key_writable(&key);
-
             match redis_key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
                 Some(doc) => {
                     let result = doc.to_string(&path)?;
