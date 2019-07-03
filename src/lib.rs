@@ -23,7 +23,7 @@ fn json_del(ctx: &Context, args: Vec<String>) -> RedisResult {
     let path = args.next_string()?;
 
     let key = ctx.open_key_writable(&key);
-    let deleted : usize = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
+    let deleted = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
         Some(doc) => doc.delete_path(&path)?,
         None => 0
     };
