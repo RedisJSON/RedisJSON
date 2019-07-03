@@ -3,7 +3,7 @@
 // Translate between JSON and tree of Redis objects:
 // User-provided JSON is converted to a tree. This tree is stored transparently in Redis.
 // It can be operated on (e.g. INCR) and serialized back to JSON.
-
+use std::mem;
 use serde_json::Value;
 use jsonpath_lib::{JsonPathError};
 
@@ -53,10 +53,11 @@ impl RedisJSON {
         // Parse the string of data into serde_json::Value.
         let json: Value = serde_json::from_str(data)?;
 
-        let v = jsonpath_lib::replace_with(self.data.clone(), path, &mut |_v| {
+        let current_data = mem::replace(&mut self.data, Value::Null);
+        let new_data = jsonpath_lib::replace_with(current_data, path, &mut |_v| {
             json.clone()
         })?;
-        self.data = v;
+        self.data = new_data;
 
         Ok(())
     }
