@@ -63,7 +63,8 @@ impl RedisJSON {
     }
 
     pub fn delete_path(&mut self, path: &str) -> Result<usize, Error> {
-        self.data = jsonpath_lib::delete(self.data.clone(), path)?;
+        let current_value = mem::replace(&mut self.data, Value::Null);
+        self.data = jsonpath_lib::delete(current_value, path)?;
 
         let res : usize = match self.data {
             Value::Null => 0,
