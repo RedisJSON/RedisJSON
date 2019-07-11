@@ -16,11 +16,27 @@ pub enum SetOptions {
     AlreadyExists,
 }
 
+///
+/// backward compatibility convector for RedisJSON 1.x clients
+///
+fn backward_path(mut path: String) -> String {
+    if !path.starts_with("$") {
+        if path == "." {
+            path.replace_range(..1, "$");
+        } else if path.starts_with(".") {
+            path.insert(0, '$');
+        } else {
+            path.insert_str(0, "$.");
+        }
+    }
+    return path;
+}
+
 fn json_del(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_string()?;
-    let path = args.next_string()?;
+    let path = backward_path(args.next_string()?);
 
     let key = ctx.open_key_writable(&key);
     let deleted = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
@@ -34,7 +50,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_string()?;
-    let path = args.next_string()?;
+    let path = backward_path(args.next_string()?);
     let value = args.next_string()?;
 
     let set_option = args
@@ -76,19 +92,14 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
         };
 
         match arg.as_str() {
-            "INDENT" => args.next(),        // TODO add support
-            "NEWLINE" => args.next(),       // TODO add support
-            "SPACE" => args.next(),         // TODO add support
-            "NOESCAPE" => continue,         // TODO add support
-            "." => break String::from("$"), // backward compatibility support
+            "INDENT" => args.next(),  // TODO add support
+            "NEWLINE" => args.next(), // TODO add support
+            "SPACE" => args.next(),   // TODO add support
+            "NOESCAPE" => continue,   // TODO add support
             _ => break arg,
         };
     };
-
-    if path.starts_with(".") {
-        // backward compatibility
-        path.insert(0, '$');
-    }
+    path = backward_path(path);
 
     let key = ctx.open_key_writable(&key);
 
@@ -105,11 +116,7 @@ fn json_mget(ctx: &Context, args: Vec<String>) -> RedisResult {
         return Err(RedisError::WrongArity);
     }
     if let Some(path) = args.last() {
-        let mut path = path.clone();
-        if path.starts_with(".") {
-            // backward compatibility
-            path.insert(0, '$');
-        }
+        let path = backward_path(path.to_string());
         let mut results: Vec<String> = Vec::with_capacity(args.len() - 2);
         for key in &args[1..args.len() - 1] {
             let redis_key = ctx.open_key_writable(&key);
@@ -130,7 +137,7 @@ fn json_mget(ctx: &Context, args: Vec<String>) -> RedisResult {
 fn json_str_len(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_string()?;
-    let path = args.next_string()?;
+    let path = backward_path(args.next_string()?);
 
     let key = ctx.open_key_writable(&key);
 
@@ -145,7 +152,7 @@ fn json_str_len(ctx: &Context, args: Vec<String>) -> RedisResult {
 fn json_type(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_string()?;
-    let path = args.next_string()?;
+    let path = backward_path(args.next_string()?);
 
     let key = ctx.open_key_writable(&key);
 
@@ -170,7 +177,9 @@ fn json_num_powby(ctx: &Context, args: Vec<String>) -> RedisResult {
 }
 
 fn json_num_op<F>(ctx: &Context, args: Vec<String>, fun: F) -> RedisResult
-    where F: Fn(f64, f64) -> f64 {
+where
+    F: Fn(f64, f64) -> f64,
+{
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_string()?;

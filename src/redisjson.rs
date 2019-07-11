@@ -68,14 +68,16 @@ impl RedisJSON {
     }
 
     pub fn delete_path(&mut self, path: &str) -> Result<usize, Error> {
-        let current_value = mem::replace(&mut self.data, Value::Null);
-        self.data = jsonpath_lib::delete(current_value, path)?;
+        let current_data = mem::replace(&mut self.data, Value::Null);
 
-        let res: usize = match self.data {
-            Value::Null => 0,
-            _ => 1,
-        };
-        Ok(res)
+        let mut deleted = 0;
+        self.data = jsonpath_lib::replace_with(current_data, path, &mut |v| {
+            if !v.is_null() {
+                deleted = deleted + 1; // might delete more than a single value
+            }
+            Value::Null
+        })?;
+        Ok(deleted)
     }
 
     pub fn to_string(&self, path: &str) -> Result<String, Error> {
@@ -143,7 +145,6 @@ impl RedisJSON {
                 }
             }
         })?;
-
         if errors.is_empty() {
             Ok(result.to_string())
         } else {
