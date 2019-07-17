@@ -299,7 +299,7 @@ dependencies = [
 
 [[package]]
 name = "redisjson"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "jsonpath_lib 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.58 (registry+https://github.com/rust-lang/crates.io-index)",
