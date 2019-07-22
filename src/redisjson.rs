@@ -60,11 +60,22 @@ impl RedisJSON {
         // Parse the string of data into serde_json::Value.
         let json: Value = serde_json::from_str(data)?;
 
-        let current_data = mem::replace(&mut self.data, Value::Null);
-        let new_data = jsonpath_lib::replace_with(current_data, path, &mut |_v| json.clone())?;
-        self.data = new_data;
-
-        Ok(())
+        if path == "$" {
+            self.data = json;
+            Ok(())
+        } else {
+            let mut replaced = false;
+            let current_data = mem::replace(&mut self.data, Value::Null);
+            self.data = jsonpath_lib::replace_with(current_data, path, &mut |_v| {
+                replaced = true;
+                json.clone()
+            })?;
+            if replaced {
+                Ok(())
+            } else {
+                Err(format!("ERR missing path {}", path).into())
+            }
+        }
     }
 
     pub fn delete_path(&mut self, path: &str) -> Result<usize, Error> {
@@ -133,16 +144,16 @@ impl RedisJSON {
         let mut errors = vec![];
         let mut result: f64 = 0.0;
 
-        self.data = jsonpath_lib::replace_with(current_data, path, &mut |v| {
-            match apply_op(v, number, &fun) {
-                Ok((res, new_value)) => {
-                    result = res;
-                    new_value
-                }
-                Err(e) => {
-                    errors.push(e);
-                    v.clone()
-                }
+        self.data = jsonpath_lib::replace_with(current_data, path, &mut |v| match apply_op(
+            v, number, &fun,
+        ) {
+            Ok((res, new_value)) => {
+                result = res;
+                new_value
+            }
+            Err(e) => {
+                errors.push(e);
+                v.clone()
             }
         })?;
         if errors.is_empty() {
@@ -156,13 +167,15 @@ impl RedisJSON {
         let results = jsonpath_lib::select(&self.data, path)?;
         match results.first() {
             Some(s) => Ok(s),
-            None => Ok(&Value::Null),
+            None => Err("ERR path does not exist".into()),
         }
     }
 }
 
 fn apply_op<F>(v: &Value, number: f64, fun: F) -> Result<(f64, Value), String>
-    where F: Fn(f64, f64) -> f64 {
+where
+    F: Fn(f64, f64) -> f64,
+{
     if let Value::Number(curr) = v {
         if let Some(curr_value) = curr.as_f64() {
             let res = fun(curr_value, number);
@@ -176,8 +189,9 @@ fn apply_op<F>(v: &Value, number: f64, fun: F) -> Result<(f64, Value), String>
             Err("ERR can not convert current value as f64".to_string())
         }
     } else {
-        Err(format!("ERR wrong type of path value - expected a number but found {}",
-                    RedisJSON::value_name(&v)))
+        Err(format!(
+            "ERR wrong type of path value - expected a number but found {}",
+            RedisJSON::value_name(&v)
+        ))
     }
 }
-

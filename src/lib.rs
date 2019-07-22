@@ -40,7 +40,14 @@ fn json_del(ctx: &Context, args: Vec<String>) -> RedisResult {
 
     let key = ctx.open_key_writable(&key);
     let deleted = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
-        Some(doc) => doc.delete_path(&path)?,
+        Some(doc) => {
+            if path == "$" {
+                key.delete()?;
+                1
+            } else {
+                doc.delete_path(&path)?
+            }
+        }
         None => 0,
     };
     Ok(deleted.into())
@@ -74,12 +81,25 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
         (None, Some(SetOptions::AlreadyExists)) => Ok(().into()),
         (None, _) => {
             let doc = RedisJSON::from_str(&value)?;
-            key.set_value(&REDIS_JSON_TYPE, doc)?;
-            REDIS_OK
+            if path == "$" {
+                key.set_value(&REDIS_JSON_TYPE, doc)?;
+                REDIS_OK
+            } else {
+                Err("ERR new objects must be created at the root".into())
+            }
         }
     }
 }
 
+///
+/// JSON.GET <key>
+///         [INDENT indentation-string]
+///         [NEWLINE line-break-string]
+///         [SPACE space-string]
+///         [NOESCAPE]
+///         [path ...]
+///
+/// TODO add support for multi path
 fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
@@ -111,6 +131,9 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
     Ok(value)
 }
 
+///
+/// JSON.MGET <key> [key ...] <path>
+///
 fn json_mget(ctx: &Context, args: Vec<String>) -> RedisResult {
     if args.len() < 3 {
         return Err(RedisError::WrongArity);
@@ -119,7 +142,7 @@ fn json_mget(ctx: &Context, args: Vec<String>) -> RedisResult {
         let path = backward_path(path.to_string());
         let mut results: Vec<String> = Vec::with_capacity(args.len() - 2);
         for key in &args[1..args.len() - 1] {
-            let redis_key = ctx.open_key_writable(&key);
+            let redis_key = ctx.open_key(&key);
             match redis_key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
                 Some(doc) => {
                     let result = doc.to_string(&path)?;
@@ -139,7 +162,7 @@ fn json_str_len(ctx: &Context, args: Vec<String>) -> RedisResult {
     let key = args.next_string()?;
     let path = backward_path(args.next_string()?);
 
-    let key = ctx.open_key_writable(&key);
+    let key = ctx.open_key(&key);
 
     let length = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
         Some(doc) => doc.str_len(&path)?.into(),
@@ -154,7 +177,7 @@ fn json_type(ctx: &Context, args: Vec<String>) -> RedisResult {
     let key = args.next_string()?;
     let path = backward_path(args.next_string()?);
 
-    let key = ctx.open_key_writable(&key);
+    let key = ctx.open_key(&key);
 
     let value = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
         Some(doc) => doc.get_type(&path)?.into(),
@@ -214,6 +237,9 @@ fn json_arr_len(ctx: &Context, args: Vec<String>) -> RedisResult {
     json_len(ctx, args, |doc, path| doc.arr_len(path))
 }
 
+///
+/// JSON.ARRPOP <key> [path [index]]
+///
 fn json_arr_pop(_ctx: &Context, _args: Vec<String>) -> RedisResult {
     Err("Command was not implemented".into())
 }
@@ -234,10 +260,6 @@ fn json_debug(_ctx: &Context, _args: Vec<String>) -> RedisResult {
     Err("Command was not implemented".into())
 }
 
-fn json_forget(_ctx: &Context, _args: Vec<String>) -> RedisResult {
-    Err("Command was not implemented".into())
-}
-
 fn json_resp(_ctx: &Context, _args: Vec<String>) -> RedisResult {
     Err("Command was not implemented".into())
 }
@@ -249,10 +271,9 @@ fn json_len<F: Fn(&RedisJSON, &String) -> Result<usize, Error>>(
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_string()?;
-    let path = args.next_string()?;
+    let path = backward_path(args.next_string()?);
 
-    let key = ctx.open_key_writable(&key);
-
+    let key = ctx.open_key(&key);
     let length = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
         Some(doc) => fun(&doc, &path)?.into(),
         None => ().into(),
@@ -261,6 +282,13 @@ fn json_len<F: Fn(&RedisJSON, &String) -> Result<usize, Error>>(
     Ok(length)
 }
 
+fn json_cache_info(_ctx: &Context, _args: Vec<String>) -> RedisResult {
+    Err("Command was not implemented".into())
+}
+
+fn json_cache_init(_ctx: &Context, _args: Vec<String>) -> RedisResult {
+    Err("Command was not implemented".into())
+}
 //////////////////////////////////////////////////////
 
 redis_module! {
@@ -275,21 +303,23 @@ redis_module! {
         ["json.mget", json_mget, ""],
         ["json.set", json_set, "write"],
         ["json.type", json_type, ""],
-        ["json.numincrby", json_num_incrby, ""],
-        ["json.nummultby", json_num_multby, ""],
-        ["json.numpowby", json_num_powby, ""],
-        ["json.strappend", json_str_append, ""],
+        ["json.numincrby", json_num_incrby, "write"],
+        ["json.nummultby", json_num_multby, "write"],
+        ["json.numpowby", json_num_powby, "write"],
+        ["json.strappend", json_str_append, "write"],
         ["json.strlen", json_str_len, ""],
-        ["json.arrappend", json_arr_append, ""],
+        ["json.arrappend", json_arr_append, "write"],
         ["json.arrindex", json_arr_index, ""],
-        ["json.arrinsert", json_arr_insert, ""],
+        ["json.arrinsert", json_arr_insert, "write"],
         ["json.arrlen", json_arr_len, ""],
-        ["json.arrpop", json_arr_pop, ""],
-        ["json.arrtrim", json_arr_trim, ""],
+        ["json.arrpop", json_arr_pop, "write"],
+        ["json.arrtrim", json_arr_trim, "write"],
         ["json.objkeys", json_obj_keys, ""],
         ["json.objlen", json_obj_len, ""],
         ["json.debug", json_debug, ""],
-        ["json.forget", json_forget, ""],
+        ["json.forget", json_del, "write"],
         ["json.resp", json_resp, ""],
+        ["json._cacheinfo", json_cache_info, ""],
+        ["json._cacheinit", json_cache_init, "write"],
     ],
 }
