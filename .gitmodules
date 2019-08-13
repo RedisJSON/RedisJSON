@@ -1,3 +1,4 @@
 [submodule "redismodule-rs"]
-	path = redismodule-rs
-	url = https://github.com/RedisLabsModules/redismodule-rs
+        path = redismodule-rs
+        url = https://github.com/RedisLabsModules/redismodule-rs
+        branch = cryptorelay-picks  

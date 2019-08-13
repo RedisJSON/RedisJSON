@@ -3,10 +3,12 @@
 // Translate between JSON and tree of Redis objects:
 // User-provided JSON is converted to a tree. This tree is stored transparently in Redis.
 // It can be operated on (e.g. INCR) and serialized back to JSON.
-use jsonpath_lib::JsonPathError;
-use serde_json::{Number, Value};
-use std::mem;
+use jsonpath_lib::{JsonPathError, SelectorMut};
+use redismodule::raw;
+use serde_json::Value;
+use std::os::raw::{c_int, c_void};
 
+#[derive(Debug)]
 pub struct Error {
     msg: String,
 }
@@ -65,7 +67,7 @@ impl RedisJSON {
             Ok(())
         } else {
             let mut replaced = false;
-            let current_data = mem::replace(&mut self.data, Value::Null);
+            let current_data = self.data.take();
             self.data = jsonpath_lib::replace_with(current_data, path, &mut |_v| {
                 replaced = true;
                 json.clone()
@@ -79,7 +81,7 @@ impl RedisJSON {
     }
 
     pub fn delete_path(&mut self, path: &str) -> Result<usize, Error> {
-        let current_data = mem::replace(&mut self.data, Value::Null);
+        let current_data = self.data.take();
 
         let mut deleted = 0;
         self.data = jsonpath_lib::replace_with(current_data, path, &mut |v| {
@@ -117,12 +119,46 @@ impl RedisJSON {
         }
     }
 
+    pub fn obj_keys<'a>(&'a self, path: &'a str) -> Result<Vec<&'a String>, Error> {
+        match self.get_doc(path)?.as_object() {
+            Some(o) => Ok(o.keys().collect()),
+            None => Err("ERR wrong type of path value".into()),
+        }
+    }
+
+    pub fn arr_index(
+        &self,
+        path: &str,
+        scalar: &str,
+        start: usize,
+        end: usize,
+    ) -> Result<i64, Error> {
+        if let Value::Array(arr) = self.get_doc(path)? {
+            match serde_json::from_str(scalar)? {
+                Value::Array(_) | Value::Object(_) => Ok(-1),
+                v => {
+                    let mut start = start.max(0);
+                    let end = end.min(arr.len() - 1);
+                    start = end.min(start);
+
+                    let slice = &arr[start..=end];
+                    match slice.iter().position(|r| r == &v) {
+                        Some(i) => Ok((start + i) as i64),
+                        None => Ok(-1),
+                    }
+                }
+            }
+        } else {
+            Ok(-1)
+        }
+    }
+
     pub fn get_type(&self, path: &str) -> Result<String, Error> {
         let s = RedisJSON::value_name(self.get_doc(path)?);
         Ok(s.to_string())
     }
 
-    fn value_name(value: &Value) -> &str {
+    pub fn value_name(value: &Value) -> &str {
         match value {
             Value::Null => "null",
             Value::Bool(_) => "boolean",
@@ -133,33 +169,50 @@ impl RedisJSON {
         }
     }
 
-    pub fn num_op<F: Fn(f64, f64) -> f64>(
-        &mut self,
-        path: &str,
-        number: f64,
-        fun: F,
-    ) -> Result<String, Error> {
-        let current_data = mem::replace(&mut self.data, Value::Null);
+    pub fn value_op<F>(&mut self, path: &str, mut fun: F) -> Result<Value, Error>
+    where
+        F: FnMut(&Value) -> Result<Value, Error>,
+    {
+        let current_data = self.data.take();
 
         let mut errors = vec![];
-        let mut result: f64 = 0.0;
+        let mut result = Value::Null; // TODO handle case where path not found
 
-        self.data = jsonpath_lib::replace_with(current_data, path, &mut |v| match apply_op(
-            v, number, &fun,
-        ) {
-            Ok((res, new_value)) => {
-                result = res;
-                new_value
-            }
-            Err(e) => {
-                errors.push(e);
-                v.clone()
-            }
-        })?;
-        if errors.is_empty() {
-            Ok(result.to_string())
+        let mut collect_fun = |value: Value| {
+            fun(&value)
+                .map(|new_value| {
+                    result = new_value.clone();
+                    new_value
+                })
+                .map_err(|e| {
+                    errors.push(e);
+                })
+                .unwrap_or(value)
+        };
+
+        self.data = if path == "$" {
+            // root needs special handling
+            collect_fun(current_data)
         } else {
-            Err(errors.join("\n").into())
+            SelectorMut::new()
+                .str_path(path)
+                .and_then(|selector| {
+                    Ok(selector
+                        .value(current_data.clone())
+                        .replace_with(&mut |v| collect_fun(v.to_owned()))?
+                        .take()
+                        .unwrap_or(Value::Null))
+                })
+                .map_err(|e| {
+                    errors.push(e.into());
+                })
+                .unwrap_or(current_data)
+        };
+
+        match errors.len() {
+            0 => Ok(result),
+            1 => Err(errors.remove(0)),
+            _ => Err(errors.into_iter().map(|e| e.msg).collect::<String>().into()),
         }
     }
 
@@ -172,26 +225,24 @@ impl RedisJSON {
     }
 }
 
-fn apply_op<F>(v: &Value, number: f64, fun: F) -> Result<(f64, Value), String>
-where
-    F: Fn(f64, f64) -> f64,
-{
-    if let Value::Number(curr) = v {
-        if let Some(curr_value) = curr.as_f64() {
-            let res = fun(curr_value, number);
-
-            if let Some(new_value) = Number::from_f64(res) {
-                Ok((res, Value::Number(new_value)))
-            } else {
-                Err("ERR can not represent result as Number".to_string())
-            }
-        } else {
-            Err("ERR can not convert current value as f64".to_string())
-        }
-    } else {
-        Err(format!(
-            "ERR wrong type of path value - expected a number but found {}",
-            RedisJSON::value_name(&v)
-        ))
+#[allow(non_snake_case, unused)]
+pub unsafe extern "C" fn json_rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
+    if encver < 2 {
+        panic!("Can't load old RedisJSON RDB"); // TODO add support for backward
     }
+    let json = RedisJSON::from_str(&raw::load_string(rdb)).unwrap();
+    Box::into_raw(Box::new(json)) as *mut c_void
+}
+
+#[allow(non_snake_case, unused)]
+#[no_mangle]
+pub unsafe extern "C" fn json_free(value: *mut c_void) {
+    Box::from_raw(value as *mut RedisJSON);
+}
+
+#[allow(non_snake_case, unused)]
+#[no_mangle]
+pub unsafe extern "C" fn json_rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
+    let json = &*(value as *mut RedisJSON);
+    raw::save_string(rdb, &json.data.to_string());
 }

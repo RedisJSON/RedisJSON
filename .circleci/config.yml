@@ -3,7 +3,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: circleci/rust
+      - image: circleci/rust:buster
 
     steps:
       - checkout
@@ -12,7 +12,10 @@ jobs:
       
       - run:
           name: Install prerequisite
-          command: sudo apt-get install -y clang
+          command: |
+             sudo apt-get install -y software-properties-common
+             sudo add-apt-repository -y ppa:chris-lea/redis-server
+             sudo apt-get install -y clang python-pip redis-server
 
       - run:
           name: Version information
@@ -45,9 +48,11 @@ jobs:
       #            rustup run stable rustc --version --verbose
       #            rustup run stable cargo --version --verbose
       #            rustup run stable cargo build
-      #      - run:
-      #          name: Test
-      #          command: rustup run stable cargo test
+      - run:
+          name: Test
+          command: |
+             pip install -r ./test/pytest/requirements.txt
+             python ./test/pytest/test.py
       #      - run:
       #          name: Upload Coverage
       #          command: ./scripts/codecov.sh
@@ -57,6 +62,6 @@ jobs:
             - "~/.cargo"
             - "./target"
 
-      - run:
-          name: Run all tests
-          command: cargo test --all
+#      - run:
+#          name: Run all tests
+#          command: cargo test --all
