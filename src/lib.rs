@@ -578,8 +578,49 @@ fn json_debug(_ctx: &Context, _args: Vec<String>) -> RedisResult {
 ///
 /// JSON.RESP <key> [path]
 ///
-fn json_resp(_ctx: &Context, _args: Vec<String>) -> RedisResult {
-    Err("Command was not implemented".into())
+fn json_resp(ctx: &Context, args: Vec<String>) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+
+    let key = args.next_string()?;
+    let path = backwards_compat_path(args.next_string()?);
+
+    let key = ctx.open_key(&key);
+    match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
+        Some(doc) => Ok(resp_serialize(doc.get_doc(&path)?)),
+        None => Ok(().into()),
+    }
+}
+
+fn resp_serialize(doc: &Value) -> RedisValue {
+    match doc {
+        Value::Null => RedisValue::None,
+
+        Value::Bool(b) => RedisValue::SimpleString(b.to_string()),
+
+        Value::Number(n) => n
+            .as_i64()
+            .map(|i| RedisValue::Integer(i))
+            .unwrap_or_else(|| RedisValue::Float(n.as_f64().unwrap())),
+
+        Value::String(s) => RedisValue::BulkString(s.clone()),
+
+        Value::Array(arr) => {
+            let mut res: Vec<RedisValue> = Vec::with_capacity(arr.len() + 1);
+            res.push(RedisValue::SimpleStringStatic("["));
+            arr.iter().for_each(|v| res.push(resp_serialize(v)));
+            RedisValue::Array(res)
+        }
+
+        Value::Object(obj) => {
+            let mut res: Vec<RedisValue> = Vec::with_capacity(obj.len() + 1);
+            res.push(RedisValue::SimpleStringStatic("{"));
+            for (key, value) in obj.iter() {
+                res.push(RedisValue::SimpleString(key.to_string()));
+                res.push(resp_serialize(value));
+            }
+            RedisValue::Array(res)
+        }
+    }
 }
 
 fn json_len<F: Fn(&RedisJSON, &String) -> Result<usize, Error>>(
