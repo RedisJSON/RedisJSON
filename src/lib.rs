@@ -615,7 +615,7 @@ fn resp_serialize(doc: &Value) -> RedisValue {
             let mut res: Vec<RedisValue> = Vec::with_capacity(obj.len() + 1);
             res.push(RedisValue::SimpleStringStatic("{"));
             for (key, value) in obj.iter() {
-                res.push(RedisValue::SimpleString(key.to_string()));
+                res.push(RedisValue::BulkString(key.to_string()));
                 res.push(resp_serialize(value));
             }
             RedisValue::Array(res)
