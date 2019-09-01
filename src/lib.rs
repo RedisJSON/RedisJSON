@@ -39,7 +39,7 @@ static REDIS_JSON_TYPE: RedisType = RedisType::new(
 );
 
 static JSON_SCHEMA_ENCODING_VERSION: i32 = 1;
-static JSON_SCHEMA_NAME: &str = "ReJSON-SCHEMA";
+static JSON_SCHEMA_NAME: &str = "ReJSON-SC";
 
 static REDIS_JSON_SCHEMA_TYPE: RedisType = RedisType::new(
     JSON_SCHEMA_NAME,
