@@ -5,7 +5,9 @@
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
 use crate::backward;
+use crate::error::Error;
 use crate::nodevisitor::NodeVisitorImpl;
+
 use bson::decode_document;
 use jsonpath_lib::{JsonPathError, SelectorMut};
 use redismodule::raw;
@@ -14,48 +16,11 @@ use std::io::Cursor;
 use std::mem;
 use std::os::raw::{c_int, c_void};
 
-#[derive(Debug)]
-pub struct Error {
-    msg: String,
-}
-
 #[derive(Debug, PartialEq)]
 pub enum SetOptions {
     NotExists,
     AlreadyExists,
     None,
-}
-
-impl From<String> for Error {
-    fn from(e: String) -> Self {
-        Error { msg: e }
-    }
-}
-
-impl From<&str> for Error {
-    fn from(e: &str) -> Self {
-        Error { msg: e.to_string() }
-    }
-}
-
-impl From<serde_json::Error> for Error {
-    fn from(e: serde_json::Error) -> Self {
-        Error { msg: e.to_string() }
-    }
-}
-
-impl From<JsonPathError> for Error {
-    fn from(e: JsonPathError) -> Self {
-        Error {
-            msg: format!("{:?}", e),
-        }
-    }
-}
-
-impl From<Error> for redismodule::RedisError {
-    fn from(e: Error) -> Self {
-        redismodule::RedisError::String(e.msg)
-    }
 }
 
 #[derive(Debug, PartialEq)]
