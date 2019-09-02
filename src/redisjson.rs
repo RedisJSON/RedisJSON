@@ -10,6 +10,7 @@ use crate::nodevisitor::NodeVisitorImpl;
 
 use bson::decode_document;
 use jsonpath_lib::{JsonPathError, SelectorMut};
+use jsonpath_lib::SelectorMut;
 use redismodule::raw;
 use serde_json::{Map, Value};
 use std::io::Cursor;
@@ -28,7 +29,6 @@ pub enum Format {
     JSON,
     BSON,
 }
-
 impl Format {
     pub fn from_str(s: &str) -> Result<Format, Error> {
         match s {

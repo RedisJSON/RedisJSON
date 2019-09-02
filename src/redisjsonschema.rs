@@ -1,21 +1,38 @@
+use crate::error::Error;
+use redisearch_api::Index;
 use redismodule::raw;
 use std::os::raw::{c_int, c_void};
-use crate::error::Error;
 
-#[derive(Debug)]
 pub struct RedisJSONSchema {
-    data: String
+    index: Index,
 }
 
 impl RedisJSONSchema {
+    pub fn new(name: &str) -> RedisJSONSchema {
+        RedisJSONSchema {
+            index: Index::create(name),
+        }
+    }
+
     pub fn from_str(data: &str) -> Result<Self, Error> {
         // let value = RedisJSON::parse_str(data, format)?;
-        Ok(Self {data: data.to_string()})
+        Ok(Self {
+            // TODO better handle RDB read
+            index: Index::create(data.to_string().as_str()),
+        })
+    }
+
+    pub fn add_index(&mut self, path: &str) -> Result<(), Error> {
+        self.index.create_field(path);
+        Ok(())
     }
 }
 
 #[allow(non_snake_case, unused)]
-pub unsafe extern "C" fn json_schema_rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
+pub unsafe extern "C" fn json_schema_rdb_load(
+    rdb: *mut raw::RedisModuleIO,
+    encver: c_int,
+) -> *mut c_void {
     if encver < 2 {
         panic!("Can't load old RedisJSONSchema RDB"); // TODO add support for backward
     }
@@ -33,5 +50,6 @@ pub unsafe extern "C" fn json_schema_free(value: *mut c_void) {
 #[no_mangle]
 pub unsafe extern "C" fn json_schema_rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
     let schema = &*(value as *mut RedisJSONSchema);
-    raw::save_string(rdb, &schema.data.to_string());
+    // TODO implement RDB write
+    // raw::save_string(rdb, &schema.schema.to_string());
 }

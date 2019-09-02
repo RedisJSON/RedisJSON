@@ -1,8 +1,9 @@
 #[macro_use]
 extern crate redismodule;
 
-use redisearch_api;
 use redismodule::native_types::RedisType;
+use redismodule::raw as rawmod;
+use redismodule::raw::RedisModuleTypeMethods;
 use redismodule::{Context, NextArg, RedisError, RedisResult, RedisValue, REDIS_OK};
 use serde_json::{Number, Value};
 use std::{i64, usize};
@@ -14,14 +15,14 @@ mod nodevisitor;
 mod redisjson;
 mod redisjsonschema;
 
+use crate::error::Error;
 use crate::index::Index;
 use crate::redisjson::{Format, RedisJSON, SetOptions};
-use crate::error::{Error};
+use crate::redisjsonschema::RedisJSONSchema;
 
-static JSON_TYPE_ENCODING_VERSION: i32 = 2;
-static JSON_TYPE_NAME: &str = "ReJSON-RL";
-
-static REDIS_JSON_TYPE: RedisType = RedisType::new(
+const JSON_TYPE_ENCODING_VERSION: i32 = 2;
+const JSON_TYPE_NAME: &str = "ReJSON-RL";
+const REDIS_JSON_TYPE: RedisType = RedisType::new(
     JSON_TYPE_NAME,
     JSON_TYPE_ENCODING_VERSION,
     raw::RedisModuleTypeMethods {
@@ -38,10 +39,9 @@ static REDIS_JSON_TYPE: RedisType = RedisType::new(
     },
 );
 
-static JSON_SCHEMA_ENCODING_VERSION: i32 = 1;
-static JSON_SCHEMA_NAME: &str = "ReJSON-SC";
-
-static REDIS_JSON_SCHEMA_TYPE: RedisType = RedisType::new(
+const JSON_SCHEMA_ENCODING_VERSION: i32 = 1;
+const JSON_SCHEMA_NAME: &str = "ReJSON-SC";
+const REDIS_JSON_SCHEMA_TYPE: RedisType = RedisType::new(
     JSON_SCHEMA_NAME,
     JSON_SCHEMA_ENCODING_VERSION,
     raw::RedisModuleTypeMethods {
@@ -721,7 +721,7 @@ fn json_len<F: Fn(&RedisJSON, &String) -> Result<usize, Error>>(
     Ok(length)
 }
 
-fn json_createindex(_ctx: &Context, _args: Vec<String>) -> RedisResult {
+fn json_createindex(ctx: &Context, args: Vec<String>) -> RedisResult {
     Err("Command was not implemented".into())
 }
 
@@ -734,6 +734,10 @@ fn json_cache_init(_ctx: &Context, _args: Vec<String>) -> RedisResult {
 }
 //////////////////////////////////////////////////////
 
+pub extern "C" fn init(raw_ctx: *mut rawmod::RedisModuleCtx) -> c_int {
+    redisearch_api::init(raw_ctx)
+}
+
 redis_module! {
     name: "redisjson",
     version: 1,
@@ -741,6 +745,7 @@ redis_module! {
         REDIS_JSON_TYPE,
         REDIS_JSON_SCHEMA_TYPE
     ],
+    init: init,
     commands: [
         ["json.del", json_del, "write"],
         ["json.get", json_get, ""],
