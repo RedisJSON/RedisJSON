@@ -16,7 +16,7 @@ pub struct NodeVisitorImpl {
 impl NodeVisitorImpl {
     ///
     /// Checks if path is static & valid
-    /// 
+    ///
     pub fn check(input: &str) -> Result<bool, String> {
         let node = Parser::compile(input)?;
         let mut visitor = NodeVisitorImpl {

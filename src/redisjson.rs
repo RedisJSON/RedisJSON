@@ -3,6 +3,7 @@
 // Translate between JSON and tree of Redis objects:
 // User-provided JSON is converted to a tree. This tree is stored transparently in Redis.
 // It can be operated on (e.g. INCR) and serialized back to JSON.
+use crate::backward;
 use crate::nodevisitor::NodeVisitorImpl;
 use jsonpath_lib::{JsonPathError, SelectorMut};
 use redismodule::raw;
@@ -13,7 +14,6 @@ use std::os::raw::{c_int, c_void};
 pub struct Error {
     msg: String,
 }
-
 
 #[derive(Debug, PartialEq)]
 pub enum SetOptions {
@@ -106,11 +106,16 @@ impl RedisJSON {
         Ok(Self { data: v })
     }
 
-    pub fn set_value(&mut self, data: &str, path: &str, option: &Option<SetOptions>) -> Result<bool, Error> {
+    pub fn set_value(
+        &mut self,
+        data: &str,
+        path: &str,
+        option: &Option<SetOptions>,
+    ) -> Result<bool, Error> {
         // Parse the string of data into serde_json::Value.
         let json: Value = serde_json::from_str(data)?;
 
-        if  path == "$" {
+        if path == "$" {
             if Some(SetOptions::NotExists) == *option {
                 Ok(false)
             } else {
@@ -283,10 +288,13 @@ impl RedisJSON {
 
 #[allow(non_snake_case, unused)]
 pub unsafe extern "C" fn json_rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
-    if encver < 2 {
-        panic!("Can't load old RedisJSON RDB"); // TODO add support for backward
-    }
-    let json = RedisJSON::from_str(&raw::load_string(rdb)).unwrap();
+    let json = match encver {
+        0 => RedisJSON {
+            data: backward::json_rdb_load(rdb),
+        },
+        2 => RedisJSON::from_str(&raw::load_string(rdb)).unwrap(),
+        _ => panic!("Can't load old RedisJSON RDB"),
+    };
     Box::into_raw(Box::new(json)) as *mut c_void
 }
 
