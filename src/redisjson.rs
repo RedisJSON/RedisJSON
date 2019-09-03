@@ -9,10 +9,9 @@ use crate::error::Error;
 use crate::nodevisitor::NodeVisitorImpl;
 
 use bson::decode_document;
-use jsonpath_lib::{JsonPathError, SelectorMut};
 use jsonpath_lib::SelectorMut;
 use redismodule::raw;
-use serde_json::{Map, Value};
+use serde_json::Value;
 use std::io::Cursor;
 use std::mem;
 use std::os::raw::{c_int, c_void};
@@ -327,27 +326,29 @@ impl RedisJSON {
     }
 }
 
-#[allow(non_snake_case, unused)]
-pub unsafe extern "C" fn json_rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
-    let json = match encver {
-        0 => RedisJSON {
-            data: backward::json_rdb_load(rdb),
-        },
-        2 => RedisJSON::from_str(&raw::load_string(rdb), Format::JSON).unwrap(),
-        _ => panic!("Can't load old RedisJSON RDB"),
-    };
-    Box::into_raw(Box::new(json)) as *mut c_void
-}
+pub mod type_methods {
+    use super::*;
 
-#[allow(non_snake_case, unused)]
-#[no_mangle]
-pub unsafe extern "C" fn json_free(value: *mut c_void) {
-    Box::from_raw(value as *mut RedisJSON);
-}
+    #[allow(non_snake_case, unused)]
+    pub unsafe extern "C" fn rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
+        let json = match encver {
+            0 => RedisJSON {
+                data: backward::json_rdb_load(rdb),
+            },
+            2 => RedisJSON::from_str(&raw::load_string(rdb), Format::JSON).unwrap(),
+            _ => panic!("Can't load old RedisJSON RDB"),
+        };
+        Box::into_raw(Box::new(json)) as *mut c_void
+    }
 
-#[allow(non_snake_case, unused)]
-#[no_mangle]
-pub unsafe extern "C" fn json_rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
-    let json = &*(value as *mut RedisJSON);
-    raw::save_string(rdb, &json.data.to_string());
+    #[allow(non_snake_case, unused)]
+    pub unsafe extern "C" fn free(value: *mut c_void) {
+        Box::from_raw(value as *mut RedisJSON);
+    }
+
+    #[allow(non_snake_case, unused)]
+    pub unsafe extern "C" fn rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
+        let json = &*(value as *mut RedisJSON);
+        raw::save_string(rdb, &json.data.to_string());
+    }
 }

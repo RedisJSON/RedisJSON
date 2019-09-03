@@ -13,23 +13,22 @@ mod error;
 mod index;
 mod nodevisitor;
 mod redisjson;
-mod redisjsonschema;
+mod schema;
 
 use crate::error::Error;
 use crate::index::Index;
 use crate::redisjson::{Format, RedisJSON, SetOptions};
-use crate::redisjsonschema::RedisJSONSchema;
 
 const REDIS_JSON_TYPE: RedisType = RedisType::new(
     "ReJSON-RL",
     2,
     RedisModuleTypeMethods {
-        version: raw::REDISMODULE_TYPE_METHOD_VERSION as u64,
+        version: redismodule::TYPE_METHOD_VERSION,
 
-        rdb_load: Some(redisjson::json_rdb_load),
-        rdb_save: Some(redisjson::json_rdb_save),
+        rdb_load: Some(redisjson::type_methods::rdb_load),
+        rdb_save: Some(redisjson::type_methods::rdb_save),
         aof_rewrite: None, // TODO add support
-        free: Some(redisjson::json_free),
+        free: Some(redisjson::type_methods::free),
 
         // Currently unused by Redis
         mem_usage: None,
@@ -41,12 +40,12 @@ const REDIS_JSON_SCHEMA_TYPE: RedisType = RedisType::new(
     "ReJSON-SC",
     1,
     RedisModuleTypeMethods {
-        version: raw::REDISMODULE_TYPE_METHOD_VERSION as u64,
+        version: redismodule::TYPE_METHOD_VERSION,
 
-        rdb_load: Some(redisjsonschema::json_schema_rdb_load),
-        rdb_save: Some(redisjsonschema::json_schema_rdb_save),
+        rdb_load: Some(schema::type_methods::rdb_load),
+        rdb_save: Some(schema::type_methods::rdb_save),
         aof_rewrite: None, // TODO add support
-        free: Some(redisjsonschema::json_schema_free),
+        free: Some(schema::type_methods::free),
 
         // Currently unused by Redis
         mem_usage: None,
