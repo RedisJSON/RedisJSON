@@ -10,5 +10,5 @@ crate-type = ["cdylib"]
 [dependencies]
 serde_json = "1.0"
 libc = "0.2"
-jsonpath_lib = "0.2.3"	
+jsonpath_lib = { git="https://github.com/gkorland/jsonpath.git", branch="reaplce_with_ownership_parser" }
 redismodule = { git = "https://github.com/RedisLabsModules/redismodule-rs.git", branch = "master" }

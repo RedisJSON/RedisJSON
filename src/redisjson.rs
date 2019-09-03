@@ -3,6 +3,7 @@
 // Translate between JSON and tree of Redis objects:
 // User-provided JSON is converted to a tree. This tree is stored transparently in Redis.
 // It can be operated on (e.g. INCR) and serialized back to JSON.
+use crate::nodevisitor::NodeVisitorImpl;
 use jsonpath_lib::{JsonPathError, SelectorMut};
 use redismodule::raw;
 use serde_json::Value;
@@ -11,6 +12,13 @@ use std::os::raw::{c_int, c_void};
 #[derive(Debug)]
 pub struct Error {
     msg: String,
+}
+
+
+#[derive(Debug, PartialEq)]
+pub enum SetOptions {
+    NotExists,
+    AlreadyExists,
 }
 
 impl From<String> for Error {
@@ -51,6 +59,46 @@ pub struct RedisJSON {
 }
 
 impl RedisJSON {
+    fn add_value(&mut self, path: &str, value: Value) -> Result<bool, Error> {
+        if NodeVisitorImpl::check(path)? {
+            let mut splits = path.rsplitn(2, '.');
+            let key = splits.next().unwrap();
+            let prefix = splits.next().unwrap();
+
+            let mut current_data = self.data.take();
+            if prefix == "$" {
+                let res = if let Value::Object(ref mut map) = current_data {
+                    if map.contains_key(key) {
+                        false
+                    } else {
+                        map.insert(key.to_string(), value.clone());
+                        true
+                    }
+                } else {
+                    false
+                };
+                self.data = current_data;
+                Ok(res)
+            } else {
+                let mut set = false;
+                self.data = jsonpath_lib::replace_with(current_data, prefix, &mut |mut ret| {
+                    if let Value::Object(ref mut map) = ret {
+                        if map.contains_key(key) {
+                            set = false;
+                        } else {
+                            map.insert(key.to_string(), value.clone());
+                            set = true;
+                        }
+                    }
+                    Some(ret)
+                })?;
+                Ok(set)
+            }
+        } else {
+            Err("Err: wrong static path".into())
+        }
+    }
+
     pub fn from_str(data: &str) -> Result<Self, Error> {
         // Parse the string of data into serde_json::Value.
         let v: Value = serde_json::from_str(data)?;
@@ -58,24 +106,32 @@ impl RedisJSON {
         Ok(Self { data: v })
     }
 
-    pub fn set_value(&mut self, data: &str, path: &str) -> Result<(), Error> {
+    pub fn set_value(&mut self, data: &str, path: &str, option: &Option<SetOptions>) -> Result<bool, Error> {
         // Parse the string of data into serde_json::Value.
         let json: Value = serde_json::from_str(data)?;
 
-        if path == "$" {
-            self.data = json;
-            Ok(())
+        if  path == "$" {
+            if Some(SetOptions::NotExists) == *option {
+                Ok(false)
+            } else {
+                self.data = json;
+                Ok(true)
+            }
         } else {
             let mut replaced = false;
-            let current_data = self.data.take();
-            self.data = jsonpath_lib::replace_with(current_data, path, &mut |_v| {
-                replaced = true;
-                json.clone()
-            })?;
+            if Some(SetOptions::NotExists) != *option {
+                let current_data = self.data.take();
+                self.data = jsonpath_lib::replace_with(current_data, path, &mut |_v| {
+                    replaced = true;
+                    Some(json.clone())
+                })?;
+            }
             if replaced {
-                Ok(())
+                Ok(true)
+            } else if Some(SetOptions::AlreadyExists) != *option {
+                self.add_value(path, json)
             } else {
-                Err(format!("ERR missing path {}", path).into())
+                Ok(false)
             }
         }
     }
@@ -88,7 +144,7 @@ impl RedisJSON {
             if !v.is_null() {
                 deleted = deleted + 1; // might delete more than a single value
             }
-            Value::Null
+            None
         })?;
         Ok(deleted)
     }
@@ -199,7 +255,7 @@ impl RedisJSON {
                 .and_then(|selector| {
                     Ok(selector
                         .value(current_data.clone())
-                        .replace_with(&mut |v| collect_fun(v.to_owned()))?
+                        .replace_with(&mut |v| Some(collect_fun(v)))?
                         .take()
                         .unwrap_or(Value::Null))
                 })
