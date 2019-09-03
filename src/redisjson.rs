@@ -99,31 +99,31 @@ impl RedisJSON {
     }
 
     pub fn str_len(&self, path: &str) -> Result<usize, Error> {
-        match self.get_doc(path)?.as_str() {
-            Some(s) => Ok(s.len()),
-            None => Err("ERR wrong type of path value".into()),
-        }
+        self.get_doc(path)?
+            .as_str()
+            .ok_or_else(|| "ERR wrong type of path value".into())
+            .map(|s| s.len())
     }
 
     pub fn arr_len(&self, path: &str) -> Result<usize, Error> {
-        match self.get_doc(path)?.as_array() {
-            Some(s) => Ok(s.len()),
-            None => Err("ERR wrong type of path value".into()),
-        }
+        self.get_doc(path)?
+            .as_array()
+            .ok_or_else(|| "ERR wrong type of path value".into())
+            .map(|arr| arr.len())
     }
 
     pub fn obj_len(&self, path: &str) -> Result<usize, Error> {
-        match self.get_doc(path)?.as_object() {
-            Some(s) => Ok(s.len()),
-            None => Err("ERR wrong type of path value".into()),
-        }
+        self.get_doc(path)?
+            .as_object()
+            .ok_or_else(|| "ERR wrong type of path value".into())
+            .map(|obj| obj.len())
     }
 
     pub fn obj_keys<'a>(&'a self, path: &'a str) -> Result<Vec<&'a String>, Error> {
-        match self.get_doc(path)?.as_object() {
-            Some(o) => Ok(o.keys().collect()),
-            None => Err("ERR wrong type of path value".into()),
-        }
+        self.get_doc(path)?
+            .as_object()
+            .ok_or_else(|| "ERR wrong type of path value".into())
+            .map(|obj| obj.keys().collect())
     }
 
     pub fn arr_index(
