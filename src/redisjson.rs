@@ -4,9 +4,9 @@
 // User-provided JSON is converted to a tree. This tree is stored transparently in Redis.
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
-use bson::decode_document;
 use crate::backward;
 use crate::nodevisitor::NodeVisitorImpl;
+use bson::decode_document;
 use jsonpath_lib::{JsonPathError, SelectorMut};
 use redismodule::raw;
 use serde_json::{Map, Value};
@@ -147,7 +147,7 @@ impl RedisJSON {
         data: &str,
         path: &str,
         option: &SetOptions,
-        format: Format
+        format: Format,
     ) -> Result<bool, Error> {
         let json: Value = RedisJSON::parse_str(data, format)?;
         if path == "$" {
@@ -193,7 +193,7 @@ impl RedisJSON {
         let results = self.get_doc(path)?;
         let res = match format {
             Format::JSON => serde_json::to_string(&results)?,
-            Format::BSON => return Err("Soon to come...".into()) //results.into() as Bson,
+            Format::BSON => return Err("Soon to come...".into()), //results.into() as Bson,
         };
         Ok(res)
     }
@@ -346,8 +346,8 @@ impl RedisJSON {
             Value::Null => 0,
             Value::Bool(v) => mem::size_of_val(v),
             Value::Number(v) => mem::size_of_val(v),
-            Value::String(v) => mem::size_of_val(v), 
-            Value::Array(v) => mem::size_of_val(v), 
+            Value::String(v) => mem::size_of_val(v),
+            Value::Array(v) => mem::size_of_val(v),
             Value::Object(v) => mem::size_of_val(v),
         };
         Ok(res.into())

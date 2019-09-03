@@ -13,7 +13,7 @@ enum NodeType {
     Boolean,
     Dict,
     Array,
-    KeyVal, 
+    KeyVal,
     // N_DATETIME = 0x100
     // N_BINARY = 0x200
 }
