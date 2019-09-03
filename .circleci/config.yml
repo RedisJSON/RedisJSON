@@ -15,7 +15,7 @@ jobs:
           command: |
              sudo apt-get install -y software-properties-common
              sudo add-apt-repository -y ppa:chris-lea/redis-server
-             sudo apt-get install -y clang python-pip redis-server
+             sudo apt-get install -y clang llvm cmake python-pip redis-server
 
       - run:
           name: Version information
