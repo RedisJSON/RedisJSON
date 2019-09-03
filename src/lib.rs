@@ -2,20 +2,23 @@
 extern crate redismodule;
 
 use redismodule::native_types::RedisType;
-use redismodule::raw as rawmod;
 use redismodule::raw::RedisModuleTypeMethods;
-use redismodule::{Context, NextArg, RedisError, RedisResult, RedisValue, REDIS_OK};
+use redismodule::{raw as rawmod, NextArg};
+use redismodule::{Context, RedisError, RedisResult, RedisValue, REDIS_OK};
 use serde_json::{Number, Value};
+
 use std::{i64, usize};
 
 mod array_index;
 mod backward;
+mod commands;
 mod error;
 mod nodevisitor;
 mod redisjson;
-mod schema;
+mod schema; // TODO: Remove
 
 use crate::array_index::ArrayIndex;
+use crate::commands::index;
 use crate::error::Error;
 use crate::redisjson::{Format, RedisJSON, SetOptions};
 
@@ -29,23 +32,6 @@ static REDIS_JSON_TYPE: RedisType = RedisType::new(
         rdb_save: Some(redisjson::type_methods::rdb_save),
         aof_rewrite: None, // TODO add support
         free: Some(redisjson::type_methods::free),
-
-        // Currently unused by Redis
-        mem_usage: None,
-        digest: None,
-    },
-);
-
-static REDIS_JSON_SCHEMA_TYPE: RedisType = RedisType::new(
-    "ReJSON-SC",
-    1,
-    RedisModuleTypeMethods {
-        version: redismodule::TYPE_METHOD_VERSION,
-
-        rdb_load: Some(schema::type_methods::rdb_load),
-        rdb_save: Some(schema::type_methods::rdb_save),
-        aof_rewrite: None, // TODO add support
-        free: Some(schema::type_methods::free),
 
         // Currently unused by Redis
         mem_usage: None,
@@ -94,7 +80,7 @@ fn json_del(ctx: &Context, args: Vec<String>) -> RedisResult {
 }
 
 ///
-/// JSON.SET <key> <path> <json> [NX | XX]
+/// JSON.SET <key> <path> <json> [NX | XX | FORMAT <format> | INDEX <index>]
 ///
 fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
@@ -105,6 +91,8 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
 
     let mut format = Format::JSON;
     let mut set_option = SetOptions::None;
+    let mut index = None;
+
     loop {
         if let Some(s) = args.next() {
             match s.to_uppercase().as_str() {
@@ -113,6 +101,9 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
                 "FORMAT" => {
                     format = Format::from_str(args.next_string()?.as_str())?;
                 }
+                "INDEX" => {
+                    index = Some(args.next_string()?);
+                }
                 _ => break,
             };
         } else {
@@ -120,12 +111,15 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
         }
     }
 
-    let key = ctx.open_key_writable(&key);
-    let current = key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?;
+    let redis_key = ctx.open_key_writable(&key);
+    let current = redis_key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?;
 
     match (current, set_option) {
         (Some(ref mut doc), ref op) => {
             if doc.set_value(&value, &path, op, format)? {
+                if let Some(index) = index {
+                    index::add_document(&key, &index, &doc)?;
+                }
                 REDIS_OK
             } else {
                 Ok(RedisValue::None)
@@ -135,7 +129,16 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
         (None, _) => {
             let doc = RedisJSON::from_str(&value, format)?;
             if path == "$" {
-                key.set_value(&REDIS_JSON_TYPE, doc)?;
+                redis_key.set_value(&REDIS_JSON_TYPE, doc)?;
+
+                if let Some(index) = index {
+                    // FIXME: We need to get the value even though we just set it,
+                    // since the original doc is consumed by set_value.
+                    // Can we do better than this?
+                    let doc = redis_key.get_value(&REDIS_JSON_TYPE)?.unwrap();
+                    index::add_document(&key, &index, doc)?;
+                }
+
                 REDIS_OK
             } else {
                 Err("ERR new objects must be created at the root".into())
@@ -721,10 +724,6 @@ fn json_len<F: Fn(&RedisJSON, &String) -> Result<usize, Error>>(
     Ok(length)
 }
 
-fn json_createindex(ctx: &Context, args: Vec<String>) -> RedisResult {
-    Err("Command was not implemented".into())
-}
-
 fn json_cache_info(_ctx: &Context, _args: Vec<String>) -> RedisResult {
     Err("Command was not implemented".into())
 }
@@ -735,6 +734,7 @@ fn json_cache_init(_ctx: &Context, _args: Vec<String>) -> RedisResult {
 //////////////////////////////////////////////////////
 
 pub extern "C" fn init(raw_ctx: *mut rawmod::RedisModuleCtx) -> c_int {
+    crate::commands::index::schema_map::init();
     redisearch_api::init(raw_ctx)
 }
 
@@ -743,7 +743,6 @@ redis_module! {
     version: 1,
     data_types: [
         REDIS_JSON_TYPE,
-        REDIS_JSON_SCHEMA_TYPE
     ],
     init: init,
     commands: [
@@ -768,7 +767,8 @@ redis_module! {
         ["json.debug", json_debug, ""],
         ["json.forget", json_del, "write"],
         ["json.resp", json_resp, ""],
-        ["json.createindex", json_createindex, "write"],
+        ["json.index", commands::index::index, "write"],
+        ["json.qget", commands::index::qget, ""],
         ["json._cacheinfo", json_cache_info, ""],
         ["json._cacheinit", json_cache_init, "write"],
     ],
