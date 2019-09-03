@@ -8,7 +8,7 @@ import json
 import os
 
 # Path to JSON test case files
-json_path = os.path.abspath(os.path.join(os.getcwd(), '../files'))
+json_path = os.path.abspath(os.path.join(os.getcwd(), 'test/files'))
 
 # TODO: these are currently not supported so ignore them
 json_ignore = [
@@ -18,7 +18,7 @@ json_ignore = [
     'pass-json-parser-0007.json',   # UTF-8 to Unicode
     'pass-json-parser-0012.json',   # UTF-8 to Unicode
     'pass-jsonsl-1.json',           # big numbers
-    'pass-jsonsl-yelp.json',        # float percision
+    'pass-jsonsl-yelp.json',        # float precision
 ]
 
 # Some basic documents to use in the tests
@@ -209,8 +209,8 @@ class ReJSONTestCase(BaseReJSONTest):
             for p in paths:
                 with self.assertRaises(redis.exceptions.ResponseError) as cm:
                     r.execute_command('JSON.GET', 'test', p)
-    
-            # Test failure in multi-path get
+            # TODO uncomment
+            # # Test failure in multi-path get
             # with self.assertRaises(redis.exceptions.ResponseError) as cm:
             #     r.execute_command('JSON.GET', 'test', '.bool', paths[0])
 
@@ -227,19 +227,29 @@ class ReJSONTestCase(BaseReJSONTest):
                 data = json.loads(r.execute_command('JSON.GET', 'test', '.{}'.format(k)))
                 self.assertEqual(str(type(data)), '<type \'{}\'>'.format(k), k)
                 self.assertEqual(data, v, k)
-    
+
+
     def testGetPartsOfValuesDocumentMultiple(self):
         """Test correctness of an object returned by JSON.GET"""
-    
+
         with self.redis() as r:
             r.client_setname(self._testMethodName)
             r.flushdb()
-    
+
             self.assertOk(r.execute_command('JSON.SET', 'test',
                                             '.', json.dumps(docs['values'])))
             data = json.loads(r.execute_command('JSON.GET', 'test', *docs['values'].keys()))
-            # self.assertDictEqual(data, docs['values'])
-    
+            # self.assertDictEqual(data, docs['values']) // TODO backward compatibility with JSONPATH "$.list" vs "list"
+
+
+    def testSetBSON(self):
+        with self.redis() as r:
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+            bson = open(os.path.join(json_path , 'bson_bytes_1.bson'), 'rb').read()
+            self.assertOk(r.execute_command('JSON.SET', 'test', '.', bson, 'FORMAT', 'BSON'))
+            data = json.loads(r.execute_command('JSON.GET', 'test', *docs['values'].keys()))
+  
     def testMgetCommand(self):
         """Test REJSON.MGET command"""
     

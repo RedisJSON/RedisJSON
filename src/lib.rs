@@ -12,7 +12,7 @@ mod nodevisitor;
 mod redisjson;
 
 use crate::index::Index;
-use crate::redisjson::{Error, RedisJSON, SetOptions};
+use crate::redisjson::{Error, Format, RedisJSON, SetOptions};
 
 static JSON_TYPE_ENCODING_VERSION: i32 = 2;
 static JSON_TYPE_NAME: &str = "ReJSON-RL";
@@ -84,29 +84,37 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     let path = backwards_compat_path(args.next_string()?);
     let value = args.next_string()?;
 
-    let set_option = args
-        .next()
-        .map(|op| match op.to_uppercase().as_str() {
-            "NX" => Ok(SetOptions::NotExists),
-            "XX" => Ok(SetOptions::AlreadyExists),
-            _ => Err(RedisError::Str("ERR syntax error")),
-        })
-        .transpose()?;
+    let mut format = Format::JSON;
+    let mut set_option = SetOptions::None;
+    loop {
+        if let Some(s) = args.next() {
+            match s.to_uppercase().as_str() {
+                "NX" => set_option = SetOptions::NotExists,
+                "XX" => set_option = SetOptions::AlreadyExists,
+                "FORMAT" => {
+                    format = Format::from_str(args.next_string()?.as_str())?;
+                }
+                _ => break,
+            };
+        } else {
+            break;
+        }
+    }
 
     let key = ctx.open_key_writable(&key);
     let current = key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?;
 
     match (current, set_option) {
         (Some(ref mut doc), ref op) => {
-            if doc.set_value(&value, &path, op)? {
+            if doc.set_value(&value, &path, op, format)? {
                 REDIS_OK
             } else {
                 Ok(RedisValue::None)
             }
         }
-        (None, Some(SetOptions::AlreadyExists)) => Ok(RedisValue::None),
+        (None, SetOptions::AlreadyExists) => Ok(RedisValue::None),
         (None, _) => {
-            let doc = RedisJSON::from_str(&value)?;
+            let doc = RedisJSON::from_str(&value, format)?;
             if path == "$" {
                 key.set_value(&REDIS_JSON_TYPE, doc)?;
                 REDIS_OK
@@ -128,29 +136,55 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
 /// TODO add support for multi path
 fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-
     let key = args.next_string()?;
 
-    let mut path = loop {
+    let mut paths: Vec<String> = vec![];
+    let mut first_loop = true;
+    let mut format = Format::JSON;
+    loop {
         let arg = match args.next_string() {
             Ok(s) => s,
-            Err(_) => "$".to_owned(), // path is optional
+            Err(_) => {
+                // path is optional -> no path found on the first loop we use root "$"
+                if first_loop {
+                    paths.push("$".to_owned());
+                }
+                break;
+            }
         };
+        first_loop = false;
 
         match arg.as_str() {
-            "INDENT" => args.next(),  // TODO add support
-            "NEWLINE" => args.next(), // TODO add support
-            "SPACE" => args.next(),   // TODO add support
-            "NOESCAPE" => continue,   // TODO add support
-            _ => break arg,
+            "INDENT" => {
+                args.next();
+            } // TODO add support
+            "NEWLINE" => {
+                args.next();
+            } // TODO add support
+            "SPACE" => {
+                args.next();
+            } // TODO add support
+            "NOESCAPE" => {
+                continue;
+            } // TODO add support
+            "FORMAT" => {
+                format = Format::from_str(args.next_string()?.as_str())?;
+            }
+            _ => {
+                paths.push(backwards_compat_path(arg));
+            }
         };
-    };
-    path = backwards_compat_path(path);
+    }
 
     let key = ctx.open_key_writable(&key);
-
     let value = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
-        Some(doc) => doc.to_string(&path)?.into(),
+        Some(doc) => if paths.len() == 1 {
+            doc.to_string(&paths[0], format)?
+        } else {
+            // can't be smaller than 1
+            doc.to_json(&mut paths)?
+        }
+        .into(),
         None => RedisValue::None,
     };
 
@@ -175,7 +209,7 @@ fn json_mget(ctx: &Context, args: Vec<String>) -> RedisResult {
                 let result = ctx
                     .open_key(key)
                     .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
-                    .map(|doc| doc.to_string(&path))
+                    .map(|doc| doc.to_string(&path, Format::JSON))
                     .transpose()?;
 
                 Ok(result.into())
@@ -572,8 +606,29 @@ fn json_obj_len(ctx: &Context, args: Vec<String>) -> RedisResult {
 /// MEMORY <key> [path]
 /// HELP
 ///
-fn json_debug(_ctx: &Context, _args: Vec<String>) -> RedisResult {
-    Err("Command was not implemented".into())
+fn json_debug(ctx: &Context, args: Vec<String>) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+    match args.next_string()?.to_uppercase().as_str() {
+        "MEMORY" => {
+            let key = args.next_string()?;
+            let path = backwards_compat_path(args.next_string()?);
+
+            let key = ctx.open_key(&key);
+            let value = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
+                Some(doc) => doc.get_memory(&path)?,
+                None => 0,
+            };
+            Ok(value.into())
+        }
+        "HELP" => {
+            let results = vec![
+                "MEMORY <key> [path] - reports memory usage",
+                "HELP                - this message",
+            ];
+            Ok(results.into())
+        }
+        _ => Err("ERR unknown subcommand - try `JSON.DEBUG HELP`".into()),
+    }
 }
 
 ///
