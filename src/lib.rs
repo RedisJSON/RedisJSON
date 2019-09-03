@@ -20,12 +20,10 @@ use crate::index::Index;
 use crate::redisjson::{Format, RedisJSON, SetOptions};
 use crate::redisjsonschema::RedisJSONSchema;
 
-const JSON_TYPE_ENCODING_VERSION: i32 = 2;
-const JSON_TYPE_NAME: &str = "ReJSON-RL";
 const REDIS_JSON_TYPE: RedisType = RedisType::new(
-    JSON_TYPE_NAME,
-    JSON_TYPE_ENCODING_VERSION,
-    raw::RedisModuleTypeMethods {
+    "ReJSON-RL",
+    2,
+    RedisModuleTypeMethods {
         version: raw::REDISMODULE_TYPE_METHOD_VERSION as u64,
 
         rdb_load: Some(redisjson::json_rdb_load),
@@ -39,12 +37,10 @@ const REDIS_JSON_TYPE: RedisType = RedisType::new(
     },
 );
 
-const JSON_SCHEMA_ENCODING_VERSION: i32 = 1;
-const JSON_SCHEMA_NAME: &str = "ReJSON-SC";
 const REDIS_JSON_SCHEMA_TYPE: RedisType = RedisType::new(
-    JSON_SCHEMA_NAME,
-    JSON_SCHEMA_ENCODING_VERSION,
-    raw::RedisModuleTypeMethods {
+    "ReJSON-SC",
+    1,
+    RedisModuleTypeMethods {
         version: raw::REDISMODULE_TYPE_METHOD_VERSION as u64,
 
         rdb_load: Some(redisjsonschema::json_schema_rdb_load),
