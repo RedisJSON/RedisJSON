@@ -8,15 +8,15 @@ use redismodule::{Context, NextArg, RedisError, RedisResult, RedisValue, REDIS_O
 use serde_json::{Number, Value};
 use std::{i64, usize};
 
+mod array_index;
 mod backward;
 mod error;
-mod index;
 mod nodevisitor;
 mod redisjson;
 mod schema;
 
+use crate::array_index::ArrayIndex;
 use crate::error::Error;
-use crate::index::Index;
 use crate::redisjson::{Format, RedisJSON, SetOptions};
 
 static REDIS_JSON_TYPE: RedisType = RedisType::new(
