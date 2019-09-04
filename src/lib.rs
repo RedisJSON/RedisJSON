@@ -19,7 +19,7 @@ use crate::error::Error;
 use crate::index::Index;
 use crate::redisjson::{Format, RedisJSON, SetOptions};
 
-const REDIS_JSON_TYPE: RedisType = RedisType::new(
+static REDIS_JSON_TYPE: RedisType = RedisType::new(
     "ReJSON-RL",
     2,
     RedisModuleTypeMethods {
@@ -36,7 +36,7 @@ const REDIS_JSON_TYPE: RedisType = RedisType::new(
     },
 );
 
-const REDIS_JSON_SCHEMA_TYPE: RedisType = RedisType::new(
+static REDIS_JSON_SCHEMA_TYPE: RedisType = RedisType::new(
     "ReJSON-SC",
     1,
     RedisModuleTypeMethods {
