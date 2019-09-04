@@ -39,16 +39,14 @@ pub unsafe fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> Value {
     match node_type {
         NodeType::Null => Value::Null,
         NodeType::Boolean => {
-            let mut str_len = 0;
-            let str_buffer = raw::load_string_buffer(rdb, &mut str_len);
-            Value::Bool(str_buffer.starts_with("1"))
+            let buffer = raw::load_string_buffer(rdb);
+            Value::Bool(buffer.as_ref()[0] == b'1')
         }
         NodeType::Integer => Value::Number(raw::load_signed(rdb).into()),
         NodeType::Number => Value::Number(Number::from_f64(raw::load_double(rdb)).unwrap()),
         NodeType::String => {
-            let mut str_len = 0;
-            let str_buffer = raw::load_string_buffer(rdb, &mut str_len);
-            Value::String(str_buffer.to_string())
+            let buffer = raw::load_string_buffer(rdb);
+            Value::String(buffer.to_string().unwrap())
         }
         NodeType::Dict => {
             let len = raw::load_unsigned(rdb);
@@ -58,9 +56,8 @@ pub unsafe fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> Value {
                 if t != NodeType::KeyVal {
                     panic!("Can't load old RedisJSON RDB");
                 }
-                let mut str_len = 0;
-                let name = &raw::load_string_buffer(rdb, &mut str_len);
-                m.insert(name.to_string(), json_rdb_load(rdb));
+                let buffer = raw::load_string_buffer(rdb);
+                m.insert(buffer.to_string().unwrap(), json_rdb_load(rdb));
             }
             Value::Object(m)
         }

@@ -66,7 +66,7 @@ docs = {
     },
 }
 
-rmtest.config.REDIS_MODULE = './target/debug/libredisjson.so'
+rmtest.config.REDIS_MODULE = os.path.abspath(os.path.join(os.getcwd(), 'target/debug/libredisjson.so'))
 
 class BaseReJSONTest(BaseModuleTestCase):
     def getCacheInfo(self):
@@ -241,6 +241,11 @@ class ReJSONTestCase(BaseReJSONTest):
             data = json.loads(r.execute_command('JSON.GET', 'test', *docs['values'].keys()))
             # self.assertDictEqual(data, docs['values']) // TODO backward compatibility with JSONPATH "$.list" vs "list"
 
+    def testBackwardRDB(self):
+        with self.redis(**{"dir": os.path.abspath(os.path.join(os.getcwd(), 'test/files/')),  "dbfilename": 'backward.rdb'}) as r:
+            r.client_setname(self._testMethodName)
+            data = json.loads(r.execute_command('JSON.GET', 'complex'))
+            self.assertDictEqual(data, {"a":{"b":[{"c":{"d":[1,'2'],"e":None}},True],"a":'a'},"b":1,"c":True,"d":None})
 
     def testSetBSON(self):
         with self.redis() as r:
