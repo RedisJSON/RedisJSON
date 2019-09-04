@@ -2,31 +2,50 @@
 extern crate redismodule;
 
 use redismodule::native_types::RedisType;
+use redismodule::raw as rawmod;
+use redismodule::raw::RedisModuleTypeMethods;
 use redismodule::{Context, NextArg, RedisError, RedisResult, RedisValue, REDIS_OK};
 use serde_json::{Number, Value};
 use std::{i64, usize};
 
 mod backward;
+mod error;
 mod index;
 mod nodevisitor;
 mod redisjson;
+mod schema;
 
+use crate::error::Error;
 use crate::index::Index;
-use crate::redisjson::{Error, Format, RedisJSON, SetOptions};
-
-static JSON_TYPE_ENCODING_VERSION: i32 = 2;
-static JSON_TYPE_NAME: &str = "ReJSON-RL";
+use crate::redisjson::{Format, RedisJSON, SetOptions};
 
 static REDIS_JSON_TYPE: RedisType = RedisType::new(
-    JSON_TYPE_NAME,
-    JSON_TYPE_ENCODING_VERSION,
-    raw::RedisModuleTypeMethods {
-        version: raw::REDISMODULE_TYPE_METHOD_VERSION as u64,
+    "ReJSON-RL",
+    2,
+    RedisModuleTypeMethods {
+        version: redismodule::TYPE_METHOD_VERSION,
 
-        rdb_load: Some(redisjson::json_rdb_load),
-        rdb_save: Some(redisjson::json_rdb_save),
+        rdb_load: Some(redisjson::type_methods::rdb_load),
+        rdb_save: Some(redisjson::type_methods::rdb_save),
         aof_rewrite: None, // TODO add support
-        free: Some(redisjson::json_free),
+        free: Some(redisjson::type_methods::free),
+
+        // Currently unused by Redis
+        mem_usage: None,
+        digest: None,
+    },
+);
+
+static REDIS_JSON_SCHEMA_TYPE: RedisType = RedisType::new(
+    "ReJSON-SC",
+    1,
+    RedisModuleTypeMethods {
+        version: redismodule::TYPE_METHOD_VERSION,
+
+        rdb_load: Some(schema::type_methods::rdb_load),
+        rdb_save: Some(schema::type_methods::rdb_save),
+        aof_rewrite: None, // TODO add support
+        free: Some(schema::type_methods::free),
 
         // Currently unused by Redis
         mem_usage: None,
@@ -697,6 +716,10 @@ fn json_len<F: Fn(&RedisJSON, &String) -> Result<usize, Error>>(
     Ok(length)
 }
 
+fn json_createindex(ctx: &Context, args: Vec<String>) -> RedisResult {
+    Err("Command was not implemented".into())
+}
+
 fn json_cache_info(_ctx: &Context, _args: Vec<String>) -> RedisResult {
     Err("Command was not implemented".into())
 }
@@ -706,12 +729,18 @@ fn json_cache_init(_ctx: &Context, _args: Vec<String>) -> RedisResult {
 }
 //////////////////////////////////////////////////////
 
+pub extern "C" fn init(raw_ctx: *mut rawmod::RedisModuleCtx) -> c_int {
+    redisearch_api::init(raw_ctx)
+}
+
 redis_module! {
     name: "redisjson",
     version: 1,
     data_types: [
         REDIS_JSON_TYPE,
+        REDIS_JSON_SCHEMA_TYPE
     ],
+    init: init,
     commands: [
         ["json.del", json_del, "write"],
         ["json.get", json_get, ""],
@@ -734,6 +763,7 @@ redis_module! {
         ["json.debug", json_debug, ""],
         ["json.forget", json_del, "write"],
         ["json.resp", json_resp, ""],
+        ["json.createindex", json_createindex, "write"],
         ["json._cacheinfo", json_cache_info, ""],
         ["json._cacheinit", json_cache_init, "write"],
     ],
