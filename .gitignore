@@ -11,3 +11,4 @@ Cargo.lock
 .idea
 .project
 .vscode/*
+*.pyc
