@@ -46,21 +46,22 @@ pub mod schema_map {
 
 ///////////////////////////
 
-fn add_field(index_name: &str, field_name: &str, path: String) -> RedisResult {
+fn add_field(index_name: &str, field_name: &str, path: &str) -> RedisResult {
     let map = schema_map::as_mut();
 
-    if !map.contains_key(index_name) {
-        let schema = Schema::new(&index_name);
-        map.insert(index_name.to_owned(), schema);
-    }
-
-    let schema = map.get_mut(index_name).unwrap();
+    let schema = if let Some(stored_schema) = map.get_mut(index_name) {
+        stored_schema
+    } else {
+        let new_schema = Schema::new(&index_name);
+        map.insert(index_name.to_owned(), new_schema);
+        map.get_mut(index_name).unwrap()
+    };
 
     if schema.fields.contains_key(field_name) {
         Err("Field already exists".into())
     } else {
         schema.index.create_field(field_name);
-        schema.fields.insert(field_name.to_string(), path);
+        schema.fields.insert(field_name.to_owned(), path.to_owned());
         REDIS_OK
     }
 }
@@ -119,7 +120,7 @@ where
     match subcommand.to_uppercase().as_str() {
         "ADD" => {
             let path = args.next_string()?;
-            add_field(&index_name, &field_name, path)
+            add_field(&index_name, &field_name, &path)
         }
         //"DEL" => {}
         //"INFO" => {}
