@@ -166,6 +166,8 @@ impl RedisJSON {
         Ok(res)
     }
 
+    // FIXME: Implement this by manipulating serde_json::Value values,
+    // and then using serde to serialize to JSON instead of doing it ourselves with strings.
     pub fn to_json(&self, paths: &mut Vec<String>) -> Result<String, Error> {
         let mut selector = jsonpath_lib::selector(&self.data);
         let mut result = paths.drain(..).fold(String::from("{"), |mut acc, path| {
@@ -331,6 +333,7 @@ impl RedisJSON {
         Ok(res.into())
     }
 
+    // TODO: Rename this to 'get_value', since 'doc' is overloaded.
     pub fn get_doc<'a>(&'a self, path: &'a str) -> Result<&'a Value, Error> {
         let results = jsonpath_lib::select(&self.data, path)?;
         match results.first() {

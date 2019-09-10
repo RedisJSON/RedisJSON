@@ -1,8 +1,8 @@
-pub(crate) trait Index {
+pub(crate) trait ArrayIndex {
     fn normalize(self, len: i64) -> usize;
 }
 
-impl Index for i64 {
+impl ArrayIndex for i64 {
     fn normalize(self, len: i64) -> usize {
         let index = if self < 0 {
             len - len.min(-self)

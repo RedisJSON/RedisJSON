@@ -728,7 +728,37 @@ class ReJSONTestCase(BaseReJSONTest):
             self.assertOk(r.execute_command('JSON.SET', 'test', '.', json.dumps(docs['simple'])))
             # This shouldn't crash Redis
             r.execute_command('JSON.GET', 'test', 'foo', 'foo')
-    #
+
+    def testRediSearch(self):
+        """Test RediSearch integration"""
+        # To run:
+        # python -m unittest -v test.pytest.test.ReJSONTestCase.testRediSearch
+
+        with self.redis() as r:
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
+            def do(*args):
+                self.assertOk(r.execute_command(*args))
+
+            index = 'person'
+
+            do('JSON.INDEX', 'ADD', index, 'first', '$.first')
+            do('JSON.INDEX', 'ADD', index, 'last', '$.last')
+
+            do('JSON.SET', 'joe', '.', '{"first": "Joe", "last": "Smith"}', 'INDEX', index)
+            do('JSON.SET', 'kevin', '.', '{"first": "Kevin", "last": "Smith"}', 'INDEX', index)
+            do('JSON.SET', 'mike', '.', '{"first": "Mike", "last": "Lane"}', 'INDEX', index)
+
+            searches = [
+                ('@first:mike', '$.last', ['"Lane"']),
+                ('@last:smith', '$.first', ['"Joe"', '"Kevin"']),
+                ('*', '$.first', ['"Joe"', '"Kevin"', '"Mike"']),
+            ]
+
+            for (query, path, results) in searches:
+                self.assertEqual(r.execute_command('JSON.QGET', index, query, path), results)
+
     # def testNoescape(self):
     #     # Store a path and see if it acts appropriately with NOESCAPE
     #     self.cmd('JSON.SET', 'escapeTest', '.', '{"key":"שלום"}')

@@ -1,53 +1,65 @@
-use crate::error::Error;
-use redisearch_api::Index;
-use redismodule::raw;
 use std::os::raw::{c_int, c_void};
 
-pub struct RedisJSONSchema {
-    index: Index,
+use redisearch_api::Index;
+use redismodule::raw;
+
+use crate::error::Error;
+use std::collections::HashMap;
+
+////////////////////////////////////////////
+
+pub struct Schema {
+    pub index: Index,
+    pub fields: HashMap<String, String>,
 }
 
-impl RedisJSONSchema {
-    pub fn new(name: &str) -> RedisJSONSchema {
-        RedisJSONSchema {
+impl Schema {
+    pub fn new(name: &str) -> Schema {
+        Schema {
             index: Index::create(name),
+            fields: HashMap::new(),
         }
     }
 
     pub fn from_str(data: &str) -> Result<Self, Error> {
-        // let value = RedisJSON::parse_str(data, format)?;
         Ok(Self {
             // TODO better handle RDB read
             index: Index::create(data.to_string().as_str()),
+            fields: HashMap::new(),
         })
     }
-
-    pub fn add_index(&mut self, path: &str) -> Result<(), Error> {
-        self.index.create_field(path);
-        Ok(())
-    }
 }
+
+////////////////////////////////////////////
 
 pub mod type_methods {
     use super::*;
 
+    // TODO: Instead of using a custom type, use Redis Module auxiliary data to save and load.
+    //
+    // Note that aux data is currently supported only in Redis Enterprise and in unstable Redis
+    // (likely to be in 6.0).
+    //
+    // When implementing, make sure not to unwrap() the relevant methods but rather to check
+    // if they are None, and in that case skip the persistence and keep the data only in memory.
+
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
         if encver < 2 {
-            panic!("Can't load old RedisJSONSchema RDB"); // TODO add support for backward
+            panic!("Can't load old RedisJSON schema RDB"); // TODO add support for backward
         }
-        let json = RedisJSONSchema::from_str(&raw::load_string(rdb)).unwrap();
+        let json = Schema::from_str(&raw::load_string(rdb)).unwrap();
         Box::into_raw(Box::new(json)) as *mut c_void
     }
 
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn free(value: *mut c_void) {
-        Box::from_raw(value as *mut RedisJSONSchema);
+        Box::from_raw(value as *mut Schema);
     }
 
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
-        let schema = &*(value as *mut RedisJSONSchema);
+        let schema = &*(value as *mut Schema);
         // TODO implement RDB write
         // raw::save_string(rdb, &schema.schema.to_string());
     }
