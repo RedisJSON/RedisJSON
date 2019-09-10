@@ -529,9 +529,9 @@ fn json_arr_pop(ctx: &Context, args: Vec<String>) -> RedisResult {
         .ok_or_else(RedisError::nonexistent_key)
         .and_then(|doc| {
             doc.value_op(&path, |value| do_json_arr_pop(index, &mut res, value))
-                .map(|v| v.to_string().into())
                 .map_err(|e| e.into())
-        })
+        })?;
+    Ok(RedisJSON::serialize(&res, Format::JSON)?.into())
 }
 
 fn do_json_arr_pop(mut index: i64, res: &mut Value, value: &Value) -> Result<Value, Error> {

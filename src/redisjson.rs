@@ -155,8 +155,12 @@ impl RedisJSON {
 
     pub fn to_string(&self, path: &str, format: Format) -> Result<String, Error> {
         let results = self.get_doc(path)?;
+        Self::serialize(results, format)
+    }
+
+    pub fn serialize(results: &Value, format: Format) -> Result<String, Error> {
         let res = match format {
-            Format::JSON => serde_json::to_string(&results)?,
+            Format::JSON => serde_json::to_string(results)?,
             Format::BSON => return Err("Soon to come...".into()), //results.into() as Bson,
         };
         Ok(res)
