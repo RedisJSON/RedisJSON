@@ -638,7 +638,7 @@ class ReJSONTestCase(BaseReJSONTest):
             self.assertOk(r.execute_command('JSON.SET', 'test', '.', '"foo"'))
             self.assertEqual('string', r.execute_command('JSON.TYPE', 'test', '.'))
             self.assertEqual(3, r.execute_command('JSON.STRLEN', 'test', '.'))
-            self.assertEqual(6, r.execute_command('JSON.STRAPPEND', 'test', '.', 'bar'))
+            self.assertEqual(6, r.execute_command('JSON.STRAPPEND', 'test', '.', '"bar"'))
             self.assertEqual('"foobar"', r.execute_command('JSON.GET', 'test', '.'))
     #
     # def testRespCommand(self):

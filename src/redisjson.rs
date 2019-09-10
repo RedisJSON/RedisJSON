@@ -250,7 +250,13 @@ impl RedisJSON {
         match value {
             Value::Null => "null",
             Value::Bool(_) => "boolean",
-            Value::Number(_) => "number",
+            Value::Number(n) => {
+                if n.is_f64() {
+                    "number"
+                } else {
+                    "integer"
+                }
+            },
             Value::String(_) => "string",
             Value::Array(_) => "array",
             Value::Object(_) => "object",

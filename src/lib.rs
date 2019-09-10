@@ -370,8 +370,13 @@ fn do_json_str_append(json: &String, value: &Value) -> Result<Value, Error> {
         .as_str()
         .ok_or_else(|| err_json(value, "string"))
         .and_then(|curr| {
-            let new_value = [curr, &json].concat();
-            Ok(Value::String(new_value))
+            let v = serde_json::from_str(json)?;
+            if let Value::String(s) = v {
+                let new_value = [curr, s.as_str()].concat();
+                Ok(Value::String(new_value))
+            } else {
+                Err(format!("ERR wrong type of value - expected string but found {}", v).into())
+            }
         })
 }
 
