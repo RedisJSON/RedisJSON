@@ -36,6 +36,11 @@ static REDIS_JSON_TYPE: RedisType = RedisType::new(
         // Currently unused by Redis
         mem_usage: None,
         digest: None,
+
+        // Auxiliary data (v2)
+        aux_load: None,
+        aux_save: None,
+        aux_save_triggers: 0,
     },
 );
 
