@@ -23,9 +23,9 @@ jobs:
 
       - restore_cache:
           keys:
-            - v1-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
+            - v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
             # fallback to using the latest cache if no exact match is found
-            - v1-dependencies-
+            - v2-dependencies-
      # - run:
      #     name: Check formatting
      #     command: |
@@ -57,7 +57,7 @@ jobs:
       #          name: Upload Coverage
       #          command: ./scripts/codecov.sh
       - save_cache:
-          key: v1-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
+          key: v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
           paths:
             - "~/.cargo"
             - "./target"
