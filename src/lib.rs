@@ -274,58 +274,76 @@ fn json_type(ctx: &Context, args: Vec<String>) -> RedisResult {
 /// JSON.NUMINCRBY <key> <path> <number>
 ///
 fn json_num_incrby(ctx: &Context, args: Vec<String>) -> RedisResult {
-    json_num_op(ctx, args, |num1, num2| num1 + num2)
+    json_num_op(ctx, args, |i1, i2| i1 + i2, |f1, f2| f1 + f2)
 }
 
 ///
 /// JSON.NUMMULTBY <key> <path> <number>
 ///
 fn json_num_multby(ctx: &Context, args: Vec<String>) -> RedisResult {
-    json_num_op(ctx, args, |num1, num2| num1 * num2)
+    json_num_op(ctx, args, |i1, i2| i1 * i2, |f1, f2| f1 * f2)
 }
 
 ///
 /// JSON.NUMPOWBY <key> <path> <number>
 ///
 fn json_num_powby(ctx: &Context, args: Vec<String>) -> RedisResult {
-    json_num_op(ctx, args, |num1, num2| num1.powf(num2))
+    json_num_op(ctx, args, |i1, i2| i1.pow(i2 as u32), |f1, f2| f1.powf(f2))
 }
 
-fn json_num_op<F>(ctx: &Context, args: Vec<String>, fun: F) -> RedisResult
+fn json_num_op<I, F>(ctx: &Context, args: Vec<String>, op_i64: I, op_f64: F) -> RedisResult
 where
+    I: Fn(i64, i64) -> i64,
     F: Fn(f64, f64) -> f64,
 {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_string()?;
     let path = backwards_compat_path(args.next_string()?);
-    let number: f64 = args.next_string()?.parse()?;
+    let number = args.next_string()?;
 
     let key = ctx.open_key_writable(&key);
 
     key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
         .ok_or_else(RedisError::nonexistent_key)
         .and_then(|doc| {
-            doc.value_op(&path, |value| do_json_num_op(&fun, number, value))
-                .map(|v| v.to_string().into())
-                .map_err(|e| e.into())
+            doc.value_op(&path, |value| {
+                do_json_num_op(&number, value, &op_i64, &op_f64)
+            })
+            .map(|v| v.to_string().into())
+            .map_err(|e| e.into())
         })
 }
 
-fn do_json_num_op<F>(fun: F, number: f64, value: &Value) -> Result<Value, Error>
+fn do_json_num_op<I, F>(
+    in_value: &str,
+    curr_value: &Value,
+    op_i64: I,
+    op_f64: F,
+) -> Result<Value, Error>
 where
+    I: FnOnce(i64, i64) -> i64,
     F: FnOnce(f64, f64) -> f64,
 {
-    value
-        .as_f64()
-        .ok_or_else(|| err_json(value, "number"))
-        .and_then(|curr_value| {
-            let res = fun(curr_value, number);
+    if let Value::Number(curr_value) = curr_value {
+        let in_value = &serde_json::from_str(in_value)?;
+        if let Value::Number(in_value) = in_value {
+            let num_res = match (curr_value.as_i64(), in_value.as_i64()) {
+                (Some(num1), Some(num2)) => op_i64(num1, num2).into(),
+                _ => {
+                    let num1 = curr_value.as_f64().unwrap();
+                    let num2 = in_value.as_f64().unwrap();
+                    Number::from_f64(op_f64(num1, num2)).unwrap()
+                }
+            };
 
-            Number::from_f64(res)
-                .ok_or(Error::from("ERR cannot represent result as Number"))
-                .map(Value::Number)
-        })
+            Ok(Value::Number(num_res))
+        } else {
+            Err(err_json(in_value, "number"))
+        }
+    } else {
+        Err(err_json(curr_value, "number"))
+    }
 }
 
 fn err_json(value: &Value, expected_value: &'static str) -> Error {

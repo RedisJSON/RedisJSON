@@ -599,10 +599,10 @@ class ReJSONTestCase(BaseReJSONTest):
             r.flushdb()
     
             self.assertOk(r.execute_command('JSON.SET', 'test', '.', '{ "foo": 0, "bar": "baz" }'))
-            # self.assertEqual('1', r.execute_command('JSON.NUMINCRBY', 'test', '.foo', 1))
-            # self.assertEqual('1', r.execute_command('JSON.GET', 'test', '.foo'))
-            # self.assertEqual('3', r.execute_command('JSON.NUMINCRBY', 'test', '.foo', 2))
-            # self.assertEqual('3.5', r.execute_command('JSON.NUMINCRBY', 'test', '.foo', .5))
+            self.assertEqual('1', r.execute_command('JSON.NUMINCRBY', 'test', '.foo', 1))
+            self.assertEqual('1', r.execute_command('JSON.GET', 'test', '.foo'))
+            self.assertEqual('3', r.execute_command('JSON.NUMINCRBY', 'test', '.foo', 2))
+            self.assertEqual('3.5', r.execute_command('JSON.NUMINCRBY', 'test', '.foo', .5))
     
             # test a wrong type
             with self.assertRaises(redis.exceptions.ResponseError) as cm:
@@ -612,22 +612,22 @@ class ReJSONTestCase(BaseReJSONTest):
     #         with self.assertRaises(redis.exceptions.ResponseError) as cm:
     #             r.execute_command('JSON.NUMINCRBY', 'test', '.fuzz', 1)
     #
-    #         # test issue #9
-    #         self.assertOk(r.execute_command('JSON.SET', 'num', '.', '0'))
-    #         self.assertEqual('1', r.execute_command('JSON.NUMINCRBY', 'num', '.', 1))
-    #         self.assertEqual('2.5', r.execute_command('JSON.NUMINCRBY', 'num', '.', 1.5))
-    #
-    #         # test issue 55
-    #         self.assertOk(r.execute_command('JSON.SET', 'foo', '.', '{"foo":0,"bar":42}'))
-    #         # Get the document once
-    #         r.execute_command('JSON.GET', 'foo', '.')
-    #         self.assertEqual('1', r.execute_command('JSON.NUMINCRBY', 'foo', 'foo', 1))
-    #         self.assertEqual('84', r.execute_command('JSON.NUMMULTBY', 'foo', 'bar', 2))
-    #         res = json.loads(r.execute_command('JSON.GET', 'foo', '.'))
-    #         self.assertEqual(1, res['foo'])
-    #         self.assertEqual(84, res['bar'])
-    #
-    #
+            # test issue #9
+            self.assertOk(r.execute_command('JSON.SET', 'num', '.', '0'))
+            self.assertEqual('1', r.execute_command('JSON.NUMINCRBY', 'num', '.', 1))
+            self.assertEqual('2.5', r.execute_command('JSON.NUMINCRBY', 'num', '.', 1.5))
+    
+            # test issue 55
+            self.assertOk(r.execute_command('JSON.SET', 'foo', '.', '{"foo":0,"bar":42}'))
+            # Get the document once
+            r.execute_command('JSON.GET', 'foo', '.')
+            self.assertEqual('1', r.execute_command('JSON.NUMINCRBY', 'foo', 'foo', 1))
+            self.assertEqual('84', r.execute_command('JSON.NUMMULTBY', 'foo', 'bar', 2))
+            res = json.loads(r.execute_command('JSON.GET', 'foo', '.'))
+            self.assertEqual(1, res['foo'])
+            self.assertEqual(84, res['bar'])
+    
+    
     def testStrCommands(self):
         """Test JSON.STRAPPEND and JSON.STRLEN commands"""
 
