@@ -769,7 +769,7 @@ redis_module! {
     ],
     init: init,
     commands: [
-        ["json.del", json_del, "write "],
+        ["json.del", json_del, "write"],
         ["json.get", json_get, ""],
         ["json.mget", json_mget, ""],
         ["json.set", json_set, "write"],
