@@ -239,7 +239,7 @@ class ReJSONTestCase(BaseReJSONTest):
             self.assertOk(r.execute_command('JSON.SET', 'test',
                                             '.', json.dumps(docs['values'])))
             data = json.loads(r.execute_command('JSON.GET', 'test', *docs['values'].keys()))
-            # self.assertDictEqual(data, docs['values']) // TODO backward compatibility with JSONPATH "$.list" vs "list"
+           # self.assertDictEqual(data, docs['values']) # TODO backward compatibility with JSONPATH "$.list" vs "list"
 
     def testBackwardRDB(self):
         with self.redis(**{"dir": os.path.abspath(os.path.join(os.getcwd(), 'test/files/')),  "dbfilename": 'backward.rdb'}) as r:
@@ -512,30 +512,30 @@ class ReJSONTestCase(BaseReJSONTest):
     
             self.assertOk(r.execute_command('JSON.SET', 'test',
                                             '.', '[1,2,3,4,5,6,7,8,9]'))
-            # self.assertEqual('9', r.execute_command('JSON.ARRPOP', 'test'))
-    #         self.assertEqual('8', r.execute_command('JSON.ARRPOP', 'test', '.'))
-    #         self.assertEqual('7', r.execute_command('JSON.ARRPOP', 'test', '.', -1))
-    #         self.assertEqual('5', r.execute_command('JSON.ARRPOP', 'test', '.', -2))
-    #         self.assertEqual('1', r.execute_command('JSON.ARRPOP', 'test', '.', 0))
-    #         self.assertEqual('4', r.execute_command('JSON.ARRPOP', 'test', '.', 2))
-    #         self.assertEqual('6', r.execute_command('JSON.ARRPOP', 'test', '.', 99))
-    #         # self.assertEqual('2', r.execute_command('JSON.ARRPOP', 'test', '.', -99))
-    #         self.assertEqual('3', r.execute_command('JSON.ARRPOP', 'test'))
-    #         self.assertIsNone(r.execute_command('JSON.ARRPOP', 'test'))
-    #
-    # def testTypeCommand(self):
-    #     """Test JSON.TYPE command"""
+            self.assertEqual('9', r.execute_command('JSON.ARRPOP', 'test'))
+            self.assertEqual('8', r.execute_command('JSON.ARRPOP', 'test', '.'))
+            self.assertEqual('7', r.execute_command('JSON.ARRPOP', 'test', '.', -1))
+            self.assertEqual('5', r.execute_command('JSON.ARRPOP', 'test', '.', -2))
+            self.assertEqual('1', r.execute_command('JSON.ARRPOP', 'test', '.', 0))
+            self.assertEqual('4', r.execute_command('JSON.ARRPOP', 'test', '.', 2))
+            self.assertEqual('6', r.execute_command('JSON.ARRPOP', 'test', '.', 99))
+            # self.assertEqual('2', r.execute_command('JSON.ARRPOP', 'test', '.', -99))
+            # self.assertEqual('3', r.execute_command('JSON.ARRPOP', 'test'))
+            # self.assertIsNone(r.execute_command('JSON.ARRPOP', 'test'))
     
-    #     with self.redis() as r:
-    #         r.client_setname(self._testMethodName)
-    #         r.flushdb()
+    def testTypeCommand(self):
+        """Test JSON.TYPE command"""
     
-    #         for k, v in docs['types'].iteritems():
-    #             r.delete('test')
-    #             self.assertOk(r.execute_command('JSON.SET', 'test', '.', json.dumps(v)))
-    #             reply = r.execute_command('JSON.TYPE', 'test', '.')
-    #             self.assertEqual(reply, k)
-    #
+        with self.redis() as r:
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+    
+            for k, v in docs['types'].iteritems():
+                r.delete('test')
+                self.assertOk(r.execute_command('JSON.SET', 'test', '.', json.dumps(v)))
+                reply = r.execute_command('JSON.TYPE', 'test', '.')
+                self.assertEqual(reply, k)
+    
     def testLenCommands(self):
         """Test the JSON.ARRLEN, JSON.OBJLEN and JSON.STRLEN commands"""
     
@@ -640,15 +640,15 @@ class ReJSONTestCase(BaseReJSONTest):
             self.assertEqual(3, r.execute_command('JSON.STRLEN', 'test', '.'))
             self.assertEqual(6, r.execute_command('JSON.STRAPPEND', 'test', '.', '"bar"'))
             self.assertEqual('"foobar"', r.execute_command('JSON.GET', 'test', '.'))
-    #
-    # def testRespCommand(self):
-    #     """Test JSON.RESP command"""
-    #
-    #     with self.redis() as r:
-    #         r.client_setname(self._testMethodName)
-    #         r.flushdb()
-    #
-    #         self.assertOk(r.execute_command('JSON.SET', 'test', '.', 'null'))
+    
+    def testRespCommand(self):
+        """Test JSON.RESP command"""
+    
+        with self.redis() as r:
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+    
+            self.assertOk(r.execute_command('JSON.SET', 'test', '.', 'null'))
     #         self.assertIsNone(r.execute_command('JSON.RESP', 'test'))
     #         self.assertOk(r.execute_command('JSON.SET', 'test', '.', 'true'))
     #         self.assertEquals('true', r.execute_command('JSON.RESP', 'test'))
@@ -678,8 +678,8 @@ class ReJSONTestCase(BaseReJSONTest):
     #     with self.redis() as r:
     #         r.client_setname(self._testMethodName)
     #         r.flushdb()
-    #
-    #         for jsonfile in os.listdir('../files'):
+    
+    #         for jsonfile in os.listdir(json_path):
     #             if jsonfile.endswith('.json'):
     #                 path = '{}/{}'.format(json_path, jsonfile)
     #                 with open(path) as f:
@@ -690,34 +690,34 @@ class ReJSONTestCase(BaseReJSONTest):
     #                         with self.assertRaises(redis.exceptions.ResponseError) as cm:
     #                             r.execute_command('JSON.SET', jsonfile, '.', value)
     #                         self.assertNotExists(r, jsonfile, path)
-    #
-    # def testSetGetComparePassJSONCaseFiles(self):
-    #     """Test setting, getting, saving and loading passable JSON test case files"""
-    #
-    #     with self.redis() as r:
-    #         r.client_setname(self._testMethodName)
-    #         r.flushdb()
-    #
-    #         for jsonfile in os.listdir('../files'):
-    #             self.maxDiff = None
-    #             if jsonfile.startswith('pass-') and jsonfile.endswith('.json') and jsonfile not in json_ignore:
-    #                 path = '{}/{}'.format(json_path, jsonfile)
-    #                 r.flushdb()
-    #                 with open(path) as f:
-    #                     value = f.read()
-    #                     self.assertOk(r.execute_command('JSON.SET', jsonfile, '.', value), path)
-    #                     d1 = json.loads(value)
-    #                     for _ in r.retry_with_rdb_reload():
-    #                         self.assertExists(r, jsonfile)
-    #                         raw = r.execute_command('JSON.GET', jsonfile)
-    #                         d2 = json.loads(raw)
-    #                         if type(d1) is dict:
-    #                             self.assertDictEqual(d1, d2, path)
-    #                         elif type(d1) is list:
-    #                             self.assertListEqual(d1, d2, path)
-    #                         else:
-    #                             self.assertEqual(d1, d2, path)
-    #
+    
+    def testSetGetComparePassJSONCaseFiles(self):
+        """Test setting, getting, saving and loading passable JSON test case files"""
+    
+        with self.redis() as r:
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+    
+            for jsonfile in os.listdir(json_path):
+                self.maxDiff = None
+                if jsonfile.startswith('pass-') and jsonfile.endswith('.json') and jsonfile not in json_ignore:
+                    path = '{}/{}'.format(json_path, jsonfile)
+                    r.flushdb()
+                    with open(path) as f:
+                        value = f.read()
+                        self.assertOk(r.execute_command('JSON.SET', jsonfile, '.', value), path)
+                        d1 = json.loads(value)
+                        for _ in r.retry_with_rdb_reload():
+                            self.assertExists(r, jsonfile)
+                            raw = r.execute_command('JSON.GET', jsonfile)
+                            d2 = json.loads(raw)
+                            if type(d1) is dict:
+                                self.assertDictEqual(d1, d2, path)
+                            elif type(d1) is list:
+                                self.assertListEqual(d1, d2, path)
+                            else:
+                                self.assertEqual(d1, d2, path)
+    
     def testIssue_13(self):
         """https://github.com/RedisJSON/RedisJSON/issues/13"""
     
@@ -759,19 +759,19 @@ class ReJSONTestCase(BaseReJSONTest):
             for (query, path, results) in searches:
                 self.assertEqual(r.execute_command('JSON.QGET', index, query, path), results)
 
-    # def testNoescape(self):
-    #     # Store a path and see if it acts appropriately with NOESCAPE
-    #     self.cmd('JSON.SET', 'escapeTest', '.', '{"key":"שלום"}')
-    #     rv = self.cmd('JSON.GET', 'escapeTest', '.')
-    #     self.assertEqual('{"key":"\u00d7\u00a9\u00d7\u009c\u00d7\u0095\u00d7\u009d"}', rv)
-    #     rv = self.cmd('JSON.GET', 'escapeTest', 'NOESCAPE', '.')
-    #     self.assertEqual('{"key":"שלום"}', rv)
-    #
+    def testNoescape(self):
+        # Store a path and see if it acts appropriately with NOESCAPE
+        self.cmd('JSON.SET', 'escapeTest', '.', '{"key":"שלום"}')
+        rv = self.cmd('JSON.GET', 'escapeTest', '.')
+        # self.assertEqual('{"key":"\u00d7\u00a9\u00d7\u009c\u00d7\u0095\u00d7\u009d"}', rv)
+        rv = self.cmd('JSON.GET', 'escapeTest', 'NOESCAPE', '.')
+        self.assertEqual('{"key":"שלום"}', rv)
+    
     def testDoubleParse(self):
         self.cmd('JSON.SET', 'dblNum', '.', '[1512060373.222988]')
         res = self.cmd('JSON.GET', 'dblNum', '[0]')
         self.assertEqual(1512060373.222988, float(res))
-        # self.assertEqual('1512060373.222988', res)
+        self.assertEqual('1512060373.222988', res)
 
 #
 # class CacheTestCase(BaseReJSONTest):
