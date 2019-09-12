@@ -107,7 +107,7 @@ jobs:
       - image: 'docker'
     steps:
       - setup_remote_docker:
-          version: 18.05.0-ce
+          version: 18.09.3
       - attach_workspace:
           at: /workspace
       - run:
