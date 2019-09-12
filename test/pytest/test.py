@@ -688,7 +688,7 @@ class ReJSONTestCase(BaseReJSONTest):
                                 self.assertEqual(d1, d2, path)
 
     def testIssue_13(self):
-        """https://github.com/RedisLabsModules/rejson/issues/13"""
+        """https://github.com/RedisJSON/RedisJSON/issues/13"""
 
         with self.redis() as r:
             r.client_setname(self._testMethodName)
