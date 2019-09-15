@@ -16,7 +16,7 @@ jobs:
              sudo apt-get install -y software-properties-common
              sudo add-apt-repository -y ppa:chris-lea/redis-server
              sudo apt-get install -y clang llvm cmake python-pip redis-server
-             pip install ramp-packer@1.9.0
+             pip install 'ramp-packer==1.9.0'
 
       - run:
           name: Version information
