@@ -71,11 +71,11 @@ jobs:
             - "~/.cargo"
             - "./target"
 
-      - run:
-          name: Deploy to S3
-          command: >-
-            aws s3 cp ./target/release/ s3://redismodules/$PACKAGE_NAME/ --acl
-            public-read --recursive --exclude "*" --include "*.zip"            
+      # - run:
+      #     name: Deploy to S3
+      #     command: >-
+      #       aws s3 cp ./target/release/ s3://redismodules/$PACKAGE_NAME/ --acl
+      #       public-read --recursive --exclude "*" --include "*.zip"            
 
 #      - run:
 #          name: Run all tests
