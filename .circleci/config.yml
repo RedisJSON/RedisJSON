@@ -58,9 +58,7 @@ jobs:
       - run:
           name: Package
           command: >-
-            ramp pack -m /workspace/ramp.yml -o
-            /workspace/build/$PACKAGE_NAME.{os}-{architecture}.$CIRCLE_BRANCH.zip
-            /workspace/$MODULE_ARTIFACT
+            ramp pack -m ramp.yml -o ./target/release/$PACKAGE_NAME.{os}-{architecture}.$CIRCLE_BRANCH.zip ./target/release/$MODULE_ARTIFACT
 
       # - run:
       #     name: Upload Coverage
