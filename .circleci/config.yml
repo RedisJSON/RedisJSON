@@ -53,9 +53,18 @@ jobs:
           command: |
              pip install -r ./test/pytest/requirements.txt
              python ./test/pytest/test.py
-      #      - run:
-      #          name: Upload Coverage
-      #          command: ./scripts/codecov.sh
+
+      - run:
+          name: Package
+          command: >-
+            ramp pack -m /workspace/ramp.yml -o
+            /workspace/build/$PACKAGE_NAME.{os}-{architecture}.$CIRCLE_BRANCH.zip
+            /workspace/$MODULE_ARTIFACT
+
+      # - run:
+      #     name: Upload Coverage
+      #     command: ./scripts/codecov.sh
+
       - save_cache:
           key: v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
           paths:

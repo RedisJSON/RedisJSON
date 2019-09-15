@@ -763,7 +763,7 @@ pub extern "C" fn init(raw_ctx: *mut rawmod::RedisModuleCtx) -> c_int {
 
 redis_module! {
     name: "ReJSON",
-    version: 200000,
+    version: 999999,
     data_types: [
         REDIS_JSON_TYPE,
     ],
