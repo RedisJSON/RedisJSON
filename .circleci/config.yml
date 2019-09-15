@@ -13,9 +13,9 @@ jobs:
       - run:
           name: Install prerequisite
           command: |
-             sudo apt-get install -y software-properties-common
+             sudo apt-get install -y software-properties-common 
              sudo add-apt-repository -y ppa:chris-lea/redis-server
-             sudo apt-get install -y clang llvm cmake python-pip redis-server
+             sudo apt-get install -y clang llvm cmake python-pip redis-server awscli
              pip install 'ramp-packer==1.9.0'
 
       - run:
@@ -70,6 +70,12 @@ jobs:
           paths:
             - "~/.cargo"
             - "./target"
+
+      - run:
+          name: Deploy to S3
+          command: >-
+            aws s3 cp ./target/release/ s3://redismodules/$PACKAGE_NAME/ --acl
+            public-read --recursive --exclude "*" --include "*.zip"            
 
 #      - run:
 #          name: Run all tests
