@@ -41,6 +41,7 @@ impl Format {
 #[derive(Debug)]
 pub struct RedisJSON {
     data: Value,
+    pub index: Option<String>,
 }
 
 impl RedisJSON {
@@ -62,10 +63,14 @@ impl RedisJSON {
         }
     }
 
-    pub fn from_str(data: &str, format: Format) -> Result<Self, Error> {
+    pub fn from_str(data: &str, index: &Option<String>, format: Format) -> Result<Self, Error> {
         let value = RedisJSON::parse_str(data, format)?;
-        Ok(Self { data: value })
+        Ok(Self {
+            data: value,
+            index: index.clone(),
+        })
     }
+
     fn add_value(&mut self, path: &str, value: Value) -> Result<bool, Error> {
         if NodeVisitorImpl::check(path)? {
             let mut splits = path.rsplitn(2, '.');
@@ -154,7 +159,7 @@ impl RedisJSON {
     }
 
     pub fn to_string(&self, path: &str, format: Format) -> Result<String, Error> {
-        let results = self.get_doc(path)?;
+        let results = self.get_first(path)?;
         Self::serialize(results, format)
     }
 
@@ -193,35 +198,35 @@ impl RedisJSON {
     }
 
     pub fn str_len(&self, path: &str) -> Result<usize, Error> {
-        self.get_doc(path)?
+        self.get_first(path)?
             .as_str()
             .ok_or_else(|| "ERR wrong type of path value".into())
             .map(|s| s.len())
     }
 
     pub fn arr_len(&self, path: &str) -> Result<usize, Error> {
-        self.get_doc(path)?
+        self.get_first(path)?
             .as_array()
             .ok_or_else(|| "ERR wrong type of path value".into())
             .map(|arr| arr.len())
     }
 
     pub fn obj_len(&self, path: &str) -> Result<usize, Error> {
-        self.get_doc(path)?
+        self.get_first(path)?
             .as_object()
             .ok_or_else(|| "ERR wrong type of path value".into())
             .map(|obj| obj.len())
     }
 
     pub fn obj_keys<'a>(&'a self, path: &'a str) -> Result<Vec<&'a String>, Error> {
-        self.get_doc(path)?
+        self.get_first(path)?
             .as_object()
             .ok_or_else(|| "ERR wrong type of path value".into())
             .map(|obj| obj.keys().collect())
     }
 
     pub fn arr_index(&self, path: &str, scalar: &str, start: i64, end: i64) -> Result<i64, Error> {
-        if let Value::Array(arr) = self.get_doc(path)? {
+        if let Value::Array(arr) = self.get_first(path)? {
             // end=-1/0 means INFINITY to support backward with RedisJSON
             if arr.is_empty() || end < -1 {
                 return Ok(-1);
@@ -252,7 +257,7 @@ impl RedisJSON {
     }
 
     pub fn get_type(&self, path: &str) -> Result<String, Error> {
-        let s = RedisJSON::value_name(self.get_doc(path)?);
+        let s = RedisJSON::value_name(self.get_first(path)?);
         Ok(s.to_string())
     }
 
@@ -322,7 +327,7 @@ impl RedisJSON {
 
     pub fn get_memory<'a>(&'a self, path: &'a str) -> Result<usize, Error> {
         // TODO add better calculation, handle wrappers, internals and length
-        let res = match self.get_doc(path)? {
+        let res = match self.get_first(path)? {
             Value::Null => 0,
             Value::Bool(v) => mem::size_of_val(v),
             Value::Number(v) => mem::size_of_val(v),
@@ -333,13 +338,17 @@ impl RedisJSON {
         Ok(res.into())
     }
 
-    // TODO: Rename this to 'get_value', since 'doc' is overloaded.
-    pub fn get_doc<'a>(&'a self, path: &'a str) -> Result<&'a Value, Error> {
-        let results = jsonpath_lib::select(&self.data, path)?;
+    pub fn get_first<'a>(&'a self, path: &'a str) -> Result<&'a Value, Error> {
+        let results = self.get_values(path)?;
         match results.first() {
             Some(s) => Ok(s),
             None => Err("ERR path does not exist".into()),
         }
+    }
+
+    pub fn get_values<'a>(&'a self, path: &'a str) -> Result<Vec<&'a Value>, Error> {
+        let results = jsonpath_lib::select(&self.data, path)?;
+        Ok(results)
     }
 }
 
@@ -347,12 +356,21 @@ pub mod type_methods {
     use super::*;
 
     #[allow(non_snake_case, unused)]
-    pub unsafe extern "C" fn rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
+    pub extern "C" fn rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
         let json = match encver {
             0 => RedisJSON {
                 data: backward::json_rdb_load(rdb),
+                index: None, // TODO handle load from rdb
             },
-            2 => RedisJSON::from_str(&raw::load_string(rdb), Format::JSON).unwrap(),
+            2 => {
+                let data = raw::load_string(rdb);
+                let schema = if raw::load_unsigned(rdb) > 0 {
+                    Some(raw::load_string(rdb))
+                } else {
+                    None
+                };
+                RedisJSON::from_str(&data, &schema, Format::JSON).unwrap()
+            }
             _ => panic!("Can't load old RedisJSON RDB"),
         };
         Box::into_raw(Box::new(json)) as *mut c_void
@@ -367,5 +385,11 @@ pub mod type_methods {
     pub unsafe extern "C" fn rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
         let json = &*(value as *mut RedisJSON);
         raw::save_string(rdb, &json.data.to_string());
+        if let Some(index) = &json.index {
+            raw::save_unsigned(rdb, 1);
+            raw::save_string(rdb, &index);
+        } else {
+            raw::save_unsigned(rdb, 0);
+        }
     }
 }

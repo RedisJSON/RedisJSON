@@ -132,7 +132,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
         }
         (None, SetOptions::AlreadyExists) => Ok(RedisValue::None),
         (None, _) => {
-            let doc = RedisJSON::from_str(&value, format)?;
+            let doc = RedisJSON::from_str(&value, &index, format)?;
             if path == "$" {
                 redis_key.set_value(&REDIS_JSON_TYPE, doc)?;
 
@@ -692,7 +692,7 @@ fn json_resp(ctx: &Context, args: Vec<String>) -> RedisResult {
 
     let key = ctx.open_key(&key);
     match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
-        Some(doc) => Ok(resp_serialize(doc.get_doc(&path)?)),
+        Some(doc) => Ok(resp_serialize(doc.get_first(&path)?)),
         None => Ok(RedisValue::None),
     }
 }

@@ -34,7 +34,7 @@ impl From<u64> for NodeType {
     }
 }
 
-pub unsafe fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> Value {
+pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> Value {
     let node_type = raw::load_unsigned(rdb).into();
     match node_type {
         NodeType::Null => Value::Null,

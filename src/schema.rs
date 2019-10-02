@@ -7,10 +7,10 @@ use crate::error::Error;
 use std::collections::HashMap;
 
 ////////////////////////////////////////////
-
 pub struct Schema {
     pub index: Index,
     pub fields: HashMap<String, String>,
+    pub name: String,
 }
 
 impl Schema {
@@ -18,6 +18,7 @@ impl Schema {
         Schema {
             index: Index::create(name),
             fields: HashMap::new(),
+            name: name.to_owned(),
         }
     }
 
@@ -26,6 +27,8 @@ impl Schema {
             // TODO better handle RDB read
             index: Index::create(data.to_string().as_str()),
             fields: HashMap::new(),
+            // TODO load count from RDB
+            name: String::new(),
         })
     }
 }

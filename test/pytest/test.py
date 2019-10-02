@@ -749,11 +749,13 @@ class ReJSONTestCase(BaseReJSONTest):
             do('JSON.SET', 'joe', '.', '{"first": "Joe", "last": "Smith"}', 'INDEX', index)
             do('JSON.SET', 'kevin', '.', '{"first": "Kevin", "last": "Smith"}', 'INDEX', index)
             do('JSON.SET', 'mike', '.', '{"first": "Mike", "last": "Lane"}', 'INDEX', index)
+            do('JSON.SET', 'dave', '.', '{"first": "Dave"}', 'INDEX', index)
+            do('JSON.SET', 'levi', '.', '{"last": "Smith"}', 'INDEX', index)
 
             searches = [
-                ('@first:mike', '$.last', ['"Lane"']),
-                ('@last:smith', '$.first', ['"Joe"', '"Kevin"']),
-                ('*', '$.first', ['"Joe"', '"Kevin"', '"Mike"']),
+                ('@first:mike', '$.last',  '{"mike":["Lane"]}'),
+                ('@last:smith', '$.first', '{"joe":["Joe"],"kevin":["Kevin"],"levi":[]}'),
+                ('*', '$.first', '{"joe":["Joe"],"kevin":["Kevin"],"mike":["Mike"],"dave":["Dave"],"levi":[]}'),
             ]
 
             for (query, path, results) in searches:
