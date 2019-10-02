@@ -1,5 +1,5 @@
-[![GitHub issues](https://img.shields.io/github/release/RedisJSON/RedisDoc.svg)](https://github.com/RedisJSON/RedisDoc/releases/latest)
-[![CircleCI](https://circleci.com/gh/RedisJSON/RedisDoc/tree/master.svg?style=svg)](https://circleci.com/gh/RedisJSON/RedisDoc/tree/master)
+[![GitHub issues](https://img.shields.io/github/release/RedisJSON/RedisJSON2.svg)](https://github.com/RedisJSON/RedisJSON2/releases/latest)
+[![CircleCI](https://circleci.com/gh/RedisJSON/RedisJSON2/tree/master.svg?style=svg)](https://circleci.com/gh/RedisJSON/RedisJSON2/tree/master)
 [![Mailing List](https://img.shields.io/badge/Mailing%20List-RedisJSON-blue)](https://groups.google.com/forum/#!forum/redisjson)
 [![Gitter](https://badges.gitter.im/RedisLabs/RedisJSON.svg)](https://gitter.im/RedisLabs/RedisJSON?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
