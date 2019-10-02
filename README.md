@@ -19,12 +19,14 @@ RedisJSON2 ([RedisJSON](https://github.com/RedisJSON/RedisJSON) nextgen) is a [R
 ## New Commands in RedisJSON2
 
     JSON.INDEX ADD <index> <field> <path>
-    JSON.INDEX DEL <index> <field>
-    JSON.INDEX INFO <index> <field>
-
     JSON.QGET <index> <query> <path>
+
+### Next Milestone
     JSON.QSET <index> <query> <path> <json> [NX | XX]
     JSON.QDEL <index> <query> <path>
+    
+    JSON.INDEX DEL <index> <field>
+    JSON.INDEX INFO <index> <field>
 
 Return value from JSON.QGET is an array of keys and values:
 
