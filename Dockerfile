@@ -7,13 +7,14 @@ RUN set -ex;\
     deps="$DEPS";\
     apt-get update; \
     apt-get install -y --no-install-recommends $deps;\
-    pip install rmtest; 
+    pip install rmtest;
 
 # Build the source
 ADD . /REJSON
 WORKDIR /REJSON
 RUN set -ex;\
     cargo build --release; \
+    pip install -r ./test/pytest/requirements.txt\
     python ./test/pytest/test.py target/release/libredisjson.so;
 
 # Package the runner
