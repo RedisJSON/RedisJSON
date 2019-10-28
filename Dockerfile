@@ -14,7 +14,7 @@ ADD . /REJSON
 WORKDIR /REJSON
 RUN set -ex;\
     cargo build --release; \
-    pip install -r ./test/pytest/requirements.txt\
+    pip install -r ./test/pytest/requirements.txt; \
     python ./test/pytest/test.py target/release/libredisjson.so;
 
 # Package the runner
