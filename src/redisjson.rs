@@ -10,7 +10,7 @@ use crate::nodevisitor::NodeVisitorImpl;
 
 use bson::decode_document;
 use jsonpath_lib::SelectorMut;
-use redismodule::raw;
+use redis_module::raw;
 use serde_json::Value;
 use std::io::Cursor;
 use std::mem;
@@ -35,6 +35,30 @@ impl Format {
             "BSON" => Ok(Format::BSON),
             _ => return Err("ERR wrong format".into()),
         }
+    }
+}
+
+///
+/// Backwards compatibility convertor for RedisJSON 1.x clients
+///
+pub struct Path {
+    pub path: String,
+    pub fixed: String,
+}
+
+impl Path {
+    pub fn new(path: String) -> Path {
+        let mut fixed = path.clone();
+        if !fixed.starts_with("$") {
+            if fixed == "." {
+                fixed.replace_range(..1, "$");
+            } else if fixed.starts_with(".") {
+                fixed.insert(0, '$');
+            } else {
+                fixed.insert_str(0, "$.");
+            }
+        }
+        Path{path, fixed}
     }
 }
 
@@ -173,10 +197,10 @@ impl RedisJSON {
 
     // FIXME: Implement this by manipulating serde_json::Value values,
     // and then using serde to serialize to JSON instead of doing it ourselves with strings.
-    pub fn to_json(&self, paths: &mut Vec<String>) -> Result<String, Error> {
+    pub fn to_json(&self, paths: &mut Vec<Path>) -> Result<String, Error> {
         let mut selector = jsonpath_lib::selector(&self.data);
         let mut result = paths.drain(..).fold(String::from("{"), |mut acc, path| {
-            let value = match selector(&path) {
+            let value = match selector(&path.fixed) {
                 Ok(s) => match s.first() {
                     Some(v) => v,
                     None => &Value::Null,
@@ -184,7 +208,7 @@ impl RedisJSON {
                 Err(_) => &Value::Null,
             };
             acc.push('\"');
-            acc.push_str(&path);
+            acc.push_str(&path.path);
             acc.push_str("\":");
             acc.push_str(value.to_string().as_str());
             acc.push(',');

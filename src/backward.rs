@@ -1,4 +1,4 @@
-use redismodule::raw;
+use redis_module::raw;
 use serde_json::map::Map;
 use serde_json::Number;
 use serde_json::Value;

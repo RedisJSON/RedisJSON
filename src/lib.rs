@@ -1,10 +1,10 @@
 #[macro_use]
-extern crate redismodule;
+extern crate redis_module;
 
-use redismodule::native_types::RedisType;
-use redismodule::raw::RedisModuleTypeMethods;
-use redismodule::{raw as rawmod, NextArg};
-use redismodule::{Context, RedisError, RedisResult, RedisValue, REDIS_OK};
+use redis_module::native_types::RedisType;
+use redis_module::raw::RedisModuleTypeMethods;
+use redis_module::{raw as rawmod, NextArg};
+use redis_module::{Context, RedisError, RedisResult, RedisValue, REDIS_OK};
 use serde_json::{Number, Value};
 
 use std::{i64, usize};
@@ -20,13 +20,13 @@ mod schema; // TODO: Remove
 use crate::array_index::ArrayIndex;
 use crate::commands::index;
 use crate::error::Error;
-use crate::redisjson::{Format, RedisJSON, SetOptions};
+use crate::redisjson::{Format, Path, RedisJSON, SetOptions};
 
 static REDIS_JSON_TYPE: RedisType = RedisType::new(
     "ReJSON-RL",
     2,
     RedisModuleTypeMethods {
-        version: redismodule::TYPE_METHOD_VERSION,
+        version: redis_module::TYPE_METHOD_VERSION,
 
         rdb_load: Some(redisjson::type_methods::rdb_load),
         rdb_save: Some(redisjson::type_methods::rdb_save),
@@ -165,7 +165,7 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_string()?;
 
-    let mut paths: Vec<String> = vec![];
+    let mut paths: Vec<Path> = vec![];
     let mut first_loop = true;
     let mut format = Format::JSON;
     loop {
@@ -174,7 +174,7 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
             Err(_) => {
                 // path is optional -> no path found on the first loop we use root "$"
                 if first_loop {
-                    paths.push("$".to_owned());
+                    paths.push(Path::new("$".to_string()));
                 }
                 break;
             }
@@ -198,7 +198,7 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
                 format = Format::from_str(args.next_string()?.as_str())?;
             }
             _ => {
-                paths.push(backwards_compat_path(arg));
+                paths.push(Path::new(arg));
             }
         };
     }
@@ -206,7 +206,7 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
     let key = ctx.open_key_writable(&key);
     let value = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
         Some(doc) => if paths.len() == 1 {
-            doc.to_string(&paths[0], format)?
+            doc.to_string(&paths[0].fixed, format)?
         } else {
             // can't be smaller than 1
             doc.to_json(&mut paths)?

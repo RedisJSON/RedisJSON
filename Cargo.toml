@@ -1,6 +1,6 @@
 [package]
 name = "redisjson"
-version = "0.7.1"
+version = "0.8.0"
 authors = ["Gavrie Philipson <gavrie@redislabs.com>"]
 edition = "2018"
 
@@ -13,11 +13,11 @@ serde_json = "1.0"
 libc = "0.2"
 jsonpath_lib = { git="https://github.com/gkorland/jsonpath.git", branch="reaplce_with_ownership_parser" }
 
-[dependencies.redismodule]
+[dependencies.redis-module]
 git = "https://github.com/redislabsmodules/redismodule-rs.git"
-branch = "safe_context_rm_call"
+tag = "v0.5.0"
 features = ["experimental-api"]
 
 [dependencies.redisearch_api]
 git = "https://github.com/RediSearch/redisearch-api-rs.git"
-branch = "safe_context_rm_call"
+tag = "v0.2.0"

@@ -31,8 +31,8 @@ impl From<JsonPathError> for Error {
     }
 }
 
-impl From<Error> for redismodule::RedisError {
+impl From<Error> for redis_module::RedisError {
     fn from(e: Error) -> Self {
-        redismodule::RedisError::String(e.msg)
+        redis_module::RedisError::String(e.msg)
     }
 }

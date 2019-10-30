@@ -2,7 +2,7 @@ use std::thread;
 
 use serde_json::{Map, Value};
 
-use redismodule::{Context, NextArg, RedisError, RedisResult, RedisValue, REDIS_OK};
+use redis_module::{Context, NextArg, RedisError, RedisResult, RedisValue, REDIS_OK};
 
 use redisearch_api::{Document, FieldType};
 
