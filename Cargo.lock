@@ -407,7 +407,7 @@ dependencies = [
 
 [[package]]
 name = "redisjson"
-version = "0.3.0"
+version = "0.8.0"
 dependencies = [
  "bson 0.14.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "jsonpath_lib 0.2.3 (git+https://github.com/gkorland/jsonpath.git?branch=reaplce_with_ownership_parser)",
