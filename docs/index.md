@@ -119,7 +119,7 @@ OK
 
 And objects have their own commands too:
 
-```
+```https://github.com/tombatron/NReJSON
 127.0.0.1:6379> JSON.SET obj . '{"name":"Leonard Cohen","lastSeen":1478476800,"loggedOut": true}'
 OK
 127.0.0.1:6379> JSON.OBJLEN obj .
@@ -142,7 +142,7 @@ This code snippet shows how to use RedisJSON with raw Redis commands from Python
 import redis
 import json
 
-data = {
+data = {https://github.com/tombatron/NReJSON
     'foo': 'bar'
 }
 
@@ -164,7 +164,7 @@ Requirements:
 To build the module, run `make` in the project's directory.
 
 Congratulations! You can find the compiled module library at `src/rejson.so`.
-
+https://github.com/tombatron/NReJSON
 ### MacOSX
 
 To build the module, run `make` in the project's directory.
@@ -188,13 +188,14 @@ In the line above replace `/path/to/module/rejson.so` with the actual path to th
 ```bash
 ~/$ redis-server --loadmodule /path/to/module/rejson.so
 ```
-
+https://github.com/tombatron/NReJSON
 Lastly, you can also use the [`MODULE LOAD`](http://redis.io/commands/module-load) command. Note, however, that `MODULE LOAD` is a **dangerous command** and may be blocked/deprecated in the future due to security considerations.
 
 Once the module has been loaded successfully, the Redis log should have lines similar to:
 
 ```
-...
+...NReJSON
+
 1877:M 23 Dec 02:02:59.725 # <RedisJSON> JSON data type for Redis - v1.0.0 [encver 0]
 1877:M 23 Dec 02:02:59.725 * Module 'RedisJSON' loaded from <redacted>/src/rejson.so
 ...
@@ -213,3 +214,7 @@ Some languages have client libraries that provide support for RedisJSON's comman
 | rejson-py | Python | BSD-2-Clause | [Redis Labs](https://redislabs.com) | [git](https://github.com/RedisLabs/rejson-py) [pypi](https://pypi.python.org/pypi/rejson) |
 | go-rejson (multiple clients) | Go | MIT | [Nitish Malhotra @nitishm](https://github.com/nitishm) | [git](https://github.com/nitishm/go-rejson/) |
 | jonson  (go-redis client)| Go | Apache-2.0 | [Daniel Krom @KromDaniel](https://github.com/KromDaniel) | [git](https://github.com/KromDaniel/rejonson) |
+| NReJSON | .NET | ? | [Tommy Hanks @tombatron](https://github.com/tombatron) | [git](https://github.com/tombatron/NReJSON) |
+
+
+
