@@ -119,7 +119,8 @@ OK
 
 And objects have their own commands too:
 
-```https://github.com/tombatron/NReJSON
+```
+https://github.com/tombatron/NReJSON
 127.0.0.1:6379> JSON.SET obj . '{"name":"Leonard Cohen","lastSeen":1478476800,"loggedOut": true}'
 OK
 127.0.0.1:6379> JSON.OBJLEN obj .
