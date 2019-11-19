@@ -119,7 +119,7 @@ OK
 
 And objects have their own commands too:
 
-```https://github.com/tombatron/NReJSON
+```
 127.0.0.1:6379> JSON.SET obj . '{"name":"Leonard Cohen","lastSeen":1478476800,"loggedOut": true}'
 OK
 127.0.0.1:6379> JSON.OBJLEN obj .
@@ -142,7 +142,7 @@ This code snippet shows how to use RedisJSON with raw Redis commands from Python
 import redis
 import json
 
-data = {https://github.com/tombatron/NReJSON
+data = {
     'foo': 'bar'
 }
 
@@ -164,7 +164,7 @@ Requirements:
 To build the module, run `make` in the project's directory.
 
 Congratulations! You can find the compiled module library at `src/rejson.so`.
-https://github.com/tombatron/NReJSON
+
 ### MacOSX
 
 To build the module, run `make` in the project's directory.
@@ -194,7 +194,7 @@ Lastly, you can also use the [`MODULE LOAD`](http://redis.io/commands/module-loa
 Once the module has been loaded successfully, the Redis log should have lines similar to:
 
 ```
-...NReJSON
+...
 
 1877:M 23 Dec 02:02:59.725 # <RedisJSON> JSON data type for Redis - v1.0.0 [encver 0]
 1877:M 23 Dec 02:02:59.725 * Module 'RedisJSON' loaded from <redacted>/src/rejson.so
