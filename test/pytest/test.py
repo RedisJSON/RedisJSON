@@ -733,6 +733,18 @@ class ReJSONTestCase(BaseReJSONTest):
             # This shouldn't crash Redis
             r.execute_command('JSON.GET', 'test', 'foo', 'foo')
 
+    def testIssue_74(self):
+        """https://github.com/RedisJSON/RedisJSON2/issues/74"""
+    
+        with self.redis() as r:
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+    
+            self.assertOk(r.execute_command('JSON.SET', 'test', '.', '{}'))
+            # This shouldn't crash Redis
+            with self.assertRaises(redis.exceptions.ResponseError) as cm:
+                r.execute_command('JSON.SET', 'test', '$a', '12')
+
     def testRediSearch(self):
         """Test RediSearch integration"""
         # To run:
