@@ -48,7 +48,7 @@ Some languages have client libraries that provide support for RedisJSON's comman
 ## Current limitations and known issues
 
 * Searching for object keys is O(N)
-* Containers are not scaled down after deleting items (i.e. free memory isn't reclaimed)
+* Containers (e.g. internal arrays) are not scaled down after deleting items (i.e. free memory isn't reclaimed)
 * Numbers are stored using 64-bit integers or doubles, and out of range values are not accepted
 
 ## Acknowledgements
