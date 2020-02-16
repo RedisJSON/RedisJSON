@@ -791,6 +791,19 @@ class ReJSONTestCase(BaseReJSONTest):
         self.assertEqual(1512060373.222988, float(res))
         self.assertEqual('1512060373.222988', res)
 
+    def testIssue_80(self):
+        """https://github.com/RedisJSON/RedisJSON2/issues/80"""
+    
+        with self.redis() as r:
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+    
+            self.assertOk(r.execute_command('JSON.SET', 'test', '.', '[{"code":"1"}, {"code":"2"}]'))
+            r.execute_command('JSON.GET', 'test', '.[?(@.code=="2")]')
+
+            # This shouldn't crash Redis
+            r.execute_command('JSON.GET', 'test', '$.[?(@.code=="2")]')
+
 #
 # class CacheTestCase(BaseReJSONTest):
 #     @property
