@@ -1,6 +1,10 @@
-# ReJSON - a JSON data type for Redis
+<img src="images/logo.svg" alt="logo" width="200"/>
 
-ReJSON is a [Redis](https://redis.io/) module that implements [ECMA-404 The JSON Data Interchange Standard](http://json.org/) as a native data type. It allows storing, updating and fetching JSON values from Redis keys (documents).
+# RedisJSON - a JSON data type for Redis
+[![Mailing List](https://img.shields.io/badge/Mailing%20List-RedisJSON-blue)](https://groups.google.com/forum/#!forum/redisjson)
+[![Gitter](https://badges.gitter.im/RedisLabs/RedisJSON.svg)](https://gitter.im/RedisLabs/RedisJSON?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+
+RedisJSON is a [Redis](https://redis.io/) module that implements [ECMA-404 The JSON Data Interchange Standard](http://json.org/) as a native data type. It allows storing, updating and fetching JSON values from Redis keys (documents).
 
 Primary features:
 
@@ -9,35 +13,35 @@ Primary features:
 * Documents are stored as binary data in a tree structure, allowing fast access to sub-elements
 * Typed atomic operations for all JSON values types
 
-ReJSON is developed with <3 at [Redis Labs](https://redislabs.com). The source code is available
-at: https://github.com/RedisLabsModules/ReJSON
+RedisJSON is developed with <3 at [Redis Labs](https://redislabs.com). The source code is available
+at: https://github.com/RedisJSON/RedisJSON
 
 ## Quickstart
 
-1.  [Launch ReJSON with Docker](#launch-rejson-with-docker)
-1.  [Use it from **any** Redis client](#using-rejson), e.g.:
+1.  [Launch RedisJSON with Docker](#launch-redisjson-with-docker)
+1.  [Use it from **any** Redis client](#using-redisjson), e.g.:
 
-![ReJSON with `redis-cli`](images/demo.gif)
+![RedisJSON with `redis-cli`](images/demo.gif)
 
-Alternatively, you can also build and load the module yourself. [Build and Load the ReJSON module library](#building-and-loading-the-module)
+Alternatively, you can also build and load the module yourself. [Build and Load the RedisJSON module library](#building-and-loading-the-module)
 
 
-## Launch ReJSON with Docker
+## Launch RedisJSON with Docker
 Run the following on Windows, MacOS or Linux with Docker.
 ```
-docker run -p 6379:6379 --name redis-rejson redislabs/rejson:latest
+docker run -p 6379:6379 --name redis-redisjson redislabs/rejson:latest
 ```
 
-## Using ReJSON
+## Using RedisJSON
 
-Before using ReJSON, you should familiarize yourself with its commands and syntax as detailed in the [commands reference](commands.md) document. However, to quickly get started just review this section and get:
+Before using RedisJSON, you should familiarize yourself with its commands and syntax as detailed in the [commands reference](commands.md) document. However, to quickly get started just review this section and get:
 
 1.  A Redis server running the module (see [building](#building-the-module-library) and [loading](#loading-the-module-to-Redis) for instructions)
-1.  Any [Redis](http://redis.io/clients) or [ReJSON client](#client-libraries)
+1.  Any [Redis](http://redis.io/clients) or [RedisJSON client](#client-libraries)
 
 ### With `redis-cli`
 
-This example will use [`redis-cli`](http://redis.io/topics/rediscli) as the Redis client. The first ReJSON command to try out is [`JSON.SET`](/commands#jsonset), which sets a Redis key with a JSON value. All JSON values can be used, for example a string:
+This example will use [`redis-cli`](http://redis.io/topics/rediscli) as the Redis client. The first RedisJSON command to try out is [`JSON.SET`](/commands#jsonset), which sets a Redis key with a JSON value. All JSON values can be used, for example a string:
 
 ```
 127.0.0.1:6379> JSON.SET foo . '"bar"'
@@ -48,7 +52,7 @@ OK
 string
 ```
 
-[`JSON.GET`](commands.md#jsonget) and [`JSON.TYPE`](commands.md#jsontype) do literally that regardless of the value's type, but you should really check out `JSON.GET` prettifying powers. Note how the commands are given the period character, i.e. `.`. This is the [path](path.md) to the value in the ReJSON data type (in this case it just means the root). A couple more string operations:
+[`JSON.GET`](commands.md#jsonget) and [`JSON.TYPE`](commands.md#jsontype) do literally that regardless of the value's type, but you should really check out `JSON.GET` prettifying powers. Note how the commands are given the period character, i.e. `.`. This is the [path](path.md) to the value in the RedisJSON data type (in this case it just means the root). A couple more string operations:
 
 ```
 127.0.0.1:6379> JSON.STRLEN foo .
@@ -90,7 +94,7 @@ OK
 "[true,{\"answer\":42}]"
 ```
 
-The handy [`JSON.DEL`](/commands#jsondel) command deletes anything you tell it to. Arrays can be manipulated with a dedicated subset of ReJSON commands:
+The handy [`JSON.DEL`](/commands#jsondel) command deletes anything you tell it to. Arrays can be manipulated with a dedicated subset of RedisJSON commands:
 
 ```
 127.0.0.1:6379> JSON.SET arr . []
@@ -128,11 +132,11 @@ OK
 
 ### With any other client
 
-Unless your [Redis client](http://redis.io/clients) already supports Redis modules (unlikely) or ReJSON specifically (even more unlikely), you should be okay using its ability to send raw Redis commands. Depending on your client of choice, the exact method for doing that may vary.
+Unless your [Redis client](http://redis.io/clients) already supports Redis modules (unlikely) or RedisJSON specifically (even more unlikely), you should be okay using its ability to send raw Redis commands. Depending on your client of choice, the exact method for doing that may vary.
 
 #### Python example
 
-This code snippet shows how to use ReJSON with raw Redis commands from Python with [redis-py](https://github.com/andymccurdy/redis-py):
+This code snippet shows how to use RedisJSON with raw Redis commands from Python with [redis-py](https://github.com/andymccurdy/redis-py):
 
 ```Python
 import redis
@@ -154,7 +158,7 @@ reply = json.loads(r.execute_command('JSON.GET', 'doc'))
 
 Requirements:
 
-* The ReJSON repository: `git clone https://github.com/RedisLabsModules/rejson.git`
+* The RedisJSON repository: `git clone https://github.com/RedisJSON/RedisJSON.git`
 * The `build-essential` package: `apt-get install build-essential`
 
 To build the module, run `make` in the project's directory.
@@ -191,21 +195,32 @@ Once the module has been loaded successfully, the Redis log should have lines si
 
 ```
 ...
-1877:M 23 Dec 02:02:59.725 # <ReJSON> JSON data type for Redis - v1.0.0 [encver 0]
-1877:M 23 Dec 02:02:59.725 * Module 'ReJSON' loaded from <redacted>/src/rejson.so
+
+1877:M 23 Dec 02:02:59.725 # <RedisJSON> JSON data type for Redis - v1.0.0 [encver 0]
+1877:M 23 Dec 02:02:59.725 * Module 'RedisJSON' loaded from <redacted>/src/rejson.so
 ...
 ```
 
 
 ### Client libraries
 
-Some languages have client libraries that provide support for ReJSON's commands:
+Some languages have client libraries that provide support for RedisJSON's commands:
 
 | Project | Language | License | Author | URL |
 | ------- | -------- | ------- | ------ | --- |
 | iorejson | Node.js | MIT | [Evan Huang @evanhuang8](https://github.com/evanhuang8) | [git](https://github.com/evanhuang8/iorejson) [npm](https://www.npmjs.com/package/iorejson) |
 | node_redis-rejson | Node.js | MIT | [Kyle Davis @stockholmux](https://github.com/stockholmux) | [git](https://github.com/stockholmux/node_redis-rejson) [npm](https://www.npmjs.com/package/redis-rejson) |
 | JReJSON | Java | BSD-2-Clause | [Redis Labs](https://redislabs.com) | [git](https://github.com/RedisLabs/JReJSON/) |
-| rejson-py | Python | BSD-2-Clause | [Redis Labs](https://redislabs.com) | [git](https://github.com/RedisLabs/redis-py/) [pypi](https://pypi.python.org/pypi/rejson) |
-| go-rejson (redigo client) | Go | MIT | [Nitish Malhotra @nitishm](https://github.com/nitishm) | [git](https://github.com/nitishm/go-rejson/) |
+| rejson-py | Python | BSD-2-Clause | [Redis Labs](https://redislabs.com) | [git](https://github.com/RedisLabs/rejson-py) [pypi](https://pypi.python.org/pypi/rejson) |
+| go-rejson (multiple clients) | Go | MIT | [Nitish Malhotra @nitishm](https://github.com/nitishm) | [git](https://github.com/nitishm/go-rejson/) |
 | jonson  (go-redis client)| Go | Apache-2.0 | [Daniel Krom @KromDaniel](https://github.com/KromDaniel) | [git](https://github.com/KromDaniel/rejonson) |
+| NReJSON | .NET | MIT/Apache-2.0 | [Tommy Hanks @tombatron](https://github.com/tombatron) | [git](https://github.com/tombatron/NReJSON) |
+| phpredis-json | PHP | MIT | [Rafa Campoy @averias](https://github.com/averias/) | [git](https://github.com/averias/phpredis-json) |
+| redislabs-rejson | PHP | MIT | [Mehmet Korkmaz @mkorkmaz](https://github.com/mkorkmaz) | [git](https://github.com/mkorkmaz/redislabs-rejson/) |
+| rejson-rb | Ruby | MIT | [Pavan Vachhani @vachhanihpavan](https://github.com/vachhanihpavan/) | [git](https://github.com/vachhanihpavan/rejson-rb) [rubygems](https://rubygems.org/gems/rejson-rb)|
+
+
+
+
+
+

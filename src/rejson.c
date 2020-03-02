@@ -1,21 +1,8 @@
 /*
- * ReJSON - a JSON data type for Redis
- * Copyright (C) 2017 Redis Labs
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
-
+* Copyright 2017-2019 Redis Labs Ltd. and Contributors
+*
+* This file is available under the Redis Labs Source Available License Agreement
+*/
 #include "rejson.h"
 #include "cache.h"
 
@@ -2017,11 +2004,32 @@ int Module_CreateCommands(RedisModuleCtx *ctx) {
     return REDISMODULE_OK;
 }
 
-int RedisModule_OnLoad(RedisModuleCtx *ctx) {
+int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // Register the module
     if (RedisModule_Init(ctx, RLMODULE_NAME, REJSON_MODULE_VERSION, REDISMODULE_APIVER_1) ==
         REDISMODULE_ERR)
         return REDISMODULE_ERR;
+
+    // Scan the arguments
+    for (size_t ii = 0; ii < argc; ++ii) {
+        const char *s = RedisModule_StringPtrLen(argv[ii], NULL);
+        if (!strcasecmp(s, "CACHE")) {
+            const char *v = RedisModule_StringPtrLen(argv[++ii], NULL);
+            if (!strcasecmp(v, "ON") || !strcasecmp(v, "TRUE")) {
+                RedisModule_Log(ctx, "notice", "LRU Caching enabled");
+                jsonLruCacheEnabled_g = 1;
+            } else if (!strcasecmp(v, "OFF") || !strcasecmp(v, "FALSE")) {
+                RedisModule_Log(ctx, "notice", "LRU Caching disabled");
+                jsonLruCacheEnabled_g = 0;
+            } else {
+                RedisModule_Log(ctx, "warning", "CACHE requires a value of ON|OFF");
+                return REDISMODULE_ERR;
+            }
+        } else {
+            RedisModule_Log(ctx, "warning", "Unknown option %s", s);
+            return REDISMODULE_ERR;
+        }
+    }
 
     // Register the JSON data type
     RedisModuleTypeMethods tm = {.version = REDISMODULE_TYPE_METHOD_VERSION,
