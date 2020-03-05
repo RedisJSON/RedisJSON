@@ -59,7 +59,7 @@ jobs:
           name: Package
           command: |
             cargo build --all --all-targets --release
-            ramp pack -m ramp.yml -o ./target/release/$PACKAGE_NAME.{os}-{architecture}.$CIRCLE_BRANCH.zip ./target/release/$MODULE_ARTIFACT
+            ramp pack -m ramp.yml -n RedisJSON -o ./target/release/$PACKAGE_NAME.{os}-{architecture}.$CIRCLE_BRANCH.zip ./target/release/$MODULE_ARTIFACT
 
       # - run:
       #     name: Upload Coverage
