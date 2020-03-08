@@ -1,7 +1,7 @@
 use std::os::raw::{c_int, c_void};
 
-use redisearch_api::Index;
 use redis_module::raw;
+use redisearch_api::Index;
 
 use crate::error::Error;
 use std::collections::HashMap;

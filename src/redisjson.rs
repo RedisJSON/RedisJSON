@@ -58,7 +58,7 @@ impl Path {
                 fixed.insert_str(0, "$.");
             }
         }
-        Path{path, fixed}
+        Path { path, fixed }
     }
 }
 
