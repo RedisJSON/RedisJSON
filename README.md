@@ -81,6 +81,14 @@ cargo build --release
 
 ## Run
 
+### Linux
+
 ```
 redis-server --loadmodule ./target/release/libredisjson.so
+```
+
+### Mac OS
+
+```
+redis-server --loadmodule ./target/release/libredisjson.dylib
 ```
