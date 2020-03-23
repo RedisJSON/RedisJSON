@@ -21,15 +21,14 @@ theme:
   feature:
     tabs: false
 
-pages:
-    - 'Quickstart': 'index.md'
-    - 'Commands': 'commands.md'
-    - 'Path syntax': 'path.md'
-    - 'Performance': 'performance.md'
-    - 'RAM usage': 'ram.md'
-    - 'Developer notes': 'developer.md'
-    - 'Contributor agreement': 'contrib.md'
-
+nav:
+  - 'Quickstart': 'index.md'
+  - 'Commands': 'commands.md'
+  - 'Path syntax': 'path.md'
+  - 'Performance': 'performance.md'
+  - 'RAM usage': 'ram.md'
+  - 'Developer notes': 'developer.md'
+  - 'Contributor agreement': 'contrib.md'
 
 markdown_extensions:
   - admonition
@@ -37,3 +36,7 @@ markdown_extensions:
       guess_lang: False
   - toc:
       permalink: True
+
+plugins:
+  - search
+  - versions-menu
