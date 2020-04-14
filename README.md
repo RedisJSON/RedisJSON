@@ -1,28 +1,26 @@
-### RedisJSON2 can be found here https://github.com/RedisJSON/RedisJSON2
-
-[![GitHub issues](https://img.shields.io/github/release/RedisJSON/RedisJSON.svg)](https://github.com/RedisJSON/RedisJSON/releases/latest)
-[![CircleCI](https://circleci.com/gh/RedisJSON/RedisJSON/tree/master.svg?style=svg)](https://circleci.com/gh/RedisJSON/RedisJSON/tree/master)
-[![Docker Cloud Build Status](https://img.shields.io/docker/cloud/build/redislabs/rejson.svg)](https://hub.docker.com/r/redislabs/rejson/builds/)
+[![GitHub issues](https://img.shields.io/github/release/RedisJSON/RedisJSON2.svg)](https://github.com/RedisJSON/RedisJSON2/releases/latest)
+[![CircleCI](https://circleci.com/gh/RedisJSON/RedisJSON2/tree/master.svg?style=svg)](https://circleci.com/gh/RedisJSON/RedisJSON2/tree/master)
+[![Docker Cloud Build Status](https://img.shields.io/docker/cloud/build/redislabs/redisjson2.svg)](https://hub.docker.com/r/redislabs/redisjson2/builds/)
 [![Mailing List](https://img.shields.io/badge/Mailing%20List-RedisJSON-blue)](https://groups.google.com/forum/#!forum/redisjson)
 [![Gitter](https://badges.gitter.im/RedisLabs/RedisJSON.svg)](https://gitter.im/RedisLabs/RedisJSON?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
-# RedisJSON - a JSON data type for Redis
+# RedisJSON
 
-RedisJSON is a [Redis](http://redis.io/) module that implements [ECMA-404 The JSON Data Interchange Standard](http://json.org/) as a native data type. It allows storing, updating and fetching JSON values from Redis keys (documents).
+RedisJSON is a [Redis](https://redis.io/) module that implements [ECMA-404 The JSON Data Interchange Standard](https://json.org/) as a native data type. It allows storing, updating and fetching JSON values from Redis keys (documents).
 
-Primary features:
+## Primary features:
 
 * Full support of the JSON standard
-* [JSONPath](http://goessner.net/articles/JsonPath/)-like syntax for selecting element inside documents
+* [JSONPath](https://goessner.net/articles/JsonPath/) syntax for selecting elements inside documents
 * Documents are stored as binary data in a tree structure, allowing fast access to sub-elements
 * Typed atomic operations for all JSON values types
+* Secondary index support based on [RediSearch](https://redisearch.io)
 
-## Quickstart
+## Quick start
 
-1.  [Launch RedisJSON with Docker](http://redisjson.io#launch-redisjson-with-docker)
-1.  [Use RedisJSON from **any** Redis client](http://redisjson.io#using-redisjson), e.g.:
-
-![RedisJSON with `redis-cli`](docs/images/demo.gif)
+```
+docker run -p 6379:6379 --name redis-redisjson redislabs/redisjson2:latest
+```
 
 ## Documentation
 
@@ -45,21 +43,87 @@ Some languages have client libraries that provide support for RedisJSON's comman
 | redislabs-rejson | PHP | MIT | [Mehmet Korkmaz @mkorkmaz](https://github.com/mkorkmaz) | [git](https://github.com/mkorkmaz/redislabs-rejson/) |
 | rejson-rb | Ruby | MIT | [Pavan Vachhani @vachhanihpavan](https://github.com/vachhanihpavan/) | [git](https://github.com/vachhanihpavan/rejson-rb) [rubygems](https://rubygems.org/gems/rejson-rb)|
 
-## Current limitations and known issues
-
-* Internal arrays are not scaled down after deleting items (i.e. free memory isn't reclaimed)
-* Numbers are stored using 64-bit integers or doubles, and out of range values are not accepted
-
 ## Acknowledgements
 
 RedisJSON is developed with <3 at [Redis Labs](https://redislabs.com).
 
-RedisJSON is made possible only because of the existance of these amazing open source projects:
+RedisJSON is made possible only because of the existance of this amazing open source project:
 
-* [jsonsl](https://github.com/mnunberg/jsonsl)
 * [redis](https://github.com/antirez/redis)
 
 ## License
 
 Redis Source Available License Agreement - see [LICENSE](LICENSE)
 
+# RedisJSON2
+
+## New Commands in RedisJSON2
+
+    JSON.INDEX ADD <index> <field> <path>
+    JSON.QGET <index> <query> <path>
+
+### Next Milestone
+    JSON.QSET <index> <query> <path> <json> [NX | XX]
+    JSON.QDEL <index> <query> <path>
+    
+    JSON.INDEX DEL <index> <field>
+    JSON.INDEX INFO <index> <field>
+
+Return value from JSON.QGET is an array of keys and values:
+
+    key
+    json
+    key
+    json
+
+In a language such as Java this could be represented as a `Map<String, Document>`.
+    
+## Examples
+
+A query combining multiple paths:
+    
+    JSON.QGET mytype "@path1:hello @path2:world" d.name
+    
+    
+```bash
+127.0.0.1:6379> json.set user1 $ '{"last":"Joe", "first":"Mc"}' INDEX person
+OK
+127.0.0.1:6379> json.set user2 $ '{"last":"Joan", "first":"Mc"}' INDEX person
+OK
+127.0.0.1:6379> json.index add person last $.last
+OK
+127.0.0.1:6379> JSON.QGET person Jo*
+"{\"user2\":[{\"last\":\"Joan\",\"first\":\"Mc\"}],\"user1\":[{\"last\":\"Joe\",\"first\":\"Mc\"}]}"
+127.0.0.1:6379> json.set user3 $ '{"last":"Joel", "first":"Dan"}' INDEX person
+OK
+127.0.0.1:6379> JSON.QGET person Jo*
+"{\"user2\":[{\"last\":\"Joan\",\"first\":\"Mc\"}],\"user1\":[{\"last\":\"Joe\",\"first\":\"Mc\"}],\"user3\":[{\"last\":\"Joel\",\"first\":\"Dan\"}]}"
+127.0.0.1:6379> json.index add person first $.first
+OK
+127.0.0.1:6379> JSON.QGET person Mc
+"{\"user2\":[{\"last\":\"Joan\",\"first\":\"Mc\"}],\"user1\":[{\"last\":\"Joe\",\"first\":\"Mc\"}]}"
+127.0.0.1:6379> JSON.QGET person Mc $.last
+"{\"user2\":[\"Joan\"],\"user1\":[\"Joe\"]}"
+```
+    
+
+
+## Build
+
+```bash
+cargo build --release
+```
+
+## Run
+
+### Linux
+
+```
+redis-server --loadmodule ./target/release/libredisjson.so
+```
+
+### Mac OS
+
+```
+redis-server --loadmodule ./target/release/libredisjson.dylib
+```

@@ -1,0 +1,82 @@
+version: 2
+
+jobs:
+  build:
+    docker:
+      - image: circleci/rust:buster
+
+    steps:
+      - checkout
+      - run: git submodule sync
+      - run: git submodule update --init      
+      
+      - run:
+          name: Install prerequisite
+          command: |
+             sudo apt-get install -y software-properties-common 
+             sudo add-apt-repository -y ppa:chris-lea/redis-server
+             sudo apt-get install -y clang llvm cmake python-pip redis-server awscli
+             pip install 'ramp-packer==1.9.0'
+
+      - run:
+          name: Version information
+          command: rustc --version; cargo --version; rustup --version
+
+      - restore_cache:
+          keys:
+            - v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
+            # fallback to using the latest cache if no exact match is found
+            - v2-dependencies-
+     # - run:
+     #     name: Check formatting
+     #     command: |
+     #       rustfmt --version
+     #       cargo fmt -- --write-mode=diff
+
+      - run:
+          name: Build all targets
+          command: cargo build --all --all-targets
+
+      #      - run:
+      #          name: Nightly Build
+      #          command: |
+      #            rustup run nightly rustc --version --verbose
+      #            rustup run nightly cargo --version --verbose
+      #            rustup run nightly cargo build
+      #      - run:
+      #          name: Stable Build
+      #          command: |
+      #            rustup run stable rustc --version --verbose
+      #            rustup run stable cargo --version --verbose
+      #            rustup run stable cargo build
+      - run:
+          name: Test
+          command: |
+             pip install -r ./test/pytest/requirements.txt
+             python ./test/pytest/test.py
+
+      - run:
+          name: Package
+          command: |
+            cargo build --all --all-targets --release
+            ramp pack -m ramp.yml -n RedisJSON -o ./target/release/$PACKAGE_NAME.{os}-{architecture}.$CIRCLE_BRANCH.zip ./target/release/$MODULE_ARTIFACT
+
+      # - run:
+      #     name: Upload Coverage
+      #     command: ./scripts/codecov.sh
+
+      - save_cache:
+          key: v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
+          paths:
+            - "~/.cargo"
+            - "./target"
+
+      - run:
+          name: Deploy to S3
+          command: >-
+            aws s3 cp ./target/release/ s3://redismodules/$PACKAGE_NAME/ --acl
+            public-read --recursive --exclude "*" --include "*.zip"            
+
+#      - run:
+#          name: Run all tests
+#          command: cargo test --all

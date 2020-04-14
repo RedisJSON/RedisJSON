@@ -1,0 +1,4 @@
+hiredis>=0.2.0
+redis>=2.10
+rmtest>=0.2
+six>=1.10.0
