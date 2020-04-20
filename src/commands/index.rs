@@ -181,14 +181,14 @@ fn scan_and_index(ctx: &Context, schema: &Schema, cursor: u64) -> Result<u64, Re
                                 }
                             })
                     } else {
-                        Err("Error on parsing reply from scan".into()) 
+                        Err("Error on parsing reply from scan".into())
                     }
                 });
                 res.map(|_| cursor)
             }
-            _ => Err("Error on parsing reply from scan".into()), 
+            _ => Err("Error on parsing reply from scan".into()),
         },
-        _ => Err("Error on parsing reply from scan".into()), 
+        _ => Err("Error on parsing reply from scan".into()),
     }
 }
 
