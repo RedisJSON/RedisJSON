@@ -775,7 +775,9 @@ class ReJSONTestCase(BaseReJSONTest):
             ]
 
             for (query, path, results) in searches:
-                self.assertEqual(r.execute_command('JSON.QGET', index, query, path), results)
+                self.assertEqual(
+                    json.loads(r.execute_command('JSON.QGET', index, query, path)),
+                    json.loads(results))
 
     def testNoescape(self):
         # Store a path and see if it acts appropriately with NOESCAPE
