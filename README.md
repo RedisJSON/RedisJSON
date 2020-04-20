@@ -93,7 +93,7 @@ redis-server --loadmodule ./target/release/rejson.so
 ### Mac OS
 
 ```
-redis-server --loadmodule ./target/release/rejson.dylib
+redis-server --loadmodule ./target/release/librejson.dylib
 ```
 
 ## Client libraries
