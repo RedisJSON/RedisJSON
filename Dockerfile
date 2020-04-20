@@ -8,13 +8,13 @@ RUN set -ex;\
     deps="$DEPS";\
     apt-get update; \
     apt-get install -y --no-install-recommends $deps;\
-    pip install rmtest;
+    pip install rmtest
 
 # Build the source
 ADD . /REJSON
 WORKDIR /REJSON
 RUN set -ex;\
-    cargo build --release;
+    cargo build --release;\
     mv target/release/librejson.so target/release/rejson.so
 
 # Package the runner
