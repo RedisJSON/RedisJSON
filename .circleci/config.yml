@@ -33,7 +33,7 @@ jobs:
           name: Check formatting
           command: |
             rustfmt --version
-            cargo fmt -- --write-mode=diff
+            cargo fmt -- --check
 
       - run:
           name: Build debug
@@ -153,7 +153,7 @@ jobs:
             cd ..; curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"; unzip awscliv2.zip;./aws/install
       - checkout
       - run:
-          name: Instal dependencies
+          name: Install dependencies
           command: pip install -r docs/requirements.txt
       - run:
           name: Build docs
