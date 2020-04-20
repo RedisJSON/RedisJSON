@@ -57,11 +57,11 @@ jobs:
       - run:
           name: Persist Artifacts
           command: >-
-            mkdir -p /workspace/build && cp target/release/$MODULE_ARTIFACT /workspace/ &&
-            cp ramp.yml /workspace/
+            mkdir -p workspace/build && cp target/release/$MODULE_ARTIFACT workspace/ &&
+            cp ramp.yml workspace/
 
       - persist_to_workspace:
-          root: /workspace
+          root: workspace
           paths:
             - '*.so'
             - ramp.yml
