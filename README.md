@@ -1,6 +1,6 @@
-[![GitHub issues](https://img.shields.io/github/release/RedisJSON/RedisJSON2.svg)](https://github.com/RedisJSON/RedisJSON2/releases/latest)
-[![CircleCI](https://circleci.com/gh/RedisJSON/RedisJSON2/tree/master.svg?style=svg)](https://circleci.com/gh/RedisJSON/RedisJSON2/tree/master)
-[![Docker Cloud Build Status](https://img.shields.io/docker/cloud/build/redislabs/redisjson2.svg)](https://hub.docker.com/r/redislabs/redisjson2/builds/)
+[![GitHub issues](https://img.shields.io/github/release/RedisJSON/RedisJSON.svg)](https://github.com/RedisJSON/RedisJSON/releases/latest)
+[![CircleCI](https://circleci.com/gh/RedisJSON/RedisJSON/tree/master.svg?style=svg)](https://circleci.com/gh/RedisJSON/RedisJSON/tree/master)
+[![Docker Cloud Build Status](https://img.shields.io/docker/cloud/build/redislabs/redisjson.svg)](https://hub.docker.com/r/redislabs/redisjson/builds/)
 [![Mailing List](https://img.shields.io/badge/Mailing%20List-RedisJSON-blue)](https://groups.google.com/forum/#!forum/redisjson)
 [![Gitter](https://badges.gitter.im/RedisLabs/RedisJSON.svg)](https://gitter.im/RedisLabs/RedisJSON?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
@@ -19,7 +19,7 @@ RedisJSON is a [Redis](https://redis.io/) module that implements [ECMA-404 The J
 ## Quick start
 
 ```
-docker run -p 6379:6379 --name redis-redisjson redislabs/redisjson2:latest
+docker run -p 6379:6379 --name redis-redisjson redislabs/redisjson:latest
 ```
 
 ## Documentation
@@ -55,9 +55,9 @@ RedisJSON is made possible only because of the existance of this amazing open so
 
 Redis Source Available License Agreement - see [LICENSE](LICENSE)
 
-# RedisJSON2
+# RedisJSON
 
-## New Commands in RedisJSON2
+## New Commands in RedisJSON
 
     JSON.INDEX ADD <index> <field> <path>
     JSON.QGET <index> <query> <path>
