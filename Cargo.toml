@@ -6,6 +6,7 @@ edition = "2018"
 
 [lib]
 crate-type = ["cdylib"]
+name = "rejson"
 
 [dependencies]
 bson = "0.14"
