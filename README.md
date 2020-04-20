@@ -119,11 +119,11 @@ cargo build --release
 ### Linux
 
 ```
-redis-server --loadmodule ./target/release/libredisjson.so
+redis-server --loadmodule ./target/release/rejson.so
 ```
 
 ### Mac OS
 
 ```
-redis-server --loadmodule ./target/release/libredisjson.dylib
+redis-server --loadmodule ./target/release/rejson.dylib
 ```

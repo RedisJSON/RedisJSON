@@ -71,7 +71,7 @@ if len(sys.argv) >= 2:
     lib_file = sys.argv[1]
     del sys.argv[1:]
 else:
-    lib_file = 'target/debug/libredisjson.so'
+    lib_file = 'target/debug/rejson.so'
 
 rmtest.config.REDIS_MODULE = os.path.abspath(os.path.join(os.getcwd(), lib_file))
 
