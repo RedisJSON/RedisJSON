@@ -39,7 +39,7 @@ jobs:
           name: Build debug
           command: |
             cargo build --all --all-targets
-            mv target/debug/librejson.so target/debug/rejson.so
+            mv target/debug/libredisjson.so target/debug/rejson.so
 
       - run:
           name: Run all tests
@@ -52,7 +52,7 @@ jobs:
           name: Build release
           command: |
             cargo build --all --all-targets --release
-            mv target/release/librejson.so target/release/rejson.so
+            mv target/release/libredisjson.so target/release/rejson.so
 
       - run:
           name: Persist Artifacts
