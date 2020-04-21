@@ -15,7 +15,7 @@ ADD . /REJSON
 WORKDIR /REJSON
 RUN set -ex;\
     cargo build --release;\
-    mv target/release/librejson.so target/release/rejson.so
+    mv target/release/libredisjson.so target/release/rejson.so
 
 # Package the runner
 FROM redis:latest
