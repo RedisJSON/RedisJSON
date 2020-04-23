@@ -19,7 +19,7 @@ jobs:
              sudo apt-get install -y clang llvm cmake python-pip redis-server awscli
              sudo pip install 'ramp-packer==1.9.0'
              curl -f -L https://static.rust-lang.org/rustup.sh -O
-             sh rustup.sh -q
+             sh rustup.sh -y
 
       - run:
           name: Version information
