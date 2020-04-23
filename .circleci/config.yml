@@ -18,7 +18,8 @@ jobs:
              sudo add-apt-repository -y ppa:chris-lea/redis-server
              sudo apt-get install -y clang llvm cmake python-pip redis-server awscli
              sudo pip install 'ramp-packer==1.9.0'
-             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+             curl -f -L https://static.rust-lang.org/rustup.sh -O
+             sh rustup.sh -q
 
       - run:
           name: Version information
