@@ -16,11 +16,21 @@ jobs:
           command: |
              sudo apt-get install -y software-properties-common 
              sudo add-apt-repository -y ppa:chris-lea/redis-server
-             sudo apt-get install -y clang llvm cmake python-pip redis-server awscli python-dev
+             sudo apt-get install -y clang llvm cmake python-pip awscli python-dev
              sudo pip install 'ramp-packer==1.9.0'
              curl -f -L https://static.rust-lang.org/rustup.sh -O
              sh rustup.sh -y
 
+             
+      - run:
+          name: Build Redis
+          command: |
+             git clone https://github.com/antirez/redis.git --branch unstable --single-branch redis-git
+             export CC="clang"
+             make -C redis-git clean
+             make -C redis-git
+             sudo mv ./redis-git/src/redis-server /usr/bin/redis-server
+             
       - run:
           name: Version information
           command: |
