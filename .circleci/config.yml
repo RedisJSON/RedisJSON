@@ -21,6 +21,7 @@ jobs:
              curl -f -L https://static.rust-lang.org/rustup.sh -O
              sh rustup.sh -y
              source $HOME/.cargo/env
+             rustc --version; cargo --version; rustup --version
 
       - run:
           name: Version information
