@@ -23,6 +23,7 @@ jobs:
              source $HOME/.cargo/env
              rustc --version; cargo --version; rustup --version
 
+
       - run:
           name: Version information
           command: rustc --version; cargo --version; rustup --version
