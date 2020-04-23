@@ -20,6 +20,7 @@ jobs:
              sudo pip install 'ramp-packer==1.9.0'
              curl -f -L https://static.rust-lang.org/rustup.sh -O
              sh rustup.sh -y
+             run source $HOME/.cargo/env
 
       - run:
           name: Version information
