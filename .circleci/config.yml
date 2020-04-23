@@ -52,7 +52,7 @@ jobs:
           command: |
              source $HOME/.cargo/env
              cargo test --all
-             pip install -r ./test/pytest/requirements.txt
+             sudo pip install -r ./test/pytest/requirements.txt
              python ./test/pytest/test.py
 
       - run:
@@ -156,13 +156,13 @@ jobs:
       - run:
           name: Setup executor
           command: |
-            apt-get -qq update
-            apt-get -q install -y git openssh-client curl ca-certificates make tar gzip wget
+            sudo apt-get -qq update
+            sudo apt-get -q install -y git openssh-client curl ca-certificates make tar gzip wget
             cd ..; curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"; unzip awscliv2.zip;./aws/install
       - checkout
       - run:
           name: Install dependencies
-          command: pip install -r docs/requirements.txt
+          command: sudo pip install -r docs/requirements.txt
       - run:
           name: Build docs
           command: mkdocs build
