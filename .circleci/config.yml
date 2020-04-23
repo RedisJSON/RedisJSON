@@ -4,7 +4,7 @@ jobs:
 
   build:
     docker:
-      - image: circleci/rust:buster
+      - image: circleci/buildpack-deps:trusty
 
     steps:
       - checkout
@@ -16,12 +16,26 @@ jobs:
           command: |
              sudo apt-get install -y software-properties-common 
              sudo add-apt-repository -y ppa:chris-lea/redis-server
-             sudo apt-get install -y clang llvm cmake python-pip redis-server awscli
-             pip install 'ramp-packer==1.9.0'
+             sudo apt-get install -y clang llvm cmake python-pip awscli python-dev
+             sudo pip install 'ramp-packer==1.9.0'
+             curl -f -L https://static.rust-lang.org/rustup.sh -O
+             sh rustup.sh -y
 
+             
+      - run:
+          name: Build Redis
+          command: |
+             git clone https://github.com/antirez/redis.git --branch unstable --single-branch redis-git
+             export CC="clang"
+             make -C redis-git clean
+             make -C redis-git
+             sudo mv ./redis-git/src/redis-server /usr/bin/redis-server
+             
       - run:
           name: Version information
-          command: rustc --version; cargo --version; rustup --version
+          command: |
+             source $HOME/.cargo/env
+             rustc --version; cargo --version; rustup --version
 
       - restore_cache:
           keys:
@@ -32,25 +46,29 @@ jobs:
       - run:
           name: Check formatting
           command: |
+            source $HOME/.cargo/env
             rustfmt --version
             cargo fmt -- --check
 
       - run:
           name: Build debug
           command: |
+            source $HOME/.cargo/env
             cargo build --all --all-targets
             mv target/debug/librejson.so target/debug/rejson.so
 
       - run:
           name: Run all tests
           command: |
+             source $HOME/.cargo/env
              cargo test --all
-             pip install -r ./test/pytest/requirements.txt
+             sudo pip install -r ./test/pytest/requirements.txt
              python ./test/pytest/test.py
 
       - run:
           name: Build release
           command: |
+            source $HOME/.cargo/env
             cargo build --all --all-targets --release
             mv target/release/librejson.so target/release/rejson.so
 
@@ -148,13 +166,13 @@ jobs:
       - run:
           name: Setup executor
           command: |
-            apt-get -qq update
-            apt-get -q install -y git openssh-client curl ca-certificates make tar gzip wget
+            sudo apt-get -qq update
+            sudo apt-get -q install -y git openssh-client curl ca-certificates make tar gzip wget
             cd ..; curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"; unzip awscliv2.zip;./aws/install
       - checkout
       - run:
           name: Install dependencies
-          command: pip install -r docs/requirements.txt
+          command: sudo pip install -r docs/requirements.txt
       - run:
           name: Build docs
           command: mkdocs build
