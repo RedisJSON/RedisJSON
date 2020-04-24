@@ -1,7 +1,7 @@
 <img src="images/logo.svg" alt="logo" width="200"/>
 
 # RedisJSON - a JSON data type for Redis
-[![Mailing List](https://img.shields.io/badge/Mailing%20List-RedisJSON-blue)](https://groups.google.com/forum/#!forum/redisjson)
+[![Forum](https://img.shields.io/badge/Forum-RedisJSON-blue)](https://forum.redislabs.com/c/modules/redisjson)
 [![Gitter](https://badges.gitter.im/RedisLabs/RedisJSON.svg)](https://gitter.im/RedisLabs/RedisJSON?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 RedisJSON is a [Redis](https://redis.io/) module that implements [ECMA-404 The JSON Data Interchange Standard](http://json.org/) as a native data type. It allows storing, updating and fetching JSON values from Redis keys (documents).
@@ -154,28 +154,15 @@ reply = json.loads(r.execute_command('JSON.GET', 'doc'))
 
 ## Building and Loading the Module
 
-### Linux Ubuntu 16.04
-
-Requirements:
-
-* The RedisJSON repository: `git clone https://github.com/RedisJSON/RedisJSON.git`
-* The `build-essential` package: `apt-get install build-essential`
-
-To build the module, run `make` in the project's directory.
-
-Congratulations! You can find the compiled module library at `src/rejson.so`.
-
-### MacOSX
-
-To build the module, run `make` in the project's directory.
-
-Congratulations! You can find the compiled module library at `src/rejson.so`.
+```
+cargo build --release
+```
 
 ### Loading the module to Redis
 
 Requirements:
 
-* [Redis v4.0 or above](http://redis.io/download)
+* [Redis v5.0 or above](http://redis.io/download)
 
 We recommend you have Redis load the module during startup by adding the following to your `redis.conf` file:
 
@@ -218,9 +205,3 @@ Some languages have client libraries that provide support for RedisJSON's comman
 | phpredis-json | PHP | MIT | [Rafa Campoy @averias](https://github.com/averias/) | [git](https://github.com/averias/phpredis-json) |
 | redislabs-rejson | PHP | MIT | [Mehmet Korkmaz @mkorkmaz](https://github.com/mkorkmaz) | [git](https://github.com/mkorkmaz/redislabs-rejson/) |
 | rejson-rb | Ruby | MIT | [Pavan Vachhani @vachhanihpavan](https://github.com/vachhanihpavan/) | [git](https://github.com/vachhanihpavan/rejson-rb) [rubygems](https://rubygems.org/gems/rejson-rb)|
-
-
-
-
-
-
