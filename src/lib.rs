@@ -72,12 +72,14 @@ fn json_del(ctx: &Context, args: Vec<String>) -> RedisResult {
     let key = ctx.open_key_writable(&key);
     let deleted = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
         Some(doc) => {
-            if path == "$" {
+            let res = if path == "$" {
                 key.delete()?;
                 1
             } else {
                 doc.delete_path(&path)?
-            }
+            };
+            ctx.replicate_verbatim();
+            res
         }
         None => 0,
     };
@@ -125,6 +127,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
                 if let Some(index) = index {
                     index::add_document(&key, &index, &doc)?;
                 }
+                ctx.replicate_verbatim();
                 REDIS_OK
             } else {
                 Ok(RedisValue::None)
@@ -143,7 +146,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
                     let doc = redis_key.get_value(&REDIS_JSON_TYPE)?.unwrap();
                     index::add_document(&key, &index, doc)?;
                 }
-
+                ctx.replicate_verbatim();
                 REDIS_OK
             } else {
                 Err("ERR new objects must be created at the root".into())
@@ -315,7 +318,10 @@ where
             doc.value_op(&path, |value| {
                 do_json_num_op(&number, value, &op_i64, &op_f64)
             })
-            .map(|v| v.to_string().into())
+            .map(|v| {
+                ctx.replicate_verbatim();
+                v.to_string().into()
+            })
             .map_err(|e| e.into())
         })
 }
@@ -386,7 +392,10 @@ fn json_str_append(ctx: &Context, args: Vec<String>) -> RedisResult {
         .ok_or_else(RedisError::nonexistent_key)
         .and_then(|doc| {
             doc.value_op(&path, |value| do_json_str_append(&json, value))
-                .map(|v| v.as_str().map_or(usize::MAX, |v| v.len()).into())
+                .map(|v| {
+                    ctx.replicate_verbatim();
+                    v.as_str().map_or(usize::MAX, |v| v.len()).into()
+                })
                 .map_err(|e| e.into())
         })
 }
@@ -424,7 +433,10 @@ fn json_arr_append(ctx: &Context, args: Vec<String>) -> RedisResult {
         .ok_or_else(RedisError::nonexistent_key)
         .and_then(|doc| {
             doc.value_op(&path, |value| do_json_arr_append(args.clone(), value))
-                .map(|v| v.as_array().map_or(usize::MAX, |v| v.len()).into())
+                .map(|v| {
+                    ctx.replicate_verbatim();
+                    v.as_array().map_or(usize::MAX, |v| v.len()).into()
+                })
                 .map_err(|e| e.into())
         })
 }
@@ -492,7 +504,10 @@ fn json_arr_insert(ctx: &Context, args: Vec<String>) -> RedisResult {
             doc.value_op(&path, |value| {
                 do_json_arr_insert(args.clone(), index, value)
             })
-            .map(|v| v.as_array().map_or(usize::MAX, |v| v.len()).into())
+            .map(|v| {
+                ctx.replicate_verbatim();
+                v.as_array().map_or(usize::MAX, |v| v.len()).into()
+            })
             .map_err(|e| e.into())
         })
 }
@@ -555,6 +570,10 @@ fn json_arr_pop(ctx: &Context, args: Vec<String>) -> RedisResult {
         .ok_or_else(RedisError::nonexistent_key)
         .and_then(|doc| {
             doc.value_op(&path, |value| do_json_arr_pop(index, &mut res, value))
+                .map(|v| {
+                    ctx.replicate_verbatim();
+                    v
+                })
                 .map_err(|e| e.into())
         })?;
     Ok(RedisJSON::serialize(&res, Format::JSON)?.into())
@@ -600,7 +619,10 @@ fn json_arr_trim(ctx: &Context, args: Vec<String>) -> RedisResult {
         .ok_or_else(RedisError::nonexistent_key)
         .and_then(|doc| {
             doc.value_op(&path, |value| do_json_arr_trim(start, stop, &value))
-                .map(|v| v.as_array().map_or(usize::MAX, |v| v.len()).into())
+                .map(|v| {
+                    ctx.replicate_verbatim();
+                    v.as_array().map_or(usize::MAX, |v| v.len()).into()
+                })
                 .map_err(|e| e.into())
         })
 }
