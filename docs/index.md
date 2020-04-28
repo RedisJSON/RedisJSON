@@ -204,7 +204,6 @@ Once the module has been loaded successfully, the Redis log should have lines si
 ### Client libraries
 
 Some languages have client libraries that provide support for RedisJSON's commands:
-
 | Project | Language | License | Author | URL |
 | ------- | -------- | ------- | ------ | --- |
 | iorejson | Node.js | MIT | [Evan Huang @evanhuang8](https://github.com/evanhuang8) | [git](https://github.com/evanhuang8/iorejson) [npm](https://www.npmjs.com/package/iorejson) |
@@ -213,3 +212,7 @@ Some languages have client libraries that provide support for RedisJSON's comman
 | rejson-py | Python | BSD-2-Clause | [Redis Labs](https://redislabs.com) | [git](https://github.com/RedisLabs/rejson-py) [pypi](https://pypi.python.org/pypi/rejson) |
 | go-rejson (multiple clients) | Go | MIT | [Nitish Malhotra @nitishm](https://github.com/nitishm) | [git](https://github.com/nitishm/go-rejson/) |
 | jonson  (go-redis client)| Go | Apache-2.0 | [Daniel Krom @KromDaniel](https://github.com/KromDaniel) | [git](https://github.com/KromDaniel/rejonson) |
+| NReJSON | .NET | MIT/Apache-2.0 | [Tommy Hanks @tombatron](https://github.com/tombatron) | [git](https://github.com/tombatron/NReJSON) |
+| phpredis-json | PHP | MIT | [Rafa Campoy @averias](https://github.com/averias/) | [git](https://github.com/averias/phpredis-json) |
+| redislabs-rejson | PHP | MIT | [Mehmet Korkmaz @mkorkmaz](https://github.com/mkorkmaz) | [git](https://github.com/mkorkmaz/redislabs-rejson/) |
+| rejson-rb | Ruby | MIT | [Pavan Vachhani @vachhanihpavan](https://github.com/vachhanihpavan/) | [git](https://github.com/vachhanihpavan/rejson-rb) [rubygems](https://rubygems.org/gems/rejson-rb)|
