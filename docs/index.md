@@ -204,6 +204,7 @@ Once the module has been loaded successfully, the Redis log should have lines si
 ### Client libraries
 
 Some languages have client libraries that provide support for RedisJSON's commands:
+
 | Project | Language | License | Author | URL |
 | ------- | -------- | ------- | ------ | --- |
 | iorejson | Node.js | MIT | [Evan Huang @evanhuang8](https://github.com/evanhuang8) | [git](https://github.com/evanhuang8/iorejson) [npm](https://www.npmjs.com/package/iorejson) |
