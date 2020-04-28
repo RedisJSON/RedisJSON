@@ -1,27 +1,96 @@
 version: 2.1
+
 jobs:
+
   build:
     docker:
-      - image: 'redislabsmodules/rmbuilder:latest'
+      - image: circleci/buildpack-deps:trusty
+
     steps:
       - checkout
+      - run: git submodule sync
+      - run: git submodule update --init      
+      
       - run:
-          name: Build
-          command: make -j 8
+          name: Install prerequisites
+          command: |
+             sudo apt-get install -y software-properties-common 
+             sudo add-apt-repository -y ppa:chris-lea/redis-server
+             sudo apt-get install -y clang llvm cmake python-pip awscli python-dev
+             sudo pip install 'ramp-packer==1.9.0'
+             curl -f -L https://static.rust-lang.org/rustup.sh -O
+             sh rustup.sh -y
+
+             
       - run:
-          name: Test
-          command: make test
+          name: Build Redis
+          command: |
+             git clone https://github.com/antirez/redis.git --branch unstable --single-branch redis-git
+             export CC="clang"
+             make -C redis-git clean
+             make -C redis-git
+             sudo mv ./redis-git/src/redis-server /usr/bin/redis-server
+             
+      - run:
+          name: Version information
+          command: |
+             source $HOME/.cargo/env
+             rustc --version; cargo --version; rustup --version
+
+      - restore_cache:
+          keys:
+            - v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
+            # fallback to using the latest cache if no exact match is found
+            - v2-dependencies-
+
+      - run:
+          name: Check formatting
+          command: |
+            source $HOME/.cargo/env
+            rustfmt --version
+            cargo fmt -- --check
+
+      - run:
+          name: Build debug
+          command: |
+            source $HOME/.cargo/env
+            cargo build --all --all-targets
+            mv target/debug/librejson.so target/debug/rejson.so
+
+      - run:
+          name: Run all tests
+          command: |
+             source $HOME/.cargo/env
+             cargo test --all
+             sudo pip install -r ./test/pytest/requirements.txt
+             python ./test/pytest/test.py
+
+      - run:
+          name: Build release
+          command: |
+            source $HOME/.cargo/env
+            cargo build --all --all-targets --release
+            mv target/release/librejson.so target/release/rejson.so
+
       - run:
           name: Persist Artifacts
           command: >-
-            mkdir -p /workspace/build && cp src/$MODULE_ARTIFACT /workspace/ &&
-            cp ramp.yml /workspace/
+            mkdir -p workspace/build && cp target/release/$MODULE_ARTIFACT workspace/ &&
+            cp ramp.yml workspace/
+
       - persist_to_workspace:
-          root: /workspace
+          root: workspace
           paths:
             - '*.so'
             - ramp.yml
             - build
+
+      - save_cache:
+          key: v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
+          paths:
+            - "~/.cargo"
+            - "./target"
+
   package_branch:
     docker:
       - image: 'redislabsmodules/rmbuilder:latest'
@@ -40,6 +109,7 @@ jobs:
             - build
       - store_artifacts:
           path: /workspace/build
+
   package_release:
     docker:
       - image: 'redislabsmodules/rmbuilder:latest'
@@ -64,6 +134,7 @@ jobs:
             - build
       - store_artifacts:
           path: /workspace/build
+
   deploy_branch:
     docker:
       - image: 'redislabsmodules/rmbuilder:latest'
@@ -75,6 +146,7 @@ jobs:
           command: >-
             aws s3 cp /workspace/build/ s3://redismodules/$PACKAGE_NAME/ --acl
             public-read --recursive --exclude "*" --include "*.zip"
+
   deploy_release:
     docker:
       - image: 'redislabsmodules/rmbuilder:latest'
@@ -99,7 +171,7 @@ jobs:
             cd ..; curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"; unzip awscliv2.zip;./aws/install
       - checkout
       - run:
-          name: Instal dependencies
+          name: Install dependencies
           command: pip install -r docs/requirements.txt
       - run:
           name: Build docs
@@ -140,10 +212,10 @@ workflows:
               only: '/^v[0-9].*/'
           requires:
             - package_release
-# TODO: deploy_docs should run only when 'docs/' or 'mkdocs.yml' change
+      # TODO: deploy_docs should run only when 'docs/' or 'mkdocs.yml' change
       - deploy_docs:
-        filters:
-          branches:
-            only:
-              - master
-              - /^[0-9]+\.[0-9]+$/
+          filters:
+            branches:
+              only:
+                - master
+                - /^[0-9]+\.[0-9]+$/
