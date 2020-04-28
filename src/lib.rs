@@ -195,6 +195,7 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
                 args.next();
             } // TODO add support
             "NOESCAPE" => {
+                args.next();
                 continue;
             } // TODO add support
             "FORMAT" => {
