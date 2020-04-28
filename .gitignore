@@ -28,3 +28,11 @@ build/
 
 # Mac
 .DS_Store
+
+# Eclipse
+.cproject
+.project
+.settings/
+
+# Rust build artifacts
+/target
