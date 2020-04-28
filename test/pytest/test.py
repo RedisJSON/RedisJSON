@@ -783,7 +783,7 @@ class ReJSONTestCase(BaseReJSONTest):
         # Store a path and see if it acts appropriately with NOESCAPE
         self.cmd('JSON.SET', 'escapeTest', '.', '{"key":"שלום"}')
         rv = self.cmd('JSON.GET', 'escapeTest', '.')
-        # self.assertEqual('{"key":"\u00d7\u00a9\u00d7\u009c\u00d7\u0095\u00d7\u009d"}', rv)
+        self.assertEqual('{"key":"שלום"}', rv)
         rv = self.cmd('JSON.GET', 'escapeTest', 'NOESCAPE', '.')
         self.assertEqual('{"key":"שלום"}', rv)
     

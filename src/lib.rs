@@ -184,7 +184,7 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
         };
         first_loop = false;
 
-        match arg.as_str() {
+        match arg.to_uppercase().as_str() {
             "INDENT" => {
                 args.next();
             } // TODO add support
