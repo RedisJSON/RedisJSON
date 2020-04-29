@@ -8,12 +8,12 @@ all:
 	$(BUILD_RELEASE)
 
 test: build_debug 
-	mv ./target/debug/librejson.so ./target/debug/rejson.so
 	python test/pytest/test.py
 .PHONY: test
 
 build_debug:
 	$(BUILD)
+	cp ./target/debug/librejson.so ./target/debug/rejson.so
 
 docker:
 	docker pull ubuntu:latest
