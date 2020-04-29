@@ -40,8 +40,4 @@ deploydocs: builddocs
 	mkdocs gh-deploy
 
 clean:
-	find ./ -name "*.[oa]" -exec rm {} \; -print
-	find ./ -name "*.so" -exec rm {} \; -print
-	find ./ -name "*.out" -exec rm {} \; -print
-	rm -rf ./build
-
+	cargo clean
