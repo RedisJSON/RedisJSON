@@ -88,13 +88,13 @@ cargo build --release
 ### Linux
 
 ```
-redis-server --loadmodule ./target/release/rejson.so
+redis-server --loadmodule ./target/release/librejson.so
 ```
 
 ### Mac OS
 
 ```
-redis-server --loadmodule ./target/release/rejson.dylib
+redis-server --loadmodule ./target/release/librejson.dylib
 ```
 
 ## Client libraries
