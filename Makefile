@@ -1,9 +1,19 @@
-all:
-	$(MAKE) -C ./src all
+BUILD = cargo build --all --all-targets
+BUILD_RELEASE = ${BUILD}
+ifndef DEBUG
+	BUILD_RELEASE += --release
+endif
 
-test:
-	$(MAKE) -C ./test all
+all:
+	$(BUILD_RELEASE)
+
+test: build_debug 
+	mv ./target/debug/librejson.so ./target/debug/rejson.so
+	python test/pytest/test.py
 .PHONY: test
+
+build_debug:
+	$(BUILD)
 
 docker:
 	docker pull ubuntu:latest
