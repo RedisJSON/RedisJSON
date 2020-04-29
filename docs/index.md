@@ -167,13 +167,13 @@ Requirements:
 We recommend you have Redis load the module during startup by adding the following to your `redis.conf` file:
 
 ```
-loadmodule /path/to/module/rejson.so
+loadmodule ./target/release/librejson.so
 ```
 
-In the line above replace `/path/to/module/rejson.so` with the actual path to the module's library. Alternatively, you can have Redis load the module using the following command line argument syntax:
+In the line above replace `/path/to/module/librejson.so` with the actual path to the module's library. Alternatively, you can have Redis load the module using the following command line argument syntax:
 
 ```bash
-~/$ redis-server --loadmodule /path/to/module/rejson.so
+~/$ redis-server --loadmodule ./target/release/librejson.so
 ```
 
 Lastly, you can also use the [`MODULE LOAD`](http://redis.io/commands/module-load) command. Note, however, that `MODULE LOAD` is a **dangerous command** and may be blocked/deprecated in the future due to security considerations.
