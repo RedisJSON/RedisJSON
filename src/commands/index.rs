@@ -67,6 +67,13 @@ fn add_field(index_name: &str, field_name: &str, path: &str) -> RedisResult {
     }
 }
 
+fn del_index(index_name: &str) -> RedisResult {
+    match schema_map::as_mut().remove(index_name) {
+        Some(_) => REDIS_OK,
+        None => Err("Index not found".into()),
+    }
+}
+
 pub fn add_document(key: &str, index_name: &str, doc: &RedisJSON) -> RedisResult {
     // TODO: Index the document with RediSearch:
     // 1. Determine the index to use (how?)
@@ -115,10 +122,10 @@ where
 
     let subcommand = args.next_string()?;
     let index_name = args.next_string()?;
-    let field_name = args.next_string()?;
 
     match subcommand.to_uppercase().as_str() {
         "ADD" => {
+            let field_name = args.next_string()?;
             let path = args.next_string()?;
             add_field(&index_name, &field_name, &path)?;
 
@@ -152,7 +159,7 @@ where
 
             REDIS_OK
         }
-        //"DEL" => {}
+        "DEL" => del_index(&index_name),
         //"INFO" => {}
         _ => Err("ERR unknown subcommand - try `JSON.INDEX HELP`".into()),
     }
