@@ -745,6 +745,34 @@ class ReJSONTestCase(BaseReJSONTest):
             with self.assertRaises(redis.exceptions.ResponseError) as cm:
                 r.execute_command('JSON.SET', 'test', '$a', '12')
 
+    def testIndexAdd(self):
+        """Test Index ADD/DEL"""
+
+        with self.redis() as r:
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
+            def do(*args):
+                self.assertOk(r.execute_command(*args))
+
+            do('JSON.INDEX', 'ADD', 'index', 'first', '$.first')
+            do('JSON.INDEX', 'ADD', 'index', 'second', '$.second')
+            do('JSON.INDEX', 'ADD', 'index2', 'second', '$.third')
+
+            # Error should be throw since this field already exists in the index
+            with self.assertRaises(redis.exceptions.ResponseError) as cm:
+                do('JSON.INDEX', 'ADD', 'index', 'first', '$.first2')
+
+            # After INDEX DEL we should be able reuse the same field name
+            do('JSON.INDEX', 'DEL', 'index')
+            do('JSON.INDEX', 'ADD', 'index', 'first', '$.first2')
+            do('JSON.INDEX', 'ADD', 'index', 'second', '$.second2')
+
+            # INDEX DEL should only del the specific index
+            with self.assertRaises(redis.exceptions.ResponseError) as cm:
+                do('JSON.INDEX', 'ADD', 'index2', 'second', '$.third2')
+
+
     def testRediSearch(self):
         """Test RediSearch integration"""
         # To run:
