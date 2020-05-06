@@ -759,7 +759,7 @@ class ReJSONTestCase(BaseReJSONTest):
             do('JSON.INDEX', 'ADD', 'index', 'second', '$.second')
             do('JSON.INDEX', 'ADD', 'index2', 'second', '$.third')
 
-            # Error should be throw since this field already exists in the index
+            # Error should be thrown since this field already exists in the index
             with self.assertRaises(redis.exceptions.ResponseError) as cm:
                 do('JSON.INDEX', 'ADD', 'index', 'first', '$.first2')
 

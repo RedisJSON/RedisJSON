@@ -67,7 +67,7 @@ fn add_field(index_name: &str, field_name: &str, path: &str) -> RedisResult {
     }
 }
 
-fn del_index(index_name: &str) -> RedisResult {
+fn del_schema(index_name: &str) -> RedisResult {
     match schema_map::as_mut().remove(index_name) {
         Some(_) => REDIS_OK,
         None => Err("Index not found".into()),
@@ -159,7 +159,7 @@ where
 
             REDIS_OK
         }
-        "DEL" => del_index(&index_name),
+        "DEL" => del_schema(&index_name),
         //"INFO" => {}
         _ => Err("ERR unknown subcommand - try `JSON.INDEX HELP`".into()),
     }
