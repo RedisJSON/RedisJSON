@@ -5,6 +5,7 @@
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
 use crate::backward;
+use crate::commands::index; 
 use crate::error::Error;
 use crate::nodevisitor::NodeVisitorImpl;
 
@@ -62,10 +63,16 @@ impl Path {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ValueIndex {
+    pub key: String,
+    pub index: String,
+}
+
 #[derive(Debug)]
 pub struct RedisJSON {
     data: Value,
-    pub index: Option<String>,
+    pub value_index: Option<ValueIndex>,
 }
 
 impl RedisJSON {
@@ -87,11 +94,11 @@ impl RedisJSON {
         }
     }
 
-    pub fn from_str(data: &str, index: &Option<String>, format: Format) -> Result<Self, Error> {
+    pub fn from_str(data: &str, value_index: &Option<ValueIndex>, format: Format) -> Result<Self, Error> {
         let value = RedisJSON::parse_str(data, format)?;
         Ok(Self {
             data: value,
-            index: index.clone(),
+            value_index: value_index.clone(),
         })
     }
 
@@ -384,12 +391,15 @@ pub mod type_methods {
         let json = match encver {
             0 => RedisJSON {
                 data: backward::json_rdb_load(rdb),
-                index: None, // TODO handle load from rdb
+                value_index: None, // TODO handle load from rdb
             },
             2 => {
                 let data = raw::load_string(rdb);
                 let schema = if raw::load_unsigned(rdb) > 0 {
-                    Some(raw::load_string(rdb))
+                    Some(ValueIndex {
+                        key: raw::load_string(rdb),
+                        index: raw::load_string(rdb),
+                    })
                 } else {
                     None
                 };
@@ -402,16 +412,22 @@ pub mod type_methods {
 
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn free(value: *mut c_void) {
-        Box::from_raw(value as *mut RedisJSON);
+        let json = value as *mut RedisJSON;
+        if let Some(index) = &(*json).value_index {
+            index::remove_document(&index.key, &index.index);
+        }
+
+        Box::from_raw(json);
     }
 
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
         let json = &*(value as *mut RedisJSON);
         raw::save_string(rdb, &json.data.to_string());
-        if let Some(index) = &json.index {
+        if let Some(index) = &json.value_index {
             raw::save_unsigned(rdb, 1);
-            raw::save_string(rdb, &index);
+            raw::save_string(rdb, &index.key);
+            raw::save_string(rdb, &index.index);
         } else {
             raw::save_unsigned(rdb, 0);
         }

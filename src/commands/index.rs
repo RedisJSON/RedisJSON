@@ -61,7 +61,7 @@ fn add_field(index_name: &str, field_name: &str, path: &str) -> RedisResult {
     if schema.fields.contains_key(field_name) {
         Err("Field already exists".into())
     } else {
-        schema.index.create_field(field_name);
+        schema.index.create_field(field_name, 1.0, None, false);
         schema.fields.insert(field_name.to_owned(), path.to_owned());
         REDIS_OK
     }
@@ -79,6 +79,13 @@ pub fn add_document(key: &str, index_name: &str, doc: &RedisJSON) -> RedisResult
     if let Some(schema) = map.get(index_name) {
         let rsdoc = create_document(key, schema, doc)?;
         schema.index.add_document(&rsdoc)?;
+    }
+    REDIS_OK
+}
+
+pub fn remove_document(key: &str, index_name: &str) -> RedisResult {
+    if let Some(schema) = schema_map::as_ref().get(index_name) {
+        schema.index.del_document(&key)?;
     }
     REDIS_OK
 }
@@ -170,9 +177,9 @@ fn scan_and_index(ctx: &Context, schema: &Schema, cursor: u64) -> Result<u64, Re
                             .get_value::<RedisJSON>(&REDIS_JSON_TYPE)
                             .and_then(|doc| {
                                 if let Some(data) = doc {
-                                    if let Some(index) = &data.index {
-                                        if schema.name == *index {
-                                            add_document(key, index, data)?;
+                                    if let Some(index) = &data.value_index {
+                                        if schema.name == index.index {
+                                            add_document(key, &index.index, data)?;
                                         }
                                     }
                                     Ok(())
@@ -209,27 +216,34 @@ where
         .ok_or("ERR no such index".into())
         .map(|schema| &schema.index)
         .and_then(|index| {
-            let result: Value =
+            let result =
                 index
                     .search(&query)?
                     .try_fold(Value::Object(Map::new()), |mut acc, key| {
-                        ctx.open_key(&key)
-                            .get_value::<RedisJSON>(&REDIS_JSON_TYPE)
-                            .and_then(|doc| {
-                                doc.map_or(Ok(Vec::new()), |data| {
-                                    data.get_values(&path)
-                                        .map_err(|e| e.into()) // Convert Error to RedisError
-                                        .map(|values| {
-                                            values.into_iter().map(|val| val.clone()).collect()
-                                        })
+                        let redis_key = ctx.open_key(&key);
+                        if redis_key.is_null() {
+                            // remove doc that doesn't exist from index
+                            remove_document(&key, &index_name)?;
+                            Ok(acc)
+                        } else {
+                            redis_key
+                                .get_value::<RedisJSON>(&REDIS_JSON_TYPE)
+                                .and_then(|doc| {
+                                    doc.map_or(Ok(Vec::new()), |data| {
+                                        data.get_values(&path)
+                                            .map_err(|e| e.into()) // Convert Error to RedisError
+                                            .map(|values| {
+                                                values.into_iter().map(|val| val.clone()).collect()
+                                            })
+                                    })
                                 })
-                            })
-                            .map(|r| {
-                                acc.as_object_mut()
-                                    .unwrap()
-                                    .insert(key.to_string(), Value::Array(r));
-                                acc
-                            })
+                                .map(|r| {
+                                    acc.as_object_mut()
+                                        .unwrap()
+                                        .insert(key.to_string(), Value::Array(r));
+                                    acc
+                                })
+                        }
                     })?;
 
             Ok(RedisJSON::serialize(&result, Format::JSON)?.into())
