@@ -75,6 +75,8 @@ OK
 "{\"user2\":[{\"last\":\"Joan\",\"first\":\"Mc\"}],\"user1\":[{\"last\":\"Joe\",\"first\":\"Mc\"}]}"
 127.0.0.1:6379> JSON.QGET person Mc $.last
 "{\"user2\":[\"Joan\"],\"user1\":[\"Joe\"]}"
+127.0.0.1:6379> JSON.QGET person "@last:Jo* @first:Mc" $.last
+"{\"user2\":[\"Joan\"],\"user1\":[\"Joe\"]}"
 ```
 
 ## Build
