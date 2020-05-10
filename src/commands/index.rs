@@ -61,7 +61,7 @@ fn add_field(index_name: &str, field_name: &str, path: &str) -> RedisResult {
     if schema.fields.contains_key(field_name) {
         Err("Field already exists".into())
     } else {
-        schema.index.create_field(field_name, 1.0, None, false);
+        schema.index.create_field(field_name, 1.0, None);
         schema.fields.insert(field_name.to_owned(), path.to_owned());
         REDIS_OK
     }
