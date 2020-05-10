@@ -100,25 +100,21 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut set_option = SetOptions::None;
     let mut value_index = None;
 
-    loop {
-        if let Some(s) = args.next() {
-            match s.to_uppercase().as_str() {
-                "NX" => set_option = SetOptions::NotExists,
-                "XX" => set_option = SetOptions::AlreadyExists,
-                "FORMAT" => {
-                    format = Format::from_str(args.next_string()?.as_str())?;
-                }
-                "INDEX" => {
-                    value_index = Some(ValueIndex {
-                        key: key.clone(),
-                        index: args.next_string()?,
-                    });
-                }
-                _ => break,
-            };
-        } else {
-            break;
-        }
+    while let Some(s) = args.next() {
+        match s.to_uppercase().as_str() {
+            "NX" => set_option = SetOptions::NotExists,
+            "XX" => set_option = SetOptions::AlreadyExists,
+            "FORMAT" => {
+                format = Format::from_str(args.next_string()?.as_str())?;
+            }
+            "INDEX" => {
+                value_index = Some(ValueIndex {
+                    key: key.clone(),
+                    index_name: args.next_string()?,
+                });
+            }
+            _ => break,
+        };
     }
 
     let redis_key = ctx.open_key_writable(&key);
@@ -128,7 +124,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
         (Some(ref mut doc), ref op) => {
             if doc.set_value(&value, &path, op, format)? {
                 if let Some(index) = value_index {
-                    index::add_document(&key, &index.index, &doc)?;
+                    index::add_document(&key, &index.index_name, &doc)?;
                 }
                 ctx.replicate_verbatim();
                 REDIS_OK
@@ -147,7 +143,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
                     // since the original doc is consumed by set_value.
                     // Can we do better than this?
                     let doc = redis_key.get_value(&REDIS_JSON_TYPE)?.unwrap();
-                    index::add_document(&key, &index.index, doc)?;
+                    index::add_document(&key, &index.index_name, doc)?;
                 }
                 ctx.replicate_verbatim();
                 REDIS_OK

@@ -84,7 +84,9 @@ pub fn add_document(key: &str, index_name: &str, doc: &RedisJSON) -> RedisResult
 }
 
 pub fn remove_document(key: &str, index_name: &str) -> RedisResult {
-    if let Some(schema) = schema_map::as_ref().get(index_name) {
+    let map = schema_map::as_ref();
+
+    if let Some(schema) = map.get(index_name) {
         schema.index.del_document(&key)?;
     }
     REDIS_OK
@@ -177,9 +179,9 @@ fn scan_and_index(ctx: &Context, schema: &Schema, cursor: u64) -> Result<u64, Re
                             .get_value::<RedisJSON>(&REDIS_JSON_TYPE)
                             .and_then(|doc| {
                                 if let Some(data) = doc {
-                                    if let Some(index) = &data.value_index {
-                                        if schema.name == index.index {
-                                            add_document(key, &index.index, data)?;
+                                    if let Some(value_index) = &data.value_index {
+                                        if schema.name == value_index.index_name {
+                                            add_document(key, &value_index.index_name, data)?;
                                         }
                                     }
                                     Ok(())
@@ -221,29 +223,24 @@ where
                     .search(&query)?
                     .try_fold(Value::Object(Map::new()), |mut acc, key| {
                         let redis_key = ctx.open_key(&key);
-                        if redis_key.is_null() {
-                            // remove doc that doesn't exist from index
-                            remove_document(&key, &index_name)?;
-                            Ok(acc)
-                        } else {
-                            redis_key
-                                .get_value::<RedisJSON>(&REDIS_JSON_TYPE)
-                                .and_then(|doc| {
-                                    doc.map_or(Ok(Vec::new()), |data| {
-                                        data.get_values(&path)
-                                            .map_err(|e| e.into()) // Convert Error to RedisError
-                                            .map(|values| {
-                                                values.into_iter().map(|val| val.clone()).collect()
-                                            })
-                                    })
+
+                        redis_key
+                            .get_value::<RedisJSON>(&REDIS_JSON_TYPE)
+                            .and_then(|doc| {
+                                doc.map_or(Ok(Vec::new()), |data| {
+                                    data.get_values(&path)
+                                        .map_err(|e| e.into()) // Convert Error to RedisError
+                                        .map(|values| {
+                                            values.into_iter().map(|val| val.clone()).collect()
+                                        })
                                 })
-                                .map(|r| {
-                                    acc.as_object_mut()
-                                        .unwrap()
-                                        .insert(key.to_string(), Value::Array(r));
-                                    acc
-                                })
-                        }
+                            })
+                            .map(|r| {
+                                acc.as_object_mut()
+                                    .unwrap()
+                                    .insert(key.to_string(), Value::Array(r));
+                                acc
+                            })
                     })?;
 
             Ok(RedisJSON::serialize(&result, Format::JSON)?.into())
