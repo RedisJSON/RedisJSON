@@ -256,7 +256,7 @@ impl RedisJSON {
                 return Ok(-1);
             }
             match serde_json::from_str(scalar)? {
-                Value::Array(_) | Value::Object(_) => Ok(-1),
+                Value::Array(_) => Ok(-1),
                 v => {
                     let end: usize = if end == 0 || end == -1 {
                         // default end of array
