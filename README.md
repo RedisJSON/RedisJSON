@@ -31,6 +31,7 @@ Read the docs at http://redisjson.io
 ## New Commands in RedisJSON
 
     JSON.INDEX ADD <index> <field> <path>
+    JSON.INDEX DEL <index>
     JSON.QGET <index> <query> <path>
 
 ### Next Milestone
