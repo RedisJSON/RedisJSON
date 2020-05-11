@@ -255,25 +255,23 @@ impl RedisJSON {
             if arr.is_empty() || end < -1 {
                 return Ok(-1);
             }
-            match serde_json::from_str(scalar)? {
-                Value::Array(_) => Ok(-1),
-                v => {
-                    let end: usize = if end == 0 || end == -1 {
-                        // default end of array
-                        arr.len() - 1
-                    } else {
-                        (end as usize).min(arr.len() - 1)
-                    };
-                    let start = start.max(0) as usize;
-                    if end < start {
-                        return Ok(-1);
-                    }
-                    let slice = &arr[start..=end];
-                    match slice.iter().position(|r| r == &v) {
-                        Some(i) => Ok((start + i) as i64),
-                        None => Ok(-1),
-                    }
-                }
+            let v: Value = serde_json::from_str(scalar)?;
+
+            let end: usize = if end == 0 || end == -1 {
+                // default end of array
+                arr.len() - 1
+            } else {
+                (end as usize).min(arr.len() - 1)
+            };
+            let start = start.max(0) as usize;
+            if end < start {
+                return Ok(-1);
+            }
+            let slice = &arr[start..=end];
+
+            match slice.iter().position(|r| r == &v) {
+                Some(i) => Ok((start + i) as i64),
+                None => Ok(-1),
             }
         } else {
             Ok(-1)
