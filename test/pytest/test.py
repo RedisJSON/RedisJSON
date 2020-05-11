@@ -469,7 +469,7 @@ class ReJSONTestCase(BaseReJSONTest):
             r.flushdb()
 
             self.assertOk(r.execute_command('JSON.SET', 'test',
-                                            '.', '{ "arr": [0, 1, 2, 3, 2, 1, 0] }'))
+                                            '.', '{ "arr": [0, 1, 2, 3, 2, 1, 0, {"val": 4}, {"val": 9}, [3,4,8], ["a", "b", 8]] }'))
             self.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0), 0)
             self.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 3), 3)
             self.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 4), -1)
@@ -485,6 +485,8 @@ class ReJSONTestCase(BaseReJSONTest):
             self.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 3), 3)
             self.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, 3), 4)
             # self.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '[4]'), -1)
+            self.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '{\"val\":4}'), 7)
+            self.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '["a", "b", 8]'), 10)
 
     def testArrTrimCommand(self):
         """Test JSON.ARRTRIM command"""
