@@ -31,6 +31,7 @@ Read the docs at http://redisjson.io
 ## New Commands in RedisJSON
 
     JSON.INDEX ADD <index> <field> <path>
+    JSON.INDEX DEL <index>
     JSON.QGET <index> <query> <path>
 
 ### Next Milestone
@@ -74,6 +75,8 @@ OK
 127.0.0.1:6379> JSON.QGET person Mc
 "{\"user2\":[{\"last\":\"Joan\",\"first\":\"Mc\"}],\"user1\":[{\"last\":\"Joe\",\"first\":\"Mc\"}]}"
 127.0.0.1:6379> JSON.QGET person Mc $.last
+"{\"user2\":[\"Joan\"],\"user1\":[\"Joe\"]}"
+127.0.0.1:6379> JSON.QGET person "@last:Jo* @first:Mc" $.last
 "{\"user2\":[\"Joan\"],\"user1\":[\"Joe\"]}"
 ```
 

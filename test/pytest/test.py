@@ -469,7 +469,7 @@ class ReJSONTestCase(BaseReJSONTest):
             r.flushdb()
 
             self.assertOk(r.execute_command('JSON.SET', 'test',
-                                            '.', '{ "arr": [0, 1, 2, 3, 2, 1, 0] }'))
+                                            '.', '{ "arr": [0, 1, 2, 3, 2, 1, 0, {"val": 4}, {"val": 9}, [3,4,8], ["a", "b", 8]] }'))
             self.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0), 0)
             self.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 3), 3)
             self.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 4), -1)
@@ -485,6 +485,8 @@ class ReJSONTestCase(BaseReJSONTest):
             self.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 3), 3)
             self.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, 3), 4)
             # self.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '[4]'), -1)
+            self.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '{\"val\":4}'), 7)
+            self.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '["a", "b", 8]'), 10)
 
     def testArrTrimCommand(self):
         """Test JSON.ARRTRIM command"""
@@ -744,6 +746,34 @@ class ReJSONTestCase(BaseReJSONTest):
             # This shouldn't crash Redis
             with self.assertRaises(redis.exceptions.ResponseError) as cm:
                 r.execute_command('JSON.SET', 'test', '$a', '12')
+
+    def testIndexAdd(self):
+        """Test Index ADD/DEL"""
+
+        with self.redis() as r:
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
+            def do(*args):
+                self.assertOk(r.execute_command(*args))
+
+            do('JSON.INDEX', 'ADD', 'index', 'first', '$.first')
+            do('JSON.INDEX', 'ADD', 'index', 'second', '$.second')
+            do('JSON.INDEX', 'ADD', 'index2', 'second', '$.third')
+
+            # Error should be thrown since this field already exists in the index
+            with self.assertRaises(redis.exceptions.ResponseError) as cm:
+                do('JSON.INDEX', 'ADD', 'index', 'first', '$.first2')
+
+            # After INDEX DEL we should be able reuse the same field name
+            do('JSON.INDEX', 'DEL', 'index')
+            do('JSON.INDEX', 'ADD', 'index', 'first', '$.first2')
+            do('JSON.INDEX', 'ADD', 'index', 'second', '$.second2')
+
+            # INDEX DEL should only del the specific index
+            with self.assertRaises(redis.exceptions.ResponseError) as cm:
+                do('JSON.INDEX', 'ADD', 'index2', 'second', '$.third2')
+
 
     def testRediSearch(self):
         """Test RediSearch integration"""
