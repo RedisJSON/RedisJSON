@@ -7,6 +7,7 @@ use redis_module::{raw as rawmod, NextArg};
 use redis_module::{Context, RedisError, RedisResult, RedisValue, REDIS_OK};
 use serde_json::{Number, Value};
 
+use std::os::raw::c_int;
 use std::{i64, usize};
 
 mod array_index;
@@ -130,10 +131,10 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
-                Ok(RedisValue::None)
+                Ok(RedisValue::Null)
             }
         }
-        (None, SetOptions::AlreadyExists) => Ok(RedisValue::None),
+        (None, SetOptions::AlreadyExists) => Ok(RedisValue::Null),
         (None, _) => {
             let doc = RedisJSON::from_str(&value, &index, format)?;
             if path == "$" {
@@ -215,7 +216,7 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
             doc.to_json(&mut paths)?
         }
         .into(),
-        None => RedisValue::None,
+        None => RedisValue::Null,
     };
 
     Ok(value)
@@ -268,10 +269,10 @@ fn json_type(ctx: &Context, args: Vec<String>) -> RedisResult {
     let key = ctx.open_key(&key);
 
     let value = key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?.map_or_else(
-        || RedisValue::None,
+        || RedisValue::Null,
         |doc| match doc.get_type(&path) {
             Ok(s) => s.into(),
-            Err(_) => RedisValue::None,
+            Err(_) => RedisValue::Null,
         },
     );
 
@@ -658,7 +659,7 @@ fn json_obj_keys(ctx: &Context, args: Vec<String>) -> RedisResult {
 
     let value = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
         Some(doc) => doc.obj_keys(&path)?.into(),
-        None => RedisValue::None,
+        None => RedisValue::Null,
     };
 
     Ok(value)
@@ -715,13 +716,13 @@ fn json_resp(ctx: &Context, args: Vec<String>) -> RedisResult {
     let key = ctx.open_key(&key);
     match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
         Some(doc) => Ok(resp_serialize(doc.get_first(&path)?)),
-        None => Ok(RedisValue::None),
+        None => Ok(RedisValue::Null),
     }
 }
 
 fn resp_serialize(doc: &Value) -> RedisValue {
     match doc {
-        Value::Null => RedisValue::None,
+        Value::Null => RedisValue::Null,
 
         Value::Bool(b) => RedisValue::SimpleString(b.to_string()),
 
@@ -763,7 +764,7 @@ fn json_len<F: Fn(&RedisJSON, &String) -> Result<usize, Error>>(
     let key = ctx.open_key(&key);
     let length = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
         Some(doc) => fun(&doc, &path)?.into(),
-        None => RedisValue::None,
+        None => RedisValue::Null,
     };
 
     Ok(length)
@@ -791,30 +792,30 @@ redis_module! {
     ],
     init: init,
     commands: [
-        ["json.del", json_del, "write"],
-        ["json.get", json_get, "readonly"],
-        ["json.mget", json_mget, "readonly"],
-        ["json.set", json_set, "write deny-oom"],
-        ["json.type", json_type, "readonly"],
-        ["json.numincrby", json_num_incrby, "write"],
-        ["json.nummultby", json_num_multby, "write"],
-        ["json.numpowby", json_num_powby, "write"],
-        ["json.strappend", json_str_append, "write deny-oom"],
-        ["json.strlen", json_str_len, "readonly"],
-        ["json.arrappend", json_arr_append, "write deny-oom"],
-        ["json.arrindex", json_arr_index, "readonly"],
-        ["json.arrinsert", json_arr_insert, "write deny-oom"],
-        ["json.arrlen", json_arr_len, "readonly"],
-        ["json.arrpop", json_arr_pop, "write"],
-        ["json.arrtrim", json_arr_trim, "write"],
-        ["json.objkeys", json_obj_keys, "readonly"],
-        ["json.objlen", json_obj_len, "readonly"],
-        ["json.debug", json_debug, "readonly"],
-        ["json.forget", json_del, "write"],
-        ["json.resp", json_resp, "readonly"],
-        ["json.index", commands::index::index, "write deny-oom"],
-        ["json.qget", commands::index::qget, "readonly"],
-        ["json._cacheinfo", json_cache_info, "readonly"],
-        ["json._cacheinit", json_cache_init, "write"],
+        ["json.del", json_del, "write", 1,1,1],
+        ["json.get", json_get, "readonly", 1,1,1],
+        ["json.mget", json_mget, "readonly", 1,1,1],
+        ["json.set", json_set, "write deny-oom", 1,1,1],
+        ["json.type", json_type, "readonly", 1,1,1],
+        ["json.numincrby", json_num_incrby, "write", 1,1,1],
+        ["json.nummultby", json_num_multby, "write", 1,1,1],
+        ["json.numpowby", json_num_powby, "write", 1,1,1],
+        ["json.strappend", json_str_append, "write deny-oom", 1,1,1],
+        ["json.strlen", json_str_len, "readonly", 1,1,1],
+        ["json.arrappend", json_arr_append, "write deny-oom", 1,1,1],
+        ["json.arrindex", json_arr_index, "readonly", 1,1,1],
+        ["json.arrinsert", json_arr_insert, "write deny-oom", 1,1,1],
+        ["json.arrlen", json_arr_len, "readonly", 1,1,1],
+        ["json.arrpop", json_arr_pop, "write", 1,1,1],
+        ["json.arrtrim", json_arr_trim, "write", 1,1,1],
+        ["json.objkeys", json_obj_keys, "readonly", 1,1,1],
+        ["json.objlen", json_obj_len, "readonly", 1,1,1],
+        ["json.debug", json_debug, "readonly", 1,1,1],
+        ["json.forget", json_del, "write", 1,1,1],
+        ["json.resp", json_resp, "readonly", 1,1,1],
+        ["json.index", commands::index::index, "write deny-oom", 1,1,1],
+        ["json.qget", commands::index::qget, "readonly", 1,1,1],
+        ["json._cacheinfo", json_cache_info, "readonly", 1,1,1],
+        ["json._cacheinit", json_cache_init, "write", 1,1,1],
     ],
 }

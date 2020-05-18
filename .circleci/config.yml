@@ -44,7 +44,7 @@ jobs:
       - run:
           name: Run all tests
           command: |
-             cargo test --all
+             cargo test --features test --all
              pip install -r ./test/pytest/requirements.txt
              python ./test/pytest/test.py
 
