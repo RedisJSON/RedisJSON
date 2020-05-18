@@ -124,8 +124,8 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     match (current, set_option) {
         (Some(ref mut doc), ref op) => {
             if doc.set_value(&value, &path, op, format)? {
-                if let Some(index) = value_index {
-                    index::add_document(&key, &index.index_name, &doc)?;
+                if let Some(value_index) = value_index {
+                    index::add_document(&key, &value_index.index_name, &doc)?;
                 }
                 ctx.replicate_verbatim();
                 REDIS_OK
@@ -139,12 +139,12 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
             if path == "$" {
                 redis_key.set_value(&REDIS_JSON_TYPE, doc)?;
 
-                if let Some(index) = value_index {
+                if let Some(value_index) = value_index {
                     // FIXME: We need to get the value even though we just set it,
                     // since the original doc is consumed by set_value.
                     // Can we do better than this?
                     let doc = redis_key.get_value(&REDIS_JSON_TYPE)?.unwrap();
-                    index::add_document(&key, &index.index_name, doc)?;
+                    index::add_document(&key, &value_index.index_name, doc)?;
                 }
                 ctx.replicate_verbatim();
                 REDIS_OK
