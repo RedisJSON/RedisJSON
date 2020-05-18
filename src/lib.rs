@@ -21,7 +21,7 @@ mod schema; // TODO: Remove
 use crate::array_index::ArrayIndex;
 use crate::commands::index;
 use crate::error::Error;
-use crate::redisjson::{Format, Path, RedisJSON, SetOptions};
+use crate::redisjson::{Format, Path, RedisJSON, SetOptions, ValueIndex};
 
 static REDIS_JSON_TYPE: RedisType = RedisType::new(
     "ReJSON-RL",
@@ -99,24 +99,23 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
 
     let mut format = Format::JSON;
     let mut set_option = SetOptions::None;
-    let mut index = None;
+    let mut value_index = None;
 
-    loop {
-        if let Some(s) = args.next() {
-            match s.to_uppercase().as_str() {
-                "NX" => set_option = SetOptions::NotExists,
-                "XX" => set_option = SetOptions::AlreadyExists,
-                "FORMAT" => {
-                    format = Format::from_str(args.next_string()?.as_str())?;
-                }
-                "INDEX" => {
-                    index = Some(args.next_string()?);
-                }
-                _ => break,
-            };
-        } else {
-            break;
-        }
+    while let Some(s) = args.next() {
+        match s.to_uppercase().as_str() {
+            "NX" => set_option = SetOptions::NotExists,
+            "XX" => set_option = SetOptions::AlreadyExists,
+            "FORMAT" => {
+                format = Format::from_str(args.next_string()?.as_str())?;
+            }
+            "INDEX" => {
+                value_index = Some(ValueIndex {
+                    key: key.clone(),
+                    index_name: args.next_string()?,
+                });
+            }
+            _ => break,
+        };
     }
 
     let redis_key = ctx.open_key_writable(&key);
@@ -125,8 +124,8 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     match (current, set_option) {
         (Some(ref mut doc), ref op) => {
             if doc.set_value(&value, &path, op, format)? {
-                if let Some(index) = index {
-                    index::add_document(&key, &index, &doc)?;
+                if let Some(value_index) = value_index {
+                    index::add_document(&key, &value_index.index_name, &doc)?;
                 }
                 ctx.replicate_verbatim();
                 REDIS_OK
@@ -136,16 +135,16 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
         }
         (None, SetOptions::AlreadyExists) => Ok(RedisValue::Null),
         (None, _) => {
-            let doc = RedisJSON::from_str(&value, &index, format)?;
+            let doc = RedisJSON::from_str(&value, &value_index, format)?;
             if path == "$" {
                 redis_key.set_value(&REDIS_JSON_TYPE, doc)?;
 
-                if let Some(index) = index {
+                if let Some(value_index) = value_index {
                     // FIXME: We need to get the value even though we just set it,
                     // since the original doc is consumed by set_value.
                     // Can we do better than this?
                     let doc = redis_key.get_value(&REDIS_JSON_TYPE)?.unwrap();
-                    index::add_document(&key, &index, doc)?;
+                    index::add_document(&key, &value_index.index_name, doc)?;
                 }
                 ctx.replicate_verbatim();
                 REDIS_OK
