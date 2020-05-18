@@ -4,7 +4,7 @@ use serde_json::{Map, Value};
 
 use redis_module::{Context, NextArg, RedisError, RedisResult, RedisValue, REDIS_OK};
 
-use redisearch_api::{Document, FieldType};
+use redisearch_api::{Document, FieldType, TagOptions};
 
 use crate::error::Error;
 use crate::redisjson::{Format, RedisJSON};
@@ -61,7 +61,9 @@ fn add_field(index_name: &str, field_name: &str, path: &str) -> RedisResult {
     if schema.fields.contains_key(field_name) {
         Err("Field already exists".into())
     } else {
-        schema.index.create_field(field_name, 1.0, None);
+        schema
+            .index
+            .create_field(field_name, 1.0, TagOptions::default());
         schema.fields.insert(field_name.to_owned(), path.to_owned());
         REDIS_OK
     }
