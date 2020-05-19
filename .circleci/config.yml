@@ -7,6 +7,7 @@ jobs:
       - image: docker.pkg.github.com/redisjson/redisjson/circleci-centos7:1.1
 
     steps:
+    
       - run:
           name: Install prerequisites
           command: |
