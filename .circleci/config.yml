@@ -11,11 +11,7 @@ jobs:
       
       - run:
           name: Install prerequisites
-          command: |
-             yum update
-             yum install -y software-properties-common git
-             yum install -y clang llvm cmake python-pip awscl
-
+          command: yum install -y software-properties-common git clang llvm cmake awscl
       - run:
           name: Install Python
           command: |
