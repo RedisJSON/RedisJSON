@@ -4,7 +4,7 @@ jobs:
 
   build:
     docker:
-      - image: centos7
+      - image: centos:7
 
     steps:
       - checkout
