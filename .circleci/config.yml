@@ -11,8 +11,12 @@ jobs:
       
       - run:
           name: Install prerequisites
-          command: yum install -y software-properties-common git clang llvm make cmake awscl gcc gcc-c++
-          
+          command: |
+              yum update -y
+              yum install -y software-properties-common git clang llvm make cmake awscl gcc gcc-c++ epel-release
+              yum install -y http://rpms.remirepo.net/enterprise/remi-release-7.rpm
+              yum --enablerepo=remi install -y redis
+
       - run:
           name: Install Python
           command: |
