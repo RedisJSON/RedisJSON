@@ -4,7 +4,7 @@ jobs:
 
   build:
     docker:
-      - image: docker.pkg.github.com/redisjson/redisjson/circleci-centos7:1.1
+      - image: centos7
 
     steps:
       - checkout
