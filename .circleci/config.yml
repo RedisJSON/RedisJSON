@@ -12,12 +12,21 @@ jobs:
       - run:
           name: Install prerequisites
           command: yum install -y software-properties-common git clang llvm cmake awscl
+          
       - run:
           name: Install Python
           command: |
              curl "https://bootstrap.pypa.io/get-pip.py" -o "get-pip.py"
              python get-pip.py
              pip install 'ramp-packer==1.9.0'
+             
+      - run:
+          name: Install Rust
+          command: |
+             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > rust.sh
+             python get-pip.py
+             sh rust.sh -y
+             echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
              
       - run: 
           name: Update git submodule
