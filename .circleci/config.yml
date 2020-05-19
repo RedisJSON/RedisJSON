@@ -12,8 +12,15 @@ jobs:
       - run:
           name: Install prerequisites
           command: |
+             yum update
              yum install -y software-properties-common git
              yum install -y clang llvm cmake python-pip awscl
+
+      - run:
+          name: Install Python
+          command: |
+             curl "https://bootstrap.pypa.io/get-pip.py" -o "get-pip.py"
+             python get-pip.py
              pip install 'ramp-packer==1.9.0'
              
       - run: 
