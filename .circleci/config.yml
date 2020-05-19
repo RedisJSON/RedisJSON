@@ -7,9 +7,7 @@ jobs:
       - image: centos:7
 
     steps:
-      - checkout
-      - run: git submodule sync
-      - run: git submodule update --init      
+      - checkout     
       
       - run:
           name: Install prerequisites
@@ -17,7 +15,13 @@ jobs:
              yum install -y software-properties-common git
              yum install -y clang llvm cmake python-pip awscl
              pip install 'ramp-packer==1.9.0'
-
+             
+      - run: 
+          name: Update git submodule
+          command: |
+             git submodule sync
+             git submodule update --init 
+      
       - run:
           name: Version information
           command: rustc --version; cargo --version; rustup --version
