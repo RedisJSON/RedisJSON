@@ -7,14 +7,7 @@ jobs:
       - image: centos:7
 
     steps:
-    
-      - run:
-          name: Install prerequisites
-          command: |
-             yum install -y software-properties-common git
-             yum install -y clang llvm cmake python-pip awscli
-             pip install 'ramp-packer==1.9.0'
-             
+   
       - checkout
       
       - run: 
