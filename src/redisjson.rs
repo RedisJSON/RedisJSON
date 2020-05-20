@@ -11,7 +11,7 @@ use crate::nodevisitor::NodeVisitorImpl;
 
 use bson::decode_document;
 use jsonpath_lib::SelectorMut;
-use redis_module::raw;
+use redis_module::raw::{self, Status};
 use serde_json::Value;
 use std::io::Cursor;
 use std::mem;
@@ -435,5 +435,62 @@ pub mod type_methods {
         } else {
             raw::save_unsigned(rdb, 0);
         }
+    }
+
+    #[allow(non_snake_case, unused)]
+    pub unsafe extern "C" fn aux_load(rdb: *mut raw::RedisModuleIO, encver: i32, when: i32) -> i32 {
+        // if(encver > REDISGEARS_DATATYPE_VERSION){
+        //     RedisModule_LogIOError(rdb, "warning", "could not load rdb created with higher RedisGears version!");
+        //     return REDISMODULE_ERR; // could not load rdb created with higher Gears version!
+        // }
+        // if(when == REDISMODULE_AUX_BEFORE_RDB){
+        //     Gears_dictIterator* iter = Gears_dictGetIterator(Readerdict);
+        //     Gears_dictEntry *curr = NULL;
+        //     while((curr = Gears_dictNext(iter))){
+        //         MgmtDataHolder* holder = Gears_dictGetVal(curr);
+        //         RedisGears_ReaderCallbacks* callbacks = holder->callback;
+        //         if(!callbacks->clear){
+        //             continue;
+        //         }
+        //         callbacks->clear();
+        //     }
+        //     Gears_dictReleaseIterator(iter);
+        // } else {
+        //     // when loading keys phase finished, we load the registrations.
+        //     char* readerName = NULL;
+        //     for(readerName = RedisModule_LoadStringBuffer(rdb, NULL) ;
+        //             strlen(readerName) > 0 ;
+        //             readerName = RedisModule_LoadStringBuffer(rdb, NULL)){
+        //         RedisModule_Assert(readerName);
+        //         RedisGears_ReaderCallbacks* callbacks = ReadersMgmt_Get(readerName);
+        //         RedisModule_Assert(callbacks->rdbLoad);
+        //         callbacks->rdbLoad(rdb, encver);
+        //         RedisModule_Free(readerName);
+        //     }
+        //     RedisModule_Free(readerName);
+        // }
+        // return REDISMODULE_OK;
+        Status::Ok as i32
+    }
+
+    #[allow(non_snake_case, unused)]
+    pub unsafe extern "C" fn aux_save(rdb: *mut raw::RedisModuleIO, when: i32) {
+        // if(when == REDISMODULE_AUX_BEFORE_RDB){
+        //     return;
+        // }
+        // Gears_dictIterator* iter = Gears_dictGetIterator(Readerdict);
+        // Gears_dictEntry *curr = NULL;
+        // while((curr = Gears_dictNext(iter))){
+        //     const char* readerName = Gears_dictGetKey(curr);
+        //     MgmtDataHolder* holder = Gears_dictGetVal(curr);
+        //     RedisGears_ReaderCallbacks* callbacks = holder->callback;
+        //     if(!callbacks->rdbSave){
+        //         continue;
+        //     }
+        //     RedisModule_SaveStringBuffer(rdb, readerName, strlen(readerName) + 1 /* for \0 */);
+        //     callbacks->rdbSave(rdb);
+        // }
+        // Gears_dictReleaseIterator(iter);
+        // RedisModule_SaveStringBuffer(rdb, "", 1); // empty str mean the end!
     }
 }
