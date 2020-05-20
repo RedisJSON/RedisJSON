@@ -41,7 +41,7 @@ static REDIS_JSON_TYPE: RedisType = RedisType::new(
         // Auxiliary data (v2)
         aux_load: Some(redisjson::type_methods::aux_load),
         aux_save: Some(redisjson::type_methods::aux_save),
-        aux_save_triggers: 0,
+        aux_save_triggers: 1, // TODO set replace with REDISMODULE_AUX_BEFORE_RDB
     },
 );
 

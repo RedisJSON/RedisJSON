@@ -8,8 +8,10 @@ use crate::backward;
 use crate::commands::index;
 use crate::error::Error;
 use crate::nodevisitor::NodeVisitorImpl;
+use crate::schema::Schema;
 
 use bson::decode_document;
+use index::schema_map;
 use jsonpath_lib::SelectorMut;
 use redis_module::raw::{self, Status};
 use serde_json::Value;
@@ -443,54 +445,41 @@ pub mod type_methods {
         //     RedisModule_LogIOError(rdb, "warning", "could not load rdb created with higher RedisGears version!");
         //     return REDISMODULE_ERR; // could not load rdb created with higher Gears version!
         // }
-        // if(when == REDISMODULE_AUX_BEFORE_RDB){
-        //     Gears_dictIterator* iter = Gears_dictGetIterator(Readerdict);
-        //     Gears_dictEntry *curr = NULL;
-        //     while((curr = Gears_dictNext(iter))){
-        //         MgmtDataHolder* holder = Gears_dictGetVal(curr);
-        //         RedisGears_ReaderCallbacks* callbacks = holder->callback;
-        //         if(!callbacks->clear){
-        //             continue;
-        //         }
-        //         callbacks->clear();
-        //     }
-        //     Gears_dictReleaseIterator(iter);
-        // } else {
-        //     // when loading keys phase finished, we load the registrations.
-        //     char* readerName = NULL;
-        //     for(readerName = RedisModule_LoadStringBuffer(rdb, NULL) ;
-        //             strlen(readerName) > 0 ;
-        //             readerName = RedisModule_LoadStringBuffer(rdb, NULL)){
-        //         RedisModule_Assert(readerName);
-        //         RedisGears_ReaderCallbacks* callbacks = ReadersMgmt_Get(readerName);
-        //         RedisModule_Assert(callbacks->rdbLoad);
-        //         callbacks->rdbLoad(rdb, encver);
-        //         RedisModule_Free(readerName);
-        //     }
-        //     RedisModule_Free(readerName);
-        // }
-        // return REDISMODULE_OK;
+
+        if (when == 1) {
+            // TODO set replace with REDISMODULE_AUX_BEFORE_RDB
+            let map = schema_map::as_mut();
+            let map_size = raw::load_unsigned(rdb);
+            for _ in 0..map_size {
+                let key = raw::load_string(rdb);
+                let mut schema = Schema::new(&key);
+                let fields_size = raw::load_unsigned(rdb);
+                for _ in 0..fields_size {
+                    let field_name = raw::load_string(rdb);
+                    let path = raw::load_string(rdb);
+                    schema.fields.insert(field_name, path);
+                }
+                map.insert(key, schema);
+            }
+        }
+
         Status::Ok as i32
     }
 
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn aux_save(rdb: *mut raw::RedisModuleIO, when: i32) {
-        // if(when == REDISMODULE_AUX_BEFORE_RDB){
-        //     return;
-        // }
-        // Gears_dictIterator* iter = Gears_dictGetIterator(Readerdict);
-        // Gears_dictEntry *curr = NULL;
-        // while((curr = Gears_dictNext(iter))){
-        //     const char* readerName = Gears_dictGetKey(curr);
-        //     MgmtDataHolder* holder = Gears_dictGetVal(curr);
-        //     RedisGears_ReaderCallbacks* callbacks = holder->callback;
-        //     if(!callbacks->rdbSave){
-        //         continue;
-        //     }
-        //     RedisModule_SaveStringBuffer(rdb, readerName, strlen(readerName) + 1 /* for \0 */);
-        //     callbacks->rdbSave(rdb);
-        // }
-        // Gears_dictReleaseIterator(iter);
-        // RedisModule_SaveStringBuffer(rdb, "", 1); // empty str mean the end!
+        if (when == 1) {
+            // TODO set replace with REDISMODULE_AUX_BEFORE_RDB
+            let map = schema_map::as_ref();
+            raw::save_unsigned(rdb, map.len() as u64);
+            for (key, schema) in map {
+                raw::save_string(rdb, key);
+                raw::save_unsigned(rdb, schema.fields.len() as u64);
+                for (name, path) in &schema.fields {
+                    raw::save_string(rdb, name);
+                    raw::save_string(rdb, path);
+                }
+            }
+        }
     }
 }
