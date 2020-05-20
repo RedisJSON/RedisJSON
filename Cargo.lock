@@ -505,6 +505,7 @@ dependencies = [
  "libc",
  "redis-module",
  "redisearch_api",
+ "serde",
  "serde_json",
 ]
 

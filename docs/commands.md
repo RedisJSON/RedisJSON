@@ -60,7 +60,6 @@ JSON.GET <key>
          [INDENT indentation-string]
          [NEWLINE line-break-string]
          [SPACE space-string]
-         [NOESCAPE]
          [path ...]
 ```
 
@@ -74,11 +73,6 @@ The following subcommands change the reply's format and are all set to the empty
 *   `INDENT` sets the indentation string for nested levels
 *   `NEWLINE` sets the string that's printed at the end of each line
 *   `SPACE` sets the string that's put between a key and a value
-
-The `NOESCAPE` option will disable the sending of \uXXXX escapes for non-ascii
-characters. This option should be used for efficiency if you deal mainly with
-such text. The escaping of JSON strings will be deprecated in the future and this
-option will become the implicit default.
 
 Pretty-formatted JSON is producible with `redis-cli` by following this example:
 

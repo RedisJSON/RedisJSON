@@ -232,7 +232,6 @@ class ReJSONTestCase(BaseReJSONTest):
                 self.assertEqual(str(type(data)), '<type \'{}\'>'.format(k), k)
                 self.assertEqual(data, v, k)
 
-
     def testGetPartsOfValuesDocumentMultiple(self):
         """Test correctness of an object returned by JSON.GET"""
 
@@ -243,7 +242,29 @@ class ReJSONTestCase(BaseReJSONTest):
             self.assertOk(r.execute_command('JSON.SET', 'test',
                                             '.', json.dumps(docs['values'])))
             data = json.loads(r.execute_command('JSON.GET', 'test', *docs['values'].keys()))
-           # self.assertDictEqual(data, docs['values']) # TODO backward compatibility with JSONPATH "$.list" vs "list"
+            self.assertDictEqual(data, docs['values'])
+
+    def testGetFormatting(self):
+        with self.redis() as r:
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
+            d = {'dict': {'f': 'v'}}
+            a = {'arr': [0, 1]}
+            self.assertOk(r.execute_command('JSON.SET', 'd', '$', json.dumps(d)))
+            self.assertOk(r.execute_command('JSON.SET', 'a', '$', json.dumps(a)))
+
+            # No formatting
+            res = r.execute_command('JSON.GET', 'd')
+            self.assertEqual(res, json.dumps(d, separators=(",", ":")))
+            res = r.execute_command('JSON.GET', 'a')
+            self.assertEqual(res, json.dumps(a, separators=(",", ":")))
+
+            # All formatting options together
+            res = r.execute_command('JSON.GET', 'd', 'INDENT', '  ', 'NEWLINE', '\n', 'SPACE', ' ')
+            self.assertEqual(res, json.dumps(d, indent=2, separators=(",", ": ")))
+            res = r.execute_command('JSON.GET', 'a', 'INDENT', '  ', 'NEWLINE', '\n', 'SPACE', ' ')
+            self.assertEqual(res, json.dumps(a, indent=2, separators=(",", ": ")))
 
     def testBackwardRDB(self):
         with self.redis(**{"dir": os.path.abspath(os.path.join(os.getcwd(), 'test/files/')),  "dbfilename": 'backward.rdb'}) as r:
@@ -820,14 +841,6 @@ class ReJSONTestCase(BaseReJSONTest):
                     json.loads(r.execute_command('JSON.QGET', index, query, path)),
                     json.loads(results))
 
-    def testNoescape(self):
-        # Store a path and see if it acts appropriately with NOESCAPE
-        self.cmd('JSON.SET', 'escapeTest', '.', '{"key":"שלום"}')
-        rv = self.cmd('JSON.GET', 'escapeTest', '.')
-        self.assertEqual('{"key":"שלום"}', rv)
-        rv = self.cmd('JSON.GET', 'escapeTest', 'NOESCAPE', '.')
-        self.assertEqual('{"key":"שלום"}', rv)
-    
     def testDoubleParse(self):
         self.cmd('JSON.SET', 'dblNum', '.', '[1512060373.222988]')
         res = self.cmd('JSON.GET', 'dblNum', '[0]')
@@ -957,6 +970,7 @@ class ReJSONTestCase(BaseReJSONTest):
 #
 #         res = self.cmd('JSON.GET', 'myDoc', 'foo')
 #         self.assertEqual(0, cacheItems())
+
 
 if __name__ == '__main__':
     unittest.main()

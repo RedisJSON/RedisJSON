@@ -14,6 +14,7 @@ mod array_index;
 mod backward;
 mod commands;
 mod error;
+mod formatter;
 mod nodevisitor;
 mod redisjson;
 mod schema; // TODO: Remove
@@ -162,7 +163,6 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///         [INDENT indentation-string]
 ///         [NEWLINE line-break-string]
 ///         [SPACE space-string]
-///         [NOESCAPE]
 ///         [path ...]
 ///
 /// TODO add support for multi path
@@ -171,33 +171,25 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
     let key = args.next_string()?;
 
     let mut paths: Vec<Path> = vec![];
-    let mut first_loop = true;
     let mut format = Format::JSON;
+    let mut indent = String::new();
+    let mut space = String::new();
+    let mut newline = String::new();
     loop {
         let arg = match args.next_string() {
             Ok(s) => s,
-            Err(_) => {
-                // path is optional -> no path found on the first loop we use root "$"
-                if first_loop {
-                    paths.push(Path::new("$".to_string()));
-                }
-                break;
-            }
+            Err(_) => break,
         };
-        first_loop = false;
 
         match arg.to_uppercase().as_str() {
             "INDENT" => {
-                args.next();
-            } // TODO add support
+                indent = args.next_string()?;
+            }
             "NEWLINE" => {
-                args.next();
-            } // TODO add support
+                newline = args.next_string()?;
+            }
             "SPACE" => {
-                args.next();
-            } // TODO add support
-            "NOESCAPE" => {
-                continue;
+                space = args.next_string()?;
             } // TODO add support
             "FORMAT" => {
                 format = Format::from_str(args.next_string()?.as_str())?;
@@ -208,15 +200,16 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
         };
     }
 
+    // path is optional -> no path found we use root "$"
+    if paths.is_empty() {
+        paths.push(Path::new("$".to_string()));
+    }
+
     let key = ctx.open_key_writable(&key);
     let value = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
-        Some(doc) => if paths.len() == 1 {
-            doc.to_string(&paths[0].fixed, format)?
-        } else {
-            // can't be smaller than 1
-            doc.to_json(&mut paths)?
-        }
-        .into(),
+        Some(doc) => doc
+            .to_json(&mut paths, indent, newline, space, format)?
+            .into(),
         None => RedisValue::Null,
     };
 

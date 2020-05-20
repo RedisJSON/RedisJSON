@@ -7,6 +7,7 @@
 use crate::backward;
 use crate::commands::index;
 use crate::error::Error;
+use crate::formatter::RedisJsonFormatter;
 use crate::nodevisitor::NodeVisitorImpl;
 use crate::REDIS_JSON_TYPE_VERSION;
 
@@ -14,7 +15,8 @@ use bson::decode_document;
 use index::schema_map;
 use jsonpath_lib::SelectorMut;
 use redis_module::raw::{self, Status};
-use serde_json::Value;
+use serde::Serialize;
+use serde_json::{Map, Value};
 use std::io::Cursor;
 use std::mem;
 use std::os::raw::{c_int, c_void};
@@ -208,30 +210,51 @@ impl RedisJSON {
         Ok(res)
     }
 
-    // FIXME: Implement this by manipulating serde_json::Value values,
-    // and then using serde to serialize to JSON instead of doing it ourselves with strings.
-    pub fn to_json(&self, paths: &mut Vec<Path>) -> Result<String, Error> {
-        let mut selector = jsonpath_lib::selector(&self.data);
-        let mut result = paths.drain(..).fold(String::from("{"), |mut acc, path| {
-            let value = match selector(&path.fixed) {
-                Ok(s) => match s.first() {
-                    Some(v) => v,
-                    None => &Value::Null,
-                },
-                Err(_) => &Value::Null,
-            };
-            acc.push('\"');
-            acc.push_str(&path.path);
-            acc.push_str("\":");
-            acc.push_str(value.to_string().as_str());
-            acc.push(',');
-            acc
-        });
-        if result.ends_with(',') {
-            result.pop();
+    pub fn to_json(
+        &self,
+        paths: &mut Vec<Path>,
+        indent: String,
+        newline: String,
+        space: String,
+        format: Format,
+    ) -> Result<String, Error> {
+        let temp_doc;
+        let res = if paths.len() > 1 {
+            let mut selector = jsonpath_lib::selector(&self.data);
+            // TODO: Creating a temp doc here duplicates memory usage. This can be very memory inefficient.
+            // A better way would be to create a doc of references to the original doc but no current support
+            // in serde_json. I'm going for this implementation anyway because serde_json isn't suppost to be
+            // memory efficient and we're using it anyway. See https://github.com/serde-rs/json/issues/635.
+            temp_doc = Value::Object(paths.drain(..).fold(Map::new(), |mut acc, path| {
+                let value = match selector(&path.fixed) {
+                    Ok(s) => match s.first() {
+                        Some(v) => v,
+                        None => &Value::Null,
+                    },
+                    Err(_) => &Value::Null,
+                };
+                acc.insert(path.path, (*value).clone());
+                acc
+            }));
+            &temp_doc
+        } else {
+            self.get_first(&paths[0].fixed)?
+        };
+
+        match format {
+            Format::JSON => {
+                let formatter = RedisJsonFormatter::new(
+                    indent.as_bytes(),
+                    space.as_bytes(),
+                    newline.as_bytes(),
+                );
+
+                let mut out = serde_json::Serializer::with_formatter(Vec::new(), formatter);
+                res.serialize(&mut out).unwrap();
+                Ok(String::from_utf8(out.into_inner()).unwrap())
+            }
+            Format::BSON => Err("Soon to come...".into()), //results.into() as Bson,
         }
-        result.push('}');
-        Ok(result)
     }
 
     pub fn str_len(&self, path: &str) -> Result<usize, Error> {
