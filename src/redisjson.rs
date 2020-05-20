@@ -223,7 +223,7 @@ impl RedisJSON {
             let mut selector = jsonpath_lib::selector(&self.data);
             // TODO: Creating a temp doc here duplicates memory usage. This can be very memory inefficient.
             // A better way would be to create a doc of references to the original doc but no current support
-            // in serde_json. I'm going for this implementation anyway because serde_json isn't suppost to be
+            // in serde_json. I'm going for this implementation anyway because serde_json isn't supposed to be
             // memory efficient and we're using it anyway. See https://github.com/serde-rs/json/issues/635.
             temp_doc = Value::Object(paths.drain(..).fold(Map::new(), |mut acc, path| {
                 let value = match selector(&path.fixed) {
