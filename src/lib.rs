@@ -51,16 +51,16 @@ static REDIS_JSON_TYPE: RedisType = RedisType::new(
 /// Backwards compatibility convertor for RedisJSON 1.x clients
 ///
 fn backwards_compat_path(mut path: String) -> String {
-    if !path.starts_with("$") {
+    if !path.starts_with('$') {
         if path == "." {
             path.replace_range(..1, "$");
-        } else if path.starts_with(".") {
+        } else if path.starts_with('.') {
             path.insert(0, '$');
         } else {
             path.insert_str(0, "$.");
         }
     }
-    return path;
+    path
 }
 
 ///
@@ -402,7 +402,7 @@ fn json_str_append(ctx: &Context, args: Vec<String>) -> RedisResult {
         })
 }
 
-fn do_json_str_append(json: &String, value: &Value) -> Result<Value, Error> {
+fn do_json_str_append(json: &str, value: &Value) -> Result<Value, Error> {
     value
         .as_str()
         .ok_or_else(|| err_json(value, "string"))
@@ -591,7 +591,7 @@ fn do_json_arr_pop(mut index: i64, res: &mut Value, value: &Value) -> Result<Val
             index = index.min(len - 1);
 
             if index < 0 {
-                index = len + index;
+                index += len;
             }
 
             if index >= len || index < 0 {
@@ -729,7 +729,7 @@ fn resp_serialize(doc: &Value) -> RedisValue {
 
         Value::Number(n) => n
             .as_i64()
-            .map(|i| RedisValue::Integer(i))
+            .map(RedisValue::Integer)
             .unwrap_or_else(|| RedisValue::Float(n.as_f64().unwrap())),
 
         Value::String(s) => RedisValue::BulkString(s.clone()),
@@ -787,7 +787,7 @@ pub extern "C" fn init(raw_ctx: *mut rawmod::RedisModuleCtx) -> c_int {
 
 redis_module! {
     name: "ReJSON",
-    version: 999999,
+    version: 99_99_99,
     data_types: [
         REDIS_JSON_TYPE,
     ],

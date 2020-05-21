@@ -219,12 +219,12 @@ where
 
     let index_name = args.next_string()?;
     let query = args.next_string()?;
-    let path = args.next().unwrap_or("$".to_string());
+    let path = args.next().unwrap_or_else(|| "$".to_string());
 
     let map = schema_map::as_ref();
 
     map.get(&index_name)
-        .ok_or("ERR no such index".into())
+        .ok_or_else(|| "ERR no such index".into())
         .map(|schema| &schema.index)
         .and_then(|index| {
             let result =
@@ -239,9 +239,7 @@ where
                                 doc.map_or(Ok(Vec::new()), |data| {
                                     data.get_values(&path)
                                         .map_err(|e| e.into()) // Convert Error to RedisError
-                                        .map(|values| {
-                                            values.into_iter().map(|val| val.clone()).collect()
-                                        })
+                                        .map(|values| values.into_iter().cloned().collect())
                                 })
                             })
                             .map(|r| {
