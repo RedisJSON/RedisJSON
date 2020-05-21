@@ -8,10 +8,12 @@ use crate::backward;
 use crate::commands::index;
 use crate::error::Error;
 use crate::nodevisitor::NodeVisitorImpl;
+use crate::REDIS_JSON_TYPE_VERSION;
 
 use bson::decode_document;
+use index::schema_map;
 use jsonpath_lib::SelectorMut;
-use redis_module::raw;
+use redis_module::raw::{self, Status};
 use serde_json::Value;
 use std::io::Cursor;
 use std::mem;
@@ -405,7 +407,11 @@ pub mod type_methods {
                 } else {
                     None
                 };
-                RedisJSON::from_str(&data, &schema, Format::JSON).unwrap()
+                let doc = RedisJSON::from_str(&data, &schema, Format::JSON).unwrap();
+                if let Some(schema) = schema {
+                    index::add_document(&schema.key, &schema.index_name, &doc).unwrap();
+                }
+                doc
             }
             _ => panic!("Can't load old RedisJSON RDB"),
         };
@@ -434,6 +440,44 @@ pub mod type_methods {
             raw::save_string(rdb, &value_index.index_name);
         } else {
             raw::save_unsigned(rdb, 0);
+        }
+    }
+
+    #[allow(non_snake_case, unused)]
+    pub unsafe extern "C" fn aux_load(rdb: *mut raw::RedisModuleIO, encver: i32, when: i32) -> i32 {
+        if (encver > REDIS_JSON_TYPE_VERSION) {
+            return Status::Err as i32; // could not load rdb created with higher RedisJSON version!
+        }
+
+        if (when == raw::Aux::Before as i32) {
+            let map_size = raw::load_unsigned(rdb);
+            for _ in 0..map_size {
+                let index_name = raw::load_string(rdb);
+                let fields_size = raw::load_unsigned(rdb);
+                for _ in 0..fields_size {
+                    let field_name = raw::load_string(rdb);
+                    let path = raw::load_string(rdb);
+                    index::add_field(&index_name, &field_name, &path);
+                }
+            }
+        }
+
+        Status::Ok as i32
+    }
+
+    #[allow(non_snake_case, unused)]
+    pub unsafe extern "C" fn aux_save(rdb: *mut raw::RedisModuleIO, when: i32) {
+        if (when == raw::Aux::Before as i32) {
+            let map = schema_map::as_ref();
+            raw::save_unsigned(rdb, map.len() as u64);
+            for (key, schema) in map {
+                raw::save_string(rdb, key);
+                raw::save_unsigned(rdb, schema.fields.len() as u64);
+                for (name, path) in &schema.fields {
+                    raw::save_string(rdb, name);
+                    raw::save_string(rdb, path);
+                }
+            }
         }
     }
 }

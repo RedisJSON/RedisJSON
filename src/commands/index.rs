@@ -47,7 +47,7 @@ pub mod schema_map {
 
 ///////////////////////////
 
-fn add_field(index_name: &str, field_name: &str, path: &str) -> RedisResult {
+pub fn add_field(index_name: &str, field_name: &str, path: &str) -> RedisResult {
     let map = schema_map::as_mut();
 
     let schema = if let Some(stored_schema) = map.get_mut(index_name) {
