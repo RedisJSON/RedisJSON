@@ -467,7 +467,7 @@ pub mod type_methods {
 
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn aux_save(rdb: *mut raw::RedisModuleIO, when: i32) {
-        if (when == raw::Aux::After as i32) {
+        if (when == raw::Aux::Before as i32) {
             let map = schema_map::as_ref();
             raw::save_unsigned(rdb, map.len() as u64);
             for (key, schema) in map {
