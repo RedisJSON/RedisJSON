@@ -8,7 +8,6 @@ use crate::backward;
 use crate::commands::index;
 use crate::error::Error;
 use crate::nodevisitor::NodeVisitorImpl;
-use crate::schema::Schema;
 
 use bson::decode_document;
 use index::schema_map;
@@ -407,7 +406,11 @@ pub mod type_methods {
                 } else {
                     None
                 };
-                RedisJSON::from_str(&data, &schema, Format::JSON).unwrap()
+                let doc = RedisJSON::from_str(&data, &schema, Format::JSON).unwrap();
+                if let Some(schema) = schema {
+                    index::add_document(&schema.key, &schema.index_name, &doc).unwrap();
+                }
+                doc
             }
             _ => panic!("Can't load old RedisJSON RDB"),
         };
@@ -448,18 +451,15 @@ pub mod type_methods {
 
         if (when == 1) {
             // TODO set replace with REDISMODULE_AUX_BEFORE_RDB
-            let map = schema_map::as_mut();
             let map_size = raw::load_unsigned(rdb);
             for _ in 0..map_size {
-                let key = raw::load_string(rdb);
-                let mut schema = Schema::new(&key);
+                let index_name = raw::load_string(rdb);
                 let fields_size = raw::load_unsigned(rdb);
                 for _ in 0..fields_size {
                     let field_name = raw::load_string(rdb);
                     let path = raw::load_string(rdb);
-                    schema.fields.insert(field_name, path);
+                    index::add_field(&index_name, &field_name, &path);
                 }
-                map.insert(key, schema);
             }
         }
 
