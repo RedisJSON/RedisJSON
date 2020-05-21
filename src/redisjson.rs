@@ -449,8 +449,7 @@ pub mod type_methods {
             return Status::Err as i32; // could not load rdb created with higher RedisJSON version!
         }
 
-        if (when == 1) {
-            // TODO set replace with REDISMODULE_AUX_BEFORE_RDB
+        if (when == raw::Aux::Before as i32) {
             let map_size = raw::load_unsigned(rdb);
             for _ in 0..map_size {
                 let index_name = raw::load_string(rdb);
@@ -468,8 +467,7 @@ pub mod type_methods {
 
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn aux_save(rdb: *mut raw::RedisModuleIO, when: i32) {
-        if (when == 1) {
-            // TODO set replace with REDISMODULE_AUX_BEFORE_RDB
+        if (when == raw::Aux::After as i32) {
             let map = schema_map::as_ref();
             raw::save_unsigned(rdb, map.len() as u64);
             for (key, schema) in map {
