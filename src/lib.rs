@@ -23,9 +23,11 @@ use crate::commands::index;
 use crate::error::Error;
 use crate::redisjson::{Format, Path, RedisJSON, SetOptions, ValueIndex};
 
+pub const REDIS_JSON_TYPE_VERSION: i32 = 2;
+
 static REDIS_JSON_TYPE: RedisType = RedisType::new(
     "ReJSON-RL",
-    2,
+    REDIS_JSON_TYPE_VERSION,
     RedisModuleTypeMethods {
         version: redis_module::TYPE_METHOD_VERSION,
 

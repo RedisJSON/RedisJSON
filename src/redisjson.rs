@@ -8,6 +8,7 @@ use crate::backward;
 use crate::commands::index;
 use crate::error::Error;
 use crate::nodevisitor::NodeVisitorImpl;
+use crate::REDIS_JSON_TYPE_VERSION;
 
 use bson::decode_document;
 use index::schema_map;
@@ -444,10 +445,9 @@ pub mod type_methods {
 
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn aux_load(rdb: *mut raw::RedisModuleIO, encver: i32, when: i32) -> i32 {
-        // if(encver > REDISGEARS_DATATYPE_VERSION){
-        //     RedisModule_LogIOError(rdb, "warning", "could not load rdb created with higher RedisGears version!");
-        //     return REDISMODULE_ERR; // could not load rdb created with higher Gears version!
-        // }
+        if (encver > REDIS_JSON_TYPE_VERSION) {
+            return Status::Err as i32; // could not load rdb created with higher RedisJSON version!
+        }
 
         if (when == 1) {
             // TODO set replace with REDISMODULE_AUX_BEFORE_RDB

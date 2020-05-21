@@ -251,6 +251,17 @@ class ReJSONTestCase(BaseReJSONTest):
             data = json.loads(r.execute_command('JSON.GET', 'complex'))
             self.assertDictEqual(data, {"a":{"b":[{"c":{"d":[1,'2'],"e":None}},True],"a":'a'},"b":1,"c":True,"d":None})
 
+    def testSchemaStoreRDB(self):
+        with self.redis() as r:
+            self.assertOk(r.execute_command('JSON.INDEX', 'ADD', 'person', 'last', '$.last' ))
+            self.assertOk(r.execute_command('JSON.SET', 'user1', '$', '{"last":"Joan", "first":"Mc"}', 'INDEX', 'person'))
+            self.assertOk(r.execute_command('JSON.SET', 'user2', '$', '{"last":"John", "first":"Avi"}', 'INDEX', 'person'))
+            self.assertOk(r.execute_command('JSON.SET', 'user3', '$', '{"last":"Jonna", "first":"Tami"}', 'INDEX', 'super'))
+
+            self.assertEqual('{"user1":["Mc"],"user2":["Avi"]}', r.execute_command('JSON.QGET', 'person', 'jo*', '$.first'))
+            for _ in r.retry_with_rdb_reload():
+                self.assertEqual(json.loads('{"user1":["Mc"],"user2":["Avi"]}'), json.loads(r.execute_command('JSON.QGET', 'person', 'jo*', '$.first')))
+
     def testSetBSON(self):
         with self.redis() as r:
             r.client_setname(self._testMethodName)
