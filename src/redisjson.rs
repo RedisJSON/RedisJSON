@@ -34,7 +34,7 @@ impl Format {
         match s {
             "JSON" => Ok(Format::JSON),
             "BSON" => Ok(Format::BSON),
-            _ => return Err("ERR wrong format".into()),
+            _ => Err("ERR wrong format".into()),
         }
     }
 }
@@ -50,10 +50,10 @@ pub struct Path {
 impl Path {
     pub fn new(path: String) -> Path {
         let mut fixed = path.clone();
-        if !fixed.starts_with("$") {
+        if !fixed.starts_with('$') {
             if fixed == "." {
                 fixed.replace_range(..1, "$");
-            } else if fixed.starts_with(".") {
+            } else if fixed.starts_with('.') {
                 fixed.insert(0, '$');
             } else {
                 fixed.insert_str(0, "$.");
@@ -81,7 +81,7 @@ impl RedisJSON {
             Format::JSON => Ok(serde_json::from_str(data)?),
             Format::BSON => decode_document(&mut Cursor::new(data.as_bytes()))
                 .map(|docs| {
-                    let v = if docs.len() >= 1 {
+                    let v = if !docs.is_empty() {
                         docs.iter()
                             .next()
                             .map_or_else(|| Value::Null, |(_, b)| b.clone().into())
@@ -118,7 +118,7 @@ impl RedisJSON {
                     if map.contains_key(key) {
                         false
                     } else {
-                        map.insert(key.to_string(), value.clone());
+                        map.insert(key.to_string(), value);
                         true
                     }
                 } else {
@@ -186,7 +186,7 @@ impl RedisJSON {
         let mut deleted = 0;
         self.data = jsonpath_lib::replace_with(current_data, path, &mut |v| {
             if !v.is_null() {
-                deleted = deleted + 1; // might delete more than a single value
+                deleted += 1; // might delete more than a single value
             }
             None
         })?;
@@ -225,11 +225,11 @@ impl RedisJSON {
             acc.push(',');
             acc
         });
-        if result.ends_with(",") {
+        if result.ends_with(',') {
             result.pop();
         }
         result.push('}');
-        Ok(result.into())
+        Ok(result)
     }
 
     pub fn str_len(&self, path: &str) -> Result<usize, Error> {
@@ -368,7 +368,7 @@ impl RedisJSON {
             Value::Array(v) => mem::size_of_val(v),
             Value::Object(v) => mem::size_of_val(v),
         };
-        Ok(res.into())
+        Ok(res)
     }
 
     pub fn get_first<'a>(&'a self, path: &'a str) -> Result<&'a Value, Error> {
