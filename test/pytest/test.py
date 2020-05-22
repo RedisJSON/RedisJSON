@@ -249,22 +249,24 @@ class ReJSONTestCase(BaseReJSONTest):
             r.client_setname(self._testMethodName)
             r.flushdb()
 
-            d = {'dict': {'f': 'v'}}
-            a = {'arr': [0, 1]}
-            self.assertOk(r.execute_command('JSON.SET', 'd', '$', json.dumps(d)))
-            self.assertOk(r.execute_command('JSON.SET', 'a', '$', json.dumps(a)))
+            objects_to_test = [
+                {'obj': {'f': 'v'}},
+                {'arr': [0, 1]}
+            ]
+            formatted_objects = [
+                '{{{newline}{indent}"obj":{space}{{{newline}{indent}{indent}"f":{space}"v"{newline}{indent}}}{newline}}}',
+                '{{{newline}{indent}"arr":{space}[{newline}{indent}{indent}0,{newline}{indent}{indent}1{newline}{indent}]{newline}}}'
+            ]
 
-            # No formatting
-            res = r.execute_command('JSON.GET', 'd')
-            self.assertEqual(res, json.dumps(d, separators=(",", ":")))
-            res = r.execute_command('JSON.GET', 'a')
-            self.assertEqual(res, json.dumps(a, separators=(",", ":")))
+            for o in objects_to_test:
+                self.assertOk(r.execute_command('JSON.SET', o.keys().pop(), '$', json.dumps(o)))
 
-            # All formatting options together
-            res = r.execute_command('JSON.GET', 'd', 'INDENT', '  ', 'NEWLINE', '\n', 'SPACE', ' ')
-            self.assertEqual(res, json.dumps(d, indent=2, separators=(",", ": ")))
-            res = r.execute_command('JSON.GET', 'a', 'INDENT', '  ', 'NEWLINE', '\n', 'SPACE', ' ')
-            self.assertEqual(res, json.dumps(a, indent=2, separators=(",", ": ")))
+            for space in ['', ' ', '\t', '  ']:
+                for indent in ['', ' ', '\t', '  ']:
+                    for newline in ['', '\n', '\r\n']:
+                        for o, f in zip(objects_to_test, formatted_objects):
+                            res = r.execute_command('JSON.GET', o.keys().pop(), 'INDENT', indent, 'NEWLINE', newline, 'SPACE', space)
+                            self.assertEqual(res, f.format(newline=newline, space=space, indent=indent))
 
     def testBackwardRDB(self):
         with self.redis(**{"dir": os.path.abspath(os.path.join(os.getcwd(), 'test/files/')),  "dbfilename": 'backward.rdb'}) as r:
