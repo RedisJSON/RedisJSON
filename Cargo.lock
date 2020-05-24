@@ -280,8 +280,8 @@ checksum = "b8b7a7c0c47db5545ed3fef7468ee7bb5b74691498139e4b3f6a20685dc6dd8e"
 
 [[package]]
 name = "jsonpath_lib"
-version = "0.2.3"
-source = "git+https://github.com/gkorland/jsonpath.git?branch=patch-1#bd1975d61eb3e0cebb1018be3a14fcfb71be3899"
+version = "0.2.5"
+source = "git+https://github.com/RedisJSON/jsonpath.git?branch=public-parser#8cd86ae96da7a6abb900edca1f7073dd4ac01b05"
 dependencies = [
  "array_tool",
  "env_logger 0.7.1",
@@ -397,9 +397,9 @@ checksum = "237a5ed80e274dbc66f86bd59c1e25edc039660be53194b5fe0a482e0f2612ea"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.13"
+version = "1.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53f5ffe53a6b28e37c9c1ce74893477864d64f74778a93a4beb43c8fa167f639"
+checksum = "1502d12e458c49a4c9cbff560d0fe0060c252bc29799ed94ca2ed4bb665a0101"
 dependencies = [
  "unicode-xid 0.2.0",
 ]
