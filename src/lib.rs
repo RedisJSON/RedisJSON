@@ -175,12 +175,7 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut indent = String::new();
     let mut space = String::new();
     let mut newline = String::new();
-    loop {
-        let arg = match args.next_string() {
-            Ok(s) => s,
-            Err(_) => break,
-        };
-
+    while let Ok(arg) = args.next_string() {
         match arg.to_uppercase().as_str() {
             "INDENT" => {
                 indent = args.next_string()?;
