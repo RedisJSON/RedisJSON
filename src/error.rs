@@ -26,7 +26,7 @@ impl From<serde_json::Error> for Error {
 impl From<JsonPathError> for Error {
     fn from(e: JsonPathError) -> Self {
         Error {
-            msg: format!("{:?}", e),
+            msg: format!("JSON Path error: {:?}", e).replace("\n", "\\n"),
         }
     }
 }
