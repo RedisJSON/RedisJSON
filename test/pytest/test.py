@@ -197,7 +197,22 @@ class ReJSONTestCase(BaseReJSONTest):
                 r.execute_command('JSON.SET', 'test', '.foo[1]', 'null', 'NX')
             # with self.assertRaises(redis.exceptions.ResponseError) as cm:
             #     r.execute_command('JSON.SET', 'test', '.foo[1]', 'null', 'XX')
-    
+
+    def testSetWithBracketNotation(self):
+        with self.redis() as r:
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
+            # test against the root
+            self.assertOk(r.execute_command('JSON.SET', 'x', '.', '{}'))
+            self.assertOk(r.execute_command('JSON.SET', 'x', '.["f1"]', '{}'))  # Simple bracket notation
+            self.assertOk(r.execute_command('JSON.SET', 'x', '.["f1"].f2', '[0,0,0]'))  # Mixed with dot notation
+            self.assertOk(r.execute_command('JSON.SET', 'x', '.["f1"].f2[1]', '{}'))  # Replace in array
+            self.assertOk(r.execute_command('JSON.SET', 'x', '.["f1"].f2[1]["f.]$.f"]', '{}'))  # Dots and invalid chars in the brackets
+            self.assertOk(r.execute_command('JSON.SET', 'x', '.["f1"]["f2"][1]["f.]$.f"]', '1'))  # Replace existing value
+            self.assertIsNone(r.execute_command('JSON.SET', 'x', '.["f3"].f2', '1'))  # Fail trying to set f2 when f3 doesn't exist
+            self.assertEqual(json.loads(r.execute_command('JSON.GET', 'x')), {'f1': {'f2': [0, {'f.]$.f': 1}, 0]}})  # Make sure it worked
+
     def testGetNonExistantPathsFromBasicDocumentShouldFail(self):
         """Test failure of getting non-existing values"""
     
