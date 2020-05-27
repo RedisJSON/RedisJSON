@@ -110,7 +110,7 @@ impl RedisJSON {
         })
     }
 
-    fn add_value(&mut self, path: &str, value: Value, option: &SetOptions) -> Result<bool, Error> {
+    fn add_value(&mut self, path: &str, value: Value) -> Result<bool, Error> {
         let mut parsed_static_path = StaticPathParser::check(path)?;
 
         if parsed_static_path.valid != VisitStatus::Valid {
@@ -196,7 +196,7 @@ impl RedisJSON {
             if replaced {
                 Ok(true)
             } else if SetOptions::AlreadyExists != *option {
-                self.add_value(path, json, option)
+                self.add_value(path, json)
             } else {
                 Ok(false)
             }
