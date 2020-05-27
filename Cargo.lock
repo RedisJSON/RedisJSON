@@ -446,9 +446,9 @@ dependencies = [
 
 [[package]]
 name = "redisearch_api"
-version = "0.4.2"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94f46b3d17c7d106c39ef899dd24690780193cff6e41e7c40e442bf672f6a8f9"
+checksum = "3472650836a6f92b309064152b37a13e360cd7b09af9f5fbbabe4c9bf67cae3a"
 dependencies = [
  "bindgen",
  "bitflags",
