@@ -125,7 +125,7 @@ fn create_document(key: &str, schema: &Schema, doc: &RedisJSON) -> Result<Docume
 // JSON.INDEX ADD <index> <field> <path>
 // JSON.INDEX DEL <index> <field>
 // JSON.INDEX INFO <index> <field>
-pub fn index<I>(_ctx: &Context, args: I) -> RedisResult
+pub fn index<I>(ctx: &Context, args: I) -> RedisResult
 where
     I: IntoIterator<Item = String>,
 {
@@ -168,9 +168,14 @@ where
                 }
             });
 
+            ctx.replicate_verbatim();
             REDIS_OK
         }
-        "DEL" => del_schema(&index_name),
+        "DEL" => {
+            let res = del_schema(&index_name)?;
+            ctx.replicate_verbatim();
+            Ok(res)
+        }
         //"INFO" => {}
         _ => Err("ERR unknown subcommand - try `JSON.INDEX HELP`".into()),
     }
