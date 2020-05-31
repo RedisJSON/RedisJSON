@@ -165,7 +165,7 @@ impl RedisJSON {
                 Ok(set)
             }
         } else {
-            Err("Err: can only add values to an object".into())
+            Err("Err: path not an object".into())
         }
     }
 

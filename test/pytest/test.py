@@ -203,7 +203,6 @@ class ReJSONTestCase(BaseReJSONTest):
             r.client_setname(self._testMethodName)
             r.flushdb()
 
-            # test against the root
             self.assertOk(r.execute_command('JSON.SET', 'x', '.', '{}'))
             self.assertOk(r.execute_command('JSON.SET', 'x', '.["f1"]', '{}'))  # Simple bracket notation
             self.assertOk(r.execute_command('JSON.SET', 'x', '.["f1"].f2', '[0,0,0]'))  # Mixed with dot notation
@@ -212,6 +211,23 @@ class ReJSONTestCase(BaseReJSONTest):
             self.assertOk(r.execute_command('JSON.SET', 'x', '.["f1"]["f2"][1]["f.]$.f"]', '1'))  # Replace existing value
             self.assertIsNone(r.execute_command('JSON.SET', 'x', '.["f3"].f2', '1'))  # Fail trying to set f2 when f3 doesn't exist
             self.assertEqual(json.loads(r.execute_command('JSON.GET', 'x')), {'f1': {'f2': [0, {'f.]$.f': 1}, 0]}})  # Make sure it worked
+
+    def testSetWithPathErrors(self):
+        with self.redis() as r:
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
+            self.assertOk(r.execute_command('JSON.SET', 'x', '.', '{}'))
+
+            # Add to non static path
+            with self.assertRaises(redis.exceptions.ResponseError) as e:
+                r.execute_command('JSON.SET', 'x', '$..f', 1)
+            self.assertEqual(str(e.exception), 'Err: wrong static path')
+
+            # Treat object as array
+            with self.assertRaises(redis.exceptions.ResponseError) as e:
+                r.execute_command('JSON.SET', 'x', '$[0]', 1)
+            self.assertEqual(str(e.exception), 'Err: path not an object')
 
     def testGetNonExistantPathsFromBasicDocumentShouldFail(self):
         """Test failure of getting non-existing values"""
