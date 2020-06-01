@@ -8,7 +8,7 @@ use crate::backward;
 use crate::commands::index;
 use crate::error::Error;
 use crate::formatter::RedisJsonFormatter;
-use crate::nodevisitor::NodeVisitorImpl;
+use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 use crate::REDIS_JSON_TYPE_VERSION;
 
 use bson::decode_document;
@@ -111,18 +111,27 @@ impl RedisJSON {
     }
 
     fn add_value(&mut self, path: &str, value: Value) -> Result<bool, Error> {
-        if NodeVisitorImpl::check(path)? {
-            let mut splits = path.rsplitn(2, '.');
-            let key = splits.next().unwrap();
-            let prefix = splits.next().unwrap();
+        let mut parsed_static_path = StaticPathParser::check(path)?;
 
+        if parsed_static_path.valid != VisitStatus::Valid {
+            return Err("Err: wrong static path".into());
+        }
+        if parsed_static_path.static_path_elements.len() < 2 {
+            return Err("Err: path must end with object key to set".into());
+        }
+
+        if let StaticPathElement::ObjectKey(key) =
+            parsed_static_path.static_path_elements.pop().unwrap()
+        {
             let mut current_data = self.data.take();
-            if prefix == "$" {
+            if let StaticPathElement::Root = parsed_static_path.static_path_elements.last().unwrap()
+            {
+                // Adding to the root, can't use jsonpath_lib::replace_with
                 let res = if let Value::Object(ref mut map) = current_data {
-                    if map.contains_key(key) {
+                    if map.contains_key(&key) {
                         false
                     } else {
-                        map.insert(key.to_string(), value);
+                        map.insert(key, value);
                         true
                     }
                 } else {
@@ -131,22 +140,32 @@ impl RedisJSON {
                 self.data = current_data;
                 Ok(res)
             } else {
+                // Adding somewhere in existing object, use jsonpath_lib::replace_with
                 let mut set = false;
-                self.data = jsonpath_lib::replace_with(current_data, prefix, &mut |mut ret| {
-                    if let Value::Object(ref mut map) = ret {
-                        if map.contains_key(key) {
-                            set = false;
-                        } else {
-                            map.insert(key.to_string(), value.clone());
-                            set = true;
+                self.data = jsonpath_lib::replace_with(
+                    current_data,
+                    &parsed_static_path
+                        .static_path_elements
+                        .iter()
+                        .map(|e| e.to_string())
+                        .collect::<Vec<String>>()
+                        .join(""),
+                    &mut |mut ret| {
+                        if let Value::Object(ref mut map) = ret {
+                            if map.contains_key(&key) {
+                                set = false;
+                            } else {
+                                map.insert(key.to_string(), value.clone());
+                                set = true;
+                            }
                         }
-                    }
-                    Some(ret)
-                })?;
+                        Some(ret)
+                    },
+                )?;
                 Ok(set)
             }
         } else {
-            Err("Err: wrong static path".into())
+            Err("Err: path not an object".into())
         }
     }
 
