@@ -804,6 +804,18 @@ class CacheTestCase(BaseReJSONTest):
         self.assertEqual(20, cacheItems())
 
         self.cmd('json._cacheinit')
+        
+        # after the write command, the cache should be invalid
+        self.cmd('JSON.SET', 'test', '.', json.dumps({
+            'foo': 'fooValue',
+            'bar': [1,2,3,4],
+        }))
+        self.assertEqual('[1,2,3,4]', self.cmd('JSON.GET', 'test', '.bar'))
+        self.cmd('JSON.ARRPOP', 'test', '.bar', 0)
+        self.assertEqual('[2,3,4]', self.cmd('JSON.GET', 'test', '.bar'))
+        self.assertEqual('"fooValue"', self.cmd('JSON.GET', 'test', '.foo'))
+        self.cmd('JSON.STRAPPEND', 'test', '.foo', '"_test"')
+        self.assertEqual('"fooValue_test"', self.cmd('JSON.GET', 'test', '.foo'))
 
 
 class NoCacheTestCase(BaseReJSONTest):
