@@ -11,6 +11,7 @@ use crate::formatter::RedisJsonFormatter;
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 use crate::REDIS_JSON_TYPE_VERSION;
 
+use crate::error::Error::{GeneralError, PathNotAnObject, WrongStaticPath};
 use bson::decode_document;
 use index::schema_map;
 use jsonpath_lib::SelectorMut;
@@ -80,7 +81,7 @@ pub struct RedisJSON {
 }
 
 impl RedisJSON {
-    pub fn parse_str(data: &str, format: Format) -> Result<Value, Error> {
+    pub fn parse_str(data: &str, format: &Format) -> Result<Value, Error> {
         match format {
             Format::JSON => Ok(serde_json::from_str(data)?),
             Format::BSON => decode_document(&mut Cursor::new(data.as_bytes()))
@@ -101,9 +102,9 @@ impl RedisJSON {
     pub fn from_str(
         data: &str,
         value_index: &Option<ValueIndex>,
-        format: Format,
+        format: &Format,
     ) -> Result<Self, Error> {
-        let value = RedisJSON::parse_str(data, format)?;
+        let value = RedisJSON::parse_str(data, &format)?;
         Ok(Self {
             data: value,
             value_index: value_index.clone(),
@@ -114,10 +115,10 @@ impl RedisJSON {
         let mut parsed_static_path = StaticPathParser::check(path)?;
 
         if parsed_static_path.valid != VisitStatus::Valid {
-            return Err("Err: wrong static path".into());
+            return Err(WrongStaticPath);
         }
         if parsed_static_path.static_path_elements.len() < 2 {
-            return Err("Err: path must end with object key to set".into());
+            return Err("path must end with object key to set".into());
         }
 
         if let StaticPathElement::ObjectKey(key) =
@@ -165,7 +166,7 @@ impl RedisJSON {
                 Ok(set)
             }
         } else {
-            Err("Err: path not an object".into())
+            Err(PathNotAnObject)
         }
     }
 
@@ -174,7 +175,7 @@ impl RedisJSON {
         data: &str,
         path: &str,
         option: &SetOptions,
-        format: Format,
+        format: &Format,
     ) -> Result<bool, Error> {
         let json: Value = RedisJSON::parse_str(data, format)?;
         if path == "$" {
@@ -398,7 +399,13 @@ impl RedisJSON {
         match errors.len() {
             0 => Ok(result),
             1 => Err(errors.remove(0)),
-            _ => Err(errors.into_iter().map(|e| e.msg).collect::<String>().into()),
+            _ => Err(GeneralError(
+                errors
+                    .into_iter()
+                    .map(|e| e.to_string())
+                    .collect::<String>()
+                    .into(),
+            )),
         }
     }
 
@@ -449,7 +456,7 @@ pub mod type_methods {
                 } else {
                     None
                 };
-                let doc = RedisJSON::from_str(&data, &schema, Format::JSON).unwrap();
+                let doc = RedisJSON::from_str(&data, &schema, &Format::JSON).unwrap();
                 if let Some(schema) = schema {
                     index::add_document(&schema.key, &schema.index_name, &doc).unwrap();
                 }

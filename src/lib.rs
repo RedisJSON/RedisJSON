@@ -126,7 +126,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
 
     match (current, set_option) {
         (Some(ref mut doc), ref op) => {
-            if doc.set_value(&value, &path, op, format)? {
+            if doc.set_value(&value, &path, op, &format)? {
                 if let Some(value_index) = value_index {
                     index::add_document(&key, &value_index.index_name, &doc)?;
                 }
@@ -138,7 +138,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
         }
         (None, SetOptions::AlreadyExists) => Ok(RedisValue::Null),
         (None, _) => {
-            let doc = RedisJSON::from_str(&value, &value_index, format)?;
+            let doc = RedisJSON::from_str(&value, &value_index, &format)?;
             if path == "$" {
                 redis_key.set_value(&REDIS_JSON_TYPE, doc)?;
 
@@ -808,6 +808,7 @@ redis_module! {
         ["json.resp", json_resp, "readonly", 1,1,1],
         ["json.index", commands::index::index, "write deny-oom", 1,1,1],
         ["json.qget", commands::index::qget, "readonly", 1,1,1],
+        ["json.qset", commands::index::qset, "write deny-oom", 1,1,1],
         ["json._cacheinfo", json_cache_info, "readonly", 1,1,1],
         ["json._cacheinit", json_cache_init, "write", 1,1,1],
     ],

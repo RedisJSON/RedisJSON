@@ -222,12 +222,12 @@ class ReJSONTestCase(BaseReJSONTest):
             # Add to non static path
             with self.assertRaises(redis.exceptions.ResponseError) as e:
                 r.execute_command('JSON.SET', 'x', '$..f', 1)
-            self.assertEqual(str(e.exception), 'Err: wrong static path')
+            self.assertEqual(str(e.exception), 'wrong static path')
 
             # Treat object as array
             with self.assertRaises(redis.exceptions.ResponseError) as e:
                 r.execute_command('JSON.SET', 'x', '$[0]', 1)
-            self.assertEqual(str(e.exception), 'Err: path not an object')
+            self.assertEqual(str(e.exception), 'path not an object')
 
     def testGetNonExistantPathsFromBasicDocumentShouldFail(self):
         """Test failure of getting non-existing values"""
@@ -839,9 +839,8 @@ class ReJSONTestCase(BaseReJSONTest):
             with self.assertRaises(redis.exceptions.ResponseError) as cm:
                 do('JSON.INDEX', 'ADD', 'index2', 'second', '$.third2')
 
-
-    def testRediSearch(self):
-        """Test RediSearch integration"""
+    def testRediSearchQGet(self):
+        """Test RediSearch integration: QGET"""
         # To run:
         # python -m unittest -v test.pytest.test.ReJSONTestCase.testRediSearch
 
@@ -873,6 +872,73 @@ class ReJSONTestCase(BaseReJSONTest):
                 self.assertEqual(
                     json.loads(r.execute_command('JSON.QGET', index, query, path)),
                     json.loads(results))
+
+    def testRediSearchQSet(self):
+        """Test RediSearch integration: QSET"""
+
+        with self.redis() as r:
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
+            def do(*args):
+                self.assertOk(r.execute_command(*args))
+
+            index = 'person'
+
+            do('JSON.INDEX', 'ADD', index, 'first', '$.first')
+            do('JSON.INDEX', 'ADD', index, 'last', '$.last')
+
+            do('JSON.SET', 'kevin', '.', '{"first": "Kevin", "last": "Smith"}', 'INDEX', index)
+            do('JSON.SET', 'mike', '.', '{"first": "Mike", "last": "Lane"}', 'INDEX', index)
+            do('JSON.SET', 'dave', '.', '{"first": "Dave"}', 'INDEX', index)
+
+            # Replace value in field
+            self.assertEqual(r.execute_command('JSON.GET', 'mike', '$.last'), '"Lane"')
+            self.assertEqual(r.execute_command('JSON.QSET', 'person', '@first:mike', '$.last', '"Smith"'), 1)
+            self.assertEqual(r.execute_command('JSON.GET', 'mike', '$.last'), '"Smith"')
+
+            # Add field to object
+            with self.assertRaises(redis.exceptions.ResponseError) as e:
+                r.execute_command('JSON.GET', 'mike', '$.age')
+            self.assertEqual(str(e.exception), 'ERR path does not exist')
+            self.assertEqual(r.execute_command('JSON.QSET', 'person', '@first:mike', '$.age', 10), 1)
+            self.assertEqual(r.execute_command('JSON.GET', 'mike', '$.age'), '10')
+
+            # Replace existing value with NX flag (should fail)
+            self.assertEqual(r.execute_command('JSON.QSET', 'person', '@first:mike', '$.age', 11, 'NX'), 0)
+            self.assertEqual(r.execute_command('JSON.GET', 'mike', '$.age'), '10')
+            # Replace non-existing value with NX flag
+            self.assertEqual(r.execute_command('JSON.QSET', 'person', '@first:mike', '$.height', 180, 'NX'), 1)
+            self.assertEqual(r.execute_command('JSON.GET', 'mike', '$.height'), '180')
+
+            # Replace existing value with XX flag
+            self.assertEqual(r.execute_command('JSON.QSET', 'person', '@first:mike', '$.age', 11, 'XX'), 1)
+            self.assertEqual(r.execute_command('JSON.GET', 'mike', '$.age'), '11')
+            # Replace non-existing value with XX flag (should fail)
+            self.assertEqual(r.execute_command('JSON.QSET', 'person', '@first:mike', '$.id', 33, 'XX'), 0)
+            with self.assertRaises(redis.exceptions.ResponseError) as e:
+                r.execute_command('JSON.GET', 'mike', '$.id')
+            self.assertEqual(str(e.exception), 'ERR path does not exist')
+
+            # Replace multiple objects
+            self.assertEqual(r.execute_command('JSON.QSET', 'person', '@first:Mike|Dave', '$.age', 30), 2)
+            self.assertEqual(r.execute_command('JSON.GET', 'mike', '$.age'), '30')  # Verify replace
+            self.assertEqual(r.execute_command('JSON.GET', 'dave', '$.age'), '30')  # Verify new
+            with self.assertRaises(redis.exceptions.ResponseError) as e:  # Verify not part of query
+                r.execute_command('JSON.GET', 'kevin', '$.age')
+            self.assertEqual(str(e.exception), 'ERR path does not exist')
+
+            # Silently skip elements with invalid path
+            self.assertEqual(r.execute_command('JSON.QSET', 'person', '@first:mike', '$..age', 33), 1)
+            # Can't use non static path when adding fields
+            self.assertEqual(r.execute_command('JSON.QSET', 'person', '@first:kevin', '$..id', 33), 0)
+            # TODO: make this simpler after https://github.com/freestrings/jsonpath/issues/50 is fixed.
+            self.assertOk(r.execute_command('JSON.SET', 'kevin', '$.friends', '{"names": ["Bob", "Mark"]}'))
+            self.assertEqual(r.execute_command('JSON.QSET', 'person', '@first:kevin', '$.friends.names[0]', '"Sarah"'), 1)
+            # Can't reference out of bounds array index
+            self.assertEqual(r.execute_command('JSON.QSET', 'person', '@first:kevin', '$.friends.names[2]', '"Naomi"'), 0)
+            # Treat object as array
+            self.assertEqual(r.execute_command('JSON.QSET', 'person', '@first:kevin', '$[1]', '"what?"'), 0)
 
     def testDoubleParse(self):
         self.cmd('JSON.SET', 'dblNum', '.', '[1512060373.222988]')

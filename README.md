@@ -32,10 +32,11 @@ Read the docs at http://redisjson.io
 
     JSON.INDEX ADD <index> <field> <path>
     JSON.INDEX DEL <index>
+    
     JSON.QGET <index> <query> <path>
+    JSON.QSET <index> <query> <path> <json> [NX | XX]
 
 ### Next Milestone
-    JSON.QSET <index> <query> <path> <json> [NX | XX]
     JSON.QDEL <index> <query> <path>
     
     JSON.INDEX DEL <index> <field>

@@ -7,7 +7,7 @@ use redis_module::{Context, NextArg, RedisError, RedisResult, RedisValue, REDIS_
 use redisearch_api::{Document, FieldType, TagOptions};
 
 use crate::error::Error;
-use crate::redisjson::{Format, RedisJSON};
+use crate::redisjson::{Format, RedisJSON, SetOptions};
 use crate::schema::Schema;
 use crate::REDIS_JSON_TYPE;
 
@@ -257,4 +257,58 @@ where
 
             Ok(RedisJSON::serialize(&result, Format::JSON)?.into())
         })
+}
+
+// JSON.QSET <index> <query> <path> <json> [NX | XX] [FORMAT <format>]
+pub fn qset<I>(ctx: &Context, args: I) -> RedisResult
+where
+    I: IntoIterator<Item = String>,
+{
+    let mut args = args.into_iter().skip(1);
+
+    let index_name = args.next_string()?;
+    let query = args.next_string()?;
+    let path = args.next().unwrap_or_else(|| "$".to_string());
+    let json = args.next_string()?;
+
+    let mut format = Format::JSON;
+    let mut set_option = SetOptions::None;
+
+    while let Some(s) = args.next() {
+        match s.to_uppercase().as_str() {
+            "NX" => set_option = SetOptions::NotExists,
+            "XX" => set_option = SetOptions::AlreadyExists,
+            "FORMAT" => {
+                format = Format::from_str(args.next_string()?.as_str())?;
+            }
+            _ => break,
+        };
+    }
+
+    let map = schema_map::as_ref();
+    let keys = map
+        .get(&index_name)
+        .ok_or(RedisError::Str("ERR no such index"))?
+        .index
+        .search(&query)?;
+
+    let mut result = 0;
+    for key in keys {
+        let redis_key = ctx.open_key_writable(&key);
+        let current = redis_key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?;
+        if let Some(doc) = current {
+            if doc
+                .set_value(&json, &path, &set_option, &format)
+                .or_else(|e| match e {
+                    // Errors with the passed path might be local to this key only, so we ignore them and continue
+                    Error::PathNotAnObject | Error::WrongStaticPath => Ok(false),
+                    _ => Err(e),
+                })?
+            {
+                result += 1
+            };
+        }
+    }
+
+    Ok(RedisValue::Integer(result))
 }
