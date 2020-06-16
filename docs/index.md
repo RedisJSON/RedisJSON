@@ -151,6 +151,15 @@ r.execute_command('JSON.SET', 'doc', '.', json.dumps(data))
 reply = json.loads(r.execute_command('JSON.GET', 'doc'))
 ```
 
+## Download and running binaries
+
+First download the pre-compiled version from [RedisLabs download center](https://redislabs.com/download-center/modules/).
+
+Next, run Redis with RedisJSON: 
+
+```
+$ redis-server --loadmodule /path/to/module/redisjson.so
+```
 
 ## Building and Loading the Module
 
