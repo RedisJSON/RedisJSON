@@ -1,6 +1,7 @@
 <img src="images/logo.svg" alt="logo" width="200"/>
 
 # RedisJSON - a JSON data type for Redis
+
 [![Forum](https://img.shields.io/badge/Forum-RedisJSON-blue)](https://forum.redislabs.com/c/modules/redisjson)
 [![Gitter](https://badges.gitter.im/RedisLabs/RedisJSON.svg)](https://gitter.im/RedisLabs/RedisJSON?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
@@ -27,6 +28,7 @@ Alternatively, you can also build and load the module yourself. [Build and Load 
 
 
 ## Launch RedisJSON with Docker
+
 Run the following on Windows, MacOS or Linux with Docker.
 ```
 docker run -p 6379:6379 --name redis-redisjson redislabs/rejson:latest
@@ -208,7 +210,6 @@ Once the module has been loaded successfully, the Redis log should have lines si
 1877:M 23 Dec 02:02:59.725 * Module 'RedisJSON' loaded from <redacted>/src/rejson.so
 ...
 ```
-
 
 ### Client libraries
 
