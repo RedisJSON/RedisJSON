@@ -158,7 +158,7 @@ First download the pre-compiled version from [RedisLabs download center](https:/
 Next, run Redis with RedisJSON: 
 
 ```
-$ redis-server --loadmodule /path/to/module/redisjson.so
+$ redis-server --loadmodule /path/to/module/rejson.so
 ```
 
 ## Building and Loading the Module
