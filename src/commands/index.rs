@@ -10,6 +10,7 @@ use crate::error::Error;
 use crate::redisjson::{Format, RedisJSON};
 use crate::schema::Schema;
 use crate::REDIS_JSON_TYPE;
+use std::collections::HashSet;
 
 pub mod schema_map {
     use crate::schema::Schema;
@@ -76,6 +77,10 @@ fn del_schema(index_name: &str) -> RedisResult {
     }
 }
 
+pub fn clear_schema() {
+    schema_map::as_mut().clear();
+}
+
 pub fn add_document(key: &str, index_name: &str, doc: &RedisJSON) -> RedisResult {
     // TODO: Index the document with RediSearch:
     // 1. Determine the index to use (how?)
@@ -132,10 +137,10 @@ where
     let mut args = args.into_iter().skip(1);
 
     let subcommand = args.next_string()?;
-    let index_name = args.next_string()?;
 
     match subcommand.to_uppercase().as_str() {
         "ADD" => {
+            let index_name = args.next_string()?;
             let field_name = args.next_string()?;
             let path = args.next_string()?;
             add_field(&index_name, &field_name, &path)?;
@@ -172,11 +177,41 @@ where
             REDIS_OK
         }
         "DEL" => {
+            let index_name = args.next_string()?;
             let res = del_schema(&index_name)?;
             ctx.replicate_verbatim();
             Ok(res)
         }
-        //"INFO" => {}
+        "INFO" => {
+            let index_args: HashSet<String> = args.collect();
+            let reply = schema_map::as_ref()
+                .iter()
+                .filter(|(name, _)| index_args.is_empty() || index_args.contains(*name))
+                .fold(Value::Object(Map::new()), |mut indexes, (index, schema)| {
+                    indexes.as_object_mut().unwrap().insert(
+                        index.clone(),
+                        schema.fields.iter().fold(
+                            Value::Object(Map::new()),
+                            |mut fields, (field, path)| {
+                                fields
+                                    .as_object_mut()
+                                    .unwrap()
+                                    .insert(field.clone(), Value::String(path.clone()));
+                                fields
+                            },
+                        ),
+                    );
+                    indexes
+                });
+            Ok(RedisValue::BulkString(
+                serde_json::to_string_pretty(&reply).unwrap(),
+            ))
+        }
+        "FLUSH" => {
+            clear_schema();
+            ctx.replicate_verbatim();
+            REDIS_OK
+        }
         _ => Err("ERR unknown subcommand - try `JSON.INDEX HELP`".into()),
     }
 }

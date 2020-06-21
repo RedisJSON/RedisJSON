@@ -772,8 +772,29 @@ fn json_cache_init(_ctx: &Context, _args: Vec<String>) -> RedisResult {
 }
 //////////////////////////////////////////////////////
 
+extern "C" fn flushdb_event(
+    _raw_ctx: *mut rawmod::RedisModuleCtx,
+    _e: rawmod::RedisModuleEvent,
+    sbuevent: u64,
+    data: *mut ::std::os::raw::c_void,
+) {
+    let fi: &rawmod::RedisModuleFlushInfo =
+        unsafe { &*(data as *const rawmod::RedisModuleFlushInfo) };
+    if sbuevent == rawmod::REDISMODULE_SUBEVENT_FLUSHDB_END && fi.dbnum == -1 {
+        index::clear_schema();
+    }
+}
+
 pub extern "C" fn init(raw_ctx: *mut rawmod::RedisModuleCtx) -> c_int {
     crate::commands::index::schema_map::init();
+    if rawmod::subscribe_to_server_event(
+        raw_ctx,
+        unsafe { rawmod::RedisModuleEvent_FlushDB },
+        Some(flushdb_event),
+    ) == rawmod::Status::Err
+    {
+        return rawmod::Status::Err as c_int;
+    }
     redisearch_api::init(raw_ctx)
 }
 

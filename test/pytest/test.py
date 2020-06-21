@@ -839,6 +839,42 @@ class ReJSONTestCase(BaseReJSONTest):
             with self.assertRaises(redis.exceptions.ResponseError) as cm:
                 do('JSON.INDEX', 'ADD', 'index2', 'second', '$.third2')
 
+    def testIndexFlush(self):
+        """Test Index flush"""
+
+        with self.redis() as r:
+            r.client_setname(self._testMethodName)
+            r.flushdb()
+
+            schema = {
+                'index': {
+                    'first': '$.first',
+                    'second': '$.second'
+                },
+                'index2': {
+                    'first2': '$.first2'
+                }
+            }
+
+            def do(*args):
+                self.assertOk(r.execute_command(*args))
+
+            def create_schema():
+                for index, fields in schema.iteritems():
+                    for field, path in fields.iteritems():
+                        do('JSON.INDEX', 'ADD', index, field, path)
+
+            # Test 'json.index flush'
+            create_schema()
+            self.assertEqual(json.loads(r.execute_command('JSON.INDEX', 'INFO')), schema)
+            do('JSON.INDEX', 'FLUSH')
+            self.assertEqual(json.loads(r.execute_command('JSON.INDEX', 'INFO')), {})
+
+            # Test 'flushall'
+            create_schema()
+            self.assertEqual(json.loads(r.execute_command('JSON.INDEX', 'INFO')), schema)
+            self.assertTrue(r.flushall())
+            self.assertEqual(json.loads(r.execute_command('JSON.INDEX', 'INFO')), {})
 
     def testRediSearch(self):
         """Test RediSearch integration"""
