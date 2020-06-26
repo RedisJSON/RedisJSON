@@ -11,7 +11,6 @@ use crate::formatter::RedisJsonFormatter;
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 use crate::REDIS_JSON_TYPE_VERSION;
 
-use crate::error::Error::{GeneralError, PathNotAnObject, WrongStaticPath};
 use bson::decode_document;
 use index::schema_map;
 use jsonpath_lib::SelectorMut;
@@ -115,7 +114,7 @@ impl RedisJSON {
         let mut parsed_static_path = StaticPathParser::check(path)?;
 
         if parsed_static_path.valid != VisitStatus::Valid {
-            return Err(WrongStaticPath);
+            return Err(Error::WrongStaticPath);
         }
         if parsed_static_path.static_path_elements.len() < 2 {
             return Err("path must end with object key to set".into());
@@ -166,7 +165,7 @@ impl RedisJSON {
                 Ok(set)
             }
         } else {
-            Err(PathNotAnObject)
+            Err(Error::PathNotAnObject)
         }
     }
 
@@ -399,7 +398,7 @@ impl RedisJSON {
         match errors.len() {
             0 => Ok(result),
             1 => Err(errors.remove(0)),
-            _ => Err(GeneralError(
+            _ => Err(Error::GeneralError(
                 errors
                     .into_iter()
                     .map(|e| e.to_string())

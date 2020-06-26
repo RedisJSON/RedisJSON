@@ -1,10 +1,22 @@
-use jsonpath_lib::JsonPathError;
-use std::fmt;
+use jsonpath_lib;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum Error {
+    #[error("ERR {0}")]
     GeneralError(String),
+
+    #[error("ERR {0}")]
+    InvalidJson(#[from] serde_json::Error),
+
+    // Escape newlines so it'll be a valid redis error response
+    #[error("ERR JSON path error: {}", format!("{:?}",.0).replace("\n", "\\n"))]
+    InvalidJsonPath(jsonpath_lib::JsonPathError),
+
+    #[error("ERR path not an object")]
     PathNotAnObject,
+
+    #[error("ERR wrong static path")]
     WrongStaticPath,
 }
 
@@ -20,31 +32,14 @@ impl From<&str> for Error {
     }
 }
 
-impl From<serde_json::Error> for Error {
-    fn from(e: serde_json::Error) -> Self {
-        Error::GeneralError(e.to_string())
-    }
-}
-
-impl From<JsonPathError> for Error {
-    fn from(e: JsonPathError) -> Self {
-        Error::GeneralError(format!("JSON path error: {:?}", e).replace("\n", "\\n"))
+impl From<jsonpath_lib::JsonPathError> for Error {
+    fn from(e: jsonpath_lib::JsonPathError) -> Self {
+        Error::InvalidJsonPath(e)
     }
 }
 
 impl From<Error> for redis_module::RedisError {
     fn from(e: Error) -> Self {
         redis_module::RedisError::String(e.to_string())
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let msg = match self {
-            Error::GeneralError(msg) => format!("ERR {}", msg),
-            Error::PathNotAnObject => "ERR path not an object".to_string(),
-            Error::WrongStaticPath => "ERR wrong static path".to_string(),
-        };
-        write!(f, "{}", msg)
     }
 }
