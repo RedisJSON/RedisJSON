@@ -109,6 +109,7 @@ fn create_document(key: &str, schema: &Schema, doc: &RedisJSON) -> Result<Docume
 
     for (field_name, path) in fields {
         let results = doc.get_values(path)?;
+        // TODO: support multiple results instead of calling .first(), see #201
         if let Some(value) = results.first() {
             match value {
                 Value::String(v) => rsdoc.add_field(field_name, &v, FieldType::FULLTEXT),
