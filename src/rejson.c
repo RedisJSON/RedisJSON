@@ -1349,6 +1349,7 @@ int JSONStrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
 
     // actually concatenate the strings
     Node_StringAppend(jpn->n, jo);
+    maybeClearPathCache(jt, jpn);
     RedisModule_ReplyWithLongLong(ctx, (long long)Node_Length(jpn->n));
     Node_Free(jo);
     JSONPathNode_Free(jpn);
@@ -1755,6 +1756,7 @@ int JSONArrPop_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int a
 
     // delete the item from the array
     Node_ArrayDelRange(jpn->n, index, 1);
+    maybeClearPathCache(jt, jpn);
 
     // reply with the serialization
     RedisModule_ReplyWithStringBuffer(ctx, json, sdslen(json));
