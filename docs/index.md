@@ -18,6 +18,7 @@ at: https://github.com/RedisJSON/RedisJSON
 
 ## Quickstart
 
+1.  [Create a free database in Redis Cloud](#redis-cloud)
 1.  [Launch RedisJSON with Docker](#launch-redisjson-with-docker)
 1.  [Use it from **any** Redis client](#using-redisjson), e.g.:
 
@@ -25,6 +26,11 @@ at: https://github.com/RedisJSON/RedisJSON
 
 Alternatively, you can also build and load the module yourself. [Build and Load the RedisJSON module library](#building-and-loading-the-module)
 
+## Redis Cloud
+
+RedisJSON is available on all Redis Cloud managed services.  Redis Cloud Essentials offers a completely free managed databbases up to 30MB.
+
+[Get started here](https://redislabs.com/redis-enterprise-cloud/).
 
 ## Launch RedisJSON with Docker
 Run the following on Windows, MacOS or Linux with Docker.
