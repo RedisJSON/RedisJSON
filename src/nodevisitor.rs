@@ -70,7 +70,7 @@ impl NodeVisitor for StaticPathParser {
 
                 (Some(ParseToken::Number(num)), ParseToken::ArrayEof) => {
                     self.static_path_elements
-                        .push(StaticPathElement::ArrayIndex(num.clone()));
+                        .push(StaticPathElement::ArrayIndex(*num));
                     VisitStatus::Valid
                 }
 
