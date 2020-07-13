@@ -514,7 +514,6 @@ pub mod type_methods {
         let json = &*(value as *const RedisJSON);
         let doc_str = json.data.to_string();
         let key = RedisString::from_ptr(key).unwrap(); // FIXME: Why does it crash when I use key directly and pass "s" to the fmt string??
-        eprintln!("In AOF rewrite for {}", key);
         if let Some(value_index) = &json.value_index {
             let index_name = &value_index.index_name;
             raw::RedisModule_EmitAOF.unwrap()(
@@ -537,7 +536,7 @@ pub mod type_methods {
                 b"bcb\0".as_ptr() as *const c_char,
                 key.as_ptr(),
                 key.len(),
-                b"$\0".as_ptr(),
+                b"$\0",
                 doc_str.as_bytes(),
                 doc_str.len(),
             );
