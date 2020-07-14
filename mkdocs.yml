@@ -7,6 +7,9 @@ google_analytics:
     - 'UA-92003007-1'
     - 'auto'
 
+extra_javascript:
+    - gtm.js
+
 theme:
   name: 'material'
   language: 'en'
