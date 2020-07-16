@@ -537,7 +537,7 @@ pub mod type_methods {
                 key.as_ptr(),
                 key.len(),
                 b"$\0",
-                doc_str.as_bytes(),
+                doc_str.as_ptr(),
                 doc_str.len(),
             );
         }
