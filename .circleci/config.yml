@@ -100,9 +100,7 @@ workflows:
             - build
           filters:
             branches:
-              only:
-                - master
-                - /^[0-9]+\.[0-9]+$/
+              only: master
       - package_release:
           requires:
             - build
