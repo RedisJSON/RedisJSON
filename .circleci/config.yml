@@ -92,9 +92,11 @@ workflows:
   build_and_package:
     jobs:
       - build:
-          filters:
-            tags:
-              only: /.*/
+        filters:
+          branches:
+            only: /.*/
+          tags:
+            only: /.*/
       - package_branch:
           requires:
             - build
