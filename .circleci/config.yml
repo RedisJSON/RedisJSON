@@ -213,20 +213,22 @@ workflows:
   build_and_package:
     jobs:
       - build:
-          <<: *on-any-branch
+	      <<: *on-any-branch
       - package_branch:
-          <<: *on-master
+          <<: *on-any-branch
+	      #@ <<: *on-master
           requires:
             - build
       - package_release:
-          <<: *on-version-tags
+	      <<: *on-version-tags
           requires:
             - build
       - deploy_branch:
-          <<: *on-master
+          <<: *on-any-branch
+	      #@ <<: *on-master
           requires:
             - package_branch
       - deploy_release:
-          <<: *on-version-tags
+	      <<: *on-version-tags
           requires:
             - package_release
