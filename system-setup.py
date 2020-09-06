@@ -19,21 +19,23 @@ class RedisJSONSetup(paella.Setup):
         self.pip_install("wheel")
         self.pip_install("setuptools --upgrade")
 
-        self.install("git wget lcov")
-        clang llvm make epel-release
+        # self.install("git wget clang-6.0 lcov")
+        self.install("git wget clang cmake")
 
     def debian_compat(self):
-        self.install("libatomic1")
+        # self.install("libatomic1")
         self.install("build-essential")
+        self.install("python-psutil")
 
     def redhat_compat(self):
         self.install("redhat-lsb-core")
         self.install("epel-release")
-        self.install("libatomic")
+        # self.install("libatomic")
         self.group_install("'Development Tools'")
+        self.install("python2-psutil")
 
     def fedora(self):
-        self.install("libatomic")
+        # self.install("libatomic")
         self.group_install("'Development Tools'")
 
     def macosx(self):
@@ -44,7 +46,7 @@ class RedisJSONSetup(paella.Setup):
         # redis-py-cluster should be installed from git due to redis-py dependency
         self.run("python2 -m pip uninstall -y -q redis redis-py-cluster ramp-packer RLTest semantic-version")
         self.pip_install("--no-cache-dir git+https://github.com/Grokzen/redis-py-cluster.git@master")
-        self.pip_install("--no-cache-dir git+https://github.com/RedisLabsModules/RLTest.git@master")
+        # self.pip_install("--no-cache-dir git+https://github.com/RedisLabsModules/RLTest.git@master")
         self.pip_install("--no-cache-dir git+https://github.com/RedisLabs/RAMP@master")
         
         self.pip_install("awscli")
