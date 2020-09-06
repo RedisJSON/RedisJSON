@@ -4,7 +4,7 @@ jobs:
 
   build:
     docker:
-      - image: centos:7
+      - image: redisfab/rmbuilder:6.0.7-x64-centos7
 
     steps:
       - checkout
