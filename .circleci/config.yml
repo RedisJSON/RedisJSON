@@ -13,13 +13,6 @@ jobs:
           name: Checkout submodules
           command: git submodule update --init --recursive
 
-#      - run:
-#          name: Install prerequisites
-#          command: |
-#              yum update -y
-#              yum install -y software-properties-common git clang llvm make cmake awscl gcc gcc-c++ epel-release
-#              yum install -y http://rpms.remirepo.net/enterprise/remi-release-7.rpm
-
       - run:
           name: Setup automation and install dependencies
           command: |
@@ -205,8 +198,7 @@ workflows:
       - build:
           <<: *on-any-branch
       - package_branch:
-          <<: *on-any-branch
-          #@ <<: *on-master
+          <<: *on-master
           requires:
             - build
       - package_release:
@@ -214,8 +206,7 @@ workflows:
           requires:
             - build
       - deploy_branch:
-          <<: *on-any-branch
-          #@ <<: *on-master
+          <<: *on-master
           requires:
             - package_branch
       - deploy_release:
