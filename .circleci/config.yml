@@ -2,9 +2,13 @@ version: 2.1
 jobs:
   build:
     docker:
-      - image: 'redislabsmodules/rmbuilder:latest'
+      - image: redisfab/rmbuilder:6.0.7-x64-buster
     steps:
       - checkout
+
+      - run: 
+          name: Checkout submodules
+          command: git submodule update --init --recursive
       - run:
           name: Build
           command: make -j 8
@@ -13,9 +17,11 @@ jobs:
           command: make test
       - run:
           name: Persist Artifacts
-          command: >-
-            mkdir -p /workspace/build && cp src/$MODULE_ARTIFACT /workspace/ &&
+          command: |
+            mkdir -p /workspace/build
+            cp src/$MODULE_ARTIFACT /workspace/
             cp ramp.yml /workspace/
+
       - persist_to_workspace:
           root: /workspace
           paths:
@@ -24,7 +30,7 @@ jobs:
             - build
   package_branch:
     docker:
-      - image: 'redislabsmodules/rmbuilder:latest'
+      - image: redisfab/rmbuilder:6.0.7-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -40,9 +46,10 @@ jobs:
             - build
       - store_artifacts:
           path: /workspace/build
+
   package_release:
     docker:
-      - image: 'redislabsmodules/rmbuilder:latest'
+      - image: redisfab/rmbuilder:6.0.7-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -64,59 +71,86 @@ jobs:
             - build
       - store_artifacts:
           path: /workspace/build
+
   deploy_branch:
     docker:
-      - image: 'redislabsmodules/rmbuilder:latest'
+      - image: redisfab/rmbuilder:6.0.7-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
       - run:
           name: Deploy to S3
-          command: >-
-            aws s3 cp /workspace/build/ s3://redismodules/$PACKAGE_NAME/ --acl
-            public-read --recursive --exclude "*" --include "*.zip"
+          command: |
+            aws s3 cp /workspace/build/ s3://redismodules/$PACKAGE_NAME/ --acl public-read --recursive --exclude "*" --include "*.zip"
+
   deploy_release:
     docker:
-      - image: 'redislabsmodules/rmbuilder:latest'
+      - image: redisfab/rmbuilder:6.0.7-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
       - run:
           name: Deploy to S3
-          command: >-
-            aws s3 cp /workspace/build/ s3://redismodules/$PACKAGE_NAME/ --acl
-            public-read --recursive --exclude "*" --include "*.zip"
+          command: |
+            aws s3 cp /workspace/build/ s3://redismodules/$PACKAGE_NAME/ --acl public-read --recursive --exclude "*" --include "*.zip"
+
+
+on-any-branch: &on-any-branch
+  filters:
+    branches:
+      only: /.*/
+    tags:
+      only: /.*/
+
+never: &never
+  filters:
+    branches:
+      ignore: /.*/
+    tags:
+      ignore: /.*/
+
+on-master: &on-master
+  filters:
+    branches:
+      only: master
+
+on-version-tags: &on-version-tags
+  filters:
+    branches:
+      ignore: /.*/
+    tags:
+      only: /^v[0-9].*/
+
+on-master-and-version-tags: &on-master-and-version-tags
+  filters:
+    branches:
+      only:
+        - master
+    tags:
+      only: /^v[0-9].*/
+
 
 workflows:
   version: 2
   build_and_package:
     jobs:
       - build:
-        filters:
-          branches:
-            only: /.*/
-          tags:
-            only: /.*/
+	      <<: *on-any-branch
       - package_branch:
+          <<: *on-any-branch
+	      #@ <<: *on-master
           requires:
             - build
-          filters:
-            branches:
-              only: master
       - package_release:
+	      <<: *on-version-tags
           requires:
             - build
-          filters:
-            branches:
-              ignore: /.*/
-            tags:
-              only: '/^v[0-9].*/'
       - deploy_branch:
+          <<: *on-any-branch
+	      #@ <<: *on-master
           requires:
             - package_branch
       - deploy_release:
-          filters:
-            tags:
-              only: '/^v[0-9].*/'
+	      <<: *on-version-tags
           requires:
             - package_release
