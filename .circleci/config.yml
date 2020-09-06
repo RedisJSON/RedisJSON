@@ -215,8 +215,7 @@ workflows:
       - build:
           <<: *on-any-branch
       - package_branch:
-          <<: *on-any-branch
-          #@ <<: *on-master
+          <<: *on-master
           requires:
             - build
       - package_release:
@@ -224,8 +223,7 @@ workflows:
           requires:
             - build
       - deploy_branch:
-          <<: *on-any-branch
-          #@ <<: *on-master
+          <<: *on-master
           requires:
             - package_branch
       - deploy_release:

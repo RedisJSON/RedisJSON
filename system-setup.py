@@ -19,23 +19,19 @@ class RedisJSONSetup(paella.Setup):
         self.pip_install("wheel")
         self.pip_install("setuptools --upgrade")
 
-        # self.install("git wget clang-6.0 lcov")
         self.install("git wget clang cmake")
 
     def debian_compat(self):
-        # self.install("libatomic1")
         self.install("build-essential")
         self.install("python-psutil")
 
     def redhat_compat(self):
         self.install("redhat-lsb-core")
         self.install("epel-release")
-        # self.install("libatomic")
         self.group_install("'Development Tools'")
         self.install("python2-psutil")
 
     def fedora(self):
-        # self.install("libatomic")
         self.group_install("'Development Tools'")
 
     def macosx(self):
