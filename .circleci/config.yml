@@ -4,43 +4,32 @@ jobs:
 
   build:
     docker:
-      - image: centos:7
+      - image: redisfab/rmbuilder:6.0.7-x64-centos7
 
     steps:
-      - checkout     
-      
-      - run:
-          name: Install prerequisites
-          command: |
-              yum update -y
-              yum install -y software-properties-common git clang llvm make cmake awscl gcc gcc-c++ epel-release
-              yum install -y http://rpms.remirepo.net/enterprise/remi-release-7.rpm
-              yum --enablerepo=remi install -y redis
+      - checkout
+
+      - run: 
+          name: Checkout submodules
+          command: git submodule update --init --recursive
 
       - run:
-          name: Install Python
+          name: Setup automation and install dependencies
           command: |
-             curl "https://bootstrap.pypa.io/get-pip.py" -o "get-pip.py"
-             python get-pip.py
-             pip install 'ramp-packer==1.9.0'
-             
+            (mkdir -p deps; cd deps; git clone https://github.com/RedisLabsModules/readies.git)
+            PIP=1 FORCE=1 ./deps/readies/bin/getpy2
+            ./system-setup.py
+
+      - run:
+          name: Install Redis
+          command: ./deps/readies/bin/getredis -v 6 
+
       - run:
           name: Install Rust
           command: |
              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > rust.sh
-             python get-pip.py
              sh rust.sh -y
              echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
-             
-      - run: 
-          name: Update git submodule
-          command: |
-             git submodule sync
-             git submodule update --init 
-      
-      - run:
-          name: Version information
-          command: |
              source $HOME/.cargo/env
              rustc --version
              cargo --version
@@ -71,8 +60,7 @@ jobs:
           command: |
              source $HOME/.cargo/env
              cargo test --features test --all
-             pip install -r ./test/pytest/requirements.txt
-             python ./test/pytest/test.py
+             python2 ./test/pytest/test.py
 
       - run:
           name: Build release
@@ -83,8 +71,9 @@ jobs:
 
       - run:
           name: Persist Artifacts
-          command: >-
-            mkdir -p workspace/build && cp target/release/$MODULE_ARTIFACT workspace/ &&
+          command: |
+            mkdir -p workspace/build
+            cp target/release/$MODULE_ARTIFACT workspace/
             cp ramp.yml workspace/
 
       - persist_to_workspace:
@@ -102,7 +91,7 @@ jobs:
 
   package_branch:
     docker:
-      - image: 'redislabsmodules/rmbuilder:latest'
+      - image: redisfab/rmbuilder:6.0.7-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -121,7 +110,7 @@ jobs:
 
   package_release:
     docker:
-      - image: 'redislabsmodules/rmbuilder:latest'
+      - image: redisfab/rmbuilder:6.0.7-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -146,56 +135,81 @@ jobs:
 
   deploy_branch:
     docker:
-      - image: 'redislabsmodules/rmbuilder:latest'
+      - image: redisfab/rmbuilder:6.0.7-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
       - run:
           name: Deploy to S3
-          command: >-
-            aws s3 cp /workspace/build/ s3://redismodules/$PACKAGE_NAME/ --acl
-            public-read --recursive --exclude "*" --include "*.zip"
+          command: |
+            aws s3 cp /workspace/build/ s3://redismodules/$PACKAGE_NAME/ --acl public-read --recursive --exclude "*" --include "*.zip"
 
   deploy_release:
     docker:
-      - image: 'redislabsmodules/rmbuilder:latest'
+      - image: redisfab/rmbuilder:6.0.7-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
       - run:
           name: Deploy to S3
-          command: >-
-            aws s3 cp /workspace/build/ s3://redismodules/$PACKAGE_NAME/ --acl
-            public-read --recursive --exclude "*" --include "*.zip"
+          command: |
+            aws s3 cp /workspace/build/ s3://redismodules/$PACKAGE_NAME/ --acl public-read --recursive --exclude "*" --include "*.zip"
+
+
+on-any-branch: &on-any-branch
+  filters:
+    branches:
+      only: /.*/
+    tags:
+      only: /.*/
+
+never: &never
+  filters:
+    branches:
+      ignore: /.*/
+    tags:
+      ignore: /.*/
+
+on-master: &on-master
+  filters:
+    branches:
+      only: master
+
+on-version-tags: &on-version-tags
+  filters:
+    branches:
+      ignore: /.*/
+    tags:
+      only: /^v[0-9].*/
+
+on-master-and-version-tags: &on-master-and-version-tags
+  filters:
+    branches:
+      only:
+        - master
+    tags:
+      only: /^v[0-9].*/
+
 
 workflows:
   version: 2
   build_and_package:
     jobs:
       - build:
-          filters:
-            tags:
-              only: /.*/
+          <<: *on-any-branch
       - package_branch:
+          <<: *on-master
           requires:
             - build
-          filters:
-            branches:
-              only: master
       - package_release:
+          <<: *on-version-tags
           requires:
             - build
-          filters:
-            branches:
-              ignore: /.*/
-            tags:
-              only: '/^v[0-9].*/'
       - deploy_branch:
+          <<: *on-master
           requires:
             - package_branch
       - deploy_release:
-          filters:
-            tags:
-              only: '/^v[0-9].*/'
+          <<: *on-version-tags
           requires:
             - package_release
