@@ -116,6 +116,13 @@ class ReJSONTestCase(BaseReJSONTest):
                 with self.assertRaises(redis.exceptions.ResponseError) as cm:
                     r.execute_command('JSON.SET', 'test', i, 'null')
                 self.assertNotExists(r, 'test', i)
+                
+            self.assertOk(r.execute_command('JSON.SET', 'test', '.', '{}'))
+
+            for i in invalid:
+                with self.assertRaises(redis.exceptions.ResponseError) as cm:
+                    r.execute_command('JSON.SET', 'test', i, 'null')
+                self.assertExists(r, 'test', i)
 
     def testSetRootWithJSONValuesShouldSucceed(self):
         """Test that the root of a JSON key can be set with any valid JSON"""
