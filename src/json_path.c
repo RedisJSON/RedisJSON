@@ -25,6 +25,10 @@ int _tokenizePath(const char *json, size_t len, SearchPath *path, JSONSearchPath
     tok.s = pos;
     tok.len = 0;
     char *jsperr = NULL;
+    if(len <= 0){ // path can't be empty
+        jsperr = JSON_PATH_IDENT_FIRST_CHAR_ERR;
+        goto syntaxerror;
+    }
     while (offset < len) {
         char c = *pos;
         switch (st) {
