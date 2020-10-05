@@ -1,12 +1,10 @@
 import multiprocessing
 import time
 import redis
-import random
 import sys
 import argparse
 from urlparse import urlparse
 import os
-from itertools import chain
 from collections import defaultdict
 import math
 
