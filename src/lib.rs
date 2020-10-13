@@ -152,7 +152,9 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
-                Err(RedisError::Str("ERR new objects must be created at the root"))
+                Err(RedisError::Str(
+                    "ERR new objects must be created at the root",
+                ))
             }
         }
     }
@@ -693,7 +695,9 @@ fn json_debug(ctx: &Context, args: Vec<String>) -> RedisResult {
             ];
             Ok(results.into())
         }
-        _ => Err(RedisError::Str("ERR unknown subcommand - try `JSON.DEBUG HELP`")),
+        _ => Err(RedisError::Str(
+            "ERR unknown subcommand - try `JSON.DEBUG HELP`",
+        )),
     }
 }
 
