@@ -2,7 +2,9 @@ use std::thread;
 
 use serde_json::{Map, Value};
 
-use redis_module::{Context, NextArg, RedisError, RedisResult, RedisValue, ThreadSafeContext, REDIS_OK};
+use redis_module::{
+    Context, NextArg, RedisError, RedisResult, RedisValue, ThreadSafeContext, REDIS_OK,
+};
 
 use redisearch_api::{Document, FieldType, TagOptions};
 
@@ -179,7 +181,9 @@ where
             Ok(res)
         }
         //"INFO" => {}
-        _ => Err(RedisError::Str("ERR unknown subcommand - try `JSON.INDEX HELP`")),
+        _ => Err(RedisError::Str(
+            "ERR unknown subcommand - try `JSON.INDEX HELP`",
+        )),
     }
 }
 
