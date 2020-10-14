@@ -2,7 +2,9 @@ use std::thread;
 
 use serde_json::{Map, Value};
 
-use redis_module::{Context, NextArg, RedisError, RedisResult, RedisValue, REDIS_OK};
+use redis_module::{
+    Context, NextArg, RedisError, RedisResult, RedisValue, ThreadSafeContext, REDIS_OK,
+};
 
 use redisearch_api::{Document, FieldType, TagOptions};
 
@@ -59,7 +61,7 @@ pub fn add_field(index_name: &str, field_name: &str, path: &str) -> RedisResult 
     };
 
     if schema.fields.contains_key(field_name) {
-        Err("Field already exists".into())
+        Err(RedisError::Str("Field already exists"))
     } else {
         schema
             .index
@@ -72,7 +74,7 @@ pub fn add_field(index_name: &str, field_name: &str, path: &str) -> RedisResult 
 fn del_schema(index_name: &str) -> RedisResult {
     match schema_map::as_mut().remove(index_name) {
         Some(_) => REDIS_OK,
-        None => Err("Index not found".into()),
+        None => Err(RedisError::Str("Index not found")),
     }
 }
 
@@ -149,12 +151,13 @@ where
                     return; // TODO handle this case
                 };
 
-                let ctx = Context::get_thread_safe_context();
+                let ts_ctx = ThreadSafeContext::new();
                 let mut cursor: u64 = 0;
                 loop {
-                    ctx.lock();
-                    let res = scan_and_index(&ctx, &schema, cursor);
-                    ctx.unlock();
+                    let res = {
+                        let ts_ctx = ts_ctx.lock();
+                        scan_and_index(&*ts_ctx, &schema, cursor)
+                    };
 
                     match res {
                         Ok(c) => cursor = c,
@@ -178,7 +181,9 @@ where
             Ok(res)
         }
         //"INFO" => {}
-        _ => Err("ERR unknown subcommand - try `JSON.INDEX HELP`".into()),
+        _ => Err(RedisError::Str(
+            "ERR unknown subcommand - try `JSON.INDEX HELP`",
+        )),
     }
 }
 
@@ -201,18 +206,18 @@ fn scan_and_index(ctx: &Context, schema: &Schema, cursor: u64) -> Result<u64, Re
                                     }
                                     Ok(())
                                 } else {
-                                    Err("Error on get value from key".into())
+                                    Err(RedisError::Str("Error on get value from key"))
                                 }
                             })
                     } else {
-                        Err("Error on parsing reply from scan".into())
+                        Err(RedisError::Str("Error on parsing reply from scan"))
                     }
                 });
                 res.map(|_| cursor)
             }
-            _ => Err("Error on parsing reply from scan".into()),
+            _ => Err(RedisError::Str("Error on parsing reply from scan")),
         },
-        _ => Err("Error on parsing reply from scan".into()),
+        _ => Err(RedisError::Str("Error on parsing reply from scan")),
     }
 }
 
@@ -230,7 +235,7 @@ where
     let map = schema_map::as_ref();
 
     map.get(&index_name)
-        .ok_or_else(|| "ERR no such index".into())
+        .ok_or_else(|| RedisError::Str("ERR no such index"))
         .map(|schema| &schema.index)
         .and_then(|index| {
             let result =
