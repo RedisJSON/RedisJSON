@@ -14,7 +14,7 @@ Primary features:
 * Typed atomic operations for all JSON values types
 
 RedisJSON is developed with <3 at [Redis Labs](https://redislabs.com). The source code is available
-at: https://github.com/RedisJSON/RedisJSON
+at: [https://github.com/RedisJSON/RedisJSON](https://github.com/RedisJSON/RedisJSON)
 
 ## Quickstart
 
