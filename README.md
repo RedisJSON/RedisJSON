@@ -86,6 +86,11 @@ OK
 
 ## Build
 
+Make sure you have Rust installed:
+https://www.rust-lang.org/tools/install
+
+Then, build as usual:
+
 ```bash
 cargo build --release
 ```
