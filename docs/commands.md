@@ -26,28 +26,36 @@ The time complexity of the command does not include that of the [path](path.md#t
 *   1 for scalar values
 *   The sum of sizes of items in a container
 
-## Commands
+## Scalar commands
 
-### JSON.DEL
+### JSON.SET
 
 > **Available since 1.0.0.**  
-> **Time complexity:**  O(N), where N is the size of the deleted value.
+> **Time complexity:**  O(M+N), where M is the size of the original value (if it exists) and N is
+> the size of the new value.
 
 #### Syntax
 
 ```
-JSON.DEL <key> [path]
+JSON.SET <key> <path> <json>
+         [NX | XX]
 ```
 
 #### Description
 
-Delete a value.
+Sets the JSON value at `path` in `key`
 
-`path` defaults to root if not provided. Non-existing keys and paths are ignored. Deleting an object's root is equivalent to deleting the key from Redis.
+For new Redis keys the `path` must be the root. For existing keys, when the entire `path` exists, the value that it contains is replaced with the `json` value.
+
+A key (with its respective value) is added to a JSON Object (in a Redis RedisJSON data type key) if and only if it is the last child in the `path`. The optional subcommands modify this behavior for both new Redis RedisJSON data type keys as well as the JSON Object keys in them:
+
+*   `NX` - only set the key if it does not already exist
+*   `XX` - only set the key if it already exists
 
 #### Return value
 
-[Integer][2], specifically the number of paths deleted (0 or 1).
+[Simple String][1] `OK` if executed correctly, or [Null Bulk][3] if the specified `NX` or `XX`
+conditions were not met.
 
 ### JSON.GET
 
@@ -108,55 +116,26 @@ Returns the values at `path` from multiple `key`s. Non-existing keys and non-exi
 [Array][4] of [Bulk Strings][3], specifically the JSON serialization of the value at each key's
 path.
 
-### JSON.SET
+### JSON.DEL
 
 > **Available since 1.0.0.**  
-> **Time complexity:**  O(M+N), where M is the size of the original value (if it exists) and N is
-> the size of the new value.
+> **Time complexity:**  O(N), where N is the size of the deleted value.
 
 #### Syntax
 
 ```
-JSON.SET <key> <path> <json>
-         [NX | XX]
+JSON.DEL <key> [path]
 ```
 
 #### Description
 
-Sets the JSON value at `path` in `key`
+Delete a value.
 
-For new Redis keys the `path` must be the root. For existing keys, when the entire `path` exists, the value that it contains is replaced with the `json` value.
-
-A key (with its respective value) is added to a JSON Object (in a Redis RedisJSON data type key) if and only if it is the last child in the `path`. The optional subcommands modify this behavior for both new Redis RedisJSON data type keys as well as the JSON Object keys in them:
-
-*   `NX` - only set the key if it does not already exist
-*   `XX` - only set the key if it already exists
+`path` defaults to root if not provided. Non-existing keys and paths are ignored. Deleting an object's root is equivalent to deleting the key from Redis.
 
 #### Return value
 
-[Simple String][1] `OK` if executed correctly, or [Null Bulk][3] if the specified `NX` or `XX`
-conditions were not met.
-
-### JSON.TYPE
-
-> **Available since 1.0.0.**  
-> **Time complexity:**  O(1).
-
-#### Syntax
-
-```
-JSON.TYPE <key> [path]
-```
-
-#### Description
-
-Report the type of JSON value at `path`.
-
-`path` defaults to root if not provided. If the `key` or `path` do not exist, null is returned.
-
-#### Return value
-
-[Simple String][1], specifically the type of value.
+[Integer][2], specifically the number of paths deleted (0 or 1).
 
 ### JSON.NUMINCRBY
 
@@ -237,6 +216,8 @@ Report the length of the JSON String at `path` in `key`.
 #### Return value
 
 [Integer][2], specifically the string's length.
+
+## Array commands
 
 ### JSON.ARRAPPEND
 
@@ -361,6 +342,8 @@ This command is extremely forgiving and using it with out of range indexes will 
 
 [Integer][2], specifically the array's new size.
 
+## Object commands
+
 ### JSON.OBJKEYS
 
 > **Available since 1.0.0.**  
@@ -402,6 +385,29 @@ Report the number of keys in the JSON Object at `path` in `key`.
 #### Return value
 
 [Integer][2], specifically the number of keys in the object.
+
+## Module commands
+
+### JSON.TYPE
+
+> **Available since 1.0.0.**  
+> **Time complexity:**  O(1).
+
+#### Syntax
+
+```
+JSON.TYPE <key> [path]
+```
+
+#### Description
+
+Report the type of JSON value at `path`.
+
+`path` defaults to root if not provided. If the `key` or `path` do not exist, null is returned.
+
+#### Return value
+
+[Simple String][1], specifically the type of value.
 
 ### JSON.DEBUG
 
