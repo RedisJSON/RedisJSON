@@ -26,34 +26,35 @@ The time complexity of the command does not include that of the [path](path.md#t
 *   1 for scalar values
 *   The sum of sizes of items in a container
 
+## Commands
 
-## JSON.DEL
+### JSON.DEL
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(N), where N is the size of the deleted value.
 
-### Syntax
+#### Syntax
 
 ```
 JSON.DEL <key> [path]
 ```
 
-### Description
+#### Description
 
 Delete a value.
 
 `path` defaults to root if not provided. Non-existing keys and paths are ignored. Deleting an object's root is equivalent to deleting the key from Redis.
 
-### Return value
+#### Return value
 
 [Integer][2], specifically the number of paths deleted (0 or 1).
 
-## JSON.GET
+### JSON.GET
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(N), where N is the size of the value.
 
-### Syntax
+#### Syntax
 
 ```
 JSON.GET <key>
@@ -63,7 +64,7 @@ JSON.GET <key>
          [path ...]
 ```
 
-### Description
+#### Description
 
 Return the value at `path` in JSON serialized form.
 
@@ -81,46 +82,46 @@ Pretty-formatted JSON is producible with `redis-cli` by following this example:
 127.0.0.1:6379> JSON.GET myjsonkey INDENT "\t" NEWLINE "\n" SPACE " " path.to.value[1]
 ```
 
-### Return value
+#### Return value
 
 [Bulk String][3], specifically the JSON serialization.
 
 The reply's structure depends on the number of paths. A single path results in the value itself being returned, whereas multiple paths are returned as a JSON object in which each path is a key.
 
-## JSON.MGET
+### JSON.MGET
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(M*N), where M is the number of keys and N is the size of the value.
 
-### Syntax
+#### Syntax
 
 ```
 JSON.MGET <key> [key ...] <path>
 ```
 
-### Description
+#### Description
 
 Returns the values at `path` from multiple `key`s. Non-existing keys and non-existing paths are reported as null.
 
-### Return value
+#### Return value
 
 [Array][4] of [Bulk Strings][3], specifically the JSON serialization of the value at each key's
 path.
 
-## JSON.SET
+### JSON.SET
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(M+N), where M is the size of the original value (if it exists) and N is
 > the size of the new value.
 
-### Syntax
+#### Syntax
 
 ```
 JSON.SET <key> <path> <json>
          [NX | XX]
 ```
 
-### Description
+#### Description
 
 Sets the JSON value at `path` in `key`
 
@@ -131,137 +132,137 @@ A key (with its respective value) is added to a JSON Object (in a Redis RedisJSO
 *   `NX` - only set the key if it does not already exist
 *   `XX` - only set the key if it already exists
 
-### Return value
+#### Return value
 
 [Simple String][1] `OK` if executed correctly, or [Null Bulk][3] if the specified `NX` or `XX`
 conditions were not met.
 
-## JSON.TYPE
+### JSON.TYPE
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(1).
 
-### Syntax
+#### Syntax
 
 ```
 JSON.TYPE <key> [path]
 ```
 
-### Description
+#### Description
 
 Report the type of JSON value at `path`.
 
 `path` defaults to root if not provided. If the `key` or `path` do not exist, null is returned.
 
-### Return value
+#### Return value
 
 [Simple String][1], specifically the type of value.
 
-## JSON.NUMINCRBY
+### JSON.NUMINCRBY
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(1).
 
-### Syntax
+#### Syntax
 
 ```
 JSON.NUMINCRBY <key> <path> <number>
 ```
 
-### Description
+#### Description
 
 Increments the number value stored at `path` by `number`.
 
-### Return value
+#### Return value
 
 [Bulk String][3], specifically the stringified new value.
 
-## JSON.NUMMULTBY
+### JSON.NUMMULTBY
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(1).
 
-### Syntax
+#### Syntax
 
 ```
 JSON.NUMMULTBY <key> <path> <number>
 ```
 
-### Description
+#### Description
 
 Multiplies the number value stored at `path` by `number`.
 
-### Return value
+#### Return value
 
 [Bulk String][3], specifically the stringified new value.
 
-## JSON.STRAPPEND
+### JSON.STRAPPEND
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(N), where N is the new string's length.
 
-### Syntax
+#### Syntax
 
 ```
 JSON.STRAPPEND <key> [path] <json-string>
 ```
 
-### Description
+#### Description
 
 Append the `json-string` value(s) the string at `path`.
 
 `path` defaults to root if not provided.
 
-### Return value
+#### Return value
 
 [Integer][2], specifically the string's new length.
 
-## JSON.STRLEN
+### JSON.STRLEN
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(1).
 
-### Syntax
+#### Syntax
 
 ```
 JSON.STRLEN <key> [path]
 ```
 
-### Description
+#### Description
 
 Report the length of the JSON String at `path` in `key`.
 
 `path` defaults to root if not provided. If the `key` or `path` do not exist, null is returned.
 
-### Return value
+#### Return value
 
 [Integer][2], specifically the string's length.
 
-## JSON.ARRAPPEND
+### JSON.ARRAPPEND
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(1).
 
-### Syntax
+#### Syntax
 
 ```
 JSON.ARRAPPEND <key> <path> <json> [json ...]
 ```
 
-### Description
+#### Description
 
 Append the `json` value(s) into the array at `path` after the last element in it.
 
-### Return value
+#### Return value
 
 [Integer][2], specifically the array's new size.
 
-## JSON.ARRINDEX
+### JSON.ARRINDEX
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(N), where N is the array's size.
 
-### Syntax
+#### Syntax
 
 ```
 JSON.ARRINDEX <key> <path> <json-scalar> [start [stop]]
@@ -273,37 +274,37 @@ The optional inclusive `start` (default 0) and exclusive `stop` (default 0, mean
 
 Note: out of range errors are treated by rounding the index to the array's start and end. An inverse index range (e.g. from 1 to 0) will return unfound.
 
-### Return value
+#### Return value
 
 [Integer][2], specifically the position of the scalar value in the array, or -1 if unfound.
 
-## JSON.ARRINSERT
+### JSON.ARRINSERT
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(N), where N is the array's size.
 
-### Syntax
+#### Syntax
 
 ```
 JSON.ARRINSERT <key> <path> <index> <json> [json ...]
 ```
 
-### Description
+#### Description
 
 Insert the `json` value(s) into the array at `path` before the `index` (shifts to the right).
 
 The index must be in the array's range. Inserting at `index` 0 prepends to the array. Negative index values are interpreted as starting from the end.
 
-### Return value
+#### Return value
 
 [Integer][2], specifically the array's new size.
 
-## JSON.ARRLEN
+### JSON.ARRLEN
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(1).
 
-### Syntax
+#### Syntax
 
 ```
 JSON.ARRLEN <key> [path]
@@ -313,107 +314,107 @@ Report the length of the JSON Array at `path` in `key`.
 
 `path` defaults to root if not provided. If the `key` or `path` do not exist, null is returned.
 
-### Return value
+#### Return value
 
 [Integer][2], specifically the array's length.
 
-## JSON.ARRPOP
+### JSON.ARRPOP
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(N), where N is the array's size for `index` other than the last element,
 > O(1) otherwise.
 
-### Syntax
+#### Syntax
 
 ```
 JSON.ARRPOP <key> [path [index]]
 ```
 
-### Description
+#### Description
 
 Remove and return element from the index in the array.
 
 `path` defaults to root if not provided. `index` is the position in the array to start popping from (defaults to -1, meaning the last element). Out of range indices are rounded to their respective array ends. Popping an empty array yields null.
 
-### Return value
+#### Return value
 
 [Bulk String][3], specifically the popped JSON value.
 
-## JSON.ARRTRIM
+### JSON.ARRTRIM
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(N), where N is the array's size.
 
-### Syntax
+#### Syntax
 
 ```
 JSON.ARRTRIM <key> <path> <start> <stop>
 ```
 
-### Description
+#### Description
 
 Trim an array so that it contains only the specified inclusive range of elements.
 
 This command is extremely forgiving and using it with out of range indexes will not produce an error. If `start` is larger than the array's size or `start` > `stop`, the result will be an empty array. If `start` is < 0 then it will be treated as 0. If `stop` is larger than the end of the array, it will be treated like the last element in it.
 
-### Return value
+#### Return value
 
 [Integer][2], specifically the array's new size.
 
-## JSON.OBJKEYS
+### JSON.OBJKEYS
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(N), where N is the number of keys in the object.
 
-### Syntax
+#### Syntax
 
 ```
 JSON.OBJKEYS <key> [path]
 ```
 
-### Description
+#### Description
 
 Return the keys in the object that's referenced by `path`.
 
 `path` defaults to root if not provided. If the object is empty, or either `key` or `path` do not exist, then null is returned.
 
-### Return value
+#### Return value
 
 [Array][4], specifically the key names in the object as [Bulk Strings][3].
 
-## JSON.OBJLEN
+### JSON.OBJLEN
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(1).
 
-### Syntax
+#### Syntax
 
 ```
 JSON.OBJLEN <key> [path]
 ```
 
-### Description
+#### Description
 
 Report the number of keys in the JSON Object at `path` in `key`.
 
 `path` defaults to root if not provided. If the `key` or `path` do not exist, null is returned.
 
-### Return value
+#### Return value
 
 [Integer][2], specifically the number of keys in the object.
 
-## JSON.DEBUG
+### JSON.DEBUG
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(N), where N is the size of the JSON value.
 
-### Syntax
+#### Syntax
 
 ```
 JSON.DEBUG <subcommand & arguments>
 ```
 
-### Description
+#### Description
 
 Report information.
 
@@ -423,29 +424,29 @@ Supported subcommands are:
     not provided.
 *   `HELP` - reply with a helpful message
 
-### Return value
+#### Return value
 
 Depends on the subcommand used.
 
 *   `MEMORY` returns an [integer][2], specifically the size in bytes of the value
 *   `HELP` returns an [array][4], specifically with the help message
 
-## JSON.FORGET
+### JSON.FORGET
 
 An alias for [`JSON.DEL`](#jsondel).
 
-## JSON.RESP
+### JSON.RESP
 
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(N), where N is the size of the JSON value.
 
-### Syntax
+#### Syntax
 
 ```
 JSON.RESP <key> [path]
 ```
 
-### Description
+#### Description
 
 Return the JSON in `key` in [Redis Serialization Protocol (RESP)][5].
 
@@ -457,7 +458,7 @@ Return the JSON in `key` in [Redis Serialization Protocol (RESP)][5].
 -   JSON Arrays are represented as [RESP Arrays][4] in which the first element is the [simple string][1] `[` followed by the array's elements
 -   JSON Objects are represented as [RESP Arrays][4] in which the first element is the [simple string][1] `{`. Each successive entry represents a key-value pair as a two-entries [array][4] of [bulk strings][3].
 
-### Return value
+#### Return value
 
 [Array][4], specifically the JSON's RESP form as detailed.
 
