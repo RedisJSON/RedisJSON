@@ -117,6 +117,7 @@ Some languages have client libraries that provide support for RedisJSON's comman
 | ------- | -------- | ------- | ------ | --- |
 | iorejson | Node.js | MIT | [Evan Huang @evanhuang8](https://github.com/evanhuang8) | [git](https://github.com/evanhuang8/iorejson) [npm](https://www.npmjs.com/package/iorejson) |
 | node_redis-rejson | Node.js | MIT | [Kyle Davis @stockholmux](https://github.com/stockholmux) | [git](https://github.com/stockholmux/node_redis-rejson) [npm](https://www.npmjs.com/package/redis-rejson) |
+| redis-modules-sdk | Node.js | BSD-3-Clause | [Dani Tseitlin @danitseitlin](https://github.com/danitseitlin) | [git](https://github.com/danitseitlin/redis-modules-sdk) [npm](https://www.npmjs.com/package/redis-modules-sdk) |
 | JReJSON | Java | BSD-2-Clause | [Redis Labs](https://redislabs.com) | [git](https://github.com/RedisLabs/JReJSON/) |
 | rejson-py | Python | BSD-2-Clause | [Redis Labs](https://redislabs.com) | [git](https://github.com/RedisLabs/rejson-py) [pypi](https://pypi.python.org/pypi/rejson) |
 | go-rejson (multiple clients) | Go | MIT | [Nitish Malhotra @nitishm](https://github.com/nitishm) | [git](https://github.com/nitishm/go-rejson/) |
