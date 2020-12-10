@@ -2,7 +2,7 @@
 
 # RedisJSON - a JSON data type for Redis
 [![Forum](https://img.shields.io/badge/Forum-RedisJSON-blue)](https://forum.redislabs.com/c/modules/redisjson)
-[![Gitter](https://badges.gitter.im/RedisLabs/RedisJSON.svg)](https://gitter.im/RedisLabs/RedisJSON?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Discord](https://img.shields.io/discord/697882427875393627?style=flat-square)](https://discord.gg/QUkjSsk)
 
 RedisJSON is a [Redis](https://redis.io/) module that implements [ECMA-404 The JSON Data Interchange Standard](http://json.org/) as a native data type. It allows storing, updating and fetching JSON values from Redis keys (documents).
 
@@ -28,7 +28,7 @@ Alternatively, you can also build and load the module yourself. [Build and Load 
 
 ## Redis Cloud
 
-RedisJSON is available on all Redis Cloud managed services.  Redis Cloud Essentials offers a completely free managed databbases up to 30MB.
+RedisJSON is available on all Redis Cloud managed services.  Redis Cloud Essentials offers a completely free managed databases up to 30MB.
 
 [Get started here](https://redislabs.com/try-free/)
 

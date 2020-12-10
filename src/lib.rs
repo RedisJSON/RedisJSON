@@ -152,7 +152,9 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
-                Err("ERR new objects must be created at the root".into())
+                Err(RedisError::Str(
+                    "ERR new objects must be created at the root",
+                ))
             }
         }
     }
@@ -704,7 +706,9 @@ fn json_debug(ctx: &Context, args: Vec<String>) -> RedisResult {
             ];
             Ok(results.into())
         }
-        _ => Err("ERR unknown subcommand - try `JSON.DEBUG HELP`".into()),
+        _ => Err(RedisError::Str(
+            "ERR unknown subcommand - try `JSON.DEBUG HELP`",
+        )),
     }
 }
 
@@ -775,11 +779,11 @@ fn json_len<F: Fn(&RedisJSON, &String) -> Result<usize, Error>>(
 }
 
 fn json_cache_info(_ctx: &Context, _args: Vec<String>) -> RedisResult {
-    Err("Command was not implemented".into())
+    Err(RedisError::Str("Command was not implemented"))
 }
 
 fn json_cache_init(_ctx: &Context, _args: Vec<String>) -> RedisResult {
-    Err("Command was not implemented".into())
+    Err(RedisError::Str("Command was not implemented"))
 }
 //////////////////////////////////////////////////////
 
