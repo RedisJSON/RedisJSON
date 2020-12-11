@@ -37,7 +37,7 @@ Read the docs at http://redisjson.io
 
 * `<index>` - user defined index name
 * `<path>` - [JSONPath](https://goessner.net/articles/JsonPath/) syntax for selecting elements inside documents
-* `<query>` - sytanx is based on [RediSearch query syntax](https://oss.redislabs.com/redisearch/Query_Syntax/)
+* `<query>` - syntax is based on [RediSearch query syntax](https://oss.redislabs.com/redisearch/Query_Syntax/)
 
 ### Next Milestone
     JSON.QSET <index> <query> <path> <json> [NX | XX]
