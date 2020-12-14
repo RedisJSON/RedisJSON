@@ -38,6 +38,7 @@ markdown_extensions:
   - codehilite:
       guess_lang: False
   - toc:
+      toc_depth: 3
       permalink: True
 
 plugins:
