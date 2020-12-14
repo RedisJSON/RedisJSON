@@ -1,10 +1,8 @@
 # Creates count of keys from a document
-import sys
 import argparse
 from urlparse import urlparse
 import os
 import redis
-from disposableredis import DisposableRedis
 
 # http://code.activestate.com/recipes/577081-humanized-representation-of-a-number-of-bytes/#c7
 def GetHumanReadable(size, precision=2):
