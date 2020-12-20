@@ -1342,9 +1342,11 @@ int JSONStrAppend_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
     // the value must be a string
     if (N_STRING != NODETYPE(jo)) {
         sds err = sdscatfmt(sdsempty(), "ERR wrong type of value - expected %s but found %s",
-                            NodeTypeStr(N_STRING), NodeTypeStr(NODETYPE(jpn->n)));
+                            NodeTypeStr(N_STRING), NodeTypeStr(NODETYPE(jo)));
         RedisModule_ReplyWithError(ctx, err);
         sdsfree(err);
+        Node_Free(jo);
+        goto error;
     }
 
     // actually concatenate the strings
