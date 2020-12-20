@@ -12,7 +12,7 @@
 #endif
 
 #ifndef REJSON_VERSION_PATCH
-#define REJSON_VERSION_PATCH 6
+#define REJSON_VERSION_PATCH 7
 #endif
 
 #define REJSON_MODULE_VERSION \
