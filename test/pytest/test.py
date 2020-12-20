@@ -841,6 +841,19 @@ class NoCacheTestCase(BaseReJSONTest):
 
         res = self.cmd('JSON.GET', 'myDoc', 'foo')
         self.assertEqual(0, cacheItems())
+        
+class ErrorTests(BaseReJSONTest):
+    def testBadValueToStrAppend(self):
+        self.cmd('JSON.SET', 'obj', '.', '{"categories":"a"}')
+        try:
+            self.cmd('json.strappend', 'obj', 'categories', 'null')
+        except Exception as e:
+            self.assertTrue('expected string but found null' in str(e))
+            
+        try:
+            self.cmd('json.strappend', 'obj', 'categories', '5')
+        except Exception as e:
+            self.assertTrue('expected string but found integer' in str(e))
 
 if __name__ == '__main__':
     unittest.main()
