@@ -1,6 +1,6 @@
 {
   "service_id": "single_module_test_cycle",
-  "name": "redisgraph automation-testing",
+  "name": "rejson automation-testing",
   "properties": {
     "sut_version": "master",
     "email_recipients": "s5i1u4h5a8c8w2d7@redislabs.slack.com",
