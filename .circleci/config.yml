@@ -1,8 +1,32 @@
 version: 2.1
+
+commands:
+  early_return_for_forked_pull_requests:
+    description: >-
+      If this build is from a fork, stop executing the current job and return success.
+      This is useful to avoid steps that will fail due to missing credentials.
+    steps:
+      - run:
+          name: Early return if this build is from a forked PR
+          command: |
+            if [ -n "$CIRCLE_PR_NUMBER" ]; then
+              echo "Nothing to do for forked PRs, so marking this step successful"
+              circleci step halt
+            fi
+
+  setup-automation:
+    steps:
+      - run:
+          name: Setup automation
+          command: |
+            (mkdir -p deps; cd deps; git clone https://github.com/RedisLabsModules/readies.git)
+            ./deps/readies/bin/getpy2
+            python2 -m pip install -r ./deps/readies/paella/requirements.txt
+
 jobs:
   build:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-buster
+      - image: redisfab/rmbuilder:6.0.9-x64-buster
     steps:
       - checkout
 
@@ -11,10 +35,11 @@ jobs:
           command: git submodule update --init --recursive
       - run:
           name: Build
-          command: make -j 8
+          command: make -j `nproc`
       - run:
           name: Test
           command: make test
+      - early_return_for_forked_pull_requests
       - run:
           name: Persist Artifacts
           command: |
@@ -30,14 +55,14 @@ jobs:
             - build
   package_branch:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-buster
+      - image: redisfab/rmbuilder:6.0.9-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
       - run:
           name: Package
           command: >-
-            ramp pack -m /workspace/ramp.yml -o
+            python -m RAMP.ramp pack -m /workspace/ramp.yml -o
             /workspace/build/$PACKAGE_NAME.{os}-{architecture}.$CIRCLE_BRANCH.zip
             /workspace/$MODULE_ARTIFACT
       - persist_to_workspace:
@@ -49,20 +74,20 @@ jobs:
 
   package_release:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-buster
+      - image: redisfab/rmbuilder:6.0.9-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
       - run:
           name: Package
           command: >-
-            ramp pack -m /workspace/ramp.yml -o
+            python -m RAMP.ramp pack -m /workspace/ramp.yml -o
             /workspace/build/$PACKAGE_NAME.{os}-{architecture}.{semantic_version}.zip
             /workspace/$MODULE_ARTIFACT
       - run:
           name: Package
           command: >-
-            ramp pack -m /workspace/ramp.yml -o
+            python -m RAMP.ramp pack -m /workspace/ramp.yml -o
             /workspace/build/$PACKAGE_NAME.{os}-{architecture}.latest.zip
             /workspace/$MODULE_ARTIFACT
       - persist_to_workspace:
@@ -74,7 +99,7 @@ jobs:
 
   deploy_branch:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-buster
+      - image: redisfab/rmbuilder:6.0.9-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -85,7 +110,7 @@ jobs:
 
   deploy_release:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-buster
+      - image: redisfab/rmbuilder:6.0.9-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -93,6 +118,26 @@ jobs:
           name: Deploy to S3
           command: |
             aws s3 cp /workspace/build/ s3://redismodules/$PACKAGE_NAME/ --acl public-read --recursive --exclude "*" --include "*.zip"
+
+  release_automation:
+    docker:
+      - image: redisfab/rmbuilder:6.0.9-x64-buster
+    steps:
+      - checkout
+      - setup-automation
+      - run:
+          name: Run QA Automation
+          command: MODULE_VERSION=$CIRCLE_TAG VERBOSE=1 TEST=release ./tests/qa/run
+
+  nightly_automation:
+    docker:
+      - image: redisfab/rmbuilder:6.0.9-x64-buster
+    steps:
+      - checkout
+      - setup-automation
+      - run:
+          name: Run QA Automation
+          command: MODULE_VERSION=$CIRCLE_BRANCH VERBOSE=1 TEST=nightly QUICK=1 ./tests/qa/run
 
 
 on-any-branch: &on-any-branch
@@ -148,7 +193,18 @@ workflows:
           <<: *on-master
           requires:
             - package_branch
+      - release_automation:
+          requires:
+            - deploy_branch
       - deploy_release:
           <<: *on-version-tags
           requires:
             - package_release
+
+  nightly:
+    triggers:
+      - schedule:
+          cron: "07 20 * * *"
+          <<: *on-master
+    jobs:
+      - nightly_automation
