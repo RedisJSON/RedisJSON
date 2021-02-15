@@ -461,7 +461,6 @@ pub mod type_methods {
 
         // Take ownership of the data from Redis (causing it to be dropped when we return)
         let json = Box::from_raw(json);
-
     }
 
     #[allow(non_snake_case, unused)]
@@ -499,7 +498,5 @@ pub mod type_methods {
     }
 
     #[allow(non_snake_case, unused)]
-    pub unsafe extern "C" fn aux_save(rdb: *mut raw::RedisModuleIO, when: i32) {
-        
-    }
+    pub unsafe extern "C" fn aux_save(rdb: *mut raw::RedisModuleIO, when: i32) {}
 }
