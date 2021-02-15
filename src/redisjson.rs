@@ -5,14 +5,12 @@
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
 use crate::backward;
-use crate::commands::index;
 use crate::error::Error;
 use crate::formatter::RedisJsonFormatter;
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 use crate::REDIS_JSON_TYPE_VERSION;
 
 use bson::decode_document;
-use index::schema_map;
 use jsonpath_lib::SelectorMut;
 use redis_module::raw::{self, Status};
 use serde::Serialize;
@@ -450,9 +448,6 @@ pub mod type_methods {
                     None
                 };
                 let doc = RedisJSON::from_str(&data, &schema, Format::JSON).unwrap();
-                if let Some(schema) = schema {
-                    index::add_document(&schema.key, &schema.index_name, &doc).unwrap();
-                }
                 doc
             }
             _ => panic!("Can't load old RedisJSON RDB"),
@@ -467,9 +462,6 @@ pub mod type_methods {
         // Take ownership of the data from Redis (causing it to be dropped when we return)
         let json = Box::from_raw(json);
 
-        if let Some(value_index) = &json.value_index {
-            index::remove_document(&value_index.key, &value_index.index_name);
-        }
     }
 
     #[allow(non_snake_case, unused)]
@@ -499,7 +491,6 @@ pub mod type_methods {
                 for _ in 0..fields_size {
                     let field_name = raw::load_string(rdb);
                     let path = raw::load_string(rdb);
-                    index::add_field(&index_name, &field_name, &path);
                 }
             }
         }
@@ -509,17 +500,6 @@ pub mod type_methods {
 
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn aux_save(rdb: *mut raw::RedisModuleIO, when: i32) {
-        if (when == raw::Aux::Before as i32) {
-            let map = schema_map::as_ref();
-            raw::save_unsigned(rdb, map.len() as u64);
-            for (key, schema) in map {
-                raw::save_string(rdb, key);
-                raw::save_unsigned(rdb, schema.fields.len() as u64);
-                for (name, path) in &schema.fields {
-                    raw::save_string(rdb, name);
-                    raw::save_string(rdb, path);
-                }
-            }
-        }
+        
     }
 }
