@@ -499,7 +499,6 @@ dependencies = [
  "jsonpath_lib",
  "libc",
  "redis-module",
- "redisearch_api",
  "serde",
  "serde_json",
 ]

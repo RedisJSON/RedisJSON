@@ -12,15 +12,12 @@ use std::{i64, usize};
 
 mod array_index;
 mod backward;
-mod commands;
 mod error;
 mod formatter;
 mod nodevisitor;
 mod redisjson;
-mod schema; // TODO: Remove
 
 use crate::array_index::ArrayIndex;
-use crate::commands::index;
 use crate::error::Error;
 use crate::redisjson::{Format, Path, RedisJSON, SetOptions, ValueIndex};
 
@@ -127,9 +124,6 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     match (current, set_option) {
         (Some(ref mut doc), ref op) => {
             if doc.set_value(&value, &path, op, format)? {
-                if let Some(value_index) = value_index {
-                    index::add_document(&key, &value_index.index_name, &doc)?;
-                }
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
@@ -141,14 +135,6 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
             let doc = RedisJSON::from_str(&value, &value_index, format)?;
             if path == "$" {
                 redis_key.set_value(&REDIS_JSON_TYPE, doc)?;
-
-                if let Some(value_index) = value_index {
-                    // FIXME: We need to get the value even though we just set it,
-                    // since the original doc is consumed by set_value.
-                    // Can we do better than this?
-                    let doc = redis_key.get_value(&REDIS_JSON_TYPE)?.unwrap();
-                    index::add_document(&key, &value_index.index_name, doc)?;
-                }
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
@@ -777,8 +763,8 @@ fn json_cache_init(_ctx: &Context, _args: Vec<String>) -> RedisResult {
 //////////////////////////////////////////////////////
 
 pub extern "C" fn init(raw_ctx: *mut rawmod::RedisModuleCtx) -> c_int {
-    crate::commands::index::schema_map::init();
-    redisearch_api::init(raw_ctx)
+    //TBD: Remove
+    0 
 }
 
 redis_module! {
@@ -810,8 +796,6 @@ redis_module! {
         ["json.debug", json_debug, "readonly", 1,1,1],
         ["json.forget", json_del, "write", 1,1,1],
         ["json.resp", json_resp, "readonly", 1,1,1],
-        ["json.index", commands::index::index, "write deny-oom", 1,1,1],
-        ["json.qget", commands::index::qget, "readonly", 1,1,1],
         ["json._cacheinfo", json_cache_info, "readonly", 1,1,1],
         ["json._cacheinit", json_cache_init, "write", 1,1,1],
     ],
