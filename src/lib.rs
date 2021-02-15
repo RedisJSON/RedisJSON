@@ -764,7 +764,7 @@ fn json_cache_init(_ctx: &Context, _args: Vec<String>) -> RedisResult {
 
 pub extern "C" fn init(raw_ctx: *mut rawmod::RedisModuleCtx) -> c_int {
     //TBD: Remove
-    0 
+    0
 }
 
 redis_module! {
