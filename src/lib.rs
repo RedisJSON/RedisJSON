@@ -1,13 +1,13 @@
 #[macro_use]
 extern crate redis_module;
 
-use redis_module::native_types::RedisType;
+use redis_module::{native_types::RedisType};
 use redis_module::raw::RedisModuleTypeMethods;
 use redis_module::{raw as rawmod, NextArg};
+
 use redis_module::{Context, RedisError, RedisResult, RedisValue, REDIS_OK};
 use serde_json::{Number, Value};
 
-use std::os::raw::c_int;
 use std::{i64, usize};
 
 mod array_index;
@@ -16,10 +16,14 @@ mod error;
 mod formatter;
 mod nodevisitor;
 mod redisjson;
+mod notify;
 
 use crate::array_index::ArrayIndex;
 use crate::error::Error;
-use crate::redisjson::{Format, Path, RedisJSON, SetOptions, ValueIndex};
+use crate::redisjson::{Format, Path, RedisJSON, SetOptions};
+
+use std::os::raw::c_int;
+use crate::notify::{notifyKeySet, export_shared_api};
 
 pub const REDIS_JSON_TYPE_VERSION: i32 = 2;
 
@@ -88,7 +92,7 @@ fn json_del(ctx: &Context, args: Vec<String>) -> RedisResult {
 }
 
 ///
-/// JSON.SET <key> <path> <json> [NX | XX | FORMAT <format> | INDEX <index>]
+/// JSON.SET <key> <path> <json> [NX | XX | FORMAT <format>]
 ///
 fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
@@ -99,20 +103,13 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
 
     let mut format = Format::JSON;
     let mut set_option = SetOptions::None;
-    let mut value_index = None;
-
+    
     while let Some(s) = args.next() {
         match s.to_uppercase().as_str() {
             "NX" => set_option = SetOptions::NotExists,
             "XX" => set_option = SetOptions::AlreadyExists,
             "FORMAT" => {
                 format = Format::from_str(args.next_string()?.as_str())?;
-            }
-            "INDEX" => {
-                value_index = Some(ValueIndex {
-                    key: key.clone(),
-                    index_name: args.next_string()?,
-                });
             }
             _ => break,
         };
@@ -124,6 +121,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     match (current, set_option) {
         (Some(ref mut doc), ref op) => {
             if doc.set_value(&value, &path, op, format)? {
+                notifyKeySet(&doc);
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
@@ -132,9 +130,10 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
         }
         (None, SetOptions::AlreadyExists) => Ok(RedisValue::Null),
         (None, _) => {
-            let doc = RedisJSON::from_str(&value, &value_index, format)?;
+            let doc = RedisJSON::from_str(&value, format)?;
             if path == "$" {
-                redis_key.set_value(&REDIS_JSON_TYPE, doc)?;
+                redis_key.set_value(&REDIS_JSON_TYPE, &doc)?;
+                notifyKeySet(&doc);
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
@@ -760,12 +759,14 @@ fn json_cache_info(_ctx: &Context, _args: Vec<String>) -> RedisResult {
 fn json_cache_init(_ctx: &Context, _args: Vec<String>) -> RedisResult {
     Err(RedisError::Str("Command was not implemented"))
 }
-//////////////////////////////////////////////////////
 
-pub extern "C" fn init(raw_ctx: *mut rawmod::RedisModuleCtx) -> c_int {
-    //TBD: Remove
-    0
+pub extern "C" fn init(ctx: *mut rawmod::RedisModuleCtx) -> c_int {
+    let ctx = Context::new(ctx);   
+    export_shared_api(&ctx);
+    rawmod::Status::Ok as c_int
 }
+
+//////////////////////////////////////////////////////
 
 redis_module! {
     name: "ReJSON",
