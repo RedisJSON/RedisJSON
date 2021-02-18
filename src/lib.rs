@@ -23,7 +23,7 @@ use crate::error::Error;
 use crate::redisjson::{Format, Path, RedisJSON, SetOptions};
 
 use std::os::raw::c_int;
-use crate::notify::{notifyKeySet, export_shared_api};
+use crate::notify::{export_shared_api};
 
 pub const REDIS_JSON_TYPE_VERSION: i32 = 2;
 
@@ -121,7 +121,6 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     match (current, set_option) {
         (Some(ref mut doc), ref op) => {
             if doc.set_value(&value, &path, op, format)? {
-                notifyKeySet(&doc);
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
@@ -132,8 +131,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
         (None, _) => {
             let doc = RedisJSON::from_str(&value, format)?;
             if path == "$" {
-                redis_key.set_value(&REDIS_JSON_TYPE, &doc)?;
-                notifyKeySet(&doc);
+                redis_key.set_value(&REDIS_JSON_TYPE, doc)?;
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
