@@ -173,6 +173,15 @@ $ redis-server --loadmodule /path/to/module/rejson.so
 cargo build --release
 ```
 
+### Building on Ubuntu 20.04
+
+The following packages are required to successfully build on Ubuntu 20.04:
+
+```
+sudo apt install build-essential llvm cmake libclang1 libclang-dev cargo
+```
+Then, run `make` or `cargo build --release` in the repository directory
+
 ### Loading the module to Redis
 
 Requirements:
