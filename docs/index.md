@@ -161,7 +161,7 @@ reply = json.loads(r.execute_command('JSON.GET', 'doc'))
 
 First download the pre-compiled version from [RedisLabs download center](https://redislabs.com/download-center/modules/).
 
-Next, run Redis with RedisJSON: 
+Next, run Redis with RedisJSON:
 
 ```
 $ redis-server --loadmodule /path/to/module/rejson.so
@@ -173,6 +173,15 @@ $ redis-server --loadmodule /path/to/module/rejson.so
 cargo build --release
 ```
 
+### Building on Ubuntu 20.04
+
+The following packages are required to successfully build on Ubuntu 20.04:
+
+```
+sudo apt install build-essential llvm cmake libclang1 libclang-dev cargo
+```
+Then, run `make` or `cargo build --release` in the repository directory
+
 ### Loading the module to Redis
 
 Requirements:
@@ -182,10 +191,18 @@ Requirements:
 We recommend you have Redis load the module during startup by adding the following to your `redis.conf` file:
 
 ```
-loadmodule ./target/release/librejson.so
+loadmodule /path/to/module/target/release/librejson.so
 ```
 
-In the line above replace `/path/to/module/librejson.so` with the actual path to the module's library. Alternatively, you can have Redis load the module using the following command line argument syntax:
+On Mac OS, if this module has been built as a dynamic library use:
+
+```
+loadmodule /path/to/module/target/release/librejson.dylib
+```
+
+In the above lines replace `/path/to/module/` with the actual path to the module's library.
+
+Alternatively, you can have Redis load the module using the following command line argument syntax:
 
 ```bash
 ~/$ redis-server --loadmodule ./target/release/librejson.so
