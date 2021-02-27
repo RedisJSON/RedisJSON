@@ -24,10 +24,13 @@ RedisJSON is a [Redis](https://redis.io/) module that implements [ECMA-404 The J
 docker run -p 6379:6379 --name redis-redisjson redislabs/rejson:latest
 ```
 
+## Trying RedisJSON
+
+To try RedisJSON, either use the RedisJSON Docker image, or [create a free Redis Cloud Essentials account](https://redislabs.com/try-free/) to get a RedisJSON instance in the cloud.
+
 ## Documentation
 
 Read the docs at http://redisjson.io
-
 
 ## New Commands in RedisJSON
 
