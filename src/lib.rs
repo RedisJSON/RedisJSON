@@ -23,7 +23,7 @@ use crate::error::Error;
 use crate::redisjson::{Format, Path, RedisJSON, SetOptions};
 
 use std::os::raw::c_int;
-use crate::notify::{export_shared_api};
+use crate::notify::{trigger_callback_key, export_shared_api};
 
 pub const REDIS_JSON_TYPE_VERSION: i32 = 2;
 
@@ -121,6 +121,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     match (current, set_option) {
         (Some(ref mut doc), ref op) => {
             if doc.set_value(&value, &path, op, format)? {
+                trigger_callback_key(redis_key.get_inner());
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
@@ -131,7 +132,8 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
         (None, _) => {
             let doc = RedisJSON::from_str(&value, format)?;
             if path == "$" {
-                redis_key.set_value(&REDIS_JSON_TYPE, doc)?;
+                redis_key.set_value(&REDIS_JSON_TYPE, &doc)?;
+                trigger_callback_key(redis_key.get_inner());
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
@@ -763,6 +765,13 @@ pub extern "C" fn init(ctx: *mut rawmod::RedisModuleCtx) -> c_int {
     export_shared_api(&ctx);
     rawmod::Status::Ok as c_int
 }
+
+pub extern "C" fn deinit(_ctx: *mut rawmod::RedisModuleCtx) -> c_int {
+    //TODO: handle deregistrations
+    //Add "deinit: deinit" to redis_module! macro
+    0
+}
+
 
 //////////////////////////////////////////////////////
 
