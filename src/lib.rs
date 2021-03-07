@@ -121,7 +121,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     match (current, set_option) {
         (Some(ref mut doc), ref op) => {
             if doc.set_value(&value, &path, op, format)? {
-                trigger_callback_key(redis_key.get_inner());
+                //trigger_callback_key(redis_key.get_inner());
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
@@ -132,8 +132,8 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
         (None, _) => {
             let doc = RedisJSON::from_str(&value, format)?;
             if path == "$" {
-                redis_key.set_value(&REDIS_JSON_TYPE, &doc)?;
-                trigger_callback_key(redis_key.get_inner());
+                redis_key.set_value(&REDIS_JSON_TYPE, doc)?;
+                //trigger_callback_key(redis_key.get_inner());
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
