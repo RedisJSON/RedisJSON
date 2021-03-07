@@ -482,6 +482,7 @@ version = "1.9.0"
 dependencies = [
  "bson",
  "jsonpath_lib",
+ "lazy_static",
  "libc",
  "redis-module",
  "serde",

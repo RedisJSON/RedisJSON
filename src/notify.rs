@@ -263,25 +263,23 @@ fn trigger_callback<F>(
     where 
         F: Fn (*const c_void) -> c_int {
     let mut res: c_int = 1;
-    unsafe {
-        println!("in triggerCallback {}", callback_kind);
-        //TODO: use index trait: let callbacks = API_CTX[event]
-        let a  = API_CTX.clone();
-        let l = a.lock().unwrap();
-        let callbacks: &Vec<*const c_void>;
-        match callback_kind {
-            CallbackKind::KeyChange => {callbacks = &(*l).subs[0]}
-            CallbackKind::Event => {callbacks = &(*l).subs[1]}
-            CallbackKind::StringData => {callbacks = &(*l).subs[2]}
-        }
-        println!("calling {} callbacks", callbacks.len());
-        for cb in callbacks {
-            // TODO: use map to return a vec with all callback results?
-            let cur_res = f(*cb);
-            println!("\tcallback returned {}", cur_res);
-            if cur_res == 0 {
-                res = 0;
-            }
+    println!("in triggerCallback {}", callback_kind);
+    //TODO: use index trait: let callbacks = API_CTX[event]
+    let a  = API_CTX.clone();
+    let l = a.lock().unwrap();
+    let callbacks: &Vec<*const c_void>;
+    match callback_kind {
+        CallbackKind::KeyChange => {callbacks = &(*l).subs[0]}
+        CallbackKind::Event => {callbacks = &(*l).subs[1]}
+        CallbackKind::StringData => {callbacks = &(*l).subs[2]}
+    }
+    println!("calling {} callbacks", callbacks.len());
+    for cb in callbacks {
+        // TODO: use map to return a vec with all callback results?
+        let cur_res = f(*cb);
+        println!("\tcallback returned {}", cur_res);
+        if cur_res == 0 {
+            res = 0;
         }
     }
     res
