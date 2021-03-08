@@ -30,7 +30,7 @@ jobs:
             ./system-setup.py
       - run:
           name: Install Redis
-          command: ./deps/readies/bin/getredis -v 6 --force
+          command: bash -l -c "./deps/readies/bin/getredis -v 6 --force"
       - run:
           name: Install Rust
           command: |
