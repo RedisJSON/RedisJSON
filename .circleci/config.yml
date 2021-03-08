@@ -49,10 +49,10 @@ jobs:
           command: bash -l -c "make lint"
       - run:
           name: Build debug
-          command: bash -l -c "make build"
+          command: bash -l -c "make build DEBUG=1"
       - run:
           name: Run all tests
-          command: bash -l -c "make DEBUG=1"
+          command: bash -l -c "make test"
       - run:
           name: Build release
           command: bash -l -c make
