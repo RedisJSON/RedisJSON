@@ -33,6 +33,3 @@ build/
 .cproject
 .project
 .settings/
-
-# Rust build artifacts
-/target

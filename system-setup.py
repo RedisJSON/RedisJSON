@@ -1,11 +1,12 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import sys
 import os
 import argparse
 
 ROOT = HERE = os.path.abspath(os.path.dirname(__file__))
-sys.path.insert(0, os.path.join(ROOT, "deps/readies"))
+READIES = os.path.join(HERE, "deps/readies")
+sys.path.insert(0, READIES)
 import paella
 
 #----------------------------------------------------------------------------------------------
@@ -15,41 +16,33 @@ class RedisJSONSetup(paella.Setup):
         paella.Setup.__init__(self, nop)
 
     def common_first(self):
-        self.setup_pip()
+        self.install_downloaders()
         self.pip_install("wheel")
         self.pip_install("setuptools --upgrade")
 
-        self.install("git wget clang cmake")
+        self.install("git clang")
+        self.run("%s/bin/getgcc" % READIES)
+        if not self.has_command("rustc"):
+            self.run("%s/bin/getrust" % READIES)
+        self.run("%s/bin/getcmake" % READIES)
 
     def debian_compat(self):
-        self.install("build-essential")
-        self.install("python-psutil")
+        pass
 
     def redhat_compat(self):
         self.install("redhat-lsb-core")
-        self.install("epel-release")
-        self.group_install("'Development Tools'")
-        self.install("python2-psutil")
 
     def fedora(self):
-        self.group_install("'Development Tools'")
+        pass
 
-    def macosx(self):
-        if sh('xcode-select -p') == '':
-            fatal("Xcode tools are not installed. Please run xcode-select --install.")
+    def macos(self):
+        pass
 
     def common_last(self):
-        # redis-py-cluster should be installed from git due to redis-py dependency
-        self.run("python2 -m pip uninstall -y -q redis redis-py-cluster ramp-packer RLTest semantic-version")
-        self.pip_install("--no-cache-dir git+https://github.com/Grokzen/redis-py-cluster.git@master")
-        # self.pip_install("--no-cache-dir git+https://github.com/RedisLabsModules/RLTest.git@master")
-        self.pip_install("--no-cache-dir git+https://github.com/RedisLabs/RAMP@master")
-        
+        self.run("python3 %s/bin/getrmpytools" % READIES)
+        self.pip_install("-r %s/test/pytest/requirements.txt" % ROOT)
         self.pip_install("awscli")
 
-        self.pip_install("-r %s/deps/readies/paella/requirements.txt" % ROOT)
-        self.pip_install("-r %s/test/pytest/requirements.txt" % ROOT)
-        
 #----------------------------------------------------------------------------------------------
 
 parser = argparse.ArgumentParser(description='Set up system for build.')

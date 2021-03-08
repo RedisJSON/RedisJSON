@@ -1,3 +1,5 @@
+/target/
+
 # Object files
 *.o
 *.ko

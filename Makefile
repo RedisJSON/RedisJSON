@@ -1,34 +1,58 @@
-BUILD = cargo build --all --all-targets
-BUILD_RELEASE = ${BUILD}
-ifndef DEBUG
-	BUILD_RELEASE += --release
+
+ifeq ($(DEBUG),1)
+TARGET_DIR=target/debug
+else
+CARGO_FLAGS += --release
+TARGET_DIR=target/release
 endif
 
-all:
-	$(BUILD_RELEASE)
+#----------------------------------------------------------------------------------------------
 
-test: build_debug 
-	python test/pytest/test.py
+all: build
+
+#----------------------------------------------------------------------------------------------
+
+lint:
+	cargo fmt -- --check
+
+#----------------------------------------------------------------------------------------------
+
+build:
+	cargo build --all --all-targets $(CARGO_FLAGS)
+	cp $(TARGET_DIR)/librejson.so $(TARGET_DIR)/rejson.so
+
+clean:
+ifneq ($(ALL),1)
+	cargo clean
+else
+	rm -rf target
+endif
+
+#----------------------------------------------------------------------------------------------
+
+test: build
+	python3 test/pytest/test.py
+
 .PHONY: test
 
-build_debug:
-	$(BUILD)
-	cp ./target/debug/librejson.so ./target/debug/rejson.so
-
-docker:
-	docker pull ubuntu:latest
-	docker pull ubuntu:xenial
-	docker build . -t rejson:latest
-.PHONY: docker
-
-docker_dist:
-	docker build --rm -f Dockerfile_Dist . -t redislabs/rejson
-
-docker_push: docker_dist
-	docker push redislabs/rejson:latest
+#----------------------------------------------------------------------------------------------
 
 package:
 	$(MAKE) -C ./src package
+
+.PHONY: package
+
+#----------------------------------------------------------------------------------------------
+
+docker:
+	docker build --pull -t rejson:latest .
+
+docker_push:
+	docker push redislabs/rejson:latest
+
+.PHONY: docker docker_push
+
+#----------------------------------------------------------------------------------------------
 
 builddocs:
 	mkdocs build
@@ -39,5 +63,4 @@ localdocs: builddocs
 deploydocs: builddocs
 	mkdocs gh-deploy
 
-clean:
-	cargo clean
+.PHONY: builddocs localdocs deploydocs
