@@ -41,6 +41,7 @@ class RedisJSONSetup(paella.Setup):
     def common_last(self):
         self.run("python3 %s/bin/getrmpytools" % READIES)
         self.pip_install("-r %s/test/pytest/requirements.txt" % ROOT)
+        self.pip_install("toml")
         self.pip_install("awscli")
 
 #----------------------------------------------------------------------------------------------
