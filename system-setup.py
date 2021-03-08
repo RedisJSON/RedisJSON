@@ -21,22 +21,22 @@ class RedisJSONSetup(paella.Setup):
         self.pip_install("setuptools --upgrade")
 
         self.install("git clang")
-        self.run("%s/bin/getgcc" % READIES)
         if not self.has_command("rustc"):
             self.run("%s/bin/getrust" % READIES)
         self.run("%s/bin/getcmake" % READIES)
 
     def debian_compat(self):
-        pass
+        self.run("%s/bin/getgcc" % READIES)
 
     def redhat_compat(self):
         self.install("redhat-lsb-core")
+        self.run("%s/bin/getgcc --modern" % READIES)
 
     def fedora(self):
-        pass
+        self.run("%s/bin/getgcc" % READIES)
 
     def macos(self):
-        pass
+        self.run("%s/bin/getgcc" % READIES)
 
     def common_last(self):
         self.run("python3 %s/bin/getrmpytools" % READIES)
