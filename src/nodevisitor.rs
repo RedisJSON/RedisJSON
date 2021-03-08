@@ -1,7 +1,7 @@
 use jsonpath_lib::parser::{NodeVisitor, ParseToken};
 use jsonpath_lib::Parser;
-use std::fmt::Formatter;
 use std::fmt::Display;
+use std::fmt::Formatter;
 
 pub enum StaticPathElement {
     ArrayIndex(f64),
