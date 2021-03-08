@@ -56,15 +56,12 @@ jobs:
       - run:
           name: Build release
           command: bash -l -c make
-
       - save_cache:
           key: v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
           paths:
             - "~/.cargo"
             - "./target"
-
       - early_return_for_forked_pull_requests
-
       - run:
           name: Persist Artifacts
           command: |
