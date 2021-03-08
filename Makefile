@@ -31,6 +31,7 @@ endif
 #----------------------------------------------------------------------------------------------
 
 test: build
+	cargo test --features test --all
 	python3 test/pytest/test.py
 
 .PHONY: test

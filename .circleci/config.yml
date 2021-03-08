@@ -30,7 +30,7 @@ jobs:
             ./system-setup.py
       - run:
           name: Install Redis
-          command: ./deps/readies/bin/getredis -v 6 
+          command: ./deps/readies/bin/getredis -v 6 --force
       - run:
           name: Install Rust
           command: |
@@ -46,19 +46,16 @@ jobs:
             - v2-dependencies-
       - run:
           name: Check formatting
-          command: make lint
+          command: bash -l -c "make lint"
       - run:
           name: Build debug
-          command: make build
-            make DEBUG=1
+          command: bash -l -c "make build"
       - run:
           name: Run all tests
-          command: |
-             cargo test --features test --all
-             python3 ./test/pytest/test.py
+          command: bash -l -c "make DEBUG=1"
       - run:
           name: Build release
-          command: make
+          command: bash -l -c make
 
       - save_cache:
           key: v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
