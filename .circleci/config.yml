@@ -14,6 +14,14 @@ commands:
               circleci step halt
             fi
 
+  setup-automation:
+    steps:
+      - run:
+          name: Setup automation
+          command: |
+            git submodule update --init deps/readies
+            ./deps/readies/bin/getpy3
+
 jobs:
   build:
     docker:
@@ -245,6 +253,8 @@ workflows:
     triggers:
       - schedule:
           cron: "07 20 * * *"
-          <<: *on-master
+          filters:
+            branches:
+              only: master
     jobs:
       - nightly_automation
