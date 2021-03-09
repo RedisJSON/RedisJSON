@@ -1,5 +1,5 @@
 /target/
-/tests/pytest/log/
+/tests/pytest/logs/
 
 # Object files
 *.o
@@ -40,6 +40,6 @@
 *.pyc
 
 # mkdocs
-site/
+/site/
 
 .vscode/
