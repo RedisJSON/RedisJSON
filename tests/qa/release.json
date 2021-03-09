@@ -1,0 +1,34 @@
+{
+  "service_id": "single_module_test_cycle",
+  "name": "rejson automation-testing",
+  "properties": {
+    "sut_version": "{{RS_VERSION}}",
+    "email_recipients": "s5i1u4h5a8c8w2d7@redislabs.slack.com",
+    "sut_environments": [],
+    "tools_environment": {},
+    "modules_version": "{{MODULE_VERSION}}",
+    "test_names_modules": [
+        "{{RS_MODULE}}"
+    ],
+    "cycle_environments_setup": [
+      {
+        "teardown": true,
+        "name": "xenial-amd64-aws",
+        "concurrency": 1,
+		"module_url": "http://redismodules.s3.amazonaws.com/{{RS_MODULE_FILE_PREFIX}}/{{RS_MODULE_FILE_PREFIX}}.Linux-x86_64.{{MODULE_VERSION}}.zip"
+      },
+      {
+        "teardown": true,
+        "name": "bionic-amd64-aws",
+        "concurrency": 1,
+		"module_url": "http://redismodules.s3.amazonaws.com/{{RS_MODULE_FILE_PREFIX}}/{{RS_MODULE_FILE_PREFIX}}.Linux-x86_64.{{MODULE_VERSION}}.zip"
+      },
+      {
+        "teardown": true,
+        "name": "rhel7.7-x86_64-aws",
+        "concurrency": 1,
+		"module_url": "http://redismodules.s3.amazonaws.com/{{RS_MODULE_FILE_PREFIX}}/{{RS_MODULE_FILE_PREFIX}}.Linux-x86_64.{{MODULE_VERSION}}.zip"
+      }
+    ]
+  }
+}

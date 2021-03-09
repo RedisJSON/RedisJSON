@@ -1,10 +1,14 @@
 
+MODULE_NAME=rejson.so
+
 ifeq ($(DEBUG),1)
 TARGET_DIR=target/debug
 else
 CARGO_FLAGS += --release
 TARGET_DIR=target/release
 endif
+
+TARGET=$(TARGET_DIR)/$(MODULE_NAME)
 
 #----------------------------------------------------------------------------------------------
 
@@ -19,7 +23,7 @@ lint:
 
 build:
 	cargo build --all --all-targets $(CARGO_FLAGS)
-	cp $(TARGET_DIR)/librejson.so $(TARGET_DIR)/rejson.so
+	cp $(TARGET_DIR)/librejson.so $(TARGET)
 
 clean:
 ifneq ($(ALL),1)
@@ -30,11 +34,15 @@ endif
 
 #----------------------------------------------------------------------------------------------
 
-test: build
-	cargo test --features test --all
-	python3 test/pytest/test.py
+test: pytest
 
-.PHONY: test
+pytest:
+	MODULE=$(abspath $(TARGET)) ./tests/pytest/tests.sh
+
+cargo_test:
+	cargo test --features test --all
+
+.PHONY: pytest cargo_test
 
 #----------------------------------------------------------------------------------------------
 

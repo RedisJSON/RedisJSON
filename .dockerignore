@@ -1,4 +1,5 @@
 /target/
+/tests/pytest/log/
 
 # Object files
 *.o

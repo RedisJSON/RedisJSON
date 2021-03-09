@@ -51,11 +51,11 @@ jobs:
           name: Build debug
           command: bash -l -c "make build DEBUG=1"
       - run:
-          name: Run all tests
-          command: bash -l -c "make test"
-      - run:
           name: Build release
           command: bash -l -c make
+      - run:
+          name: Run all tests
+          command: bash -l -c "make pytest"
       - save_cache:
           key: v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
           paths:
@@ -134,6 +134,26 @@ jobs:
           name: Deploy to S3
           command: |
             aws s3 cp /workspace/build/ s3://redismodules/$PACKAGE_NAME/ --acl public-read --recursive --exclude "*" --include "*.zip"
+
+  release_automation:
+    docker:
+      - image: redisfab/rmbuilder:6.0.9-x64-buster
+    steps:
+      - checkout
+      - setup-automation
+      - run:
+          name: Run QA Automation
+          command: MODULE_VERSION=$CIRCLE_TAG VERBOSE=1 TEST=release ./tests/qa/run
+
+  nightly_automation:
+    docker:
+      - image: redisfab/rmbuilder:6.0.9-x64-buster
+    steps:
+      - checkout
+      - setup-automation
+      - run:
+          name: Run QA Automation
+          command: MODULE_VERSION=$CIRCLE_BRANCH VERBOSE=1 TEST=nightly QUICK=1 ./tests/qa/run
 
 
 on-any-branch: &on-any-branch
@@ -216,3 +236,15 @@ workflows:
           <<: *on-version-tags
           requires:
             - package_release
+      - release_automation:
+          <<: *on-version-tags
+          requires:
+            - deploy_release
+
+  nightly:
+    triggers:
+      - schedule:
+          cron: "07 20 * * *"
+          <<: *on-master
+    jobs:
+      - nightly_automation
