@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate redis_module;
 
-use redis_module::{native_types::RedisType};
+use redis_module::{native_types::RedisType, NotifyEvent};
 use redis_module::raw::RedisModuleTypeMethods;
 use redis_module::{raw as rawmod, NextArg};
 
@@ -22,8 +22,7 @@ use crate::array_index::ArrayIndex;
 use crate::error::Error;
 use crate::redisjson::{Format, Path, RedisJSON, SetOptions};
 
-use std::os::raw::c_int;
-use crate::notify::{trigger_callback_key, export_shared_api};
+use crate::notify::{notify_keyspace_event, export_shared_api};
 
 pub const REDIS_JSON_TYPE_VERSION: i32 = 2;
 
@@ -121,7 +120,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     match (current, set_option) {
         (Some(ref mut doc), ref op) => {
             if doc.set_value(&value, &path, op, format)? {
-                //trigger_callback_key(redis_key.get_inner());
+                notify_keyspace_event(ctx, NotifyEvent::GENERIC, "json_set", key.as_str());
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
@@ -133,7 +132,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
             let doc = RedisJSON::from_str(&value, format)?;
             if path == "$" {
                 redis_key.set_value(&REDIS_JSON_TYPE, doc)?;
-                //trigger_callback_key(redis_key.get_inner());
+                notify_keyspace_event(ctx, NotifyEvent::GENERIC, "json.set", key.as_str());
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
@@ -760,16 +759,9 @@ fn json_cache_init(_ctx: &Context, _args: Vec<String>) -> RedisResult {
     Err(RedisError::Str("Command was not implemented"))
 }
 
-pub extern "C" fn init(ctx: *mut rawmod::RedisModuleCtx) -> c_int {
-    let ctx = Context::new(ctx);   
-    export_shared_api(&ctx);
-    rawmod::Status::Ok as c_int
-}
-
-pub extern "C" fn deinit(_ctx: *mut rawmod::RedisModuleCtx) -> c_int {
-    //TODO: handle deregistrations
-    //Add "deinit: deinit" to redis_module! macro
-    0
+fn init(ctx: &Context, _args: &Vec<String>) -> rawmod::Status {
+    export_shared_api(ctx);
+    rawmod::Status::Ok
 }
 
 
