@@ -14,90 +14,68 @@ commands:
               circleci step halt
             fi
 
-jobs:
+  setup-automation:
+    steps:
+      - run:
+          name: Setup automation
+          command: |
+            git submodule update --init deps/readies
+            ./deps/readies/bin/getpy3
 
+jobs:
   build:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-centos7
-
+      - image: redisfab/rmbuilder:6.0.9-x64-centos7
     steps:
       - checkout
-
       - run: 
           name: Checkout submodules
           command: git submodule update --init --recursive
-
       - run:
           name: Setup automation and install dependencies
           command: |
-            (mkdir -p deps; cd deps; git clone https://github.com/RedisLabsModules/readies.git)
-            PIP=1 FORCE=1 ./deps/readies/bin/getpy2
+            ./deps/readies/bin/getpy3
             ./system-setup.py
-
       - run:
           name: Install Redis
-          command: ./deps/readies/bin/getredis -v 6 
-
+          command: bash -l -c "./deps/readies/bin/getredis -v 6 --force"
       - run:
           name: Install Rust
           command: |
-             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > rust.sh
-             sh rust.sh -y
-             echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
-             source $HOME/.cargo/env
-             rustc --version
-             cargo --version
-             rustup --version
-
+            ./deps/readies/bin/getrust
+            source $HOME/.cargo/env
+            rustc --version
+            cargo --version
+            rustup --version
       - restore_cache:
           keys:
             - v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
             # fallback to using the latest cache if no exact match is found
             - v2-dependencies-
-
       - run:
           name: Check formatting
-          command: |
-            source $HOME/.cargo/env
-            rustfmt --version
-            cargo fmt -- --check
-
+          command: bash -l -c "make lint"
       - run:
           name: Build debug
-          command: |
-            source $HOME/.cargo/env
-            cargo build --all --all-targets
-            mv target/debug/librejson.so target/debug/rejson.so
-
-      - run:
-          name: Run all tests
-          command: |
-             source $HOME/.cargo/env
-             cargo test --features test --all
-             python2 ./test/pytest/test.py
-
+          command: bash -l -c "make build DEBUG=1"
       - run:
           name: Build release
-          command: |
-            source $HOME/.cargo/env
-            cargo build --all --all-targets --release
-            mv target/release/librejson.so target/release/rejson.so
-
+          command: bash -l -c make
+      - run:
+          name: Run all tests
+          command: bash -l -c "make pytest"
       - save_cache:
           key: v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
           paths:
             - "~/.cargo"
             - "./target"
-
       - early_return_for_forked_pull_requests
-
       - run:
           name: Persist Artifacts
           command: |
             mkdir -p workspace/build
             cp target/release/$MODULE_ARTIFACT workspace/
             cp ramp.yml workspace/
-
       - persist_to_workspace:
           root: workspace
           paths:
@@ -105,19 +83,16 @@ jobs:
             - ramp.yml
             - build
 
-
   package_branch:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-buster
+      - image: redisfab/rmbuilder:6.0.9-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
       - run:
           name: Package
-          command: >-
-            ramp pack -m /workspace/ramp.yml -o
-            /workspace/build/$PACKAGE_NAME.{os}-{architecture}.$CIRCLE_BRANCH.zip
-            /workspace/$MODULE_ARTIFACT
+          command: |
+            ramp pack -m /workspace/ramp.yml -o /workspace/build/$PACKAGE_NAME.{os}-{architecture}.$CIRCLE_BRANCH.zip /workspace/$MODULE_ARTIFACT
       - persist_to_workspace:
           root: /workspace
           paths:
@@ -127,22 +102,18 @@ jobs:
 
   package_release:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-buster
+      - image: redisfab/rmbuilder:6.0.9-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
       - run:
           name: Package
-          command: >-
-            ramp pack -m /workspace/ramp.yml -o
-            /workspace/build/$PACKAGE_NAME.{os}-{architecture}.{semantic_version}.zip
-            /workspace/$MODULE_ARTIFACT
+          command: |
+            ramp pack -m /workspace/ramp.yml -o /workspace/build/$PACKAGE_NAME.{os}-{architecture}.{semantic_version}.zip /workspace/$MODULE_ARTIFACT
       - run:
           name: Package
-          command: >-
-            ramp pack -m /workspace/ramp.yml -o
-            /workspace/build/$PACKAGE_NAME.{os}-{architecture}.latest.zip
-            /workspace/$MODULE_ARTIFACT
+          command: |
+            ramp pack -m /workspace/ramp.yml -o /workspace/build/$PACKAGE_NAME.{os}-{architecture}.latest.zip /workspace/$MODULE_ARTIFACT
       - persist_to_workspace:
           root: /workspace
           paths:
@@ -152,7 +123,7 @@ jobs:
 
   deploy_branch:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-buster
+      - image: redisfab/rmbuilder:6.0.9-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -163,7 +134,7 @@ jobs:
 
   deploy_release:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-buster
+      - image: redisfab/rmbuilder:6.0.9-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -171,6 +142,26 @@ jobs:
           name: Deploy to S3
           command: |
             aws s3 cp /workspace/build/ s3://redismodules/$PACKAGE_NAME/ --acl public-read --recursive --exclude "*" --include "*.zip"
+
+  release_automation:
+    docker:
+      - image: redisfab/rmbuilder:6.0.9-x64-buster
+    steps:
+      - checkout
+      - setup-automation
+      - run:
+          name: Run QA Automation
+          command: MODULE_VERSION=$CIRCLE_TAG VERBOSE=1 TEST=release ./tests/qa/run
+
+  nightly_automation:
+    docker:
+      - image: redisfab/rmbuilder:6.0.9-x64-buster
+    steps:
+      - checkout
+      - setup-automation
+      - run:
+          name: Run QA Automation
+          command: MODULE_VERSION=$CIRCLE_BRANCH VERBOSE=1 TEST=nightly QUICK=1 ./tests/qa/run
 
 
 on-any-branch: &on-any-branch
@@ -191,6 +182,26 @@ on-master: &on-master
   filters:
     branches:
       only: master
+    tags:
+      ignore: /.*/
+
+on-integ-branch: &on-integ-branch
+  filters:
+    branches:
+      only:
+        - master
+        - /^\d+\.\d+.*$/
+    tags:
+      ignore: /.*/
+
+not-on-integ-branch: &not-on-integ-branch
+  filters:
+    branches:
+      ignore:
+        - master
+        - /^\d+\.\d+.*$/
+    tags:
+      ignore: /.*/
 
 on-version-tags: &on-version-tags
   filters:
@@ -199,11 +210,12 @@ on-version-tags: &on-version-tags
     tags:
       only: /^v[0-9].*/
 
-on-master-and-version-tags: &on-master-and-version-tags
+on-integ-and-version-tags: &on-integ-and-version-tags
   filters:
     branches:
       only:
         - master
+        - /^\d+\.\d+.*$/
     tags:
       only: /^v[0-9].*/
 
@@ -215,7 +227,7 @@ workflows:
       - build:
           <<: *on-any-branch
       - package_branch:
-          <<: *on-master
+          <<: *on-integ-branch
           requires:
             - build
       - package_release:
@@ -223,10 +235,26 @@ workflows:
           requires:
             - build
       - deploy_branch:
-          <<: *on-master
+          context: common
+          <<: *on-integ-branch
           requires:
             - package_branch
       - deploy_release:
+          context: common
           <<: *on-version-tags
           requires:
             - package_release
+      - release_automation:
+          <<: *on-version-tags
+          requires:
+            - deploy_release
+
+  nightly:
+    triggers:
+      - schedule:
+          cron: "07 20 * * *"
+          filters:
+            branches:
+              only: master
+    jobs:
+      - nightly_automation
