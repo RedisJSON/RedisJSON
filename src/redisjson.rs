@@ -87,14 +87,9 @@ impl RedisJSON {
         }
     }
 
-    pub fn from_str(
-        data: &str,
-        format: Format,
-    ) -> Result<Self, Error> {
+    pub fn from_str(data: &str, format: Format) -> Result<Self, Error> {
         let value = RedisJSON::parse_str(data, format)?;
-        Ok(Self {
-            data: value,
-        })
+        Ok(Self { data: value })
     }
 
     fn add_value(&mut self, path: &str, value: Value) -> Result<bool, Error> {

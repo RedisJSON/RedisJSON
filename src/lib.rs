@@ -1,8 +1,8 @@
 #[macro_use]
 extern crate redis_module;
 
-use redis_module::{native_types::RedisType, NotifyEvent};
 use redis_module::raw::RedisModuleTypeMethods;
+use redis_module::{native_types::RedisType, NotifyEvent};
 use redis_module::{raw as rawmod, NextArg};
 
 use redis_module::{Context, RedisError, RedisResult, RedisValue, REDIS_OK};
@@ -15,14 +15,14 @@ mod backward;
 mod error;
 mod formatter;
 mod nodevisitor;
-mod redisjson;
 mod notify;
+mod redisjson;
 
 use crate::array_index::ArrayIndex;
 use crate::error::Error;
 use crate::redisjson::{Format, Path, RedisJSON, SetOptions};
 
-use crate::notify::{notify_keyspace_event, export_shared_api};
+use crate::notify::{export_shared_api, notify_keyspace_event};
 
 pub const REDIS_JSON_TYPE_VERSION: i32 = 2;
 
@@ -102,7 +102,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
 
     let mut format = Format::JSON;
     let mut set_option = SetOptions::None;
-    
+
     while let Some(s) = args.next() {
         match s.to_uppercase().as_str() {
             "NX" => set_option = SetOptions::NotExists,
@@ -763,7 +763,6 @@ fn init(ctx: &Context, _args: &Vec<String>) -> rawmod::Status {
     export_shared_api(ctx);
     rawmod::Status::Ok
 }
-
 
 //////////////////////////////////////////////////////
 
