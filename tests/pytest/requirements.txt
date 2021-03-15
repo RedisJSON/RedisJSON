@@ -1,0 +1,4 @@
+redis>=3.0.0
+redis-py-cluster>=2.1.0
+git+https://github.com/RedisLabsModules/RLTest.git@master
+six>=1.10.0
