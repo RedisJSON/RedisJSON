@@ -9,6 +9,7 @@ use crate::error::Error;
 use crate::formatter::RedisJsonFormatter;
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 
+use crate::notify::JSONType;
 use bson::decode_document;
 use jsonpath_lib::SelectorMut;
 use redis_module::raw::{self};
@@ -334,6 +335,23 @@ impl RedisJSON {
             Value::String(_) => "string",
             Value::Array(_) => "array",
             Value::Object(_) => "object",
+        }
+    }
+
+    pub fn get_type_as_numeric(&self) -> c_int {
+        match &self.data {
+            Value::Null => JSONType::Null as c_int,
+            Value::Bool(_) => JSONType::Bool as c_int,
+            Value::Number(n) => {
+                if n.is_f64() {
+                    JSONType::Float as c_int
+                } else {
+                    JSONType::Int as c_int
+                }
+            }
+            Value::String(_) => JSONType::String as c_int,
+            Value::Array(_) => JSONType::Array as c_int,
+            Value::Object(_) => JSONType::Object as c_int,
         }
     }
 
