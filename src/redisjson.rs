@@ -4,20 +4,21 @@
 // User-provided JSON is converted to a tree. This tree is stored transparently in Redis.
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
-use crate::backward;
-use crate::error::Error;
-use crate::formatter::RedisJsonFormatter;
-use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
+use std::io::Cursor;
+use std::mem;
+use std::os::raw::{c_int, c_void};
 
-use crate::notify::JSONType;
 use bson::decode_document;
 use jsonpath_lib::SelectorMut;
 use redis_module::raw::{self};
 use serde::Serialize;
 use serde_json::{Map, Value};
-use std::io::Cursor;
-use std::mem;
-use std::os::raw::{c_int, c_void};
+
+use crate::backward;
+use crate::error::Error;
+use crate::formatter::RedisJsonFormatter;
+use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
+use crate::notify::JSONType;
 
 #[derive(Debug, PartialEq)]
 pub enum SetOptions {
@@ -338,20 +339,20 @@ impl RedisJSON {
         }
     }
 
-    pub fn get_type_as_numeric(&self) -> c_int {
+    pub fn get_type_and_size(&self) -> (c_int, libc::size_t) {
         match &self.data {
-            Value::Null => JSONType::Null as c_int,
-            Value::Bool(_) => JSONType::Bool as c_int,
+            Value::Null => (JSONType::Null as c_int, 0),
+            Value::Bool(_) => (JSONType::Bool as c_int, 1),
             Value::Number(n) => {
                 if n.is_f64() {
-                    JSONType::Float as c_int
+                    (JSONType::Float as c_int, 1)
                 } else {
-                    JSONType::Int as c_int
+                    (JSONType::Int as c_int, 1)
                 }
             }
-            Value::String(_) => JSONType::String as c_int,
-            Value::Array(_) => JSONType::Array as c_int,
-            Value::Object(_) => JSONType::Object as c_int,
+            Value::String(_) => (JSONType::String as c_int, 1),
+            Value::Array(arr) => (JSONType::Array as c_int, arr.len()),
+            Value::Object(map) => (JSONType::Object as c_int, map.len()),
         }
     }
 
