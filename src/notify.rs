@@ -83,6 +83,15 @@ pub extern "C" fn JSONAPI_closeKey(json: JSONApiKeyRef) {
     }
 }
 
+#[no_mangle]
+pub extern "C" fn JSONAPI_closePath(path: JSONApiPathRef) {
+    if !path.is_null() {
+        unsafe {
+            Box::from_raw(path);
+        }
+    }
+}
+
 //---------------------------------------------------------------------------------------------
 
 pub struct JSONApiPath<'a> {
@@ -157,6 +166,7 @@ static JSONAPI: RedisJSONAPI_V1 = RedisJSONAPI_V1 {
     getPath: JSONAPI_getPath,
     getInfo: JSONAPI_getInfo,
     closeKey: JSONAPI_closeKey,
+    closePath: JSONAPI_closePath,
 };
 
 #[repr(C)]
@@ -175,6 +185,7 @@ pub struct RedisJSONAPI_V1<'a> {
         size: *mut libc::size_t,
     ) -> c_int,
     pub closeKey: extern "C" fn(key: JSONApiKeyRef),
+    pub closePath: extern "C" fn(key: JSONApiPathRef),
 }
 
 pub fn notify_keyspace_event(
