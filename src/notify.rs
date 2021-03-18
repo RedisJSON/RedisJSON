@@ -37,7 +37,7 @@ pub enum JSONType {
 //---------------------------------------------------------------------------------------------
 
 pub struct JSONApiKey<'a> {
-    key: RedisKeyWritable,
+    _key: RedisKeyWritable,
     redis_json: &'a mut RedisJSON,
 }
 
@@ -54,7 +54,7 @@ impl<'a> JSONApiKey<'a> {
 
         if let Some(value) = res {
             Ok(JSONApiKey {
-                key,
+                _key: key,
                 redis_json: value,
             })
         } else {
@@ -139,17 +139,20 @@ pub extern "C" fn JSONAPI_getInfo(
     size: *mut libc::size_t,
 ) -> c_int {
     let res;
+    let info;
     if !json.is_null() {
         let json = unsafe { &*json };
-        res = json.json_key.redis_json.get_type_and_size();
+        info = RedisJSON::get_type_and_size(json.path);
+        res = 0;
     } else {
-        res = (JSONType::Err as c_int, 0 as libc::size_t);
+        info = (JSONType::Err as c_int, 0 as libc::size_t);
+        res = -1;
     }
     unsafe {
-        *jtype = res.0;
-        *size = res.1;
+        *jtype = info.0;
+        *size = info.1;
     }
-    0
+    res
 }
 
 static REDISJSON_GETAPI: &str = concat!("RedisJSON_V1", "\0");

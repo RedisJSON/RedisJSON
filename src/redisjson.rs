@@ -339,8 +339,8 @@ impl RedisJSON {
         }
     }
 
-    pub fn get_type_and_size(&self) -> (c_int, libc::size_t) {
-        match &self.data {
+    pub fn get_type_and_size(data: &Value) -> (c_int, libc::size_t) {
+        match data {
             Value::Null => (JSONType::Null as c_int, 0),
             Value::Bool(_) => (JSONType::Bool as c_int, 1),
             Value::Number(n) => {
