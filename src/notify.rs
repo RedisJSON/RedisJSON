@@ -11,6 +11,7 @@ use redis_module::{Context, NotifyEvent, Status};
 use serde_json::Value;
 
 use crate::{redisjson::RedisJSON, REDIS_JSON_TYPE};
+use std::ffi::CString;
 
 //
 // structs
@@ -26,12 +27,18 @@ pub struct RedisModuleCtx {
 pub enum JSONType {
     String = 0,
     Int = 1,
-    Float = 2,
+    Double = 2,
     Bool = 3,
     Object = 4,
     Array = 5,
     Null = 6,
-    Err = 7,
+}
+
+#[repr(C)]
+#[allow(non_camel_case_types)]
+pub enum RedisErrorCode {
+    REDISMODULE_OK = 0,
+    REDISMODULE_ERR = 1,
 }
 
 //---------------------------------------------------------------------------------------------
@@ -84,7 +91,31 @@ pub extern "C" fn JSONAPI_closeKey(json: JSONApiKeyRef) {
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_closePath(path: JSONApiPathRef) {
+pub extern "C" fn JSONAPI_getAt(
+    path: JSONApiPathRef,
+    index: libc::size_t,
+    jtype: *mut c_int,
+    count: *mut libc::size_t,
+) -> JSONApiPathRef {
+    if !path.is_null() {
+        let path = unsafe { &*path };
+
+        if let Value::Array(vec) = path.value {
+            if index < vec.len() {
+                let child_path = JSONApiPath {
+                    json_key: path.json_key,
+                    value: vec.get(index).unwrap(),
+                    str_val: None,
+                };
+                return Box::into_raw(Box::new(child_path)) as JSONApiPathRef;
+            }
+        }
+    }
+    null_mut() as JSONApiPathRef
+}
+
+#[no_mangle]
+pub extern "C" fn JSONAPI_closeJSON(path: JSONApiPathRef) {
     if !path.is_null() {
         unsafe {
             Box::from_raw(path);
@@ -92,11 +123,43 @@ pub extern "C" fn JSONAPI_closePath(path: JSONApiPathRef) {
     }
 }
 
+#[no_mangle]
+pub extern "C" fn JSONAPI_getString(
+    path: JSONApiPathRef,
+    str: *mut *const c_char,
+    len: *mut libc::size_t,
+) -> c_int {
+    if !path.is_null() {
+        let path = unsafe { &mut *path };
+        if let Some(ref str_val) = path.str_val {
+            // Use cached string value
+            unsafe {
+                *str = str_val.as_ptr();
+                //*len = str_val.le
+            }
+            return RedisErrorCode::REDISMODULE_OK as c_int;
+        } else {
+            if let Value::String(s) = path.value {
+                // Cache string value
+                if let Ok(s) = CString::new(s.as_bytes()) {
+                    unsafe {
+                        *str = s.as_ptr();
+                    }
+                    path.str_val = Some(s);
+                    return RedisErrorCode::REDISMODULE_OK as c_int;
+                }
+            }
+        }
+    }
+    RedisErrorCode::REDISMODULE_ERR as c_int
+}
+
 //---------------------------------------------------------------------------------------------
 
 pub struct JSONApiPath<'a> {
     json_key: &'a JSONApiKey<'a>,
-    path: &'a Value,
+    value: &'a Value,
+    str_val: Option<CString>,
 }
 
 type JSONApiPathRef<'a> = *mut JSONApiPath<'a>;
@@ -110,7 +173,8 @@ impl<'a> JSONApiPath<'a> {
         if let Ok(value) = json_key.redis_json.get_first(path) {
             Ok(JSONApiPath {
                 json_key,
-                path: value,
+                value: value,
+                str_val: None,
             })
         } else {
             Err(RedisError::Str("JSON path not found"))
@@ -119,40 +183,38 @@ impl<'a> JSONApiPath<'a> {
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_getPath(json_key: JSONApiKeyRef, path: *const c_char) -> JSONApiPathRef {
-    if !json_key.is_null() {
-        let json = unsafe { &*json_key };
-        match JSONApiPath::new(json, path) {
-            Ok(path) => Box::into_raw(Box::new(path)) as JSONApiPathRef,
-            _ => null_mut(),
+pub extern "C" fn JSONAPI_getPath(
+    key: JSONApiKeyRef,
+    path: *const c_char,
+    jtype: *mut c_int,
+    count: *mut libc::size_t,
+) -> JSONApiPathRef {
+    if !key.is_null() {
+        let key = unsafe { &*key };
+        match JSONApiPath::new(key, path) {
+            Ok(path) => {
+                let info = RedisJSON::get_type_and_size(path.value);
+                unsafe {
+                    *jtype = info.0 as c_int;
+                    if !count.is_null() {
+                        *count = info.1;
+                    }
+                }
+                Box::into_raw(Box::new(path)) as JSONApiPathRef
+            }
+            _ => {
+                // FIXME: remove the following commented out snippet (we return null - no need to also set count to zero)
+                // unsafe {
+                //     if !count.is_null() {
+                //         *count = 0;
+                //     }
+                // }
+                null_mut()
+            }
         }
     } else {
         null_mut()
     }
-}
-
-#[no_mangle]
-pub extern "C" fn JSONAPI_getInfo(
-    json: JSONApiPathRef,
-    _name: *mut c_void,
-    jtype: *mut c_int,
-    size: *mut libc::size_t,
-) -> c_int {
-    let res;
-    let info;
-    if !json.is_null() {
-        let json = unsafe { &*json };
-        info = RedisJSON::get_type_and_size(json.path);
-        res = 0;
-    } else {
-        info = (JSONType::Err as c_int, 0 as libc::size_t);
-        res = -1;
-    }
-    unsafe {
-        *jtype = info.0;
-        *size = info.1;
-    }
-    res
 }
 
 static REDISJSON_GETAPI: &str = concat!("RedisJSON_V1", "\0");
@@ -166,10 +228,11 @@ pub fn export_shared_api(ctx: &Context) {
 
 static JSONAPI: RedisJSONAPI_V1 = RedisJSONAPI_V1 {
     openKey: JSONAPI_openKey,
-    getPath: JSONAPI_getPath,
-    getInfo: JSONAPI_getInfo,
     closeKey: JSONAPI_closeKey,
-    closePath: JSONAPI_closePath,
+    getPath: JSONAPI_getPath,
+    getAt: JSONAPI_getAt,
+    closeJSON: JSONAPI_closeJSON,
+    getString: JSONAPI_getString,
 };
 
 #[repr(C)]
@@ -180,15 +243,31 @@ pub struct RedisJSONAPI_V1<'a> {
         ctx: *mut rawmod::RedisModuleCtx,
         key_str: *mut rawmod::RedisModuleString,
     ) -> JSONApiKeyRef<'a>,
-    pub getPath: extern "C" fn(json_key: JSONApiKeyRef, path: *const c_char) -> JSONApiPathRef,
-    pub getInfo: extern "C" fn(
-        json: JSONApiPathRef,
-        name: *mut c_void,
-        jtype: *mut c_int,
-        size: *mut libc::size_t,
-    ) -> c_int,
     pub closeKey: extern "C" fn(key: JSONApiKeyRef),
-    pub closePath: extern "C" fn(key: JSONApiPathRef),
+    pub getPath: extern "C" fn(
+        key: JSONApiKeyRef,
+        path: *const c_char,
+        jtype: *mut c_int,
+        count: *mut libc::size_t,
+    ) -> JSONApiPathRef,
+    pub getAt: extern "C" fn(
+        json_key: JSONApiPathRef,
+        index: libc::size_t,
+        jtype: *mut c_int,
+        count: *mut libc::size_t,
+    ) -> JSONApiPathRef,
+    pub closeJSON: extern "C" fn(key: JSONApiPathRef),
+    // Get
+    // int (*getInt)(const RedisJSON *path, int *integer);
+    // int (*getDouble)(const RedisJSON *path, double *dbl);
+    // int (*getBoolean)(const RedisJSON *path, int *boolean);
+    pub getString: extern "C" fn(
+        path: JSONApiPathRef,
+        str: *mut *const c_char,
+        len: *mut libc::size_t,
+    ) -> c_int,
+    //
+    // void (*replyWithJSON)(const RedisJSON *json);
 }
 
 pub fn notify_keyspace_event(

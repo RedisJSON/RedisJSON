@@ -339,20 +339,20 @@ impl RedisJSON {
         }
     }
 
-    pub fn get_type_and_size(data: &Value) -> (c_int, libc::size_t) {
+    pub fn get_type_and_size(data: &Value) -> (JSONType, libc::size_t) {
         match data {
-            Value::Null => (JSONType::Null as c_int, 0),
-            Value::Bool(_) => (JSONType::Bool as c_int, 1),
+            Value::Null => (JSONType::Null, 0),
+            Value::Bool(_) => (JSONType::Bool, 0),
             Value::Number(n) => {
                 if n.is_f64() {
-                    (JSONType::Float as c_int, 1)
+                    (JSONType::Double, 0)
                 } else {
-                    (JSONType::Int as c_int, 1)
+                    (JSONType::Int, 0)
                 }
             }
-            Value::String(_) => (JSONType::String as c_int, 1),
-            Value::Array(arr) => (JSONType::Array as c_int, arr.len()),
-            Value::Object(map) => (JSONType::Object as c_int, map.len()),
+            Value::String(_) => (JSONType::String, 0),
+            Value::Array(arr) => (JSONType::Array, arr.len()),
+            Value::Object(map) => (JSONType::Object, map.len()),
         }
     }
 
