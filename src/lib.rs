@@ -132,7 +132,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
             let doc = RedisJSON::from_str(&value, format)?;
             if path == "$" {
                 redis_key.set_value(&REDIS_JSON_TYPE, doc)?;
-                notify_keyspace_event(ctx, NotifyEvent::GENERIC, "json.set", key.as_str());
+                notify_keyspace_event(ctx, NotifyEvent::GENERIC, "json_set", key.as_str());
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {

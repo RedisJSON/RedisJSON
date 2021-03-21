@@ -174,6 +174,11 @@ pub extern "C" fn JSONAPI_replyWith(path: JSONApiPathRef) -> c_int {
     0
 }
 
+#[no_mangle]
+pub extern "C" fn JSONAPI_isJSON(redis_module_key: *mut c_void) -> c_int {
+    //FIXME: Call redis_module::key::verify_type
+    0
+}
 //---------------------------------------------------------------------------------------------
 
 pub struct JSONApiPath<'a> {
