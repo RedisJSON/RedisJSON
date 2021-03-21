@@ -12,6 +12,7 @@ use redis_module::{Context, NotifyEvent, Status};
 use serde_json::{from_slice, Value};
 
 use crate::{redisjson::RedisJSON, REDIS_JSON_TYPE};
+use std::ops::Index;
 
 //
 // structs
@@ -101,13 +102,7 @@ pub extern "C" fn JSONAPI_getAt(
         let path = unsafe { &*path };
         match JSONApiPath::new_from_index(path.json_key, index) {
             Ok(path) => {
-                let info = RedisJSON::get_type_and_size(path.value);
-                unsafe {
-                    *jtype = info.0 as c_int;
-                    if !count.is_null() {
-                        *count = info.1;
-                    }
-                }
+                path.get_type_and_size(jtype, count);
                 Box::into_raw(Box::new(path)) as JSONApiPathRef
             }
             _ => null_mut(),
@@ -210,19 +205,42 @@ impl<'a> JSONApiPath<'a> {
         json_key: &'a JSONApiKey<'a>,
         index: libc::size_t,
     ) -> Result<JSONApiPath<'a>, RedisError> {
-        if let Value::Array(ref vec) = json_key.redis_json.data {
-            //FIXME: get data field when it is private
-            if index < vec.len() {
-                Ok(JSONApiPath {
-                    json_key: json_key,
-                    value: vec.get(index).unwrap(),
-                    str_val: None,
-                })
-            } else {
-                Err(RedisError::Str("JSON index is out of range"))
+        match json_key.redis_json.data {
+            Value::Array(ref vec) => {
+                //FIXME: move to RedisJSON struct?
+                if index < vec.len() {
+                    Ok(JSONApiPath {
+                        json_key: json_key,
+                        value: vec.get(index).unwrap(),
+                        str_val: None,
+                    })
+                } else {
+                    Err(RedisError::Str("JSON index is out of range"))
+                }
             }
-        } else {
-            Err(RedisError::Str("Not a JSON Array"))
+            Value::Object(ref map) => {
+                //FIXME: get the i'th entry in map
+                if index < map.len() {
+                    Ok(JSONApiPath {
+                        json_key: json_key,
+                        value: map.iter().nth(index).unwrap().1,
+                        str_val: None,
+                    })
+                } else {
+                    Err(RedisError::Str("JSON index is out of range"))
+                }
+            }
+            _ => Err(RedisError::Str("Not a JSON Array or Object")),
+        }
+    }
+
+    pub fn get_type_and_size(&self, jtype: *mut c_int, count: *mut libc::size_t) {
+        let info = RedisJSON::get_type_and_size(self.value);
+        unsafe {
+            *jtype = info.0 as c_int;
+            if !count.is_null() {
+                *count = info.1;
+            }
         }
     }
 }
@@ -238,13 +256,7 @@ pub extern "C" fn JSONAPI_get(
         let key = unsafe { &*key };
         match JSONApiPath::new_from_path(key, path) {
             Ok(path) => {
-                let info = RedisJSON::get_type_and_size(path.value);
-                unsafe {
-                    *jtype = info.0 as c_int;
-                    if !count.is_null() {
-                        *count = info.1;
-                    }
-                }
+                path.get_type_and_size(jtype, count);
                 Box::into_raw(Box::new(path)) as JSONApiPathRef
             }
             _ => null_mut(),

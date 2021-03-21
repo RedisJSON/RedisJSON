@@ -67,7 +67,7 @@ impl Path {
 }
 #[derive(Debug)]
 pub struct RedisJSON {
-    //FIXME: make private and expose array/object without requiring a path
+    //FIXME: make private and expose array/object Values without requiring a path
     pub data: Value,
 }
 

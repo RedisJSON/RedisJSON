@@ -21,14 +21,14 @@ typedef const void *RedisJSON;
 typedef struct RedisJSONAPI_V1 {
     /* RedisJSONKey functions */
     RedisJSONKey (*openKey)(RedisModuleCtx *ctx, RedisModuleString *key_name);
-    int (*closeKey)(RedisJSONKey key);
+    void (*closeKey)(RedisJSONKey key);
     /* RedisJSON functions
      * Return NULL if path does not exist
      * `count` can be NULL and return 0 for non array/object
      **/
     RedisJSON (*get)(RedisJSONKey key, const char *path, JSONType *type, size_t *count);
     RedisJSON (*getAt)(RedisJSON jsonIn, size_t index, JSONType *type, size_t *count);
-    int (*close)(RedisJSON json);
+    void (*close)(RedisJSON json);
     /* RedisJSON value functions
      * Return REDISMODULE_OK if RedisJSON is of the correct JSONType,
      * else REDISMODULE_ERR is returned
