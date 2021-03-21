@@ -1,3 +1,4 @@
+use std::ffi::CString;
 use std::os::raw::{c_double, c_int, c_long};
 use std::ptr::null_mut;
 use std::{
@@ -11,7 +12,6 @@ use redis_module::{Context, NotifyEvent, Status};
 use serde_json::{from_slice, Value};
 
 use crate::{redisjson::RedisJSON, REDIS_JSON_TYPE};
-use std::ffi::CString;
 
 //
 // structs
@@ -134,22 +134,20 @@ pub extern "C" fn JSONAPI_getString(
 ) -> c_int {
     if !path.is_null() {
         let path = unsafe { &mut *path };
-        if let Some(ref str_val) = path.str_val {
+        if let Some(ref s) = path.str_val {
             // Use cached string value
             unsafe {
-                *str = str_val.as_ptr();
-                //*len = str_val.le
+                *str = s.as_bytes_with_nul().as_ptr() as *const c_char;
+                *len = s.as_bytes().len();
             }
             return RedisReturnCode::REDISMODULE_OK as c_int;
         } else {
             if let Value::String(s) = path.value {
                 // Cache string value
                 if let Ok(s) = CString::new(s.as_str()) {
-                    let a = s.as_bytes_with_nul();
                     unsafe {
-                        let slice = s.as_bytes_with_nul();
-                        *str = slice.as_ptr() as *const c_char;
-                        *len = slice.len();
+                        *str = s.as_bytes_with_nul().as_ptr() as *const c_char;
+                        *len = s.as_bytes().len();
                     }
                     path.str_val = Some(s);
                     return RedisReturnCode::REDISMODULE_OK as c_int;
