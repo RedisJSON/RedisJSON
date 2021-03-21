@@ -1,4 +1,4 @@
-use std::os::raw::{c_double, c_int};
+use std::os::raw::{c_double, c_int, c_long};
 use std::ptr::null_mut;
 use std::{
     ffi::CStr,
@@ -118,7 +118,7 @@ pub extern "C" fn JSONAPI_getAt(
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_closeJSON(path: JSONApiPathRef) {
+pub extern "C" fn JSONAPI_close(path: JSONApiPathRef) {
     if !path.is_null() {
         unsafe {
             Box::from_raw(path);
@@ -161,7 +161,7 @@ pub extern "C" fn JSONAPI_getString(
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_getInt(path: JSONApiPathRef, val: *mut c_int) -> c_int {
+pub extern "C" fn JSONAPI_getInt(path: JSONApiPathRef, val: *mut c_int) -> c_long {
     0 //FIXME:
 }
 
@@ -176,8 +176,9 @@ pub extern "C" fn JSONAPI_getBoolean(path: JSONApiPathRef, val: *mut c_int) -> c
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_replyWithJSON(path: JSONApiPathRef) {
+pub extern "C" fn JSONAPI_replyWith(path: JSONApiPathRef) -> c_int {
     //FIXME:
+    0
 }
 
 //---------------------------------------------------------------------------------------------
@@ -229,7 +230,7 @@ impl<'a> JSONApiPath<'a> {
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_getPath(
+pub extern "C" fn JSONAPI_get(
     key: JSONApiKeyRef,
     path: *const c_char,
     jtype: *mut c_int,
@@ -267,14 +268,14 @@ pub fn export_shared_api(ctx: &Context) {
 static JSONAPI: RedisJSONAPI_V1 = RedisJSONAPI_V1 {
     openKey: JSONAPI_openKey,
     closeKey: JSONAPI_closeKey,
-    getPath: JSONAPI_getPath,
+    get: JSONAPI_get,
     getAt: JSONAPI_getAt,
-    closeJSON: JSONAPI_closeJSON,
+    close: JSONAPI_close,
     getString: JSONAPI_getString,
     getInt: JSONAPI_getInt,
     getDouble: JSONAPI_getDouble,
     getBoolean: JSONAPI_getBoolean,
-    replyWithJSON: JSONAPI_replyWithJSON,
+    replyWith: JSONAPI_replyWith,
 };
 
 #[repr(C)]
@@ -286,7 +287,7 @@ pub struct RedisJSONAPI_V1<'a> {
         key_str: *mut rawmod::RedisModuleString,
     ) -> JSONApiKeyRef<'a>,
     pub closeKey: extern "C" fn(key: JSONApiKeyRef),
-    pub getPath: extern "C" fn(
+    pub get: extern "C" fn(
         key: JSONApiKeyRef,
         path: *const c_char,
         jtype: *mut c_int,
@@ -298,18 +299,18 @@ pub struct RedisJSONAPI_V1<'a> {
         jtype: *mut c_int,
         count: *mut libc::size_t,
     ) -> JSONApiPathRef,
-    pub closeJSON: extern "C" fn(key: JSONApiPathRef),
+    pub close: extern "C" fn(key: JSONApiPathRef),
     // Get
-    pub getInt: extern "C" fn(path: JSONApiPathRef, val: *mut c_int) -> c_int,
-    pub getDouble: extern "C" fn(path: JSONApiPathRef, val: *mut c_double) -> c_int,
-    pub getBoolean: extern "C" fn(path: JSONApiPathRef, val: *mut c_int) -> c_int,
+    pub getInt: extern "C" fn(json: JSONApiPathRef, val: *mut c_int) -> c_long,
+    pub getDouble: extern "C" fn(json: JSONApiPathRef, val: *mut c_double) -> c_int,
+    pub getBoolean: extern "C" fn(json: JSONApiPathRef, val: *mut c_int) -> c_int,
     pub getString: extern "C" fn(
-        path: JSONApiPathRef,
+        json: JSONApiPathRef,
         str: *mut *const c_char,
         len: *mut libc::size_t,
     ) -> c_int,
     //
-    pub replyWithJSON: extern "C" fn(path: JSONApiPathRef),
+    pub replyWith: extern "C" fn(path: JSONApiPathRef) -> c_int,
 }
 
 pub fn notify_keyspace_event(
