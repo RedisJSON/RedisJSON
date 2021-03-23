@@ -266,17 +266,6 @@ def testBackwardRDB(env):
     data = json.loads(r.execute_command('JSON.GET', 'complex'))
     r.assertEqual(data, {"a":{"b":[{"c":{"d":[1,'2'],"e":None}},True],"a":'a'},"b":1,"c":True,"d":None})
 
-def testSchemaStoreRDB(env):
-    r = env
-    r.assertOk(r.execute_command('JSON.INDEX', 'ADD', 'person', 'last', '$.last' ))
-    r.assertOk(r.execute_command('JSON.SET', 'user1', '$', '{"last":"Joan", "first":"Mc"}', 'INDEX', 'person'))
-    r.assertOk(r.execute_command('JSON.SET', 'user2', '$', '{"last":"John", "first":"Avi"}', 'INDEX', 'person'))
-    r.assertOk(r.execute_command('JSON.SET', 'user3', '$', '{"last":"Jonna", "first":"Tami"}', 'INDEX', 'super'))
-
-    r.assertEqual('{"user1":["Mc"],"user2":["Avi"]}', r.execute_command('JSON.QGET', 'person', 'jo*', '$.first'))
-    for _ in r.retry_with_rdb_reload():
-        r.assertEqual(json.loads('{"user1":["Mc"],"user2":["Avi"]}'), json.loads(r.execute_command('JSON.QGET', 'person', 'jo*', '$.first')))
-
 def testSetBSON(env):
     r = env
     bson = open(os.path.join(JSON_PATH , 'bson_bytes_1.bson'), 'rb').read()
@@ -702,58 +691,6 @@ def testIssue_74(env):
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{}'))
     # This shouldn't crash Redis
     r.expect('JSON.SET', 'test', '$a', '12').raiseError()
-
-def testIndexAdd(env):
-    """Test Index ADD/DEL"""
-    r = env
-
-    def do(*args, response='OK'):
-        r.expect(*args).equal(response)
-
-    do('JSON.INDEX', 'ADD', 'index', 'first', '$.first')
-    do('JSON.INDEX', 'ADD', 'index', 'second', '$.second')
-    do('JSON.INDEX', 'ADD', 'index2', 'second', '$.third')
-
-    # Error should be thrown since this field already exists in the index
-    do('JSON.INDEX', 'ADD', 'index', 'first', '$.first2', response='Field already exists')
-
-    # After INDEX DEL we should be able reuse the same field name
-    do('JSON.INDEX', 'DEL', 'index')
-    do('JSON.INDEX', 'ADD', 'index', 'first', '$.first2')
-    do('JSON.INDEX', 'ADD', 'index', 'second', '$.second2')
-
-    # INDEX DEL should only del the specific index
-    do('JSON.INDEX', 'ADD', 'index2', 'second', '$.third2', response='Field already exists')
-
-
-def testRediSearch(env):
-    """Test RediSearch integration"""
-    r = env
-
-    def do(*args):
-        r.assertOk(r.execute_command(*args))
-
-    index = 'person'
-
-    do('JSON.INDEX', 'ADD', index, 'first', '$.first')
-    do('JSON.INDEX', 'ADD', index, 'last', '$.last')
-
-    do('JSON.SET', 'joe', '.', '{"first": "Joe", "last": "Smith"}', 'INDEX', index)
-    do('JSON.SET', 'kevin', '.', '{"first": "Kevin", "last": "Smith"}', 'INDEX', index)
-    do('JSON.SET', 'mike', '.', '{"first": "Mike", "last": "Lane"}', 'INDEX', index)
-    do('JSON.SET', 'dave', '.', '{"first": "Dave"}', 'INDEX', index)
-    do('JSON.SET', 'levi', '.', '{"last": "Smith"}', 'INDEX', index)
-
-    searches = [
-        ('@first:mike', '$.last',  '{"mike":["Lane"]}'),
-        ('@last:smith', '$.first', '{"joe":["Joe"],"kevin":["Kevin"],"levi":[]}'),
-        ('*', '$.first', '{"joe":["Joe"],"kevin":["Kevin"],"mike":["Mike"],"dave":["Dave"],"levi":[]}'),
-    ]
-
-    for (query, path, results) in searches:
-        r.assertEqual(
-            json.loads(r.execute_command('JSON.QGET', index, query, path)),
-            json.loads(results))
 
 def testDoubleParse(env):
     r = env
