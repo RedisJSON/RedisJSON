@@ -7,7 +7,7 @@ impl ArrayIndex for i64 {
         let index = if self < 0 {
             len - len.min(-self)
         } else {
-            (len - 1).min(self)
+            (len - 1).min(self).max(0)
         };
         index as usize
     }

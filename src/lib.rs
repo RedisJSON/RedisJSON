@@ -495,19 +495,23 @@ where
         .ok_or_else(|| err_json(value, "array"))
         .and_then(|curr| {
             let len = curr.len() as i64;
-
-            if !(-len..len).contains(&index) {
+            
+            if !(-len..len+1).contains(&index) {
                 return Err("ERR index out of bounds".into());
             }
 
             let index = index.normalize(len);
 
-            let items: Vec<Value> = args
+            let mut items: Vec<Value> = args
                 .map(|json| serde_json::from_str(&json))
                 .collect::<Result<_, _>>()?;
 
             let mut new_value = curr.to_owned();
-            new_value.splice(index..index, items.into_iter());
+            if new_value.len() == index {
+                new_value.append(&mut items);
+            } else {
+                new_value.splice(index..index, items.into_iter());
+            }
 
             Ok(Value::Array(new_value))
         })
