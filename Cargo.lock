@@ -162,15 +162,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cmake"
-version = "0.1.45"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb6210b637171dfba4cda12e579ac6dc73f5165ad56133e5d72ef3131f320855"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "enum-primitive-derive"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -476,22 +467,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "redisearch_api"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fc1328eb1baad16f19722b12923d6778edde2495e39b805ea78be9a0d22b4db"
-dependencies = [
- "bindgen",
- "bitflags",
- "cmake",
- "enum-primitive-derive",
- "libc",
- "num-traits 0.2.14",
- "redis-module",
- "time",
-]
-
-[[package]]
 name = "redisjson"
 version = "1.9.0"
 dependencies = [
@@ -499,7 +474,6 @@ dependencies = [
  "jsonpath_lib",
  "libc",
  "redis-module",
- "redisearch_api",
  "serde",
  "serde_json",
 ]
