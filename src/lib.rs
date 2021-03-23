@@ -87,7 +87,7 @@ fn json_del(ctx: &Context, args: Vec<String>) -> RedisResult {
 }
 
 ///
-/// JSON.SET <key> <path> <json> [NX | XX | FORMAT <format> | INDEX <index>]
+/// JSON.SET <key> <path> <json> [NX | XX | FORMAT <format>]
 ///
 fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
