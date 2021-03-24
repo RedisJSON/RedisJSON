@@ -32,7 +32,7 @@ typedef struct RedisJSONAPI_V1 {
 
     RedisJSON (*getAt)(RedisJSON jsonIn, size_t index, JSONType *type, size_t *count);
 
-    void (*close)(RedisModuleCtx *ctx, RedisJSON json);
+    void (*close)(RedisJSON json);
 
     /* RedisJSON value functions
      * Return REDISMODULE_OK if RedisJSON is of the correct JSONType,
@@ -44,10 +44,10 @@ typedef struct RedisJSONAPI_V1 {
 
     int (*getBoolean)(RedisJSON json, int *boolean);
 
-    // Callee owns str - valid until api `close` is called
-    int (*getString)(RedisJSON json, char **str, size_t *len);
+    // Callee has ownership of `str` - valid until api `close` is called
+    int (*getString)(RedisJSON json, const char **str, size_t *len);
 
-    // Callee owns str - valid until api `close` is called
+    // Caller gains ownership of `str`
     int (*getRedisModuleString)(RedisModuleCtx *ctx, RedisJSON json, RedisModuleString **str);
 
     int (*replyWith)(RedisModuleCtx *ctx, RedisJSON json);
