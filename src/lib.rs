@@ -495,8 +495,8 @@ where
         .ok_or_else(|| err_json(value, "array"))
         .and_then(|curr| {
             let len = curr.len() as i64;
-            
-            if !(-len..len+1).contains(&index) {
+
+            if !(-len..len + 1).contains(&index) {
                 return Err("ERR index out of bounds".into());
             }
 
