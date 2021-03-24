@@ -112,10 +112,11 @@ pub extern "C" fn JSONAPI_getAt(
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_close(path: JSONApiPathRef) {
+pub extern "C" fn JSONAPI_close(ctx: *mut rawmod::RedisModuleCtx, path: JSONApiPathRef) {
     if !path.is_null() {
         unsafe {
-            Box::from_raw(path);
+            let mut path = Box::from_raw(path);
+            (*path).ctx = ctx; // to be used in drop function
         }
     }
 }
@@ -128,7 +129,7 @@ pub extern "C" fn JSONAPI_getString(
 ) -> c_int {
     if !path.is_null() {
         let path = unsafe { &mut *path };
-        if let Some(ref s) = path.str_val {
+        if let Some(ref s) = path.cstr_val {
             // Use cached string value
             unsafe {
                 *str = s.as_bytes_with_nul().as_ptr() as *const c_char;
@@ -136,29 +137,64 @@ pub extern "C" fn JSONAPI_getString(
             }
             return RedisReturnCode::REDISMODULE_OK as c_int;
         } else {
-            if let Value::String(s) = path.value {
-                return path.set_string(s.as_str(), str, len);
-            }
+            let res: c_int = match path.value {
+                Value::String(s) => path.set_string(s.as_str(), str, len),
+                Value::Number(n) => {
+                    if let Some(i) = n.as_i64() {
+                        path.set_string(i.to_string().as_str(), str, len)
+                    } else {
+                        return RedisReturnCode::REDISMODULE_OK as c_int;
+                    }
+                }
+                Value::Bool(b) => path.set_string(b.to_string().as_str(), str, len),
+                _ => RedisReturnCode::REDISMODULE_ERR as c_int,
+            };
+            return res;
         }
     }
     RedisReturnCode::REDISMODULE_ERR as c_int
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_getInt(
+pub extern "C" fn JSONAPI_getRedisModuleString(
+    ctx: *mut rawmod::RedisModuleCtx,
     path: JSONApiPathRef,
-    val: *mut c_long,
-    str: *mut *const c_char,
-    len: *mut libc::size_t,
+    str: *mut *mut rawmod::RedisModuleString,
 ) -> c_int {
     if !path.is_null() {
         let path = unsafe { &mut *path };
+        if let Some(s) = path.rmstr_val {
+            // Use cached string value
+            unsafe {
+                *str = s;
+            }
+            return RedisReturnCode::REDISMODULE_OK as c_int;
+        } else {
+            let res: c_int = match path.value {
+                Value::String(s) => path.set_rmstring(ctx, s.as_str(), str),
+                Value::Number(n) => {
+                    if let Some(i) = n.as_i64() {
+                        path.set_rmstring(ctx, i.to_string().as_str(), str)
+                    } else {
+                        return RedisReturnCode::REDISMODULE_OK as c_int;
+                    }
+                }
+                Value::Bool(b) => path.set_rmstring(ctx, b.to_string().as_str(), str),
+                _ => RedisReturnCode::REDISMODULE_ERR as c_int,
+            };
+            return res;
+        }
+    }
+    RedisReturnCode::REDISMODULE_ERR as c_int
+}
+
+#[no_mangle]
+pub extern "C" fn JSONAPI_getInt(json: JSONApiPathRef, val: *mut c_long) -> c_int {
+    if !json.is_null() {
+        let path = unsafe { &mut *json };
         if let Value::Number(n) = path.value {
             if let Some(i) = n.as_i64() {
                 unsafe { *val = i };
-                if !str.is_null() {
-                    return path.set_string(i.to_string().as_str(), str, len);
-                }
                 return RedisReturnCode::REDISMODULE_OK as c_int;
             }
         }
@@ -167,20 +203,12 @@ pub extern "C" fn JSONAPI_getInt(
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_getDouble(
-    path: JSONApiPathRef,
-    val: *mut c_double,
-    str: *mut *const c_char,
-    len: *mut libc::size_t,
-) -> c_int {
-    if !path.is_null() {
-        let path = unsafe { &mut *path };
+pub extern "C" fn JSONAPI_getDouble(json: JSONApiPathRef, val: *mut c_double) -> c_int {
+    if !json.is_null() {
+        let path = unsafe { &mut *json };
         if let Value::Number(n) = path.value {
             if let Some(f) = n.as_f64() {
                 unsafe { *val = f };
-                if !str.is_null() {
-                    return path.set_string(f.to_string().as_str(), str, len);
-                }
                 return RedisReturnCode::REDISMODULE_OK as c_int;
             }
         }
@@ -189,9 +217,9 @@ pub extern "C" fn JSONAPI_getDouble(
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_getBoolean(path: JSONApiPathRef, val: *mut c_int) -> c_int {
-    if !path.is_null() {
-        let path = unsafe { &*path };
+pub extern "C" fn JSONAPI_getBoolean(json: JSONApiPathRef, val: *mut c_int) -> c_int {
+    if !json.is_null() {
+        let path = unsafe { &*json };
         if let Value::Bool(b) = path.value {
             unsafe { *val = if *b { 1 } else { 0 } };
             return RedisReturnCode::REDISMODULE_OK as c_int;
@@ -201,7 +229,10 @@ pub extern "C" fn JSONAPI_getBoolean(path: JSONApiPathRef, val: *mut c_int) -> c
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_replyWith(path: JSONApiPathRef) -> c_int {
+pub extern "C" fn JSONAPI_replyWith(
+    ctx: *mut rawmod::RedisModuleCtx,
+    json: JSONApiPathRef,
+) -> c_int {
     //FIXME:
     0
 }
@@ -216,7 +247,9 @@ pub extern "C" fn JSONAPI_isJSON(redis_module_key: *mut c_void) -> c_int {
 pub struct JSONApiPath<'a> {
     json_key: &'a JSONApiKey<'a>,
     value: &'a Value,
-    str_val: Option<CString>,
+    cstr_val: Option<CString>,
+    rmstr_val: Option<*mut rawmod::RedisModuleString>,
+    ctx: *mut rawmod::RedisModuleCtx,
 }
 
 type JSONApiPathRef<'a> = *mut JSONApiPath<'a>;
@@ -231,7 +264,9 @@ impl<'a> JSONApiPath<'a> {
             Ok(JSONApiPath {
                 json_key,
                 value: value,
-                str_val: None,
+                cstr_val: None,
+                rmstr_val: None,
+                ctx: null_mut(),
             })
         } else {
             Err(RedisError::Str("JSON path not found"))
@@ -249,18 +284,23 @@ impl<'a> JSONApiPath<'a> {
                     Ok(JSONApiPath {
                         json_key: json_key,
                         value: vec.get(index).unwrap(),
-                        str_val: None,
+                        cstr_val: None,
+                        rmstr_val: None,
+                        ctx: null_mut(),
                     })
                 } else {
                     Err(RedisError::Str("JSON index is out of range"))
                 }
             }
+            //FIXME: Return the name of the key in the map (allocate CString)
             Value::Object(ref map) => {
                 if index < map.len() {
                     Ok(JSONApiPath {
                         json_key: json_key,
                         value: map.iter().nth(index).unwrap().1,
-                        str_val: None,
+                        cstr_val: None,
+                        rmstr_val: None,
+                        ctx: null_mut(),
                     })
                 } else {
                     Err(RedisError::Str("JSON index is out of range"))
@@ -292,11 +332,39 @@ impl<'a> JSONApiPath<'a> {
                     *str = s.as_bytes_with_nul().as_ptr() as *const c_char;
                     *len = s.as_bytes().len();
                 }
-                self.str_val = Some(s);
+                self.cstr_val = Some(s);
                 return RedisReturnCode::REDISMODULE_OK as c_int;
             }
         }
         return RedisReturnCode::REDISMODULE_ERR as c_int;
+    }
+
+    pub fn set_rmstring(
+        &mut self,
+        ctx: *mut rawmod::RedisModuleCtx,
+        from_str: &str,
+        str: *mut *mut rawmod::RedisModuleString,
+    ) -> c_int {
+        if let Ok(s) = CString::new(from_str) {
+            let p = s.as_bytes_with_nul().as_ptr() as *const c_char;
+            let len = s.as_bytes().len();
+            let rmstr = unsafe { rawmod::RedisModule_CreateString.unwrap()(ctx, p, len) };
+            self.rmstr_val = Some(rmstr);
+            return RedisReturnCode::REDISMODULE_OK as c_int;
+        }
+        return RedisReturnCode::REDISMODULE_ERR as c_int;
+    }
+}
+
+impl Drop for JSONApiPath<'_> {
+    fn drop(&mut self) {
+        if let Some(rms) = self.rmstr_val {
+            unsafe {
+                if !self.ctx.is_null() {
+                    rawmod::RedisModule_FreeString.unwrap()(self.ctx, rms);
+                }
+            }
+        }
     }
 }
 
@@ -337,6 +405,7 @@ static JSONAPI: RedisJSONAPI_V1 = RedisJSONAPI_V1 {
     getAt: JSONAPI_getAt,
     close: JSONAPI_close,
     getString: JSONAPI_getString,
+    getRedisModuleString: JSONAPI_getRedisModuleString,
     getInt: JSONAPI_getInt,
     getDouble: JSONAPI_getDouble,
     getBoolean: JSONAPI_getBoolean,
@@ -364,28 +433,23 @@ pub struct RedisJSONAPI_V1<'a> {
         jtype: *mut c_int,
         count: *mut libc::size_t,
     ) -> JSONApiPathRef,
-    pub close: extern "C" fn(key: JSONApiPathRef),
+    pub close: extern "C" fn(ctx: *mut rawmod::RedisModuleCtx, key: JSONApiPathRef),
     // Get
-    pub getInt: extern "C" fn(
-        json: JSONApiPathRef,
-        val: *mut c_long,
-        str: *mut *const c_char,
-        len: *mut libc::size_t,
-    ) -> c_int,
-    pub getDouble: extern "C" fn(
-        json: JSONApiPathRef,
-        val: *mut c_double,
-        str: *mut *const c_char,
-        len: *mut libc::size_t,
-    ) -> c_int,
+    pub getInt: extern "C" fn(json: JSONApiPathRef, val: *mut c_long) -> c_int,
+    pub getDouble: extern "C" fn(json: JSONApiPathRef, val: *mut c_double) -> c_int,
     pub getBoolean: extern "C" fn(json: JSONApiPathRef, val: *mut c_int) -> c_int,
     pub getString: extern "C" fn(
         json: JSONApiPathRef,
         str: *mut *const c_char,
         len: *mut libc::size_t,
     ) -> c_int,
+    pub getRedisModuleString: extern "C" fn(
+        ctx: *mut rawmod::RedisModuleCtx,
+        json: JSONApiPathRef,
+        str: *mut *mut rawmod::RedisModuleString,
+    ) -> c_int,
     //
-    pub replyWith: extern "C" fn(path: JSONApiPathRef) -> c_int,
+    pub replyWith: extern "C" fn(ctx: *mut rawmod::RedisModuleCtx, path: JSONApiPathRef) -> c_int,
 }
 
 pub fn notify_keyspace_event(
