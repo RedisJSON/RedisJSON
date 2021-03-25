@@ -4,19 +4,21 @@
 // User-provided JSON is converted to a tree. This tree is stored transparently in Redis.
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
+use std::io::Cursor;
+use std::mem;
+use std::os::raw::{c_int, c_void};
+
+use bson::decode_document;
+use jsonpath_lib::SelectorMut;
+use redis_module::raw::{self};
+use serde::Serialize;
+use serde_json::{Map, Value};
+
 use crate::backward;
 use crate::error::Error;
 use crate::formatter::RedisJsonFormatter;
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
-
-use bson::decode_document;
-use jsonpath_lib::SelectorMut;
-use redis_module::raw;
-use serde::Serialize;
-use serde_json::{Map, Value};
-use std::io::Cursor;
-use std::mem;
-use std::os::raw::{c_int, c_void};
+use crate::c_api::JSONType;
 
 #[derive(Debug, PartialEq)]
 pub enum SetOptions {
@@ -63,10 +65,10 @@ impl Path {
         Path { path, fixed }
     }
 }
-
 #[derive(Debug)]
 pub struct RedisJSON {
-    data: Value,
+    //FIXME: make private and expose array/object Values without requiring a path
+    pub data: Value,
 }
 
 impl RedisJSON {
@@ -338,6 +340,23 @@ impl RedisJSON {
         }
     }
 
+    pub fn get_type_and_size(data: &Value) -> (JSONType, libc::size_t) {
+        match data {
+            Value::Null => (JSONType::Null, 0),
+            Value::Bool(_) => (JSONType::Bool, 0),
+            Value::Number(n) => {
+                if n.is_f64() {
+                    (JSONType::Double, 0)
+                } else {
+                    (JSONType::Int, 0)
+                }
+            }
+            Value::String(_) => (JSONType::String, 0),
+            Value::Array(arr) => (JSONType::Array, arr.len()),
+            Value::Object(map) => (JSONType::Object, map.len()),
+        }
+    }
+
     pub fn value_op<F>(&mut self, path: &str, mut fun: F) -> Result<Value, Error>
     where
         F: FnMut(&Value) -> Result<Value, Error>,
@@ -419,11 +438,16 @@ pub mod type_methods {
     pub extern "C" fn rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
         let json = match encver {
             0 => RedisJSON {
-                data: backward::json_rdb_load(rdb),
+                data: backward::json_rdb_load(rdb), // TODO handle load from rdb
             },
             2 => {
                 let data = raw::load_string(rdb);
-                RedisJSON::from_str(&data, Format::JSON).unwrap()
+                if raw::load_unsigned(rdb) > 0 {
+                    raw::load_string(rdb);
+                    raw::load_string(rdb);
+                };
+                let doc = RedisJSON::from_str(&data, Format::JSON).unwrap();
+                doc
             }
             _ => panic!("Can't load old RedisJSON RDB"),
         };
@@ -435,12 +459,13 @@ pub mod type_methods {
         let json = value as *mut RedisJSON;
 
         // Take ownership of the data from Redis (causing it to be dropped when we return)
-        Box::from_raw(json);
+        let json = Box::from_raw(json);
     }
 
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
         let json = &*(value as *mut RedisJSON);
         raw::save_string(rdb, &json.data.to_string());
+        raw::save_unsigned(rdb, 0);
     }
 }

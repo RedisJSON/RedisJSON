@@ -22,10 +22,42 @@ commands:
             git submodule update --init deps/readies
             ./deps/readies/bin/getpy3
 
+  platforms_build_steps:
+    parameters:
+      platform:
+        type: string
+    steps:
+      - setup-executor
+      - checkout
+      - run:
+          name: Checkout submodules
+          command: |
+            git submodule update --init --recursive
+      - setup-automation
+      - run:
+          name: Build for platform
+          command: |
+            cd build/docker
+            make build OSNICK=<<parameters.platform>> ARTIFACTS=0 TEST=1 SHOW=1
+      - early_return_for_forked_pull_requests
+      - run:
+          name: Build for platform (publish)
+          command: |
+            docker login -u redisfab -p $DOCKER_REDISFAB_PWD
+            cd build/docker
+            make publish OSNICK=<<parameters.platform>> OFFICIAL=0 SHOW=1 VERBOSE=1
+      - persist_to_workspace:
+          root: bin/artifacts
+          paths:
+            - 'snapshots/*.zip'
+            - 'snapshots/*.tgz'
+            - '*.zip'
+            - '*.tgz'
+
 jobs:
   build:
     docker:
-      - image: redisfab/rmbuilder:6.0.9-x64-centos7
+      - image: redisfab/rmbuilder:6.2.1-x64-centos7
     steps:
       - checkout
       - run: 
@@ -83,9 +115,19 @@ jobs:
             - ramp.yml
             - build
 
+  platforms_build:
+    parameters:
+      platform:
+        type: string
+    docker:
+      - image: debian:buster
+    steps:
+      - platform-build-steps:
+          platform: <<parameters.platform>>
+
   package_branch:
     docker:
-      - image: redisfab/rmbuilder:6.0.9-x64-buster
+      - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -102,7 +144,7 @@ jobs:
 
   package_release:
     docker:
-      - image: redisfab/rmbuilder:6.0.9-x64-buster
+      - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -123,7 +165,7 @@ jobs:
 
   deploy_branch:
     docker:
-      - image: redisfab/rmbuilder:6.0.9-x64-buster
+      - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -134,7 +176,7 @@ jobs:
 
   deploy_release:
     docker:
-      - image: redisfab/rmbuilder:6.0.9-x64-buster
+      - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -145,7 +187,7 @@ jobs:
 
   release_automation:
     docker:
-      - image: redisfab/rmbuilder:6.0.9-x64-buster
+      - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
       - checkout
       - setup-automation
@@ -155,7 +197,7 @@ jobs:
 
   nightly_automation:
     docker:
-      - image: redisfab/rmbuilder:6.0.9-x64-buster
+      - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
       - checkout
       - setup-automation
@@ -191,6 +233,7 @@ on-integ-branch: &on-integ-branch
       only:
         - master
         - /^\d+\.\d+.*$/
+        - /^feature-.*$/
     tags:
       ignore: /.*/
 
@@ -200,6 +243,7 @@ not-on-integ-branch: &not-on-integ-branch
       ignore:
         - master
         - /^\d+\.\d+.*$/
+        - /^feature-.*$/
     tags:
       ignore: /.*/
 
@@ -216,6 +260,7 @@ on-integ-and-version-tags: &on-integ-and-version-tags
       only:
         - master
         - /^\d+\.\d+.*$/
+        - /^feature-.*$/
     tags:
       only: /^v[0-9].*/
 

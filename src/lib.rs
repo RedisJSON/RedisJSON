@@ -1,9 +1,10 @@
 #[macro_use]
 extern crate redis_module;
 
-use redis_module::native_types::RedisType;
 use redis_module::raw::RedisModuleTypeMethods;
+use redis_module::{native_types::RedisType, NotifyEvent};
 use redis_module::{raw as rawmod, NextArg};
+
 use redis_module::{Context, RedisError, RedisResult, RedisValue, REDIS_OK};
 use serde_json::{Number, Value};
 
@@ -15,10 +16,12 @@ mod error;
 mod formatter;
 mod nodevisitor;
 mod redisjson;
+mod c_api;
 
 use crate::array_index::ArrayIndex;
 use crate::error::Error;
 use crate::redisjson::{Format, Path, RedisJSON, SetOptions};
+use crate::c_api::{export_shared_api, notify_keyspace_event};
 
 pub const REDIS_JSON_TYPE_VERSION: i32 = 2;
 
@@ -116,6 +119,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     match (current, set_option) {
         (Some(ref mut doc), ref op) => {
             if doc.set_value(&value, &path, op, format)? {
+                notify_keyspace_event(ctx, NotifyEvent::GENERIC, "json_set", key.as_str());
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
@@ -127,6 +131,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
             let doc = RedisJSON::from_str(&value, format)?;
             if path == "$" {
                 redis_key.set_value(&REDIS_JSON_TYPE, doc)?;
+                notify_keyspace_event(ctx, NotifyEvent::GENERIC, "json_set", key.as_str());
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
@@ -752,7 +757,13 @@ fn json_cache_info(_ctx: &Context, _args: Vec<String>) -> RedisResult {
 fn json_cache_init(_ctx: &Context, _args: Vec<String>) -> RedisResult {
     Err(RedisError::Str("Command was not implemented"))
 }
-//////////////////////////////////////////////////////
+
+fn init(ctx: &Context, _args: &Vec<String>) -> rawmod::Status {
+    export_shared_api(ctx);
+    rawmod::Status::Ok
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
 
 redis_module! {
     name: "ReJSON",
