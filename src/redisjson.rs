@@ -15,10 +15,10 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 
 use crate::backward;
+use crate::c_api::JSONType;
 use crate::error::Error;
 use crate::formatter::RedisJsonFormatter;
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
-use crate::c_api::JSONType;
 
 #[derive(Debug, PartialEq)]
 pub enum SetOptions {

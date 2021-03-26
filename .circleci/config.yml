@@ -68,17 +68,13 @@ jobs:
           command: |
             ./deps/readies/bin/getpy3
             ./system-setup.py
-      - run:
-          name: Install Redis
-          command: bash -l -c "./deps/readies/bin/getredis -v 6 --force"
-      - run:
-          name: Install Rust
-          command: |
-            ./deps/readies/bin/getrust
             source $HOME/.cargo/env
             rustc --version
             cargo --version
             rustup --version
+      - run:
+          name: Install Redis
+          command: bash -l -c "./deps/readies/bin/getredis -v 6 --force"
       - restore_cache:
           keys:
             - v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
@@ -122,7 +118,7 @@ jobs:
     docker:
       - image: debian:buster
     steps:
-      - platform-build-steps:
+      - platforms_build_steps:
           platform: <<parameters.platform>>
 
   package_branch:
@@ -270,7 +266,14 @@ workflows:
   build_and_package:
     jobs:
       - build:
+          #@@ <<: not-on-integ-branch
           <<: *on-any-branch
+      - platforms_build:
+          #@@ <<: *on-integ-and-version-tags
+          <<: *on-any-branch
+          matrix:
+            parameters:
+              platform: [focal, bionic, xenial, centos7]
       - package_branch:
           <<: *on-integ-branch
           requires:

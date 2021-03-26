@@ -12,16 +12,16 @@ use std::{i64, usize};
 
 mod array_index;
 mod backward;
+mod c_api;
 mod error;
 mod formatter;
 mod nodevisitor;
 mod redisjson;
-mod c_api;
 
 use crate::array_index::ArrayIndex;
+use crate::c_api::{export_shared_api, notify_keyspace_event};
 use crate::error::Error;
 use crate::redisjson::{Format, Path, RedisJSON, SetOptions};
-use crate::c_api::{export_shared_api, notify_keyspace_event};
 
 pub const REDIS_JSON_TYPE_VERSION: i32 = 2;
 
