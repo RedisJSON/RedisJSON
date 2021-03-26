@@ -22,8 +22,9 @@ commands:
             apt-get -qq update
             apt-get -q install -y git openssh-client curl ca-certificates make tar gzip
             bash <(curl -fsSL https://get.docker.com)
-      - setup_remote_docker:
-          docker_layer_caching: true
+      - setup_remote_docker
+#      - setup_remote_docker:
+#          docker_layer_caching: true
 
   setup-automation:
     steps:
@@ -68,7 +69,7 @@ commands:
 jobs:
   build:
     docker:
-      - image: redisfab/rmbuilder:6.2.1-x64-centos7
+      - image: redisfab/rmbuilder:6.0.9-x64-centos7
     steps:
       - checkout
       - run: 
