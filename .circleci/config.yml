@@ -58,13 +58,13 @@ commands:
             docker login -u redisfab -p $DOCKER_REDISFAB_PWD
             cd build/platforms
             make publish OSNICK=<<parameters.platform>> OFFICIAL=0 SHOW=1 VERBOSE=1
-      - persist_to_workspace:
-          root: bin/artifacts
-          paths:
-            - 'snapshots/*.zip'
-            - 'snapshots/*.tgz'
-            - '*.zip'
-            - '*.tgz'
+#      - persist_to_workspace:
+#          root: bin/artifacts
+#          paths:
+#            - 'snapshots/*.zip'
+#            - 'snapshots/*.tgz'
+#            - '*.zip'
+#            - '*.tgz'
 
 jobs:
   build:
@@ -278,11 +278,9 @@ workflows:
   build_and_package:
     jobs:
       - build:
-          #@@ <<: not-on-integ-branch
-          <<: *on-any-branch
+          <<: not-on-integ-branch
       - platforms_build:
-          #@@ <<: *on-integ-and-version-tags
-          <<: *on-any-branch
+          <<: *on-integ-and-version-tags
           matrix:
             parameters:
               platform: [focal, bionic, xenial, centos7]
