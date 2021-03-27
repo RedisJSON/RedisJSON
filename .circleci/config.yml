@@ -278,7 +278,7 @@ workflows:
   build_and_package:
     jobs:
       - build:
-          <<: not-on-integ-branch
+          <<: *not-on-integ-branch
       - platforms_build:
           <<: *on-integ-and-version-tags
           matrix:
