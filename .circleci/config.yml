@@ -14,6 +14,18 @@ commands:
               circleci step halt
             fi
 
+  setup_executor:
+    steps:
+      - run:
+          name: Setup executor
+          command: |
+            apt-get -qq update
+            apt-get -q install -y git openssh-client curl ca-certificates make tar gzip
+            bash <(curl -fsSL https://get.docker.com)
+      - setup_remote_docker
+#      - setup_remote_docker:
+#          docker_layer_caching: true
+
   setup-automation:
     steps:
       - run:
@@ -22,10 +34,42 @@ commands:
             git submodule update --init deps/readies
             ./deps/readies/bin/getpy3
 
+  platforms_build_steps:
+    parameters:
+      platform:
+        type: string
+    steps:
+      - setup_executor
+      - checkout
+      - run:
+          name: Checkout submodules
+          command: |
+            git submodule update --init --recursive
+      - setup-automation
+      - run:
+          name: Build for platform
+          command: |
+            cd build/platforms
+            make build OSNICK=<<parameters.platform>> ARTIFACTS=0 TEST=1 SHOW=1
+      - early_return_for_forked_pull_requests
+      - run:
+          name: Build for platform (publish)
+          command: |
+            docker login -u redisfab -p $DOCKER_REDISFAB_PWD
+            cd build/platforms
+            make publish OSNICK=<<parameters.platform>> OFFICIAL=0 SHOW=1 VERBOSE=1
+#      - persist_to_workspace:
+#          root: bin/artifacts
+#          paths:
+#            - 'snapshots/*.zip'
+#            - 'snapshots/*.tgz'
+#            - '*.zip'
+#            - '*.tgz'
+
 jobs:
   build:
     docker:
-      - image: redisfab/rmbuilder:6.0.9-x64-centos7
+      - image: redisfab/rmbuilder:6.2.1-x64-centos7
     steps:
       - checkout
       - run: 
@@ -36,17 +80,13 @@ jobs:
           command: |
             ./deps/readies/bin/getpy3
             ./system-setup.py
-      - run:
-          name: Install Redis
-          command: bash -l -c "./deps/readies/bin/getredis -v 6 --force"
-      - run:
-          name: Install Rust
-          command: |
-            ./deps/readies/bin/getrust
             source $HOME/.cargo/env
             rustc --version
             cargo --version
             rustup --version
+      - run:
+          name: Install Redis
+          command: bash -l -c "./deps/readies/bin/getredis -v 6 --force"
       - restore_cache:
           keys:
             - v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
@@ -83,16 +123,26 @@ jobs:
             - ramp.yml
             - build
 
+  platforms_build:
+    parameters:
+      platform:
+        type: string
+    docker:
+      - image: debian:buster
+    steps:
+      - platforms_build_steps:
+          platform: <<parameters.platform>>
+
   package_branch:
     docker:
-      - image: redisfab/rmbuilder:6.0.9-x64-buster
+      - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
       - run:
           name: Package
           command: |
-            ramp pack -m /workspace/ramp.yml -o /workspace/build/$PACKAGE_NAME.{os}-{architecture}.$CIRCLE_BRANCH.zip /workspace/$MODULE_ARTIFACT
+            python3 -m RAMP.ramp pack -m /workspace/ramp.yml -o /workspace/build/$PACKAGE_NAME.{os}-{architecture}.$CIRCLE_BRANCH.zip /workspace/$MODULE_ARTIFACT
       - persist_to_workspace:
           root: /workspace
           paths:
@@ -102,18 +152,18 @@ jobs:
 
   package_release:
     docker:
-      - image: redisfab/rmbuilder:6.0.9-x64-buster
+      - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
       - run:
           name: Package
           command: |
-            ramp pack -m /workspace/ramp.yml -o /workspace/build/$PACKAGE_NAME.{os}-{architecture}.{semantic_version}.zip /workspace/$MODULE_ARTIFACT
+            python3 -m RAMP.ramp pack -m /workspace/ramp.yml -o /workspace/build/$PACKAGE_NAME.{os}-{architecture}.{semantic_version}.zip /workspace/$MODULE_ARTIFACT
       - run:
           name: Package
           command: |
-            ramp pack -m /workspace/ramp.yml -o /workspace/build/$PACKAGE_NAME.{os}-{architecture}.latest.zip /workspace/$MODULE_ARTIFACT
+            python3 -m RAMP.ramp pack -m /workspace/ramp.yml -o /workspace/build/$PACKAGE_NAME.{os}-{architecture}.latest.zip /workspace/$MODULE_ARTIFACT
       - persist_to_workspace:
           root: /workspace
           paths:
@@ -123,7 +173,7 @@ jobs:
 
   deploy_branch:
     docker:
-      - image: redisfab/rmbuilder:6.0.9-x64-buster
+      - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -134,7 +184,7 @@ jobs:
 
   deploy_release:
     docker:
-      - image: redisfab/rmbuilder:6.0.9-x64-buster
+      - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -145,7 +195,7 @@ jobs:
 
   release_automation:
     docker:
-      - image: redisfab/rmbuilder:6.0.9-x64-buster
+      - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
       - checkout
       - setup-automation
@@ -155,7 +205,7 @@ jobs:
 
   nightly_automation:
     docker:
-      - image: redisfab/rmbuilder:6.0.9-x64-buster
+      - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
       - checkout
       - setup-automation
@@ -191,6 +241,7 @@ on-integ-branch: &on-integ-branch
       only:
         - master
         - /^\d+\.\d+.*$/
+        - /^feature-.*$/
     tags:
       ignore: /.*/
 
@@ -200,6 +251,7 @@ not-on-integ-branch: &not-on-integ-branch
       ignore:
         - master
         - /^\d+\.\d+.*$/
+        - /^feature-.*$/
     tags:
       ignore: /.*/
 
@@ -216,6 +268,7 @@ on-integ-and-version-tags: &on-integ-and-version-tags
       only:
         - master
         - /^\d+\.\d+.*$/
+        - /^feature-.*$/
     tags:
       only: /^v[0-9].*/
 
@@ -225,7 +278,12 @@ workflows:
   build_and_package:
     jobs:
       - build:
-          <<: *on-any-branch
+          <<: *not-on-integ-branch
+      - platforms_build:
+          <<: *on-integ-and-version-tags
+          matrix:
+            parameters:
+              platform: [focal, bionic, xenial, centos7]
       - package_branch:
           <<: *on-integ-branch
           requires:

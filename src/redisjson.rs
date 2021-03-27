@@ -4,22 +4,21 @@
 // User-provided JSON is converted to a tree. This tree is stored transparently in Redis.
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
-use crate::backward;
-use crate::commands::index;
-use crate::error::Error;
-use crate::formatter::RedisJsonFormatter;
-use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
-use crate::REDIS_JSON_TYPE_VERSION;
-
-use bson::decode_document;
-use index::schema_map;
-use jsonpath_lib::SelectorMut;
-use redis_module::raw::{self, Status};
-use serde::Serialize;
-use serde_json::{Map, Value};
 use std::io::Cursor;
 use std::mem;
 use std::os::raw::{c_int, c_void};
+
+use bson::decode_document;
+use jsonpath_lib::SelectorMut;
+use redis_module::raw::{self};
+use serde::Serialize;
+use serde_json::{Map, Value};
+
+use crate::backward;
+use crate::c_api::JSONType;
+use crate::error::Error;
+use crate::formatter::RedisJsonFormatter;
+use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 
 #[derive(Debug, PartialEq)]
 pub enum SetOptions {
@@ -66,17 +65,10 @@ impl Path {
         Path { path, fixed }
     }
 }
-
-#[derive(Debug, Clone)]
-pub struct ValueIndex {
-    pub key: String,
-    pub index_name: String,
-}
-
 #[derive(Debug)]
 pub struct RedisJSON {
-    data: Value,
-    pub value_index: Option<ValueIndex>,
+    //FIXME: make private and expose array/object Values without requiring a path
+    pub data: Value,
 }
 
 impl RedisJSON {
@@ -98,16 +90,9 @@ impl RedisJSON {
         }
     }
 
-    pub fn from_str(
-        data: &str,
-        value_index: &Option<ValueIndex>,
-        format: Format,
-    ) -> Result<Self, Error> {
+    pub fn from_str(data: &str, format: Format) -> Result<Self, Error> {
         let value = RedisJSON::parse_str(data, format)?;
-        Ok(Self {
-            data: value,
-            value_index: value_index.clone(),
-        })
+        Ok(Self { data: value })
     }
 
     fn add_value(&mut self, path: &str, value: Value) -> Result<bool, Error> {
@@ -355,6 +340,23 @@ impl RedisJSON {
         }
     }
 
+    pub fn get_type_and_size(data: &Value) -> (JSONType, libc::size_t) {
+        match data {
+            Value::Null => (JSONType::Null, 0),
+            Value::Bool(_) => (JSONType::Bool, 0),
+            Value::Number(n) => {
+                if n.is_f64() {
+                    (JSONType::Double, 0)
+                } else {
+                    (JSONType::Int, 0)
+                }
+            }
+            Value::String(_) => (JSONType::String, 0),
+            Value::Array(arr) => (JSONType::Array, arr.len()),
+            Value::Object(map) => (JSONType::Object, map.len()),
+        }
+    }
+
     pub fn value_op<F>(&mut self, path: &str, mut fun: F) -> Result<Value, Error>
     where
         F: FnMut(&Value) -> Result<Value, Error>,
@@ -436,23 +438,15 @@ pub mod type_methods {
     pub extern "C" fn rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
         let json = match encver {
             0 => RedisJSON {
-                data: backward::json_rdb_load(rdb),
-                value_index: None, // TODO handle load from rdb
+                data: backward::json_rdb_load(rdb), // TODO handle load from rdb
             },
             2 => {
                 let data = raw::load_string(rdb);
-                let schema = if raw::load_unsigned(rdb) > 0 {
-                    Some(ValueIndex {
-                        key: raw::load_string(rdb),
-                        index_name: raw::load_string(rdb),
-                    })
-                } else {
-                    None
+                if raw::load_unsigned(rdb) > 0 {
+                    raw::load_string(rdb);
+                    raw::load_string(rdb);
                 };
-                let doc = RedisJSON::from_str(&data, &schema, Format::JSON).unwrap();
-                if let Some(schema) = schema {
-                    index::add_document(&schema.key, &schema.index_name, &doc).unwrap();
-                }
+                let doc = RedisJSON::from_str(&data, Format::JSON).unwrap();
                 doc
             }
             _ => panic!("Can't load old RedisJSON RDB"),
@@ -466,60 +460,12 @@ pub mod type_methods {
 
         // Take ownership of the data from Redis (causing it to be dropped when we return)
         let json = Box::from_raw(json);
-
-        if let Some(value_index) = &json.value_index {
-            index::remove_document(&value_index.key, &value_index.index_name);
-        }
     }
 
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
         let json = &*(value as *mut RedisJSON);
         raw::save_string(rdb, &json.data.to_string());
-        if let Some(value_index) = &json.value_index {
-            raw::save_unsigned(rdb, 1);
-            raw::save_string(rdb, &value_index.key);
-            raw::save_string(rdb, &value_index.index_name);
-        } else {
-            raw::save_unsigned(rdb, 0);
-        }
-    }
-
-    #[allow(non_snake_case, unused)]
-    pub unsafe extern "C" fn aux_load(rdb: *mut raw::RedisModuleIO, encver: i32, when: i32) -> i32 {
-        if (encver > REDIS_JSON_TYPE_VERSION) {
-            return Status::Err as i32; // could not load rdb created with higher RedisJSON version!
-        }
-
-        if (when == raw::Aux::Before as i32) {
-            let map_size = raw::load_unsigned(rdb);
-            for _ in 0..map_size {
-                let index_name = raw::load_string(rdb);
-                let fields_size = raw::load_unsigned(rdb);
-                for _ in 0..fields_size {
-                    let field_name = raw::load_string(rdb);
-                    let path = raw::load_string(rdb);
-                    index::add_field(&index_name, &field_name, &path);
-                }
-            }
-        }
-
-        Status::Ok as i32
-    }
-
-    #[allow(non_snake_case, unused)]
-    pub unsafe extern "C" fn aux_save(rdb: *mut raw::RedisModuleIO, when: i32) {
-        if (when == raw::Aux::Before as i32) {
-            let map = schema_map::as_ref();
-            raw::save_unsigned(rdb, map.len() as u64);
-            for (key, schema) in map {
-                raw::save_string(rdb, key);
-                raw::save_unsigned(rdb, schema.fields.len() as u64);
-                for (name, path) in &schema.fields {
-                    raw::save_string(rdb, name);
-                    raw::save_string(rdb, path);
-                }
-            }
-        }
+        raw::save_unsigned(rdb, 0);
     }
 }
