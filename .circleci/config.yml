@@ -69,7 +69,7 @@ commands:
 jobs:
   build:
     docker:
-      - image: redisfab/rmbuilder:6.0.9-x64-centos7
+      - image: redisfab/rmbuilder:6.2.1-x64-centos7
     steps:
       - checkout
       - run: 
