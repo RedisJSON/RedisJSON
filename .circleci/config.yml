@@ -49,14 +49,14 @@ commands:
       - run:
           name: Build for platform
           command: |
-            cd build/docker
+            cd build/platforms
             make build OSNICK=<<parameters.platform>> ARTIFACTS=0 TEST=1 SHOW=1
       - early_return_for_forked_pull_requests
       - run:
           name: Build for platform (publish)
           command: |
             docker login -u redisfab -p $DOCKER_REDISFAB_PWD
-            cd build/docker
+            cd build/platforms
             make publish OSNICK=<<parameters.platform>> OFFICIAL=0 SHOW=1 VERBOSE=1
       - persist_to_workspace:
           root: bin/artifacts
@@ -142,7 +142,7 @@ jobs:
       - run:
           name: Package
           command: |
-            ramp pack -m /workspace/ramp.yml -o /workspace/build/$PACKAGE_NAME.{os}-{architecture}.$CIRCLE_BRANCH.zip /workspace/$MODULE_ARTIFACT
+            python3 -m RAMP.ramp pack -m /workspace/ramp.yml -o /workspace/build/$PACKAGE_NAME.{os}-{architecture}.$CIRCLE_BRANCH.zip /workspace/$MODULE_ARTIFACT
       - persist_to_workspace:
           root: /workspace
           paths:
@@ -159,11 +159,11 @@ jobs:
       - run:
           name: Package
           command: |
-            ramp pack -m /workspace/ramp.yml -o /workspace/build/$PACKAGE_NAME.{os}-{architecture}.{semantic_version}.zip /workspace/$MODULE_ARTIFACT
+            python3 -m RAMP.ramp pack -m /workspace/ramp.yml -o /workspace/build/$PACKAGE_NAME.{os}-{architecture}.{semantic_version}.zip /workspace/$MODULE_ARTIFACT
       - run:
           name: Package
           command: |
-            ramp pack -m /workspace/ramp.yml -o /workspace/build/$PACKAGE_NAME.{os}-{architecture}.latest.zip /workspace/$MODULE_ARTIFACT
+            python3 -m RAMP.ramp pack -m /workspace/ramp.yml -o /workspace/build/$PACKAGE_NAME.{os}-{architecture}.latest.zip /workspace/$MODULE_ARTIFACT
       - persist_to_workspace:
           root: /workspace
           paths:
