@@ -23,6 +23,9 @@ use crate::c_api::{export_shared_api, notify_keyspace_event};
 use crate::error::Error;
 use crate::redisjson::{Format, Path, RedisJSON, SetOptions};
 
+// extern crate readies_wd40;
+// use crate::readies_wd40::{BB, _BB, getenv};
+
 pub const REDIS_JSON_TYPE_VERSION: i32 = 2;
 
 static REDIS_JSON_TYPE: RedisType = RedisType::new(
@@ -771,6 +774,7 @@ redis_module! {
     data_types: [
         REDIS_JSON_TYPE,
     ],
+    init: init,
     commands: [
         ["json.del", json_del, "write", 1,1,1],
         ["json.get", json_get, "readonly", 1,1,1],

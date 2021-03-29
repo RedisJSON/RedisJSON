@@ -17,6 +17,7 @@ jsonpath_lib = { git="https://github.com/RedisJSON/jsonpath.git", branch="public
 # redis-module = { version="0.12.0", features = ["experimental-api"]}
 redis-module = { git = "https://github.com/RedisLabsModules/redismodule-rs", branch = "feature-search-json", features = ["experimental-api"] }
 lazy_static = "1.4.0"
+# readies-wd40 = { path = "deps/readies/wd40" }
 
 [features]
 # Workaround to allow cfg(feature = "test") in redismodue-rs dependencies:
