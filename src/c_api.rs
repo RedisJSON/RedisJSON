@@ -7,11 +7,15 @@ use std::{
 };
 
 use redis_module::key::RedisKeyWritable;
+use redis_module::logging::log_notice;
 use redis_module::{raw as rawmod, RedisError};
 use redis_module::{Context, NotifyEvent, Status};
 use serde_json::Value;
 
 use crate::{redisjson::RedisJSON, REDIS_JSON_TYPE};
+
+// extern crate readies_wd40;
+// use crate::readies_wd40::{BB, _BB, getenv};
 
 //
 // structs
@@ -362,6 +366,7 @@ pub extern "C" fn JSONAPI_get(
 static REDISJSON_GETAPI: &str = concat!("RedisJSON_V1", "\0");
 
 pub fn export_shared_api(ctx: &Context) {
+    log_notice("Exported RedisJSON_V1 API");
     ctx.export_shared_api(
         &JSONAPI as *const RedisJSONAPI_V1 as *const c_void,
         REDISJSON_GETAPI.as_ptr() as *mut i8,
