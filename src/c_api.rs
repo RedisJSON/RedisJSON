@@ -55,14 +55,8 @@ pub struct JSONApiKey<'a> {
 pub type JSONApiKeyRef<'a> = *mut JSONApiKey<'a>;
 
 impl<'a> JSONApiKey<'a> {
-    pub fn new(
-        ctx: *mut rawmod::RedisModuleCtx,
-        key_str: *mut rawmod::RedisModuleString,
-    ) -> Result<JSONApiKey<'a>, RedisError> {
-        let ctx = Context::new(ctx);
-        let key = ctx.open_with_redis_string(key_str);
+    pub fn new_from_key(key: RedisKeyWritable) -> Result<JSONApiKey<'a>, RedisError> {
         let res = key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?;
-
         if let Some(value) = res {
             Ok(JSONApiKey {
                 _key: key,
@@ -72,6 +66,25 @@ impl<'a> JSONApiKey<'a> {
             Err(RedisError::Str("Not a JSON key"))
         }
     }
+
+    pub fn new_from_redis_string(
+        ctx: *mut rawmod::RedisModuleCtx,
+        key_str: *mut rawmod::RedisModuleString,
+    ) -> Result<JSONApiKey<'a>, RedisError> {
+        let ctx = Context::new(ctx);
+        let key = ctx.open_with_redis_string(key_str);
+        JSONApiKey::new_from_key(key)
+    }
+
+    pub fn new_from_str(
+        ctx: *mut rawmod::RedisModuleCtx,
+        path: *const c_char,
+    ) -> Result<JSONApiKey<'a>, RedisError> {
+        let ctx = Context::new(ctx);
+        let path = unsafe { CStr::from_ptr(path).to_str().unwrap() };
+        let key = ctx.open_key_writable(path);
+        JSONApiKey::new_from_key(key)
+    }
 }
 
 #[no_mangle]
@@ -79,12 +92,22 @@ pub extern "C" fn JSONAPI_openKey<'a>(
     ctx: *mut rawmod::RedisModuleCtx,
     key_str: *mut rawmod::RedisModuleString,
 ) -> JSONApiKeyRef<'a> {
-    match JSONApiKey::new(ctx, key_str) {
+    match JSONApiKey::new_from_redis_string(ctx, key_str) {
         Ok(key) => Box::into_raw(Box::new(key)) as JSONApiKeyRef,
         _ => null_mut(),
     }
 }
 
+#[no_mangle]
+pub extern "C" fn JSONAPI_openKeyFromStr<'a>(
+    ctx: *mut rawmod::RedisModuleCtx,
+    path: *const c_char,
+) -> JSONApiKeyRef<'a> {
+    match JSONApiKey::new_from_str(ctx, path) {
+        Ok(key) => Box::into_raw(Box::new(key)) as JSONApiKeyRef,
+        _ => null_mut(),
+    }
+}
 #[no_mangle]
 pub extern "C" fn JSONAPI_closeKey(json: JSONApiKeyRef) {
     if !json.is_null() {
@@ -375,6 +398,7 @@ pub fn export_shared_api(ctx: &Context) {
 
 static JSONAPI: RedisJSONAPI_V1 = RedisJSONAPI_V1 {
     openKey: JSONAPI_openKey,
+    openKeyFromStr: JSONAPI_openKeyFromStr,
     closeKey: JSONAPI_closeKey,
     get: JSONAPI_get,
     getAt: JSONAPI_getAt,
@@ -395,6 +419,8 @@ pub struct RedisJSONAPI_V1<'a> {
         ctx: *mut rawmod::RedisModuleCtx,
         key_str: *mut rawmod::RedisModuleString,
     ) -> JSONApiKeyRef<'a>,
+    pub openKeyFromStr:
+        extern "C" fn(ctx: *mut rawmod::RedisModuleCtx, path: *const c_char) -> JSONApiKeyRef<'a>,
     pub closeKey: extern "C" fn(key: JSONApiKeyRef),
     pub get: extern "C" fn(
         key: JSONApiKeyRef,

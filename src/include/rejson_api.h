@@ -21,6 +21,7 @@ typedef const void *RedisJSON;
 typedef struct RedisJSONAPI_V1 {
     /* RedisJSONKey functions */
     RedisJSONKey (*openKey)(RedisModuleCtx *ctx, RedisModuleString *key_name);
+    RedisJSONKey (*openKeyFromStr)(RedisModuleCtx *ctx, const char *path);
 
     void (*closeKey)(RedisJSONKey key);
 
