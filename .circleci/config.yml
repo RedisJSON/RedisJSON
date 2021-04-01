@@ -273,7 +273,7 @@ workflows:
       - platforms_build:
           context: common
           #@@ <<: *on-integ-and-version-tags
-          <<: *on-integ-branch
+          <<: *on-any-branch
           matrix:
             parameters:
               platform: [focal, bionic, xenial, centos7]
