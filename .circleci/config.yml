@@ -94,7 +94,7 @@ commands:
           command: bash -l -c "make build DEBUG=1 <<parameters.build_params>>"
       - run:
           name: Build release
-          command: bash -l -c make build pack <<parameters.build_params>>
+          command: bash -l -c "make build pack <<parameters.build_params>>"
       - run:
           name: Run all tests
           command: bash -l -c "make pytest"
@@ -273,12 +273,15 @@ workflows:
           <<: *not-on-integ-branch
       - platforms_build:
           context: common
-          # <<: *on-integ-and-version-tags
-          <<: *on-any-branch
+          #@@ <<: *on-integ-and-version-tags
+          <<: *on-integ-branch
           matrix:
             parameters:
               platform: [focal, bionic, xenial, centos7]
       - deploy_artifacts:
+      - build-macos:
+          #@@ <<: *on-integ-and-version-tags
+          <<: *on-any-branch
           name: deploy_snapshot
           location: snapshots
           context: common
