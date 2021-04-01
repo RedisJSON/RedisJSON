@@ -152,12 +152,11 @@ jobs:
       - platforms_build_steps:
           platform: <<parameters.platform>>
 
-  macos:
+  build_macos:
     macos:
       xcode: 11.3.0
     steps:
-      - build-steps
-
+      - build_steps
 
   deploy_artifacts:
     parameters:
@@ -278,10 +277,10 @@ workflows:
           matrix:
             parameters:
               platform: [focal, bionic, xenial, centos7]
-      - deploy_artifacts:
-      - build-macos:
+      - build_macos:
           #@@ <<: *on-integ-and-version-tags
           <<: *on-any-branch
+      - deploy_artifacts:
           name: deploy_snapshot
           location: snapshots
           context: common
