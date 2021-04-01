@@ -16,7 +16,7 @@ make pytest        # run tests
   CLUSTER=0|1      # run general tests on a OSS Redis Cluster topology
   VALGRIND|VD=1    # run specified tests with Valgrind
 
-make package       # build package (RAMP file)
+make pack          # build package (RAMP file)
 
 make docker
 make docker_push
@@ -82,10 +82,10 @@ cargo_test:
 
 #----------------------------------------------------------------------------------------------
 
-package:
-	$(MAKE) -C ./src package
+pack:
+	./sbin/pack.sh
 
-.PHONY: package
+.PHONY: pack
 
 #----------------------------------------------------------------------------------------------
 
