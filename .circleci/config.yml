@@ -125,14 +125,14 @@ commands:
           name: Build for platform
           command: |
             cd build/platforms
-            make build OSNICK=<<parameters.platform>> VERSION=$(CIRCLE_TAG) BRANCH=$(CIRCLE_BRANCH) ARTIFACTS=1 TEST=1 SHOW=1
+            make build OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH ARTIFACTS=1 TEST=1 SHOW=1
       - early_return_for_forked_pull_requests
       - run:
           name: Build for platform (publish)
           command: |
             docker login -u redisfab -p $DOCKER_REDISFAB_PWD
             cd build/platforms
-            make publish OSNICK=<<parameters.platform>> VERSION=$(CIRCLE_TAG) BRANCH=$(CIRCLE_BRANCH) OFFICIAL=0 SHOW=1 VERBOSE=1
+            make publish OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH OFFICIAL=0 SHOW=1 VERBOSE=1
       - persist_to_workspace:
           root: bin/
           paths:
