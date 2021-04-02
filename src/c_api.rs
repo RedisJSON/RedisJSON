@@ -403,11 +403,11 @@ static JSONAPI: RedisJSONAPI_V1 = RedisJSONAPI_V1 {
     get: JSONAPI_get,
     getAt: JSONAPI_getAt,
     close: JSONAPI_close,
-    getString: JSONAPI_getString,
-    getRedisModuleString: JSONAPI_getRedisModuleString,
     getInt: JSONAPI_getInt,
     getDouble: JSONAPI_getDouble,
     getBoolean: JSONAPI_getBoolean,
+    getString: JSONAPI_getString,
+    getRedisModuleString: JSONAPI_getRedisModuleString,
     replyWith: JSONAPI_replyWith,
 };
 
