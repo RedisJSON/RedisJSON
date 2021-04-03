@@ -285,8 +285,7 @@ workflows:
             parameters:
               platform: [focal, bionic, xenial, centos7]
       - build_macos:
-          #@@ <<: *on-integ-and-version-tags
-          <<: *on-any-branch
+          <<: *on-integ-and-version-tags
       - deploy_artifacts:
           name: deploy_snapshot
           location: snapshots
