@@ -1,7 +1,7 @@
 version: 2.1
 
 commands:
-  abort_for_docs:
+  abort-for-docs:
     steps:
       - run:
           name: Avoid tests for docs
@@ -11,7 +11,7 @@ commands:
               circleci step halt
             fi
 
-  early_return_for_forked_pull_requests:
+  early-return-for-forked-pull-requests:
     description: >-
       If this build is from a fork, stop executing the current job and return success.
       This is useful to avoid steps that will fail due to missing credentials.
@@ -24,7 +24,7 @@ commands:
               circleci step halt
             fi
 
-  setup_executor:
+  setup-executor:
     steps:
       - run:
           name: Setup executor
@@ -35,7 +35,7 @@ commands:
       - setup_remote_docker:
           docker_layer_caching: true
 
-  setup_automation:
+  setup-automation:
     steps:
       - run:
           name: Setup automation
@@ -43,14 +43,14 @@ commands:
             git submodule update --init deps/readies
             ./deps/readies/bin/getpy3
 
-  checkout_all:
+  checkout-all:
     steps:
       - checkout
       - run:
           name: Checkout submodules
           command: git submodule update --init --recursive
 
-  build_steps:
+  build-steps:
     parameters:
       build_params:
         type: string
@@ -65,8 +65,8 @@ commands:
         type: string
         default: ""
     steps:
-      - abort_for_docs
-      - checkout_all
+      - abort-for-docs
+      - checkout-all
       - run:
           name: Setup automation and install dependencies
           command: |
@@ -112,21 +112,21 @@ commands:
       - store_artifacts:
           path: tests/pytest/logs
 
-  platforms_build_steps:
+  platforms-build-steps:
     parameters:
       platform:
         type: string
     steps:
-      - abort_for_docs
-      - setup_executor
-      - checkout_all
-      - setup_automation
+      - abort-for-docs
+      - setup-executor
+      - checkout-all
+      - setup-automation
       - run:
           name: Build for platform
           command: |
             cd build/platforms
             make build OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH ARTIFACTS=1 TEST=1 SHOW=1
-      - early_return_for_forked_pull_requests
+      - early-return-for-forked-pull-requests
       - run:
           name: Build for platform (publish)
           command: |
@@ -148,25 +148,25 @@ jobs:
     docker:
       - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
-      - build_steps
+      - build-steps
 
-  platforms_build:
+  platforms-build:
     parameters:
       platform:
         type: string
     docker:
       - image: debian:buster
     steps:
-      - platforms_build_steps:
+      - platforms-build-steps:
           platform: <<parameters.platform>>
 
-  build_macos:
+  build-macos:
     macos:
       xcode: 11.3.0
     steps:
-      - build_steps
+      - build-steps
 
-  deploy_artifacts:
+  deploy-artifacts:
     parameters:
       location:
         type: string
@@ -174,8 +174,8 @@ jobs:
     docker:
       - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
-      - abort_for_docs
-      - early_return_for_forked_pull_requests
+      - abort-for-docs
+      - early-return-for-forked-pull-requests
       - attach_workspace:
           at: workspace
       - run:
@@ -192,22 +192,22 @@ jobs:
               aws s3 cp $f s3://redismodules/$PACKAGE_NAME/$path --acl public-read
             done
 
-  release_automation:
+  release-automation:
     docker:
       - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
       - checkout
-      - setup_automation
+      - setup-automation
       - run:
           name: Run QA Automation
           command: MODULE_VERSION=$CIRCLE_TAG VERBOSE=1 TEST=release ./tests/qa/run
 
-  nightly_automation:
+  nightly-automation:
     docker:
       - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
       - checkout
-      - setup_automation
+      - setup-automation
       - run:
           name: Run QA Automation
           command: MODULE_VERSION=$CIRCLE_BRANCH VERBOSE=1 TEST=nightly QUICK=1 ./tests/qa/run
@@ -274,32 +274,32 @@ on-integ-and-version-tags: &on-integ-and-version-tags
 
 workflows:
   version: 2
-  build_and_package:
+  default-flow:
     jobs:
       - build:
           <<: *not-on-integ-branch
-      - platforms_build:
+      - platforms-build:
           context: common
           <<: *on-integ-and-version-tags
           matrix:
             parameters:
               platform: [focal, bionic, xenial, centos7]
-      - build_macos:
+      - build-macos:
           <<: *on-integ-and-version-tags
-      - deploy_artifacts:
+      - deploy-artifacts:
           name: deploy_snapshot
           location: snapshots
           context: common
           <<: *on-integ-branch
           requires:
-            - platforms_build
-      - deploy_artifacts:
+            - platforms-build
+      - deploy-artifacts:
           name: deploy_release
           context: common
           <<: *on-version-tags
           requires:
-            - platforms_build
-      - release_automation:
+            - platforms-build
+      - release-automation:
           <<: *on-version-tags
           requires:
             - deploy_release
@@ -312,4 +312,4 @@ workflows:
             branches:
               only: master
     jobs:
-      - nightly_automation
+      - nightly-automation
