@@ -1,7 +1,17 @@
 version: 2.1
 
 commands:
-  early_return_for_forked_pull_requests:
+  abort-for-docs:
+    steps:
+      - run:
+          name: Avoid tests for docs
+          command: |
+            if [[ $CIRCLE_BRANCH == *_docs ]]; then
+              echo "Identifies as documents PR, no testing required"
+              circleci step halt
+            fi
+
+  early-return-for-forked-pull-requests:
     description: >-
       If this build is from a fork, stop executing the current job and return success.
       This is useful to avoid steps that will fail due to missing credentials.
@@ -9,12 +19,12 @@ commands:
       - run:
           name: Early return if this build is from a forked PR
           command: |
-            if [ -n "$CIRCLE_PR_NUMBER" ]; then
+            if [[ -n "$CIRCLE_PR_NUMBER" ]]; then
               echo "Nothing to do for forked PRs, so marking this step successful"
               circleci step halt
             fi
 
-  setup_executor:
+  setup-executor:
     steps:
       - run:
           name: Setup executor
@@ -22,9 +32,8 @@ commands:
             apt-get -qq update
             apt-get -q install -y git openssh-client curl ca-certificates make tar gzip
             bash <(curl -fsSL https://get.docker.com)
-      - setup_remote_docker
-#      - setup_remote_docker:
-#          docker_layer_caching: true
+      - setup_remote_docker:
+          docker_layer_caching: true
 
   setup-automation:
     steps:
@@ -34,47 +43,47 @@ commands:
             git submodule update --init deps/readies
             ./deps/readies/bin/getpy3
 
-  platforms_build_steps:
-    parameters:
-      platform:
-        type: string
-    steps:
-      - setup_executor
-      - checkout
-      - run:
-          name: Checkout submodules
-          command: |
-            git submodule update --init --recursive
-      - setup-automation
-      - run:
-          name: Build for platform
-          command: |
-            cd build/platforms
-            make build OSNICK=<<parameters.platform>> ARTIFACTS=0 TEST=1 SHOW=1
-      - early_return_for_forked_pull_requests
-      - run:
-          name: Build for platform (publish)
-          command: |
-            docker login -u redisfab -p $DOCKER_REDISFAB_PWD
-            cd build/platforms
-            make publish OSNICK=<<parameters.platform>> OFFICIAL=0 SHOW=1 VERBOSE=1
-#      - persist_to_workspace:
-#          root: bin/artifacts
-#          paths:
-#            - 'snapshots/*.zip'
-#            - 'snapshots/*.tgz'
-#            - '*.zip'
-#            - '*.tgz'
-
-jobs:
-  build:
-    docker:
-      - image: redisfab/rmbuilder:6.2.1-x64-centos7
+  checkout-all:
     steps:
       - checkout
-      - run: 
+      - run:
           name: Checkout submodules
           command: git submodule update --init --recursive
+
+  persist-artifacts:
+    steps:
+      - persist_to_workspace:
+          root: bin/
+          paths:
+            - artifacts/snapshots/*.zip
+            - artifacts/snapshots/*.tgz
+            - artifacts/snapshots/*.tar
+            - artifacts/*.zip
+            - artifacts/*.tgz
+            - artifacts/*.tar
+      - run:
+          name: Cleanup test log dir
+          command: rm -f tests/pytest/logs/*.rdb
+      - store_artifacts:
+          path: tests/pytest/logs
+  
+  build-steps:
+    parameters:
+      build_params:
+        type: string
+        default: ""
+      test_params:
+        type: string
+        default: ""
+      redis_version:
+        type: string
+        default: "6"
+      getredis_params:
+        type: string
+        default: ""
+    steps:
+      - abort-for-docs
+      - checkout-all
       - run:
           name: Setup automation and install dependencies
           command: |
@@ -86,21 +95,21 @@ jobs:
             rustup --version
       - run:
           name: Install Redis
-          command: bash -l -c "./deps/readies/bin/getredis -v 6 --force"
+          command: |
+            bash -l -c "./deps/readies/bin/getredis -v <<parameters.redis_version>> --force <<parameters.getredis_params>>"
+            redis-server --version
       - restore_cache:
           keys:
             - v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
-            # fallback to using the latest cache if no exact match is found
-            - v2-dependencies-
       - run:
           name: Check formatting
           command: bash -l -c "make lint"
       - run:
           name: Build debug
-          command: bash -l -c "make build DEBUG=1"
+          command: bash -l -c "make build DEBUG=1 <<parameters.build_params>>"
       - run:
           name: Build release
-          command: bash -l -c make
+          command: bash -l -c "make build pack <<parameters.build_params>>"
       - run:
           name: Run all tests
           command: bash -l -c "make pytest"
@@ -109,91 +118,81 @@ jobs:
           paths:
             - "~/.cargo"
             - "./target"
-      - early_return_for_forked_pull_requests
-      - run:
-          name: Persist Artifacts
-          command: |
-            mkdir -p workspace/build
-            cp target/release/$MODULE_ARTIFACT workspace/
-            cp ramp.yml workspace/
-      - persist_to_workspace:
-          root: workspace
-          paths:
-            - '*.so'
-            - ramp.yml
-            - build
+      - persist-artifacts
 
-  platforms_build:
+  platforms-build-steps:
+    parameters:
+      platform:
+        type: string
+    steps:
+      - abort-for-docs
+      - setup-executor
+      - checkout-all
+      - setup-automation
+      - run:
+          name: Build for platform
+          command: |
+            cd build/platforms
+            make build OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH ARTIFACTS=1 TEST=1 SHOW=1
+      - early-return-for-forked-pull-requests
+      - run:
+          name: Build for platform (publish)
+          command: |
+            docker login -u redisfab -p $DOCKER_REDISFAB_PWD
+            cd build/platforms
+            make publish OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH OFFICIAL=0 SHOW=1 VERBOSE=1
+      - persist-artifacts
+
+jobs:
+  build:
+    docker:
+      - image: redisfab/rmbuilder:6.2.1-x64-buster
+    steps:
+      - build-steps
+
+  platforms-build:
     parameters:
       platform:
         type: string
     docker:
       - image: debian:buster
     steps:
-      - platforms_build_steps:
+      - platforms-build-steps:
           platform: <<parameters.platform>>
 
-  package_branch:
-    docker:
-      - image: redisfab/rmbuilder:6.2.1-x64-buster
+  build-macos:
+    macos:
+      xcode: 11.3.0
     steps:
-      - attach_workspace:
-          at: /workspace
-      - run:
-          name: Package
-          command: |
-            python3 -m RAMP.ramp pack -m /workspace/ramp.yml -o /workspace/build/$PACKAGE_NAME.{os}-{architecture}.$CIRCLE_BRANCH.zip /workspace/$MODULE_ARTIFACT
-      - persist_to_workspace:
-          root: /workspace
-          paths:
-            - build
-      - store_artifacts:
-          path: /workspace/build
+      - build-steps
 
-  package_release:
+  deploy-artifacts:
+    parameters:
+      location:
+        type: string
+        default: ""
     docker:
       - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
+      - abort-for-docs
+      - early-return-for-forked-pull-requests
       - attach_workspace:
-          at: /workspace
-      - run:
-          name: Package
-          command: |
-            python3 -m RAMP.ramp pack -m /workspace/ramp.yml -o /workspace/build/$PACKAGE_NAME.{os}-{architecture}.{semantic_version}.zip /workspace/$MODULE_ARTIFACT
-      - run:
-          name: Package
-          command: |
-            python3 -m RAMP.ramp pack -m /workspace/ramp.yml -o /workspace/build/$PACKAGE_NAME.{os}-{architecture}.latest.zip /workspace/$MODULE_ARTIFACT
-      - persist_to_workspace:
-          root: /workspace
-          paths:
-            - build
-      - store_artifacts:
-          path: /workspace/build
-
-  deploy_branch:
-    docker:
-      - image: redisfab/rmbuilder:6.2.1-x64-buster
-    steps:
-      - attach_workspace:
-          at: /workspace
+          at: workspace
       - run:
           name: Deploy to S3
           command: |
-            aws s3 cp /workspace/build/ s3://redismodules/$PACKAGE_NAME/ --acl public-read --recursive --exclude "*" --include "*.zip"
+            cd "workspace/artifacts/<<parameters.location>>"
+            du -ah --apparent-size *
+            if [[ -z <<parameters.location>> ]]; then
+                path="/"
+            else
+                path="<<parameters.location>>/"
+            fi
+            for f in `ls *.zip *.tgz`; do
+              aws s3 cp $f s3://redismodules/$PACKAGE_NAME/$path --acl public-read
+            done
 
-  deploy_release:
-    docker:
-      - image: redisfab/rmbuilder:6.2.1-x64-buster
-    steps:
-      - attach_workspace:
-          at: /workspace
-      - run:
-          name: Deploy to S3
-          command: |
-            aws s3 cp /workspace/build/ s3://redismodules/$PACKAGE_NAME/ --acl public-read --recursive --exclude "*" --include "*.zip"
-
-  release_automation:
+  release-automation:
     docker:
       - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
@@ -203,7 +202,7 @@ jobs:
           name: Run QA Automation
           command: MODULE_VERSION=$CIRCLE_TAG VERBOSE=1 TEST=release ./tests/qa/run
 
-  nightly_automation:
+  nightly-automation:
     docker:
       - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
@@ -275,34 +274,32 @@ on-integ-and-version-tags: &on-integ-and-version-tags
 
 workflows:
   version: 2
-  build_and_package:
+  default-flow:
     jobs:
       - build:
           <<: *not-on-integ-branch
-      - platforms_build:
+      - platforms-build:
+          context: common
           <<: *on-integ-and-version-tags
           matrix:
             parameters:
               platform: [focal, bionic, xenial, centos7]
-      - package_branch:
-          <<: *on-integ-branch
-          requires:
-            - build
-      - package_release:
-          <<: *on-version-tags
-          requires:
-            - build
-      - deploy_branch:
+      - build-macos:
+          <<: *on-integ-and-version-tags
+      - deploy-artifacts:
+          name: deploy_snapshot
+          location: snapshots
           context: common
           <<: *on-integ-branch
           requires:
-            - package_branch
-      - deploy_release:
+            - platforms-build
+      - deploy-artifacts:
+          name: deploy_release
           context: common
           <<: *on-version-tags
           requires:
-            - package_release
-      - release_automation:
+            - platforms-build
+      - release-automation:
           <<: *on-version-tags
           requires:
             - deploy_release
@@ -315,4 +312,4 @@ workflows:
             branches:
               only: master
     jobs:
-      - nightly_automation
+      - nightly-automation

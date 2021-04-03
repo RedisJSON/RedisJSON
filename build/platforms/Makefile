@@ -10,7 +10,7 @@ REPO=rejson
 
 REDIS_VER=6.2.1
 
-INT_BRANCHES=1.2 1.1 1.0 feature-search-json rafi-merge1
+INT_BRANCHES=1.2 1.1 1.0 feature-search-json
 
 ART_DIR=$(ROOT)/bin/artifacts
 ART_INT_DIR=/var/opt/redislabs/artifacts

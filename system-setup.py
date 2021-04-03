@@ -28,9 +28,11 @@ class RedisJSONSetup(paella.Setup):
         self.run("%s/bin/getcmake" % READIES)
 
     def debian_compat(self):
+        self.run("%s/bin/enable-utf8" % READIES)
         self.run("%s/bin/getgcc" % READIES)
 
     def redhat_compat(self):
+        self.run("%s/bin/enable-utf8" % READIES)
         self.install("redhat-lsb-core")
         self.run("%s/bin/getgcc --modern" % READIES)
 
@@ -38,6 +40,7 @@ class RedisJSONSetup(paella.Setup):
         self.run("%s/bin/getgcc" % READIES)
 
     def macos(self):
+        self.install_gnu_utils()
         self.run("%s/bin/getgcc" % READIES)
 
     def common_last(self):
