@@ -85,7 +85,7 @@ commands:
           keys:
             - v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
             # fallback to using the latest cache if no exact match is found
-            - v2-dependencies-
+            # - v2-dependencies-
       - run:
           name: Check formatting
           command: bash -l -c "make lint"
@@ -280,8 +280,7 @@ workflows:
           <<: *not-on-integ-branch
       - platforms_build:
           context: common
-          #@@ <<: *on-integ-and-version-tags
-          <<: *on-any-branch
+          <<: *on-integ-and-version-tags
           matrix:
             parameters:
               platform: [focal, bionic, xenial, centos7]
