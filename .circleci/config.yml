@@ -50,6 +50,23 @@ commands:
           name: Checkout submodules
           command: git submodule update --init --recursive
 
+  persist-artifacts:
+    steps:
+      - persist_to_workspace:
+          root: bin/
+          paths:
+            - artifacts/snapshots/*.zip
+            - artifacts/snapshots/*.tgz
+            - artifacts/snapshots/*.tar
+            - artifacts/*.zip
+            - artifacts/*.tgz
+            - artifacts/*.tar
+      - run:
+          name: Cleanup test log dir
+          command: rm -f tests/pytest/logs/*.rdb
+      - store_artifacts:
+          path: tests/pytest/logs
+  
   build-steps:
     parameters:
       build_params:
@@ -84,8 +101,6 @@ commands:
       - restore_cache:
           keys:
             - v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
-            # fallback to using the latest cache if no exact match is found
-            # - v2-dependencies-
       - run:
           name: Check formatting
           command: bash -l -c "make lint"
@@ -103,14 +118,7 @@ commands:
           paths:
             - "~/.cargo"
             - "./target"
-      - persist_to_workspace:
-          root: bin/
-          paths:
-            - artifacts/*.zip
-            - artifacts/*.tgz
-            - artifacts/*.tar
-      - store_artifacts:
-          path: tests/pytest/logs
+      - persist-artifacts
 
   platforms-build-steps:
     parameters:
@@ -133,15 +141,7 @@ commands:
             docker login -u redisfab -p $DOCKER_REDISFAB_PWD
             cd build/platforms
             make publish OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH OFFICIAL=0 SHOW=1 VERBOSE=1
-      - persist_to_workspace:
-          root: bin/
-          paths:
-            - artifacts/snapshots/*.zip
-            - artifacts/snapshots/*.tgz
-            - artifacts/snapshots/*.tar
-            - artifacts/*.zip
-            - artifacts/*.tgz
-            - artifacts/*.tar
+      - persist-artifacts
 
 jobs:
   build:
