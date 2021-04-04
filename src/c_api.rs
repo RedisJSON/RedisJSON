@@ -12,6 +12,7 @@ use redis_module::{raw as rawmod, RedisError};
 use redis_module::{Context, NotifyEvent, Status};
 use serde_json::Value;
 
+use crate::redisjson::Format;
 use crate::{redisjson::RedisJSON, REDIS_JSON_TYPE};
 
 // extern crate readies_wd40;
@@ -163,19 +164,9 @@ pub extern "C" fn JSONAPI_getString(
             }
             return RedisReturnCode::REDISMODULE_OK as c_int;
         } else {
-            let res: c_int = match path.value {
-                Value::String(s) => path.set_string(s.as_str(), str, len),
-                Value::Number(n) => {
-                    if let Some(i) = n.as_i64() {
-                        path.set_string(i.to_string().as_str(), str, len)
-                    } else {
-                        return RedisReturnCode::REDISMODULE_OK as c_int;
-                    }
-                }
-                Value::Bool(b) => path.set_string(b.to_string().as_str(), str, len),
-                _ => RedisReturnCode::REDISMODULE_ERR as c_int,
-            };
-            return res;
+            if let Ok(s) = path.json_key.redis_json.to_string("$", Format::JSON) {
+                return path.set_string(s.as_str(), str, len);
+            }
         }
     }
     RedisReturnCode::REDISMODULE_ERR as c_int
@@ -189,17 +180,10 @@ pub extern "C" fn JSONAPI_getRedisModuleString(
 ) -> c_int {
     if !path.is_null() {
         let path = unsafe { &*path };
-        match path.value {
-            Value::String(s) => path.create_rmstring(ctx, s.as_str(), str),
-            Value::Number(n) => {
-                if let Some(i) = n.as_i64() {
-                    path.create_rmstring(ctx, i.to_string().as_str(), str)
-                } else {
-                    RedisReturnCode::REDISMODULE_OK as c_int
-                }
-            }
-            Value::Bool(b) => path.create_rmstring(ctx, b.to_string().as_str(), str),
-            _ => RedisReturnCode::REDISMODULE_ERR as c_int,
+        if let Ok(res) = path.json_key.redis_json.to_string("$", Format::JSON) {
+            path.create_rmstring(ctx, res.as_str(), str)
+        } else {
+            RedisReturnCode::REDISMODULE_ERR as c_int
         }
     } else {
         RedisReturnCode::REDISMODULE_ERR as c_int
