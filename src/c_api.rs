@@ -150,13 +150,14 @@ pub extern "C" fn JSONAPI_close(path: JSONApiPathRef) {
 
 #[no_mangle]
 pub extern "C" fn JSONAPI_getString(
-    path: JSONApiPathRef,
+    json: JSONApiPathRef,
+    path: *const c_char,
     str: *mut *const c_char,
     len: *mut libc::size_t,
 ) -> c_int {
-    if !path.is_null() {
-        let path = unsafe { &mut *path };
-        if let Some(ref s) = path.cstr_val {
+    if !json.is_null() {
+        let json = unsafe { &mut *json };
+        if let Some(ref s) = json.cstr_val {
             // Use cached string value
             unsafe {
                 *str = s.as_bytes_with_nul().as_ptr() as *const c_char;
@@ -164,8 +165,9 @@ pub extern "C" fn JSONAPI_getString(
             }
             return RedisReturnCode::REDISMODULE_OK as c_int;
         } else {
-            if let Ok(s) = path.json_key.redis_json.to_string("$", Format::JSON) {
-                return path.set_string(s.as_str(), str, len);
+            let path = unsafe { CStr::from_ptr(path).to_str().unwrap() };
+            if let Ok(s) = json.json_key.redis_json.to_string(path, Format::JSON) {
+                return json.set_string(s.as_str(), str, len);
             }
         }
     }
@@ -175,13 +177,15 @@ pub extern "C" fn JSONAPI_getString(
 #[no_mangle]
 pub extern "C" fn JSONAPI_getRedisModuleString(
     ctx: *mut rawmod::RedisModuleCtx,
-    path: JSONApiPathRef,
+    json: JSONApiPathRef,
+    path: *const c_char,
     str: *mut *mut rawmod::RedisModuleString,
 ) -> c_int {
-    if !path.is_null() {
-        let path = unsafe { &*path };
-        if let Ok(res) = path.json_key.redis_json.to_string("$", Format::JSON) {
-            path.create_rmstring(ctx, res.as_str(), str)
+    if !json.is_null() {
+        let json = unsafe { &*json };
+        let path = unsafe { CStr::from_ptr(path).to_str().unwrap() };
+        if let Ok(res) = json.json_key.redis_json.to_string(path, Format::JSON) {
+            json.create_rmstring(ctx, res.as_str(), str)
         } else {
             RedisReturnCode::REDISMODULE_ERR as c_int
         }
@@ -425,12 +429,14 @@ pub struct RedisJSONAPI_V1<'a> {
     pub getBoolean: extern "C" fn(json: JSONApiPathRef, val: *mut c_int) -> c_int,
     pub getString: extern "C" fn(
         json: JSONApiPathRef,
+        path: *const c_char,
         str: *mut *const c_char,
         len: *mut libc::size_t,
     ) -> c_int,
     pub getRedisModuleString: extern "C" fn(
         ctx: *mut rawmod::RedisModuleCtx,
         json: JSONApiPathRef,
+        path: *const c_char,
         str: *mut *mut rawmod::RedisModuleString,
     ) -> c_int,
     //

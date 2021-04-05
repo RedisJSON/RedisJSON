@@ -1,5 +1,7 @@
 #pragma once
 
+#include "redismodule.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -46,10 +48,10 @@ typedef struct RedisJSONAPI_V1 {
     int (*getBoolean)(RedisJSON json, int *boolean);
 
     // Callee has ownership of `str` - valid until api `close` is called
-    int (*getString)(RedisJSON json, const char **str, size_t *len);
+    int (*getString)(RedisJSON json, const char *path, const char **str, size_t *len);
 
     // Caller gains ownership of `str`
-    int (*getRedisModuleString)(RedisModuleCtx *ctx, RedisJSON json, RedisModuleString **str);
+    int (*getRedisModuleString)(RedisModuleCtx *ctx, RedisJSON json, const char *path, RedisModuleString **str);
 
     int (*replyWith)(RedisModuleCtx *ctx, RedisJSON json);
 } RedisJSONAPI_V1;
