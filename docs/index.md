@@ -47,7 +47,7 @@ Before using RedisJSON, you should familiarize yourself with its commands and sy
 
 ### With `redis-cli`
 
-This example will use [`redis-cli`](http://redis.io/topics/rediscli) as the Redis client. The first RedisJSON command to try out is [`JSON.SET`](commands.md#jsonget), which sets a Redis key with a JSON value. All JSON values can be used, for example a string:
+This example will use [`redis-cli`](http://redis.io/topics/rediscli) as the Redis client. The first RedisJSON command to try out is [`JSON.SET`](commands.md#jsonset), which sets a Redis key with a JSON value. All JSON values can be used, for example a string:
 
 ```
 127.0.0.1:6379> JSON.SET foo . '"bar"'
