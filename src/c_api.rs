@@ -1,6 +1,6 @@
 use std::ffi::CString;
 use std::os::raw::{c_double, c_int, c_long};
-use std::ptr::{null_mut};
+use std::ptr::null_mut;
 use std::{
     ffi::CStr,
     os::raw::{c_char, c_void},
@@ -102,11 +102,7 @@ impl<'a> JSONApiKey<'a> {
         key_str: *mut rawmod::RedisModuleString,
     ) -> Result<JSONApiKey<'a>, RedisError> {
         let ctx = Context::new(ctx);
-        //let mut len: usize = 0;
-        //let ptr: *const c_char = unsafe { rawmod::RedisModule_StringPtrLen.unwrap()(key_str, &mut len) };
-        let ptr: *const c_char = unsafe { rawmod::RedisModule_StringPtrLen.unwrap()(key_str, null_mut()) };
-        let str = unsafe { CStr::from_ptr(ptr).to_str().unwrap() };
-        let key = ctx.open_key_writable(str);
+        let key = ctx.open_with_redis_string(key_str);
         JSONApiKey::new_from_key(key, ctx)
     }
 
