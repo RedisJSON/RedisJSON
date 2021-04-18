@@ -7,22 +7,18 @@ use redis_module::{raw as rawmod, NextArg};
 use redis_module::{Context, RedisError, RedisResult, RedisValue, REDIS_OK};
 use serde_json::{Number, Value};
 
-use std::os::raw::c_int;
 use std::{i64, usize};
 
 mod array_index;
 mod backward;
-mod commands;
 mod error;
 mod formatter;
 mod nodevisitor;
 mod redisjson;
-mod schema; // TODO: Remove
 
 use crate::array_index::ArrayIndex;
-use crate::commands::index;
 use crate::error::Error;
-use crate::redisjson::{Format, Path, RedisJSON, SetOptions, ValueIndex};
+use crate::redisjson::{Format, Path, RedisJSON, SetOptions};
 
 pub const REDIS_JSON_TYPE_VERSION: i32 = 2;
 
@@ -42,8 +38,8 @@ static REDIS_JSON_TYPE: RedisType = RedisType::new(
         digest: None,
 
         // Auxiliary data (v2)
-        aux_load: Some(redisjson::type_methods::aux_load),
-        aux_save: Some(redisjson::type_methods::aux_save),
+        aux_load: None,
+        aux_save: None,
         aux_save_triggers: rawmod::Aux::Before as i32,
     },
 );
@@ -91,7 +87,7 @@ fn json_del(ctx: &Context, args: Vec<String>) -> RedisResult {
 }
 
 ///
-/// JSON.SET <key> <path> <json> [NX | XX | FORMAT <format> | INDEX <index>]
+/// JSON.SET <key> <path> <json> [NX | XX | FORMAT <format>]
 ///
 fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
@@ -102,7 +98,6 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
 
     let mut format = Format::JSON;
     let mut set_option = SetOptions::None;
-    let mut value_index = None;
 
     while let Some(s) = args.next() {
         match s.to_uppercase().as_str() {
@@ -110,12 +105,6 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
             "XX" => set_option = SetOptions::AlreadyExists,
             "FORMAT" => {
                 format = Format::from_str(args.next_string()?.as_str())?;
-            }
-            "INDEX" => {
-                value_index = Some(ValueIndex {
-                    key: key.clone(),
-                    index_name: args.next_string()?,
-                });
             }
             _ => break,
         };
@@ -127,9 +116,6 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     match (current, set_option) {
         (Some(ref mut doc), ref op) => {
             if doc.set_value(&value, &path, op, format)? {
-                if let Some(value_index) = value_index {
-                    index::add_document(&key, &value_index.index_name, &doc)?;
-                }
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
@@ -138,17 +124,9 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
         }
         (None, SetOptions::AlreadyExists) => Ok(RedisValue::Null),
         (None, _) => {
-            let doc = RedisJSON::from_str(&value, &value_index, format)?;
+            let doc = RedisJSON::from_str(&value, format)?;
             if path == "$" {
                 redis_key.set_value(&REDIS_JSON_TYPE, doc)?;
-
-                if let Some(value_index) = value_index {
-                    // FIXME: We need to get the value even though we just set it,
-                    // since the original doc is consumed by set_value.
-                    // Can we do better than this?
-                    let doc = redis_key.get_value(&REDIS_JSON_TYPE)?.unwrap();
-                    index::add_document(&key, &value_index.index_name, doc)?;
-                }
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
@@ -776,18 +754,12 @@ fn json_cache_init(_ctx: &Context, _args: Vec<String>) -> RedisResult {
 }
 //////////////////////////////////////////////////////
 
-pub extern "C" fn init(raw_ctx: *mut rawmod::RedisModuleCtx) -> c_int {
-    crate::commands::index::schema_map::init();
-    redisearch_api::init(raw_ctx)
-}
-
 redis_module! {
     name: "ReJSON",
     version: 99_99_99,
     data_types: [
         REDIS_JSON_TYPE,
     ],
-    init: init,
     commands: [
         ["json.del", json_del, "write", 1,1,1],
         ["json.get", json_get, "readonly", 1,1,1],
@@ -810,8 +782,6 @@ redis_module! {
         ["json.debug", json_debug, "readonly", 1,1,1],
         ["json.forget", json_del, "write", 1,1,1],
         ["json.resp", json_resp, "readonly", 1,1,1],
-        ["json.index", commands::index::index, "write deny-oom", 1,1,1],
-        ["json.qget", commands::index::qget, "readonly", 1,1,1],
         ["json._cacheinfo", json_cache_info, "readonly", 1,1,1],
         ["json._cacheinit", json_cache_init, "write", 1,1,1],
     ],
