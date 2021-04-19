@@ -662,17 +662,19 @@ fn json_clear(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_string()?;
     let arg = get_optional_arg(&mut args);
+    let mut paths: Vec<Path> = vec![];
     let path = backwards_compat_path(arg);
-    // FIXME: support multi paths
+    paths.push(Path::new(path));
+    while let Ok(mut arg) = args.next_string() {
+        arg = backwards_compat_path(arg);
+        paths.push(Path::new(arg));
+    }
+
+    // FIXME: handle multi paths
     let key = ctx.open_key_writable(&key);
     let deleted = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
         Some(doc) => {
-            let res = if path == "$" {
-                key.delete()?;
-                1
-            } else {
-                doc.clear(&path)?
-            };
+            let res = doc.clear(paths.first().unwrap().fixed.as_str())?;
             ctx.replicate_verbatim();
             res
         }
