@@ -656,6 +656,31 @@ fn json_obj_len(ctx: &Context, args: Vec<String>) -> RedisResult {
 }
 
 ///
+/// JSON.CLEAR <key> [path ...]
+///
+fn json_clear(ctx: &Context, args: Vec<String>) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+    let key = args.next_string()?;
+    let arg = get_optional_arg(&mut args);
+    let path = backwards_compat_path(arg);
+    // FIXME: support multi paths
+    let key = ctx.open_key_writable(&key);
+    let deleted = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
+        Some(doc) => {
+            let res = if path == "$" {
+                key.delete()?;
+                1
+            } else {
+                doc.clear(&path)?
+            };
+            ctx.replicate_verbatim();
+            res
+        }
+        None => 0,
+    };
+    Ok(deleted.into())
+}
+///
 /// JSON.DEBUG <subcommand & arguments>
 ///
 /// subcommands:
@@ -790,6 +815,7 @@ redis_module! {
         ["json.arrtrim", json_arr_trim, "write", 1,1,1],
         ["json.objkeys", json_obj_keys, "readonly", 1,1,1],
         ["json.objlen", json_obj_len, "readonly", 1,1,1],
+        ["json.clear", json_clear, "write", 1,1,1],
         ["json.debug", json_debug, "readonly", 1,1,1],
         ["json.forget", json_del, "write", 1,1,1],
         ["json.resp", json_resp, "readonly", 1,1,1],

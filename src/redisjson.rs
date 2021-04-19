@@ -199,6 +199,24 @@ impl RedisJSON {
         Ok(deleted)
     }
 
+    pub fn clear(&mut self, path: &str) -> Result<usize, Error> {
+        let current_data = self.data.take();
+        let mut cleared = 0;
+        self.data = jsonpath_lib::replace_with(current_data, path, &mut |v| match v {
+            Value::Object(mut obj) => {
+                obj.clear();
+                cleared += 1;
+                Some(Value::from(obj))
+            }
+            Value::Array(mut arr) => {
+                arr.clear();
+                cleared += 1;
+                Some(Value::from(arr))
+            }
+            _ => Some(v),
+        })?;
+        Ok(cleared)
+    }
     pub fn to_string(&self, path: &str, format: Format) -> Result<String, Error> {
         let results = self.get_first(path)?;
         Self::serialize(results, format)
