@@ -53,8 +53,10 @@ fn backwards_compat_path(mut path: String) -> String {
             path.replace_range(..1, "$");
         } else if path.starts_with('.') {
             path.insert(0, '$');
-        } else {
+        } else if !path.is_empty() {
             path.insert_str(0, "$.");
+        } else {
+            path = "$".to_string();
         }
     }
     path
@@ -67,7 +69,8 @@ fn json_del(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_string()?;
-    let path = backwards_compat_path(args.next_string()?);
+    let arg = get_optional_arg(&mut args);
+    let path = backwards_compat_path(arg);
 
     let key = ctx.open_key_writable(&key);
     let deleted = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
@@ -135,6 +138,13 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
                 ))
             }
         }
+    }
+}
+
+fn get_optional_arg<I: NextArg>(mut args: I) -> String {
+    match args.next_string() {
+        Ok(arg) => arg,
+        Err(_) => "".to_string(),
     }
 }
 
@@ -686,7 +696,8 @@ fn json_resp(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_string()?;
-    let path = backwards_compat_path(args.next_string()?);
+    let arg = get_optional_arg(&mut args);
+    let path = backwards_compat_path(arg);
 
     let key = ctx.open_key(&key);
     match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
