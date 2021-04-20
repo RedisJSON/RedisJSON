@@ -20,7 +20,7 @@ class RedisJSONSetup(paella.Setup):
         self.pip_install("wheel")
         self.pip_install("setuptools --upgrade")
 
-        self.install("git llvm-dev libclang-dev clang")
+        self.install("git clang")
         if not self.has_command("rustc"):
             self.run("%s/bin/getrust" % READIES)
         self.run("%s/bin/getcmake" % READIES)
@@ -29,7 +29,7 @@ class RedisJSONSetup(paella.Setup):
         self.run("%s/bin/getgcc" % READIES)
 
     def redhat_compat(self):
-        self.install("redhat-lsb-core")
+        self.install("redhat-lsb-core clang-devel")
         self.run("%s/bin/getgcc --modern" % READIES)
 
     def fedora(self):
