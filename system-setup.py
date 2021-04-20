@@ -20,7 +20,7 @@ class RedisJSONSetup(paella.Setup):
         self.pip_install("wheel")
         self.pip_install("setuptools --upgrade")
 
-        self.install("git clang")
+        self.install("git llvm-dev libclang-dev clang")
         if not self.has_command("rustc"):
             self.run("%s/bin/getrust" % READIES)
         self.run("%s/bin/getcmake" % READIES)
