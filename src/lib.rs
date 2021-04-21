@@ -1,8 +1,8 @@
 #[macro_use]
 extern crate redis_module;
 
-use redis_module::{native_types::RedisType, NotifyEvent};
 use redis_module::raw::RedisModuleTypeMethods;
+use redis_module::{native_types::RedisType, NotifyEvent};
 use redis_module::{raw as rawmod, NextArg};
 use redis_module::{Context, RedisError, RedisResult, RedisValue, REDIS_OK};
 use serde_json::{Number, Value};
@@ -278,10 +278,22 @@ fn json_num_multby(ctx: &Context, args: Vec<String>) -> RedisResult {
 /// JSON.NUMPOWBY <key> <path> <number>
 ///
 fn json_num_powby(ctx: &Context, args: Vec<String>) -> RedisResult {
-    json_num_op(ctx, "json_numpowby", args, |i1, i2| i1.pow(i2 as u32), |f1, f2| f1.powf(f2))
+    json_num_op(
+        ctx,
+        "json_numpowby",
+        args,
+        |i1, i2| i1.pow(i2 as u32),
+        |f1, f2| f1.powf(f2),
+    )
 }
 
-fn json_num_op<I, F>(ctx: &Context, cmd: &str, args: Vec<String>, op_i64: I, op_f64: F) -> RedisResult
+fn json_num_op<I, F>(
+    ctx: &Context,
+    cmd: &str,
+    args: Vec<String>,
+    op_i64: I,
+    op_f64: F,
+) -> RedisResult
 where
     I: Fn(i64, i64) -> i64,
     F: Fn(f64, f64) -> f64,
@@ -294,7 +306,8 @@ where
 
     let redis_key = ctx.open_key_writable(&key);
 
-    redis_key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
+    redis_key
+        .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
         .ok_or_else(RedisError::nonexistent_key)
         .and_then(|doc| {
             doc.value_op(&path, |value| {
@@ -371,7 +384,8 @@ fn json_str_append(ctx: &Context, args: Vec<String>) -> RedisResult {
 
     let redis_key = ctx.open_key_writable(&key);
 
-    redis_key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
+    redis_key
+        .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
         .ok_or_else(RedisError::nonexistent_key)
         .and_then(|doc| {
             doc.value_op(&path, |value| do_json_str_append(&json, value))
@@ -413,7 +427,8 @@ fn json_arr_append(ctx: &Context, args: Vec<String>) -> RedisResult {
 
     let redis_key = ctx.open_key_writable(&key);
 
-    redis_key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
+    redis_key
+        .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
         .ok_or_else(RedisError::nonexistent_key)
         .and_then(|doc| {
             doc.value_op(&path, |value| do_json_arr_append(args.clone(), value))
@@ -483,7 +498,8 @@ fn json_arr_insert(ctx: &Context, args: Vec<String>) -> RedisResult {
 
     let redis_key = ctx.open_key_writable(&key);
 
-    redis_key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
+    redis_key
+        .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
         .ok_or_else(RedisError::nonexistent_key)
         .and_then(|doc| {
             doc.value_op(&path, |value| {
@@ -552,7 +568,8 @@ fn json_arr_pop(ctx: &Context, args: Vec<String>) -> RedisResult {
     let redis_key = ctx.open_key_writable(&key);
     let mut res = Value::Null;
 
-    redis_key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
+    redis_key
+        .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
         .ok_or_else(RedisError::nonexistent_key)
         .and_then(|doc| {
             doc.value_op(&path, |value| do_json_arr_pop(index, &mut res, value))
@@ -602,7 +619,8 @@ fn json_arr_trim(ctx: &Context, args: Vec<String>) -> RedisResult {
 
     let redis_key = ctx.open_key_writable(&key);
 
-    redis_key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
+    redis_key
+        .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
         .ok_or_else(RedisError::nonexistent_key)
         .and_then(|doc| {
             doc.value_op(&path, |value| do_json_arr_trim(start, stop, &value))
