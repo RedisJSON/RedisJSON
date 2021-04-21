@@ -41,6 +41,11 @@ static REDIS_JSON_TYPE: RedisType = RedisType::new(
         aux_load: None,
         aux_save: None,
         aux_save_triggers: rawmod::Aux::Before as i32,
+
+        free_effort: None,
+        unlink: None,
+        copy: None,
+        defrag: None,
     },
 );
 
