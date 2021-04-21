@@ -1,3 +1,12 @@
+ROOT=.
+MK.pyver:=3
+
+ifeq ($(wildcard $(ROOT)/deps/readies/mk),)
+$(error Submodules not present. Please run 'git submodule update --init --recursive')
+endif
+include $(ROOT)/deps/readies/mk/main
+
+#----------------------------------------------------------------------------------------------
 
 define HELP
 make build
@@ -16,16 +25,32 @@ make pytest        # run tests
   CLUSTER=0|1      # run general tests on a OSS Redis Cluster topology
   VALGRIND|VD=1    # run specified tests with Valgrind
 
-make package       # build package (RAMP file)
+make pack          # build package (RAMP file)
 
 make docker
 make docker_push
+
+make platform      # build for specific Linux distribution
+  OSNICK=nick        # Linux distribution to build for
+  REDIS_VER=ver      # use Redis version `ver`
+  TEST=1             # test aftar build
+  PACK=1             # create packages
+  ARTIFACTS=1        # copy artifacts from docker image
+  PUBLISH=1          # publish (i.e. docker push) after build
 
 make builddocs
 make localdocs
 make deploydocs
 
 endef
+
+#----------------------------------------------------------------------------------------------
+
+MK_CUSTOM_CLEAN=1
+BINDIR=$(BINROOT)
+
+include $(MK)/defs
+include $(MK)/rules
 
 #----------------------------------------------------------------------------------------------
 
@@ -44,16 +69,24 @@ TARGET=$(TARGET_DIR)/$(MODULE_NAME)
 
 all: build
 
+.PHONY: all
+
 #----------------------------------------------------------------------------------------------
 
 lint:
 	cargo fmt -- --check
 
+.PHONY: lint
+
 #----------------------------------------------------------------------------------------------
+
+RUST_SOEXT.linux=so
+RUST_SOEXT.freebsd=so
+RUST_SOEXT.macos=dylib
 
 build:
 	cargo build --all --all-targets $(CARGO_FLAGS)
-	cp $(TARGET_DIR)/librejson.so $(TARGET)
+	cp $(TARGET_DIR)/librejson.$(RUST_SOEXT.$(OS)) $(TARGET)
 
 clean:
 ifneq ($(ALL),1)
@@ -61,6 +94,8 @@ ifneq ($(ALL),1)
 else
 	rm -rf target
 endif
+
+.PHONY: build clean
 
 #----------------------------------------------------------------------------------------------
 
@@ -76,10 +111,10 @@ cargo_test:
 
 #----------------------------------------------------------------------------------------------
 
-package:
-	$(MAKE) -C ./src package
+pack:
+	./sbin/pack.sh
 
-.PHONY: package
+.PHONY: pack
 
 #----------------------------------------------------------------------------------------------
 
@@ -93,6 +128,14 @@ docker_push:
 
 #----------------------------------------------------------------------------------------------
 
+platform:
+	@make -C build/platforms build
+ifeq ($(PUBLISH),1)
+	@make -C build/platforms publish
+endif
+
+#----------------------------------------------------------------------------------------------
+
 builddocs:
 	mkdocs build
 
@@ -103,20 +146,3 @@ deploydocs: builddocs
 	mkdocs gh-deploy
 
 .PHONY: builddocs localdocs deploydocs
-
-#----------------------------------------------------------------------------------------------
-
-ifneq ($(HELP),) 
-ifneq ($(filter help,$(MAKECMDGOALS)),)
-HELPFILE:=$(shell mktemp /tmp/make.help.XXXX)
-endif
-endif
-
-help:
-	$(file >$(HELPFILE),$(HELP))
-	@echo
-	@cat $(HELPFILE)
-	@echo
-	@-rm -f $(HELPFILE)
-
-.PHONY: help
