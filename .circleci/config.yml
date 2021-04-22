@@ -110,6 +110,16 @@ commands:
       - run:
           name: Build release
           command: bash -l -c "make build pack <<parameters.build_params>>"
+      - save_cache:
+          key: v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
+          paths:
+            - "~/.cargo"
+            - "./target"
+
+  test-steps:
+    steps:
+      - abort-for-docs
+      - checkout-all
       - run:
           name: Run all tests
           command: bash -l -c "make pytest"
@@ -143,12 +153,51 @@ commands:
             make publish OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH OFFICIAL=0 SHOW=1 VERBOSE=1
       - persist-artifacts
 
+  benchmark-steps:
+    parameters:
+      github_actor:
+        type: string
+        default: $CIRCLE_USERNAME
+      module_path:
+        type: string
+        default: ../../target/release/rejson.so
+    steps:
+      - run:
+          name: Install remote benchmark tool dependencies
+          command: |
+            mkdir -p /workspace
+            TF_EXE_FILE_NAME=/workspace/terraform ./tests/benchmarks/remote/install_deps.sh
+      - run:
+          name: Install remote benchmark python dependencies
+          command: python3 -m pip install -r ./tests/benchmarks/requirements.txt
+      - run:
+          name: Run CI benchmarks on aws
+          command: |
+            cd ./tests/benchmarks
+            export AWS_ACCESS_KEY_ID=$PERFORMANCE_EC2_ACCESS_KEY
+            export AWS_SECRET_ACCESS_KEY=$PERFORMANCE_EC2_SECRET_KEY
+            export AWS_DEFAULT_REGION=$PERFORMANCE_EC2_REGION
+            export EC2_PRIVATE_PEM=$PERFORMANCE_EC2_PRIVATE_PEM
+
+            redisbench-admin run-remote \
+              --terraform_bin_path /workspace/terraform \
+              --module_path << parameters.module_path >> \
+              --github_actor << parameters.github_actor >> \
+              --github_repo $CIRCLE_PROJECT_REPONAME \
+              --github_org $CIRCLE_PROJECT_USERNAME \
+              --github_sha $CIRCLE_SHA1 \
+              --github_branch $CIRCLE_BRANCH \
+              --upload_results_s3 \
+              --triggering_env circleci \
+              --push_results_redistimeseries
+
 jobs:
   build:
     docker:
       - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
       - build-steps
+      - test-steps
 
   platforms-build:
     parameters:
@@ -165,6 +214,7 @@ jobs:
       xcode: 11.3.0
     steps:
       - build-steps
+      - test-steps
 
   deploy-artifacts:
     parameters:
@@ -212,6 +262,12 @@ jobs:
           name: Run QA Automation
           command: MODULE_VERSION=$CIRCLE_BRANCH VERBOSE=1 TEST=nightly QUICK=1 ./tests/qa/run
 
+  performance-automation:
+    docker:
+      - image: redisfab/rmbuilder:6.2.1-x64-bionic
+    steps:
+      - build-steps
+      - benchmark-steps
 
 on-any-branch: &on-any-branch
   filters:
@@ -303,6 +359,9 @@ workflows:
           <<: *on-version-tags
           requires:
             - deploy_release
+      - performance-automation:
+          <<: *not-on-integ-branch
+          context: common
 
   nightly:
     triggers:
@@ -315,3 +374,5 @@ workflows:
                 - /^feature-.*$/
     jobs:
       - nightly-automation
+      - performance-automation:
+          context: common
