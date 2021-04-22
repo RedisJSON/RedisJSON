@@ -306,6 +306,7 @@ def testToggleCommand(env):
     r = env
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"foo":true}'))
     r.assertEqual(r.execute_command('JSON.TOGGLE','test','.foo'), 'false')
+    r.assertEqual(r.execute_command('JSON.TOGGLE','test','.foo'), 'true')
 
     # Test Toggeling Empty Path
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"foo":"bar"}'))
