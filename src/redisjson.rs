@@ -422,7 +422,7 @@ pub mod type_methods {
             0 => RedisJSON {
                 data: backward::json_rdb_load(rdb),
             },
-            2 => {
+            2 | 3 => {
                 let data = raw::load_string(rdb);
                 RedisJSON::from_str(&data, Format::JSON).unwrap()
             }
