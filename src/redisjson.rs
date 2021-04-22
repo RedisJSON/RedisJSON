@@ -453,17 +453,15 @@ pub mod type_methods {
 
         // Backward support for modules that had AUX field for RediSarch
         // TODO remove in future versions
-        if (encver == 2) {
-            if (when == raw::Aux::Before as i32) {
-                let map_size = raw::load_unsigned(rdb);
-                for _ in 0..map_size {
-                    let index_name = raw::load_string(rdb);
-                    let fields_size = raw::load_unsigned(rdb);
-                    for _ in 0..fields_size {
-                        let field_name = raw::load_string(rdb);
-                        let path = raw::load_string(rdb);
-                        // index::add_field(&index_name, &field_name, &path);
-                    }
+        if (encver == 2 && when == raw::Aux::Before as i32) {
+            let map_size = raw::load_unsigned(rdb);
+            for _ in 0..map_size {
+                let index_name = raw::load_string(rdb);
+                let fields_size = raw::load_unsigned(rdb);
+                for _ in 0..fields_size {
+                    let field_name = raw::load_string(rdb);
+                    let path = raw::load_string(rdb);
+                    // index::add_field(&index_name, &field_name, &path);
                 }
             }
         }
