@@ -20,7 +20,7 @@ use crate::array_index::ArrayIndex;
 use crate::error::Error;
 use crate::redisjson::{Format, Path, RedisJSON, SetOptions};
 
-pub const REDIS_JSON_TYPE_VERSION: i32 = 2;
+pub const REDIS_JSON_TYPE_VERSION: i32 = 3;
 
 static REDIS_JSON_TYPE: RedisType = RedisType::new(
     "ReJSON-RL",
@@ -38,7 +38,7 @@ static REDIS_JSON_TYPE: RedisType = RedisType::new(
         digest: None,
 
         // Auxiliary data (v2)
-        aux_load: None,
+        aux_load: Some(redisjson::type_methods::aux_load),
         aux_save: None,
         aux_save_triggers: rawmod::Aux::Before as i32,
 
