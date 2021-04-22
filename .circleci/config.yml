@@ -360,7 +360,7 @@ workflows:
           requires:
             - deploy_release
       - performance-automation:
-          <<: *not-on-integ-branch
+          <<: *on-integ-and-version-tags
           context: common
 
   nightly:
