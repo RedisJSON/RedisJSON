@@ -310,6 +310,8 @@ workflows:
           cron: "07 20 * * *"
           filters:
             branches:
-              only: master
+              only:
+                - master
+                - /^feature-.*$/
     jobs:
       - nightly-automation
