@@ -286,7 +286,30 @@ fn json_num_powby(ctx: &Context, args: Vec<String>) -> RedisResult {
         |f1, f2| f1.powf(f2),
     )
 }
+//
+/// JSON.TOGGLE <key> <path>
+fn json_bool_toggle(ctx: &Context, args: Vec<String>) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+    let key = args.next_string()?;
+    let path = backwards_compat_path(args.next_string()?);
+    let key = ctx.open_key_writable(&key);
 
+    key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
+        .ok_or_else(RedisError::nonexistent_key)
+        .and_then(|doc| {
+            doc.value_op(&path, |value| {
+                value
+                    .as_bool()
+                    .ok_or_else(|| err_json(value, "boolean"))
+                    .and_then(|curr| {
+                        let result = curr ^ true;
+                        Ok(Value::Bool(result))
+                    })
+            })
+            .map(|v| v.to_string().into())
+            .map_err(|e| e.into())
+        })
+}
 fn json_num_op<I, F>(
     ctx: &Context,
     cmd: &str,
@@ -799,6 +822,7 @@ redis_module! {
         ["json.set", json_set, "write deny-oom", 1,1,1],
         ["json.type", json_type, "readonly", 1,1,1],
         ["json.numincrby", json_num_incrby, "write", 1,1,1],
+        ["json.toggle", json_bool_toggle, "write deny-oom", 1,1,1],
         ["json.nummultby", json_num_multby, "write", 1,1,1],
         ["json.numpowby", json_num_powby, "write", 1,1,1],
         ["json.strappend", json_str_append, "write deny-oom", 1,1,1],
