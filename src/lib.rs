@@ -292,9 +292,9 @@ fn json_bool_toggle(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_string()?;
     let path = backwards_compat_path(args.next_string()?);
-    let key = ctx.open_key_writable(&key);
+    let redis_key = ctx.open_key_writable(&key);
 
-    key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
+    redis_key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
         .ok_or_else(RedisError::nonexistent_key)
         .and_then(|doc| {
             doc.value_op(&path, |value| {
@@ -306,7 +306,11 @@ fn json_bool_toggle(ctx: &Context, args: Vec<String>) -> RedisResult {
                         Ok(Value::Bool(result))
                     })
             })
-            .map(|v| v.to_string().into())
+            .map(|v| {
+                ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_toggle", key.as_str());
+                ctx.replicate_verbatim();
+                v.to_string().into()
+            })
             .map_err(|e| e.into())
         })
 }
