@@ -392,7 +392,7 @@ impl RedisJSON {
         match errors.len() {
             0 => match result {
                 Some(r) => Ok(r),
-                None => Err("Path not found".into()),
+                None => Err(format!("Path '{}' does not exist", path).into()),
             },
             1 => Err(errors.remove(0)),
             _ => Err(errors.into_iter().map(|e| e.msg).collect::<String>().into()),
