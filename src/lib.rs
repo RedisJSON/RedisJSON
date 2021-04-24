@@ -483,7 +483,6 @@ fn do_json_arr_append<I>(args: I, value: &mut Value) -> Result<Value, Error>
 where
     I: Iterator<Item = String>,
 {
-
     let mut new_value = if value.is_array() {
         value.take()
     } else {
@@ -491,8 +490,8 @@ where
     };
 
     let mut items: Vec<Value> = args
-    .map(|json| serde_json::from_str(&json))
-    .collect::<Result<_, _>>()?;
+        .map(|json| serde_json::from_str(&json))
+        .collect::<Result<_, _>>()?;
 
     new_value.as_array_mut().unwrap().append(&mut items);
     Ok(new_value)
