@@ -304,9 +304,9 @@ fn json_bool_toggle(ctx: &Context, args: Vec<String>) -> RedisResult {
                     value
                         .as_bool()
                         .ok_or_else(|| err_json(value, "boolean"))
-                        .and_then(|curr| {
+                        .map(|curr| {
                             let result = curr ^ true;
-                            Ok(Value::Bool(result))
+                            Value::Bool(result)
                         })
                 },
                 |value| {
@@ -483,16 +483,15 @@ fn do_json_arr_append<I>(args: I, value: &mut Value) -> Result<Value, Error>
 where
     I: Iterator<Item = String>,
 {
-    let mut new_value = if value.is_array() {
-        value.take()
-    } else {
-        Err(err_json(value, "array"))?
-    };
+    if !value.is_array() {
+        return Err(err_json(value, "array"));
+    }
 
     let mut items: Vec<Value> = args
         .map(|json| serde_json::from_str(&json))
         .collect::<Result<_, _>>()?;
 
+    let mut new_value = value.take();
     new_value.as_array_mut().unwrap().append(&mut items);
     Ok(new_value)
 }
@@ -554,31 +553,30 @@ fn json_arr_insert(ctx: &Context, args: Vec<String>) -> RedisResult {
         })
 }
 
-fn do_json_arr_insert<I>(args: I, index: i64, value: &Value) -> Result<Value, Error>
+fn do_json_arr_insert<I>(args: I, index: i64, value: &mut Value) -> Result<Value, Error>
 where
     I: Iterator<Item = String>,
 {
-    value
-        .as_array()
-        .ok_or_else(|| err_json(value, "array"))
-        .and_then(|curr| {
-            let len = curr.len() as i64;
+    if !value.is_array() {
+        return Err(err_json(value, "array"));
+    }
 
-            if !(-len..len).contains(&index) {
-                return Err("ERR index out of bounds".into());
-            }
+    // Verify legel index in bounds
+    let len = value.as_array().unwrap().len() as i64;
+    if !(-len..len).contains(&index) {
+        return Err("ERR index out of bounds".into());
+    }
+    let index = index.normalize(len);
 
-            let index = index.normalize(len);
+    let items: Vec<Value> = args
+        .map(|json| serde_json::from_str(&json))
+        .collect::<Result<_, _>>()?;
 
-            let items: Vec<Value> = args
-                .map(|json| serde_json::from_str(&json))
-                .collect::<Result<_, _>>()?;
+    let mut new_value = value.take();
+    let curr = new_value.as_array_mut().unwrap();
+    curr.splice(index..index, items.into_iter());
 
-            let mut new_value = curr.to_owned();
-            new_value.splice(index..index, items.into_iter());
-
-            Ok(Value::Array(new_value))
-        })
+    Ok(new_value)
 }
 
 ///
@@ -615,10 +613,10 @@ fn json_arr_pop(ctx: &Context, args: Vec<String>) -> RedisResult {
             doc.value_op(
                 &path,
                 |value| do_json_arr_pop(index, &mut res, value),
-                |v| {
+                |_v| {
                     ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrpop", key.as_str());
                     ctx.replicate_verbatim();
-                    Ok(v.clone()) // TODO
+                    Ok(()) // fake result doesn't use it uses `res` instead
                 },
             )
             .map_err(|e| e.into())
@@ -626,27 +624,26 @@ fn json_arr_pop(ctx: &Context, args: Vec<String>) -> RedisResult {
     Ok(RedisJSON::serialize(&res, Format::JSON)?.into())
 }
 
-fn do_json_arr_pop(mut index: i64, res: &mut Value, value: &Value) -> Result<Value, Error> {
-    value
-        .as_array()
-        .ok_or_else(|| err_json(value, "array"))
-        .and_then(|curr| {
-            let len = curr.len() as i64;
+fn do_json_arr_pop(mut index: i64, res: &mut Value, value: &mut Value) -> Result<Value, Error> {
+    if !value.is_array() {
+        return Err(err_json(value, "array"));
+    }
 
-            index = index.min(len - 1);
+    // Verify legel index in bounds
+    let len = value.as_array().unwrap().len() as i64;
+    index = index.min(len - 1);
+    if index < 0 {
+        index += len;
+    }
 
-            if index < 0 {
-                index += len;
-            }
+    if index >= len || index < 0 {
+        return Err("ERR index out of bounds".into());
+    }
 
-            if index >= len || index < 0 {
-                return Err("ERR index out of bounds".into());
-            }
-
-            let mut new_value = curr.to_owned();
-            *res = new_value.remove(index as usize);
-            Ok(Value::Array(new_value))
-        })
+    let mut new_value = value.take();
+    let curr = new_value.as_array_mut().unwrap();
+    *res = curr.remove(index as usize);
+    Ok(new_value)
 }
 
 ///
@@ -668,7 +665,7 @@ fn json_arr_trim(ctx: &Context, args: Vec<String>) -> RedisResult {
         .and_then(|doc| {
             doc.value_op(
                 &path,
-                |value| do_json_arr_trim(start, stop, &value),
+                |value| do_json_arr_trim(start, stop, value),
                 |v| {
                     ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrtrim", key.as_str());
                     ctx.replicate_verbatim();
@@ -679,23 +676,26 @@ fn json_arr_trim(ctx: &Context, args: Vec<String>) -> RedisResult {
         })
 }
 
-fn do_json_arr_trim(start: i64, stop: i64, value: &Value) -> Result<Value, Error> {
-    value
-        .as_array()
-        .ok_or_else(|| err_json(value, "array"))
-        .and_then(|curr| {
-            let len = curr.len() as i64;
-            let stop = stop.normalize(len);
+fn do_json_arr_trim(start: i64, stop: i64, value: &mut Value) -> Result<Value, Error> {
+    if !value.is_array() {
+        return Err(err_json(value, "array"));
+    }
 
-            let range = if start > len || start > stop as i64 {
-                0..0 // Return an empty array
-            } else {
-                start.normalize(len)..(stop + 1)
-            };
+    let len = value.as_array().unwrap().len() as i64;
+    let stop = stop.normalize(len);
 
-            let res = &curr[range];
-            Ok(Value::Array(res.to_vec()))
-        })
+    let range = if start > len || start > stop as i64 {
+        0..0 // Return an empty array
+    } else {
+        start.normalize(len)..(stop + 1)
+    };
+
+    let mut new_value = value.take();
+    let curr = new_value.as_array_mut().unwrap();
+    curr.rotate_left(range.start);
+    curr.resize(range.end - range.start, Value::Null);
+
+    Ok(new_value)
 }
 
 ///
