@@ -498,7 +498,7 @@ fn json_arr_index(ctx: &Context, args: Vec<String>) -> RedisResult {
     let path = backwards_compat_path(args.next_string()?);
     let json_scalar = args.next_string()?;
     let start: i64 = args.next().map(|v| v.parse()).unwrap_or(Ok(0))?;
-    let end: i64 = args.next().map(|v| v.parse()).unwrap_or(Ok(i64::MAX))?;
+    let end: i64 = args.next().map(|v| v.parse()).unwrap_or(Ok(0))?;
 
     args.done()?; // TODO: Add to other functions as well to terminate args list
 

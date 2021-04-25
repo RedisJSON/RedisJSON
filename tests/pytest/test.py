@@ -479,24 +479,46 @@ def testArrIndexCommand(env):
     r = env
 
     r.assertOk(r.execute_command('JSON.SET', 'test',
+                                    '.', '{ "arr": [0, 1, 2, 3, 2, 1, 0] }'))
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0), 0)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 3), 3)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 4), -1)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 1), 6)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, -1), 6)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 6), 6)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 4, -0), 6)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 5, -1), -1)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, -2, 6), -1)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '"foo"'), -1)
+
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 4, '[4]'), 8)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 3), 3)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, 3), 5)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '[4]'), 4)
+
+def testArrIndexMixCommand(env):
+    """Test JSON.ARRINDEX command with mixed values"""
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'test',
                                     '.', '{ "arr": [0, 1, 2, 3, 2, 1, 0, {"val": 4}, {"val": 9}, [3,4,8], ["a", "b", 8]] }'))
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0), 0)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 3), 3)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 4), -1)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 1), 6)
-    # r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, -1), 6)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, -5), 6)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 6), 6)
-    # r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 4, -0), 6)
-    # r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 5, -1), -1)
-    # r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, -2, 6), -1)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 4, -0), 6)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 5, -1), 6)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, -2, 6), -1)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '"foo"'), -1)
 
-    # r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 4, '[4]'), 8)
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 4, '[4]'), 12)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 3), 3)
-    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, 3), 4)
-    # r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '[4]'), -1)
-    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '{\"val\":4}'), 7)
-    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '["a", "b", 8]'), 10)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, 3), 5)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '[4]'), 4)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '{\"val\":4}'), 8)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '["a", "b", 8]'), 11)
 
 def testArrTrimCommand(env):
     """Test JSON.ARRTRIM command"""
