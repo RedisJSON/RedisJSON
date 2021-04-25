@@ -819,7 +819,6 @@ fn json_cache_init(_ctx: &Context, _args: Vec<String>) -> RedisResult {
     Err(RedisError::Str("Command was not implemented"))
 }
 
-<<<<<<< HEAD
 fn init(ctx: &Context, _args: &Vec<String>) -> rawmod::Status {
     export_shared_api(ctx);
     rawmod::Status::Ok
@@ -827,8 +826,6 @@ fn init(ctx: &Context, _args: &Vec<String>) -> rawmod::Status {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-=======
->>>>>>> origin/master
 redis_module! {
     name: "ReJSON",
     version: 99_99_99,

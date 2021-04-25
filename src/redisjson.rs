@@ -4,21 +4,21 @@
 // User-provided JSON is converted to a tree. This tree is stored transparently in Redis.
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
-use std::io::Cursor;
-use std::mem;
-use std::os::raw::{c_int, c_void};
-use bson::decode_document;
-use jsonpath_lib::SelectorMut;
-use redis_module::raw::{self};
-use serde::Serialize;
-use serde_json::{Map, Value};
-
 use crate::backward;
 use crate::c_api::JSONType;
 use crate::error::Error;
 use crate::formatter::RedisJsonFormatter;
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 use crate::REDIS_JSON_TYPE_VERSION;
+
+use bson::decode_document;
+use jsonpath_lib::SelectorMut;
+use redis_module::raw::{self, Status};
+use serde::Serialize;
+use serde_json::{Map, Value};
+use std::io::Cursor;
+use std::mem;
+use std::os::raw::{c_int, c_void};
 
 #[derive(Debug, PartialEq)]
 pub enum SetOptions {
@@ -438,24 +438,15 @@ pub mod type_methods {
     pub extern "C" fn rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
         let json = match encver {
             0 => RedisJSON {
-<<<<<<< HEAD
-                data: backward::json_rdb_load(rdb), // TODO handle load from rdb
-=======
                 data: backward::json_rdb_load(rdb),
->>>>>>> origin/master
             },
             2 | 3 => {
                 let data = raw::load_string(rdb);
-<<<<<<< HEAD
                 if raw::load_unsigned(rdb) > 0 {
                     raw::load_string(rdb);
                     raw::load_string(rdb);
                 };
-                let doc = RedisJSON::from_str(&data, Format::JSON).unwrap();
-                doc
-=======
                 RedisJSON::from_str(&data, Format::JSON).unwrap()
->>>>>>> origin/master
             }
             _ => panic!("Can't load old RedisJSON RDB"),
         };
@@ -467,20 +458,14 @@ pub mod type_methods {
         let json = value as *mut RedisJSON;
 
         // Take ownership of the data from Redis (causing it to be dropped when we return)
-<<<<<<< HEAD
-        let json = Box::from_raw(json);
-=======
         Box::from_raw(json);
->>>>>>> origin/master
     }
 
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
         let json = &*(value as *mut RedisJSON);
         raw::save_string(rdb, &json.data.to_string());
-<<<<<<< HEAD
         raw::save_unsigned(rdb, 0);
-=======
     }
 
     #[allow(non_snake_case, unused)]
@@ -505,6 +490,5 @@ pub mod type_methods {
         }
 
         Status::Ok as i32
->>>>>>> origin/master
     }
 }
