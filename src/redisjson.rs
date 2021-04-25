@@ -290,22 +290,33 @@ impl RedisJSON {
     pub fn arr_index(&self, path: &str, scalar: &str, start: i64, end: i64) -> Result<i64, Error> {
         if let Value::Array(arr) = self.get_first(path)? {
             // end=-1/0 means INFINITY to support backward with RedisJSON
-            if arr.is_empty() || end < -1 {
+            if arr.is_empty() {
                 return Ok(-1);
             }
             let v: Value = serde_json::from_str(scalar)?;
 
-            let end: usize = if end == 0 || end == -1 {
-                // default end of array
-                arr.len() - 1
+            // Normalize start
+            let start = start % arr.len() as i64;
+            let start = if start < 0 {
+                (arr.len() as i64 + start) as usize
             } else {
-                (end as usize).min(arr.len() - 1)
+                start as usize
             };
-            let start = start.max(0) as usize;
+
+            // Normalize end
+            let end = end % arr.len() as i64;
+            let end = if end < 0 {
+                (arr.len() as i64 + end) as usize
+            } else if end == 0 {
+                arr.len()
+            } else {
+                end as usize
+            };
+
             if end < start {
                 return Ok(-1);
             }
-            let slice = &arr[start..=end];
+            let slice = &arr[start..end];
 
             match slice.iter().position(|r| r == &v) {
                 Some(i) => Ok((start + i) as i64),
