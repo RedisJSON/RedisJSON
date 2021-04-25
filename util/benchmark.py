@@ -1,12 +1,10 @@
 import multiprocessing
 import time
 import redis
-import random
 import sys
 import argparse
 from urlparse import urlparse
 import os
-from itertools import chain
 from collections import defaultdict
 import math
 
@@ -26,7 +24,6 @@ def runWorker(ctx):
     work = ctx['work']
     if ctx['pipeline'] == 0:
         for i in range(0, ctx['count']):
-            key = '{}:{}'.format(wpid, i)
             s0 = time.time()
             work(r)
             s1 = time.time() - s0
@@ -37,7 +34,6 @@ def runWorker(ctx):
             p = r.pipeline()
             s0 = time.time()
             for j in range(0, ctx['pipeline']):
-                key = '{}:{}'.format(wpid, i)
                 work(p)
             p.execute()
             s1 = time.time() - s0

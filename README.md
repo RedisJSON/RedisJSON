@@ -2,6 +2,7 @@
 [![CircleCI](https://circleci.com/gh/RedisJSON/RedisJSON/tree/master.svg?style=svg)](https://circleci.com/gh/RedisJSON/RedisJSON/tree/master)
 [![macos](https://github.com/RedisJSON/RedisJSON/workflows/macos/badge.svg)](https://github.com/RedisJSON/RedisJSON/actions?query=workflow%3Amacos)
 [![Docker Cloud Build Status](https://img.shields.io/docker/cloud/build/redislabs/rejson.svg)](https://hub.docker.com/r/redislabs/rejson/builds/)
+[![Total alerts](https://img.shields.io/lgtm/alerts/g/RedisJSON/RedisJSON.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/RedisJSON/RedisJSON/alerts/)
 [![Forum](https://img.shields.io/badge/Forum-RedisJSON-blue)](https://forum.redislabs.com/c/modules/redisjson)
 [![Discord](https://img.shields.io/discord/697882427875393627?style=flat-square)](https://discord.gg/QUkjSsk)
 
@@ -26,63 +27,6 @@ docker run -p 6379:6379 --name redis-redisjson redislabs/rejson:latest
 ## Documentation
 
 Read the docs at http://redisjson.io
-
-
-## New Commands in RedisJSON
-
-    JSON.INDEX ADD <index> <field> <path>
-    JSON.INDEX DEL <index>
-    JSON.QGET <index> <query> <path>
-
-* `<index>` - user defined index name
-* `<path>` - [JSONPath](https://goessner.net/articles/JsonPath/) syntax for selecting elements inside documents
-* `<query>` - sytanx is based on [RediSearch query syntax](https://oss.redislabs.com/redisearch/Query_Syntax/)
-
-### Next Milestone
-    JSON.QSET <index> <query> <path> <json> [NX | XX]
-    JSON.QDEL <index> <query> <path>
-    
-    JSON.INDEX DEL <index> <field>
-    JSON.INDEX INFO <index> <field>
-
-Return value from JSON.QGET is an array of keys and values:
-
-    key
-    json
-    key
-    json
-
-In a language such as Java this could be represented as a `Map<String, Document>`.
-    
-## Examples
-
-A query combining multiple paths:
-    
-    JSON.QGET mytype "@path1:hello @path2:world" d.name
-    
-    
-```bash
-127.0.0.1:6379> json.set user1 $ '{"last":"Joe", "first":"Mc"}' INDEX person
-OK
-127.0.0.1:6379> json.set user2 $ '{"last":"Joan", "first":"Mc"}' INDEX person
-OK
-127.0.0.1:6379> json.index add person last $.last
-OK
-127.0.0.1:6379> JSON.QGET person Jo*
-"{\"user2\":[{\"last\":\"Joan\",\"first\":\"Mc\"}],\"user1\":[{\"last\":\"Joe\",\"first\":\"Mc\"}]}"
-127.0.0.1:6379> json.set user3 $ '{"last":"Joel", "first":"Dan"}' INDEX person
-OK
-127.0.0.1:6379> JSON.QGET person Jo*
-"{\"user2\":[{\"last\":\"Joan\",\"first\":\"Mc\"}],\"user1\":[{\"last\":\"Joe\",\"first\":\"Mc\"}],\"user3\":[{\"last\":\"Joel\",\"first\":\"Dan\"}]}"
-127.0.0.1:6379> json.index add person first $.first
-OK
-127.0.0.1:6379> JSON.QGET person Mc
-"{\"user2\":[{\"last\":\"Joan\",\"first\":\"Mc\"}],\"user1\":[{\"last\":\"Joe\",\"first\":\"Mc\"}]}"
-127.0.0.1:6379> JSON.QGET person Mc $.last
-"{\"user2\":[\"Joan\"],\"user1\":[\"Joe\"]}"
-127.0.0.1:6379> JSON.QGET person "@last:Jo* @first:Mc" $.last
-"{\"user2\":[\"Joan\"],\"user1\":[\"Joe\"]}"
-```
 
 ## Build
 

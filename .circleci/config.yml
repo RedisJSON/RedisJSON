@@ -1,7 +1,17 @@
 version: 2.1
 
 commands:
-  early_return_for_forked_pull_requests:
+  abort-for-docs:
+    steps:
+      - run:
+          name: Avoid tests for docs
+          command: |
+            if [[ $CIRCLE_BRANCH == *_docs ]]; then
+              echo "Identifies as documents PR, no testing required"
+              circleci step halt
+            fi
+
+  early-return-for-forked-pull-requests:
     description: >-
       If this build is from a fork, stop executing the current job and return success.
       This is useful to avoid steps that will fail due to missing credentials.
@@ -9,169 +19,255 @@ commands:
       - run:
           name: Early return if this build is from a forked PR
           command: |
-            if [ -n "$CIRCLE_PR_NUMBER" ]; then
+            if [[ -n "$CIRCLE_PR_NUMBER" ]]; then
               echo "Nothing to do for forked PRs, so marking this step successful"
               circleci step halt
             fi
 
-jobs:
+  setup-executor:
+    steps:
+      - run:
+          name: Setup executor
+          command: |
+            apt-get -qq update
+            apt-get -q install -y git openssh-client curl ca-certificates make tar gzip
+            bash <(curl -fsSL https://get.docker.com)
+      - setup_remote_docker:
+          docker_layer_caching: true
 
-  build:
-    docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-centos7
+  setup-automation:
+    steps:
+      - run:
+          name: Setup automation
+          command: |
+            git submodule update --init deps/readies
+            ./deps/readies/bin/getpy3
 
+  checkout-all:
     steps:
       - checkout
-
-      - run: 
+      - run:
           name: Checkout submodules
           command: git submodule update --init --recursive
 
+  persist-artifacts:
+    steps:
+      - persist_to_workspace:
+          root: bin/
+          paths:
+            - artifacts/snapshots/*.zip
+            - artifacts/snapshots/*.tgz
+            - artifacts/snapshots/*.tar
+            - artifacts/*.zip
+            - artifacts/*.tgz
+            - artifacts/*.tar
+      - run:
+          name: Cleanup test log dir
+          command: rm -f tests/pytest/logs/*.rdb
+      - store_artifacts:
+          path: tests/pytest/logs
+  
+  build-steps:
+    parameters:
+      build_params:
+        type: string
+        default: ""
+      test_params:
+        type: string
+        default: ""
+      redis_version:
+        type: string
+        default: "6"
+      getredis_params:
+        type: string
+        default: ""
+    steps:
+      - abort-for-docs
+      - checkout-all
       - run:
           name: Setup automation and install dependencies
           command: |
-            (mkdir -p deps; cd deps; git clone https://github.com/RedisLabsModules/readies.git)
-            PIP=1 FORCE=1 ./deps/readies/bin/getpy2
+            ./deps/readies/bin/getpy3
             ./system-setup.py
-
+            source $HOME/.cargo/env
+            rustc --version
+            cargo --version
+            rustup --version
       - run:
           name: Install Redis
-          command: ./deps/readies/bin/getredis -v 6 
-
-      - run:
-          name: Install Rust
           command: |
-             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > rust.sh
-             sh rust.sh -y
-             echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
-             source $HOME/.cargo/env
-             rustc --version
-             cargo --version
-             rustup --version
-
+            bash -l -c "./deps/readies/bin/getredis -v <<parameters.redis_version>> --force <<parameters.getredis_params>>"
+            redis-server --version
       - restore_cache:
           keys:
             - v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
-            # fallback to using the latest cache if no exact match is found
-            - v2-dependencies-
-
       - run:
           name: Check formatting
-          command: |
-            source $HOME/.cargo/env
-            rustfmt --version
-            cargo fmt -- --check
-
+          command: bash -l -c "make lint"
       - run:
           name: Build debug
-          command: |
-            source $HOME/.cargo/env
-            cargo build --all --all-targets
-            mv target/debug/librejson.so target/debug/rejson.so
-
-      - run:
-          name: Run all tests
-          command: |
-             source $HOME/.cargo/env
-             cargo test --features test --all
-             python2 ./test/pytest/test.py
-
+          command: bash -l -c "make build DEBUG=1 <<parameters.build_params>>"
       - run:
           name: Build release
-          command: |
-            source $HOME/.cargo/env
-            cargo build --all --all-targets --release
-            mv target/release/librejson.so target/release/rejson.so
-
+          command: bash -l -c "make build pack <<parameters.build_params>>"
       - save_cache:
           key: v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
           paths:
             - "~/.cargo"
             - "./target"
 
-      - early_return_for_forked_pull_requests
-
+  test-steps:
+    steps:
+      - abort-for-docs
+      - checkout-all
       - run:
-          name: Persist Artifacts
+          name: Run all tests
+          command: bash -l -c "make pytest"
+      - save_cache:
+          key: v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
+          paths:
+            - "~/.cargo"
+            - "./target"
+      - persist-artifacts
+
+  platforms-build-steps:
+    parameters:
+      platform:
+        type: string
+    steps:
+      - abort-for-docs
+      - setup-executor
+      - checkout-all
+      - setup-automation
+      - run:
+          name: Build for platform
           command: |
-            mkdir -p workspace/build
-            cp target/release/$MODULE_ARTIFACT workspace/
-            cp ramp.yml workspace/
-
-      - persist_to_workspace:
-          root: workspace
-          paths:
-            - '*.so'
-            - ramp.yml
-            - build
-
-
-  package_branch:
-    docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-buster
-    steps:
-      - attach_workspace:
-          at: /workspace
+            cd build/platforms
+            make build OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH ARTIFACTS=1 TEST=1 SHOW=1
+      - early-return-for-forked-pull-requests
       - run:
-          name: Package
-          command: >-
-            ramp pack -m /workspace/ramp.yml -o
-            /workspace/build/$PACKAGE_NAME.{os}-{architecture}.$CIRCLE_BRANCH.zip
-            /workspace/$MODULE_ARTIFACT
-      - persist_to_workspace:
-          root: /workspace
-          paths:
-            - build
-      - store_artifacts:
-          path: /workspace/build
+          name: Build for platform (publish)
+          command: |
+            docker login -u redisfab -p $DOCKER_REDISFAB_PWD
+            cd build/platforms
+            make publish OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH OFFICIAL=0 SHOW=1 VERBOSE=1
+      - persist-artifacts
 
-  package_release:
-    docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-buster
+  benchmark-steps:
+    parameters:
+      github_actor:
+        type: string
+        default: $CIRCLE_USERNAME
+      module_path:
+        type: string
+        default: ../../target/release/rejson.so
     steps:
-      - attach_workspace:
-          at: /workspace
       - run:
-          name: Package
-          command: >-
-            ramp pack -m /workspace/ramp.yml -o
-            /workspace/build/$PACKAGE_NAME.{os}-{architecture}.{semantic_version}.zip
-            /workspace/$MODULE_ARTIFACT
+          name: Install remote benchmark tool dependencies
+          command: |
+            mkdir -p /workspace
+            TF_EXE_FILE_NAME=/workspace/terraform ./tests/benchmarks/remote/install_deps.sh
       - run:
-          name: Package
-          command: >-
-            ramp pack -m /workspace/ramp.yml -o
-            /workspace/build/$PACKAGE_NAME.{os}-{architecture}.latest.zip
-            /workspace/$MODULE_ARTIFACT
-      - persist_to_workspace:
-          root: /workspace
-          paths:
-            - build
-      - store_artifacts:
-          path: /workspace/build
+          name: Install remote benchmark python dependencies
+          command: python3 -m pip install -r ./tests/benchmarks/requirements.txt
+      - run:
+          name: Run CI benchmarks on aws
+          command: |
+            cd ./tests/benchmarks
+            export AWS_ACCESS_KEY_ID=$PERFORMANCE_EC2_ACCESS_KEY
+            export AWS_SECRET_ACCESS_KEY=$PERFORMANCE_EC2_SECRET_KEY
+            export AWS_DEFAULT_REGION=$PERFORMANCE_EC2_REGION
+            export EC2_PRIVATE_PEM=$PERFORMANCE_EC2_PRIVATE_PEM
 
-  deploy_branch:
+            redisbench-admin run-remote \
+              --terraform_bin_path /workspace/terraform \
+              --module_path << parameters.module_path >> \
+              --github_actor << parameters.github_actor >> \
+              --github_repo $CIRCLE_PROJECT_REPONAME \
+              --github_org $CIRCLE_PROJECT_USERNAME \
+              --github_sha $CIRCLE_SHA1 \
+              --github_branch $CIRCLE_BRANCH \
+              --upload_results_s3 \
+              --triggering_env circleci \
+              --push_results_redistimeseries
+
+jobs:
+  build:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-buster
+      - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
+      - build-steps
+      - test-steps
+
+  platforms-build:
+    parameters:
+      platform:
+        type: string
+    docker:
+      - image: debian:buster
+    steps:
+      - platforms-build-steps:
+          platform: <<parameters.platform>>
+
+  build-macos:
+    macos:
+      xcode: 11.3.0
+    steps:
+      - build-steps
+      - test-steps
+
+  deploy-artifacts:
+    parameters:
+      location:
+        type: string
+        default: ""
+    docker:
+      - image: redisfab/rmbuilder:6.2.1-x64-buster
+    steps:
+      - abort-for-docs
+      - early-return-for-forked-pull-requests
       - attach_workspace:
-          at: /workspace
+          at: workspace
       - run:
           name: Deploy to S3
           command: |
-            aws s3 cp /workspace/build/ s3://redismodules/$PACKAGE_NAME/ --acl public-read --recursive --exclude "*" --include "*.zip"
+            cd "workspace/artifacts/<<parameters.location>>"
+            du -ah --apparent-size *
+            if [[ -z <<parameters.location>> ]]; then
+                path="/"
+            else
+                path="<<parameters.location>>/"
+            fi
+            for f in `ls *.zip *.tgz`; do
+              aws s3 cp $f s3://redismodules/$PACKAGE_NAME/$path --acl public-read
+            done
 
-  deploy_release:
+  release-automation:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-buster
+      - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
-      - attach_workspace:
-          at: /workspace
+      - checkout
+      - setup-automation
       - run:
-          name: Deploy to S3
-          command: |
-            aws s3 cp /workspace/build/ s3://redismodules/$PACKAGE_NAME/ --acl public-read --recursive --exclude "*" --include "*.zip"
+          name: Run QA Automation
+          command: MODULE_VERSION=$CIRCLE_TAG VERBOSE=1 TEST=release ./tests/qa/run
 
+  nightly-automation:
+    docker:
+      - image: redisfab/rmbuilder:6.2.1-x64-buster
+    steps:
+      - checkout
+      - setup-automation
+      - run:
+          name: Run QA Automation
+          command: MODULE_VERSION=$CIRCLE_BRANCH VERBOSE=1 TEST=nightly QUICK=1 ./tests/qa/run
+
+  performance-automation:
+    docker:
+      - image: redisfab/rmbuilder:6.2.1-x64-bionic
+    steps:
+      - build-steps
+      - benchmark-steps
 
 on-any-branch: &on-any-branch
   filters:
@@ -191,6 +287,28 @@ on-master: &on-master
   filters:
     branches:
       only: master
+    tags:
+      ignore: /.*/
+
+on-integ-branch: &on-integ-branch
+  filters:
+    branches:
+      only:
+        - master
+        - /^\d+\.\d+.*$/
+        - /^feature-.*$/
+    tags:
+      ignore: /.*/
+
+not-on-integ-branch: &not-on-integ-branch
+  filters:
+    branches:
+      ignore:
+        - master
+        - /^\d+\.\d+.*$/
+        - /^feature-.*$/
+    tags:
+      ignore: /.*/
 
 on-version-tags: &on-version-tags
   filters:
@@ -199,34 +317,62 @@ on-version-tags: &on-version-tags
     tags:
       only: /^v[0-9].*/
 
-on-master-and-version-tags: &on-master-and-version-tags
+on-integ-and-version-tags: &on-integ-and-version-tags
   filters:
     branches:
       only:
         - master
+        - /^\d+\.\d+.*$/
+        - /^feature-.*$/
     tags:
       only: /^v[0-9].*/
 
 
 workflows:
   version: 2
-  build_and_package:
+  default-flow:
     jobs:
       - build:
-          <<: *on-any-branch
-      - package_branch:
-          <<: *on-master
+          <<: *not-on-integ-branch
+      - platforms-build:
+          context: common
+          <<: *on-integ-and-version-tags
+          matrix:
+            parameters:
+              platform: [focal, bionic, xenial, centos7]
+      - build-macos:
+          <<: *on-integ-and-version-tags
+      - deploy-artifacts:
+          name: deploy_snapshot
+          location: snapshots
+          context: common
+          <<: *on-integ-branch
           requires:
-            - build
-      - package_release:
+            - platforms-build
+      - deploy-artifacts:
+          name: deploy_release
+          context: common
           <<: *on-version-tags
           requires:
-            - build
-      - deploy_branch:
-          <<: *on-master
-          requires:
-            - package_branch
-      - deploy_release:
+            - platforms-build
+      - release-automation:
           <<: *on-version-tags
           requires:
-            - package_release
+            - deploy_release
+      - performance-automation:
+          <<: *on-integ-and-version-tags
+          context: common
+
+  nightly:
+    triggers:
+      - schedule:
+          cron: "07 20 * * *"
+          filters:
+            branches:
+              only:
+                - master
+                - /^feature-.*$/
+    jobs:
+      - nightly-automation
+      - performance-automation:
+          context: common

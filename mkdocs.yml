@@ -38,10 +38,28 @@ markdown_extensions:
   - codehilite:
       guess_lang: False
   - toc:
+      toc_depth: 3
       permalink: True
 
 plugins:
   - search
+  - modules-template:
+      modules:
+        - name: 'Search'
+          link: '/redisearch'
+
+        - name: 'Time Series'
+          link: '/redistimeseries'
+
+        - name: 'Bloom'
+          link: '/redisbloom'
+
+        - name: 'Graph'
+          link: '/redisgraph'
+
+        - name: 'AI'
+          link: '/redisai'
+
+        - name: 'Gears'
+          link: '/redisgears'
   - versions-menu
-  
-  

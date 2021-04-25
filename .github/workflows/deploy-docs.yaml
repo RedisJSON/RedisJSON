@@ -26,7 +26,7 @@ jobs:
     - name: Install docs dependencies
       run: pip install -r docs/requirements.txt
     - name: Build docs
-      run: mkdocs build
+      run: mkdocs build --clean
     - uses: jakejarvis/s3-sync-action@master
       with:
         args: --acl public-read --follow-symlinks
