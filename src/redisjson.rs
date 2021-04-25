@@ -432,7 +432,7 @@ pub mod type_methods {
             0 => RedisJSON {
                 data: backward::json_rdb_load(rdb),
             },
-            2 => {
+            2 | 3 => {
                 let data = raw::load_string(rdb);
                 RedisJSON::from_str(&data, Format::JSON).unwrap()
             }
@@ -453,5 +453,29 @@ pub mod type_methods {
     pub unsafe extern "C" fn rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
         let json = &*(value as *mut RedisJSON);
         raw::save_string(rdb, &json.data.to_string());
+    }
+
+    #[allow(non_snake_case, unused)]
+    pub unsafe extern "C" fn aux_load(rdb: *mut raw::RedisModuleIO, encver: i32, when: i32) -> i32 {
+        if (encver > REDIS_JSON_TYPE_VERSION) {
+            return Status::Err as i32; // could not load rdb created with higher RedisJSON version!
+        }
+
+        // Backward support for modules that had AUX field for RediSarch
+        // TODO remove in future versions
+        if (encver == 2 && when == raw::Aux::Before as i32) {
+            let map_size = raw::load_unsigned(rdb);
+            for _ in 0..map_size {
+                let index_name = raw::load_string(rdb);
+                let fields_size = raw::load_unsigned(rdb);
+                for _ in 0..fields_size {
+                    let field_name = raw::load_string(rdb);
+                    let path = raw::load_string(rdb);
+                    // index::add_field(&index_name, &field_name, &path);
+                }
+            }
+        }
+
+        Status::Ok as i32
     }
 }

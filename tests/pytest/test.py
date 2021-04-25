@@ -301,6 +301,21 @@ def testMgetCommand(env):
     # Test that MGET fails on path errors
     r.expect('JSON.MGET', 'doc:0', 'doc:1', '42isnotapath').raiseError()
 
+def testToggleCommand(env):
+    """Test REJSON.TOGGLE command"""
+    r = env
+    r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"foo":true}'))
+    r.assertEqual(r.execute_command('JSON.TOGGLE','test','.foo'), 'false')
+    r.assertEqual(r.execute_command('JSON.TOGGLE','test','.foo'), 'true')
+
+    # Test Toggeling Empty Path
+    r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"foo":"bar"}'))
+    r.assertEqual(r.execute_command('JSON.TOGGLE', 'test', '.bar'), 'null')
+    
+    # Test Toggeling Non Boolean
+    r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"foo":"bar"}'))
+    r.expect('JSON.TOGGLE','test','.foo').raiseError()
+
 def testDelCommand(env):
     """Test REJSON.DEL command"""
     r = env
