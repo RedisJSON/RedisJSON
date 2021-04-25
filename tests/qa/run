@@ -28,8 +28,8 @@ if [[ $1 == --help || $1 == help ]]; then
 	exit 0
 fi
 
-export RS_MODULE=redisjson2
-export RS_MODULE_FILE_PREFIX=redisjson2
+export RS_MODULE=ReJSON
+export RS_MODULE_FILE_PREFIX=rejson
 
 if [[ -z $QA_AUTOMATION_USERNAME && $NOP != 1 ]]; then
 	echo "Variable QA_AUTOMATION_USERNAME is undefined." >&2

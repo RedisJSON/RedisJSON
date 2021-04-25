@@ -760,7 +760,7 @@ fn json_cache_init(_ctx: &Context, _args: Vec<String>) -> RedisResult {
 
 redis_module! {
     name: "ReJSON",
-    version: 99_99_99,
+    version: 01_02_00,
     data_types: [
         REDIS_JSON_TYPE,
     ],
