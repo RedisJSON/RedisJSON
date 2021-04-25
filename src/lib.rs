@@ -294,7 +294,8 @@ fn json_bool_toggle(ctx: &Context, args: Vec<String>) -> RedisResult {
     let path = backwards_compat_path(args.next_string()?);
     let redis_key = ctx.open_key_writable(&key);
 
-    redis_key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
+    redis_key
+        .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
         .ok_or_else(RedisError::nonexistent_key)
         .and_then(|doc| {
             doc.value_op(&path, |value| {
