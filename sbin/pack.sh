@@ -59,9 +59,7 @@ export OSNICK=$($READIES/bin/platform --osnick)
 # RLEC naming conventions
 [[ $ARCH == x64 ]] && ARCH=x86_64
 [[ $OS == linux ]] && OS=Linux
-if [[ $OSNICK == focal ]]; then
-	OSNICK=ubuntu20.04
-elif [[ $OSNICK == bionic ]]; then
+if [[ $OSNICK == bionic ]]; then
 	OSNICK=ubuntu18.04
 elif [[ $OSNICK == xenial ]]; then
 	OSNICK=ubuntu16.04
