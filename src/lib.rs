@@ -502,7 +502,7 @@ where
 
             let index = index.normalize(len);
 
-            let mut items: Vec<Value> = args
+            let mut items = args
                 .map(|json| serde_json::from_str(&json))
                 .collect::<Result<_, _>>()?;
 
