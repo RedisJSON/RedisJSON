@@ -832,6 +832,7 @@ redis_module! {
     data_types: [
         REDIS_JSON_TYPE,
     ],
+    init: init,
     commands: [
         ["json.del", json_del, "write", 1,1,1],
         ["json.get", json_get, "readonly", 1,1,1],
