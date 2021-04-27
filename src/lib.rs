@@ -557,26 +557,23 @@ fn do_json_arr_insert<I>(args: I, index: i64, value: &mut Value) -> Result<Value
 where
     I: Iterator<Item = String>,
 {
-    if !value.is_array() {
-        return Err(err_json(value, "array"));
+    if let Some(array) = value.as_array() {
+        // Verify legal index in bounds
+        let len = array.len() as i64;
+        if !(-len..len).contains(&index) {
+            return Err("ERR index out of bounds".into());
+        }
+        let index = index.normalize(len);
+        let items: Vec<Value> = args
+            .map(|json| serde_json::from_str(&json))
+            .collect::<Result<_, _>>()?;
+        let mut new_value = value.take();
+        let curr = new_value.as_array_mut().unwrap();
+        curr.splice(index..index, items.into_iter());
+        Ok(new_value)
+    } else {
+        Err(err_json(value, "array"))
     }
-
-    // Verify legel index in bounds
-    let len = value.as_array().unwrap().len() as i64;
-    if !(-len..len).contains(&index) {
-        return Err("ERR index out of bounds".into());
-    }
-    let index = index.normalize(len);
-
-    let items: Vec<Value> = args
-        .map(|json| serde_json::from_str(&json))
-        .collect::<Result<_, _>>()?;
-
-    let mut new_value = value.take();
-    let curr = new_value.as_array_mut().unwrap();
-    curr.splice(index..index, items.into_iter());
-
-    Ok(new_value)
 }
 
 ///
@@ -625,25 +622,25 @@ fn json_arr_pop(ctx: &Context, args: Vec<String>) -> RedisResult {
 }
 
 fn do_json_arr_pop(mut index: i64, res: &mut Value, value: &mut Value) -> Result<Value, Error> {
-    if !value.is_array() {
-        return Err(err_json(value, "array"));
-    }
+    if let Some(array) = value.as_array() {
+        // Verify legel index in bounds
+        let len = array.len() as i64;
+        index = index.min(len - 1);
+        if index < 0 {
+            index += len;
+        }
 
-    // Verify legel index in bounds
-    let len = value.as_array().unwrap().len() as i64;
-    index = index.min(len - 1);
-    if index < 0 {
-        index += len;
-    }
+        if index >= len || index < 0 {
+            return Err("ERR index out of bounds".into());
+        }
 
-    if index >= len || index < 0 {
-        return Err("ERR index out of bounds".into());
+        let mut new_value = value.take();
+        let curr = new_value.as_array_mut().unwrap();
+        *res = curr.remove(index as usize);
+        Ok(new_value)
+    } else {
+        Err(err_json(value, "array"))
     }
-
-    let mut new_value = value.take();
-    let curr = new_value.as_array_mut().unwrap();
-    *res = curr.remove(index as usize);
-    Ok(new_value)
 }
 
 ///
@@ -677,25 +674,25 @@ fn json_arr_trim(ctx: &Context, args: Vec<String>) -> RedisResult {
 }
 
 fn do_json_arr_trim(start: i64, stop: i64, value: &mut Value) -> Result<Value, Error> {
-    if !value.is_array() {
-        return Err(err_json(value, "array"));
-    }
+    if let Some(array) = value.as_array() {
+        let len = array.len() as i64;
+        let stop = stop.normalize(len);
 
-    let len = value.as_array().unwrap().len() as i64;
-    let stop = stop.normalize(len);
+        let range = if start > len || start > stop as i64 {
+            0..0 // Return an empty array
+        } else {
+            start.normalize(len)..(stop + 1)
+        };
 
-    let range = if start > len || start > stop as i64 {
-        0..0 // Return an empty array
+        let mut new_value = value.take();
+        let curr = new_value.as_array_mut().unwrap();
+        curr.rotate_left(range.start);
+        curr.resize(range.end - range.start, Value::Null);
+
+        Ok(new_value)
     } else {
-        start.normalize(len)..(stop + 1)
-    };
-
-    let mut new_value = value.take();
-    let curr = new_value.as_array_mut().unwrap();
-    curr.rotate_left(range.start);
-    curr.resize(range.end - range.start, Value::Null);
-
-    Ok(new_value)
+        Err(err_json(value, "array"))
+    }
 }
 
 ///
