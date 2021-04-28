@@ -1,20 +1,20 @@
-use std::ffi::CString;
-use std::os::raw::{c_double, c_int, c_long};
-use std::ptr::null_mut;
 use std::{
     ffi::CStr,
     os::raw::{c_char, c_void},
 };
+use std::ffi::CString;
+use std::os::raw::{c_double, c_int, c_long};
+use std::ptr::null_mut;
+use std::str::FromStr;
 
+use redis_module::{raw as rawmod, RedisError};
+use redis_module::Context;
 use redis_module::key::RedisKeyWritable;
 use redis_module::logging::log_notice;
-use redis_module::{raw as rawmod, RedisError};
-use redis_module::{Context, NotifyEvent, Status};
 use serde_json::Value;
 
+use crate::{REDIS_JSON_TYPE, redisjson::RedisJSON};
 use crate::redisjson::Format;
-use crate::{redisjson::RedisJSON, REDIS_JSON_TYPE};
-use std::str::FromStr;
 
 // extern crate readies_wd40;
 // use crate::readies_wd40::{BB, _BB, getenv};
@@ -610,13 +610,4 @@ pub struct RedisJSONAPI_V1<'a> {
         path: *const c_char,
         str: *mut *mut rawmod::RedisModuleString,
     ) -> c_int,
-}
-
-pub fn notify_keyspace_event(
-    ctx: &Context,
-    event_type: NotifyEvent,
-    event: &str,
-    keyname: &str,
-) -> Status {
-    ctx.notify_keyspace_event(event_type, event, keyname)
 }
