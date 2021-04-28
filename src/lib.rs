@@ -3,10 +3,10 @@ extern crate redis_module;
 
 use std::{i64, usize};
 
-use redis_module::{native_types::RedisType, NotifyEvent};
-use redis_module::{NextArg, raw as rawmod};
-use redis_module::{Context, REDIS_OK, RedisError, RedisResult, RedisValue};
 use redis_module::raw::RedisModuleTypeMethods;
+use redis_module::{native_types::RedisType, NotifyEvent};
+use redis_module::{raw as rawmod, NextArg};
+use redis_module::{Context, RedisError, RedisResult, RedisValue, REDIS_OK};
 use serde_json::{Number, Value};
 
 use crate::array_index::ArrayIndex;

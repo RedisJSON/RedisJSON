@@ -1,20 +1,19 @@
-use std::{
-    ffi::CStr,
-    os::raw::{c_char, c_void},
-};
 use std::ffi::CString;
 use std::os::raw::{c_double, c_int, c_long};
 use std::ptr::null_mut;
 use std::str::FromStr;
+use std::{
+    ffi::CStr,
+    os::raw::{c_char, c_void},
+};
 
-use redis_module::{raw as rawmod, RedisError};
-use redis_module::Context;
+use crate::redisjson::Format;
+use crate::{redisjson::RedisJSON, REDIS_JSON_TYPE};
 use redis_module::key::RedisKeyWritable;
 use redis_module::logging::log_notice;
+use redis_module::Context;
+use redis_module::{raw as rawmod, RedisError};
 use serde_json::Value;
-
-use crate::{REDIS_JSON_TYPE, redisjson::RedisJSON};
-use crate::redisjson::Format;
 
 // extern crate readies_wd40;
 // use crate::readies_wd40::{BB, _BB, getenv};
