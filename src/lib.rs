@@ -1,14 +1,18 @@
 #[macro_use]
 extern crate redis_module;
 
+use std::{i64, usize};
+
 use redis_module::raw::RedisModuleTypeMethods;
 use redis_module::{native_types::RedisType, NotifyEvent};
 use redis_module::{raw as rawmod, NextArg};
-
 use redis_module::{Context, RedisError, RedisResult, RedisValue, REDIS_OK};
 use serde_json::{Number, Value};
 
-use std::{i64, usize};
+use crate::array_index::ArrayIndex;
+use crate::c_api::export_shared_api;
+use crate::error::Error;
+use crate::redisjson::{Format, Path, RedisJSON, SetOptions};
 
 mod array_index;
 mod backward;
@@ -17,11 +21,6 @@ mod error;
 mod formatter;
 mod nodevisitor;
 mod redisjson;
-
-use crate::array_index::ArrayIndex;
-use crate::c_api::{export_shared_api, notify_keyspace_event};
-use crate::error::Error;
-use crate::redisjson::{Format, Path, RedisJSON, SetOptions};
 
 // extern crate readies_wd40;
 // use crate::readies_wd40::{BB, _BB, getenv};
