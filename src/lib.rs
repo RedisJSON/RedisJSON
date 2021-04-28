@@ -309,10 +309,10 @@ fn json_bool_toggle(ctx: &Context, args: Vec<String>) -> RedisResult {
                             Value::Bool(result)
                         })
                 },
-                |value| {
+                |result| {
                     ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_toggle", key.as_str());
                     ctx.replicate_verbatim();
-                    Ok(value.to_string().into())
+                    Ok(result.to_string().into())
                 },
             )
             .map_err(|e| e.into())
@@ -344,10 +344,10 @@ where
             doc.value_op(
                 &path,
                 |value| do_json_num_op(&number, value, &op_i64, &op_f64),
-                |v| {
+                |result| {
                     ctx.notify_keyspace_event(NotifyEvent::MODULE, cmd, key.as_str());
                     ctx.replicate_verbatim();
-                    Ok(v.to_string().into())
+                    Ok(result.to_string().into())
                 },
             )
             .map_err(|e| e.into())
@@ -423,10 +423,13 @@ fn json_str_append(ctx: &Context, args: Vec<String>) -> RedisResult {
             doc.value_op(
                 &path,
                 |value| do_json_str_append(&json, value),
-                |v| {
+                |result| {
                     ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_strappend", key.as_str());
                     ctx.replicate_verbatim();
-                    Ok(v.as_str().map_or(usize::MAX, |v| v.len()).into())
+                    Ok(result
+                        .as_str()
+                        .map_or(usize::MAX, |result| result.len())
+                        .into())
                 },
             )
             .map_err(|e| e.into())
@@ -469,10 +472,13 @@ fn json_arr_append(ctx: &Context, args: Vec<String>) -> RedisResult {
             doc.value_op(
                 &path,
                 |value| do_json_arr_append(args.clone(), value),
-                |v| {
+                |result| {
                     ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrappend", key.as_str());
                     ctx.replicate_verbatim();
-                    Ok(v.as_array().map_or(usize::MAX, |v| v.len()).into())
+                    Ok(result
+                        .as_array()
+                        .map_or(usize::MAX, |result| result.len())
+                        .into())
                 },
             )
             .map_err(|e| e.into())
@@ -543,10 +549,13 @@ fn json_arr_insert(ctx: &Context, args: Vec<String>) -> RedisResult {
             doc.value_op(
                 &path,
                 |value| do_json_arr_insert(args.clone(), index, value),
-                |v| {
+                |result| {
                     ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrinsert", key.as_str());
                     ctx.replicate_verbatim();
-                    Ok(v.as_array().map_or(usize::MAX, |v| v.len()).into())
+                    Ok(result
+                        .as_array()
+                        .map_or(usize::MAX, |result| result.len())
+                        .into())
                 },
             )
             .map_err(|e| e.into())
@@ -610,7 +619,7 @@ fn json_arr_pop(ctx: &Context, args: Vec<String>) -> RedisResult {
             doc.value_op(
                 &path,
                 |value| do_json_arr_pop(index, &mut res, value),
-                |_v| {
+                |_result| {
                     ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrpop", key.as_str());
                     ctx.replicate_verbatim();
                     Ok(()) // fake result doesn't use it uses `res` instead
@@ -663,10 +672,13 @@ fn json_arr_trim(ctx: &Context, args: Vec<String>) -> RedisResult {
             doc.value_op(
                 &path,
                 |value| do_json_arr_trim(start, stop, value),
-                |v| {
+                |result| {
                     ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrtrim", key.as_str());
                     ctx.replicate_verbatim();
-                    Ok(v.as_array().map_or(usize::MAX, |v| v.len()).into())
+                    Ok(result
+                        .as_array()
+                        .map_or(usize::MAX, |result| result.len())
+                        .into())
                 },
             )
             .map_err(|e| e.into())

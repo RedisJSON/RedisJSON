@@ -339,7 +339,7 @@ impl RedisJSON {
         }
     }
 
-    pub fn value_op<F, R, T>(&mut self, path: &str, mut fun: F, res: R) -> Result<T, Error>
+    pub fn value_op<F, R, T>(&mut self, path: &str, mut op_fun: F, res_func: R) -> Result<T, Error>
     where
         F: FnMut(&mut Value) -> Result<Value, Error>,
         R: Fn(&Value) -> Result<T, Error>,
@@ -350,9 +350,9 @@ impl RedisJSON {
         let mut result = None;
 
         let mut collect_fun = |mut value: Value| {
-            fun(&mut value)
+            op_fun(&mut value)
                 .and_then(|new_value| {
-                    res(&new_value).map(|res| {
+                    res_func(&new_value).map(|res| {
                         result = Some(res);
                         new_value
                     })
