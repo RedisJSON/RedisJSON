@@ -344,14 +344,19 @@ impl RedisJSON {
         F: FnMut(&mut Value) -> Result<Value, Error>,
         R: Fn(&Value) -> Result<T, Error>,
     {
+        // take the root before updating the value must be returned at the end
         let current_data = self.data.take();
 
         let mut errors = vec![];
         let mut result = None;
 
+        // A wrapper function that is called by replace_with
+        // calls op_fun and then res_func
         let mut collect_fun = |mut value: Value| {
             op_fun(&mut value)
                 .and_then(|new_value| {
+                    // after calling op_fun calling res_func
+                    // to prepae the command result
                     res_func(&new_value).map(|res| {
                         result = Some(res);
                         new_value
@@ -373,18 +378,16 @@ impl RedisJSON {
                         .value(current_data)
                         .replace_with(&mut |v| Some(collect_fun(v)));
 
-                    match replace_result {
-                        Ok(selector) => {
-                            self.data = selector.take().unwrap();
-                        }
-                        Err(e) => {
-                            errors.push(e.into());
-                            self.data = selector.take().unwrap();
-                        }
+                    if let Err(e) = replace_result {
+                        errors.push(e.into());
                     }
+                    // reassign the modified root
+                    self.data = selector.take().unwrap();
                 }
                 Err(e) => {
                     errors.push(e.into());
+                    // reassign the original root
+                    self.data = current_data;
                 }
             }
         };
