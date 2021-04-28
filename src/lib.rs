@@ -1,14 +1,18 @@
 #[macro_use]
 extern crate redis_module;
 
+use std::{i64, usize};
+
 use redis_module::raw::RedisModuleTypeMethods;
 use redis_module::{native_types::RedisType, NotifyEvent};
 use redis_module::{raw as rawmod, NextArg};
-
 use redis_module::{Context, RedisError, RedisResult, RedisValue, REDIS_OK};
 use serde_json::{Number, Value};
 
-use std::{i64, usize};
+use crate::array_index::ArrayIndex;
+use crate::c_api::export_shared_api;
+use crate::error::Error;
+use crate::redisjson::{Format, Path, RedisJSON, SetOptions};
 
 mod array_index;
 mod backward;
@@ -18,15 +22,10 @@ mod formatter;
 mod nodevisitor;
 mod redisjson;
 
-use crate::array_index::ArrayIndex;
-use crate::c_api::{export_shared_api, notify_keyspace_event};
-use crate::error::Error;
-use crate::redisjson::{Format, Path, RedisJSON, SetOptions};
-
 // extern crate readies_wd40;
 // use crate::readies_wd40::{BB, _BB, getenv};
 
-pub const REDIS_JSON_TYPE_VERSION: i32 = 2;
+pub const REDIS_JSON_TYPE_VERSION: i32 = 3;
 
 static REDIS_JSON_TYPE: RedisType = RedisType::new(
     "ReJSON-RL",
@@ -44,9 +43,14 @@ static REDIS_JSON_TYPE: RedisType = RedisType::new(
         digest: None,
 
         // Auxiliary data (v2)
-        aux_load: None,
+        aux_load: Some(redisjson::type_methods::aux_load),
         aux_save: None,
         aux_save_triggers: rawmod::Aux::Before as i32,
+
+        free_effort: None,
+        unlink: None,
+        copy: None,
+        defrag: None,
     },
 );
 
@@ -84,7 +88,7 @@ fn json_del(ctx: &Context, args: Vec<String>) -> RedisResult {
             } else {
                 doc.delete_path(&path)?
             };
-            notify_keyspace_event(ctx, NotifyEvent::MODULE, "json_del", key.as_str());
+            ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_del", key.as_str());
             ctx.replicate_verbatim();
             res
         }
@@ -123,7 +127,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     match (current, set_option) {
         (Some(ref mut doc), ref op) => {
             if doc.set_value(&value, &path, op, format)? {
-                notify_keyspace_event(ctx, NotifyEvent::MODULE, "json_set", key.as_str());
+                ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_set", key.as_str());
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
@@ -135,7 +139,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
             let doc = RedisJSON::from_str(&value, format)?;
             if path == "$" {
                 redis_key.set_value(&REDIS_JSON_TYPE, doc)?;
-                notify_keyspace_event(ctx, NotifyEvent::MODULE, "json_set", key.as_str());
+                ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_set", key.as_str());
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
@@ -288,6 +292,36 @@ fn json_num_powby(ctx: &Context, args: Vec<String>) -> RedisResult {
     )
 }
 
+//
+/// JSON.TOGGLE <key> <path>
+fn json_bool_toggle(ctx: &Context, args: Vec<String>) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+    let key = args.next_string()?;
+    let path = backwards_compat_path(args.next_string()?);
+    let redis_key = ctx.open_key_writable(&key);
+
+    redis_key
+        .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
+        .ok_or_else(RedisError::nonexistent_key)
+        .and_then(|doc| {
+            doc.value_op(&path, |value| {
+                value
+                    .as_bool()
+                    .ok_or_else(|| err_json(value, "boolean"))
+                    .and_then(|curr| {
+                        let result = curr ^ true;
+                        Ok(Value::Bool(result))
+                    })
+            })
+            .map(|v| {
+                ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_toggle", key.as_str());
+                ctx.replicate_verbatim();
+                v.to_string().into()
+            })
+            .map_err(|e| e.into())
+        })
+}
+
 fn json_num_op<I, F>(
     ctx: &Context,
     cmd: &str,
@@ -315,7 +349,7 @@ where
                 do_json_num_op(&number, value, &op_i64, &op_f64)
             })
             .map(|v| {
-                notify_keyspace_event(ctx, NotifyEvent::MODULE, cmd, key.as_str());
+                ctx.notify_keyspace_event(NotifyEvent::MODULE, cmd, key.as_str());
                 ctx.replicate_verbatim();
                 v.to_string().into()
             })
@@ -391,7 +425,7 @@ fn json_str_append(ctx: &Context, args: Vec<String>) -> RedisResult {
         .and_then(|doc| {
             doc.value_op(&path, |value| do_json_str_append(&json, value))
                 .map(|v| {
-                    notify_keyspace_event(ctx, NotifyEvent::MODULE, "json_strappend", key.as_str());
+                    ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_strappend", key.as_str());
                     ctx.replicate_verbatim();
                     v.as_str().map_or(usize::MAX, |v| v.len()).into()
                 })
@@ -434,7 +468,7 @@ fn json_arr_append(ctx: &Context, args: Vec<String>) -> RedisResult {
         .and_then(|doc| {
             doc.value_op(&path, |value| do_json_arr_append(args.clone(), value))
                 .map(|v| {
-                    notify_keyspace_event(ctx, NotifyEvent::MODULE, "json_arrappend", key.as_str());
+                    ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrappend", key.as_str());
                     ctx.replicate_verbatim();
                     v.as_array().map_or(usize::MAX, |v| v.len()).into()
                 })
@@ -507,7 +541,7 @@ fn json_arr_insert(ctx: &Context, args: Vec<String>) -> RedisResult {
                 do_json_arr_insert(args.clone(), index, value)
             })
             .map(|v| {
-                notify_keyspace_event(ctx, NotifyEvent::MODULE, "json_arrinsert", key.as_str());
+                ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrinsert", key.as_str());
                 ctx.replicate_verbatim();
                 v.as_array().map_or(usize::MAX, |v| v.len()).into()
             })
@@ -575,7 +609,7 @@ fn json_arr_pop(ctx: &Context, args: Vec<String>) -> RedisResult {
         .and_then(|doc| {
             doc.value_op(&path, |value| do_json_arr_pop(index, &mut res, value))
                 .map(|v| {
-                    notify_keyspace_event(ctx, NotifyEvent::MODULE, "json_arrpop", key.as_str());
+                    ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrpop", key.as_str());
                     ctx.replicate_verbatim();
                     v
                 })
@@ -626,7 +660,7 @@ fn json_arr_trim(ctx: &Context, args: Vec<String>) -> RedisResult {
         .and_then(|doc| {
             doc.value_op(&path, |value| do_json_arr_trim(start, stop, &value))
                 .map(|v| {
-                    notify_keyspace_event(ctx, NotifyEvent::MODULE, "json_arrtrim", key.as_str());
+                    ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrtrim", key.as_str());
                     ctx.replicate_verbatim();
                     v.as_array().map_or(usize::MAX, |v| v.len()).into()
                 })
@@ -807,6 +841,7 @@ redis_module! {
         ["json.set", json_set, "write deny-oom", 1,1,1],
         ["json.type", json_type, "readonly", 1,1,1],
         ["json.numincrby", json_num_incrby, "write", 1,1,1],
+        ["json.toggle", json_bool_toggle, "write deny-oom", 1,1,1],
         ["json.nummultby", json_num_multby, "write", 1,1,1],
         ["json.numpowby", json_num_powby, "write", 1,1,1],
         ["json.strappend", json_str_append, "write deny-oom", 1,1,1],
