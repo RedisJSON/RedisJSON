@@ -190,6 +190,7 @@ commands:
               --upload_results_s3 \
               --triggering_env circleci \
               --push_results_redistimeseries
+          no_output_timeout: 30m
 
 jobs:
   build:
