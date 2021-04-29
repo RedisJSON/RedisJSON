@@ -350,20 +350,28 @@ impl RedisJSON {
         }
     }
 
-    pub fn value_op<F>(&mut self, path: &str, mut fun: F) -> Result<Value, Error>
+    pub fn value_op<F, R, T>(&mut self, path: &str, mut op_fun: F, res_func: R) -> Result<T, Error>
     where
-        F: FnMut(&Value) -> Result<Value, Error>,
+        F: FnMut(&mut Value) -> Result<Value, Error>,
+        R: Fn(&Value) -> Result<T, Error>,
     {
+        // take the root before updating the value must be returned at the end
         let current_data = self.data.take();
 
         let mut errors = vec![];
-        let mut result = Value::Null; // TODO handle case where path not found
+        let mut result = None;
 
-        let mut collect_fun = |value: Value| {
-            fun(&value)
-                .map(|new_value| {
-                    result = new_value.clone();
-                    new_value
+        // A wrapper function that is called by replace_with
+        // calls op_fun and then res_func
+        let mut collect_fun = |mut value: Value| {
+            op_fun(&mut value)
+                .and_then(|new_value| {
+                    // after calling op_fun calling res_func
+                    // to prepae the command result
+                    res_func(&new_value).map(|res| {
+                        result = Some(res);
+                        new_value
+                    })
                 })
                 .map_err(|e| {
                     errors.push(e);
@@ -371,27 +379,35 @@ impl RedisJSON {
                 .unwrap_or(value)
         };
 
-        self.data = if path == "$" {
+        if path == "$" {
             // root needs special handling
-            collect_fun(current_data)
+            self.data = collect_fun(current_data)
         } else {
-            SelectorMut::new()
-                .str_path(path)
-                .and_then(|selector| {
-                    Ok(selector
-                        .value(current_data.clone())
-                        .replace_with(&mut |v| Some(collect_fun(v)))?
-                        .take()
-                        .unwrap_or(Value::Null))
-                })
-                .map_err(|e| {
+            match SelectorMut::new().str_path(path) {
+                Ok(selector) => {
+                    let replace_result = selector
+                        .value(current_data)
+                        .replace_with(&mut |v| Some(collect_fun(v)));
+
+                    if let Err(e) = replace_result {
+                        errors.push(e.into());
+                    }
+                    // reassign the modified root
+                    self.data = selector.take().unwrap();
+                }
+                Err(e) => {
                     errors.push(e.into());
-                })
-                .unwrap_or(current_data)
+                    // reassign the original root
+                    self.data = current_data;
+                }
+            }
         };
 
         match errors.len() {
-            0 => Ok(result),
+            0 => match result {
+                Some(r) => Ok(r),
+                None => Err(format!("Path '{}' does not exist", path).into()),
+            },
             1 => Err(errors.remove(0)),
             _ => Err(errors.into_iter().map(|e| e.msg).collect::<String>().into()),
         }
