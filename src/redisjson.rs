@@ -204,7 +204,7 @@ impl RedisJSON {
         let current_data = self.data.take();
         let mut cleared = 0;
 
-        let clear_func = &mut |v: Value| match v {
+        let clear_func = &mut |v| match v {
             Value::Object(mut obj) => {
                 obj.clear();
                 cleared += 1;
