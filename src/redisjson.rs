@@ -301,27 +301,30 @@ impl RedisJSON {
             // Normalize start
             let start = if start < 0 {
                 0.max(len + start)
-            } else { // start >= 0
-                start.min(len - 1) 
+            } else {
+                // start >= 0
+                start.min(len - 1)
             };
 
             // Normalize end
             let end = if end == 0 {
                 len
             } else if end < 0 {
-                len + end 
-            } else { // end > 0
+                len + end
+            } else {
+                // end > 0
                 end.min(len)
             };
-            
-            if end < start { // don't search at all
+
+            if end < start {
+                // don't search at all
                 return Ok(-1);
             }
 
             let slice = &arr[start as usize..end as usize];
 
             match slice.iter().position(|r| r == &v) {
-                Some(i) => Ok((start as us + i) as i64),
+                Some(i) => Ok((start as usize + i) as i64),
                 None => Ok(-1),
             }
         } else {
