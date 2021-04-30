@@ -310,7 +310,7 @@ def testToggleCommand(env):
 
     # Test Toggeling Empty Path
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"foo":"bar"}'))
-    r.assertEqual(r.execute_command('JSON.TOGGLE', 'test', '.bar'), 'null')
+    r.expect('JSON.TOGGLE', 'test', '.bar').raiseError()
     
     # Test Toggeling Non Boolean
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"foo":"bar"}'))
