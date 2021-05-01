@@ -13,7 +13,7 @@ use crate::json_node::{JsonValueUpdater, replace_with};
 use crate::REDIS_JSON_TYPE_VERSION;
 
 use bson::decode_document;
-use index::schema_map;
+// use index::schema_map; todo: is this needed? it breaks the build!!!
 use redis_module::raw::{self, Status};
 use serde::Serialize;
 use serde_json::{Map, Value};
