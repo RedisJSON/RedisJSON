@@ -1,9 +1,12 @@
 use crate::select::cmp::*;
-use crate::select::{FilterKey, to_f64};
 use crate::select::select_value::{SelectValue, SelectValueType};
+use crate::select::{to_f64, FilterKey};
 
 #[derive(Debug, PartialEq)]
-pub(super) enum ExprTerm<'a, T> where T: SelectValue {
+pub(super) enum ExprTerm<'a, T>
+where
+    T: SelectValue,
+{
     String(String),
     Long(i64),
     Double(f64),
@@ -11,7 +14,10 @@ pub(super) enum ExprTerm<'a, T> where T: SelectValue {
     Json(Option<Vec<&'a T>>, Option<FilterKey>, Vec<&'a T>),
 }
 
-impl<'a, T> ExprTerm<'a, T> where T: SelectValue {
+impl<'a, T> ExprTerm<'a, T>
+where
+    T: SelectValue,
+{
     fn cmp<C1: Cmp<'a, T>, C2: Cmp<'a, T>>(
         &self,
         other: &Self,
@@ -48,9 +54,11 @@ impl<'a, T> ExprTerm<'a, T> where T: SelectValue {
                             SelectValueType::Dict => {
                                 if let Some(FilterKey::String(k)) = fk1 {
                                     if let Some(tmp) = v1.get_key(k) {
-                                        match tmp.get_type(){
-                                            SelectValueType::String => return cmp_fn.cmp_string(&tmp.get_str(), s2),
-                                            _ => {},
+                                        match tmp.get_type() {
+                                            SelectValueType::String => {
+                                                return cmp_fn.cmp_string(&tmp.get_str(), s2)
+                                            }
+                                            _ => {}
                                         }
                                     }
                                 }
@@ -63,15 +71,23 @@ impl<'a, T> ExprTerm<'a, T> where T: SelectValue {
                     ExprTerm::Long(n2) => vec1
                         .iter()
                         .filter(|v1| match v1.get_type() {
-                            SelectValueType::Long => cmp_fn.cmp_f64(to_f64(v1.get_long()), to_f64(*n2)),
+                            SelectValueType::Long => {
+                                cmp_fn.cmp_f64(to_f64(v1.get_long()), to_f64(*n2))
+                            }
                             SelectValueType::Double => cmp_fn.cmp_f64(v1.get_double(), to_f64(*n2)),
                             SelectValueType::Dict => {
                                 if let Some(FilterKey::String(k)) = fk1 {
                                     if let Some(tmp) = v1.get_key(k) {
-                                        match tmp.get_type(){
-                                            SelectValueType::Long => return cmp_fn.cmp_f64(to_f64(tmp.get_long()), to_f64(*n2)),
-                                            SelectValueType::Double => return cmp_fn.cmp_f64(tmp.get_double(), to_f64(*n2)),
-                                            _ => {},
+                                        match tmp.get_type() {
+                                            SelectValueType::Long => {
+                                                return cmp_fn
+                                                    .cmp_f64(to_f64(tmp.get_long()), to_f64(*n2))
+                                            }
+                                            SelectValueType::Double => {
+                                                return cmp_fn
+                                                    .cmp_f64(tmp.get_double(), to_f64(*n2))
+                                            }
+                                            _ => {}
                                         }
                                     }
                                 }
@@ -89,10 +105,14 @@ impl<'a, T> ExprTerm<'a, T> where T: SelectValue {
                             SelectValueType::Dict => {
                                 if let Some(FilterKey::String(k)) = fk1 {
                                     if let Some(tmp) = v1.get_key(k) {
-                                        match tmp.get_type(){
-                                            SelectValueType::Long => return cmp_fn.cmp_f64(to_f64(tmp.get_long()), *n2),
-                                            SelectValueType::Double => return cmp_fn.cmp_f64(tmp.get_double(), *n2),
-                                            _ => {},
+                                        match tmp.get_type() {
+                                            SelectValueType::Long => {
+                                                return cmp_fn.cmp_f64(to_f64(tmp.get_long()), *n2)
+                                            }
+                                            SelectValueType::Double => {
+                                                return cmp_fn.cmp_f64(tmp.get_double(), *n2)
+                                            }
+                                            _ => {}
                                         }
                                     }
                                 }
@@ -109,9 +129,11 @@ impl<'a, T> ExprTerm<'a, T> where T: SelectValue {
                             SelectValueType::Dict => {
                                 if let Some(FilterKey::String(k)) = fk1 {
                                     if let Some(tmp) = v1.get_key(k) {
-                                        match tmp.get_type(){
-                                            SelectValueType::Bool => return cmp_fn.cmp_bool(tmp.get_bool(), *b2),
-                                            _ => {},
+                                        match tmp.get_type() {
+                                            SelectValueType::Bool => {
+                                                return cmp_fn.cmp_bool(tmp.get_bool(), *b2)
+                                            }
+                                            _ => {}
                                         }
                                     }
                                 }
@@ -224,7 +246,10 @@ impl<'a, T> ExprTerm<'a, T> where T: SelectValue {
     }
 }
 
-impl<'a, T> Into<ExprTerm<'a, T>> for &Vec<&'a T> where T: SelectValue{
+impl<'a, T> Into<ExprTerm<'a, T>> for &Vec<&'a T>
+where
+    T: SelectValue,
+{
     fn into(self) -> ExprTerm<'a, T> {
         if self.len() == 1 {
             match &self[0].get_type() {
@@ -239,7 +264,6 @@ impl<'a, T> Into<ExprTerm<'a, T>> for &Vec<&'a T> where T: SelectValue{
         ExprTerm::Json(None, None, self.to_vec())
     }
 }
-
 
 // #[cfg(test)]
 // mod expr_term_inner_tests {

@@ -1,7 +1,10 @@
-use array_tool::vec::{Intersect, Union};
 use crate::select::select_value::SelectValue;
+use array_tool::vec::{Intersect, Union};
 
-pub(super) trait Cmp<'a, T> where T: SelectValue{
+pub(super) trait Cmp<'a, T>
+where
+    T: SelectValue,
+{
     fn cmp_bool(&self, v1: bool, v2: bool) -> bool;
 
     fn cmp_f64(&self, v1: f64, v2: f64) -> bool;
@@ -17,7 +20,10 @@ pub(super) trait Cmp<'a, T> where T: SelectValue{
 
 pub(super) struct CmpEq;
 
-impl<'a, T> Cmp<'a, T> for CmpEq where T: SelectValue{
+impl<'a, T> Cmp<'a, T> for CmpEq
+where
+    T: SelectValue,
+{
     fn cmp_bool(&self, v1: bool, v2: bool) -> bool {
         v1 == v2
     }
@@ -37,7 +43,10 @@ impl<'a, T> Cmp<'a, T> for CmpEq where T: SelectValue{
 
 pub(super) struct CmpNe;
 
-impl<'a, T> Cmp<'a, T> for CmpNe where T: SelectValue {
+impl<'a, T> Cmp<'a, T> for CmpNe
+where
+    T: SelectValue,
+{
     fn cmp_bool(&self, v1: bool, v2: bool) -> bool {
         v1 != v2
     }
@@ -57,7 +66,10 @@ impl<'a, T> Cmp<'a, T> for CmpNe where T: SelectValue {
 
 pub(super) struct CmpGt;
 
-impl<'a, T> Cmp<'a, T> for CmpGt where T: SelectValue{
+impl<'a, T> Cmp<'a, T> for CmpGt
+where
+    T: SelectValue,
+{
     fn cmp_bool(&self, v1: bool, v2: bool) -> bool {
         v1 & !v2
     }
@@ -77,7 +89,10 @@ impl<'a, T> Cmp<'a, T> for CmpGt where T: SelectValue{
 
 pub(super) struct CmpGe;
 
-impl<'a, T> Cmp<'a, T> for CmpGe where T: SelectValue{
+impl<'a, T> Cmp<'a, T> for CmpGe
+where
+    T: SelectValue,
+{
     fn cmp_bool(&self, v1: bool, v2: bool) -> bool {
         v1 >= v2
     }
@@ -97,7 +112,10 @@ impl<'a, T> Cmp<'a, T> for CmpGe where T: SelectValue{
 
 pub(super) struct CmpLt;
 
-impl<'a, T> Cmp<'a, T> for CmpLt where T: SelectValue{
+impl<'a, T> Cmp<'a, T> for CmpLt
+where
+    T: SelectValue,
+{
     fn cmp_bool(&self, v1: bool, v2: bool) -> bool {
         !v1 & v2
     }
@@ -117,7 +135,10 @@ impl<'a, T> Cmp<'a, T> for CmpLt where T: SelectValue{
 
 pub(super) struct CmpLe;
 
-impl<'a, T> Cmp<'a, T> for CmpLe where T: SelectValue {
+impl<'a, T> Cmp<'a, T> for CmpLe
+where
+    T: SelectValue,
+{
     fn cmp_bool(&self, v1: bool, v2: bool) -> bool {
         v1 <= v2
     }
@@ -137,7 +158,10 @@ impl<'a, T> Cmp<'a, T> for CmpLe where T: SelectValue {
 
 pub(super) struct CmpAnd;
 
-impl<'a, T> Cmp<'a, T> for CmpAnd where T: SelectValue{
+impl<'a, T> Cmp<'a, T> for CmpAnd
+where
+    T: SelectValue,
+{
     fn cmp_bool(&self, v1: bool, v2: bool) -> bool {
         v1 && v2
     }
@@ -157,7 +181,10 @@ impl<'a, T> Cmp<'a, T> for CmpAnd where T: SelectValue{
 
 pub(super) struct CmpOr;
 
-impl<'a, T> Cmp<'a, T> for CmpOr where T: SelectValue{
+impl<'a, T> Cmp<'a, T> for CmpOr
+where
+    T: SelectValue,
+{
     fn cmp_bool(&self, v1: bool, v2: bool) -> bool {
         v1 || v2
     }
@@ -174,7 +201,6 @@ impl<'a, T> Cmp<'a, T> for CmpOr where T: SelectValue{
         v1.to_vec().union(v2.to_vec())
     }
 }
-
 
 // #[cfg(test)]
 // mod cmp_inner_tests {

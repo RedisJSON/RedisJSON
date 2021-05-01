@@ -1,7 +1,7 @@
 use crate::select::JsonPathError;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum SelectValueType{
+pub enum SelectValueType {
     Undef,
     Null,
     Bool,
@@ -12,12 +12,9 @@ pub enum SelectValueType{
     Dict,
 }
 
-pub trait SelectValue : 
-                        std::fmt::Debug + 
-                        std::cmp::Eq + 
-                        std::cmp::PartialEq +
-                        std::default::Default + 
-                        std::clone::Clone{
+pub trait SelectValue:
+    std::fmt::Debug + std::cmp::Eq + std::cmp::PartialEq + std::default::Default + std::clone::Clone
+{
     fn get_type(&self) -> SelectValueType;
     fn contains_key(&self, key: &str) -> bool;
     fn values<'a>(&'a self) -> Option<Vec<&'a Self>>;
@@ -34,5 +31,5 @@ pub trait SelectValue :
 }
 
 pub trait ValueUpdater<T: SelectValue> {
-    fn update(&mut self, path: Vec<String>, root:&mut T) -> Result<&mut Self, JsonPathError>;
+    fn update(&mut self, path: Vec<String>, root: &mut T) -> Result<&mut Self, JsonPathError>;
 }

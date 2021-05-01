@@ -16,10 +16,10 @@ mod array_index;
 mod backward;
 mod error;
 mod formatter;
+mod json_node;
 mod nodevisitor;
 mod redisjson;
 mod select;
-mod json_node;
 
 use crate::array_index::ArrayIndex;
 use crate::error::Error;

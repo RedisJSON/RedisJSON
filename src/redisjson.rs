@@ -7,9 +7,9 @@
 use crate::backward;
 use crate::error::Error;
 use crate::formatter::RedisJsonFormatter;
+use crate::json_node::{replace_with, JsonValueUpdater};
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 use crate::select::{Selector, SelectorMut};
-use crate::json_node::{JsonValueUpdater, replace_with};
 use crate::REDIS_JSON_TYPE_VERSION;
 
 use bson::decode_document;
@@ -113,7 +113,7 @@ impl RedisJSON {
             {
                 // Adding to the root, can't use jsonpath_lib::replace_with
                 let mut current_data = self.data.take();
-                let res = if let Value::Object(ref mut map) = current_data  {
+                let res = if let Value::Object(ref mut map) = current_data {
                     if map.contains_key(&key) {
                         false
                     } else {
@@ -129,26 +129,28 @@ impl RedisJSON {
                 // Adding somewhere in existing object, use jsonpath_lib::replace_with
                 let mut set = false;
                 let mut selector = SelectorMut::default();
-                if let Err(e) = selector.str_path(&parsed_static_path
-                    .static_path_elements
-                    .iter()
-                    .map(|e| e.to_string())
-                    .collect::<Vec<String>>()
-                    .join("")) {
-                        return Err(e.into());
+                if let Err(e) = selector.str_path(
+                    &parsed_static_path
+                        .static_path_elements
+                        .iter()
+                        .map(|e| e.to_string())
+                        .collect::<Vec<String>>()
+                        .join(""),
+                ) {
+                    return Err(e.into());
                 }
                 selector.value(&mut self.data);
                 let mut updater = JsonValueUpdater::new(|mut ret| {
-                        if let Value::Object(ref mut map) = ret {
-                            if map.contains_key(&key) {
-                                set = false;
-                            } else {
-                                map.insert(key.to_string(), value.clone());
-                                set = true;
-                            }
+                    if let Value::Object(ref mut map) = ret {
+                        if map.contains_key(&key) {
+                            set = false;
+                        } else {
+                            map.insert(key.to_string(), value.clone());
+                            set = true;
                         }
-                        Some(ret)
-                    });
+                    }
+                    Some(ret)
+                });
                 selector.replace_with(&mut updater)?;
                 Ok(set)
             }
@@ -175,7 +177,7 @@ impl RedisJSON {
         } else {
             let mut replaced = false;
             if SetOptions::NotExists != *option {
-                replace_with(&mut self.data, path, &mut|_v| {
+                replace_with(&mut self.data, path, &mut |_v| {
                     replaced = true;
                     Some(json.clone())
                 })?;
@@ -191,7 +193,6 @@ impl RedisJSON {
     }
 
     pub fn delete_path(&mut self, path: &str) -> Result<usize, Error> {
-
         let mut deleted = 0;
         replace_with(&mut self.data, path, &mut |v| {
             if !v.is_null() {
@@ -233,7 +234,7 @@ impl RedisJSON {
                 let mut selector = Selector::new();
                 selector.value(&self.data);
                 if let Err(_) = selector.str_path(&path.fixed) {
-                    return acc
+                    return acc;
                 }
                 let value = match selector.select() {
                     Ok(s) => match s.first() {
@@ -365,7 +366,6 @@ impl RedisJSON {
         F: FnMut(&mut Value) -> Result<Value, Error>,
         R: Fn(&Value) -> Result<T, Error>,
     {
-
         let mut errors = vec![];
         let mut result = None;
 
@@ -394,9 +394,7 @@ impl RedisJSON {
             match SelectorMut::new().str_path(path) {
                 Ok(selector) => {
                     let mut updater = JsonValueUpdater::new(|v| Some(collect_fun(v)));
-                    let replace_result = selector
-                        .value(&mut self.data)
-                        .replace_with(&mut updater);
+                    let replace_result = selector.value(&mut self.data).replace_with(&mut updater);
 
                     if let Err(e) = replace_result {
                         errors.push(e.into());
