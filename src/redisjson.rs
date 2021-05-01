@@ -8,10 +8,12 @@ use crate::backward;
 use crate::error::Error;
 use crate::formatter::RedisJsonFormatter;
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
+use crate::select::{Selector, SelectorMut};
+use crate::json_node::{JsonValueUpdater, replace_with};
 use crate::REDIS_JSON_TYPE_VERSION;
 
 use bson::decode_document;
-use jsonpath_lib::SelectorMut;
+use index::schema_map;
 use redis_module::raw::{self, Status};
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -107,11 +109,11 @@ impl RedisJSON {
         if let StaticPathElement::ObjectKey(key) =
             parsed_static_path.static_path_elements.pop().unwrap()
         {
-            let mut current_data = self.data.take();
             if let StaticPathElement::Root = parsed_static_path.static_path_elements.last().unwrap()
             {
                 // Adding to the root, can't use jsonpath_lib::replace_with
-                let res = if let Value::Object(ref mut map) = current_data {
+                let mut current_data = self.data.take();
+                let res = if let Value::Object(ref mut map) = current_data  {
                     if map.contains_key(&key) {
                         false
                     } else {
@@ -126,15 +128,17 @@ impl RedisJSON {
             } else {
                 // Adding somewhere in existing object, use jsonpath_lib::replace_with
                 let mut set = false;
-                self.data = jsonpath_lib::replace_with(
-                    current_data,
-                    &parsed_static_path
-                        .static_path_elements
-                        .iter()
-                        .map(|e| e.to_string())
-                        .collect::<Vec<String>>()
-                        .join(""),
-                    &mut |mut ret| {
+                let mut selector = SelectorMut::default();
+                if let Err(e) = selector.str_path(&parsed_static_path
+                    .static_path_elements
+                    .iter()
+                    .map(|e| e.to_string())
+                    .collect::<Vec<String>>()
+                    .join("")) {
+                        return Err(e.into());
+                }
+                selector.value(&mut self.data);
+                let mut updater = JsonValueUpdater::new(|mut ret| {
                         if let Value::Object(ref mut map) = ret {
                             if map.contains_key(&key) {
                                 set = false;
@@ -144,8 +148,8 @@ impl RedisJSON {
                             }
                         }
                         Some(ret)
-                    },
-                )?;
+                    });
+                selector.replace_with(&mut updater)?;
                 Ok(set)
             }
         } else {
@@ -171,8 +175,7 @@ impl RedisJSON {
         } else {
             let mut replaced = false;
             if SetOptions::NotExists != *option {
-                let current_data = self.data.take();
-                self.data = jsonpath_lib::replace_with(current_data, path, &mut |_v| {
+                replace_with(&mut self.data, path, &mut|_v| {
                     replaced = true;
                     Some(json.clone())
                 })?;
@@ -188,10 +191,9 @@ impl RedisJSON {
     }
 
     pub fn delete_path(&mut self, path: &str) -> Result<usize, Error> {
-        let current_data = self.data.take();
 
         let mut deleted = 0;
-        self.data = jsonpath_lib::replace_with(current_data, path, &mut |v| {
+        replace_with(&mut self.data, path, &mut |v| {
             if !v.is_null() {
                 deleted += 1; // might delete more than a single value
             }
@@ -223,13 +225,17 @@ impl RedisJSON {
     ) -> Result<String, Error> {
         let temp_doc;
         let res = if paths.len() > 1 {
-            let mut selector = jsonpath_lib::selector(&self.data);
             // TODO: Creating a temp doc here duplicates memory usage. This can be very memory inefficient.
             // A better way would be to create a doc of references to the original doc but no current support
             // in serde_json. I'm going for this implementation anyway because serde_json isn't supposed to be
             // memory efficient and we're using it anyway. See https://github.com/serde-rs/json/issues/635.
             temp_doc = Value::Object(paths.drain(..).fold(Map::new(), |mut acc, path| {
-                let value = match selector(&path.fixed) {
+                let mut selector = Selector::new();
+                selector.value(&self.data);
+                if let Err(_) = selector.str_path(&path.fixed) {
+                    return acc
+                }
+                let value = match selector.select() {
                     Ok(s) => match s.first() {
                         Some(v) => v,
                         None => &Value::Null,
@@ -359,8 +365,6 @@ impl RedisJSON {
         F: FnMut(&mut Value) -> Result<Value, Error>,
         R: Fn(&Value) -> Result<T, Error>,
     {
-        // take the root before updating the value must be returned at the end
-        let current_data = self.data.take();
 
         let mut errors = vec![];
         let mut result = None;
@@ -385,24 +389,21 @@ impl RedisJSON {
 
         if path == "$" {
             // root needs special handling
-            self.data = collect_fun(current_data)
+            self.data = collect_fun(self.data.take());
         } else {
             match SelectorMut::new().str_path(path) {
                 Ok(selector) => {
+                    let mut updater = JsonValueUpdater::new(|v| Some(collect_fun(v)));
                     let replace_result = selector
-                        .value(current_data)
-                        .replace_with(&mut |v| Some(collect_fun(v)));
+                        .value(&mut self.data)
+                        .replace_with(&mut updater);
 
                     if let Err(e) = replace_result {
                         errors.push(e.into());
                     }
-                    // reassign the modified root
-                    self.data = selector.take().unwrap();
                 }
                 Err(e) => {
                     errors.push(e.into());
-                    // reassign the original root
-                    self.data = current_data;
                 }
             }
         };
@@ -439,7 +440,10 @@ impl RedisJSON {
     }
 
     pub fn get_values<'a>(&'a self, path: &'a str) -> Result<Vec<&'a Value>, Error> {
-        let results = jsonpath_lib::select(&self.data, path)?;
+        let mut selector = Selector::new();
+        selector.str_path(path)?;
+        selector.value(&self.data);
+        let results = selector.select()?;
         Ok(results)
     }
 }

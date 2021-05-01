@@ -447,9 +447,11 @@ dependencies = [
 name = "redisjson"
 version = "99.99.99"
 dependencies = [
+ "array_tool",
  "bson",
  "jsonpath_lib",
  "libc",
+ "log",
  "redis-module",
  "serde",
  "serde_json",
