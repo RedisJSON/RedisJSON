@@ -100,7 +100,7 @@ commands:
             redis-server --version
       - restore_cache:
           keys:
-            - v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
+            - v3-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
       - run:
           name: Check formatting
           command: bash -l -c "make lint"
@@ -111,7 +111,7 @@ commands:
           name: Build release
           command: bash -l -c "make build pack <<parameters.build_params>>"
       - save_cache:
-          key: v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
+          key: v3-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
           paths:
             - "~/.cargo"
             - "./target"
