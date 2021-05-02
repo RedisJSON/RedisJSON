@@ -217,9 +217,10 @@ jobs:
     macos:
       xcode: 11.6.0
     steps:
+      - checkout-all
       - run:
           name: Update Python
-          command: brew upgrade python3
+          command: brew upgrade python
       - build-steps
       - test-steps
 
