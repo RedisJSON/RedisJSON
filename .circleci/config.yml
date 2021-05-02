@@ -88,7 +88,9 @@ commands:
           name: Setup automation and install dependencies
           command: |
             ./deps/readies/bin/getpy3
+            python3 -m pip list -v
             ./system-setup.py
+            python3 -m pip list -v
             source $HOME/.cargo/env
             rustc --version
             cargo --version
