@@ -218,8 +218,8 @@ jobs:
       xcode: 11.6.0
     steps:
       - run:
-          name: Update brew
-          command: brew update
+          name: Update Python
+          command: brew upgrade python3
       - build-steps
       - test-steps
 
