@@ -296,20 +296,35 @@ impl RedisJSON {
             }
             let v: Value = serde_json::from_str(scalar)?;
 
-            let end: usize = if end == 0 || end == -1 {
-                // default end of array
-                arr.len() - 1
+            let len = arr.len() as i64;
+
+            // Normalize start
+            let start = if start < 0 {
+                0.max(len + start)
             } else {
-                (end as usize).min(arr.len() - 1)
+                // start >= 0
+                start.min(len - 1)
             };
-            let start = start.max(0) as usize;
+
+            // Normalize end
+            let end = if end == 0 {
+                len
+            } else if end < 0 {
+                len + end
+            } else {
+                // end > 0
+                end.min(len)
+            };
+
             if end < start {
+                // don't search at all
                 return Ok(-1);
             }
-            let slice = &arr[start..=end];
+
+            let slice = &arr[start as usize..end as usize];
 
             match slice.iter().position(|r| r == &v) {
-                Some(i) => Ok((start + i) as i64),
+                Some(i) => Ok((start as usize + i) as i64),
                 None => Ok(-1),
             }
         } else {
