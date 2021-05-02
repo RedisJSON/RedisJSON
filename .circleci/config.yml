@@ -217,6 +217,9 @@ jobs:
     macos:
       xcode: 11.6.0
     steps:
+      - run:
+          name: Update brew
+          command: brew update
       - build-steps
       - test-steps
 
