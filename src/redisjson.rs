@@ -455,7 +455,17 @@ pub mod type_methods {
             0 => RedisJSON {
                 data: backward::json_rdb_load(rdb),
             },
-            2 | 3 => {
+            2 => {
+                let data = raw::load_string(rdb);
+                // Backward support for modules that had AUX field for RediSarch
+                // TODO remove in future versions
+                if raw::load_unsigned(rdb) > 0 {
+                    raw::load_string(rdb);
+                    raw::load_string(rdb);
+                }
+                RedisJSON::from_str(&data, Format::JSON).unwrap()
+            }
+            3 => {
                 let data = raw::load_string(rdb);
                 RedisJSON::from_str(&data, Format::JSON).unwrap()
             }

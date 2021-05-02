@@ -5,8 +5,7 @@ extern crate redis_module;
 extern crate log;
 
 use redis_module::raw::RedisModuleTypeMethods;
-use redis_module::{native_types::RedisType, NotifyEvent};
-use redis_module::{raw as rawmod, NextArg};
+use redis_module::{native_types::RedisType, NextArg, NotifyEvent};
 use redis_module::{Context, RedisError, RedisResult, RedisValue, REDIS_OK};
 use serde_json::{Number, Value};
 
@@ -45,7 +44,7 @@ static REDIS_JSON_TYPE: RedisType = RedisType::new(
         // Auxiliary data (v2)
         aux_load: Some(redisjson::type_methods::aux_load),
         aux_save: None,
-        aux_save_triggers: rawmod::Aux::Before as i32,
+        aux_save_triggers: 0,
 
         free_effort: None,
         unlink: None,
