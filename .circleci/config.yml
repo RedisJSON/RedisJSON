@@ -175,7 +175,7 @@ commands:
       - run:
           name: Run CI benchmarks on aws
           timeout: 60m
-          no_output_timeout: 20m
+          no_output_timeout: 30m
           command: |
             cd ./tests/benchmarks
             export AWS_ACCESS_KEY_ID=$PERFORMANCE_EC2_ACCESS_KEY
