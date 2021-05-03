@@ -409,6 +409,54 @@ def testObjectCRUD(env):
     r.assertEqual(1, r.execute_command('JSON.DEL', 'test', '.'))
     r.assertIsNone(r.execute_command('JSON.GET', 'test', '.'))
 
+    # Test deleting with default (root) path
+    r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"foo": "bar"}'))
+    r.assertEqual(1, r.execute_command('JSON.DEL', 'test'))
+    r.assertIsNone(r.execute_command('JSON.GET', 'test', '.'))
+
+def testClear(env):
+    """Test JSON.CLEAR command"""
+
+    r = env
+    r.expect('JSON.SET', 'test', '.', r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}')\
+        .ok()
+
+    # Test get multi results (using .. recursive descent)
+    # TODO: Enable when supporting multi results (and not only the first)
+    #r.expect('JSON.GET', 'test', '$..n').equal([42,44,{"a": 1,"b": 2},["to","be","cleared",4]])
+
+    # Make sure specific obj content exists before clear
+    obj_content = r'{"a":1,"b":2}'
+    r.expect('JSON.GET', 'test', '$.arr[2].n').equal(obj_content)
+    # Make sure specific arr content exists before clear
+    arr_content = r'["to","be","cleared",4]'
+    r.expect('JSON.GET', 'test', '$.arr[3].n2.n').equal(arr_content)
+
+    # Clear obj and arr with specific paths
+    r.expect('JSON.CLEAR', 'test', '$.arr[2].n').equal(1)
+    r.expect('JSON.CLEAR', 'test', '$.arr[3].n2.n').equal(1)
+
+    # Fail clear on inappropriate path (not obj or arr)
+    r.expect('JSON.CLEAR', 'test', '$.arr[1]').equal(0)
+
+    # Make sure specific obj content was cleared
+    r.expect('JSON.GET', 'test', '$.arr[2].n').equal('{}')
+    # Make sure specific arr content was cleared
+    r.expect('JSON.GET', 'test', '$.arr[3].n2.n').equal('[]')
+
+    # Make sure only appropriate content (obj and arr) was cleared - and that errors were printed for inappropriate content (string and numeric)
+    # TODO: Enable when supporting multi results (and not only the first)
+    #r.expect('JSON.GET', 'test', '$..n').equal([42, 44, {}, []])
+
+    # Clear root
+    # TODO: switch order of the following paths and expect .equals(2) when supporting multi-paths
+    r.expect('JSON.CLEAR', 'test', '$', '$.arr[2].n').equal(1)
+    r.expect('JSON.GET', 'test', '$').equal('{}')
+
+    r.expect('JSON.SET', 'test', '$', obj_content).ok()
+    r.expect('JSON.CLEAR', 'test').equal(1)
+    r.expect('JSON.GET', 'test', '$').equal('{}')
+
 def testArrayCRUD(env):
     """Test JSON Array CRUDness"""
 
