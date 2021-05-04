@@ -494,13 +494,13 @@ where
         .as_array()
         .ok_or_else(|| err_json(value, "array"))
         .and_then(|curr| {
+            // Verify legal index in bounds
             let len = curr.len() as i64;
-
-            if !(-len..len + 1).contains(&index) {
+            let index = if index < 0 { len + index } else { index };
+            if !(0..=len).contains(&index) {
                 return Err("ERR index out of bounds".into());
             }
-
-            let index = index.normalize(len);
+            let index = index as usize;
 
             let mut items = args
                 .map(|json| serde_json::from_str(&json))
