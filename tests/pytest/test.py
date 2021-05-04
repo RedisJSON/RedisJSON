@@ -560,7 +560,7 @@ def testArrInsertCommand(env):
     r.assertEqual(r.execute_command('JSON.GET', 'test', '.arr'), "[3,5,2,6,1,4]")
     
     r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', -3, '7', '{"A":"Z"}', '9'), 9)
-    r.assertEqual(r.execute_command('JSON.GET', 'test', '.arr'), "[3,5,2,7,{"A":"Z"},9,6,1,4]")     
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '.arr'), '[3,5,2,7,{"A":"Z"},9,6,1,4]')     
 
     r.expect('JSON.ARRINSERT', 'test', '.arr', -10, '10').raiseError()
     r.expect('JSON.ARRINSERT', 'test', '.arr', 10, '10').raiseError()
