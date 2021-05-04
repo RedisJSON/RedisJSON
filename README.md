@@ -39,6 +39,14 @@ Then, build as usual:
 cargo build --release
 ```
 
+When running the tests, you need to explicitly specify the `test` feature to disable use of the Redis memory allocator when testing:
+
+```bash
+cargo test --features test
+```
+
+If you forget to do this, you'll see an error mentioning `signal: 4, SIGILL: illegal instruction`.
+
 ## Run
 
 ### Linux

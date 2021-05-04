@@ -444,7 +444,7 @@ dependencies = [
 
 [[package]]
 name = "redisjson"
-version = "1.2.0"
+version = "99.99.99"
 dependencies = [
  "bson",
  "jsonpath_lib",
