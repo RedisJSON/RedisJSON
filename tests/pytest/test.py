@@ -553,16 +553,17 @@ def testArrInsertCommand(env):
     r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', -1, '2'), 2)
     r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', -2, '3'), 3)
     r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 3, '4'), 4)
-
     r.assertEqual(r.execute_command('JSON.GET', 'test', '.arr'), "[3,2,1,4]")
 
     r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 1, '5'), 5)
-    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', -2, '6'), 6)
-    
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', -2, '6'), 6)    
     r.assertEqual(r.execute_command('JSON.GET', 'test', '.arr'), "[3,5,2,6,1,4]")
+    
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', -3, '7', '{"A":"Z"}', '9'), 9)
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '.arr'), "[3,5,2,7,{"A":"Z"},9,6,1,4]")     
 
-    r.expect('JSON.ARRINSERT', 'test', '.arr', -7, '6').raiseError()
-    r.expect('JSON.ARRINSERT', 'test', '.arr', 7, '6').raiseError()
+    r.expect('JSON.ARRINSERT', 'test', '.arr', -10, '10').raiseError()
+    r.expect('JSON.ARRINSERT', 'test', '.arr', 10, '10').raiseError()
 
 def testArrIndexMixCommand(env):
     """Test JSON.ARRINDEX command with mixed values"""
