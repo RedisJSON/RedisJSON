@@ -19,6 +19,7 @@ use crate::array_index::ArrayIndex;
 use crate::error::Error;
 use crate::redisjson::{Format, Path, RedisJSON, SetOptions};
 
+const JSON_ROOT_PATH: &'static str = "$";
 pub const REDIS_JSON_TYPE_VERSION: i32 = 3;
 
 static REDIS_JSON_TYPE: RedisType = RedisType::new(
@@ -71,7 +72,9 @@ fn json_del(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_string()?;
-    let path = backwards_compat_path(args.next_string()?);
+    let path = args
+        .next_string()
+        .map_or_else(|_| JSON_ROOT_PATH.to_string(), |v| backwards_compat_path(v));
 
     let redis_key = ctx.open_key_writable(&key);
     let deleted = match redis_key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
@@ -188,7 +191,7 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
 
     // path is optional -> no path found we use root "$"
     if paths.is_empty() {
-        paths.push(Path::new("$".to_string()));
+        paths.push(Path::new(JSON_ROOT_PATH.to_string()));
     }
 
     let key = ctx.open_key_writable(&key);
@@ -409,7 +412,7 @@ fn json_str_append(ctx: &Context, args: Vec<String>) -> RedisResult {
         path = backwards_compat_path(path_or_json);
         json = val;
     } else {
-        path = "$".to_string();
+        path = JSON_ROOT_PATH.to_string();
         json = path_or_json;
     }
 
@@ -606,7 +609,7 @@ fn json_arr_pop(ctx: &Context, args: Vec<String>) -> RedisResult {
             let index = args.next_i64().unwrap_or(i64::MAX);
             (path, index)
         })
-        .unwrap_or(("$".to_string(), i64::MAX));
+        .unwrap_or((JSON_ROOT_PATH.to_string(), i64::MAX));
 
     let redis_key = ctx.open_key_writable(&key);
     let mut res = Value::Null;
@@ -732,6 +735,32 @@ fn json_obj_len(ctx: &Context, args: Vec<String>) -> RedisResult {
 }
 
 ///
+/// JSON.CLEAR <key> [path ...]
+///
+fn json_clear(ctx: &Context, args: Vec<String>) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+    let key = args.next_string()?;
+    let paths = args.map(Path::new).collect::<Vec<_>>();
+
+    let paths = if paths.is_empty() {
+        vec![Path::new(JSON_ROOT_PATH.to_string())]
+    } else {
+        paths
+    };
+
+    // FIXME: handle multi paths
+    let key = ctx.open_key_writable(&key);
+    let deleted = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
+        Some(doc) => {
+            let res = doc.clear(paths.first().unwrap().fixed.as_str())?;
+            ctx.replicate_verbatim();
+            res
+        }
+        None => 0,
+    };
+    Ok(deleted.into())
+}
+///
 /// JSON.DEBUG <subcommand & arguments>
 ///
 /// subcommands:
@@ -772,7 +801,9 @@ fn json_resp(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_string()?;
-    let path = backwards_compat_path(args.next_string()?);
+    let path = args
+        .next_string()
+        .map_or_else(|_| JSON_ROOT_PATH.to_string(), |v| backwards_compat_path(v));
 
     let key = ctx.open_key(&key);
     match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
@@ -866,6 +897,7 @@ redis_module! {
         ["json.arrtrim", json_arr_trim, "write", 1,1,1],
         ["json.objkeys", json_obj_keys, "readonly", 1,1,1],
         ["json.objlen", json_obj_len, "readonly", 1,1,1],
+        ["json.clear", json_clear, "write", 1,1,1],
         ["json.debug", json_debug, "readonly", 1,1,1],
         ["json.forget", json_del, "write", 1,1,1],
         ["json.resp", json_resp, "readonly", 1,1,1],
