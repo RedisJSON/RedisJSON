@@ -561,6 +561,8 @@ def testArrInsertCommand(env):
     
     r.assertEqual(r.execute_command('JSON.GET', 'test', '.arr'), "[3,5,2,6,1,4]")
 
+    r.expect('JSON.ARRINSERT', 'test', '.arr', -7, '6').raiseError()
+    r.expect('JSON.ARRINSERT', 'test', '.arr', 7, '6').raiseError()
 
 def testArrIndexMixCommand(env):
     """Test JSON.ARRINDEX command with mixed values"""
