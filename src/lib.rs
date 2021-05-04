@@ -571,10 +571,12 @@ where
     if let Some(array) = value.as_array() {
         // Verify legal index in bounds
         let len = array.len() as i64;
-        if !(-len..len).contains(&index) {
+        let index = if index < 0 { len + index } else { index };
+        if !(0..=len).contains(&index) {
             return Err("ERR index out of bounds".into());
         }
-        let index = index.normalize(len);
+        let index = index as usize;
+
         let items: Vec<Value> = args
             .map(|json| serde_json::from_str(&json))
             .collect::<Result<_, _>>()?;
