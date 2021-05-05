@@ -608,13 +608,13 @@ fn json_arr_pop(ctx: &Context, args: Vec<String>) -> RedisResult {
         .next()
         .map(|p| {
             let path = backwards_compat_path(p);
-            let index = args.next_i64().unwrap_or(i64::MAX);
+            let index = args.next_i64().unwrap_or(-1);
             (path, index)
         })
         .unwrap_or((JSON_ROOT_PATH.to_string(), i64::MAX));
 
     let redis_key = ctx.open_key_writable(&key);
-    let mut res = Value::Null;
+    let mut res = None;
 
     redis_key
         .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
@@ -631,25 +631,32 @@ fn json_arr_pop(ctx: &Context, args: Vec<String>) -> RedisResult {
             )
             .map_err(|e| e.into())
         })?;
-    Ok(RedisJSON::serialize(&res, Format::JSON)?.into())
+
+    let result = match res {
+        None => ().into(),
+        Some(r) => RedisJSON::serialize(&r, Format::JSON)?.into(),
+    };
+    Ok(result)
 }
 
-fn do_json_arr_pop(mut index: i64, res: &mut Value, value: &mut Value) -> Result<Value, Error> {
+fn do_json_arr_pop(index: i64, res: &mut Option<Value>, value: &mut Value) -> Result<Value, Error> {
     if let Some(array) = value.as_array() {
-        // Verify legel index in bounds
-        let len = array.len() as i64;
-        index = index.min(len - 1);
-        if index < 0 {
-            index += len;
+        if array.is_empty() {
+            *res = None;
+            return Ok(value.clone());
         }
 
-        if index >= len || index < 0 {
-            return Err("ERR index out of bounds".into());
-        }
+        // Verify legel index in bounds
+        let len = array.len() as i64;
+        let index = if index < 0 {
+            0.max(len + index)
+        } else {
+            index.min(len - 1)
+        } as usize;
 
         let mut new_value = value.take();
         let curr = new_value.as_array_mut().unwrap();
-        *res = curr.remove(index as usize);
+        *res = Some(curr.remove(index as usize));
         Ok(new_value)
     } else {
         Err(err_json(value, "array"))

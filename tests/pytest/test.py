@@ -621,9 +621,11 @@ def testArrPopCommand(env):
     r.assertEqual('1', r.execute_command('JSON.ARRPOP', 'test', '.', 0))
     r.assertEqual('4', r.execute_command('JSON.ARRPOP', 'test', '.', 2))
     r.assertEqual('6', r.execute_command('JSON.ARRPOP', 'test', '.', 99))
-    # r.assertEqual('2', r.execute_command('JSON.ARRPOP', 'test', '.', -99))
-    # r.assertEqual('3', r.execute_command('JSON.ARRPOP', 'test'))
-    # r.assertIsNone(r.execute_command('JSON.ARRPOP', 'test'))
+    r.assertEqual('2', r.execute_command('JSON.ARRPOP', 'test', '.', -99))
+    r.assertEqual('3', r.execute_command('JSON.ARRPOP', 'test'))
+    r.assertIsNone(r.execute_command('JSON.ARRPOP', 'test'))
+    r.assertIsNone(r.execute_command('JSON.ARRPOP', 'test', '.'))
+    r.assertIsNone(r.execute_command('JSON.ARRPOP', 'test', '.', 2))
 
 def testTypeCommand(env):
     """Test JSON.TYPE command"""
