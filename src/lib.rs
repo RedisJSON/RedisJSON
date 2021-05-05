@@ -4,8 +4,7 @@ extern crate redis_module;
 use std::{i64, usize};
 
 use redis_module::raw::RedisModuleTypeMethods;
-use redis_module::{native_types::RedisType, NotifyEvent};
-use redis_module::{raw as rawmod, NextArg};
+use redis_module::{native_types::RedisType, raw as rawmod, NextArg, NotifyEvent};
 use redis_module::{Context, RedisError, RedisResult, RedisValue, REDIS_OK};
 use serde_json::{Number, Value};
 
@@ -25,6 +24,7 @@ mod redisjson;
 // extern crate readies_wd40;
 // use crate::readies_wd40::{BB, _BB, getenv};
 
+const JSON_ROOT_PATH: &'static str = "$";
 pub const REDIS_JSON_TYPE_VERSION: i32 = 3;
 
 static REDIS_JSON_TYPE: RedisType = RedisType::new(
@@ -45,7 +45,7 @@ static REDIS_JSON_TYPE: RedisType = RedisType::new(
         // Auxiliary data (v2)
         aux_load: Some(redisjson::type_methods::aux_load),
         aux_save: None,
-        aux_save_triggers: rawmod::Aux::Before as i32,
+        aux_save_triggers: 0,
 
         free_effort: None,
         unlink: None,
@@ -77,7 +77,9 @@ fn json_del(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_string()?;
-    let path = backwards_compat_path(args.next_string()?);
+    let path = args
+        .next_string()
+        .map_or_else(|_| JSON_ROOT_PATH.to_string(), |v| backwards_compat_path(v));
 
     let redis_key = ctx.open_key_writable(&key);
     let deleted = match redis_key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
@@ -194,7 +196,7 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
 
     // path is optional -> no path found we use root "$"
     if paths.is_empty() {
-        paths.push(Path::new("$".to_string()));
+        paths.push(Path::new(JSON_ROOT_PATH.to_string()));
     }
 
     let key = ctx.open_key_writable(&key);
@@ -303,20 +305,23 @@ fn json_bool_toggle(ctx: &Context, args: Vec<String>) -> RedisResult {
         .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
         .ok_or_else(RedisError::nonexistent_key)
         .and_then(|doc| {
-            doc.value_op(&path, |value| {
-                value
-                    .as_bool()
-                    .ok_or_else(|| err_json(value, "boolean"))
-                    .and_then(|curr| {
-                        let result = curr ^ true;
-                        Ok(Value::Bool(result))
-                    })
-            })
-            .map(|v| {
-                ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_toggle", key.as_str());
-                ctx.replicate_verbatim();
-                v.to_string().into()
-            })
+            doc.value_op(
+                &path,
+                |value| {
+                    value
+                        .as_bool()
+                        .ok_or_else(|| err_json(value, "boolean"))
+                        .map(|curr| {
+                            let result = curr ^ true;
+                            Value::Bool(result)
+                        })
+                },
+                |result| {
+                    ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_toggle", key.as_str());
+                    ctx.replicate_verbatim();
+                    Ok(result.to_string().into())
+                },
+            )
             .map_err(|e| e.into())
         })
 }
@@ -343,14 +348,15 @@ where
         .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
         .ok_or_else(RedisError::nonexistent_key)
         .and_then(|doc| {
-            doc.value_op(&path, |value| {
-                do_json_num_op(&number, value, &op_i64, &op_f64)
-            })
-            .map(|v| {
-                ctx.notify_keyspace_event(NotifyEvent::MODULE, cmd, key.as_str());
-                ctx.replicate_verbatim();
-                v.to_string().into()
-            })
+            doc.value_op(
+                &path,
+                |value| do_json_num_op(&number, value, &op_i64, &op_f64),
+                |result| {
+                    ctx.notify_keyspace_event(NotifyEvent::MODULE, cmd, key.as_str());
+                    ctx.replicate_verbatim();
+                    Ok(result.to_string().into())
+                },
+            )
             .map_err(|e| e.into())
         })
 }
@@ -411,7 +417,7 @@ fn json_str_append(ctx: &Context, args: Vec<String>) -> RedisResult {
         path = backwards_compat_path(path_or_json);
         json = val;
     } else {
-        path = "$".to_string();
+        path = JSON_ROOT_PATH.to_string();
         json = path_or_json;
     }
 
@@ -421,13 +427,19 @@ fn json_str_append(ctx: &Context, args: Vec<String>) -> RedisResult {
         .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
         .ok_or_else(RedisError::nonexistent_key)
         .and_then(|doc| {
-            doc.value_op(&path, |value| do_json_str_append(&json, value))
-                .map(|v| {
+            doc.value_op(
+                &path,
+                |value| do_json_str_append(&json, value),
+                |result| {
                     ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_strappend", key.as_str());
                     ctx.replicate_verbatim();
-                    v.as_str().map_or(usize::MAX, |v| v.len()).into()
-                })
-                .map_err(|e| e.into())
+                    Ok(result
+                        .as_str()
+                        .map_or(usize::MAX, |result| result.len())
+                        .into())
+                },
+            )
+            .map_err(|e| e.into())
         })
 }
 
@@ -464,31 +476,37 @@ fn json_arr_append(ctx: &Context, args: Vec<String>) -> RedisResult {
         .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
         .ok_or_else(RedisError::nonexistent_key)
         .and_then(|doc| {
-            doc.value_op(&path, |value| do_json_arr_append(args.clone(), value))
-                .map(|v| {
+            doc.value_op(
+                &path,
+                |value| do_json_arr_append(args.clone(), value),
+                |result| {
                     ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrappend", key.as_str());
                     ctx.replicate_verbatim();
-                    v.as_array().map_or(usize::MAX, |v| v.len()).into()
-                })
-                .map_err(|e| e.into())
+                    Ok(result
+                        .as_array()
+                        .map_or(usize::MAX, |result| result.len())
+                        .into())
+                },
+            )
+            .map_err(|e| e.into())
         })
 }
 
-fn do_json_arr_append<I>(args: I, value: &Value) -> Result<Value, Error>
+fn do_json_arr_append<I>(args: I, value: &mut Value) -> Result<Value, Error>
 where
     I: Iterator<Item = String>,
 {
-    value
-        .as_array()
-        .ok_or_else(|| err_json(value, "array"))
-        .and_then(|curr| {
-            let items: Vec<Value> = args
-                .map(|json| serde_json::from_str(&json))
-                .collect::<Result<_, _>>()?;
+    if !value.is_array() {
+        return Err(err_json(value, "array"));
+    }
 
-            let new_value = [curr.as_slice(), &items].concat();
-            Ok(Value::Array(new_value))
-        })
+    let mut items: Vec<Value> = args
+        .map(|json| serde_json::from_str(&json))
+        .collect::<Result<_, _>>()?;
+
+    let mut new_value = value.take();
+    new_value.as_array_mut().unwrap().append(&mut items);
+    Ok(new_value)
 }
 
 ///
@@ -503,7 +521,7 @@ fn json_arr_index(ctx: &Context, args: Vec<String>) -> RedisResult {
     let path = backwards_compat_path(args.next_string()?);
     let json_scalar = args.next_string()?;
     let start: i64 = args.next().map(|v| v.parse()).unwrap_or(Ok(0))?;
-    let end: i64 = args.next().map(|v| v.parse()).unwrap_or(Ok(i64::MAX))?;
+    let end: i64 = args.next().map(|v| v.parse()).unwrap_or(Ok(0))?;
 
     args.done()?; // TODO: Add to other functions as well to terminate args list
 
@@ -535,43 +553,45 @@ fn json_arr_insert(ctx: &Context, args: Vec<String>) -> RedisResult {
         .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
         .ok_or_else(RedisError::nonexistent_key)
         .and_then(|doc| {
-            doc.value_op(&path, |value| {
-                do_json_arr_insert(args.clone(), index, value)
-            })
-            .map(|v| {
-                ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrinsert", key.as_str());
-                ctx.replicate_verbatim();
-                v.as_array().map_or(usize::MAX, |v| v.len()).into()
-            })
+            doc.value_op(
+                &path,
+                |value| do_json_arr_insert(args.clone(), index, value),
+                |result| {
+                    ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrinsert", key.as_str());
+                    ctx.replicate_verbatim();
+                    Ok(result
+                        .as_array()
+                        .map_or(usize::MAX, |result| result.len())
+                        .into())
+                },
+            )
             .map_err(|e| e.into())
         })
 }
 
-fn do_json_arr_insert<I>(args: I, index: i64, value: &Value) -> Result<Value, Error>
+fn do_json_arr_insert<I>(args: I, index: i64, value: &mut Value) -> Result<Value, Error>
 where
     I: Iterator<Item = String>,
 {
-    value
-        .as_array()
-        .ok_or_else(|| err_json(value, "array"))
-        .and_then(|curr| {
-            let len = curr.len() as i64;
+    if let Some(array) = value.as_array() {
+        // Verify legal index in bounds
+        let len = array.len() as i64;
+        let index = if index < 0 { len + index } else { index };
+        if !(0..=len).contains(&index) {
+            return Err("ERR index out of bounds".into());
+        }
+        let index = index as usize;
 
-            if !(-len..len).contains(&index) {
-                return Err("ERR index out of bounds".into());
-            }
-
-            let index = index.normalize(len);
-
-            let items: Vec<Value> = args
-                .map(|json| serde_json::from_str(&json))
-                .collect::<Result<_, _>>()?;
-
-            let mut new_value = curr.to_owned();
-            new_value.splice(index..index, items.into_iter());
-
-            Ok(Value::Array(new_value))
-        })
+        let items: Vec<Value> = args
+            .map(|json| serde_json::from_str(&json))
+            .collect::<Result<_, _>>()?;
+        let mut new_value = value.take();
+        let curr = new_value.as_array_mut().unwrap();
+        curr.splice(index..index, items.into_iter());
+        Ok(new_value)
+    } else {
+        Err(err_json(value, "array"))
+    }
 }
 
 ///
@@ -593,50 +613,59 @@ fn json_arr_pop(ctx: &Context, args: Vec<String>) -> RedisResult {
         .next()
         .map(|p| {
             let path = backwards_compat_path(p);
-            let index = args.next_i64().unwrap_or(i64::MAX);
+            let index = args.next_i64().unwrap_or(-1);
             (path, index)
         })
-        .unwrap_or(("$".to_string(), i64::MAX));
+        .unwrap_or((JSON_ROOT_PATH.to_string(), i64::MAX));
 
     let redis_key = ctx.open_key_writable(&key);
-    let mut res = Value::Null;
+    let mut res = None;
 
     redis_key
         .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
         .ok_or_else(RedisError::nonexistent_key)
         .and_then(|doc| {
-            doc.value_op(&path, |value| do_json_arr_pop(index, &mut res, value))
-                .map(|v| {
+            doc.value_op(
+                &path,
+                |value| do_json_arr_pop(index, &mut res, value),
+                |_result| {
                     ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrpop", key.as_str());
                     ctx.replicate_verbatim();
-                    v
-                })
-                .map_err(|e| e.into())
+                    Ok(()) // fake result doesn't use it uses `res` instead
+                },
+            )
+            .map_err(|e| e.into())
         })?;
-    Ok(RedisJSON::serialize(&res, Format::JSON)?.into())
+
+    let result = match res {
+        None => ().into(),
+        Some(r) => RedisJSON::serialize(&r, Format::JSON)?.into(),
+    };
+    Ok(result)
 }
 
-fn do_json_arr_pop(mut index: i64, res: &mut Value, value: &Value) -> Result<Value, Error> {
-    value
-        .as_array()
-        .ok_or_else(|| err_json(value, "array"))
-        .and_then(|curr| {
-            let len = curr.len() as i64;
+fn do_json_arr_pop(index: i64, res: &mut Option<Value>, value: &mut Value) -> Result<Value, Error> {
+    if let Some(array) = value.as_array() {
+        if array.is_empty() {
+            *res = None;
+            return Ok(value.clone());
+        }
 
-            index = index.min(len - 1);
+        // Verify legel index in bounds
+        let len = array.len() as i64;
+        let index = if index < 0 {
+            0.max(len + index)
+        } else {
+            index.min(len - 1)
+        } as usize;
 
-            if index < 0 {
-                index += len;
-            }
-
-            if index >= len || index < 0 {
-                return Err("ERR index out of bounds".into());
-            }
-
-            let mut new_value = curr.to_owned();
-            *res = new_value.remove(index as usize);
-            Ok(Value::Array(new_value))
-        })
+        let mut new_value = value.take();
+        let curr = new_value.as_array_mut().unwrap();
+        *res = Some(curr.remove(index as usize));
+        Ok(new_value)
+    } else {
+        Err(err_json(value, "array"))
+    }
 }
 
 ///
@@ -656,33 +685,42 @@ fn json_arr_trim(ctx: &Context, args: Vec<String>) -> RedisResult {
         .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
         .ok_or_else(RedisError::nonexistent_key)
         .and_then(|doc| {
-            doc.value_op(&path, |value| do_json_arr_trim(start, stop, &value))
-                .map(|v| {
+            doc.value_op(
+                &path,
+                |value| do_json_arr_trim(start, stop, value),
+                |result| {
                     ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrtrim", key.as_str());
                     ctx.replicate_verbatim();
-                    v.as_array().map_or(usize::MAX, |v| v.len()).into()
-                })
-                .map_err(|e| e.into())
+                    Ok(result
+                        .as_array()
+                        .map_or(usize::MAX, |result| result.len())
+                        .into())
+                },
+            )
+            .map_err(|e| e.into())
         })
 }
 
-fn do_json_arr_trim(start: i64, stop: i64, value: &Value) -> Result<Value, Error> {
-    value
-        .as_array()
-        .ok_or_else(|| err_json(value, "array"))
-        .and_then(|curr| {
-            let len = curr.len() as i64;
-            let stop = stop.normalize(len);
+fn do_json_arr_trim(start: i64, stop: i64, value: &mut Value) -> Result<Value, Error> {
+    if let Some(array) = value.as_array() {
+        let len = array.len() as i64;
+        let stop = stop.normalize(len);
 
-            let range = if start > len || start > stop as i64 {
-                0..0 // Return an empty array
-            } else {
-                start.normalize(len)..(stop + 1)
-            };
+        let range = if start > len || start > stop as i64 {
+            0..0 // Return an empty array
+        } else {
+            start.normalize(len)..(stop + 1)
+        };
 
-            let res = &curr[range];
-            Ok(Value::Array(res.to_vec()))
-        })
+        let mut new_value = value.take();
+        let curr = new_value.as_array_mut().unwrap();
+        curr.rotate_left(range.start);
+        curr.resize(range.end - range.start, Value::Null);
+
+        Ok(new_value)
+    } else {
+        Err(err_json(value, "array"))
+    }
 }
 
 ///
@@ -710,6 +748,32 @@ fn json_obj_len(ctx: &Context, args: Vec<String>) -> RedisResult {
     json_len(ctx, args, |doc, path| doc.obj_len(path))
 }
 
+///
+/// JSON.CLEAR <key> [path ...]
+///
+fn json_clear(ctx: &Context, args: Vec<String>) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+    let key = args.next_string()?;
+    let paths = args.map(Path::new).collect::<Vec<_>>();
+
+    let paths = if paths.is_empty() {
+        vec![Path::new(JSON_ROOT_PATH.to_string())]
+    } else {
+        paths
+    };
+
+    // FIXME: handle multi paths
+    let key = ctx.open_key_writable(&key);
+    let deleted = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
+        Some(doc) => {
+            let res = doc.clear(paths.first().unwrap().fixed.as_str())?;
+            ctx.replicate_verbatim();
+            res
+        }
+        None => 0,
+    };
+    Ok(deleted.into())
+}
 ///
 /// JSON.DEBUG <subcommand & arguments>
 ///
@@ -751,7 +815,9 @@ fn json_resp(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_string()?;
-    let path = backwards_compat_path(args.next_string()?);
+    let path = args
+        .next_string()
+        .map_or_else(|_| JSON_ROOT_PATH.to_string(), |v| backwards_compat_path(v));
 
     let key = ctx.open_key(&key);
     match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
@@ -852,6 +918,7 @@ redis_module! {
         ["json.arrtrim", json_arr_trim, "write", 1,1,1],
         ["json.objkeys", json_obj_keys, "readonly", 1,1,1],
         ["json.objlen", json_obj_len, "readonly", 1,1,1],
+        ["json.clear", json_clear, "write", 1,1,1],
         ["json.debug", json_debug, "readonly", 1,1,1],
         ["json.forget", json_del, "write", 1,1,1],
         ["json.resp", json_resp, "readonly", 1,1,1],
