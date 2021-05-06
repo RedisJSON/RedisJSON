@@ -67,7 +67,7 @@ impl<'a> JSONApiKey<'a> {
             unsafe { *str = rawmod::RedisModule_CreateString.unwrap()(self.ctx.get_raw(), p, len) };
             return RedisReturnCode::REDISMODULE_OK as c_int;
         }
-        return RedisReturnCode::REDISMODULE_ERR as c_int;
+        RedisReturnCode::REDISMODULE_ERR as c_int
     }
 
     fn get_value(&self, path: *const c_char) -> Option<&Value> {
@@ -237,7 +237,7 @@ pub extern "C" fn JSONAPI_getRedisModuleString(
             }
         }
     }
-    return RedisReturnCode::REDISMODULE_ERR as c_int;
+    RedisReturnCode::REDISMODULE_ERR as c_int
 }
 
 #[no_mangle]
@@ -280,7 +280,7 @@ fn get_int_value(value: &Value) -> Option<c_long> {
         }
         _ => {}
     }
-    return None;
+    None
 }
 
 fn get_double_value(value: &Value) -> Option<c_double> {
@@ -304,7 +304,7 @@ fn get_double_value(value: &Value) -> Option<c_double> {
         }
         _ => {}
     }
-    return None;
+    None
 }
 
 fn get_bool_value(value: &Value) -> Option<c_int> {
@@ -317,10 +317,10 @@ fn get_bool_value(value: &Value) -> Option<c_int> {
                 return if f != 0.0 { Some(1) } else { Some(0) };
             }
         }
-        Value::String(ref s) => return if s.len() != 0 { Some(1) } else { Some(0) },
+        Value::String(ref s) => return if s.is_empty() { Some(0) } else { Some(1) },
         _ => {}
     }
-    return None;
+    None
 }
 
 #[no_mangle]
@@ -332,7 +332,7 @@ pub extern "C" fn JSONAPI_getInt(json: JSONApiPathRef, val: *mut c_long) -> c_in
             return RedisReturnCode::REDISMODULE_OK as c_int;
         }
     }
-    return RedisReturnCode::REDISMODULE_ERR as c_int;
+    RedisReturnCode::REDISMODULE_ERR as c_int
 }
 
 #[no_mangle]
@@ -350,7 +350,7 @@ pub extern "C" fn JSONAPI_getIntFromKey(
             }
         }
     }
-    return RedisReturnCode::REDISMODULE_ERR as c_int;
+    RedisReturnCode::REDISMODULE_ERR as c_int
 }
 
 #[no_mangle]
@@ -362,7 +362,7 @@ pub extern "C" fn JSONAPI_getDouble(json: JSONApiPathRef, val: *mut c_double) ->
             return RedisReturnCode::REDISMODULE_OK as c_int;
         }
     }
-    return RedisReturnCode::REDISMODULE_ERR as c_int;
+    RedisReturnCode::REDISMODULE_ERR as c_int
 }
 
 #[no_mangle]
@@ -380,7 +380,7 @@ pub extern "C" fn JSONAPI_getDoubleFromKey(
             }
         }
     }
-    return RedisReturnCode::REDISMODULE_ERR as c_int;
+    RedisReturnCode::REDISMODULE_ERR as c_int
 }
 
 #[no_mangle]
@@ -392,7 +392,7 @@ pub extern "C" fn JSONAPI_getBoolean(json: JSONApiPathRef, val: *mut c_int) -> c
             return RedisReturnCode::REDISMODULE_OK as c_int;
         }
     }
-    return RedisReturnCode::REDISMODULE_ERR as c_int;
+    RedisReturnCode::REDISMODULE_ERR as c_int
 }
 
 #[no_mangle]
@@ -410,7 +410,7 @@ pub extern "C" fn JSONAPI_getBooleanFromKey(
             }
         }
     }
-    return RedisReturnCode::REDISMODULE_ERR as c_int;
+    RedisReturnCode::REDISMODULE_ERR as c_int
 }
 
 //---------------------------------------------------------------------------------------------
@@ -503,7 +503,7 @@ impl<'a> JSONApiPath<'a> {
                 return RedisReturnCode::REDISMODULE_OK as c_int;
             }
         }
-        return RedisReturnCode::REDISMODULE_ERR as c_int;
+        RedisReturnCode::REDISMODULE_ERR as c_int
     }
 }
 
