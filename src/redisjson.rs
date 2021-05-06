@@ -7,9 +7,9 @@
 use crate::backward;
 use crate::error::Error;
 use crate::formatter::RedisJsonFormatter;
-use crate::json_node::{replace_with, JsonValueUpdater};
+use jsonpath_lib::select::json_node::{JsonValueUpdater};
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
-use crate::select::{Selector, SelectorMut};
+use jsonpath_lib::select::{Selector, SelectorMut};
 use crate::REDIS_JSON_TYPE_VERSION;
 
 use bson::decode_document;
@@ -177,7 +177,7 @@ impl RedisJSON {
         } else {
             let mut replaced = false;
             if SetOptions::NotExists != *option {
-                replace_with(&mut self.data, path, &mut |_v| {
+                self.data = jsonpath_lib::replace_with(self.data.take(), path, |_v| {
                     replaced = true;
                     Some(json.clone())
                 })?;
@@ -194,7 +194,7 @@ impl RedisJSON {
 
     pub fn delete_path(&mut self, path: &str) -> Result<usize, Error> {
         let mut deleted = 0;
-        replace_with(&mut self.data, path, &mut |v| {
+        self.data = jsonpath_lib::replace_with(self.data.take(), path, |v| {
             if !v.is_null() {
                 deleted += 1; // might delete more than a single value
             }

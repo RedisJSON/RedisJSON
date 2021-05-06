@@ -1,9 +1,6 @@
 #[macro_use]
 extern crate redis_module;
 
-#[macro_use]
-extern crate log;
-
 use redis_module::raw::RedisModuleTypeMethods;
 use redis_module::{native_types::RedisType, NextArg, NotifyEvent};
 use redis_module::{Context, RedisError, RedisResult, RedisValue, REDIS_OK};
@@ -15,10 +12,8 @@ mod array_index;
 mod backward;
 mod error;
 mod formatter;
-mod json_node;
 mod nodevisitor;
 mod redisjson;
-mod select;
 
 use crate::array_index::ArrayIndex;
 use crate::error::Error;

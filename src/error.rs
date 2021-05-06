@@ -1,4 +1,4 @@
-use crate::select::JsonPathError;
+use jsonpath_lib::select::JsonPathError;
 
 #[derive(Debug)]
 pub struct Error {
