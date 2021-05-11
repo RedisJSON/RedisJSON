@@ -184,6 +184,7 @@ commands:
             export EC2_PRIVATE_PEM=$PERFORMANCE_EC2_PRIVATE_PEM
 
             redisbench-admin run-remote \
+              --required-module ReJSON \
               --terraform_bin_path /workspace/terraform \
               --module_path << parameters.module_path >> \
               --github_actor << parameters.github_actor >> \
