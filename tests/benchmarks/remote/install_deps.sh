@@ -1,6 +1,6 @@
 #!/bin/bash
 set -x
-TF_VERSION=${TF_VERSION:-"0.15.3"}
+TF_VERSION=${TF_VERSION:-"0.13.5"}
 
 # Ensure terraform is available
 TF_EXE_FILE_NAME=${TF_EXE_FILE_NAME:-$(which terraform)}
