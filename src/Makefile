@@ -81,3 +81,25 @@ package: $(MODULE) print_version
 # Compile an executable that prints the current version
 print_version: version.h print_version.c
 	@$(CC) -o $@ -DPRINT_VERSION_TARGET $@.c
+
+#----------------------------------------------------------------------------------------------
+
+BENCHMARK_ARGS = redisbench-admin run-local
+
+ifneq ($(REMOTE),)
+	BENCHMARK_ARGS = redisbench-admin run-remote
+endif
+
+BENCHMARK_ARGS += --module_path $(realpath $(MODULE)) \
+	--required-module ReJSON
+ifneq ($(BENCHMARK),)
+	BENCHMARK_ARGS += --test $(BENCHMARK)
+endif
+
+
+benchmark: $(MODULE)
+	cd ../tests/benchmarks; $(BENCHMARK_ARGS) ; cd ../../
+
+.PHONY: benchmark
+
+#----------------------------------------------------------------------------------------------
