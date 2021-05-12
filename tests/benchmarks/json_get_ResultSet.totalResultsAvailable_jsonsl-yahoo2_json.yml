@@ -1,5 +1,5 @@
 version: 0.2
-name: "json_set_ResultSet.totalResultsAvailable_1_jsonsl-yahoo2_json"
+name: "json_get_ResultSet.totalResultsAvailable_jsonsl-yahoo2_json"
 description: "JSON.GET jsonsl-yahoo2 ResultSet.totalResultsAvailable || https://oss.redislabs.com/redisjson/performance/"
 remote:
  - type: oss-standalone
