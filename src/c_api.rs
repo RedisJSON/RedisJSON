@@ -11,8 +11,8 @@ use crate::redisjson::Format;
 use crate::{redisjson::RedisJSON, REDIS_JSON_TYPE};
 use redis_module::key::RedisKeyWritable;
 use redis_module::logging::log_notice;
-use redis_module::Context;
 use redis_module::{raw as rawmod, RedisError};
+use redis_module::{Context, Status};
 use serde_json::Value;
 
 // extern crate readies_wd40;
@@ -23,12 +23,6 @@ use serde_json::Value;
 //
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct RedisModuleCtx {
-    _unused: [u8; 0],
-}
-
-#[repr(C)]
 pub enum JSONType {
     String = 0,
     Int = 1,
@@ -37,13 +31,6 @@ pub enum JSONType {
     Object = 4,
     Array = 5,
     Null = 6,
-}
-
-#[repr(C)]
-#[allow(non_camel_case_types)]
-pub enum RedisReturnCode {
-    REDISMODULE_OK = 0,
-    REDISMODULE_ERR = 1,
 }
 
 //---------------------------------------------------------------------------------------------
@@ -65,18 +52,14 @@ impl<'a> JSONApiKey<'a> {
             let p = s.as_bytes_with_nul().as_ptr() as *const c_char;
             let len = s.as_bytes().len();
             unsafe { *str = rawmod::RedisModule_CreateString.unwrap()(self.ctx.get_raw(), p, len) };
-            return RedisReturnCode::REDISMODULE_OK as c_int;
+            return Status::Ok as c_int;
         }
-        return RedisReturnCode::REDISMODULE_ERR as c_int;
+        Status::Err as c_int
     }
 
     fn get_value(&self, path: *const c_char) -> Option<&Value> {
         let path = unsafe { CStr::from_ptr(path).to_str().unwrap() };
-        if let Ok(ref value) = self.redis_json.get_first(path) {
-            Some(value)
-        } else {
-            None
-        }
+        self.redis_json.get_first(path).ok()
     }
 }
 pub type JSONApiKeyRef<'a> = *mut JSONApiKey<'a>;
@@ -190,14 +173,14 @@ pub extern "C" fn JSONAPI_getString(
                 *str = s.as_bytes_with_nul().as_ptr() as *const c_char;
                 *len = s.as_bytes().len();
             }
-            return RedisReturnCode::REDISMODULE_OK as c_int;
+            return Status::Ok as c_int;
         } else if let Some(ref p) = json.path {
             if let Ok(s) = json.json_key.redis_json.to_string(p.as_str(), Format::JSON) {
                 return json.set_string(s.as_str(), str, len);
             }
         }
     }
-    RedisReturnCode::REDISMODULE_ERR as c_int
+    Status::Err as c_int
 }
 
 #[no_mangle]
@@ -217,11 +200,11 @@ pub extern "C" fn JSONAPI_getStringFromKey(
                     *len = s.as_bytes().len();
                 }
                 key.cstr_val = Some(s);
-                return RedisReturnCode::REDISMODULE_OK as c_int;
+                return Status::Ok as c_int;
             }
         }
     }
-    RedisReturnCode::REDISMODULE_ERR as c_int
+    Status::Err as c_int
 }
 
 #[no_mangle]
@@ -237,7 +220,7 @@ pub extern "C" fn JSONAPI_getRedisModuleString(
             }
         }
     }
-    return RedisReturnCode::REDISMODULE_ERR as c_int;
+    Status::Err as c_int
 }
 
 #[no_mangle]
@@ -252,10 +235,10 @@ pub extern "C" fn JSONAPI_getRedisModuleStringFromKey(
         if let Ok(res) = key.redis_json.to_string(path, Format::JSON) {
             key.create_rmstring(res.as_str(), str)
         } else {
-            RedisReturnCode::REDISMODULE_ERR as c_int
+            Status::Err as c_int
         }
     } else {
-        RedisReturnCode::REDISMODULE_ERR as c_int
+        Status::Err as c_int
     }
 }
 
@@ -280,47 +263,32 @@ fn get_int_value(value: &Value) -> Option<c_long> {
         }
         _ => {}
     }
-    return None;
+    None
 }
 
 fn get_double_value(value: &Value) -> Option<c_double> {
     match value {
-        Value::Number(n) => {
-            if let Some(f) = n.as_f64() {
-                return Some(f);
-            }
-        }
-        Value::String(ref s) => {
-            if let Ok(v) = c_double::from_str(s.as_str()) {
-                return Some(v);
-            }
-        }
-        Value::Bool(ref b) => {
-            if *b {
-                return Some(1.0);
-            } else {
-                return Some(0.0);
-            }
-        }
-        _ => {}
+        Value::Number(n) if n.is_f64() => n.as_f64(),
+        Value::String(s) => c_double::from_str(s.as_str()).ok(),
+        Value::Bool(b) => Some(if *b { 1.0 } else { 0.0 }),
+        _ => None,
     }
-    return None;
 }
 
 fn get_bool_value(value: &Value) -> Option<c_int> {
     match value {
-        Value::Bool(ref b) => return if *b { Some(1) } else { Some(0) },
-        Value::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                return if i != 0 { Some(1) } else { Some(0) };
-            } else if let Some(f) = n.as_f64() {
-                return if f != 0.0 { Some(1) } else { Some(0) };
+        Value::Bool(b) => {
+            if *b {
+                Some(1)
+            } else {
+                Some(0)
             }
         }
-        Value::String(ref s) => return if s.len() != 0 { Some(1) } else { Some(0) },
-        _ => {}
+        Value::Number(n) if n.is_i64() => Some(if n.as_i64().unwrap() != 0 { 1 } else { 0 }),
+        Value::Number(n) if n.is_f64() => Some(if n.as_f64().unwrap() != 0.0 { 1 } else { 0 }),
+        Value::String(s) => Some(if s.is_empty() { 0 } else { 1 }),
+        _ => None,
     }
-    return None;
 }
 
 #[no_mangle]
@@ -329,10 +297,10 @@ pub extern "C" fn JSONAPI_getInt(json: JSONApiPathRef, val: *mut c_long) -> c_in
         let json = unsafe { &mut *json };
         if let Some(v) = get_int_value(json.value) {
             unsafe { *val = v };
-            return RedisReturnCode::REDISMODULE_OK as c_int;
+            return Status::Ok as c_int;
         }
     }
-    return RedisReturnCode::REDISMODULE_ERR as c_int;
+    Status::Err as c_int
 }
 
 #[no_mangle]
@@ -346,11 +314,11 @@ pub extern "C" fn JSONAPI_getIntFromKey(
         if let Some(value) = key.get_value(path) {
             if let Some(v) = get_int_value(value) {
                 unsafe { *val = v };
-                return RedisReturnCode::REDISMODULE_OK as c_int;
+                return Status::Ok as c_int;
             }
         }
     }
-    return RedisReturnCode::REDISMODULE_ERR as c_int;
+    Status::Err as c_int
 }
 
 #[no_mangle]
@@ -359,10 +327,10 @@ pub extern "C" fn JSONAPI_getDouble(json: JSONApiPathRef, val: *mut c_double) ->
         let json = unsafe { &mut *json };
         if let Some(v) = get_double_value(json.value) {
             unsafe { *val = v };
-            return RedisReturnCode::REDISMODULE_OK as c_int;
+            return Status::Ok as c_int;
         }
     }
-    return RedisReturnCode::REDISMODULE_ERR as c_int;
+    Status::Err as c_int
 }
 
 #[no_mangle]
@@ -376,11 +344,11 @@ pub extern "C" fn JSONAPI_getDoubleFromKey(
         if let Some(value) = key.get_value(path) {
             if let Some(v) = get_double_value(value) {
                 unsafe { *val = v };
-                return RedisReturnCode::REDISMODULE_OK as c_int;
+                return Status::Ok as c_int;
             }
         }
     }
-    return RedisReturnCode::REDISMODULE_ERR as c_int;
+    Status::Err as c_int
 }
 
 #[no_mangle]
@@ -389,10 +357,10 @@ pub extern "C" fn JSONAPI_getBoolean(json: JSONApiPathRef, val: *mut c_int) -> c
         let json = unsafe { &*json };
         if let Some(v) = get_bool_value(json.value) {
             unsafe { *val = v };
-            return RedisReturnCode::REDISMODULE_OK as c_int;
+            return Status::Ok as c_int;
         }
     }
-    return RedisReturnCode::REDISMODULE_ERR as c_int;
+    Status::Err as c_int
 }
 
 #[no_mangle]
@@ -406,11 +374,11 @@ pub extern "C" fn JSONAPI_getBooleanFromKey(
         if let Some(value) = key.get_value(path) {
             if let Some(v) = get_bool_value(value) {
                 unsafe { *val = v };
-                return RedisReturnCode::REDISMODULE_OK as c_int;
+                return Status::Ok as c_int;
             }
         }
     }
-    return RedisReturnCode::REDISMODULE_ERR as c_int;
+    Status::Err as c_int
 }
 
 //---------------------------------------------------------------------------------------------
@@ -500,10 +468,10 @@ impl<'a> JSONApiPath<'a> {
                     *len = s.as_bytes().len();
                 }
                 self.cstr_val = Some(s);
-                return RedisReturnCode::REDISMODULE_OK as c_int;
+                return Status::Ok as c_int;
             }
         }
-        return RedisReturnCode::REDISMODULE_ERR as c_int;
+        Status::Err as c_int
     }
 }
 
