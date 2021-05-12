@@ -23,4 +23,3 @@ lazy_static = "1.4.0"
 # https://github.com/RedisLabsModules/redismodule-rs/pull/68
 # This requires running the tests with `--features test`
 test = ["redis-module/test"]
-# experimental-api = []
