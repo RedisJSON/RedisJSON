@@ -17,6 +17,7 @@ else ifeq ($(SAN),thread)
 else
 $(error SAN=mem|addr|leak|thread)
 endif
+endif
 
 #----------------------------------------------------------------------------------------------
 
