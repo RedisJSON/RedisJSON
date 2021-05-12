@@ -78,14 +78,16 @@ include $(MK)/rules
 MODULE_NAME=rejson.so
 
 RUST_TARGET:=$(shell eval $$(rustc --print cfg | grep =); echo $$target_arch-$$target_vendor-$$target_os-$$target_env)
-CARGO_ARGS=
+CARGO_TOOLCHAIN=
+CARGO_FLAGS=
 
 ifeq ($(DEBUG),1)
 ifeq ($(SAN),)
 TARGET_DIR=target/debug
 else
 TARGET_DIR=target/$(RUST_TARGET)/debug
-CARGO_ARGS += +nightly
+CARGO_TOOLCHAIN = +nightly
+CARGO_FLAGS += -Zbuild-std
 endif
 else
 CARGO_FLAGS += --release
@@ -127,7 +129,7 @@ ifeq ($(SAN),)
 else
 	export RUSTFLAGS=-Zsanitizer=$(SAN) ;\
 	export RUSTDOCFLAGS=-Zsanitizer=$(SAN) ;\
-	cargo $(CARGO_ARGS) build -Zbuild-std --target $(RUST_TARGET)
+	cargo $(CARGO_TOOLCHAIN) build --target $(RUST_TARGET) $(CARGO_FLAGS)
 endif
 	cp $(TARGET_DIR)/librejson.$(RUST_SOEXT.$(OS)) $(TARGET)
 
@@ -148,29 +150,29 @@ pytest:
 	MODULE=$(abspath $(TARGET)) ./tests/pytest/tests.sh
 
 cargo_test:
-	cargo $(CARGO_ARGS) test --features test --all
+	cargo $(CARGO_TOOLCHAIN) test --features test --all
 
 .PHONY: pytest cargo_test
 
 #----------------------------------------------------------------------------------------------
 
-BENCHMARK_ARGS = redisbench-admin run-local
-
 ifneq ($(REMOTE),)
-BENCHMARK_ARGS = redisbench-admin run-remote
+BENCHMARK_ARGS = run-remote
+else
+BENCHMARK_ARGS = run-local
 endif
 
-BENCHMARK_ARGS += --module_path $(realpath $(TARGET)) \
-	--required-module ReJSON
+BENCHMARK_ARGS += --module_path $(realpath $(TARGET)) --required-module ReJSON
+
 ifneq ($(BENCHMARK),)
 BENCHMARK_ARGS += --test $(BENCHMARK)
 endif
 
-benchmark: $(TARGET)
+bench benchmark: $(TARGET)
 	cd ./tests/benchmarks ;\
-	$(BENCHMARK_ARGS)
+	redisbench-admin $(BENCHMARK_ARGS)
 
-.PHONY: benchmark
+.PHONY: bench benchmark
 
 #----------------------------------------------------------------------------------------------
 
@@ -217,6 +219,6 @@ nightly:
 	rustup component add rust-src
 
 stable:
-	@rustup default stable
+	rustup default stable
 
 .PHONY: nightly stable
