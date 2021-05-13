@@ -69,7 +69,7 @@ impl Path {
 
 #[derive(Debug)]
 pub struct RedisJSON {
-    data: Value,
+    pub data: Value,
 }
 
 impl RedisJSON {

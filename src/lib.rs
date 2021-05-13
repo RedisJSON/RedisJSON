@@ -1,28 +1,40 @@
+#[cfg(not(feature = "as-library"))]
 #[macro_use]
 extern crate redis_module;
 
+use redis_module::native_types::RedisType;
 use redis_module::raw::RedisModuleTypeMethods;
-use redis_module::{native_types::RedisType, NextArg, NotifyEvent};
-use redis_module::{Context, RedisError, RedisResult, RedisValue, REDIS_OK};
+#[cfg(not(feature = "as-library"))]
+use redis_module::{Context, NextArg, NotifyEvent, RedisError, RedisResult, RedisValue};
+#[cfg(not(feature = "as-library"))]
 use serde_json::{Number, Value};
-
+#[cfg(not(feature = "as-library"))]
 use std::{i64, usize};
 
 mod array_index;
 mod backward;
-mod error;
+pub mod commands;
+pub mod error;
 mod formatter;
+pub mod manager;
 mod nodevisitor;
-mod redisjson;
+pub mod redisjson;
 
+#[cfg(not(feature = "as-library"))]
 use crate::array_index::ArrayIndex;
+#[cfg(not(feature = "as-library"))]
 use crate::error::Error;
-use crate::redisjson::{Format, Path, RedisJSON, SetOptions};
+use crate::redisjson::{Format};
+#[cfg(not(feature = "as-library"))]
+use crate::redisjson::{Path};
+#[cfg(not(feature = "as-library"))]
+use crate::redisjson::RedisJSON;
 
+#[cfg(not(feature = "as-library"))]
 const JSON_ROOT_PATH: &'static str = "$";
 pub const REDIS_JSON_TYPE_VERSION: i32 = 3;
 
-static REDIS_JSON_TYPE: RedisType = RedisType::new(
+pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
     "ReJSON-RL",
     REDIS_JSON_TYPE_VERSION,
     RedisModuleTypeMethods {
@@ -52,7 +64,7 @@ static REDIS_JSON_TYPE: RedisType = RedisType::new(
 ///
 /// Backwards compatibility convertor for RedisJSON 1.x clients
 ///
-fn backwards_compat_path(mut path: String) -> String {
+pub fn backwards_compat_path(mut path: String) -> String {
     if !path.starts_with('$') {
         if path == "." {
             path.replace_range(..1, "$");
@@ -68,6 +80,7 @@ fn backwards_compat_path(mut path: String) -> String {
 ///
 /// JSON.DEL <key> [path]
 ///
+#[cfg(not(feature = "as-library"))]
 fn json_del(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
@@ -95,60 +108,6 @@ fn json_del(ctx: &Context, args: Vec<String>) -> RedisResult {
 }
 
 ///
-/// JSON.SET <key> <path> <json> [NX | XX | FORMAT <format>]
-///
-fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
-    let mut args = args.into_iter().skip(1);
-
-    let key = args.next_string()?;
-    let path = backwards_compat_path(args.next_string()?);
-    let value = args.next_string()?;
-
-    let mut format = Format::JSON;
-    let mut set_option = SetOptions::None;
-
-    while let Some(s) = args.next() {
-        match s.to_uppercase().as_str() {
-            "NX" => set_option = SetOptions::NotExists,
-            "XX" => set_option = SetOptions::AlreadyExists,
-            "FORMAT" => {
-                format = Format::from_str(args.next_string()?.as_str())?;
-            }
-            _ => break,
-        };
-    }
-
-    let redis_key = ctx.open_key_writable(&key);
-    let current = redis_key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?;
-
-    match (current, set_option) {
-        (Some(ref mut doc), ref op) => {
-            if doc.set_value(&value, &path, op, format)? {
-                ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_set", key.as_str());
-                ctx.replicate_verbatim();
-                REDIS_OK
-            } else {
-                Ok(RedisValue::Null)
-            }
-        }
-        (None, SetOptions::AlreadyExists) => Ok(RedisValue::Null),
-        (None, _) => {
-            let doc = RedisJSON::from_str(&value, format)?;
-            if path == "$" {
-                redis_key.set_value(&REDIS_JSON_TYPE, doc)?;
-                ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_set", key.as_str());
-                ctx.replicate_verbatim();
-                REDIS_OK
-            } else {
-                Err(RedisError::Str(
-                    "ERR new objects must be created at the root",
-                ))
-            }
-        }
-    }
-}
-
-///
 /// JSON.GET <key>
 ///         [INDENT indentation-string]
 ///         [NEWLINE line-break-string]
@@ -156,58 +115,23 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///         [path ...]
 ///
 /// TODO add support for multi path
+#[cfg(not(feature = "as-library"))]
 fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
-    let mut args = args.into_iter().skip(1);
-    let key = args.next_string()?;
+    commands::command_json_get(manager::RedisJsonKeyManager, ctx, args)
+}
 
-    let mut paths: Vec<Path> = vec![];
-    let mut format = Format::JSON;
-    let mut indent = String::new();
-    let mut space = String::new();
-    let mut newline = String::new();
-    while let Ok(arg) = args.next_string() {
-        match arg.to_uppercase().as_str() {
-            "INDENT" => {
-                indent = args.next_string()?;
-            }
-            "NEWLINE" => {
-                newline = args.next_string()?;
-            }
-            "SPACE" => {
-                space = args.next_string()?;
-            }
-            "NOESCAPE" => {
-                // Silently ignore. Compatibility with ReJSON v1.0 which has this option. See #168
-                continue;
-            } // TODO add support
-            "FORMAT" => {
-                format = Format::from_str(args.next_string()?.as_str())?;
-            }
-            _ => {
-                paths.push(Path::new(arg));
-            }
-        };
-    }
-
-    // path is optional -> no path found we use root "$"
-    if paths.is_empty() {
-        paths.push(Path::new(JSON_ROOT_PATH.to_string()));
-    }
-
-    let key = ctx.open_key_writable(&key);
-    let value = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
-        Some(doc) => doc
-            .to_json(&mut paths, indent, newline, space, format)?
-            .into(),
-        None => RedisValue::Null,
-    };
-
-    Ok(value)
+///
+/// JSON.SET <key> <path> <json> [NX | XX | FORMAT <format>]
+///
+#[cfg(not(feature = "as-library"))]
+fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
+    commands::command_json_set(manager::RedisJsonKeyManager, ctx, args)
 }
 
 ///
 /// JSON.MGET <key> [key ...] <path>
 ///
+#[cfg(not(feature = "as-library"))]
 fn json_mget(ctx: &Context, args: Vec<String>) -> RedisResult {
     if args.len() < 3 {
         return Err(RedisError::WrongArity);
@@ -237,6 +161,7 @@ fn json_mget(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 /// JSON.STRLEN <key> [path]
 ///
+#[cfg(not(feature = "as-library"))]
 fn json_str_len(ctx: &Context, args: Vec<String>) -> RedisResult {
     json_len(ctx, args, |doc, path| doc.str_len(path))
 }
@@ -244,6 +169,7 @@ fn json_str_len(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 /// JSON.TYPE <key> [path]
 ///
+#[cfg(not(feature = "as-library"))]
 fn json_type(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_string()?;
@@ -265,6 +191,7 @@ fn json_type(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 /// JSON.NUMINCRBY <key> <path> <number>
 ///
+#[cfg(not(feature = "as-library"))]
 fn json_num_incrby(ctx: &Context, args: Vec<String>) -> RedisResult {
     json_num_op(ctx, "json_incrby", args, |i1, i2| i1 + i2, |f1, f2| f1 + f2)
 }
@@ -272,6 +199,7 @@ fn json_num_incrby(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 /// JSON.NUMMULTBY <key> <path> <number>
 ///
+#[cfg(not(feature = "as-library"))]
 fn json_num_multby(ctx: &Context, args: Vec<String>) -> RedisResult {
     json_num_op(ctx, "json_multby", args, |i1, i2| i1 * i2, |f1, f2| f1 * f2)
 }
@@ -279,6 +207,7 @@ fn json_num_multby(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 /// JSON.NUMPOWBY <key> <path> <number>
 ///
+#[cfg(not(feature = "as-library"))]
 fn json_num_powby(ctx: &Context, args: Vec<String>) -> RedisResult {
     json_num_op(
         ctx,
@@ -290,6 +219,7 @@ fn json_num_powby(ctx: &Context, args: Vec<String>) -> RedisResult {
 }
 //
 /// JSON.TOGGLE <key> <path>
+#[cfg(not(feature = "as-library"))]
 fn json_bool_toggle(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_string()?;
@@ -320,6 +250,8 @@ fn json_bool_toggle(ctx: &Context, args: Vec<String>) -> RedisResult {
             .map_err(|e| e.into())
         })
 }
+
+#[cfg(not(feature = "as-library"))]
 fn json_num_op<I, F>(
     ctx: &Context,
     cmd: &str,
@@ -356,6 +288,7 @@ where
         })
 }
 
+#[cfg(not(feature = "as-library"))]
 fn do_json_num_op<I, F>(
     in_value: &str,
     curr_value: &Value,
@@ -387,6 +320,7 @@ where
     }
 }
 
+#[cfg(not(feature = "as-library"))]
 fn err_json(value: &Value, expected_value: &'static str) -> Error {
     Error::from(format!(
         "ERR wrong type of path value - expected {} but found {}",
@@ -398,6 +332,7 @@ fn err_json(value: &Value, expected_value: &'static str) -> Error {
 ///
 /// JSON.STRAPPEND <key> [path] <json-string>
 ///
+#[cfg(not(feature = "as-library"))]
 fn json_str_append(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
@@ -438,6 +373,7 @@ fn json_str_append(ctx: &Context, args: Vec<String>) -> RedisResult {
         })
 }
 
+#[cfg(not(feature = "as-library"))]
 fn do_json_str_append(json: &str, value: &Value) -> Result<Value, Error> {
     value
         .as_str()
@@ -456,6 +392,7 @@ fn do_json_str_append(json: &str, value: &Value) -> Result<Value, Error> {
 ///
 /// JSON.ARRAPPEND <key> <path> <json> [json ...]
 ///
+#[cfg(not(feature = "as-library"))]
 fn json_arr_append(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1).peekable();
 
@@ -487,6 +424,7 @@ fn json_arr_append(ctx: &Context, args: Vec<String>) -> RedisResult {
         })
 }
 
+#[cfg(not(feature = "as-library"))]
 fn do_json_arr_append<I>(args: I, value: &mut Value) -> Result<Value, Error>
 where
     I: Iterator<Item = String>,
@@ -509,6 +447,7 @@ where
 ///
 /// scalar - number, string, Boolean (true or false), or null
 ///
+#[cfg(not(feature = "as-library"))]
 fn json_arr_index(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
@@ -532,6 +471,7 @@ fn json_arr_index(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 /// JSON.ARRINSERT <key> <path> <index> <json> [json ...]
 ///
+#[cfg(not(feature = "as-library"))]
 fn json_arr_insert(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1).peekable();
 
@@ -564,6 +504,7 @@ fn json_arr_insert(ctx: &Context, args: Vec<String>) -> RedisResult {
         })
 }
 
+#[cfg(not(feature = "as-library"))]
 fn do_json_arr_insert<I>(args: I, index: i64, value: &mut Value) -> Result<Value, Error>
 where
     I: Iterator<Item = String>,
@@ -592,6 +533,7 @@ where
 ///
 /// JSON.ARRLEN <key> [path]
 ///
+#[cfg(not(feature = "as-library"))]
 fn json_arr_len(ctx: &Context, args: Vec<String>) -> RedisResult {
     json_len(ctx, args, |doc, path| doc.arr_len(path))
 }
@@ -599,6 +541,7 @@ fn json_arr_len(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 /// JSON.ARRPOP <key> [path [index]]
 ///
+#[cfg(not(feature = "as-library"))]
 fn json_arr_pop(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
@@ -639,6 +582,7 @@ fn json_arr_pop(ctx: &Context, args: Vec<String>) -> RedisResult {
     Ok(result)
 }
 
+#[cfg(not(feature = "as-library"))]
 fn do_json_arr_pop(index: i64, res: &mut Option<Value>, value: &mut Value) -> Result<Value, Error> {
     if let Some(array) = value.as_array() {
         if array.is_empty() {
@@ -666,6 +610,7 @@ fn do_json_arr_pop(index: i64, res: &mut Option<Value>, value: &mut Value) -> Re
 ///
 /// JSON.ARRTRIM <key> <path> <start> <stop>
 ///
+#[cfg(not(feature = "as-library"))]
 fn json_arr_trim(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
@@ -696,6 +641,7 @@ fn json_arr_trim(ctx: &Context, args: Vec<String>) -> RedisResult {
         })
 }
 
+#[cfg(not(feature = "as-library"))]
 fn do_json_arr_trim(start: i64, stop: i64, value: &mut Value) -> Result<Value, Error> {
     if let Some(array) = value.as_array() {
         let len = array.len() as i64;
@@ -721,6 +667,7 @@ fn do_json_arr_trim(start: i64, stop: i64, value: &mut Value) -> Result<Value, E
 ///
 /// JSON.OBJKEYS <key> [path]
 ///
+#[cfg(not(feature = "as-library"))]
 fn json_obj_keys(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_string()?;
@@ -739,6 +686,7 @@ fn json_obj_keys(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 /// JSON.OBJLEN <key> [path]
 ///
+#[cfg(not(feature = "as-library"))]
 fn json_obj_len(ctx: &Context, args: Vec<String>) -> RedisResult {
     json_len(ctx, args, |doc, path| doc.obj_len(path))
 }
@@ -746,6 +694,7 @@ fn json_obj_len(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 /// JSON.CLEAR <key> [path ...]
 ///
+#[cfg(not(feature = "as-library"))]
 fn json_clear(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_string()?;
@@ -776,6 +725,7 @@ fn json_clear(ctx: &Context, args: Vec<String>) -> RedisResult {
 /// MEMORY <key> [path]
 /// HELP
 ///
+#[cfg(not(feature = "as-library"))]
 fn json_debug(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     match args.next_string()?.to_uppercase().as_str() {
@@ -806,6 +756,7 @@ fn json_debug(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 /// JSON.RESP <key> [path]
 ///
+#[cfg(not(feature = "as-library"))]
 fn json_resp(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
@@ -821,6 +772,7 @@ fn json_resp(ctx: &Context, args: Vec<String>) -> RedisResult {
     }
 }
 
+#[cfg(not(feature = "as-library"))]
 fn resp_serialize(doc: &Value) -> RedisValue {
     match doc {
         Value::Null => RedisValue::Null,
@@ -853,6 +805,7 @@ fn resp_serialize(doc: &Value) -> RedisValue {
     }
 }
 
+#[cfg(not(feature = "as-library"))]
 fn json_len<F: Fn(&RedisJSON, &String) -> Result<usize, Error>>(
     ctx: &Context,
     args: Vec<String>,
@@ -871,15 +824,18 @@ fn json_len<F: Fn(&RedisJSON, &String) -> Result<usize, Error>>(
     Ok(length)
 }
 
+#[cfg(not(feature = "as-library"))]
 fn json_cache_info(_ctx: &Context, _args: Vec<String>) -> RedisResult {
     Err(RedisError::Str("Command was not implemented"))
 }
 
+#[cfg(not(feature = "as-library"))]
 fn json_cache_init(_ctx: &Context, _args: Vec<String>) -> RedisResult {
     Err(RedisError::Str("Command was not implemented"))
 }
 //////////////////////////////////////////////////////
 
+#[cfg(not(feature = "as-library"))]
 redis_module! {
     name: "ReJSON",
     version: 99_99_99,
