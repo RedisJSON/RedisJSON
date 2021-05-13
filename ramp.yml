@@ -5,8 +5,8 @@ description: Native JSON Data Type for Redis
 homepage: http://redisjson.io
 license: Redis Source Available License Agreement
 command_line_args: ""
-min_redis_version: "5.0"
-min_redis_pack_version: "5.4"
+min_redis_version: "6.0"
+min_redis_pack_version: "6.0"
 capabilities:
     - types
     - no_multi_key
