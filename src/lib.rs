@@ -24,9 +24,9 @@ pub mod redisjson;
 use crate::array_index::ArrayIndex;
 #[cfg(not(feature = "as-library"))]
 use crate::error::Error;
-use crate::redisjson::{Format};
+use crate::redisjson::Format;
 #[cfg(not(feature = "as-library"))]
-use crate::redisjson::{Path};
+use crate::redisjson::Path;
 #[cfg(not(feature = "as-library"))]
 use crate::redisjson::RedisJSON;
 
