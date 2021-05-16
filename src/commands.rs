@@ -130,9 +130,9 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             return Err("Err: path must end with object key to set".into());
         }
 
-        if let StaticPathElement::ObjectKey(key) =
-            parsed_static_path.static_path_elements.pop().unwrap()
-        {
+        let last = parsed_static_path.static_path_elements.pop().unwrap();
+
+        if let StaticPathElement::ObjectKey(key) = last {
             if let StaticPathElement::Root = parsed_static_path.static_path_elements.last().unwrap()
             {
                 // Adding to the root
@@ -164,8 +164,13 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     })
                     .collect())
             }
+        } else if let StaticPathElement::ArrayIndex(_) = last {
+            // if we reach here with array path we must be out of range
+            // otherwise the path would be valid to be set and we would not
+            // have reached here!!
+            Err("array index out of range".into())
         } else {
-            Err("Err: path not an object".into())
+            Err("path not an object".into())
         }
     }
 
