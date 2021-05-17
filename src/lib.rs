@@ -7,7 +7,7 @@ use redis_module::raw::RedisModuleTypeMethods;
 #[cfg(not(feature = "as-library"))]
 use redis_module::{Context, NextArg, NotifyEvent, RedisError, RedisResult, RedisValue};
 #[cfg(not(feature = "as-library"))]
-use serde_json::{Number, Value};
+use serde_json::{Value};
 #[cfg(not(feature = "as-library"))]
 use std::{i64, usize};
 
@@ -135,7 +135,7 @@ fn json_type(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 #[cfg(not(feature = "as-library"))]
 fn json_num_incrby(ctx: &Context, args: Vec<String>) -> RedisResult {
-    json_num_op(ctx, "json_incrby", args, |i1, i2| i1 + i2, |f1, f2| f1 + f2)
+    commands::command_json_num_incrby(manager::RedisJsonKeyManager, ctx, args)
 }
 
 ///
@@ -143,7 +143,7 @@ fn json_num_incrby(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 #[cfg(not(feature = "as-library"))]
 fn json_num_multby(ctx: &Context, args: Vec<String>) -> RedisResult {
-    json_num_op(ctx, "json_multby", args, |i1, i2| i1 * i2, |f1, f2| f1 * f2)
+    commands::command_json_num_multby(manager::RedisJsonKeyManager, ctx, args)
 }
 
 ///
@@ -151,115 +151,13 @@ fn json_num_multby(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 #[cfg(not(feature = "as-library"))]
 fn json_num_powby(ctx: &Context, args: Vec<String>) -> RedisResult {
-    json_num_op(
-        ctx,
-        "json_numpowby",
-        args,
-        |i1, i2| i1.pow(i2 as u32),
-        |f1, f2| f1.powf(f2),
-    )
+    commands::command_json_num_powby(manager::RedisJsonKeyManager, ctx, args)
 }
 //
 /// JSON.TOGGLE <key> <path>
 #[cfg(not(feature = "as-library"))]
 fn json_bool_toggle(ctx: &Context, args: Vec<String>) -> RedisResult {
-    let mut args = args.into_iter().skip(1);
-    let key = args.next_string()?;
-    let path = backwards_compat_path(args.next_string()?);
-    let redis_key = ctx.open_key_writable(&key);
-
-    redis_key
-        .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
-        .ok_or_else(RedisError::nonexistent_key)
-        .and_then(|doc| {
-            doc.value_op(
-                &path,
-                |value| {
-                    value
-                        .as_bool()
-                        .ok_or_else(|| err_json(value, "boolean"))
-                        .map(|curr| {
-                            let result = curr ^ true;
-                            Value::Bool(result)
-                        })
-                },
-                |result| {
-                    ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_toggle", key.as_str());
-                    ctx.replicate_verbatim();
-                    Ok(result.to_string().into())
-                },
-            )
-            .map_err(|e| e.into())
-        })
-}
-
-#[cfg(not(feature = "as-library"))]
-fn json_num_op<I, F>(
-    ctx: &Context,
-    cmd: &str,
-    args: Vec<String>,
-    op_i64: I,
-    op_f64: F,
-) -> RedisResult
-where
-    I: Fn(i64, i64) -> i64,
-    F: Fn(f64, f64) -> f64,
-{
-    let mut args = args.into_iter().skip(1);
-
-    let key = args.next_string()?;
-    let path = backwards_compat_path(args.next_string()?);
-    let number = args.next_string()?;
-
-    let redis_key = ctx.open_key_writable(&key);
-
-    redis_key
-        .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
-        .ok_or_else(RedisError::nonexistent_key)
-        .and_then(|doc| {
-            doc.value_op(
-                &path,
-                |value| do_json_num_op(&number, value, &op_i64, &op_f64),
-                |result| {
-                    ctx.notify_keyspace_event(NotifyEvent::MODULE, cmd, key.as_str());
-                    ctx.replicate_verbatim();
-                    Ok(result.to_string().into())
-                },
-            )
-            .map_err(|e| e.into())
-        })
-}
-
-#[cfg(not(feature = "as-library"))]
-fn do_json_num_op<I, F>(
-    in_value: &str,
-    curr_value: &Value,
-    op_i64: I,
-    op_f64: F,
-) -> Result<Value, Error>
-where
-    I: FnOnce(i64, i64) -> i64,
-    F: FnOnce(f64, f64) -> f64,
-{
-    if let Value::Number(curr_value) = curr_value {
-        let in_value = &serde_json::from_str(in_value)?;
-        if let Value::Number(in_value) = in_value {
-            let num_res = match (curr_value.as_i64(), in_value.as_i64()) {
-                (Some(num1), Some(num2)) => op_i64(num1, num2).into(),
-                _ => {
-                    let num1 = curr_value.as_f64().unwrap();
-                    let num2 = in_value.as_f64().unwrap();
-                    Number::from_f64(op_f64(num1, num2)).unwrap()
-                }
-            };
-
-            Ok(Value::Number(num_res))
-        } else {
-            Err(err_json(in_value, "number"))
-        }
-    } else {
-        Err(err_json(curr_value, "number"))
-    }
+    commands::command_json_bool_toggle(manager::RedisJsonKeyManager, ctx, args)
 }
 
 #[cfg(not(feature = "as-library"))]

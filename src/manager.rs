@@ -1,7 +1,7 @@
 use jsonpath_lib::select::select_value::SelectValue;
 use jsonpath_lib::select::JsonPathError;
 use serde_json::map::Entry;
-use serde_json::Value;
+use serde_json::{Value, Number};
 
 use redis_module::key::RedisKeyWritable;
 use redis_module::rediserror::RedisError;
@@ -40,6 +40,10 @@ pub trait Holder<E: Clone, V: SelectValue> {
     fn set_root(&mut self, v: E) -> Result<(), RedisError>;
     fn set_value(&mut self, update_info: Vec<UpdateInfo>, v: E) -> Result<bool, RedisError>;
     fn delete_paths(&mut self, paths: Vec<Vec<String>>) -> Result<usize, RedisError>;
+    fn incr_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Value, RedisError>;
+    fn mult_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Value, RedisError>;
+    fn pow_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Value, RedisError>;
+    fn bool_toggle(&mut self, paths: Vec<Vec<String>>) -> Result<Value, RedisError>;
 }
 
 pub trait Manager {
@@ -109,6 +113,55 @@ impl KeyHolder {
         }
 
         Ok(())
+    }
+
+    fn do_op<F>(&mut self, paths: Vec<Vec<String>>, mut op_fun: F) -> Result<Option<Value>, RedisError>
+    where F: FnMut(&mut Value) -> Value,
+    {
+        let mut new = None;
+        for p in paths {
+            if p.len() == 0{
+                // updating the root require special treatment
+                let root = self.get_value().unwrap().unwrap();
+                let res = (op_fun)(root);
+                new = Some(res.clone());
+                self.set_root(res)?;
+            }else {
+                self.update(&p, self.get_value().unwrap().unwrap(), |mut v| {
+                    let res = (op_fun)(&mut v);
+                    new = Some(res.clone());
+                    Some(res)
+                })?;
+            }
+        };
+        Ok(new)
+    }
+
+    fn do_num_op<F1, F2>(&mut self, paths: Vec<Vec<String>>, num:String, mut op1_fun: F1, mut op2_fun: F2) -> Result<Value, RedisError> 
+    where 
+    F1: FnMut(i64, i64) -> i64,
+    F2: FnMut(f64, f64) -> f64,
+    {
+        let in_value = &serde_json::from_str(&num)?;
+        if let Value::Number(in_value) = in_value {
+            let res = self.do_op(paths, |v|{
+                let num_res = match (v.as_i64(), in_value.as_i64()) {
+                    (Some(num1), Some(num2)) => ((op1_fun)(num1, num2)).into(),
+                    _ => {
+                        let num1 = v.as_f64().unwrap();
+                        let num2 = in_value.as_f64().unwrap();
+                        Number::from_f64((op2_fun)(num1, num2)).unwrap()
+                    }
+                };
+                Value::Number(num_res)
+            })?;
+            match res {
+                None => Err(RedisError::Str("path does not exists")),
+                Some(n) =>Ok(n)
+            }
+        } else {
+            Err(RedisError::Str("bad input number"))
+        }
     }
 }
 
@@ -185,6 +238,28 @@ impl Holder<Value, Value> for KeyHolder {
             })?;
         }
         Ok(deleted)
+    }
+
+    fn incr_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Value, RedisError> {
+        self.do_num_op(paths, num, |i1, i2| i1 + i2, |f1, f2| f1 + f2)
+    }
+
+    fn mult_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Value, RedisError>{
+        self.do_num_op(paths, num, |i1, i2| i1 * i2, |f1, f2| f1 * f2)
+    }
+
+    fn pow_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Value, RedisError>{
+        self.do_num_op(paths, num, |i1, i2| i1.pow(i2 as u32), |f1, f2| f1.powf(f2))
+    }
+
+    fn bool_toggle(&mut self, paths: Vec<Vec<String>>) -> Result<Value, RedisError>{
+        let res = self.do_op(paths, |v|{
+            Value::Bool(v.as_bool().unwrap() ^ true)
+        })?;
+        match res {
+            None => Err(RedisError::Str("path does not exists")),
+            Some(n) =>Ok(n)
+        }
     }
 }
 
