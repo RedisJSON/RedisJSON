@@ -316,3 +316,43 @@ pub fn command_json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
         }
     }
 }
+
+pub fn command_json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+
+    let key = args.next_string()?;
+    let path = args.next_string().map_or_else(
+        |_| crate::JSON_ROOT_PATH.to_string(),
+        |v| crate::backwards_compat_path(v),
+    );
+
+    let mut redis_key = manager.open_key_writable(ctx, &key)?;
+    let deleted = match redis_key.get_value()? {
+        Some(doc) => {
+            let res = if path == "$" {
+                redis_key.delete()?;
+                1
+            } else {
+                let mut selector = Selector::default();
+                let mut res = selector.str_path(&path)?.value(doc).select_with_paths()?;
+                let paths = if res.len() > 0 {
+                    res.drain(..).map(|v| v.path).collect()
+                } else {
+                    Vec::new()
+                };
+                if paths.len() > 0 {
+                    redis_key.delete_paths(paths)?
+                } else {
+                    0
+                }
+            };
+            if res > 0 {
+                ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_del", key.as_str());
+                ctx.replicate_verbatim();
+            }
+            res
+        }
+        None => 0,
+    };
+    Ok(deleted.into())
+}

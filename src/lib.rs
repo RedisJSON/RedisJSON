@@ -82,29 +82,7 @@ pub fn backwards_compat_path(mut path: String) -> String {
 ///
 #[cfg(not(feature = "as-library"))]
 fn json_del(ctx: &Context, args: Vec<String>) -> RedisResult {
-    let mut args = args.into_iter().skip(1);
-
-    let key = args.next_string()?;
-    let path = args
-        .next_string()
-        .map_or_else(|_| JSON_ROOT_PATH.to_string(), |v| backwards_compat_path(v));
-
-    let redis_key = ctx.open_key_writable(&key);
-    let deleted = match redis_key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
-        Some(doc) => {
-            let res = if path == "$" {
-                redis_key.delete()?;
-                1
-            } else {
-                doc.delete_path(&path)?
-            };
-            ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_del", key.as_str());
-            ctx.replicate_verbatim();
-            res
-        }
-        None => 0,
-    };
-    Ok(deleted.into())
+    commands::command_json_del(manager::RedisJsonKeyManager, ctx, args)
 }
 
 ///

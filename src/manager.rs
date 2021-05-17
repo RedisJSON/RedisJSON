@@ -35,9 +35,11 @@ pub enum UpdateInfo {
 }
 
 pub trait Holder<E: Clone, V: SelectValue> {
+    fn delete(&mut self) -> Result<(), RedisError>;
     fn get_value(&self) -> Result<Option<&mut V>, RedisError>;
     fn set_root(&mut self, v: E) -> Result<(), RedisError>;
     fn set_value(&mut self, update_info: Vec<UpdateInfo>, v: E) -> Result<bool, RedisError>;
+    fn delete_paths(&mut self, paths: Vec<Vec<String>>) -> Result<usize, RedisError>;
 }
 
 pub trait Manager {
@@ -111,6 +113,11 @@ impl KeyHolder {
 }
 
 impl Holder<Value, Value> for KeyHolder {
+    fn delete(&mut self) -> Result<(), RedisError> {
+        self.key.delete()?;
+        Ok(())
+    }
+
     fn get_value(&self) -> Result<Option<&mut Value>, RedisError> {
         let key_value = self.key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?;
         match key_value {
@@ -165,6 +172,19 @@ impl Holder<Value, Value> for KeyHolder {
 
     fn set_root(&mut self, v: Value) -> Result<(), RedisError> {
         self.key.set_value(&REDIS_JSON_TYPE, RedisJSON { data: v })
+    }
+
+    fn delete_paths(&mut self, paths: Vec<Vec<String>>) -> Result<usize, RedisError> {
+        let mut deleted = 0;
+        for p in paths {
+            self.update(&p, self.get_value().unwrap().unwrap(), |v| {
+                if !v.is_null() {
+                    deleted += 1; // might delete more than a single value
+                }
+                None
+            })?;
+        }
+        Ok(deleted)
     }
 }
 
