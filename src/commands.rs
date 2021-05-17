@@ -198,7 +198,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             Ok(Vec::new()) // empty vector means no updates
         }
     }
-    
+
     pub fn serialize(results: &V, format: Format) -> Result<String, Error> {
         let res = match format {
             Format::JSON => serde_json::to_string(results)?,
@@ -432,15 +432,21 @@ pub fn command_json_type<M: Manager>(manager: M, ctx: &Context, args: Vec<String
     Ok(value)
 }
 
-enum NumOp{
+enum NumOp {
     INCR,
     MULT,
     POW,
 }
 
-fn command_json_num_op<M>(manager: M, ctx: &Context, args: Vec<String>, cmd: &str, op: NumOp) -> RedisResult 
+fn command_json_num_op<M>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<String>,
+    cmd: &str,
+    op: NumOp,
+) -> RedisResult
 where
-M: Manager,
+    M: Manager,
 {
     let mut args = args.into_iter().skip(1);
 
@@ -450,57 +456,86 @@ M: Manager,
 
     let mut redis_key = manager.open_key_writable(ctx, &key)?;
 
-    let root = redis_key.get_value()?.ok_or_else(RedisError::nonexistent_key)?;
+    let root = redis_key
+        .get_value()?
+        .ok_or_else(RedisError::nonexistent_key)?;
     let mut selector = Selector::default();
     let mut res = selector.str_path(&path)?.value(root).select_with_paths()?;
     let paths = if res.len() > 0 {
-        res.drain(..).filter(|v| v.n.get_type() == SelectValueType::Double || v.n.get_type() == SelectValueType::Long)
-        .map(|v| v.path).collect()
+        res.drain(..)
+            .filter(|v| {
+                v.n.get_type() == SelectValueType::Double || v.n.get_type() == SelectValueType::Long
+            })
+            .map(|v| v.path)
+            .collect()
     } else {
         Vec::new()
     };
     if paths.len() > 0 {
-
-        let res = Ok(
-            {match op{
-                    NumOp::INCR => redis_key.incr_by(paths, number),
-                    NumOp::MULT => redis_key.mult_by(paths, number),
-                    NumOp::POW => redis_key.pow_by(paths, number),
-                }
-            }?
-            .to_string().into());
+        let res = Ok({
+            match op {
+                NumOp::INCR => redis_key.incr_by(paths, number),
+                NumOp::MULT => redis_key.mult_by(paths, number),
+                NumOp::POW => redis_key.pow_by(paths, number),
+            }
+        }?
+        .to_string()
+        .into());
         ctx.notify_keyspace_event(NotifyEvent::MODULE, cmd, key.as_str());
         ctx.replicate_verbatim();
         res
     } else {
-        Err(RedisError::String(format!("Path '{}' does not exist", path)))
+        Err(RedisError::String(format!(
+            "Path '{}' does not exist",
+            path
+        )))
     }
 }
 
-pub fn command_json_num_incrby<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
+pub fn command_json_num_incrby<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<String>,
+) -> RedisResult {
     command_json_num_op(manager, ctx, args, "json.numincrby", NumOp::INCR)
 }
 
-pub fn command_json_num_multby<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
+pub fn command_json_num_multby<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<String>,
+) -> RedisResult {
     command_json_num_op(manager, ctx, args, "json.nummultby", NumOp::MULT)
 }
 
-pub fn command_json_num_powby<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
+pub fn command_json_num_powby<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<String>,
+) -> RedisResult {
     command_json_num_op(manager, ctx, args, "json.numpowby", NumOp::POW)
 }
 
-pub fn command_json_bool_toggle<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
+pub fn command_json_bool_toggle<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<String>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_string()?;
     let path = crate::backwards_compat_path(args.next_string()?);
     let mut redis_key = manager.open_key_writable(ctx, &key)?;
 
-    let root = redis_key.get_value()?.ok_or_else(RedisError::nonexistent_key)?;
+    let root = redis_key
+        .get_value()?
+        .ok_or_else(RedisError::nonexistent_key)?;
     let mut selector = Selector::default();
     let mut res = selector.str_path(&path)?.value(root).select_with_paths()?;
     let paths = if res.len() > 0 {
-        res.drain(..).filter(|v| v.n.get_type() == SelectValueType::Bool)
-        .map(|v| v.path).collect()
+        res.drain(..)
+            .filter(|v| v.n.get_type() == SelectValueType::Bool)
+            .map(|v| v.path)
+            .collect()
     } else {
         Vec::new()
     };
@@ -510,6 +545,9 @@ pub fn command_json_bool_toggle<M: Manager>(manager: M, ctx: &Context, args: Vec
         ctx.replicate_verbatim();
         res
     } else {
-        Err(RedisError::String(format!("Path '{}' does not exist", path)))
+        Err(RedisError::String(format!(
+            "Path '{}' does not exist",
+            path
+        )))
     }
 }

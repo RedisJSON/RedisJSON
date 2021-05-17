@@ -7,7 +7,7 @@ use redis_module::raw::RedisModuleTypeMethods;
 #[cfg(not(feature = "as-library"))]
 use redis_module::{Context, NextArg, NotifyEvent, RedisError, RedisResult, RedisValue};
 #[cfg(not(feature = "as-library"))]
-use serde_json::{Value};
+use serde_json::Value;
 #[cfg(not(feature = "as-library"))]
 use std::{i64, usize};
 
