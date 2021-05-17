@@ -198,6 +198,37 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             Ok(Vec::new()) // empty vector means no updates
         }
     }
+    
+    pub fn serialize(results: &V, format: Format) -> Result<String, Error> {
+        let res = match format {
+            Format::JSON => serde_json::to_string(results)?,
+            Format::BSON => return Err("Soon to come...".into()), //results.into() as Bson,
+        };
+        Ok(res)
+    }
+
+    pub fn to_string(&self, path: &str, format: Format) -> Result<String, Error> {
+        let results = self.get_first(path)?;
+        Self::serialize(results, format)
+    }
+
+    pub fn get_type(&self, path: &str) -> Result<String, Error> {
+        let s = Self::value_name(self.get_first(path)?);
+        Ok(s.to_string())
+    }
+
+    pub fn value_name(value: &V) -> &str {
+        match value.get_type() {
+            SelectValueType::Null => "null",
+            SelectValueType::Bool => "boolean",
+            SelectValueType::Long => "integer",
+            SelectValueType::Double => "number",
+            SelectValueType::String => "string",
+            SelectValueType::Array => "array",
+            SelectValueType::Dict => "object",
+            SelectValueType::Undef => panic!("undefine value"),
+        }
+    }
 }
 
 pub fn command_json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
@@ -355,4 +386,48 @@ pub fn command_json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
         None => 0,
     };
     Ok(deleted.into())
+}
+
+pub fn command_json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
+    if args.len() < 3 {
+        return Err(RedisError::WrongArity);
+    }
+
+    args.last().ok_or(RedisError::WrongArity).and_then(|path| {
+        let path = crate::backwards_compat_path(path.to_string());
+        let keys = &args[1..args.len() - 1];
+
+        let results: Result<Vec<RedisValue>, RedisError> = keys
+            .iter()
+            .map(|key| {
+                let result = manager
+                    .open_key_writable(ctx, key)?
+                    .get_value()?
+                    .map(|doc| KeyValue::new(doc).to_string(&path, Format::JSON))
+                    .transpose()?;
+
+                Ok(result.into())
+            })
+            .collect();
+
+        Ok(results?.into())
+    })
+}
+
+pub fn command_json_type<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+    let key = args.next_string()?;
+    let path = crate::backwards_compat_path(args.next_string()?);
+
+    let key = manager.open_key_writable(ctx, &key)?;
+
+    let value = key.get_value()?.map_or_else(
+        || RedisValue::Null,
+        |doc| match KeyValue::new(doc).get_type(&path) {
+            Ok(s) => s.into(),
+            Err(_) => RedisValue::Null,
+        },
+    );
+
+    Ok(value)
 }

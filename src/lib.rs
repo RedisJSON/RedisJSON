@@ -111,29 +111,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 #[cfg(not(feature = "as-library"))]
 fn json_mget(ctx: &Context, args: Vec<String>) -> RedisResult {
-    if args.len() < 3 {
-        return Err(RedisError::WrongArity);
-    }
-
-    args.last().ok_or(RedisError::WrongArity).and_then(|path| {
-        let path = backwards_compat_path(path.to_string());
-        let keys = &args[1..args.len() - 1];
-
-        let results: Result<Vec<RedisValue>, RedisError> = keys
-            .iter()
-            .map(|key| {
-                let result = ctx
-                    .open_key(key)
-                    .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
-                    .map(|doc| doc.to_string(&path, Format::JSON))
-                    .transpose()?;
-
-                Ok(result.into())
-            })
-            .collect();
-
-        Ok(results?.into())
-    })
+    commands::command_json_mget(manager::RedisJsonKeyManager, ctx, args)
 }
 
 ///
@@ -149,21 +127,7 @@ fn json_str_len(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 #[cfg(not(feature = "as-library"))]
 fn json_type(ctx: &Context, args: Vec<String>) -> RedisResult {
-    let mut args = args.into_iter().skip(1);
-    let key = args.next_string()?;
-    let path = backwards_compat_path(args.next_string()?);
-
-    let key = ctx.open_key(&key);
-
-    let value = key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?.map_or_else(
-        || RedisValue::Null,
-        |doc| match doc.get_type(&path) {
-            Ok(s) => s.into(),
-            Err(_) => RedisValue::Null,
-        },
-    );
-
-    Ok(value)
+    commands::command_json_type(manager::RedisJsonKeyManager, ctx, args)
 }
 
 ///
