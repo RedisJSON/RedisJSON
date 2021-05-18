@@ -63,6 +63,54 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         }
     }
 
+    fn resp_serialize(&'a self, path: &'a str) -> RedisResult {
+        let v = self.get_first(path)?;
+        Ok(self.resp_serialize_inner(v))
+    }
+
+    fn resp_serialize_inner(&'a self, v: &V) -> RedisValue {
+        match v.get_type() {
+            SelectValueType::Null => RedisValue::Null,
+
+            SelectValueType::Bool => {
+                let bool_val = v.get_bool();
+                match bool_val {
+                    true => RedisValue::SimpleString("true".to_string()),
+                    false => RedisValue::SimpleString("false".to_string()),
+                }
+            }
+
+            SelectValueType::Long => RedisValue::Integer(v.get_long()),
+
+            SelectValueType::Double => RedisValue::Float(v.get_double()),
+
+            SelectValueType::String => RedisValue::BulkString(v.get_str()),
+
+            SelectValueType::Array => {
+                let mut res: Vec<RedisValue> = Vec::with_capacity(v.len().unwrap() + 1);
+                res.push(RedisValue::SimpleStringStatic("["));
+                v.values()
+                    .unwrap()
+                    .iter()
+                    .for_each(|v| res.push(self.resp_serialize_inner(v)));
+                RedisValue::Array(res)
+            }
+
+            SelectValueType::Dict => {
+                let keys = v.keys().unwrap();
+                let mut res: Vec<RedisValue> = Vec::with_capacity(keys.len() + 1);
+                res.push(RedisValue::SimpleStringStatic("{"));
+                for key in keys {
+                    res.push(RedisValue::BulkString(key.to_string()));
+                    res.push(self.resp_serialize_inner(v.get_key(&key).unwrap()));
+                }
+                RedisValue::Array(res)
+            }
+
+            SelectValueType::Undef => panic!("got undefine value"),
+        }
+    }
+
     fn get_values(&'a self, path: &'a str) -> Result<Vec<&'a V>, Error> {
         let mut selector = Selector::new();
         selector.str_path(path)?;
@@ -1083,7 +1131,7 @@ pub fn command_json_resp<M: Manager>(manager: M, ctx: &Context, args: Vec<String
 
     let key = manager.open_key_writable(ctx, &key)?;
     match key.get_value()? {
-        Some(doc) => Ok(manager.resp_serialize(KeyValue::new(doc).get_first(&path)?)),
+        Some(doc) => KeyValue::new(doc).resp_serialize(&path),
         None => Ok(RedisValue::Null),
     }
 }

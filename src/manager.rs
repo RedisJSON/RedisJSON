@@ -4,7 +4,7 @@ use serde_json::{Number, Value};
 
 use redis_module::key::RedisKeyWritable;
 use redis_module::rediserror::RedisError;
-use redis_module::{Context, RedisValue};
+use redis_module::Context;
 
 use crate::redisjson::RedisJSON;
 use crate::Format;
@@ -80,7 +80,6 @@ pub trait Manager {
     fn open_key_writable(&self, ctx: &Context, key: &str) -> Result<Self::Holder, RedisError>;
     fn from_str(&self, val: &str, format: Format) -> Result<Self::E, Error>;
     fn get_memory(&self, v: &Self::V) -> Result<usize, RedisError>;
-    fn resp_serialize(&self, v: &Self::V) -> RedisValue;
 }
 
 fn err_json(value: &Value, expected_value: &'static str) -> Error {
@@ -513,37 +512,5 @@ impl Manager for RedisJsonKeyManager {
             Value::Object(v) => mem::size_of_val(v),
         };
         Ok(res)
-    }
-
-    fn resp_serialize(&self, v: &Value) -> RedisValue {
-        match v {
-            Value::Null => RedisValue::Null,
-
-            Value::Bool(b) => RedisValue::SimpleString(b.to_string()),
-
-            Value::Number(n) => n
-                .as_i64()
-                .map(RedisValue::Integer)
-                .unwrap_or_else(|| RedisValue::Float(n.as_f64().unwrap())),
-
-            Value::String(s) => RedisValue::BulkString(s.clone()),
-
-            Value::Array(arr) => {
-                let mut res: Vec<RedisValue> = Vec::with_capacity(arr.len() + 1);
-                res.push(RedisValue::SimpleStringStatic("["));
-                arr.iter().for_each(|v| res.push(self.resp_serialize(v)));
-                RedisValue::Array(res)
-            }
-
-            Value::Object(obj) => {
-                let mut res: Vec<RedisValue> = Vec::with_capacity(obj.len() + 1);
-                res.push(RedisValue::SimpleStringStatic("{"));
-                for (key, value) in obj.iter() {
-                    res.push(RedisValue::BulkString(key.to_string()));
-                    res.push(self.resp_serialize(value));
-                }
-                RedisValue::Array(res)
-            }
-        }
     }
 }
