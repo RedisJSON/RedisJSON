@@ -227,9 +227,35 @@ impl RedisJSON {
         };
         Ok(cleared)
     }
+
     pub fn to_string(&self, path: &str, format: Format) -> Result<String, Error> {
         let results = self.get_first(path)?;
         Self::serialize(results, format)
+    }
+
+    pub fn get_string_value(
+        &self,
+        is_strict: libc::c_int,
+        path: &str,
+        format: Format,
+    ) -> Result<String, Error> {
+        match &self.data {
+            Value::String(s) => Ok(s.to_string()),
+            Value::Number(n) => Ok(n.to_string()),
+            Value::Bool(b) => Ok(if *b {
+                "true".to_string()
+            } else {
+                "false".to_string()
+            }),
+            Value::Array(_) if is_strict == 0 => self.to_string(path, format),
+            Value::Object(_) if is_strict == 0 => {
+                let v = self.get_first(path)?;
+                v.as_str()
+                    .map_or_else(|| Self::serialize(v, format), |s| Ok(s.to_string()))
+            }
+            Value::Null => Ok("".to_string()),
+            _ => Err("no matching string value".into()),
+        }
     }
 
     pub fn serialize(results: &Value, format: Format) -> Result<String, Error> {
