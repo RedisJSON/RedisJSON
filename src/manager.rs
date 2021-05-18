@@ -1,11 +1,10 @@
 use jsonpath_lib::select::select_value::SelectValue;
-use jsonpath_lib::select::JsonPathError;
 use serde_json::map::Entry;
 use serde_json::{Number, Value};
 
 use redis_module::key::RedisKeyWritable;
 use redis_module::rediserror::RedisError;
-use redis_module::Context;
+use redis_module::{Context, RedisValue};
 
 use crate::redisjson::RedisJSON;
 use crate::Format;
@@ -14,6 +13,10 @@ use crate::REDIS_JSON_TYPE;
 use crate::error::Error;
 use bson::decode_document;
 use std::io::Cursor;
+
+use crate::array_index::ArrayIndex;
+
+use std::mem;
 
 pub struct SetUpdateInfo {
     pub path: Vec<String>,
@@ -37,13 +40,37 @@ pub enum UpdateInfo {
 pub trait Holder<E: Clone, V: SelectValue> {
     fn delete(&mut self) -> Result<(), RedisError>;
     fn get_value(&self) -> Result<Option<&mut V>, RedisError>;
-    fn set_root(&mut self, v: E) -> Result<(), RedisError>;
+    fn set_root(&mut self, v: Option<E>) -> Result<(), RedisError>;
     fn set_value(&mut self, update_info: Vec<UpdateInfo>, v: E) -> Result<bool, RedisError>;
     fn delete_paths(&mut self, paths: Vec<Vec<String>>) -> Result<usize, RedisError>;
-    fn incr_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Value, RedisError>;
-    fn mult_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Value, RedisError>;
-    fn pow_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Value, RedisError>;
-    fn bool_toggle(&mut self, paths: Vec<Vec<String>>) -> Result<Value, RedisError>;
+    fn incr_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Number, RedisError>;
+    fn mult_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Number, RedisError>;
+    fn pow_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Number, RedisError>;
+    fn bool_toggle(&mut self, paths: Vec<Vec<String>>) -> Result<bool, RedisError>;
+    fn str_append(&mut self, paths: Vec<Vec<String>>, val: String) -> Result<usize, RedisError>;
+    fn arr_append<I: Iterator<Item = String>>(
+        &mut self,
+        paths: Vec<Vec<String>>,
+        args: I,
+    ) -> Result<usize, RedisError>;
+    fn arr_insert<I: Iterator<Item = String>>(
+        &mut self,
+        paths: Vec<Vec<String>>,
+        args: I,
+        index: i64,
+    ) -> Result<usize, RedisError>;
+    fn arr_pop(
+        &mut self,
+        paths: Vec<Vec<String>>,
+        index: i64,
+    ) -> Result<Option<String>, RedisError>;
+    fn arr_trim(
+        &mut self,
+        paths: Vec<Vec<String>>,
+        start: i64,
+        stop: i64,
+    ) -> Result<usize, RedisError>;
+    fn clear(&mut self, paths: Vec<Vec<String>>) -> Result<usize, RedisError>;
 }
 
 pub trait Manager {
@@ -52,6 +79,16 @@ pub trait Manager {
     type Holder: Holder<Self::E, Self::V>;
     fn open_key_writable(&self, ctx: &Context, key: &str) -> Result<Self::Holder, RedisError>;
     fn from_str(&self, val: &str, format: Format) -> Result<Self::E, Error>;
+    fn get_memory(&self, v: &Self::V) -> Result<usize, RedisError>;
+    fn resp_serialize(&self, v: &Self::V) -> RedisValue;
+}
+
+fn err_json(value: &Value, expected_value: &'static str) -> Error {
+    Error::from(format!(
+        "ERR wrong type of path value - expected {} but found {}",
+        expected_value,
+        RedisJSON::value_name(value)
+    ))
 }
 
 pub struct KeyHolder {
@@ -59,12 +96,12 @@ pub struct KeyHolder {
 }
 
 impl KeyHolder {
-    fn update<F: FnMut(Value) -> Option<Value>>(
+    fn update<F: FnMut(Value) -> Result<Option<Value>, Error>>(
         &self,
         path: &Vec<String>,
         root: &mut Value,
         mut func: F,
-    ) -> Result<(), JsonPathError> {
+    ) -> Result<(), Error> {
         let mut target = root;
 
         let last_index = path.len().saturating_sub(1);
@@ -76,7 +113,7 @@ impl KeyHolder {
                     if is_last {
                         if let Entry::Occupied(mut e) = map.entry(token) {
                             let v = e.insert(Value::Null);
-                            if let Some(res) = (func)(v) {
+                            if let Some(res) = (func)(v)? {
                                 e.insert(res);
                             } else {
                                 e.remove();
@@ -90,7 +127,7 @@ impl KeyHolder {
                     if let Ok(x) = token.parse::<usize>() {
                         if is_last {
                             let v = std::mem::replace(&mut vec[x], Value::Null);
-                            if let Some(res) = (func)(v) {
+                            if let Some(res) = (func)(v)? {
                                 vec[x] = res;
                             } else {
                                 vec.remove(x);
@@ -121,21 +158,21 @@ impl KeyHolder {
         mut op_fun: F,
     ) -> Result<Option<Value>, RedisError>
     where
-        F: FnMut(&mut Value) -> Value,
+        F: FnMut(Value) -> Result<Option<Value>, Error>,
     {
         let mut new = None;
         for p in paths {
             if p.len() == 0 {
                 // updating the root require special treatment
                 let root = self.get_value().unwrap().unwrap();
-                let res = (op_fun)(root);
-                new = Some(res.clone());
+                let res = (op_fun)(root.take())?;
+                new = res.clone();
                 self.set_root(res)?;
             } else {
-                self.update(&p, self.get_value().unwrap().unwrap(), |mut v| {
-                    let res = (op_fun)(&mut v);
-                    new = Some(res.clone());
-                    Some(res)
+                self.update(&p, self.get_value().unwrap().unwrap(), |v| {
+                    let res = (op_fun)(v)?;
+                    new = res.clone();
+                    Ok(res)
                 })?;
             }
         }
@@ -148,7 +185,7 @@ impl KeyHolder {
         num: String,
         mut op1_fun: F1,
         mut op2_fun: F2,
-    ) -> Result<Value, RedisError>
+    ) -> Result<Number, RedisError>
     where
         F1: FnMut(i64, i64) -> i64,
         F2: FnMut(f64, f64) -> f64,
@@ -164,11 +201,14 @@ impl KeyHolder {
                         Number::from_f64((op2_fun)(num1, num2)).unwrap()
                     }
                 };
-                Value::Number(num_res)
+                Ok(Some(Value::Number(num_res)))
             })?;
             match res {
                 None => Err(RedisError::Str("path does not exists")),
-                Some(n) => Ok(n),
+                Some(n) => match n {
+                    Value::Number(n) => Ok(n),
+                    _ => Err(RedisError::Str("return value is not a number")),
+                },
             }
         } else {
             Err(RedisError::Str("bad input number"))
@@ -209,7 +249,7 @@ impl Holder<Value, Value> for KeyHolder {
                     } else {
                         self.update(&suv.path, self.get_value().unwrap().unwrap(), |_v| {
                             updated = true;
-                            Some(v.clone())
+                            Ok(Some(v.clone()))
                         })?;
                     }
                 }
@@ -225,7 +265,7 @@ impl Holder<Value, Value> for KeyHolder {
                                     map.insert(auv.key.to_string(), v.clone());
                                 }
                             }
-                            Some(ret)
+                            Ok(Some(ret))
                         })?;
                     }
                 }
@@ -234,8 +274,16 @@ impl Holder<Value, Value> for KeyHolder {
         Ok(updated)
     }
 
-    fn set_root(&mut self, v: Value) -> Result<(), RedisError> {
-        self.key.set_value(&REDIS_JSON_TYPE, RedisJSON { data: v })
+    fn set_root(&mut self, v: Option<Value>) -> Result<(), RedisError> {
+        match v {
+            Some(inner) => self
+                .key
+                .set_value(&REDIS_JSON_TYPE, RedisJSON { data: inner }),
+            None => {
+                self.key.delete()?;
+                Ok(())
+            }
+        }
     }
 
     fn delete_paths(&mut self, paths: Vec<Vec<String>>) -> Result<usize, RedisError> {
@@ -245,30 +293,183 @@ impl Holder<Value, Value> for KeyHolder {
                 if !v.is_null() {
                     deleted += 1; // might delete more than a single value
                 }
-                None
+                Ok(None)
             })?;
         }
         Ok(deleted)
     }
 
-    fn incr_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Value, RedisError> {
+    fn incr_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Number, RedisError> {
         self.do_num_op(paths, num, |i1, i2| i1 + i2, |f1, f2| f1 + f2)
     }
 
-    fn mult_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Value, RedisError> {
+    fn mult_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Number, RedisError> {
         self.do_num_op(paths, num, |i1, i2| i1 * i2, |f1, f2| f1 * f2)
     }
 
-    fn pow_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Value, RedisError> {
+    fn pow_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Number, RedisError> {
         self.do_num_op(paths, num, |i1, i2| i1.pow(i2 as u32), |f1, f2| f1.powf(f2))
     }
 
-    fn bool_toggle(&mut self, paths: Vec<Vec<String>>) -> Result<Value, RedisError> {
-        let res = self.do_op(paths, |v| Value::Bool(v.as_bool().unwrap() ^ true))?;
+    fn bool_toggle(&mut self, paths: Vec<Vec<String>>) -> Result<bool, RedisError> {
+        let res = self.do_op(paths, |v| {
+            Ok(Some(Value::Bool(v.as_bool().unwrap() ^ true)))
+        })?;
         match res {
             None => Err(RedisError::Str("path does not exists")),
-            Some(n) => Ok(n),
+            Some(n) => Ok(n.as_bool().unwrap()),
         }
+    }
+
+    fn str_append(&mut self, paths: Vec<Vec<String>>, val: String) -> Result<usize, RedisError> {
+        let json = serde_json::from_str(&val)?;
+        if let Value::String(s) = json {
+            let res = self.do_op(paths, |v| {
+                let new_value = [v.as_str().unwrap(), s.as_str()].concat();
+                Ok(Some(Value::String(new_value)))
+            })?;
+            match res {
+                None => Err(RedisError::Str("path does not exists")),
+                Some(n) => Ok(n.as_str().unwrap().len()),
+            }
+        } else {
+            Err(RedisError::String(format!(
+                "ERR wrong type of value - expected string but found {}",
+                val
+            )))
+        }
+    }
+
+    fn arr_append<I: Iterator<Item = String>>(
+        &mut self,
+        paths: Vec<Vec<String>>,
+        args: I,
+    ) -> Result<usize, RedisError> {
+        let items: Vec<Value> = args
+            .map(|json| serde_json::from_str(&json))
+            .collect::<Result<_, _>>()?;
+
+        let res = self.do_op(paths, |mut v| {
+            v.as_array_mut().unwrap().append(&mut items.clone());
+            Ok(Some(v))
+        })?;
+        match res {
+            None => Err(RedisError::Str("path does not exists")),
+            Some(n) => Ok(n.as_array().unwrap().len()),
+        }
+    }
+
+    fn arr_insert<I: Iterator<Item = String>>(
+        &mut self,
+        paths: Vec<Vec<String>>,
+        args: I,
+        index: i64,
+    ) -> Result<usize, RedisError> {
+        let items: Vec<Value> = args
+            .map(|json| serde_json::from_str(&json))
+            .collect::<Result<_, _>>()?;
+
+        let res = self.do_op(paths, |mut v| {
+            // Verify legal index in bounds
+            let len = v.len().unwrap() as i64;
+            let index = if index < 0 { len + index } else { index };
+            if !(0..=len).contains(&index) {
+                return Err("ERR index out of bounds".into());
+            }
+            let index = index as usize;
+            let mut new_value = v.take();
+            let curr = new_value.as_array_mut().unwrap();
+            curr.splice(index..index, items.clone());
+            Ok(Some(new_value))
+        })?;
+        match res {
+            None => Err(RedisError::Str("path does not exists")),
+            Some(n) => Ok(n.as_array().unwrap().len()),
+        }
+    }
+
+    fn arr_pop(
+        &mut self,
+        paths: Vec<Vec<String>>,
+        index: i64,
+    ) -> Result<Option<String>, RedisError> {
+        let mut res = None;
+        self.do_op(paths, |mut v| {
+            if let Some(array) = v.as_array() {
+                if array.is_empty() {
+                    return Ok(Some(v));
+                }
+                // Verify legel index in bounds
+                let len = array.len() as i64;
+                let index = if index < 0 {
+                    0.max(len + index)
+                } else {
+                    index.min(len - 1)
+                } as usize;
+
+                let mut new_value = v.take();
+                let curr = new_value.as_array_mut().unwrap();
+                res = Some(curr.remove(index as usize));
+                Ok(Some(new_value))
+            } else {
+                Err(err_json(&v, "array"))
+            }
+        })?;
+        match res {
+            None => Ok(None),
+            Some(n) => Ok(Some(RedisJSON::serialize(&n, Format::JSON)?)),
+        }
+    }
+
+    fn arr_trim(
+        &mut self,
+        paths: Vec<Vec<String>>,
+        start: i64,
+        stop: i64,
+    ) -> Result<usize, RedisError> {
+        let res = self.do_op(paths, |mut v| {
+            if let Some(array) = v.as_array() {
+                let len = array.len() as i64;
+                let stop = stop.normalize(len);
+
+                let range = if start > len || start > stop as i64 {
+                    0..0 // Return an empty array
+                } else {
+                    start.normalize(len)..(stop + 1)
+                };
+
+                let mut new_value = v.take();
+                let curr = new_value.as_array_mut().unwrap();
+                curr.rotate_left(range.start);
+                curr.resize(range.end - range.start, Value::Null);
+
+                Ok(Some(new_value))
+            } else {
+                Err(err_json(&v, "array"))
+            }
+        })?;
+        match res {
+            None => Err(RedisError::Str("path does not exists")),
+            Some(n) => Ok(n.as_array().unwrap().len()),
+        }
+    }
+
+    fn clear(&mut self, paths: Vec<Vec<String>>) -> Result<usize, RedisError> {
+        let mut cleared = 0;
+        self.do_op(paths, |v| match v {
+            Value::Object(mut obj) => {
+                obj.clear();
+                cleared += 1;
+                Ok(Some(Value::from(obj)))
+            }
+            Value::Array(mut arr) => {
+                arr.clear();
+                cleared += 1;
+                Ok(Some(Value::from(arr)))
+            }
+            _ => Ok(Some(v)),
+        })?;
+        Ok(cleared)
     }
 }
 
@@ -299,6 +500,50 @@ impl Manager for RedisJsonKeyManager {
                     Ok(v)
                 })
                 .unwrap_or_else(|e| Err(e.to_string().into())),
+        }
+    }
+
+    fn get_memory(&self, v: &Value) -> Result<usize, RedisError> {
+        let res = match v {
+            Value::Null => 0,
+            Value::Bool(v) => mem::size_of_val(v),
+            Value::Number(v) => mem::size_of_val(v),
+            Value::String(v) => mem::size_of_val(v),
+            Value::Array(v) => mem::size_of_val(v),
+            Value::Object(v) => mem::size_of_val(v),
+        };
+        Ok(res)
+    }
+
+    fn resp_serialize(&self, v: &Value) -> RedisValue {
+        match v {
+            Value::Null => RedisValue::Null,
+
+            Value::Bool(b) => RedisValue::SimpleString(b.to_string()),
+
+            Value::Number(n) => n
+                .as_i64()
+                .map(RedisValue::Integer)
+                .unwrap_or_else(|| RedisValue::Float(n.as_f64().unwrap())),
+
+            Value::String(s) => RedisValue::BulkString(s.clone()),
+
+            Value::Array(arr) => {
+                let mut res: Vec<RedisValue> = Vec::with_capacity(arr.len() + 1);
+                res.push(RedisValue::SimpleStringStatic("["));
+                arr.iter().for_each(|v| res.push(self.resp_serialize(v)));
+                RedisValue::Array(res)
+            }
+
+            Value::Object(obj) => {
+                let mut res: Vec<RedisValue> = Vec::with_capacity(obj.len() + 1);
+                res.push(RedisValue::SimpleStringStatic("{"));
+                for (key, value) in obj.iter() {
+                    res.push(RedisValue::BulkString(key.to_string()));
+                    res.push(self.resp_serialize(value));
+                }
+                RedisValue::Array(res)
+            }
         }
     }
 }

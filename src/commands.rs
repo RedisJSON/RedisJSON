@@ -19,6 +19,8 @@ use serde_json::{Map, Value};
 
 use serde::Serialize;
 
+const JSON_ROOT_PATH: &'static str = "$";
+
 pub struct KeyValue<'a, V: SelectValue> {
     val: &'a mut V,
 }
@@ -229,6 +231,131 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             SelectValueType::Undef => panic!("undefine value"),
         }
     }
+
+    pub fn str_len(&self, path: &str) -> Result<usize, Error> {
+        let first = self.get_first(path)?;
+        match first.get_type() {
+            SelectValueType::String => Ok(first.get_str().len()),
+            _ => Err("ERR wrong type of path value".into()),
+        }
+    }
+
+    pub fn arr_len(&self, path: &str) -> Result<usize, Error> {
+        let first = self.get_first(path)?;
+        match first.get_type() {
+            SelectValueType::Array => Ok(first.len().unwrap()),
+            _ => Err("ERR wrong type of path value".into()),
+        }
+    }
+
+    pub fn obj_len(&self, path: &str) -> Result<usize, Error> {
+        let first = self.get_first(path)?;
+        match first.get_type() {
+            SelectValueType::Dict => Ok(first.keys().unwrap().len()),
+            _ => Err("ERR wrong type of path value".into()),
+        }
+    }
+
+    pub fn is_eqaul<T1: SelectValue, T2: SelectValue>(&self, a: &T1, b: &T2) -> bool {
+        match (a.get_type(), b.get_type()) {
+            (SelectValueType::Null, SelectValueType::Null) => true,
+            (SelectValueType::Bool, SelectValueType::Bool) => a.get_bool() == b.get_bool(),
+            (SelectValueType::Long, SelectValueType::Long) => a.get_long() == b.get_long(),
+            (SelectValueType::Double, SelectValueType::Double) => a.get_double() == b.get_double(),
+            (SelectValueType::String, SelectValueType::String) => a.get_str() == b.get_str(),
+            (SelectValueType::Array, SelectValueType::Array) => {
+                if a.len().unwrap() != b.len().unwrap() {
+                    false
+                } else {
+                    for (i, e) in a.values().unwrap().into_iter().enumerate() {
+                        if !self.is_eqaul(e, b.get_index(i).unwrap()) {
+                            return false;
+                        }
+                    }
+                    true
+                }
+            }
+            (SelectValueType::Dict, SelectValueType::Dict) => {
+                if a.keys().unwrap().len() != b.keys().unwrap().len() {
+                    false
+                } else {
+                    for k in a.keys().unwrap() {
+                        let temp1 = a.get_key(&k);
+                        let temp2 = b.get_key(&k);
+                        match (temp1, temp2) {
+                            (Some(a1), Some(b1)) => {
+                                if !self.is_eqaul(a1, b1) {
+                                    return false;
+                                }
+                            }
+                            (_, _) => return false,
+                        }
+                    }
+                    true
+                }
+            }
+            (_, _) => false,
+        }
+    }
+
+    pub fn arr_index(
+        &self,
+        path: &str,
+        scalar_json: &str,
+        start: i64,
+        end: i64,
+    ) -> Result<i64, Error> {
+        let res = self.get_first(path)?;
+        if res.get_type() == SelectValueType::Array {
+            // end=-1/0 means INFINITY to support backward with RedisJSON
+            if res.len().unwrap() == 0 || end < -1 {
+                return Ok(-1);
+            }
+            let v: Value = serde_json::from_str(scalar_json)?;
+
+            let len = res.len().unwrap() as i64;
+
+            // Normalize start
+            let start = if start < 0 {
+                0.max(len + start)
+            } else {
+                // start >= 0
+                start.min(len - 1)
+            };
+
+            // Normalize end
+            let end = if end == 0 {
+                len
+            } else if end < 0 {
+                len + end
+            } else {
+                // end > 0
+                end.min(len)
+            };
+
+            if end < start {
+                // don't search at all
+                return Ok(-1);
+            }
+            let mut i = -1;
+            for index in start..end {
+                if self.is_eqaul(res.get_index(index as usize).unwrap(), &v) {
+                    i = index;
+                    break;
+                }
+            }
+
+            Ok(i)
+        } else {
+            Ok(-1)
+        }
+    }
+
+    pub fn obj_keys(&self, path: &str) -> Result<Vec<String>, Error> {
+        self.get_first(path)?
+            .keys()
+            .ok_or_else(|| "ERR wrong type of path value".into())
+    }
 }
 
 pub fn command_json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
@@ -284,7 +411,7 @@ pub fn command_json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_string()?;
-    let path = crate::backwards_compat_path(args.next_string()?);
+    let path = backwards_compat_path(args.next_string()?);
     let value = args.next_string()?;
 
     let mut format = Format::JSON;
@@ -310,7 +437,7 @@ pub fn command_json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
         (Some(ref mut doc), ref op) => {
             if path == "$" {
                 if *op != SetOptions::NotExists {
-                    redis_key.set_root(val)?;
+                    redis_key.set_root(Some(val))?;
                     ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_set", key.as_str());
                     ctx.replicate_verbatim();
                     REDIS_OK
@@ -335,7 +462,7 @@ pub fn command_json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
         (None, SetOptions::AlreadyExists) => Ok(RedisValue::Null),
         (None, _) => {
             if path == "$" {
-                redis_key.set_root(val)?;
+                redis_key.set_root(Some(val))?;
                 ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_set", key.as_str());
                 ctx.replicate_verbatim();
                 REDIS_OK
@@ -352,10 +479,9 @@ pub fn command_json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_string()?;
-    let path = args.next_string().map_or_else(
-        |_| crate::JSON_ROOT_PATH.to_string(),
-        |v| crate::backwards_compat_path(v),
-    );
+    let path = args
+        .next_string()
+        .map_or_else(|_| JSON_ROOT_PATH.to_string(), |v| backwards_compat_path(v));
 
     let mut redis_key = manager.open_key_writable(ctx, &key)?;
     let deleted = match redis_key.get_value()? {
@@ -394,7 +520,7 @@ pub fn command_json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<String
     }
 
     args.last().ok_or(RedisError::WrongArity).and_then(|path| {
-        let path = crate::backwards_compat_path(path.to_string());
+        let path = backwards_compat_path(path.to_string());
         let keys = &args[1..args.len() - 1];
 
         let results: Result<Vec<RedisValue>, RedisError> = keys
@@ -417,7 +543,7 @@ pub fn command_json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<String
 pub fn command_json_type<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_string()?;
-    let path = crate::backwards_compat_path(args.next_string()?);
+    let path = backwards_compat_path(args.next_string()?);
 
     let key = manager.open_key_writable(ctx, &key)?;
 
@@ -451,7 +577,7 @@ where
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_string()?;
-    let path = crate::backwards_compat_path(args.next_string()?);
+    let path = backwards_compat_path(args.next_string()?);
     let number = args.next_string()?;
 
     let mut redis_key = manager.open_key_writable(ctx, &key)?;
@@ -523,7 +649,7 @@ pub fn command_json_bool_toggle<M: Manager>(
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_string()?;
-    let path = crate::backwards_compat_path(args.next_string()?);
+    let path = backwards_compat_path(args.next_string()?);
     let mut redis_key = manager.open_key_writable(ctx, &key)?;
 
     let root = redis_key
@@ -550,4 +676,446 @@ pub fn command_json_bool_toggle<M: Manager>(
             path
         )))
     }
+}
+
+pub fn command_json_str_append<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<String>,
+) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+
+    let key = args.next_string()?;
+    let path_or_json = args.next_string()?;
+
+    let path;
+    let json;
+
+    // path is optional
+    if let Ok(val) = args.next_string() {
+        path = backwards_compat_path(path_or_json);
+        json = val;
+    } else {
+        path = JSON_ROOT_PATH.to_string();
+        json = path_or_json;
+    }
+
+    let mut redis_key = manager.open_key_writable(ctx, &key)?;
+
+    let root = redis_key
+        .get_value()?
+        .ok_or_else(RedisError::nonexistent_key)?;
+
+    let mut selector = Selector::default();
+    let mut res = selector.str_path(&path)?.value(root).select_with_paths()?;
+    let paths = if res.len() > 0 {
+        res.drain(..)
+            .filter(|v| v.n.get_type() == SelectValueType::String)
+            .map(|v| v.path)
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    if paths.len() > 0 {
+        let res = Ok(redis_key.str_append(paths, json)?.into());
+        ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.strappend", key.as_str());
+        ctx.replicate_verbatim();
+        res
+    } else {
+        Err(RedisError::String(format!(
+            "Path '{}' does not exist",
+            path
+        )))
+    }
+}
+
+pub fn command_json_str_len<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<String>,
+) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+    let key = args.next_string()?;
+    let path = backwards_compat_path(args.next_string()?);
+
+    let key = manager.open_key_writable(ctx, &key)?;
+    match key.get_value()? {
+        Some(doc) => Ok(RedisValue::Integer(
+            KeyValue::new(doc).str_len(&path)? as i64
+        )),
+        None => Ok(RedisValue::Null),
+    }
+}
+
+pub fn command_json_arr_append<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<String>,
+) -> RedisResult {
+    let mut args = args.into_iter().skip(1).peekable();
+
+    let key = args.next_string()?;
+    let path = backwards_compat_path(args.next_string()?);
+
+    // We require at least one JSON item to append
+    args.peek().ok_or(RedisError::WrongArity)?;
+
+    let mut redis_key = manager.open_key_writable(ctx, &key)?;
+    let root = redis_key
+        .get_value()?
+        .ok_or_else(RedisError::nonexistent_key)?;
+
+    let mut selector = Selector::default();
+    let mut res = selector.str_path(&path)?.value(root).select_with_paths()?;
+    let paths = if res.len() > 0 {
+        res.drain(..)
+            .filter(|v| v.n.get_type() == SelectValueType::Array)
+            .map(|v| v.path)
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    if paths.len() > 0 {
+        let res = Ok(redis_key.arr_append(paths, args)?.into());
+        ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrappend", key.as_str());
+        ctx.replicate_verbatim();
+        res
+    } else {
+        Err(RedisError::String(format!(
+            "Path '{}' does not exist",
+            path
+        )))
+    }
+}
+
+pub fn command_json_arr_index<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<String>,
+) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+
+    let key = args.next_string()?;
+    let path = backwards_compat_path(args.next_string()?);
+    let json_scalar = args.next_string()?;
+    let start: i64 = args.next().map(|v| v.parse()).unwrap_or(Ok(0))?;
+    let end: i64 = args.next().map(|v| v.parse()).unwrap_or(Ok(0))?;
+
+    args.done()?; // TODO: Add to other functions as well to terminate args list
+
+    let key = manager.open_key_writable(ctx, &key)?;
+
+    let index = key.get_value()?.map_or(Ok(-1), |doc| {
+        KeyValue::new(doc).arr_index(&path, &json_scalar, start, end)
+    })?;
+
+    Ok(index.into())
+}
+
+pub fn command_json_arr_insert<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<String>,
+) -> RedisResult {
+    let mut args = args.into_iter().skip(1).peekable();
+
+    let key = args.next_string()?;
+    let path = backwards_compat_path(args.next_string()?);
+    let index = args.next_i64()?;
+
+    // We require at least one JSON item to append
+    args.peek().ok_or(RedisError::WrongArity)?;
+
+    let mut redis_key = manager.open_key_writable(ctx, &key)?;
+
+    let root = redis_key
+        .get_value()?
+        .ok_or_else(RedisError::nonexistent_key)?;
+
+    let mut selector = Selector::default();
+    let mut res = selector.str_path(&path)?.value(root).select_with_paths()?;
+    let paths = if res.len() > 0 {
+        res.drain(..)
+            .filter(|v| v.n.get_type() == SelectValueType::Array)
+            .map(|v| v.path)
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    if paths.len() > 0 {
+        let res = Ok(redis_key.arr_insert(paths, args, index)?.into());
+        ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrinsert", key.as_str());
+        ctx.replicate_verbatim();
+        res
+    } else {
+        Err(RedisError::String(format!(
+            "Path '{}' does not exist",
+            path
+        )))
+    }
+}
+
+pub fn command_json_arr_len<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<String>,
+) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+    let key = args.next_string()?;
+    let path = backwards_compat_path(args.next_string()?);
+
+    let key = manager.open_key_writable(ctx, &key)?;
+    match key.get_value()? {
+        Some(doc) => Ok(RedisValue::Integer(
+            KeyValue::new(doc).arr_len(&path)? as i64
+        )),
+        None => Ok(RedisValue::Null),
+    }
+}
+
+pub fn command_json_arr_pop<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<String>,
+) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+
+    let key = args.next_string()?;
+
+    let (path, index) = args
+        .next()
+        .map(|p| {
+            let path = backwards_compat_path(p);
+            let index = args.next_i64().unwrap_or(-1);
+            (path, index)
+        })
+        .unwrap_or((JSON_ROOT_PATH.to_string(), i64::MAX));
+
+    let mut redis_key = manager.open_key_writable(ctx, &key)?;
+
+    let root = redis_key
+        .get_value()?
+        .ok_or_else(RedisError::nonexistent_key)?;
+
+    let mut selector = Selector::default();
+    let mut res = selector.str_path(&path)?.value(root).select_with_paths()?;
+    let paths = if res.len() > 0 {
+        res.drain(..)
+            .filter(|v| v.n.get_type() == SelectValueType::Array)
+            .map(|v| v.path)
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    if paths.len() > 0 {
+        let res = redis_key.arr_pop(paths, index)?;
+        match res {
+            Some(r) => {
+                ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrpop", key.as_str());
+                ctx.replicate_verbatim();
+                Ok(r.into())
+            }
+            None => Ok(().into()),
+        }
+    } else {
+        Ok(().into())
+    }
+}
+
+pub fn command_json_arr_trim<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<String>,
+) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+
+    let key = args.next_string()?;
+    let path = backwards_compat_path(args.next_string()?);
+    let start = args.next_i64()?;
+    let stop = args.next_i64()?;
+
+    let mut redis_key = manager.open_key_writable(ctx, &key)?;
+
+    let root = redis_key
+        .get_value()?
+        .ok_or_else(RedisError::nonexistent_key)?;
+
+    let mut selector = Selector::default();
+    let mut res = selector.str_path(&path)?.value(root).select_with_paths()?;
+    let paths = if res.len() > 0 {
+        res.drain(..)
+            .filter(|v| v.n.get_type() == SelectValueType::Array)
+            .map(|v| v.path)
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    if paths.len() > 0 {
+        let res = Ok(redis_key.arr_trim(paths, start, stop)?.into());
+        ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrtrim", key.as_str());
+        ctx.replicate_verbatim();
+        res
+    } else {
+        Err(RedisError::String(format!(
+            "Path '{}' does not exist",
+            path
+        )))
+    }
+}
+
+pub fn command_json_obj_keys<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<String>,
+) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+    let key = args.next_string()?;
+    let path = backwards_compat_path(args.next_string()?);
+
+    let key = manager.open_key_writable(ctx, &key)?;
+
+    let value = match key.get_value()? {
+        Some(doc) => KeyValue::new(doc).obj_keys(&path)?.into(),
+        None => RedisValue::Null,
+    };
+
+    Ok(value)
+}
+
+pub fn command_json_obj_len<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<String>,
+) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+    let key = args.next_string()?;
+    let path = backwards_compat_path(args.next_string()?);
+
+    let key = manager.open_key_writable(ctx, &key)?;
+    match key.get_value()? {
+        Some(doc) => Ok(RedisValue::Integer(
+            KeyValue::new(doc).obj_len(&path)? as i64
+        )),
+        None => Ok(RedisValue::Null),
+    }
+}
+
+pub fn command_json_clear<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+    let key = args.next_string()?;
+    let paths = args.map(Path::new).collect::<Vec<_>>();
+
+    let paths = if paths.is_empty() {
+        vec![Path::new(JSON_ROOT_PATH.to_string())]
+    } else {
+        paths
+    };
+
+    let path = paths.first().unwrap().fixed.as_str();
+
+    // FIXME: handle multi paths
+    let mut redis_key = manager.open_key_writable(ctx, &key)?;
+
+    let root = redis_key
+        .get_value()?
+        .ok_or_else(RedisError::nonexistent_key)?;
+
+    let mut selector = Selector::default();
+    let mut res = selector.str_path(path)?.value(root).select_with_paths()?;
+    let paths = if res.len() > 0 {
+        res.drain(..).map(|v| v.path).collect()
+    } else {
+        Vec::new()
+    };
+
+    if paths.len() > 0 {
+        let res = Ok(redis_key.clear(paths)?.into());
+        ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.clear", key.as_str());
+        ctx.replicate_verbatim();
+        res
+    } else {
+        Err(RedisError::String(format!(
+            "Path '{}' does not exist",
+            path
+        )))
+    }
+}
+
+pub fn command_json_debug<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+    match args.next_string()?.to_uppercase().as_str() {
+        "MEMORY" => {
+            let key = args.next_string()?;
+            let path = backwards_compat_path(args.next_string()?);
+
+            let key = manager.open_key_writable(ctx, &key)?;
+            let value = match key.get_value()? {
+                Some(doc) => manager.get_memory(KeyValue::new(doc).get_first(&path)?)?,
+                None => 0,
+            };
+            Ok(value.into())
+        }
+        "HELP" => {
+            let results = vec![
+                "MEMORY <key> [path] - reports memory usage",
+                "HELP                - this message",
+            ];
+            Ok(results.into())
+        }
+        _ => Err(RedisError::Str(
+            "ERR unknown subcommand - try `JSON.DEBUG HELP`",
+        )),
+    }
+}
+
+pub fn command_json_resp<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+
+    let key = args.next_string()?;
+    let path = args
+        .next_string()
+        .map_or_else(|_| JSON_ROOT_PATH.to_string(), |v| backwards_compat_path(v));
+
+    let key = manager.open_key_writable(ctx, &key)?;
+    match key.get_value()? {
+        Some(doc) => Ok(manager.resp_serialize(KeyValue::new(doc).get_first(&path)?)),
+        None => Ok(RedisValue::Null),
+    }
+}
+
+pub fn command_json_cache_info<M: Manager>(
+    _manager: M,
+    _ctx: &Context,
+    _args: Vec<String>,
+) -> RedisResult {
+    Err(RedisError::Str("Command was not implemented"))
+}
+
+pub fn command_json_cache_init<M: Manager>(
+    _manager: M,
+    _ctx: &Context,
+    _args: Vec<String>,
+) -> RedisResult {
+    Err(RedisError::Str("Command was not implemented"))
+}
+
+///
+/// Backwards compatibility convertor for RedisJSON 1.x clients
+///
+fn backwards_compat_path(mut path: String) -> String {
+    if !path.starts_with('$') {
+        if path == "." {
+            path.replace_range(..1, "$");
+        } else if path.starts_with('.') {
+            path.insert(0, '$');
+        } else {
+            path.insert_str(0, "$.");
+        }
+    }
+    path
 }
