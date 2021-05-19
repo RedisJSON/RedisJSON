@@ -509,10 +509,6 @@ pub mod type_methods {
             }
             3 => {
                 let data = raw::load_string(rdb);
-                if raw::load_unsigned(rdb) > 0 {
-                    raw::load_string(rdb);
-                    raw::load_string(rdb);
-                };
                 RedisJSON::from_str(&data, Format::JSON).unwrap()
             }
             _ => panic!("Can't load old RedisJSON RDB"),
@@ -532,7 +528,6 @@ pub mod type_methods {
     pub unsafe extern "C" fn rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
         let json = &*(value as *mut RedisJSON);
         raw::save_string(rdb, &json.data.to_string());
-        raw::save_unsigned(rdb, 0);
     }
 
     #[allow(non_snake_case, unused)]
