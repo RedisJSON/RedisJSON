@@ -220,13 +220,11 @@ fn json_mget(ctx: &Context, args: Vec<String>) -> RedisResult {
         let results: Result<Vec<RedisValue>, RedisError> = keys
             .iter()
             .map(|key| {
-                let result = ctx
-                    .open_key(key)
+                ctx.open_key(key)
                     .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
                     .map(|doc| doc.to_string(&path, Format::JSON))
-                    .transpose()?;
-
-                Ok(result.into())
+                    .transpose()
+                    .map_or_else(|_| Ok(RedisValue::Null), |v| Ok(v.into()))
             })
             .collect();
 

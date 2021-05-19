@@ -298,8 +298,20 @@ def testMgetCommand(env):
     r.assertTrue(json.loads(raw[1]))
     r.assertEqual(raw[2], None)
 
+    # Test that MGET on missing path
+    raw = r.execute_command('JSON.MGET', 'doc:0', 'doc:1', '42isnotapath')
+    r.assertEqual(len(raw), 2)
+    r.assertEqual(raw[0], None)
+    r.assertEqual(raw[1], None)
+
     # Test that MGET fails on path errors
-    r.expect('JSON.MGET', 'doc:0', 'doc:1', '42isnotapath').raiseError()
+    r.cmd('DEL', 'test')
+    r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"bull":4.2}'))
+    raw = r.execute_command('JSON.MGET', 'doc:0', 'test', 'doc:1', '.bool')
+    r.assertEqual(len(raw), 3)
+    r.assertTrue(json.loads(raw[0]))
+    r.assertEqual(raw[1], None)
+    r.assertTrue(json.loads(raw[2]))
 
 def testToggleCommand(env):
     """Test REJSON.TOGGLE command"""
