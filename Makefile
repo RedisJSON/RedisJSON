@@ -9,6 +9,8 @@ include $(ROOT)/deps/readies/mk/main
 #----------------------------------------------------------------------------------------------
 
 define HELP
+make setup         # install prerequisites
+
 make build
   DEBUG=1          # build debug variant
 make clean         # remove binary files
@@ -73,6 +75,14 @@ all: build
 
 #----------------------------------------------------------------------------------------------
 
+setup:
+	./deps/readies/bin/getpy3
+	./system-setup.py
+
+.PHONY: setup
+
+#----------------------------------------------------------------------------------------------
+
 lint:
 	cargo fmt -- --check
 
@@ -117,7 +127,8 @@ ifneq ($(REMOTE),)
 	BENCHMARK_ARGS = redisbench-admin run-remote
 endif
 
-BENCHMARK_ARGS += --module_path $(realpath $(TARGET))
+BENCHMARK_ARGS += --module_path $(realpath $(TARGET)) \
+	--required-module ReJSON
 ifneq ($(BENCHMARK),)
 	BENCHMARK_ARGS += --test $(BENCHMARK)
 endif

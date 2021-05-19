@@ -310,7 +310,7 @@ def testToggleCommand(env):
 
     # Test Toggeling Empty Path
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"foo":"bar"}'))
-    r.assertEqual(r.execute_command('JSON.TOGGLE', 'test', '.bar'), 'null')
+    r.expect('JSON.TOGGLE', 'test', '.bar').raiseError()
     
     # Test Toggeling Non Boolean
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"foo":"bar"}'))
@@ -409,6 +409,54 @@ def testObjectCRUD(env):
     r.assertEqual(1, r.execute_command('JSON.DEL', 'test', '.'))
     r.assertIsNone(r.execute_command('JSON.GET', 'test', '.'))
 
+    # Test deleting with default (root) path
+    r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"foo": "bar"}'))
+    r.assertEqual(1, r.execute_command('JSON.DEL', 'test'))
+    r.assertIsNone(r.execute_command('JSON.GET', 'test', '.'))
+
+def testClear(env):
+    """Test JSON.CLEAR command"""
+
+    r = env
+    r.expect('JSON.SET', 'test', '.', r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}')\
+        .ok()
+
+    # Test get multi results (using .. recursive descent)
+    # TODO: Enable when supporting multi results (and not only the first)
+    #r.expect('JSON.GET', 'test', '$..n').equal([42,44,{"a": 1,"b": 2},["to","be","cleared",4]])
+
+    # Make sure specific obj content exists before clear
+    obj_content = r'{"a":1,"b":2}'
+    r.expect('JSON.GET', 'test', '$.arr[2].n').equal(obj_content)
+    # Make sure specific arr content exists before clear
+    arr_content = r'["to","be","cleared",4]'
+    r.expect('JSON.GET', 'test', '$.arr[3].n2.n').equal(arr_content)
+
+    # Clear obj and arr with specific paths
+    r.expect('JSON.CLEAR', 'test', '$.arr[2].n').equal(1)
+    r.expect('JSON.CLEAR', 'test', '$.arr[3].n2.n').equal(1)
+
+    # Fail clear on inappropriate path (not obj or arr)
+    r.expect('JSON.CLEAR', 'test', '$.arr[1]').equal(0)
+
+    # Make sure specific obj content was cleared
+    r.expect('JSON.GET', 'test', '$.arr[2].n').equal('{}')
+    # Make sure specific arr content was cleared
+    r.expect('JSON.GET', 'test', '$.arr[3].n2.n').equal('[]')
+
+    # Make sure only appropriate content (obj and arr) was cleared - and that errors were printed for inappropriate content (string and numeric)
+    # TODO: Enable when supporting multi results (and not only the first)
+    #r.expect('JSON.GET', 'test', '$..n').equal([42, 44, {}, []])
+
+    # Clear root
+    # TODO: switch order of the following paths and expect .equals(2) when supporting multi-paths
+    r.expect('JSON.CLEAR', 'test', '$', '$.arr[2].n').equal(1)
+    r.expect('JSON.GET', 'test', '$').equal('{}')
+
+    r.expect('JSON.SET', 'test', '$', obj_content).ok()
+    r.expect('JSON.CLEAR', 'test').equal(1)
+    r.expect('JSON.GET', 'test', '$').equal('{}')
+
 def testArrayCRUD(env):
     """Test JSON Array CRUDness"""
 
@@ -479,24 +527,67 @@ def testArrIndexCommand(env):
     r = env
 
     r.assertOk(r.execute_command('JSON.SET', 'test',
+                                    '.', '{ "arr": [0, 1, 2, 3, 2, 1, 0] }'))
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0), 0)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 3), 3)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 4), -1)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 1), 6)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, -1), 6)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 6), 6)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 4, -0), 6)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 5, -1), -1)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, -2, 6), -1)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '"foo"'), -1)
+
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 4, '[4]'), 8)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 3), 3)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, 3), 5)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '[4]'), 4)
+
+def testArrInsertCommand(env):
+    """Test JSON.ARRINSERT command"""
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{ "arr": [] }'))
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 0, '1'), 1)
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', -1, '2'), 2)
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', -2, '3'), 3)
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 3, '4'), 4)
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '.arr'), "[3,2,1,4]")
+
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 1, '5'), 5)
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', -2, '6'), 6)    
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '.arr'), "[3,5,2,6,1,4]")
+    
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', -3, '7', '{"A":"Z"}', '9'), 9)
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '.arr'), '[3,5,2,7,{"A":"Z"},9,6,1,4]')     
+
+    r.expect('JSON.ARRINSERT', 'test', '.arr', -10, '10').raiseError()
+    r.expect('JSON.ARRINSERT', 'test', '.arr', 10, '10').raiseError()
+
+def testArrIndexMixCommand(env):
+    """Test JSON.ARRINDEX command with mixed values"""
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'test',
                                     '.', '{ "arr": [0, 1, 2, 3, 2, 1, 0, {"val": 4}, {"val": 9}, [3,4,8], ["a", "b", 8]] }'))
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0), 0)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 3), 3)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 4), -1)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 1), 6)
-    # r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, -1), 6)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, -5), 6)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 6), 6)
-    # r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 4, -0), 6)
-    # r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 5, -1), -1)
-    # r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, -2, 6), -1)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 4, -0), 6)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 5, -1), 6)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, -2, 6), -1)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '"foo"'), -1)
 
-    # r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 4, '[4]'), 8)
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 4, '[4]'), 12)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 3), 3)
-    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, 3), 4)
-    # r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '[4]'), -1)
-    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '{\"val\":4}'), 7)
-    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '["a", "b", 8]'), 10)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, 3), 5)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '[4]'), 4)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '{\"val\":4}'), 8)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '["a", "b", 8]'), 11)
 
 def testArrTrimCommand(env):
     """Test JSON.ARRTRIM command"""
@@ -530,9 +621,11 @@ def testArrPopCommand(env):
     r.assertEqual('1', r.execute_command('JSON.ARRPOP', 'test', '.', 0))
     r.assertEqual('4', r.execute_command('JSON.ARRPOP', 'test', '.', 2))
     r.assertEqual('6', r.execute_command('JSON.ARRPOP', 'test', '.', 99))
-    # r.assertEqual('2', r.execute_command('JSON.ARRPOP', 'test', '.', -99))
-    # r.assertEqual('3', r.execute_command('JSON.ARRPOP', 'test'))
-    # r.assertIsNone(r.execute_command('JSON.ARRPOP', 'test'))
+    r.assertEqual('2', r.execute_command('JSON.ARRPOP', 'test', '.', -99))
+    r.assertEqual('3', r.execute_command('JSON.ARRPOP', 'test'))
+    r.assertIsNone(r.execute_command('JSON.ARRPOP', 'test'))
+    r.assertIsNone(r.execute_command('JSON.ARRPOP', 'test', '.'))
+    r.assertIsNone(r.execute_command('JSON.ARRPOP', 'test', '.', 2))
 
 def testTypeCommand(env):
     """Test JSON.TYPE command"""
