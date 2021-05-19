@@ -5,14 +5,12 @@
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
 use crate::backward;
-use crate::commands::index;
 use crate::error::Error;
 use crate::formatter::RedisJsonFormatter;
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 use crate::REDIS_JSON_TYPE_VERSION;
 
 use bson::decode_document;
-use index::schema_map;
 use jsonpath_lib::SelectorMut;
 use redis_module::raw::{self, Status};
 use serde::Serialize;
@@ -67,16 +65,9 @@ impl Path {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct ValueIndex {
-    pub key: String,
-    pub index_name: String,
-}
-
 #[derive(Debug)]
 pub struct RedisJSON {
     data: Value,
-    pub value_index: Option<ValueIndex>,
 }
 
 impl RedisJSON {
@@ -98,16 +89,9 @@ impl RedisJSON {
         }
     }
 
-    pub fn from_str(
-        data: &str,
-        value_index: &Option<ValueIndex>,
-        format: Format,
-    ) -> Result<Self, Error> {
+    pub fn from_str(data: &str, format: Format) -> Result<Self, Error> {
         let value = RedisJSON::parse_str(data, format)?;
-        Ok(Self {
-            data: value,
-            value_index: value_index.clone(),
-        })
+        Ok(Self { data: value })
     }
 
     fn add_value(&mut self, path: &str, value: Value) -> Result<bool, Error> {
@@ -216,6 +200,31 @@ impl RedisJSON {
         Ok(deleted)
     }
 
+    pub fn clear(&mut self, path: &str) -> Result<usize, Error> {
+        let current_data = self.data.take();
+        let mut cleared = 0;
+
+        let clear_func = &mut |v| match v {
+            Value::Object(mut obj) => {
+                obj.clear();
+                cleared += 1;
+                Some(Value::from(obj))
+            }
+            Value::Array(mut arr) => {
+                arr.clear();
+                cleared += 1;
+                Some(Value::from(arr))
+            }
+            _ => Some(v),
+        };
+
+        self.data = if path == "$" {
+            clear_func(current_data).unwrap()
+        } else {
+            jsonpath_lib::replace_with(current_data, path, clear_func)?
+        };
+        Ok(cleared)
+    }
     pub fn to_string(&self, path: &str, format: Format) -> Result<String, Error> {
         let results = self.get_first(path)?;
         Self::serialize(results, format)
@@ -312,20 +321,35 @@ impl RedisJSON {
             }
             let v: Value = serde_json::from_str(scalar)?;
 
-            let end: usize = if end == 0 || end == -1 {
-                // default end of array
-                arr.len() - 1
+            let len = arr.len() as i64;
+
+            // Normalize start
+            let start = if start < 0 {
+                0.max(len + start)
             } else {
-                (end as usize).min(arr.len() - 1)
+                // start >= 0
+                start.min(len - 1)
             };
-            let start = start.max(0) as usize;
+
+            // Normalize end
+            let end = if end == 0 {
+                len
+            } else if end < 0 {
+                len + end
+            } else {
+                // end > 0
+                end.min(len)
+            };
+
             if end < start {
+                // don't search at all
                 return Ok(-1);
             }
-            let slice = &arr[start..=end];
+
+            let slice = &arr[start as usize..end as usize];
 
             match slice.iter().position(|r| r == &v) {
-                Some(i) => Ok((start + i) as i64),
+                Some(i) => Ok((start as usize + i) as i64),
                 None => Ok(-1),
             }
         } else {
@@ -355,20 +379,28 @@ impl RedisJSON {
         }
     }
 
-    pub fn value_op<F>(&mut self, path: &str, mut fun: F) -> Result<Value, Error>
+    pub fn value_op<F, R, T>(&mut self, path: &str, mut op_fun: F, res_func: R) -> Result<T, Error>
     where
-        F: FnMut(&Value) -> Result<Value, Error>,
+        F: FnMut(&mut Value) -> Result<Value, Error>,
+        R: Fn(&Value) -> Result<T, Error>,
     {
+        // take the root before updating the value must be returned at the end
         let current_data = self.data.take();
 
         let mut errors = vec![];
-        let mut result = Value::Null; // TODO handle case where path not found
+        let mut result = None;
 
-        let mut collect_fun = |value: Value| {
-            fun(&value)
-                .map(|new_value| {
-                    result = new_value.clone();
-                    new_value
+        // A wrapper function that is called by replace_with
+        // calls op_fun and then res_func
+        let mut collect_fun = |mut value: Value| {
+            op_fun(&mut value)
+                .and_then(|new_value| {
+                    // after calling op_fun calling res_func
+                    // to prepae the command result
+                    res_func(&new_value).map(|res| {
+                        result = Some(res);
+                        new_value
+                    })
                 })
                 .map_err(|e| {
                     errors.push(e);
@@ -376,27 +408,35 @@ impl RedisJSON {
                 .unwrap_or(value)
         };
 
-        self.data = if path == "$" {
+        if path == "$" {
             // root needs special handling
-            collect_fun(current_data)
+            self.data = collect_fun(current_data)
         } else {
-            SelectorMut::new()
-                .str_path(path)
-                .and_then(|selector| {
-                    Ok(selector
-                        .value(current_data.clone())
-                        .replace_with(&mut |v| Some(collect_fun(v)))?
-                        .take()
-                        .unwrap_or(Value::Null))
-                })
-                .map_err(|e| {
+            match SelectorMut::new().str_path(path) {
+                Ok(selector) => {
+                    let replace_result = selector
+                        .value(current_data)
+                        .replace_with(&mut |v| Some(collect_fun(v)));
+
+                    if let Err(e) = replace_result {
+                        errors.push(e.into());
+                    }
+                    // reassign the modified root
+                    self.data = selector.take().unwrap();
+                }
+                Err(e) => {
                     errors.push(e.into());
-                })
-                .unwrap_or(current_data)
+                    // reassign the original root
+                    self.data = current_data;
+                }
+            }
         };
 
         match errors.len() {
-            0 => Ok(result),
+            0 => match result {
+                Some(r) => Ok(r),
+                None => Err(format!("Path '{}' does not exist", path).into()),
+            },
             1 => Err(errors.remove(0)),
             _ => Err(errors.into_iter().map(|e| e.msg).collect::<String>().into()),
         }
@@ -437,23 +477,20 @@ pub mod type_methods {
         let json = match encver {
             0 => RedisJSON {
                 data: backward::json_rdb_load(rdb),
-                value_index: None, // TODO handle load from rdb
             },
             2 => {
                 let data = raw::load_string(rdb);
-                let schema = if raw::load_unsigned(rdb) > 0 {
-                    Some(ValueIndex {
-                        key: raw::load_string(rdb),
-                        index_name: raw::load_string(rdb),
-                    })
-                } else {
-                    None
-                };
-                let doc = RedisJSON::from_str(&data, &schema, Format::JSON).unwrap();
-                if let Some(schema) = schema {
-                    index::add_document(&schema.key, &schema.index_name, &doc).unwrap();
+                // Backward support for modules that had AUX field for RediSarch
+                // TODO remove in future versions
+                if raw::load_unsigned(rdb) > 0 {
+                    raw::load_string(rdb);
+                    raw::load_string(rdb);
                 }
-                doc
+                RedisJSON::from_str(&data, Format::JSON).unwrap()
+            }
+            3 => {
+                let data = raw::load_string(rdb);
+                RedisJSON::from_str(&data, Format::JSON).unwrap()
             }
             _ => panic!("Can't load old RedisJSON RDB"),
         };
@@ -465,24 +502,13 @@ pub mod type_methods {
         let json = value as *mut RedisJSON;
 
         // Take ownership of the data from Redis (causing it to be dropped when we return)
-        let json = Box::from_raw(json);
-
-        if let Some(value_index) = &json.value_index {
-            index::remove_document(&value_index.key, &value_index.index_name);
-        }
+        Box::from_raw(json);
     }
 
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
         let json = &*(value as *mut RedisJSON);
         raw::save_string(rdb, &json.data.to_string());
-        if let Some(value_index) = &json.value_index {
-            raw::save_unsigned(rdb, 1);
-            raw::save_string(rdb, &value_index.key);
-            raw::save_string(rdb, &value_index.index_name);
-        } else {
-            raw::save_unsigned(rdb, 0);
-        }
     }
 
     #[allow(non_snake_case, unused)]
@@ -491,7 +517,9 @@ pub mod type_methods {
             return Status::Err as i32; // could not load rdb created with higher RedisJSON version!
         }
 
-        if (when == raw::Aux::Before as i32) {
+        // Backward support for modules that had AUX field for RediSarch
+        // TODO remove in future versions
+        if (encver == 2 && when == raw::Aux::Before as i32) {
             let map_size = raw::load_unsigned(rdb);
             for _ in 0..map_size {
                 let index_name = raw::load_string(rdb);
@@ -499,27 +527,11 @@ pub mod type_methods {
                 for _ in 0..fields_size {
                     let field_name = raw::load_string(rdb);
                     let path = raw::load_string(rdb);
-                    index::add_field(&index_name, &field_name, &path);
+                    // index::add_field(&index_name, &field_name, &path);
                 }
             }
         }
 
         Status::Ok as i32
-    }
-
-    #[allow(non_snake_case, unused)]
-    pub unsafe extern "C" fn aux_save(rdb: *mut raw::RedisModuleIO, when: i32) {
-        if (when == raw::Aux::Before as i32) {
-            let map = schema_map::as_ref();
-            raw::save_unsigned(rdb, map.len() as u64);
-            for (key, schema) in map {
-                raw::save_string(rdb, key);
-                raw::save_unsigned(rdb, schema.fields.len() as u64);
-                for (name, path) in &schema.fields {
-                    raw::save_string(rdb, name);
-                    raw::save_string(rdb, path);
-                }
-            }
-        }
     }
 }

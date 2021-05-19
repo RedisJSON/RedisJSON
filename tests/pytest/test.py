@@ -266,17 +266,6 @@ def testBackwardRDB(env):
     data = json.loads(r.execute_command('JSON.GET', 'complex'))
     r.assertEqual(data, {"a":{"b":[{"c":{"d":[1,'2'],"e":None}},True],"a":'a'},"b":1,"c":True,"d":None})
 
-def testSchemaStoreRDB(env):
-    r = env
-    r.assertOk(r.execute_command('JSON.INDEX', 'ADD', 'person', 'last', '$.last' ))
-    r.assertOk(r.execute_command('JSON.SET', 'user1', '$', '{"last":"Joan", "first":"Mc"}', 'INDEX', 'person'))
-    r.assertOk(r.execute_command('JSON.SET', 'user2', '$', '{"last":"John", "first":"Avi"}', 'INDEX', 'person'))
-    r.assertOk(r.execute_command('JSON.SET', 'user3', '$', '{"last":"Jonna", "first":"Tami"}', 'INDEX', 'super'))
-
-    r.assertEqual('{"user1":["Mc"],"user2":["Avi"]}', r.execute_command('JSON.QGET', 'person', 'jo*', '$.first'))
-    for _ in r.retry_with_rdb_reload():
-        r.assertEqual(json.loads('{"user1":["Mc"],"user2":["Avi"]}'), json.loads(r.execute_command('JSON.QGET', 'person', 'jo*', '$.first')))
-
 def testSetBSON(env):
     r = env
     bson = open(os.path.join(JSON_PATH , 'bson_bytes_1.bson'), 'rb').read()
@@ -311,6 +300,21 @@ def testMgetCommand(env):
 
     # Test that MGET fails on path errors
     r.expect('JSON.MGET', 'doc:0', 'doc:1', '42isnotapath').raiseError()
+
+def testToggleCommand(env):
+    """Test REJSON.TOGGLE command"""
+    r = env
+    r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"foo":true}'))
+    r.assertEqual(r.execute_command('JSON.TOGGLE','test','.foo'), 'false')
+    r.assertEqual(r.execute_command('JSON.TOGGLE','test','.foo'), 'true')
+
+    # Test Toggeling Empty Path
+    r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"foo":"bar"}'))
+    r.expect('JSON.TOGGLE', 'test', '.bar').raiseError()
+    
+    # Test Toggeling Non Boolean
+    r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"foo":"bar"}'))
+    r.expect('JSON.TOGGLE','test','.foo').raiseError()
 
 def testDelCommand(env):
     """Test REJSON.DEL command"""
@@ -405,6 +409,54 @@ def testObjectCRUD(env):
     r.assertEqual(1, r.execute_command('JSON.DEL', 'test', '.'))
     r.assertIsNone(r.execute_command('JSON.GET', 'test', '.'))
 
+    # Test deleting with default (root) path
+    r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"foo": "bar"}'))
+    r.assertEqual(1, r.execute_command('JSON.DEL', 'test'))
+    r.assertIsNone(r.execute_command('JSON.GET', 'test', '.'))
+
+def testClear(env):
+    """Test JSON.CLEAR command"""
+
+    r = env
+    r.expect('JSON.SET', 'test', '.', r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}')\
+        .ok()
+
+    # Test get multi results (using .. recursive descent)
+    # TODO: Enable when supporting multi results (and not only the first)
+    #r.expect('JSON.GET', 'test', '$..n').equal([42,44,{"a": 1,"b": 2},["to","be","cleared",4]])
+
+    # Make sure specific obj content exists before clear
+    obj_content = r'{"a":1,"b":2}'
+    r.expect('JSON.GET', 'test', '$.arr[2].n').equal(obj_content)
+    # Make sure specific arr content exists before clear
+    arr_content = r'["to","be","cleared",4]'
+    r.expect('JSON.GET', 'test', '$.arr[3].n2.n').equal(arr_content)
+
+    # Clear obj and arr with specific paths
+    r.expect('JSON.CLEAR', 'test', '$.arr[2].n').equal(1)
+    r.expect('JSON.CLEAR', 'test', '$.arr[3].n2.n').equal(1)
+
+    # Fail clear on inappropriate path (not obj or arr)
+    r.expect('JSON.CLEAR', 'test', '$.arr[1]').equal(0)
+
+    # Make sure specific obj content was cleared
+    r.expect('JSON.GET', 'test', '$.arr[2].n').equal('{}')
+    # Make sure specific arr content was cleared
+    r.expect('JSON.GET', 'test', '$.arr[3].n2.n').equal('[]')
+
+    # Make sure only appropriate content (obj and arr) was cleared - and that errors were printed for inappropriate content (string and numeric)
+    # TODO: Enable when supporting multi results (and not only the first)
+    #r.expect('JSON.GET', 'test', '$..n').equal([42, 44, {}, []])
+
+    # Clear root
+    # TODO: switch order of the following paths and expect .equals(2) when supporting multi-paths
+    r.expect('JSON.CLEAR', 'test', '$', '$.arr[2].n').equal(1)
+    r.expect('JSON.GET', 'test', '$').equal('{}')
+
+    r.expect('JSON.SET', 'test', '$', obj_content).ok()
+    r.expect('JSON.CLEAR', 'test').equal(1)
+    r.expect('JSON.GET', 'test', '$').equal('{}')
+
 def testArrayCRUD(env):
     """Test JSON Array CRUDness"""
 
@@ -475,24 +527,67 @@ def testArrIndexCommand(env):
     r = env
 
     r.assertOk(r.execute_command('JSON.SET', 'test',
+                                    '.', '{ "arr": [0, 1, 2, 3, 2, 1, 0] }'))
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0), 0)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 3), 3)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 4), -1)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 1), 6)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, -1), 6)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 6), 6)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 4, -0), 6)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 5, -1), -1)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, -2, 6), -1)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '"foo"'), -1)
+
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 4, '[4]'), 8)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 3), 3)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, 3), 5)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '[4]'), 4)
+
+def testArrInsertCommand(env):
+    """Test JSON.ARRINSERT command"""
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{ "arr": [] }'))
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 0, '1'), 1)
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', -1, '2'), 2)
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', -2, '3'), 3)
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 3, '4'), 4)
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '.arr'), "[3,2,1,4]")
+
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 1, '5'), 5)
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', -2, '6'), 6)    
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '.arr'), "[3,5,2,6,1,4]")
+    
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', -3, '7', '{"A":"Z"}', '9'), 9)
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '.arr'), '[3,5,2,7,{"A":"Z"},9,6,1,4]')     
+
+    r.expect('JSON.ARRINSERT', 'test', '.arr', -10, '10').raiseError()
+    r.expect('JSON.ARRINSERT', 'test', '.arr', 10, '10').raiseError()
+
+def testArrIndexMixCommand(env):
+    """Test JSON.ARRINDEX command with mixed values"""
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'test',
                                     '.', '{ "arr": [0, 1, 2, 3, 2, 1, 0, {"val": 4}, {"val": 9}, [3,4,8], ["a", "b", 8]] }'))
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0), 0)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 3), 3)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 4), -1)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 1), 6)
-    # r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, -1), 6)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, -5), 6)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 6), 6)
-    # r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 4, -0), 6)
-    # r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 5, -1), -1)
-    # r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, -2, 6), -1)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 4, -0), 6)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 5, -1), 6)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, -2, 6), -1)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '"foo"'), -1)
 
-    # r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 4, '[4]'), 8)
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 4, '[4]'), 12)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 3), 3)
-    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, 3), 4)
-    # r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '[4]'), -1)
-    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '{\"val\":4}'), 7)
-    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '["a", "b", 8]'), 10)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, 3), 5)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '[4]'), 4)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '{\"val\":4}'), 8)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '["a", "b", 8]'), 11)
 
 def testArrTrimCommand(env):
     """Test JSON.ARRTRIM command"""
@@ -526,9 +621,11 @@ def testArrPopCommand(env):
     r.assertEqual('1', r.execute_command('JSON.ARRPOP', 'test', '.', 0))
     r.assertEqual('4', r.execute_command('JSON.ARRPOP', 'test', '.', 2))
     r.assertEqual('6', r.execute_command('JSON.ARRPOP', 'test', '.', 99))
-    # r.assertEqual('2', r.execute_command('JSON.ARRPOP', 'test', '.', -99))
-    # r.assertEqual('3', r.execute_command('JSON.ARRPOP', 'test'))
-    # r.assertIsNone(r.execute_command('JSON.ARRPOP', 'test'))
+    r.assertEqual('2', r.execute_command('JSON.ARRPOP', 'test', '.', -99))
+    r.assertEqual('3', r.execute_command('JSON.ARRPOP', 'test'))
+    r.assertIsNone(r.execute_command('JSON.ARRPOP', 'test'))
+    r.assertIsNone(r.execute_command('JSON.ARRPOP', 'test', '.'))
+    r.assertIsNone(r.execute_command('JSON.ARRPOP', 'test', '.', 2))
 
 def testTypeCommand(env):
     """Test JSON.TYPE command"""
@@ -702,58 +799,6 @@ def testIssue_74(env):
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{}'))
     # This shouldn't crash Redis
     r.expect('JSON.SET', 'test', '$a', '12').raiseError()
-
-def testIndexAdd(env):
-    """Test Index ADD/DEL"""
-    r = env
-
-    def do(*args, response='OK'):
-        r.expect(*args).equal(response)
-
-    do('JSON.INDEX', 'ADD', 'index', 'first', '$.first')
-    do('JSON.INDEX', 'ADD', 'index', 'second', '$.second')
-    do('JSON.INDEX', 'ADD', 'index2', 'second', '$.third')
-
-    # Error should be thrown since this field already exists in the index
-    do('JSON.INDEX', 'ADD', 'index', 'first', '$.first2', response='Field already exists')
-
-    # After INDEX DEL we should be able reuse the same field name
-    do('JSON.INDEX', 'DEL', 'index')
-    do('JSON.INDEX', 'ADD', 'index', 'first', '$.first2')
-    do('JSON.INDEX', 'ADD', 'index', 'second', '$.second2')
-
-    # INDEX DEL should only del the specific index
-    do('JSON.INDEX', 'ADD', 'index2', 'second', '$.third2', response='Field already exists')
-
-
-def testRediSearch(env):
-    """Test RediSearch integration"""
-    r = env
-
-    def do(*args):
-        r.assertOk(r.execute_command(*args))
-
-    index = 'person'
-
-    do('JSON.INDEX', 'ADD', index, 'first', '$.first')
-    do('JSON.INDEX', 'ADD', index, 'last', '$.last')
-
-    do('JSON.SET', 'joe', '.', '{"first": "Joe", "last": "Smith"}', 'INDEX', index)
-    do('JSON.SET', 'kevin', '.', '{"first": "Kevin", "last": "Smith"}', 'INDEX', index)
-    do('JSON.SET', 'mike', '.', '{"first": "Mike", "last": "Lane"}', 'INDEX', index)
-    do('JSON.SET', 'dave', '.', '{"first": "Dave"}', 'INDEX', index)
-    do('JSON.SET', 'levi', '.', '{"last": "Smith"}', 'INDEX', index)
-
-    searches = [
-        ('@first:mike', '$.last',  '{"mike":["Lane"]}'),
-        ('@last:smith', '$.first', '{"joe":["Joe"],"kevin":["Kevin"],"levi":[]}'),
-        ('*', '$.first', '{"joe":["Joe"],"kevin":["Kevin"],"mike":["Mike"],"dave":["Dave"],"levi":[]}'),
-    ]
-
-    for (query, path, results) in searches:
-        r.assertEqual(
-            json.loads(r.execute_command('JSON.QGET', index, query, path)),
-            json.loads(results))
 
 def testDoubleParse(env):
     r = env

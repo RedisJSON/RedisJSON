@@ -47,7 +47,7 @@ Before using RedisJSON, you should familiarize yourself with its commands and sy
 
 ### With `redis-cli`
 
-This example will use [`redis-cli`](http://redis.io/topics/rediscli) as the Redis client. The first RedisJSON command to try out is [`JSON.SET`](/commands#jsonset), which sets a Redis key with a JSON value. All JSON values can be used, for example a string:
+This example will use [`redis-cli`](http://redis.io/topics/rediscli) as the Redis client. The first RedisJSON command to try out is [`JSON.SET`](commands.md#jsonset), which sets a Redis key with a JSON value. All JSON values can be used, for example a string:
 
 ```
 127.0.0.1:6379> JSON.SET foo . '"bar"'
@@ -70,7 +70,7 @@ string
 
 ``` 
 
-[`JSON.STRLEN`](/commands#jsonstrlen) tells you the length of the string, and you can append another string to it with [`JSON.STRAPPEND`](/commands#jsonstrappend). Numbers can be [incremented](/commands#jsonnumincrby) and [multiplied](/commands#jsonnummultby):
+[`JSON.STRLEN`](commands.md#jsonstrlen) tells you the length of the string, and you can append another string to it with [`JSON.STRAPPEND`](commands.md#jsonstrappend). Numbers can be [incremented](commands.md#jsonnumincrby) and [multiplied](commands.md#jsonnummultby):
 
 ```
 127.0.0.1:6379> JSON.SET num . 0
@@ -100,7 +100,7 @@ OK
 "[true,{\"answer\":42}]"
 ```
 
-The handy [`JSON.DEL`](/commands#jsondel) command deletes anything you tell it to. Arrays can be manipulated with a dedicated subset of RedisJSON commands:
+The handy [`JSON.DEL`](commands.md#jsondel) command deletes anything you tell it to. Arrays can be manipulated with a dedicated subset of RedisJSON commands:
 
 ```
 127.0.0.1:6379> JSON.SET arr . []
@@ -231,6 +231,7 @@ Some languages have client libraries that provide support for RedisJSON's comman
 | [node_redis-rejson][node_redis-rejson-url] | Node.js | MIT | [Kyle Davis @stockholmux][node_redis-rejson-author] | [![node_redis-rejson-stars]][node_redis-rejson-url] | [npm][node_redis-rejson-package]  |
 | [redis-modules-sdk][redis-modules-sdk-url] | Node.js | BSD-3-Clause | [Dani Tseitlin @danitseitlin][redis-modules-sdk-author] | [![redis-modules-sdk-stars]][redis-modules-sdk-url] | [npm][redis-modules-sdk-package] |
 | [JRedisJSON][JRedisJSON-url] | Java | BSD-2-Clause | [Redis Labs][JRedisJSON-author] | [![JRedisJSON-stars]][JRedisJSON-url] | [maven][JRedisJSON-package] |
+| [redis-modules-java][redis-modules-java-url] | Java | Apache-2.0 | [Liming Deng @dengliming][redis-modules-java-author] | [![redis-modules-java-stars]][redis-modules-java-url] | [maven][redis-modules-java-package] |
 | [redisjson-py][rejson-py-url]  | Python | BSD-2-Clause | [Redis Labs][rejson-py-author] | [![rejson-py-stars]][rejson-py-url] | [pypi][rejson-py-package] |
 | [go-rejson][go-rejson-url] | Go | MIT | [Nitish Malhotra @nitishm][go-rejson-author] | [![go-rejson-stars]][go-rejson-url] | |
 | [rejonson][rejonson-url] | Go | Apache-2.0 | [Daniel Krom @KromDaniel][rejonson-author] | [![rejonson-stars]][rejonson-url] | |
@@ -258,6 +259,11 @@ Some languages have client libraries that provide support for RedisJSON's comman
 [JRedisJSON-url]: https://github.com/RedisJSON/JRedisJSON
 [JRedisJSON-package]: https://search.maven.org/artifact/com.redislabs/jrejson/1.2.0/jar
 [JRedisJSON-stars]: https://img.shields.io/github/stars/RedisJSON/JRedisJSON.svg?style=social&amp;label=Star&amp;maxAge=2592000
+
+[redis-modules-java-author]: https://github.com/dengliming/
+[redis-modules-java-url]: https://github.com/dengliming/redis-modules-java
+[redis-modules-java-package]: https://search.maven.org/artifact/io.github.dengliming.redismodule/redis-modules-java/
+[redis-modules-java-stars]: https://img.shields.io/github/stars/dengliming/redis-modules-java.svg?style=social&amp;label=Star&amp;maxAge=2592000
 
 [rejson-py-author]: https://redislabs.com
 [rejson-py-url]: https://github.com/RedisJSON/redisjson-py
