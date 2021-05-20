@@ -2,7 +2,7 @@ use jsonpath_lib::select::select_value::SelectValue;
 use serde_json::map::Entry;
 use serde_json::{Number, Value};
 
-use redis_module::key::RedisKeyWritable;
+use redis_module::key::{RedisKeyWritable, RedisKey};
 use redis_module::rediserror::RedisError;
 use redis_module::Context;
 
@@ -37,7 +37,11 @@ pub enum UpdateInfo {
     ARUI(AddRootUpdateInfo),
 }
 
-pub trait Holder<E: Clone, V: SelectValue> {
+pub trait ReadHolder<E: Clone, V: SelectValue> {
+    fn get_value(&self) -> Result<Option<&V>, RedisError>;
+}
+
+pub trait WriteHolder<E: Clone, V: SelectValue> {
     fn delete(&mut self) -> Result<(), RedisError>;
     fn get_value(&self) -> Result<Option<&mut V>, RedisError>;
     fn set_root(&mut self, v: Option<E>) -> Result<(), RedisError>;
@@ -76,8 +80,10 @@ pub trait Holder<E: Clone, V: SelectValue> {
 pub trait Manager {
     type V: SelectValue;
     type E: Clone;
-    type Holder: Holder<Self::E, Self::V>;
-    fn open_key_writable(&self, ctx: &Context, key: &str) -> Result<Self::Holder, RedisError>;
+    type WriteHolder: WriteHolder<Self::E, Self::V>;
+    type ReadHolder: ReadHolder<Self::E, Self::V>;
+    fn open_key_read(&self, ctx: &Context, key: &str) -> Result<Self::ReadHolder, RedisError>;
+    fn open_key_write(&self, ctx: &Context, key: &str) -> Result<Self::WriteHolder, RedisError>;
     fn from_str(&self, val: &str, format: Format) -> Result<Self::E, Error>;
     fn get_memory(&self, v: &Self::V) -> Result<usize, RedisError>;
 }
@@ -90,11 +96,11 @@ fn err_json(value: &Value, expected_value: &'static str) -> Error {
     ))
 }
 
-pub struct KeyHolder {
+pub struct KeyHolderWrite {
     key: RedisKeyWritable,
 }
 
-impl KeyHolder {
+impl KeyHolderWrite {
     fn update<F: FnMut(Value) -> Result<Option<Value>, Error>>(
         &self,
         path: &Vec<String>,
@@ -215,7 +221,7 @@ impl KeyHolder {
     }
 }
 
-impl Holder<Value, Value> for KeyHolder {
+impl WriteHolder<Value, Value> for KeyHolderWrite {
     fn delete(&mut self) -> Result<(), RedisError> {
         self.key.delete()?;
         Ok(())
@@ -472,16 +478,36 @@ impl Holder<Value, Value> for KeyHolder {
     }
 }
 
+pub struct KeyHolderRead {
+    key: RedisKey,
+}
+
+impl ReadHolder<Value, Value> for KeyHolderRead {
+    fn get_value(&self) -> Result<Option<&Value>, RedisError> {
+        let key_value = self.key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?;
+        match key_value {
+            Some(v) => Ok(Some(&v.data)),
+            None => Ok(None),
+        }
+    }
+}
+
 pub struct RedisJsonKeyManager;
 
 impl Manager for RedisJsonKeyManager {
-    type Holder = KeyHolder;
+    type WriteHolder = KeyHolderWrite;
+    type ReadHolder = KeyHolderRead;
     type V = Value;
     type E = Value;
 
-    fn open_key_writable(&self, ctx: &Context, key: &str) -> Result<KeyHolder, RedisError> {
+    fn open_key_read(&self, ctx: &Context, key: &str) -> Result<KeyHolderRead, RedisError> {
+        let key = ctx.open_key(key);
+        Ok(KeyHolderRead { key: key })
+    }
+
+    fn open_key_write(&self, ctx: &Context, key: &str) -> Result<KeyHolderWrite, RedisError> {
         let key = ctx.open_key_writable(key);
-        Ok(KeyHolder { key: key })
+        Ok(KeyHolderWrite { key: key })
     }
 
     fn from_str(&self, val: &str, format: Format) -> Result<Value, Error> {

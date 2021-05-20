@@ -1,6 +1,6 @@
 use crate::formatter::RedisJsonFormatter;
 use crate::manager::{
-    AddRootUpdateInfo, AddUpdateInfo, Holder, Manager, SetUpdateInfo, UpdateInfo,
+    AddRootUpdateInfo, AddUpdateInfo, WriteHolder, ReadHolder, Manager, SetUpdateInfo, UpdateInfo,
 };
 use crate::redisjson::{Format, Path};
 use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
@@ -22,11 +22,11 @@ use serde::Serialize;
 const JSON_ROOT_PATH: &'static str = "$";
 
 pub struct KeyValue<'a, V: SelectValue> {
-    val: &'a mut V,
+    val: &'a V,
 }
 
 impl<'a, V: SelectValue> KeyValue<'a, V> {
-    pub fn new(v: &'a mut V) -> KeyValue<'a, V> {
+    pub fn new(v: &'a V) -> KeyValue<'a, V> {
         KeyValue { val: v }
     }
 
@@ -444,7 +444,7 @@ pub fn command_json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
         paths.push(Path::new("$".to_string()));
     }
 
-    let key = manager.open_key_writable(ctx, &key)?;
+    let key = manager.open_key_read(ctx, &key)?;
     let value = match key.get_value()? {
         Some(doc) => KeyValue::new(doc)
             .to_json(&mut paths, indent, newline, space, format)?
@@ -476,7 +476,7 @@ pub fn command_json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
         };
     }
 
-    let mut redis_key = manager.open_key_writable(ctx, &key)?;
+    let mut redis_key = manager.open_key_write(ctx, &key)?;
     let current = redis_key.get_value()?;
 
     let val = manager.from_str(&value, format)?;
@@ -531,7 +531,7 @@ pub fn command_json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
         .next_string()
         .map_or_else(|_| JSON_ROOT_PATH.to_string(), |v| backwards_compat_path(v));
 
-    let mut redis_key = manager.open_key_writable(ctx, &key)?;
+    let mut redis_key = manager.open_key_write(ctx, &key)?;
     let deleted = match redis_key.get_value()? {
         Some(doc) => {
             let res = if path == "$" {
@@ -575,7 +575,7 @@ pub fn command_json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<String
             .iter()
             .map(|key| {
                 let result = manager
-                    .open_key_writable(ctx, key)?
+                    .open_key_read(ctx, key)?
                     .get_value()?
                     .map(|doc| KeyValue::new(doc).to_string(&path, Format::JSON))
                     .transpose()?;
@@ -593,7 +593,7 @@ pub fn command_json_type<M: Manager>(manager: M, ctx: &Context, args: Vec<String
     let key = args.next_string()?;
     let path = backwards_compat_path(args.next_string()?);
 
-    let key = manager.open_key_writable(ctx, &key)?;
+    let key = manager.open_key_read(ctx, &key)?;
 
     let value = key.get_value()?.map_or_else(
         || RedisValue::Null,
@@ -628,7 +628,7 @@ where
     let path = backwards_compat_path(args.next_string()?);
     let number = args.next_string()?;
 
-    let mut redis_key = manager.open_key_writable(ctx, &key)?;
+    let mut redis_key = manager.open_key_write(ctx, &key)?;
 
     let root = redis_key
         .get_value()?
@@ -698,7 +698,7 @@ pub fn command_json_bool_toggle<M: Manager>(
     let mut args = args.into_iter().skip(1);
     let key = args.next_string()?;
     let path = backwards_compat_path(args.next_string()?);
-    let mut redis_key = manager.open_key_writable(ctx, &key)?;
+    let mut redis_key = manager.open_key_write(ctx, &key)?;
 
     let root = redis_key
         .get_value()?
@@ -748,7 +748,7 @@ pub fn command_json_str_append<M: Manager>(
         json = path_or_json;
     }
 
-    let mut redis_key = manager.open_key_writable(ctx, &key)?;
+    let mut redis_key = manager.open_key_write(ctx, &key)?;
 
     let root = redis_key
         .get_value()?
@@ -787,7 +787,7 @@ pub fn command_json_str_len<M: Manager>(
     let key = args.next_string()?;
     let path = backwards_compat_path(args.next_string()?);
 
-    let key = manager.open_key_writable(ctx, &key)?;
+    let key = manager.open_key_read(ctx, &key)?;
     match key.get_value()? {
         Some(doc) => Ok(RedisValue::Integer(
             KeyValue::new(doc).str_len(&path)? as i64
@@ -809,7 +809,7 @@ pub fn command_json_arr_append<M: Manager>(
     // We require at least one JSON item to append
     args.peek().ok_or(RedisError::WrongArity)?;
 
-    let mut redis_key = manager.open_key_writable(ctx, &key)?;
+    let mut redis_key = manager.open_key_write(ctx, &key)?;
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
@@ -853,7 +853,7 @@ pub fn command_json_arr_index<M: Manager>(
 
     args.done()?; // TODO: Add to other functions as well to terminate args list
 
-    let key = manager.open_key_writable(ctx, &key)?;
+    let key = manager.open_key_read(ctx, &key)?;
 
     let index = key.get_value()?.map_or(Ok(-1), |doc| {
         KeyValue::new(doc).arr_index(&path, &json_scalar, start, end)
@@ -876,7 +876,7 @@ pub fn command_json_arr_insert<M: Manager>(
     // We require at least one JSON item to append
     args.peek().ok_or(RedisError::WrongArity)?;
 
-    let mut redis_key = manager.open_key_writable(ctx, &key)?;
+    let mut redis_key = manager.open_key_write(ctx, &key)?;
 
     let root = redis_key
         .get_value()?
@@ -915,7 +915,7 @@ pub fn command_json_arr_len<M: Manager>(
     let key = args.next_string()?;
     let path = backwards_compat_path(args.next_string()?);
 
-    let key = manager.open_key_writable(ctx, &key)?;
+    let key = manager.open_key_read(ctx, &key)?;
     match key.get_value()? {
         Some(doc) => Ok(RedisValue::Integer(
             KeyValue::new(doc).arr_len(&path)? as i64
@@ -942,7 +942,7 @@ pub fn command_json_arr_pop<M: Manager>(
         })
         .unwrap_or((JSON_ROOT_PATH.to_string(), i64::MAX));
 
-    let mut redis_key = manager.open_key_writable(ctx, &key)?;
+    let mut redis_key = manager.open_key_write(ctx, &key)?;
 
     let root = redis_key
         .get_value()?
@@ -986,7 +986,7 @@ pub fn command_json_arr_trim<M: Manager>(
     let start = args.next_i64()?;
     let stop = args.next_i64()?;
 
-    let mut redis_key = manager.open_key_writable(ctx, &key)?;
+    let mut redis_key = manager.open_key_write(ctx, &key)?;
 
     let root = redis_key
         .get_value()?
@@ -1025,7 +1025,7 @@ pub fn command_json_obj_keys<M: Manager>(
     let key = args.next_string()?;
     let path = backwards_compat_path(args.next_string()?);
 
-    let key = manager.open_key_writable(ctx, &key)?;
+    let key = manager.open_key_read(ctx, &key)?;
 
     let value = match key.get_value()? {
         Some(doc) => KeyValue::new(doc).obj_keys(&path)?.into(),
@@ -1044,7 +1044,7 @@ pub fn command_json_obj_len<M: Manager>(
     let key = args.next_string()?;
     let path = backwards_compat_path(args.next_string()?);
 
-    let key = manager.open_key_writable(ctx, &key)?;
+    let key = manager.open_key_read(ctx, &key)?;
     match key.get_value()? {
         Some(doc) => Ok(RedisValue::Integer(
             KeyValue::new(doc).obj_len(&path)? as i64
@@ -1067,7 +1067,7 @@ pub fn command_json_clear<M: Manager>(manager: M, ctx: &Context, args: Vec<Strin
     let path = paths.first().unwrap().fixed.as_str();
 
     // FIXME: handle multi paths
-    let mut redis_key = manager.open_key_writable(ctx, &key)?;
+    let mut redis_key = manager.open_key_write(ctx, &key)?;
 
     let root = redis_key
         .get_value()?
@@ -1101,7 +1101,7 @@ pub fn command_json_debug<M: Manager>(manager: M, ctx: &Context, args: Vec<Strin
             let key = args.next_string()?;
             let path = backwards_compat_path(args.next_string()?);
 
-            let key = manager.open_key_writable(ctx, &key)?;
+            let key = manager.open_key_read(ctx, &key)?;
             let value = match key.get_value()? {
                 Some(doc) => manager.get_memory(KeyValue::new(doc).get_first(&path)?)?,
                 None => 0,
@@ -1129,7 +1129,7 @@ pub fn command_json_resp<M: Manager>(manager: M, ctx: &Context, args: Vec<String
         .next_string()
         .map_or_else(|_| JSON_ROOT_PATH.to_string(), |v| backwards_compat_path(v));
 
-    let key = manager.open_key_writable(ctx, &key)?;
+    let key = manager.open_key_read(ctx, &key)?;
     match key.get_value()? {
         Some(doc) => KeyValue::new(doc).resp_serialize(&path),
         None => Ok(RedisValue::Null),
