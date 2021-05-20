@@ -225,13 +225,11 @@ fn json_mget(ctx: &Context, args: Vec<String>) -> RedisResult {
         let results: Result<Vec<RedisValue>, RedisError> = keys
             .iter()
             .map(|key| {
-                let result = ctx
-                    .open_key(key)
+                ctx.open_key(key)
                     .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
                     .map(|doc| doc.to_string(&path, Format::JSON))
-                    .transpose()?;
-
-                Ok(result.into())
+                    .transpose()
+                    .map_or_else(|_| Ok(RedisValue::Null), |v| Ok(v.into()))
             })
             .collect();
 
@@ -316,13 +314,14 @@ fn json_bool_toggle(ctx: &Context, args: Vec<String>) -> RedisResult {
                             Value::Bool(result)
                         })
                 },
-                |result| {
-                    ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_toggle", key.as_str());
-                    ctx.replicate_verbatim();
-                    Ok(result.to_string().into())
-                },
+                |result| Ok(result.to_string().into()),
             )
             .map_err(|e| e.into())
+        })
+        .and_then(|v: RedisValue| {
+            ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_toggle", key.as_str());
+            ctx.replicate_verbatim();
+            Ok(v)
         })
 }
 fn json_num_op<I, F>(
@@ -342,29 +341,24 @@ where
     let path = backwards_compat_path(args.next_string()?);
     let number = args.next_string()?;
 
-    // FIXME: Consider how to make a similar change to all other commands:
-    // FIXME: Have the keyspace notification and the replication occur only after the `data:Value` of the JSonPath is updated and the key in redis is closed (naively done here using a nested block)
-    let res = {
-        let redis_key = ctx.open_key_writable(&key);
+    let redis_key = ctx.open_key_writable(&key);
 
-        redis_key
-            .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
-            .ok_or_else(RedisError::nonexistent_key)
-            .and_then(|doc| {
-                doc.value_op(
-                    &path,
-                    |value| do_json_num_op(&number, value, &op_i64, &op_f64),
-                    |result| Ok(result.to_string().into()),
-                )
-                .map_err(|e| e.into())
-            })
-    };
-
-    if let Ok(_) = res {
-        ctx.notify_keyspace_event(NotifyEvent::MODULE, cmd, key.as_str());
-        ctx.replicate_verbatim();
-    }
-    res
+    redis_key
+        .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
+        .ok_or_else(RedisError::nonexistent_key)
+        .and_then(|doc| {
+            doc.value_op(
+                &path,
+                |value| do_json_num_op(&number, value, &op_i64, &op_f64),
+                |result| Ok(result.to_string().into()),
+            )
+            .map_err(|e| e.into())
+        })
+        .and_then(|v: RedisValue| {
+            ctx.notify_keyspace_event(NotifyEvent::MODULE, cmd, key.as_str());
+            ctx.replicate_verbatim();
+            Ok(v)
+        })
 }
 
 fn do_json_num_op<I, F>(
@@ -437,8 +431,6 @@ fn json_str_append(ctx: &Context, args: Vec<String>) -> RedisResult {
                 &path,
                 |value| do_json_str_append(&json, value),
                 |result| {
-                    ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_strappend", key.as_str());
-                    ctx.replicate_verbatim();
                     Ok(result
                         .as_str()
                         .map_or(usize::MAX, |result| result.len())
@@ -446,6 +438,11 @@ fn json_str_append(ctx: &Context, args: Vec<String>) -> RedisResult {
                 },
             )
             .map_err(|e| e.into())
+        })
+        .and_then(|v: RedisValue| {
+            ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_strappend", key.as_str());
+            ctx.replicate_verbatim();
+            Ok(v)
         })
 }
 
@@ -486,8 +483,6 @@ fn json_arr_append(ctx: &Context, args: Vec<String>) -> RedisResult {
                 &path,
                 |value| do_json_arr_append(args.clone(), value),
                 |result| {
-                    ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrappend", key.as_str());
-                    ctx.replicate_verbatim();
                     Ok(result
                         .as_array()
                         .map_or(usize::MAX, |result| result.len())
@@ -495,6 +490,11 @@ fn json_arr_append(ctx: &Context, args: Vec<String>) -> RedisResult {
                 },
             )
             .map_err(|e| e.into())
+        })
+        .and_then(|v: RedisValue| {
+            ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrappend", key.as_str());
+            ctx.replicate_verbatim();
+            Ok(v)
         })
 }
 
@@ -563,8 +563,6 @@ fn json_arr_insert(ctx: &Context, args: Vec<String>) -> RedisResult {
                 &path,
                 |value| do_json_arr_insert(args.clone(), index, value),
                 |result| {
-                    ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrinsert", key.as_str());
-                    ctx.replicate_verbatim();
                     Ok(result
                         .as_array()
                         .map_or(usize::MAX, |result| result.len())
@@ -572,6 +570,11 @@ fn json_arr_insert(ctx: &Context, args: Vec<String>) -> RedisResult {
                 },
             )
             .map_err(|e| e.into())
+        })
+        .and_then(|v: RedisValue| {
+            ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrinsert", key.as_str());
+            ctx.replicate_verbatim();
+            Ok(v)
         })
 }
 
@@ -635,12 +638,15 @@ fn json_arr_pop(ctx: &Context, args: Vec<String>) -> RedisResult {
                 &path,
                 |value| do_json_arr_pop(index, &mut res, value),
                 |_result| {
-                    ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrpop", key.as_str());
-                    ctx.replicate_verbatim();
                     Ok(()) // fake result doesn't use it uses `res` instead
                 },
             )
             .map_err(|e| e.into())
+        })
+        .and_then(|v| {
+            ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrpop", key.as_str());
+            ctx.replicate_verbatim();
+            Ok(v)
         })?;
 
     let result = match res {
@@ -695,8 +701,6 @@ fn json_arr_trim(ctx: &Context, args: Vec<String>) -> RedisResult {
                 &path,
                 |value| do_json_arr_trim(start, stop, value),
                 |result| {
-                    ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrtrim", key.as_str());
-                    ctx.replicate_verbatim();
                     Ok(result
                         .as_array()
                         .map_or(usize::MAX, |result| result.len())
@@ -704,6 +708,11 @@ fn json_arr_trim(ctx: &Context, args: Vec<String>) -> RedisResult {
                 },
             )
             .map_err(|e| e.into())
+        })
+        .and_then(|v: RedisValue| {
+            ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrtrim", key.as_str());
+            ctx.replicate_verbatim();
+            Ok(v)
         })
 }
 
