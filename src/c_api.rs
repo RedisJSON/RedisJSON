@@ -246,7 +246,7 @@ pub extern "C" fn JSONAPI_getRedisModuleStringFromKey(
 pub extern "C" fn JSONAPI_isJSON(key: *mut rawmod::RedisModuleKey) -> c_int {
     match verify_type(key, &REDIS_JSON_TYPE) {
         Ok(_) => 1,
-        Err(_) => 0
+        Err(_) => 0,
     }
 }
 
