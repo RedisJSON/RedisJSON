@@ -345,9 +345,7 @@ where
             doc.value_op(
                 &path,
                 |value| do_json_num_op(&number, value, &op_i64, &op_f64),
-                |result| {
-                    Ok(result.to_string().into())
-                },
+                |result| Ok(result.to_string().into()),
             )
             .map_err(|e| e.into())
         })
@@ -706,7 +704,7 @@ fn json_arr_trim(ctx: &Context, args: Vec<String>) -> RedisResult {
             )
             .map_err(|e| e.into())
         })
-        .and_then(|v : RedisValue| {
+        .and_then(|v: RedisValue| {
             ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_arrtrim", key.as_str());
             ctx.replicate_verbatim();
             Ok(v)
