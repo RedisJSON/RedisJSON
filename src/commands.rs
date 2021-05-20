@@ -1,6 +1,6 @@
 use crate::formatter::RedisJsonFormatter;
 use crate::manager::{
-    AddRootUpdateInfo, AddUpdateInfo, WriteHolder, ReadHolder, Manager, SetUpdateInfo, UpdateInfo,
+    AddRootUpdateInfo, AddUpdateInfo, Manager, ReadHolder, SetUpdateInfo, UpdateInfo, WriteHolder,
 };
 use crate::redisjson::{Format, Path};
 use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};

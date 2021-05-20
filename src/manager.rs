@@ -2,7 +2,7 @@ use jsonpath_lib::select::select_value::SelectValue;
 use serde_json::map::Entry;
 use serde_json::{Number, Value};
 
-use redis_module::key::{RedisKeyWritable, RedisKey};
+use redis_module::key::{RedisKey, RedisKeyWritable};
 use redis_module::rediserror::RedisError;
 use redis_module::Context;
 
