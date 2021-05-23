@@ -19,16 +19,16 @@ def test_keyspace_set(env):
         env.assertEqual('psubscribe', pubsub.get_message()['type']) 
 
         r.execute_command('JSON.SET', 'test_key', '$', '{"foo": "bar"}')
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'json.set')
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'test_key')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'json.set')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key')
 
-        env.assertEqual(b'OK', r.execute_command('JSON.SET', 'test_key', '$.foo', '"gogo"'))
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'json.set')
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'test_key')
+        env.assertEqual('OK', r.execute_command('JSON.SET', 'test_key', '$.foo', '"gogo"'))
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'json.set')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key')
 
         env.assertEqual(8, r.execute_command('JSON.STRAPPEND', 'test_key', '$.foo', '"toto"'))
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'json.strappend')
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'test_key')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'json.strappend')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key')
 
         # Negative tests should not get an event 
         env.assertEqual(None, r.execute_command('JSON.SET', 'test_key', '$.foo.a', '"nono"'))
@@ -37,13 +37,13 @@ def test_keyspace_set(env):
         env.assertEqual(8, r.execute_command('JSON.STRLEN', 'test_key', '$.foo'))
         env.assertEqual(None, pubsub.get_message())       
 
-        env.assertEqual(b'"gogototo"', r.execute_command('JSON.GET', 'test_key', '$.foo'))
+        env.assertEqual('"gogototo"', r.execute_command('JSON.GET', 'test_key', '$.foo'))
         env.assertEqual(None, pubsub.get_message())       
 
-        env.assertEqual([b'"gogototo"', None], r.execute_command('JSON.MGET', 'test_key', 'test_key1', '$.foo'))
+        env.assertEqual(['"gogototo"', None], r.execute_command('JSON.MGET', 'test_key', 'test_key1', '$.foo'))
         env.assertEqual(None, pubsub.get_message())       
 
-        env.assertEqual([b'foo'], r.execute_command('JSON.OBJKEYS', 'test_key', '$'))
+        env.assertEqual(['foo'], r.execute_command('JSON.OBJKEYS', 'test_key', '$'))
         env.assertEqual(None, pubsub.get_message())       
 
         env.assertEqual(1, r.execute_command('JSON.OBJLEN', 'test_key', '$'))
@@ -60,24 +60,24 @@ def test_keyspace_arr(env):
         env.assertEqual('psubscribe', pubsub.get_message()['type']) 
 
         r.execute_command('JSON.SET', 'test_key_arr', '$', '{"foo": []}')
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'json.set')
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'test_key_arr')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'json.set')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key_arr')
 
         env.assertEqual(2, r.execute_command('JSON.ARRAPPEND', 'test_key_arr', '$.foo', '"gogo1"', '"gogo2"'))
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'json.arrappend')
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'test_key_arr')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'json.arrappend')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key_arr')
 
         env.assertEqual(4, r.execute_command('JSON.ARRINSERT', 'test_key_arr', '$.foo', 1, '"gogo3"', '"gogo4"'))
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'json.arrinsert')
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'test_key_arr')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'json.arrinsert')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key_arr')
 
-        env.assertEqual(b'"gogo3"', r.execute_command('JSON.ARRPOP', 'test_key_arr', '$.foo', 1))
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'json.arrpop')
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'test_key_arr')
+        env.assertEqual('"gogo3"', r.execute_command('JSON.ARRPOP', 'test_key_arr', '$.foo', 1))
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'json.arrpop')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key_arr')
 
         env.assertEqual(2, r.execute_command('JSON.ARRTRIM', 'test_key_arr', '$.foo', 0, 1))
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'json.arrtrim')
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'test_key_arr')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'json.arrtrim')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key_arr')
 
         # Negative tests should not get an event 
         env.assertEqual(0, r.execute_command('JSON.ARRINDEX', 'test_key_arr', '$.foo', '"gogo1"'))
@@ -99,16 +99,16 @@ def test_keyspace_del(env):
         env.assertEqual('psubscribe', pubsub.get_message()['type']) 
 
         r.execute_command('JSON.SET', 'test_key', '$', '{"foo": "bar", "foo2":"bar2", "foo3":"bar3"}')
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'json.set')
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'test_key')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'json.set')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key')
 
         env.assertEqual(1, r.execute_command('JSON.DEL', 'test_key', '$.foo'))
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'json.del')
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'test_key')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'json.del')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key')
 
         env.assertEqual(1, r.execute_command('JSON.FORGET', 'test_key', '$.foo3'))
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'json.del')
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'test_key')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'json.del')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key')
 
         env.assertEqual(0, r.execute_command('JSON.DEL', 'test_key', '$.foo'))
         env.assertEqual(None, pubsub.get_message())      
@@ -124,19 +124,19 @@ def test_keyspace_num(env):
         env.assertEqual('psubscribe', pubsub.get_message()['type']) 
 
         r.execute_command('JSON.SET', 'test_key', '$', '{"foo": 1}')
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'json.set')
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'test_key')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'json.set')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key')
 
-        env.assertEqual(b'4', r.execute_command('JSON.NUMINCRBY', 'test_key', '$.foo', 3))
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'json.numincrby')
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'test_key')
+        env.assertEqual('4', r.execute_command('JSON.NUMINCRBY', 'test_key', '$.foo', 3))
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'json.numincrby')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key')
 
-        env.assertEqual(b'12', r.execute_command('JSON.NUMMULTBY', 'test_key', '$.foo', 3))
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'json.nummultby')
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'test_key')
+        env.assertEqual('12', r.execute_command('JSON.NUMMULTBY', 'test_key', '$.foo', 3))
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'json.nummultby')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key')
 
-        env.assertEqual(b'1728', r.execute_command('JSON.NUMPOWBY', 'test_key', '$.foo', 3))
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'json.numpowby')
-        assert_msg(env, pubsub.get_message(), 'pmessage', b'test_key')
+        env.assertEqual('1728', r.execute_command('JSON.NUMPOWBY', 'test_key', '$.foo', 3))
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'json.numpowby')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key')
 
         # TODO add negative test for number
