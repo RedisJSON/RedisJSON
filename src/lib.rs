@@ -268,14 +268,26 @@ fn json_type(ctx: &Context, args: Vec<String>) -> RedisResult {
 /// JSON.NUMINCRBY <key> <path> <number>
 ///
 fn json_num_incrby(ctx: &Context, args: Vec<String>) -> RedisResult {
-    json_num_op(ctx, "json.numincrby", args, |i1, i2| i1 + i2, |f1, f2| f1 + f2)
+    json_num_op(
+        ctx,
+        "json.numincrby",
+        args,
+        |i1, i2| i1 + i2,
+        |f1, f2| f1 + f2,
+    )
 }
 
 ///
 /// JSON.NUMMULTBY <key> <path> <number>
 ///
 fn json_num_multby(ctx: &Context, args: Vec<String>) -> RedisResult {
-    json_num_op(ctx, "json.nummultby", args, |i1, i2| i1 * i2, |f1, f2| f1 * f2)
+    json_num_op(
+        ctx,
+        "json.nummultby",
+        args,
+        |i1, i2| i1 * i2,
+        |f1, f2| f1 * f2,
+    )
 }
 
 ///
