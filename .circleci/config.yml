@@ -1,13 +1,21 @@
 version: 2.1
 
 commands:
-  abort-for-docs:
+
+  early-returns:
     steps:
       - run:
-          name: Avoid tests for docs
+          name: Early return if this is a docs build
           command: |
-            if [[ $CIRCLE_BRANCH == *_docs ]]; then
-              echo "Identifies as documents PR, no testing required"
+            if [[ $CIRCLE_BRANCH == *docs ]]; then
+              echo "Identifies as documents PR, no testing required."
+              circleci step halt
+            fi
+      - run:
+          name: Early return if this branch should ignore CI
+          command: |
+            if [[ $CIRCLE_BRANCH == *noci ]]; then
+              echo "Identifies as actively ignoring CI, no testing required."
               circleci step halt
             fi
 
@@ -66,7 +74,7 @@ commands:
           command: rm -f tests/pytest/logs/*.rdb
       - store_artifacts:
           path: tests/pytest/logs
-  
+
   build-steps:
     parameters:
       build_params:
@@ -82,7 +90,6 @@ commands:
         type: string
         default: ""
     steps:
-      - abort-for-docs
       - checkout-all
       - run:
           name: Setup automation and install dependencies
@@ -120,7 +127,6 @@ commands:
 
   test-steps:
     steps:
-      - abort-for-docs
       - checkout-all
       - run:
           name: Run all tests
@@ -137,7 +143,7 @@ commands:
       platform:
         type: string
     steps:
-      - abort-for-docs
+      - early-returns
       - setup-executor
       - checkout-all
       - setup-automation
@@ -167,8 +173,7 @@ commands:
       - run:
           name: Install remote benchmark tool dependencies
           command: |
-            mkdir -p /workspace
-            TF_EXE_FILE_NAME=/workspace/terraform ./tests/benchmarks/remote/install_deps.sh
+            VERSION=0.14.8 ./deps/readies/bin/getterraform
       - run:
           name: Install remote benchmark python dependencies
           command: python3 -m pip install -r ./tests/benchmarks/requirements.txt
@@ -184,7 +189,7 @@ commands:
             export EC2_PRIVATE_PEM=$PERFORMANCE_EC2_PRIVATE_PEM
 
             redisbench-admin run-remote \
-              --terraform_bin_path /workspace/terraform \
+              --required-module ReJSON \
               --module_path << parameters.module_path >> \
               --github_actor << parameters.github_actor >> \
               --github_repo $CIRCLE_PROJECT_REPONAME \
@@ -228,7 +233,7 @@ jobs:
     docker:
       - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
-      - abort-for-docs
+      - early-returns
       - early-return-for-forked-pull-requests
       - attach_workspace:
           at: workspace

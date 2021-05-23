@@ -1,5 +1,5 @@
 version: 0.2
-name: "json_set_num_0"
+name: "json_nummultby_num_2"
 description: "JSON.SET num . 2 || https://oss.redislabs.com/redisjson/performance/"
 remote:
  - type: oss-standalone

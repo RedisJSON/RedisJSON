@@ -1,5 +1,5 @@
 version: 0.2
-name: "json_get_array_of_docs[1]_pass_100_json"
+name: "json_get_array_of_docs[1]sclr_pass_100_json"
 description: "JSON.GET pass-100 array_of_docs[1] || {Full document: pass-100.json https://oss.redislabs.com/redisjson/performance/"
 remote:
  - type: oss-standalone
