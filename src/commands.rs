@@ -1,6 +1,6 @@
 use crate::formatter::RedisJsonFormatter;
 use crate::manager::{
-    AddRootUpdateInfo, AddUpdateInfo, Manager, ReadHolder, SetUpdateInfo, UpdateInfo, WriteHolder,
+    AddUpdateInfo, Manager, ReadHolder, SetUpdateInfo, UpdateInfo, WriteHolder,
 };
 use crate::redisjson::{Format, Path};
 use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
@@ -186,7 +186,8 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             if let StaticPathElement::Root = parsed_static_path.static_path_elements.last().unwrap()
             {
                 // Adding to the root
-                Ok(vec![UpdateInfo::ARUI(AddRootUpdateInfo {
+                Ok(vec![UpdateInfo::AUI(AddUpdateInfo {
+                    path: Vec::new(),
                     key: key.to_string(),
                 })])
             } else {
@@ -485,7 +486,7 @@ pub fn command_json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
         (Some(ref mut doc), ref op) => {
             if path == "$" {
                 if *op != SetOptions::NotExists {
-                    redis_key.set_root(Some(val))?;
+                    redis_key.set_value(Vec::new(), val)?;
                     ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_set", key.as_str());
                     ctx.replicate_verbatim();
                     REDIS_OK
@@ -495,9 +496,20 @@ pub fn command_json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
             } else {
                 let update_info = KeyValue::new(*doc).find_paths(&path, op)?;
                 if update_info.len() > 0 {
-                    if redis_key.set_value(update_info, val)? {
-                        ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_set", key.as_str());
-                        ctx.replicate_verbatim();
+                    let mut res = false;
+                    for ui in update_info{
+                        res = match ui {
+                            UpdateInfo::SUI(sui) => {
+                                redis_key.set_value(sui.path, val.clone())?
+                            },
+                            UpdateInfo::AUI(aui) => {
+                                redis_key.dict_add(aui.path, &aui.key, val.clone())?
+                            }
+                        }
+                    }
+                    ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_set", key.as_str());
+                    ctx.replicate_verbatim();
+                    if res {
                         REDIS_OK
                     } else {
                         Ok(RedisValue::Null)
@@ -510,7 +522,7 @@ pub fn command_json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
         (None, SetOptions::AlreadyExists) => Ok(RedisValue::Null),
         (None, _) => {
             if path == "$" {
-                redis_key.set_root(Some(val))?;
+                redis_key.set_value(Vec::new(), val)?;
                 ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_set", key.as_str());
                 ctx.replicate_verbatim();
                 REDIS_OK
@@ -545,11 +557,13 @@ pub fn command_json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
                 } else {
                     Vec::new()
                 };
-                if paths.len() > 0 {
-                    redis_key.delete_paths(paths)?
-                } else {
-                    0
+                let mut changed = 0;
+                for p in paths{
+                    if redis_key.delete_path(p)? {
+                        changed+=1;
+                    }
                 }
+                changed
             };
             if res > 0 {
                 ctx.notify_keyspace_event(NotifyEvent::MODULE, "json_del", key.as_str());
@@ -559,7 +573,7 @@ pub fn command_json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
         }
         None => 0,
     };
-    Ok(deleted.into())
+    Ok((deleted as i64).into())
 }
 
 pub fn command_json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
@@ -646,18 +660,17 @@ where
         Vec::new()
     };
     if paths.len() > 0 {
-        let res = Ok({
-            match op {
-                NumOp::INCR => redis_key.incr_by(paths, number),
-                NumOp::MULT => redis_key.mult_by(paths, number),
-                NumOp::POW => redis_key.pow_by(paths, number),
-            }
-        }?
-        .to_string()
-        .into());
+        let mut res = None;
+        for p in paths{
+            res = Some(match op {
+                NumOp::INCR => redis_key.incr_by(p, &number)?,
+                NumOp::MULT => redis_key.mult_by(p, &number)?,
+                NumOp::POW => redis_key.pow_by(p, &number)?,
+            });
+        }
         ctx.notify_keyspace_event(NotifyEvent::MODULE, cmd, key.as_str());
         ctx.replicate_verbatim();
-        res
+        Ok(res.unwrap().to_string().into())
     } else {
         Err(RedisError::String(format!(
             "Path '{}' does not exist",
@@ -714,10 +727,13 @@ pub fn command_json_bool_toggle<M: Manager>(
         Vec::new()
     };
     if paths.len() > 0 {
-        let res = Ok(redis_key.bool_toggle(paths)?.to_string().into());
+        let mut res = None;
+        for p in paths{
+            res = Some(redis_key.bool_toggle(p)?);
+        }
         ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.toggle", key.as_str());
         ctx.replicate_verbatim();
-        res
+        Ok(res.unwrap().to_string().into())
     } else {
         Err(RedisError::String(format!(
             "Path '{}' does not exist",
@@ -766,10 +782,13 @@ pub fn command_json_str_append<M: Manager>(
     };
 
     if paths.len() > 0 {
-        let res = Ok(redis_key.str_append(paths, json)?.into());
+        let mut res = None;
+        for p in paths{
+            res = Some(redis_key.str_append(p, json.clone())?);
+        }
         ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.strappend", key.as_str());
         ctx.replicate_verbatim();
-        res
+        Ok(res.unwrap().into())
     } else {
         Err(RedisError::String(format!(
             "Path '{}' does not exist",
@@ -808,6 +827,7 @@ pub fn command_json_arr_append<M: Manager>(
 
     // We require at least one JSON item to append
     args.peek().ok_or(RedisError::WrongArity)?;
+    let args = args.map(|json| manager.from_str(&json,Format::JSON)).collect::<Result<_, _>>()?;
 
     let mut redis_key = manager.open_key_write(ctx, &key)?;
     let root = redis_key
@@ -826,10 +846,13 @@ pub fn command_json_arr_append<M: Manager>(
     };
 
     if paths.len() > 0 {
-        let res = Ok(redis_key.arr_append(paths, args)?.into());
+        let mut res = None;
+        for p in paths{
+            res = Some(redis_key.arr_append(p, &args)?);    
+        }
         ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrappend", key.as_str());
         ctx.replicate_verbatim();
-        res
+        Ok(res.unwrap().into())
     } else {
         Err(RedisError::String(format!(
             "Path '{}' does not exist",
@@ -875,6 +898,7 @@ pub fn command_json_arr_insert<M: Manager>(
 
     // We require at least one JSON item to append
     args.peek().ok_or(RedisError::WrongArity)?;
+    let args = args.map(|json| manager.from_str(&json,Format::JSON)).collect::<Result<_, _>>()?;
 
     let mut redis_key = manager.open_key_write(ctx, &key)?;
 
@@ -894,10 +918,13 @@ pub fn command_json_arr_insert<M: Manager>(
     };
 
     if paths.len() > 0 {
-        let res = Ok(redis_key.arr_insert(paths, args, index)?.into());
+        let mut res = None;
+        for p in paths{
+            res = Some(redis_key.arr_insert(p, &args, index)?);
+        }
         ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrinsert", key.as_str());
         ctx.replicate_verbatim();
-        res
+        Ok(res.unwrap().into())
     } else {
         Err(RedisError::String(format!(
             "Path '{}' does not exist",
@@ -960,8 +987,11 @@ pub fn command_json_arr_pop<M: Manager>(
     };
 
     if paths.len() > 0 {
-        let res = redis_key.arr_pop(paths, index)?;
-        match res {
+        let mut res = None;
+        for p in paths{
+            res = Some(redis_key.arr_pop(p, index)?);
+        }
+        match res.unwrap() {
             Some(r) => {
                 ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrpop", key.as_str());
                 ctx.replicate_verbatim();
@@ -1004,10 +1034,13 @@ pub fn command_json_arr_trim<M: Manager>(
     };
 
     if paths.len() > 0 {
-        let res = Ok(redis_key.arr_trim(paths, start, stop)?.into());
+        let mut res = None;
+        for p in paths{
+            res = Some(redis_key.arr_trim(p, start, stop)?);
+        }
         ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrtrim", key.as_str());
         ctx.replicate_verbatim();
-        res
+        Ok(res.unwrap().into())
     } else {
         Err(RedisError::String(format!(
             "Path '{}' does not exist",
@@ -1082,10 +1115,13 @@ pub fn command_json_clear<M: Manager>(manager: M, ctx: &Context, args: Vec<Strin
     };
 
     if paths.len() > 0 {
-        let res = Ok(redis_key.clear(paths)?.into());
+        let mut res = None;
+        for p in paths{
+            res = Some(redis_key.clear(p)?);
+        }
         ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.clear", key.as_str());
         ctx.replicate_verbatim();
-        res
+        Ok(res.unwrap().into())
     } else {
         Err(RedisError::String(format!(
             "Path '{}' does not exist",

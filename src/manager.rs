@@ -27,61 +27,56 @@ pub struct AddUpdateInfo {
     pub key: String,
 }
 
-pub struct AddRootUpdateInfo {
-    pub key: String,
-}
-
 pub enum UpdateInfo {
     SUI(SetUpdateInfo),
     AUI(AddUpdateInfo),
-    ARUI(AddRootUpdateInfo),
 }
 
-pub trait ReadHolder<E: Clone, V: SelectValue> {
+pub trait ReadHolder<V: SelectValue> {
     fn get_value(&self) -> Result<Option<&V>, RedisError>;
 }
 
 pub trait WriteHolder<E: Clone, V: SelectValue> {
     fn delete(&mut self) -> Result<(), RedisError>;
     fn get_value(&self) -> Result<Option<&mut V>, RedisError>;
-    fn set_root(&mut self, v: Option<E>) -> Result<(), RedisError>;
-    fn set_value(&mut self, update_info: Vec<UpdateInfo>, v: E) -> Result<bool, RedisError>;
-    fn delete_paths(&mut self, paths: Vec<Vec<String>>) -> Result<usize, RedisError>;
-    fn incr_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Number, RedisError>;
-    fn mult_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Number, RedisError>;
-    fn pow_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Number, RedisError>;
-    fn bool_toggle(&mut self, paths: Vec<Vec<String>>) -> Result<bool, RedisError>;
-    fn str_append(&mut self, paths: Vec<Vec<String>>, val: String) -> Result<usize, RedisError>;
-    fn arr_append<I: Iterator<Item = String>>(
+    fn set_value(&mut self, path: Vec<String>, v: E) -> Result<bool, RedisError>;
+    fn dict_add(&mut self, path: Vec<String>, key: &str, v: E) -> Result<bool, RedisError>;
+    fn delete_path(&mut self, path: Vec<String>) -> Result<bool, RedisError>;
+    fn incr_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError>;
+    fn mult_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError>;
+    fn pow_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError>;
+    fn bool_toggle(&mut self, path: Vec<String>) -> Result<bool, RedisError>;
+    fn str_append(&mut self, path: Vec<String>, val: String) -> Result<usize, RedisError>;
+    fn arr_append(
         &mut self,
-        paths: Vec<Vec<String>>,
-        args: I,
+        path: Vec<String>,
+        args: &Vec<E>,
     ) -> Result<usize, RedisError>;
-    fn arr_insert<I: Iterator<Item = String>>(
+    fn arr_insert(
         &mut self,
-        paths: Vec<Vec<String>>,
-        args: I,
+        path: Vec<String>,
+        args: &Vec<E>,
         index: i64,
     ) -> Result<usize, RedisError>;
     fn arr_pop(
         &mut self,
-        paths: Vec<Vec<String>>,
+        path: Vec<String>,
         index: i64,
     ) -> Result<Option<String>, RedisError>;
     fn arr_trim(
         &mut self,
-        paths: Vec<Vec<String>>,
+        path: Vec<String>,
         start: i64,
         stop: i64,
     ) -> Result<usize, RedisError>;
-    fn clear(&mut self, paths: Vec<Vec<String>>) -> Result<usize, RedisError>;
+    fn clear(&mut self, path: Vec<String>) -> Result<usize, RedisError>;
 }
 
 pub trait Manager {
     type V: SelectValue;
     type E: Clone;
     type WriteHolder: WriteHolder<Self::E, Self::V>;
-    type ReadHolder: ReadHolder<Self::E, Self::V>;
+    type ReadHolder: ReadHolder<Self::V>;
     fn open_key_read(&self, ctx: &Context, key: &str) -> Result<Self::ReadHolder, RedisError>;
     fn open_key_write(&self, ctx: &Context, key: &str) -> Result<Self::WriteHolder, RedisError>;
     fn from_str(&self, val: &str, format: Format) -> Result<Self::E, Error>;
@@ -159,35 +154,34 @@ impl KeyHolderWrite {
 
     fn do_op<F>(
         &mut self,
-        paths: Vec<Vec<String>>,
+        paths: Vec<String>,
         mut op_fun: F,
     ) -> Result<Option<Value>, RedisError>
     where
         F: FnMut(Value) -> Result<Option<Value>, Error>,
     {
         let mut new = None;
-        for p in paths {
-            if p.len() == 0 {
-                // updating the root require special treatment
-                let root = self.get_value().unwrap().unwrap();
-                let res = (op_fun)(root.take())?;
+        if paths.len() == 0 {
+            // updating the root require special treatment
+            let root = self.get_value().unwrap().unwrap();
+            let res = (op_fun)(root.take())?;
+            new = res.clone();
+            self.set_root(res)?;
+        } else {
+            self.update(&paths, self.get_value().unwrap().unwrap(), |v| {
+                let res = (op_fun)(v)?;
                 new = res.clone();
-                self.set_root(res)?;
-            } else {
-                self.update(&p, self.get_value().unwrap().unwrap(), |v| {
-                    let res = (op_fun)(v)?;
-                    new = res.clone();
-                    Ok(res)
-                })?;
-            }
+                Ok(res)
+            })?;
         }
+
         Ok(new)
     }
 
     fn do_num_op<F1, F2>(
         &mut self,
-        paths: Vec<Vec<String>>,
-        num: String,
+        path: Vec<String>,
+        num: &str,
         mut op1_fun: F1,
         mut op2_fun: F2,
     ) -> Result<Number, RedisError>
@@ -195,9 +189,9 @@ impl KeyHolderWrite {
         F1: FnMut(i64, i64) -> i64,
         F2: FnMut(f64, f64) -> f64,
     {
-        let in_value = &serde_json::from_str(&num)?;
+        let in_value = &serde_json::from_str(num)?;
         if let Value::Number(in_value) = in_value {
-            let res = self.do_op(paths, |v| {
+            let res = self.do_op(path, |v| {
                 let num_res = match (v.as_i64(), in_value.as_i64()) {
                     (Some(num1), Some(num2)) => ((op1_fun)(num1, num2)).into(),
                     _ => {
@@ -219,6 +213,18 @@ impl KeyHolderWrite {
             Err(RedisError::Str("bad input number"))
         }
     }
+
+    fn set_root(&mut self, v: Option<Value>) -> Result<(), RedisError> {
+        match v {
+            Some(inner) => self
+                .key
+                .set_value(&REDIS_JSON_TYPE, RedisJSON { data: inner }),
+            None => {
+                self.key.delete()?;
+                Ok(())
+            }
+        }
+    }
 }
 
 impl WriteHolder<Value, Value> for KeyHolderWrite {
@@ -235,89 +241,78 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
         }
     }
 
-    fn set_value(&mut self, update_info: Vec<UpdateInfo>, v: Value) -> Result<bool, RedisError> {
+    fn set_value(&mut self, path: Vec<String>, v: Value) -> Result<bool, RedisError> {
         let mut updated = false;
-        for ui in update_info {
-            match ui {
-                UpdateInfo::ARUI(aruv) => {
-                    let root = self.get_value().unwrap().unwrap();
-                    if let Value::Object(ref mut map) = root {
-                        if !map.contains_key(&aruv.key) {
-                            updated = true;
-                            map.insert(aruv.key.to_string(), v.clone());
-                        }
-                    }
-                }
-                UpdateInfo::SUI(suv) => {
-                    if suv.path.len() == 0 {
-                        panic!("update the root should happened with set_root");
-                    } else {
-                        self.update(&suv.path, self.get_value().unwrap().unwrap(), |_v| {
-                            updated = true;
-                            Ok(Some(v.clone()))
-                        })?;
-                    }
-                }
-                UpdateInfo::AUI(auv) => {
-                    if auv.path.len() == 0 {
-                        // todo: handle this, add dict element to the root
-                        ();
-                    } else {
-                        self.update(&auv.path, self.get_value().unwrap().unwrap(), |mut ret| {
-                            if let Value::Object(ref mut map) = ret {
-                                if !map.contains_key(&auv.key) {
-                                    updated = true;
-                                    map.insert(auv.key.to_string(), v.clone());
-                                }
-                            }
-                            Ok(Some(ret))
-                        })?;
-                    }
-                }
-            }
+        if path.is_empty() {
+            // update the root
+            self.set_root(Some(v))?;
+            updated = true;
+        } else {
+            self.update(&path, self.get_value().unwrap().unwrap(), |_v| {
+                updated = true;
+                Ok(Some(v.clone()))
+            })?;
         }
         Ok(updated)
     }
 
-    fn set_root(&mut self, v: Option<Value>) -> Result<(), RedisError> {
-        match v {
-            Some(inner) => self
-                .key
-                .set_value(&REDIS_JSON_TYPE, RedisJSON { data: inner }),
-            None => {
-                self.key.delete()?;
-                Ok(())
-            }
-        }
-    }
-
-    fn delete_paths(&mut self, paths: Vec<Vec<String>>) -> Result<usize, RedisError> {
-        let mut deleted = 0;
-        for p in paths {
-            self.update(&p, self.get_value().unwrap().unwrap(), |v| {
-                if !v.is_null() {
-                    deleted += 1; // might delete more than a single value
+    fn dict_add(&mut self, path: Vec<String>, key: &str, mut v: Value) -> Result<bool, RedisError> {
+        let mut updated = false;
+        if path.is_empty() {
+            // update the root
+            let root = self.get_value().unwrap().unwrap();
+            let val = if let Value::Object(mut o) = root.take(){
+                if !o.contains_key(key) {
+                    updated = true;
+                    o.insert(key.to_string(), v.take());
                 }
-                Ok(None)
+                Value::Object(o)
+            } else {
+                root.take()
+            };
+            self.set_root(Some(val))?;
+        } else {
+            self.update(&path, self.get_value().unwrap().unwrap(), |mut val| {
+                let val = if let Value::Object(mut o) = val.take(){
+                    if !o.contains_key(key) {
+                        updated = true;
+                        o.insert(key.to_string(), v.take());
+                    }
+                    Value::Object(o)
+                } else {
+                    val
+                };
+                Ok(Some(val))
             })?;
         }
+        Ok(updated)
+    }
+
+    fn delete_path(&mut self, path: Vec<String>) -> Result<bool, RedisError> {
+        let mut deleted = false;
+        self.update(&path, self.get_value().unwrap().unwrap(), |v| {
+            if !v.is_null() {
+                deleted = true; // might delete more than a single value
+            }
+            Ok(None)
+        })?;
         Ok(deleted)
     }
 
-    fn incr_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Number, RedisError> {
-        self.do_num_op(paths, num, |i1, i2| i1 + i2, |f1, f2| f1 + f2)
+    fn incr_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError> {
+        self.do_num_op(path, num, |i1, i2| i1 + i2, |f1, f2| f1 + f2)
     }
 
-    fn mult_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Number, RedisError> {
-        self.do_num_op(paths, num, |i1, i2| i1 * i2, |f1, f2| f1 * f2)
+    fn mult_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError> {
+        self.do_num_op(path, num, |i1, i2| i1 * i2, |f1, f2| f1 * f2)
     }
 
-    fn pow_by(&mut self, paths: Vec<Vec<String>>, num: String) -> Result<Number, RedisError> {
-        self.do_num_op(paths, num, |i1, i2| i1.pow(i2 as u32), |f1, f2| f1.powf(f2))
+    fn pow_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError> {
+        self.do_num_op(path, num, |i1, i2| i1.pow(i2 as u32), |f1, f2| f1.powf(f2))
     }
 
-    fn bool_toggle(&mut self, paths: Vec<Vec<String>>) -> Result<bool, RedisError> {
-        let res = self.do_op(paths, |v| {
+    fn bool_toggle(&mut self, path: Vec<String>) -> Result<bool, RedisError> {
+        let res = self.do_op(path, |v| {
             Ok(Some(Value::Bool(v.as_bool().unwrap() ^ true)))
         })?;
         match res {
@@ -326,10 +321,10 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
         }
     }
 
-    fn str_append(&mut self, paths: Vec<Vec<String>>, val: String) -> Result<usize, RedisError> {
+    fn str_append(&mut self, path: Vec<String>, val: String) -> Result<usize, RedisError> {
         let json = serde_json::from_str(&val)?;
         if let Value::String(s) = json {
-            let res = self.do_op(paths, |v| {
+            let res = self.do_op(path, |v| {
                 let new_value = [v.as_str().unwrap(), s.as_str()].concat();
                 Ok(Some(Value::String(new_value)))
             })?;
@@ -345,17 +340,13 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
         }
     }
 
-    fn arr_append<I: Iterator<Item = String>>(
+    fn arr_append(
         &mut self,
-        paths: Vec<Vec<String>>,
-        args: I,
+        path: Vec<String>,
+        args: &Vec<Value>,
     ) -> Result<usize, RedisError> {
-        let items: Vec<Value> = args
-            .map(|json| serde_json::from_str(&json))
-            .collect::<Result<_, _>>()?;
-
-        let res = self.do_op(paths, |mut v| {
-            v.as_array_mut().unwrap().append(&mut items.clone());
+        let res = self.do_op(path, |mut v| {
+            v.as_array_mut().unwrap().append(&mut args.clone());
             Ok(Some(v))
         })?;
         match res {
@@ -364,15 +355,12 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
         }
     }
 
-    fn arr_insert<I: Iterator<Item = String>>(
+    fn arr_insert(
         &mut self,
-        paths: Vec<Vec<String>>,
-        args: I,
+        paths: Vec<String>,
+        args: &Vec<Value>,
         index: i64,
     ) -> Result<usize, RedisError> {
-        let items: Vec<Value> = args
-            .map(|json| serde_json::from_str(&json))
-            .collect::<Result<_, _>>()?;
 
         let res = self.do_op(paths, |mut v| {
             // Verify legal index in bounds
@@ -384,7 +372,7 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
             let index = index as usize;
             let mut new_value = v.take();
             let curr = new_value.as_array_mut().unwrap();
-            curr.splice(index..index, items.clone());
+            curr.splice(index..index, args.clone());
             Ok(Some(new_value))
         })?;
         match res {
@@ -395,11 +383,11 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
 
     fn arr_pop(
         &mut self,
-        paths: Vec<Vec<String>>,
+        path: Vec<String>,
         index: i64,
     ) -> Result<Option<String>, RedisError> {
         let mut res = None;
-        self.do_op(paths, |mut v| {
+        self.do_op(path, |mut v| {
             if let Some(array) = v.as_array() {
                 if array.is_empty() {
                     return Ok(Some(v));
@@ -428,11 +416,11 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
 
     fn arr_trim(
         &mut self,
-        paths: Vec<Vec<String>>,
+        path: Vec<String>,
         start: i64,
         stop: i64,
     ) -> Result<usize, RedisError> {
-        let res = self.do_op(paths, |mut v| {
+        let res = self.do_op(path, |mut v| {
             if let Some(array) = v.as_array() {
                 let len = array.len() as i64;
                 let stop = stop.normalize(len);
@@ -459,9 +447,9 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
         }
     }
 
-    fn clear(&mut self, paths: Vec<Vec<String>>) -> Result<usize, RedisError> {
+    fn clear(&mut self, path: Vec<String>) -> Result<usize, RedisError> {
         let mut cleared = 0;
-        self.do_op(paths, |v| match v {
+        self.do_op(path, |v| match v {
             Value::Object(mut obj) => {
                 obj.clear();
                 cleared += 1;
@@ -482,7 +470,7 @@ pub struct KeyHolderRead {
     key: RedisKey,
 }
 
-impl ReadHolder<Value, Value> for KeyHolderRead {
+impl ReadHolder<Value> for KeyHolderRead {
     fn get_value(&self) -> Result<Option<&Value>, RedisError> {
         let key_value = self.key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?;
         match key_value {
