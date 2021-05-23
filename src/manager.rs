@@ -47,28 +47,15 @@ pub trait WriteHolder<E: Clone, V: SelectValue> {
     fn pow_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError>;
     fn bool_toggle(&mut self, path: Vec<String>) -> Result<bool, RedisError>;
     fn str_append(&mut self, path: Vec<String>, val: String) -> Result<usize, RedisError>;
-    fn arr_append(
-        &mut self,
-        path: Vec<String>,
-        args: &Vec<E>,
-    ) -> Result<usize, RedisError>;
+    fn arr_append(&mut self, path: Vec<String>, args: &Vec<E>) -> Result<usize, RedisError>;
     fn arr_insert(
         &mut self,
         path: Vec<String>,
         args: &Vec<E>,
         index: i64,
     ) -> Result<usize, RedisError>;
-    fn arr_pop(
-        &mut self,
-        path: Vec<String>,
-        index: i64,
-    ) -> Result<Option<String>, RedisError>;
-    fn arr_trim(
-        &mut self,
-        path: Vec<String>,
-        start: i64,
-        stop: i64,
-    ) -> Result<usize, RedisError>;
+    fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<String>, RedisError>;
+    fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> Result<usize, RedisError>;
     fn clear(&mut self, path: Vec<String>) -> Result<usize, RedisError>;
 }
 
@@ -152,11 +139,7 @@ impl KeyHolderWrite {
         Ok(())
     }
 
-    fn do_op<F>(
-        &mut self,
-        paths: Vec<String>,
-        mut op_fun: F,
-    ) -> Result<Option<Value>, RedisError>
+    fn do_op<F>(&mut self, paths: Vec<String>, mut op_fun: F) -> Result<Option<Value>, RedisError>
     where
         F: FnMut(Value) -> Result<Option<Value>, Error>,
     {
@@ -261,7 +244,7 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
         if path.is_empty() {
             // update the root
             let root = self.get_value().unwrap().unwrap();
-            let val = if let Value::Object(mut o) = root.take(){
+            let val = if let Value::Object(mut o) = root.take() {
                 if !o.contains_key(key) {
                     updated = true;
                     o.insert(key.to_string(), v.take());
@@ -273,7 +256,7 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
             self.set_root(Some(val))?;
         } else {
             self.update(&path, self.get_value().unwrap().unwrap(), |mut val| {
-                let val = if let Value::Object(mut o) = val.take(){
+                let val = if let Value::Object(mut o) = val.take() {
                     if !o.contains_key(key) {
                         updated = true;
                         o.insert(key.to_string(), v.take());
@@ -312,9 +295,7 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
     }
 
     fn bool_toggle(&mut self, path: Vec<String>) -> Result<bool, RedisError> {
-        let res = self.do_op(path, |v| {
-            Ok(Some(Value::Bool(v.as_bool().unwrap() ^ true)))
-        })?;
+        let res = self.do_op(path, |v| Ok(Some(Value::Bool(v.as_bool().unwrap() ^ true))))?;
         match res {
             None => Err(RedisError::Str("path does not exists")),
             Some(n) => Ok(n.as_bool().unwrap()),
@@ -340,11 +321,7 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
         }
     }
 
-    fn arr_append(
-        &mut self,
-        path: Vec<String>,
-        args: &Vec<Value>,
-    ) -> Result<usize, RedisError> {
+    fn arr_append(&mut self, path: Vec<String>, args: &Vec<Value>) -> Result<usize, RedisError> {
         let res = self.do_op(path, |mut v| {
             v.as_array_mut().unwrap().append(&mut args.clone());
             Ok(Some(v))
@@ -361,7 +338,6 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
         args: &Vec<Value>,
         index: i64,
     ) -> Result<usize, RedisError> {
-
         let res = self.do_op(paths, |mut v| {
             // Verify legal index in bounds
             let len = v.len().unwrap() as i64;
@@ -381,11 +357,7 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
         }
     }
 
-    fn arr_pop(
-        &mut self,
-        path: Vec<String>,
-        index: i64,
-    ) -> Result<Option<String>, RedisError> {
+    fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<String>, RedisError> {
         let mut res = None;
         self.do_op(path, |mut v| {
             if let Some(array) = v.as_array() {
@@ -414,12 +386,7 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
         }
     }
 
-    fn arr_trim(
-        &mut self,
-        path: Vec<String>,
-        start: i64,
-        stop: i64,
-    ) -> Result<usize, RedisError> {
+    fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> Result<usize, RedisError> {
         let res = self.do_op(path, |mut v| {
             if let Some(array) = v.as_array() {
                 let len = array.len() as i64;

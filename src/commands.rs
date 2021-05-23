@@ -1,7 +1,5 @@
 use crate::formatter::RedisJsonFormatter;
-use crate::manager::{
-    AddUpdateInfo, Manager, ReadHolder, SetUpdateInfo, UpdateInfo, WriteHolder,
-};
+use crate::manager::{AddUpdateInfo, Manager, ReadHolder, SetUpdateInfo, UpdateInfo, WriteHolder};
 use crate::redisjson::{Format, Path};
 use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
 use redis_module::{Context, RedisValue};
@@ -497,11 +495,9 @@ pub fn command_json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
                 let update_info = KeyValue::new(*doc).find_paths(&path, op)?;
                 if update_info.len() > 0 {
                     let mut res = false;
-                    for ui in update_info{
+                    for ui in update_info {
                         res = match ui {
-                            UpdateInfo::SUI(sui) => {
-                                redis_key.set_value(sui.path, val.clone())?
-                            },
+                            UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, val.clone())?,
                             UpdateInfo::AUI(aui) => {
                                 redis_key.dict_add(aui.path, &aui.key, val.clone())?
                             }
@@ -558,9 +554,9 @@ pub fn command_json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
                     Vec::new()
                 };
                 let mut changed = 0;
-                for p in paths{
+                for p in paths {
                     if redis_key.delete_path(p)? {
-                        changed+=1;
+                        changed += 1;
                     }
                 }
                 changed
@@ -661,7 +657,7 @@ where
     };
     if paths.len() > 0 {
         let mut res = None;
-        for p in paths{
+        for p in paths {
             res = Some(match op {
                 NumOp::INCR => redis_key.incr_by(p, &number)?,
                 NumOp::MULT => redis_key.mult_by(p, &number)?,
@@ -728,7 +724,7 @@ pub fn command_json_bool_toggle<M: Manager>(
     };
     if paths.len() > 0 {
         let mut res = None;
-        for p in paths{
+        for p in paths {
             res = Some(redis_key.bool_toggle(p)?);
         }
         ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.toggle", key.as_str());
@@ -783,7 +779,7 @@ pub fn command_json_str_append<M: Manager>(
 
     if paths.len() > 0 {
         let mut res = None;
-        for p in paths{
+        for p in paths {
             res = Some(redis_key.str_append(p, json.clone())?);
         }
         ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.strappend", key.as_str());
@@ -827,7 +823,9 @@ pub fn command_json_arr_append<M: Manager>(
 
     // We require at least one JSON item to append
     args.peek().ok_or(RedisError::WrongArity)?;
-    let args = args.map(|json| manager.from_str(&json,Format::JSON)).collect::<Result<_, _>>()?;
+    let args = args
+        .map(|json| manager.from_str(&json, Format::JSON))
+        .collect::<Result<_, _>>()?;
 
     let mut redis_key = manager.open_key_write(ctx, &key)?;
     let root = redis_key
@@ -847,8 +845,8 @@ pub fn command_json_arr_append<M: Manager>(
 
     if paths.len() > 0 {
         let mut res = None;
-        for p in paths{
-            res = Some(redis_key.arr_append(p, &args)?);    
+        for p in paths {
+            res = Some(redis_key.arr_append(p, &args)?);
         }
         ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrappend", key.as_str());
         ctx.replicate_verbatim();
@@ -898,7 +896,9 @@ pub fn command_json_arr_insert<M: Manager>(
 
     // We require at least one JSON item to append
     args.peek().ok_or(RedisError::WrongArity)?;
-    let args = args.map(|json| manager.from_str(&json,Format::JSON)).collect::<Result<_, _>>()?;
+    let args = args
+        .map(|json| manager.from_str(&json, Format::JSON))
+        .collect::<Result<_, _>>()?;
 
     let mut redis_key = manager.open_key_write(ctx, &key)?;
 
@@ -919,7 +919,7 @@ pub fn command_json_arr_insert<M: Manager>(
 
     if paths.len() > 0 {
         let mut res = None;
-        for p in paths{
+        for p in paths {
             res = Some(redis_key.arr_insert(p, &args, index)?);
         }
         ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrinsert", key.as_str());
@@ -988,7 +988,7 @@ pub fn command_json_arr_pop<M: Manager>(
 
     if paths.len() > 0 {
         let mut res = None;
-        for p in paths{
+        for p in paths {
             res = Some(redis_key.arr_pop(p, index)?);
         }
         match res.unwrap() {
@@ -1035,7 +1035,7 @@ pub fn command_json_arr_trim<M: Manager>(
 
     if paths.len() > 0 {
         let mut res = None;
-        for p in paths{
+        for p in paths {
             res = Some(redis_key.arr_trim(p, start, stop)?);
         }
         ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrtrim", key.as_str());
@@ -1116,7 +1116,7 @@ pub fn command_json_clear<M: Manager>(manager: M, ctx: &Context, args: Vec<Strin
 
     if paths.len() > 0 {
         let mut res = None;
-        for p in paths{
+        for p in paths {
             res = Some(redis_key.clear(p)?);
         }
         ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.clear", key.as_str());
