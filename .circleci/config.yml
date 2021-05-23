@@ -203,7 +203,7 @@ commands:
 jobs:
   build:
     docker:
-      - image: redisfab/rmbuilder:6.2.1-x64-buster
+      - image: redisfab/rmbuilder:6.2.2-x64-buster
     steps:
       - build-steps
       - test-steps
@@ -231,7 +231,7 @@ jobs:
         type: string
         default: ""
     docker:
-      - image: redisfab/rmbuilder:6.2.1-x64-buster
+      - image: redisfab/rmbuilder:6.2.2-x64-buster
     steps:
       - early-returns
       - early-return-for-forked-pull-requests
@@ -253,7 +253,7 @@ jobs:
 
   release-automation:
     docker:
-      - image: redisfab/rmbuilder:6.2.1-x64-buster
+      - image: redisfab/rmbuilder:6.2.2-x64-buster
     steps:
       - checkout
       - setup-automation
@@ -263,7 +263,7 @@ jobs:
 
   nightly-automation:
     docker:
-      - image: redisfab/rmbuilder:6.2.1-x64-buster
+      - image: redisfab/rmbuilder:6.2.2-x64-buster
     steps:
       - checkout
       - setup-automation
@@ -273,7 +273,7 @@ jobs:
 
   performance-automation:
     docker:
-      - image: redisfab/rmbuilder:6.2.1-x64-bionic
+      - image: redisfab/rmbuilder:6.2.2-x64-bionic
     steps:
       - build-steps
       - benchmark-steps
