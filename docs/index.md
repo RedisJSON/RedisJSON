@@ -28,9 +28,9 @@ Alternatively, you can also build and load the module yourself. [Build and Load 
 
 ## Redis Cloud
 
-RedisJSON is available on all Redis Cloud managed services.  Redis Cloud Essentials offers a completely free managed databases up to 30MB.
+RedisJSON is available on all Redis Cloud managed services, including a completely free tier up to 30MB!
 
-[Get started here](https://redislabs.com/try-free/)
+[Get started here](https://redislabs.com/redis-enterprise-cloud/pricing/)
 
 ## Launch RedisJSON with Docker
 Run the following on Windows, MacOS or Linux with Docker.
