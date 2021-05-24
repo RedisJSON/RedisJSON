@@ -135,8 +135,4 @@ def test_keyspace_num(env):
         assert_msg(env, pubsub.get_message(), 'pmessage', 'json.nummultby')
         assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key')
 
-        env.assertEqual('1728', r.execute_command('JSON.NUMPOWBY', 'test_key', '$.foo', 3))
-        assert_msg(env, pubsub.get_message(), 'pmessage', 'json.numpowby')
-        assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key')
-
         # TODO add negative test for number
