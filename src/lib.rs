@@ -295,18 +295,6 @@ fn json_num_multby(ctx: &Context, args: Vec<String>) -> RedisResult {
     )
 }
 
-///
-/// JSON.NUMPOWBY <key> <path> <number>
-///
-fn json_num_powby(ctx: &Context, args: Vec<String>) -> RedisResult {
-    json_num_op(
-        ctx,
-        "json.numpowby",
-        args,
-        |i1, i2| i1.pow(i2 as u32),
-        |f1, f2| f1.powf(f2),
-    )
-}
 //
 /// JSON.TOGGLE <key> <path>
 fn json_bool_toggle(ctx: &Context, args: Vec<String>) -> RedisResult {
@@ -938,7 +926,6 @@ redis_module! {
         ["json.numincrby", json_num_incrby, "write", 1,1,1],
         ["json.toggle", json_bool_toggle, "write deny-oom", 1,1,1],
         ["json.nummultby", json_num_multby, "write", 1,1,1],
-        ["json.numpowby", json_num_powby, "write", 1,1,1],
         ["json.strappend", json_str_append, "write deny-oom", 1,1,1],
         ["json.strlen", json_str_len, "readonly", 1,1,1],
         ["json.arrappend", json_arr_append, "write deny-oom", 1,1,1],
