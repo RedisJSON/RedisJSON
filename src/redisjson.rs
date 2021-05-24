@@ -5,6 +5,7 @@
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
 use crate::backward;
+use crate::c_api::JSONType;
 use crate::error::Error;
 use crate::formatter::RedisJsonFormatter;
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
@@ -67,7 +68,8 @@ impl Path {
 
 #[derive(Debug)]
 pub struct RedisJSON {
-    data: Value,
+    //FIXME: make private and expose array/object Values without requiring a path
+    pub data: Value,
 }
 
 impl RedisJSON {
@@ -376,6 +378,23 @@ impl RedisJSON {
             Value::String(_) => "string",
             Value::Array(_) => "array",
             Value::Object(_) => "object",
+        }
+    }
+
+    pub fn get_type_and_size(data: &Value) -> (JSONType, libc::size_t) {
+        match data {
+            Value::Null => (JSONType::Null, 0),
+            Value::Bool(_) => (JSONType::Bool, 0),
+            Value::Number(n) => {
+                if n.is_f64() {
+                    (JSONType::Double, 0)
+                } else {
+                    (JSONType::Int, 0)
+                }
+            }
+            Value::String(_) => (JSONType::String, 0),
+            Value::Array(arr) => (JSONType::Array, arr.len()),
+            Value::Object(map) => (JSONType::Object, map.len()),
         }
     }
 

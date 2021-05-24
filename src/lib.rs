@@ -1,23 +1,28 @@
 #[macro_use]
 extern crate redis_module;
 
+use std::{i64, usize};
+
 use redis_module::raw::RedisModuleTypeMethods;
-use redis_module::{native_types::RedisType, NextArg, NotifyEvent};
+use redis_module::{native_types::RedisType, raw as rawmod, NextArg, NotifyEvent};
 use redis_module::{Context, RedisError, RedisResult, RedisValue, REDIS_OK};
 use serde_json::{Number, Value};
 
-use std::{i64, usize};
+use crate::array_index::ArrayIndex;
+use crate::c_api::export_shared_api;
+use crate::error::Error;
+use crate::redisjson::{Format, Path, RedisJSON, SetOptions};
 
 mod array_index;
 mod backward;
+mod c_api;
 mod error;
 mod formatter;
 mod nodevisitor;
 mod redisjson;
 
-use crate::array_index::ArrayIndex;
-use crate::error::Error;
-use crate::redisjson::{Format, Path, RedisJSON, SetOptions};
+// extern crate readies_wd40;
+// use crate::readies_wd40::{BB, _BB, getenv};
 
 const JSON_ROOT_PATH: &'static str = "$";
 pub const REDIS_JSON_TYPE_VERSION: i32 = 3;
@@ -909,7 +914,13 @@ fn json_cache_info(_ctx: &Context, _args: Vec<String>) -> RedisResult {
 fn json_cache_init(_ctx: &Context, _args: Vec<String>) -> RedisResult {
     Err(RedisError::Str("Command was not implemented"))
 }
-//////////////////////////////////////////////////////
+
+fn init(ctx: &Context, _args: &Vec<String>) -> rawmod::Status {
+    export_shared_api(ctx);
+    rawmod::Status::Ok
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
 
 redis_module! {
     name: "ReJSON",
@@ -917,6 +928,7 @@ redis_module! {
     data_types: [
         REDIS_JSON_TYPE,
     ],
+    init: init,
     commands: [
         ["json.del", json_del, "write", 1,1,1],
         ["json.get", json_get, "readonly", 1,1,1],

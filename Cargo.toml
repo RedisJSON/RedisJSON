@@ -14,7 +14,8 @@ serde_json = "1.0"
 serde = "1.0"
 libc = "0.2"
 jsonpath_lib = { git="https://github.com/RedisJSON/jsonpath.git", branch="public-parser" }
-redis-module = { version="0.15", features = ["experimental-api"]}
+redis-module = { version="0.17", features = ["experimental-api"]}
+# readies-wd40 = { path = "deps/readies/wd40" }
 
 [features]
 # Workaround to allow cfg(feature = "test") in redismodue-rs dependencies:
