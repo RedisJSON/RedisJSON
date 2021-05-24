@@ -357,23 +357,7 @@ where
     let path = backwards_compat_path(args.next_string()?);
     let number = args.next_string()?;
 
-    // FIXME: Consider how to make a similar change to all other commands:
-    // FIXME: Have the keyspace notification and the replication occur only after the `data:Value` of the JSonPath is updated and the key in redis is closed (naively done here using a nested block)
-    let res = {
-        let redis_key = ctx.open_key_writable(&key);
-
-        redis_key
-            .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?
-            .ok_or_else(RedisError::nonexistent_key)
-            .and_then(|doc| {
-                doc.value_op(
-                    &path,
-                    |value| do_json_num_op(&number, value, &op_i64, &op_f64),
-                    |result| Ok(result.to_string().into()),
-                )
-                .map_err(|e| e.into())
-            })
-    };
+    let redis_key = ctx.open_key_writable(&key);
 
     redis_key
         .get_value::<RedisJSON>(&REDIS_JSON_TYPE)?

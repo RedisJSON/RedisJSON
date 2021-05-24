@@ -9,6 +9,7 @@ use std::{
 
 use crate::redisjson::Format;
 use crate::{redisjson::RedisJSON, REDIS_JSON_TYPE};
+use redis_module::key::verify_type;
 use redis_module::key::RedisKeyWritable;
 use redis_module::logging::log_notice;
 use redis_module::{raw as rawmod, RedisError};
@@ -239,6 +240,14 @@ pub extern "C" fn JSONAPI_getRedisModuleStringFromKey(
         }
     } else {
         Status::Err as c_int
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn JSONAPI_isJSON(key: *mut rawmod::RedisModuleKey) -> c_int {
+    match verify_type(key, &REDIS_JSON_TYPE) {
+        Ok(_) => 1,
+        Err(_) => 0,
     }
 }
 
@@ -523,6 +532,7 @@ static JSONAPI: RedisJSONAPI_V1 = RedisJSONAPI_V1 {
     getStringFromKey: JSONAPI_getStringFromKey,
     getRedisModuleString: JSONAPI_getRedisModuleString,
     getRedisModuleStringFromKey: JSONAPI_getRedisModuleStringFromKey,
+    isJSON: JSONAPI_isJSON,
 };
 
 #[repr(C)]
@@ -577,4 +587,5 @@ pub struct RedisJSONAPI_V1<'a> {
         path: *const c_char,
         str: *mut *mut rawmod::RedisModuleString,
     ) -> c_int,
+    pub isJSON: extern "C" fn(key: *mut rawmod::RedisModuleKey) -> c_int,
 }

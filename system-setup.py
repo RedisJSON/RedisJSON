@@ -22,7 +22,8 @@ class RedisJSONSetup(paella.Setup):
 
         self.install("git")
 
-        self.run("%s/bin/getclang --modern" % READIES)
+        if not self.has_command("clang"): 
+            self.run("%s/bin/getclang --modern" % READIES)
         if not self.has_command("rustc"):
             self.run("%s/bin/getrust" % READIES)
         self.run("%s/bin/getcmake" % READIES)
