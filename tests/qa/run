@@ -13,8 +13,7 @@ if [[ $1 == --help || $1 == help ]]; then
 		[ARGVARS...] run [--help|help]
 
 		Argument variables:
-		QA_AUTOMATION_USERNAME=name   QA automation (Opereto) username
-		QA_AUTOMATION_PASS=pass       QA automation (Opereto) password
+  		QA_AUTOMATION_TOKEN=token     QA automation (Opereto) token
 		TEST=name                     Name of .json parameters file
 		MODULE_VERSION=ver            Module version to test. Default: master
 		NOP=1                         Do not execute automation command
@@ -31,12 +30,8 @@ fi
 export RS_MODULE=ReJSON
 export RS_MODULE_FILE_PREFIX=rejson
 
-if [[ -z $QA_AUTOMATION_USERNAME && $NOP != 1 ]]; then
-	echo "Variable QA_AUTOMATION_USERNAME is undefined." >&2
-	exit 1
-fi
-if [[ -z $QA_AUTOMATION_PASS && $NOP != 1 ]]; then
-	echo "Variable QA_AUTOMATION_PASS is undefined." >&2
+if [[ -z $QA_AUTOMATION_TOKEN && $NOP != 1 ]]; then
+	echo "Variable QA_AUTOMATION_TOKEN is undefined." >&2
 	exit 1
 fi
 
@@ -70,18 +65,19 @@ run_test() {
 		return 0
 	fi
 
+   	OPERETO3_URL="opereto.qa.redislabs.com"
 	JSON=$(curl -sk \
-		-u "$QA_AUTOMATION_USERNAME":"$QA_AUTOMATION_PASS" \
-		-X POST -H "Content-Type: application/json" \
-		-d @$json_in \
-		https://qa-automation-center.redislabs.com/processes 2>&1)
+   		-X POST -H "Content-Type: application/json" \
+   		-H "Authorization: Bearer $QA_AUTOMATION_TOKEN" \
+   		-d @$json_in \
+   		https://$OPERETO3_URL/processes 2>&1)
 	rc=$?
 	rm $json_in
 	status=$(results .status)
 	if [[ $rc == 0 && $status == success ]]; then
 		id=$(results .data[0])
 		echo "Tests running on $MODULE_VERSION for RS $RS_VERSION"
-		echo "Results: https://qa-automation-center.redislabs.com/ui#dashboard/flow/$id"
+		echo "Results: https://$OPERETO3_URL/ui#dashboard/flow/$id"
 		return 0
 	else
 		err=$(results .message)
