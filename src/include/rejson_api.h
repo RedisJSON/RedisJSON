@@ -31,7 +31,7 @@ typedef struct RedisJSONAPI_V1 {
    * Return NULL if path/index does not exist
    **/
   RedisJSON (*get)(RedisJSONKey key, const char *path, JSONType *type);
-  RedisJSON (*getAt)(RedisJSON jsonIn, size_t index, JSONType *type);
+  RedisJSON (*getAt)(RedisJSON json, size_t index, JSONType *type);
 
   /* RedisJSON value functions
    * Return REDISMODULE_OK if RedisJSON is of the correct JSONType,
@@ -64,8 +64,8 @@ typedef struct RedisJSONAPI_V1 {
 
   // Return JSON String representation (for any JSONType)
   // The caller gains ownership of `str`
-  int (*getJSON)(RedisJSON json, RedisModuleString **str);
-  int (*getJSONFromKey)(RedisJSONKey key, const char *path,
+  int (*getJSON)(RedisJSON json, RedisModuleCtx *ctx, RedisModuleString **str);
+  int (*getJSONFromKey)(RedisJSONKey key, RedisModuleCtx *ctx, const char *path,
                         RedisModuleString **str);
 
   // Return 1 if type of key is JSON
