@@ -4,7 +4,8 @@ use serde_json::{Number, Value};
 
 use redis_module::key::{RedisKey, RedisKeyWritable};
 use redis_module::rediserror::RedisError;
-use redis_module::Context;
+use redis_module::raw::{Status};
+use redis_module::{Context, NotifyEvent};
 
 use crate::redisjson::RedisJSON;
 use crate::Format;
@@ -57,6 +58,7 @@ pub trait WriteHolder<E: Clone, V: SelectValue> {
     fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<String>, RedisError>;
     fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> Result<usize, RedisError>;
     fn clear(&mut self, path: Vec<String>) -> Result<usize, RedisError>;
+    fn apply_changes(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError>;
 }
 
 pub trait Manager {
@@ -80,6 +82,7 @@ fn err_json(value: &Value, expected_value: &'static str) -> Error {
 
 pub struct KeyHolderWrite {
     key: RedisKeyWritable,
+    key_name: String,
 }
 
 impl KeyHolderWrite {
@@ -211,6 +214,15 @@ impl KeyHolderWrite {
 }
 
 impl WriteHolder<Value, Value> for KeyHolderWrite {
+    fn apply_changes(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError> {
+        if ctx.notify_keyspace_event(NotifyEvent::MODULE, command, &self.key_name) != Status::Ok {
+            Err(RedisError::Str("failed notify key space event"))
+        } else {
+            ctx.replicate_verbatim();
+            Ok(())
+        }
+    }
+
     fn delete(&mut self) -> Result<(), RedisError> {
         self.key.delete()?;
         Ok(())
@@ -461,8 +473,8 @@ impl Manager for RedisJsonKeyManager {
     }
 
     fn open_key_write(&self, ctx: &Context, key: &str) -> Result<KeyHolderWrite, RedisError> {
-        let key = ctx.open_key_writable(key);
-        Ok(KeyHolderWrite { key: key })
+        let key_ptr = ctx.open_key_writable(key);
+        Ok(KeyHolderWrite { key: key_ptr, key_name: key.to_string() })
     }
 
     fn from_str(&self, val: &str, format: Format) -> Result<Value, Error> {
