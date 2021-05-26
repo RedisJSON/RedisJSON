@@ -53,7 +53,6 @@ typedef struct RedisJSONAPI_V1 {
   int (*getDoubleFromKey)(RedisJSONKey key, const char *path, double *dbl);
 
   // Return 0 or 1 as int value from a Bool field
-  // Empty String returns 0
   int (*getBoolean)(RedisJSON json, int *boolean);
   int (*getBooleanFromKey)(RedisJSONKey key, const char *path, int *boolean);
 
