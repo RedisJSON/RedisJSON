@@ -42,14 +42,13 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 }
                 Value::Array(arr)
             }
-            SelectValueType::Dict => {
+            SelectValueType::Object => {
                 let mut m = Map::new();
                 for k in val.keys().unwrap() {
                     m.insert(k.to_string(), self.to_value(val.get_key(&k).unwrap()));
                 }
                 Value::Object(m)
             }
-            SelectValueType::Undef => panic!("reach undefine value"),
         }
     }
 
@@ -94,7 +93,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 RedisValue::Array(res)
             }
 
-            SelectValueType::Dict => {
+            SelectValueType::Object => {
                 let keys = v.keys().unwrap();
                 let mut res: Vec<RedisValue> = Vec::with_capacity(keys.len() + 1);
                 res.push(RedisValue::SimpleStringStatic("{"));
@@ -104,8 +103,6 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 }
                 RedisValue::Array(res)
             }
-
-            SelectValueType::Undef => panic!("got undefine value"),
         }
     }
 
@@ -274,8 +271,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             SelectValueType::Double => "number",
             SelectValueType::String => "string",
             SelectValueType::Array => "array",
-            SelectValueType::Dict => "object",
-            SelectValueType::Undef => panic!("undefine value"),
+            SelectValueType::Object => "object",
         }
     }
 
@@ -298,7 +294,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     pub fn obj_len(&self, path: &str) -> Result<usize, Error> {
         let first = self.get_first(path)?;
         match first.get_type() {
-            SelectValueType::Dict => Ok(first.keys().unwrap().len()),
+            SelectValueType::Object => Ok(first.keys().unwrap().len()),
             _ => Err("ERR wrong type of path value".into()),
         }
     }
@@ -322,7 +318,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     true
                 }
             }
-            (SelectValueType::Dict, SelectValueType::Dict) => {
+            (SelectValueType::Object, SelectValueType::Object) => {
                 if a.keys().unwrap().len() != b.keys().unwrap().len() {
                     false
                 } else {

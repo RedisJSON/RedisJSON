@@ -1,6 +1,5 @@
 #[cfg(not(feature = "as-library"))]
-#[macro_use]
-extern crate redis_module;
+use redis_module::{redis_command, redis_module};
 
 use redis_module::native_types::RedisType;
 use redis_module::raw::RedisModuleTypeMethods;
