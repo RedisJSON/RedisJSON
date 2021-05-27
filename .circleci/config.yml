@@ -349,7 +349,7 @@ workflows:
           <<: *on-integ-and-version-tags
           matrix:
             parameters:
-              platform: [ focal, bionic, xenial, centos7, buster ]
+              platform: [focal, bionic, xenial, centos7, buster]
       - build-macos:
           <<: *on-integ-and-version-tags
       - deploy-artifacts:
