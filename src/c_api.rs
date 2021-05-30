@@ -138,9 +138,11 @@ pub extern "C" fn JSONAPI_getAt(
         let json = unsafe { &*json };
         match value_from_index(json, index) {
             Ok(value) => {
-                let (t, _) = get_type_and_size(&*value);
-                unsafe {
-                    *jtype = t as c_int;
+                if !jtype.is_null() {
+                    let (t, _) = get_type_and_size(&*value);
+                    unsafe {
+                        *jtype = t as c_int;
+                    }
                 }
                 value as *const Value as JSONApiPathRef
             }
@@ -437,9 +439,11 @@ pub extern "C" fn JSONAPI_get(
         let key = unsafe { &*key };
         match value_from_path(key, path) {
             Ok(value) => {
-                let (t, _) = get_type_and_size(&*value);
-                unsafe {
-                    *jtype = t as c_int;
+                if !jtype.is_null() {
+                    let (t, _) = get_type_and_size(&*value);
+                    unsafe {
+                        *jtype = t as c_int;
+                    }
                 }
                 value as *const Value as JSONApiPathRef
             }
