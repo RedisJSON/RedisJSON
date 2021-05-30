@@ -21,52 +21,55 @@ typedef const void *RedisJSONKey;
 typedef const void *RedisJSON;
 
 typedef struct RedisJSONAPI_V1 {
-    /* RedisJSONKey functions */
-    RedisJSONKey (*openKey)(RedisModuleCtx *ctx, RedisModuleString *key_name);
-    RedisJSONKey (*openKeyFromStr)(RedisModuleCtx *ctx, const char *path);
+  /* RedisJSONKey functions */
+  RedisJSONKey (*openKey)(RedisModuleCtx *ctx, RedisModuleString *key_name);
+  RedisJSONKey (*openKeyFromStr)(RedisModuleCtx *ctx, const char *path);
 
-    void (*closeKey)(RedisJSONKey key);
+  void (*closeKey)(RedisJSONKey key);
 
-    /* RedisJSON functions
-     * Return NULL if path does not exist
-     * `count` can be NULL and return 0 for non array/object
-     **/
-    RedisJSON (*get)(RedisJSONKey key, const char *path, JSONType *type, size_t *count);
+  /* RedisJSON functions
+   * Return NULL if path/index does not exist
+   * `type` is an optional out parameter returning the JSONType (can be NULL)
+   **/
+  RedisJSON (*get)(RedisJSONKey key, const char *path, JSONType *type);
+  RedisJSON (*getAt)(RedisJSON json, size_t index, JSONType *type);
 
-    RedisJSON (*getAt)(RedisJSON jsonIn, size_t index, JSONType *type, size_t *count);
+  /* RedisJSON value functions
+   * Return REDISMODULE_OK if RedisJSON is of the correct JSONType,
+   * else REDISMODULE_ERR is returned
+   * */
 
-    void (*close)(RedisJSON json);
+  // Return the length of Object/Array
+  int (*getLen)(RedisJSON json, size_t *count);
 
-    /* RedisJSON value functions
-     * Return REDISMODULE_OK if RedisJSON is of the correct JSONType,
-     * else REDISMODULE_ERR is returned
-     **/
-    // Return int value from a Numeric, String or Bool field
-    int (*getInt)(RedisJSON json, long long *integer);
-    int (*getIntFromKey)(RedisJSONKey key, const char *path, long long *integer);
+  // Return the JSONType
+  JSONType (*getType)(RedisJSON json);
 
-    // Return double value from a Numeric, String or Bool field
-    int (*getDouble)(RedisJSON json, double *dbl);
-    int (*getDoubleFromKey)(RedisJSONKey key, const char *path, double *dbl);
+  // Return int value from a Numeric field
+  int (*getInt)(RedisJSON json, long long *integer);
+  int (*getIntFromKey)(RedisJSONKey key, const char *path, long long *integer);
 
-    // Return 0 or 1 as int value from a Numeric, String or Bool field
-    // Empty String returns 0
-    int (*getBoolean)(RedisJSON json, int *boolean);
-    int (*getBooleanFromKey)(RedisJSONKey key, const char *path, int *boolean);
+  // Return double value from a Numeric field
+  int (*getDouble)(RedisJSON json, double *dbl);
+  int (*getDoubleFromKey)(RedisJSONKey key, const char *path, double *dbl);
 
-    // Callee has ownership of `str` - valid until api `close` is called
-    // Return the String or the String representation for Numeric or Bool
-    // FIXME: Handle null field
-    int (*getString)(RedisJSON json, const char **str, size_t *len);
-    int (*getStringFromKey)(RedisJSONKey key, const char *path, const char **str, size_t *len);
+  // Return 0 or 1 as int value from a Bool field
+  int (*getBoolean)(RedisJSON json, int *boolean);
+  int (*getBooleanFromKey)(RedisJSONKey key, const char *path, int *boolean);
 
+  // Return a Read-Only String value from a String field
+  int (*getString)(RedisJSON json, const char **str, size_t *len);
+  int (*getStringFromKey)(RedisJSONKey key, const char *path, const char **str,
+                          size_t *len);
 
-    // Caller gains ownership of `str`
-    int (*getRedisModuleString)(RedisJSON json, RedisModuleString **str);
-    int (*getRedisModuleStringFromKey)(RedisJSONKey key, const char *path, RedisModuleString **str);
+  // Return JSON String representation (for any JSONType)
+  // The caller gains ownership of `str`
+  int (*getJSON)(RedisJSON json, RedisModuleCtx *ctx, RedisModuleString **str);
+  int (*getJSONFromKey)(RedisJSONKey key, RedisModuleCtx *ctx, const char *path,
+                        RedisModuleString **str);
 
-    // Return 1 if type of key is JSON
-    int (*isJSON)(RedisModuleKey *redis_key);
+  // Return 1 if type of key is JSON
+  int (*isJSON)(RedisModuleKey *redis_key);
 
 } RedisJSONAPI_V1;
 
