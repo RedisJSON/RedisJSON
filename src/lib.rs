@@ -24,7 +24,7 @@ mod redisjson;
 // extern crate readies_wd40;
 // use crate::readies_wd40::{BB, _BB, getenv};
 
-const JSON_ROOT_PATH: &'static str = "$";
+const JSON_ROOT_PATH: &str = "$";
 pub const REDIS_JSON_TYPE_VERSION: i32 = 3;
 
 static REDIS_JSON_TYPE: RedisType = RedisType::new(
@@ -79,7 +79,7 @@ fn json_del(ctx: &Context, args: Vec<String>) -> RedisResult {
     let key = args.next_string()?;
     let path = args
         .next_string()
-        .map_or_else(|_| JSON_ROOT_PATH.to_string(), |v| backwards_compat_path(v));
+        .map_or_else(|_| JSON_ROOT_PATH.to_string(), backwards_compat_path);
 
     let redis_key = ctx.open_key_writable(&key);
     let deleted = match redis_key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
@@ -322,10 +322,10 @@ fn json_bool_toggle(ctx: &Context, args: Vec<String>) -> RedisResult {
             )
             .map_err(|e| e.into())
         })
-        .and_then(|v: RedisValue| {
+        .map(|v: RedisValue| {
             ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.toggle", key.as_str());
             ctx.replicate_verbatim();
-            Ok(v)
+            v
         })
 }
 fn json_num_op<I, F>(
@@ -358,10 +358,10 @@ where
             )
             .map_err(|e| e.into())
         })
-        .and_then(|v: RedisValue| {
+        .map(|v: RedisValue| {
             ctx.notify_keyspace_event(NotifyEvent::MODULE, cmd, key.as_str());
             ctx.replicate_verbatim();
-            Ok(v)
+            v
         })
 }
 
@@ -443,10 +443,10 @@ fn json_str_append(ctx: &Context, args: Vec<String>) -> RedisResult {
             )
             .map_err(|e| e.into())
         })
-        .and_then(|v: RedisValue| {
+        .map(|v: RedisValue| {
             ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.strappend", key.as_str());
             ctx.replicate_verbatim();
-            Ok(v)
+            v
         })
 }
 
@@ -495,10 +495,10 @@ fn json_arr_append(ctx: &Context, args: Vec<String>) -> RedisResult {
             )
             .map_err(|e| e.into())
         })
-        .and_then(|v: RedisValue| {
+        .map(|v: RedisValue| {
             ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrappend", key.as_str());
             ctx.replicate_verbatim();
-            Ok(v)
+            v
         })
 }
 
@@ -575,10 +575,10 @@ fn json_arr_insert(ctx: &Context, args: Vec<String>) -> RedisResult {
             )
             .map_err(|e| e.into())
         })
-        .and_then(|v: RedisValue| {
+        .map(|v: RedisValue| {
             ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrinsert", key.as_str());
             ctx.replicate_verbatim();
-            Ok(v)
+            v
         })
 }
 
@@ -647,10 +647,10 @@ fn json_arr_pop(ctx: &Context, args: Vec<String>) -> RedisResult {
             )
             .map_err(|e| e.into())
         })
-        .and_then(|v| {
+        .map(|v| {
             ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrpop", key.as_str());
             ctx.replicate_verbatim();
-            Ok(v)
+            v
         })?;
 
     let result = match res {
@@ -713,10 +713,10 @@ fn json_arr_trim(ctx: &Context, args: Vec<String>) -> RedisResult {
             )
             .map_err(|e| e.into())
         })
-        .and_then(|v: RedisValue| {
+        .map(|v: RedisValue| {
             ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrtrim", key.as_str());
             ctx.replicate_verbatim();
-            Ok(v)
+            v
         })
 }
 
@@ -836,7 +836,7 @@ fn json_resp(ctx: &Context, args: Vec<String>) -> RedisResult {
     let key = args.next_string()?;
     let path = args
         .next_string()
-        .map_or_else(|_| JSON_ROOT_PATH.to_string(), |v| backwards_compat_path(v));
+        .map_or_else(|_| JSON_ROOT_PATH.to_string(), backwards_compat_path);
 
     let key = ctx.open_key(&key);
     match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
