@@ -337,8 +337,8 @@ impl RedisJSON {
             let end = match end {
                 0 => len,
                 e if e < 0 => len + end,
-                _ => end.min(len)
-            };      
+                _ => end.min(len),
+            };
 
             if end < start {
                 // don't search at all
