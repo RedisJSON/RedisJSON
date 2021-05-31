@@ -5,6 +5,10 @@ test:
 	$(MAKE) -C ./test all
 .PHONY: test
 
+benchmark:
+	$(MAKE) -C ./src benchmark
+.PHONY: benchmark
+
 docker:
 	docker pull ubuntu:latest
 	docker pull ubuntu:xenial
