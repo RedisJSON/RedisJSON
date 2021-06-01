@@ -22,12 +22,15 @@ ARG PACK
 ARG TEST
 
 RUN echo "Building for ${OSNICK} (${OS}) for ${ARCH} [with Redis ${REDIS_VER}]"
- 
+
 ADD ./ /build
 WORKDIR /build
 
 RUN ./deps/readies/bin/getpy3
 RUN ./system-setup.py
+RUN apt-get update -qq
+RUN apt-get upgrade -qqy
+RUN rm -rf /var/cache/apt/
 RUN bash -l -c make
 
 RUN set -ex ;\
