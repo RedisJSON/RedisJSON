@@ -3,8 +3,8 @@ use serde_json::map::Entry;
 use serde_json::{Number, Value};
 
 use redis_module::key::{RedisKey, RedisKeyWritable};
+use redis_module::raw::Status;
 use redis_module::rediserror::RedisError;
-use redis_module::raw::{Status};
 use redis_module::{Context, NotifyEvent};
 
 use crate::redisjson::RedisJSON;
@@ -474,7 +474,10 @@ impl Manager for RedisJsonKeyManager {
 
     fn open_key_write(&self, ctx: &Context, key: &str) -> Result<KeyHolderWrite, RedisError> {
         let key_ptr = ctx.open_key_writable(key);
-        Ok(KeyHolderWrite { key: key_ptr, key_name: key.to_string() })
+        Ok(KeyHolderWrite {
+            key: key_ptr,
+            key_name: key.to_string(),
+        })
     }
 
     fn from_str(&self, val: &str, format: Format) -> Result<Value, Error> {

@@ -5,7 +5,7 @@ use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, REDIS_OK};
 
-use jsonpath_lib::select::{Selector, SelectResult};
+use jsonpath_lib::select::{SelectResult, Selector};
 
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 
@@ -524,9 +524,19 @@ pub fn command_json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
     }
 }
 
-fn find_paths<T: SelectValue, F:FnMut(&SelectResult<T>) -> bool>(path: &str, doc: &T, f: F) -> 
-Result<Vec<Vec<String>>, RedisError>{
-    Ok(Selector::default().str_path(&path)?.value(doc).select_with_paths()?.drain(..).filter(f).map(|v| v.path).collect())
+fn find_paths<T: SelectValue, F: FnMut(&SelectResult<T>) -> bool>(
+    path: &str,
+    doc: &T,
+    f: F,
+) -> Result<Vec<Vec<String>>, RedisError> {
+    Ok(Selector::default()
+        .str_path(&path)?
+        .value(doc)
+        .select_with_paths()?
+        .drain(..)
+        .filter(f)
+        .map(|v| v.path)
+        .collect())
 }
 
 pub fn command_json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
@@ -634,7 +644,9 @@ where
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
-    let paths = find_paths(&path, root, |v| v.n.get_type() == SelectValueType::Double || v.n.get_type() == SelectValueType::Long)?;
+    let paths = find_paths(&path, root, |v| {
+        v.n.get_type() == SelectValueType::Double || v.n.get_type() == SelectValueType::Long
+    })?;
     if paths.len() > 0 {
         let mut res = None;
         for p in paths {
@@ -1019,7 +1031,6 @@ pub fn command_json_clear<M: Manager>(manager: M, ctx: &Context, args: Vec<Strin
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
-
 
     let paths = find_paths(&path, root, |_v| true)?;
     if paths.len() > 0 {
