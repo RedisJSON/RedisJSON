@@ -158,6 +158,7 @@ Increments the number value stored at `path` by `number`.
 
 ### JSON.NUMMULTBY
 
+> **Deprecated - might be dropped in a future version**  
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(1).
 
