@@ -94,6 +94,10 @@ CARGO_FLAGS += --release
 TARGET_DIR=target/release
 endif
 
+ifeq ($(PROFILE),1)
+RUSTFLAGS += " -g -C force-frame-pointers=yes"
+endif
+
 TARGET=$(TARGET_DIR)/$(MODULE_NAME)
 
 #----------------------------------------------------------------------------------------------
@@ -125,6 +129,7 @@ RUST_SOEXT.macos=dylib
 
 build:
 ifeq ($(SAN),)
+	export RUSTFLAGS=$(RUSTFLAGS) ;\
 	cargo build --all --all-targets $(CARGO_FLAGS)
 else
 	export RUSTFLAGS=-Zsanitizer=$(SAN) ;\
