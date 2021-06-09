@@ -937,7 +937,10 @@ pub fn command_json_arr_pop<M: Manager>(
             None => Ok(().into()),
         }
     } else {
-        Ok(().into())
+        Err(RedisError::String(format!(
+            "Path '{}' does not exist or not an array",
+            path
+        )))
     }
 }
 
@@ -969,7 +972,7 @@ pub fn command_json_arr_trim<M: Manager>(
         Ok(res.unwrap().into())
     } else {
         Err(RedisError::String(format!(
-            "Path '{}' does not exist",
+            "Path '{}' does not exist or not an array",
             path
         )))
     }
