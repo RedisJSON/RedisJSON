@@ -1,28 +1,16 @@
-# BUILD redisfab/rejson:${VERSION}-${ARCH}-${OSNICK}
+# BUILD redisfab/rejson:{{REDIS_VERSION}}-{{REDIS_ARCH}}-{{REDIS_OSNICK}}
 
-ARG REDIS_VER=6.2.2
-
-# stretch|bionic|buster
-ARG OSNICK=buster
-
-# ARCH=x64|arm64v8|arm32v7
-ARG ARCH=x64
-
-ARG PACK=0
-ARG TEST=0
+ARG PACK={{REDISAI_PACK}}
+ARG TEST={{REDISAI_TEST}}
 
 #----------------------------------------------------------------------------------------------
-FROM redisfab/redis:${REDIS_VER}-${ARCH}-${OSNICK} AS builder
+FROM redisfab/redis:{{REDIS_VERSION}}-{{REDIS_ARCH}}-{{REDIS_OSNICK}} AS builder
 
-ARG OSNICK
-ARG OS
-ARG ARCH
-ARG REDIS_VER
 ARG PACK
 ARG TEST
 
-RUN echo "Building for ${OSNICK} (${OS}) for ${ARCH} [with Redis ${REDIS_VER}]"
- 
+RUN echo "Building for {{REDIS_OSNICK}} ({{OS}}) for {{REDIS_ARCH}} [with Redis {{REDIS_VERSION}}]"
+
 ADD ./ /build
 WORKDIR /build
 
@@ -37,7 +25,7 @@ RUN set -ex ;\
     if [ "$PACK" = "1" ]; then bash -l -c "make pack"; fi
 
 #----------------------------------------------------------------------------------------------
-FROM redisfab/redis:${REDIS_VER}-${ARCH}-${OSNICK}
+FROM redisfab/redis:{{REDIS_VERSION}}-{{REDIS_ARCH}}-{{REDIS_OSNICK}}
 
 ARG REDIS_VER
 

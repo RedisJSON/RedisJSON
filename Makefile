@@ -45,7 +45,6 @@ make pytest        # run tests
 make pack          # build package (RAMP file)
 
 make docker
-make docker_push
 
 make platform      # build for specific Linux distribution
   OSNICK=nick        # Linux distribution to build for
@@ -189,20 +188,9 @@ pack:
 #----------------------------------------------------------------------------------------------
 
 docker:
-	docker build --pull -t rejson:latest .
+	${MAKE} -C build/platforms
 
-docker_push:
-	docker push redislabs/rejson:latest
-
-.PHONY: docker docker_push
-
-#----------------------------------------------------------------------------------------------
-
-platform:
-	@make -C build/platforms build
-ifeq ($(PUBLISH),1)
-	@make -C build/platforms publish
-endif
+.PHONY: docker
 
 #----------------------------------------------------------------------------------------------
 
