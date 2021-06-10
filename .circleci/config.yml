@@ -159,8 +159,7 @@ commands:
           command: |
             docker login -u redisfab -p $DOCKER_REDISFAB_PWD
             cd build/platforms
-            make build OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH PACK=1 TEST=1 VERBOSE=1
-            make publish OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH VERBOSE=1 PUBLISH=1 DOCKERWRAPPER_EXTRA_VARS="DOCKER_PUSH_ONLY=1"
+            make build OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH VERBOSE=1 PUBLISH=1 DOCKERWRAPPER_EXTRA_VARS="DOCKER_PUSH_ONLY=1"
       - persist-artifacts
 
   benchmark-steps:
@@ -335,6 +334,7 @@ on-integ-and-version-tags: &on-integ-and-version-tags
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
+        - /.*dockertest$/
     tags:
       only: /^v[0-9].*/
 
