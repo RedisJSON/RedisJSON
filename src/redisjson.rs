@@ -530,6 +530,10 @@ pub mod type_methods {
         raw::save_string(rdb, &json.data.to_string());
     }
 
+    fn is_io_error(rdb: *mut raw::RedisModuleIO) -> bool {
+        unsafe { raw::RedisModule_IsIOError.unwrap()(rdb) != 0 }
+    }
+
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn aux_load(rdb: *mut raw::RedisModuleIO, encver: i32, when: i32) -> i32 {
         if (encver > REDIS_JSON_TYPE_VERSION) {
@@ -540,12 +544,28 @@ pub mod type_methods {
         // TODO remove in future versions
         if (encver == 2 && when == raw::Aux::Before as i32) {
             let map_size = raw::load_unsigned(rdb);
+            if is_io_error(rdb) {
+                return Status::Err as i32;
+            }
+
             for _ in 0..map_size {
                 let index_name = raw::load_string(rdb);
+                if is_io_error(rdb) {
+                    return Status::Err as i32;
+                }
                 let fields_size = raw::load_unsigned(rdb);
+                if is_io_error(rdb) {
+                    return Status::Err as i32;
+                }
                 for _ in 0..fields_size {
                     let field_name = raw::load_string(rdb);
+                    if is_io_error(rdb) {
+                        return Status::Err as i32;
+                    }
                     let path = raw::load_string(rdb);
+                    if is_io_error(rdb) {
+                        return Status::Err as i32;
+                    }
                     // index::add_field(&index_name, &field_name, &path);
                 }
             }
