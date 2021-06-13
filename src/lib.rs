@@ -175,27 +175,31 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut space = String::new();
     let mut newline = String::new();
     while let Ok(arg) = args.next_string() {
-        match arg.to_uppercase().as_str() {
-            "INDENT" => {
-                indent = args.next_string()?;
-            }
-            "NEWLINE" => {
-                newline = args.next_string()?;
-            }
-            "SPACE" => {
-                space = args.next_string()?;
-            }
-            "NOESCAPE" => {
-                // Silently ignore. Compatibility with ReJSON v1.0 which has this option. See #168
-                continue;
-            } // TODO add support
-            "FORMAT" => {
-                format = Format::from_str(args.next_string()?.as_str())?;
-            }
-            _ => {
-                paths.push(Path::new(arg));
-            }
-        };
+        if arg.len() > 8 {
+            paths.push(Path::new(arg));
+        } else {
+            match arg.to_uppercase().as_str() {
+                "INDENT" => {
+                    indent = args.next_string()?;
+                }
+                "NEWLINE" => {
+                    newline = args.next_string()?;
+                }
+                "SPACE" => {
+                    space = args.next_string()?;
+                }
+                "NOESCAPE" => {
+                    // Silently ignore. Compatibility with ReJSON v1.0 which has this option. See #168
+                    continue;
+                } // TODO add support
+                "FORMAT" => {
+                    format = Format::from_str(args.next_string()?.as_str())?;
+                }
+                _ => {
+                    paths.push(Path::new(arg));
+                }
+            };
+        }
     }
 
     // path is optional -> no path found we use root "$"
