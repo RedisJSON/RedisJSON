@@ -175,23 +175,17 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut space = String::new();
     let mut newline = String::new();
     while let Ok(arg) = args.next_string() {
-        // fast way to consider arg a path given none of
-        // the bellow subcommand placeholders is larger than 8
-        if arg.len() > 8 {
-            paths.push(Path::new(arg));
-        } else if arg.eq_ignore_ascii_case("INDENT") {
-            indent = args.next_string()?;
-        } else if arg.eq_ignore_ascii_case("NEWLINE") {
-            newline = args.next_string()?;
-        } else if arg.eq_ignore_ascii_case("SPACE") {
-            space = args.next_string()?;
-        } else if arg.eq_ignore_ascii_case("NOESCAPE") {
-            continue;
-        } else if arg.eq_ignore_ascii_case("FORMAT") {
-            format = Format::from_str(args.next_string()?.as_str())?;
-        } else {
-            paths.push(Path::new(arg));
-        }
+        match arg {
+            arg if arg.eq_ignore_ascii_case("INDENT") => indent = args.next_string()?,
+            arg if arg.eq_ignore_ascii_case("NEWLINE") => newline = args.next_string()?,
+            arg if arg.eq_ignore_ascii_case("SPACE") => space = args.next_string()?,
+            // Silently ignore. Compatibility with ReJSON v1.0 which has this option. See #168 TODO add support
+            arg if arg.eq_ignore_ascii_case("NOESCAPE") => continue,
+            arg if arg.eq_ignore_ascii_case("FORMAT") => {
+                format = Format::from_str(args.next_string()?.as_str())?
+            }
+            _ => paths.push(Path::new(arg)),
+        };
     }
 
     // path is optional -> no path found we use root "$"
