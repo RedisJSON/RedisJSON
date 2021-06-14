@@ -176,6 +176,10 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut newline = String::new();
     while let Ok(arg) = args.next_string() {
         match arg {
+            // fast way to consider arg a path given none of
+            // the bellow subcommand placeholders is larger than 8
+            // See #390 for the comparison of this function with/without this optimization
+            arg if arg.len() > 8 => paths.push(Path::new(arg)),
             arg if arg.eq_ignore_ascii_case("INDENT") => indent = args.next_string()?,
             arg if arg.eq_ignore_ascii_case("NEWLINE") => newline = args.next_string()?,
             arg if arg.eq_ignore_ascii_case("SPACE") => space = args.next_string()?,
