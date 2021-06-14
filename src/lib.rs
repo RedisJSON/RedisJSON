@@ -43,7 +43,7 @@ const fn max_strlen(arr: &[&str]) -> usize {
     max_strlen
 }
 
-// We use this constant to further optimize json_get command
+// We use this constant to further optimize json_get command, by calculating the max subcommand length
 // Any subcommand added to JSON.GET should be included on the following array
 const JSONGET_SUBCOMMANDS_MAXSTRLEN: usize = max_strlen(&["NOESCAPE","INDENT","NEWLINE","SPACE","FORMAT"]);
 
@@ -196,8 +196,7 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut newline = String::new();
     while let Ok(arg) = args.next_string() {
         match arg {
-            // fast way to consider arg a path given by using the max length of all
-            // of all possible subcommands
+            // fast way to consider arg a path by using the max length of all possible subcommands
             // See #390 for the comparison of this function with/without this optimization
             arg if arg.len() > JSONGET_SUBCOMMANDS_MAXSTRLEN => paths.push(Path::new(arg)),
             arg if arg.eq_ignore_ascii_case("INDENT") => indent = args.next_string()?,
