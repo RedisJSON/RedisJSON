@@ -27,6 +27,26 @@ mod redisjson;
 const JSON_ROOT_PATH: &'static str = "$";
 pub const REDIS_JSON_TYPE_VERSION: i32 = 3;
 
+// Compile time evaluation of the max len() of all elements of the array
+const fn max_strlen(arr: &[&str]) -> usize {
+    let mut max_strlen = 0;
+    let arr_len = arr.len();
+    if arr_len < 1 { return max_strlen; }
+    let mut pos = 0;
+    while pos < arr_len {
+        let curr_strlen = arr[pos].len();
+        if max_strlen < curr_strlen {
+            max_strlen = curr_strlen;
+        }
+        pos += 1;
+    }
+    max_strlen
+}
+
+// We use this constant to further optimize json_get command
+// Any subcommand added to JSON.GET should be included on the following array
+const JSONGET_SUBCOMMANDS_MAXSTRLEN: usize = max_strlen(&["NOESCAPE","INDENT","NEWLINE","SPACE","FORMAT"]);
+
 static REDIS_JSON_TYPE: RedisType = RedisType::new(
     "ReJSON-RL",
     REDIS_JSON_TYPE_VERSION,
@@ -176,10 +196,10 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut newline = String::new();
     while let Ok(arg) = args.next_string() {
         match arg {
-            // fast way to consider arg a path given none of
-            // the bellow subcommand placeholders is larger than 8
+            // fast way to consider arg a path given by using the max length of all
+            // of all possible subcommands
             // See #390 for the comparison of this function with/without this optimization
-            arg if arg.len() > 8 => paths.push(Path::new(arg)),
+            arg if arg.len() > JSONGET_SUBCOMMANDS_MAXSTRLEN => paths.push(Path::new(arg)),
             arg if arg.eq_ignore_ascii_case("INDENT") => indent = args.next_string()?,
             arg if arg.eq_ignore_ascii_case("NEWLINE") => newline = args.next_string()?,
             arg if arg.eq_ignore_ascii_case("SPACE") => space = args.next_string()?,
