@@ -62,6 +62,9 @@ pub trait WriteHolder<E: Clone, V: SelectValue> {
 }
 
 pub trait Manager {
+    /* todo: 1. explain why this split is needed,
+             2. E is used for error, change!!!
+    */
     type V: SelectValue;
     type E: Clone;
     type WriteHolder: WriteHolder<Self::E, Self::V>;
@@ -245,6 +248,7 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
         } else {
             self.update(&path, self.get_value().unwrap().unwrap(), |_v| {
                 updated = true;
+                // todo: check if this close is needed
                 Ok(Some(v.clone()))
             })?;
         }

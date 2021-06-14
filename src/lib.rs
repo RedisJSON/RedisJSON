@@ -53,6 +53,7 @@ macro_rules! redis_json_module_create {(
         ],
         pre_command_function: $pre_command_function_expr:expr,
         get_manage: $get_manager_expr:expr,
+        version: $version:expr,
         $(init: $init_func:ident,)* $(,)*
     ) => {
 
@@ -372,7 +373,7 @@ macro_rules! redis_json_module_create {(
 
         redis_module! {
             name: "ReJSON",
-            version: 99_99_99,
+            version: $version,
             data_types: [$($data_type,)*],
             $(
                 init: $init_func,
@@ -416,4 +417,5 @@ redis_json_module_create! {
     data_types: [REDIS_JSON_TYPE],
     pre_command_function: pre_command,
     get_manage: Some(manager::RedisJsonKeyManager),
+    version: 99_99_99,
 }
