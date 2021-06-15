@@ -62,16 +62,18 @@ pub trait WriteHolder<E: Clone, V: SelectValue> {
 }
 
 pub trait Manager {
-    /* todo: 1. explain why this split is needed,
-             2. E is used for error, change!!!
-    */
+    /* V - SelectValue that the json path library can work on
+     * O - SelectValue Holder
+     * Naiv implementation is that V and O are from the same type but its not
+     * always possible so they are seperated
+     */
     type V: SelectValue;
-    type E: Clone;
-    type WriteHolder: WriteHolder<Self::E, Self::V>;
+    type O: Clone;
+    type WriteHolder: WriteHolder<Self::O, Self::V>;
     type ReadHolder: ReadHolder<Self::V>;
     fn open_key_read(&self, ctx: &Context, key: &str) -> Result<Self::ReadHolder, RedisError>;
     fn open_key_write(&self, ctx: &Context, key: &str) -> Result<Self::WriteHolder, RedisError>;
-    fn from_str(&self, val: &str, format: Format) -> Result<Self::E, Error>;
+    fn from_str(&self, val: &str, format: Format) -> Result<Self::O, Error>;
     fn get_memory(&self, v: &Self::V) -> Result<usize, RedisError>;
 }
 
@@ -239,7 +241,7 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
         }
     }
 
-    fn set_value(&mut self, path: Vec<String>, v: Value) -> Result<bool, RedisError> {
+    fn set_value(&mut self, path: Vec<String>, mut v: Value) -> Result<bool, RedisError> {
         let mut updated = false;
         if path.is_empty() {
             // update the root
@@ -248,8 +250,7 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
         } else {
             self.update(&path, self.get_value().unwrap().unwrap(), |_v| {
                 updated = true;
-                // todo: check if this close is needed
-                Ok(Some(v.clone()))
+                Ok(Some(v.take()))
             })?;
         }
         Ok(updated)
@@ -469,7 +470,7 @@ impl Manager for RedisJsonKeyManager {
     type WriteHolder = KeyHolderWrite;
     type ReadHolder = KeyHolderRead;
     type V = Value;
-    type E = Value;
+    type O = Value;
 
     fn open_key_read(&self, ctx: &Context, key: &str) -> Result<KeyHolderRead, RedisError> {
         let key = ctx.open_key(key);
