@@ -25,11 +25,11 @@ mod redisjson;
 // use crate::readies_wd40::{BB, _BB, getenv};
 
 const JSON_ROOT_PATH: &'static str = "$";
-const CMD_ARG_NOESCAPE: &'static str = "NOESCAPE";
-const CMD_ARG_INDENT: &'static str = "INDENT";
-const CMD_ARG_NEWLINE: &'static str = "NEWLINE";
-const CMD_ARG_SPACE: &'static str = "SPACE";
-const CMD_ARG_FORMAT: &'static str = "FORMAT";
+const CMD_ARG_NOESCAPE: &str = "NOESCAPE";
+const CMD_ARG_INDENT: &str = "INDENT";
+const CMD_ARG_NEWLINE: &str = "NEWLINE";
+const CMD_ARG_SPACE: &str = "SPACE";
+const CMD_ARG_FORMAT: &str = "FORMAT";
 
 pub const REDIS_JSON_TYPE_VERSION: i32 = 3;
 
@@ -37,7 +37,9 @@ pub const REDIS_JSON_TYPE_VERSION: i32 = 3;
 const fn max_strlen(arr: &[&str]) -> usize {
     let mut max_strlen = 0;
     let arr_len = arr.len();
-    if arr_len < 1 { return max_strlen; }
+    if arr_len < 1 {
+        return max_strlen;
+    }
     let mut pos = 0;
     while pos < arr_len {
         let curr_strlen = arr[pos].len();
@@ -51,7 +53,13 @@ const fn max_strlen(arr: &[&str]) -> usize {
 
 // We use this constant to further optimize json_get command, by calculating the max subcommand length
 // Any subcommand added to JSON.GET should be included on the following array
-const JSONGET_SUBCOMMANDS_MAXSTRLEN: usize = max_strlen(&[CMD_ARG_NOESCAPE,CMD_ARG_INDENT,CMD_ARG_NEWLINE,CMD_ARG_SPACE,CMD_ARG_FORMAT]);
+const JSONGET_SUBCOMMANDS_MAXSTRLEN: usize = max_strlen(&[
+    CMD_ARG_NOESCAPE,
+    CMD_ARG_INDENT,
+    CMD_ARG_NEWLINE,
+    CMD_ARG_SPACE,
+    CMD_ARG_FORMAT,
+]);
 
 static REDIS_JSON_TYPE: RedisType = RedisType::new(
     "ReJSON-RL",
