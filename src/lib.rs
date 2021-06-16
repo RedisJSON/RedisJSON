@@ -5,7 +5,7 @@ use std::{i64, usize};
 
 use redis_module::raw::RedisModuleTypeMethods;
 use redis_module::{native_types::RedisType, raw as rawmod, NextArg, NotifyEvent};
-use redis_module::{Context, RedisError, RedisResult, RedisValue, REDIS_OK};
+use redis_module::{Context, RedisError, RedisResult, RedisString, RedisValue, REDIS_OK};
 use serde_json::{Number, Value};
 
 use crate::array_index::ArrayIndex;
@@ -73,10 +73,10 @@ fn backwards_compat_path(mut path: String) -> String {
 ///
 /// JSON.DEL <key> [path]
 ///
-fn json_del(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_del(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = args
         .next_string()
         .map_or_else(|_| JSON_ROOT_PATH.to_string(), |v| backwards_compat_path(v));
@@ -96,7 +96,7 @@ fn json_del(ctx: &Context, args: Vec<String>) -> RedisResult {
 
     // no need to notify or replicate if nothing was deleted
     if deleted > 0 {
-        ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.del", key.as_str());
+        ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.del", &key);
         ctx.replicate_verbatim();
     }
 
@@ -106,10 +106,10 @@ fn json_del(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 /// JSON.SET <key> <path> <json> [NX | XX | FORMAT <format>]
 ///
-fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_set(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = backwards_compat_path(args.next_string()?);
     let value = args.next_string()?;
 
@@ -117,13 +117,13 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     let mut set_option = SetOptions::None;
 
     while let Some(s) = args.next() {
-        match s.to_uppercase().as_str() {
-            "NX" => set_option = SetOptions::NotExists,
-            "XX" => set_option = SetOptions::AlreadyExists,
-            "FORMAT" => {
+        match s.try_as_str()? {
+            arg if arg.eq_ignore_ascii_case("NX") => set_option = SetOptions::NotExists,
+            arg if arg.eq_ignore_ascii_case("XX") => set_option = SetOptions::AlreadyExists,
+            arg if arg.eq_ignore_ascii_case("FORMAT") => {
                 format = Format::from_str(args.next_string()?.as_str())?;
             }
-            _ => break,
+            _ => break, // TODO shoudl return an error??
         };
     }
 
@@ -133,7 +133,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
     match (current, set_option) {
         (Some(ref mut doc), ref op) => {
             if doc.set_value(&value, &path, op, format)? {
-                ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.set", key.as_str());
+                ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.set", &key);
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
@@ -145,7 +145,7 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
             let doc = RedisJSON::from_str(&value, format)?;
             if path == "$" {
                 redis_key.set_value(&REDIS_JSON_TYPE, doc)?;
-                ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.set", key.as_str());
+                ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.set", &key);
                 ctx.replicate_verbatim();
                 REDIS_OK
             } else {
@@ -165,9 +165,9 @@ fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///         [path ...]
 ///
 /// TODO add support for multi path
-fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_get(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
 
     let mut paths: Vec<Path> = vec![];
     let mut format = Format::JSON;
@@ -217,7 +217,7 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 /// JSON.MGET <key> [key ...] <path>
 ///
-fn json_mget(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_mget(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     if args.len() < 3 {
         return Err(RedisError::WrongArity);
     }
@@ -244,16 +244,16 @@ fn json_mget(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 /// JSON.STRLEN <key> [path]
 ///
-fn json_str_len(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_str_len(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     json_len(ctx, args, |doc, path| doc.str_len(path))
 }
 
 ///
 /// JSON.TYPE <key> [path]
 ///
-fn json_type(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_type(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = backwards_compat_path(args.next_string()?);
 
     let key = ctx.open_key(&key);
@@ -272,7 +272,7 @@ fn json_type(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 /// JSON.NUMINCRBY <key> <path> <number>
 ///
-fn json_num_incrby(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_num_incrby(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     json_num_op(
         ctx,
         "json.numincrby",
@@ -285,7 +285,7 @@ fn json_num_incrby(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 /// JSON.NUMMULTBY <key> <path> <number>
 ///
-fn json_num_multby(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_num_multby(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     json_num_op(
         ctx,
         "json.nummultby",
@@ -297,9 +297,9 @@ fn json_num_multby(ctx: &Context, args: Vec<String>) -> RedisResult {
 
 //
 /// JSON.TOGGLE <key> <path>
-fn json_bool_toggle(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_bool_toggle(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = backwards_compat_path(args.next_string()?);
     let redis_key = ctx.open_key_writable(&key);
 
@@ -323,7 +323,7 @@ fn json_bool_toggle(ctx: &Context, args: Vec<String>) -> RedisResult {
             .map_err(|e| e.into())
         })
         .and_then(|v: RedisValue| {
-            ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.toggle", key.as_str());
+            ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.toggle", &key);
             ctx.replicate_verbatim();
             Ok(v)
         })
@@ -331,7 +331,7 @@ fn json_bool_toggle(ctx: &Context, args: Vec<String>) -> RedisResult {
 fn json_num_op<I, F>(
     ctx: &Context,
     cmd: &str,
-    args: Vec<String>,
+    args: Vec<RedisString>,
     op_i64: I,
     op_f64: F,
 ) -> RedisResult
@@ -341,7 +341,7 @@ where
 {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = backwards_compat_path(args.next_string()?);
     let number = args.next_string()?;
 
@@ -359,7 +359,7 @@ where
             .map_err(|e| e.into())
         })
         .and_then(|v: RedisValue| {
-            ctx.notify_keyspace_event(NotifyEvent::MODULE, cmd, key.as_str());
+            ctx.notify_keyspace_event(NotifyEvent::MODULE, cmd, &key);
             ctx.replicate_verbatim();
             Ok(v)
         })
@@ -407,10 +407,10 @@ fn err_json(value: &Value, expected_value: &'static str) -> Error {
 ///
 /// JSON.STRAPPEND <key> [path] <json-string>
 ///
-fn json_str_append(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_str_append(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path_or_json = args.next_string()?;
 
     let path;
@@ -444,7 +444,7 @@ fn json_str_append(ctx: &Context, args: Vec<String>) -> RedisResult {
             .map_err(|e| e.into())
         })
         .and_then(|v: RedisValue| {
-            ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.strappend", key.as_str());
+            ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.strappend", &key);
             ctx.replicate_verbatim();
             Ok(v)
         })
@@ -468,10 +468,10 @@ fn do_json_str_append(json: &str, value: &Value) -> Result<Value, Error> {
 ///
 /// JSON.ARRAPPEND <key> <path> <json> [json ...]
 ///
-fn json_arr_append(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_arr_append(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1).peekable();
 
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = backwards_compat_path(args.next_string()?);
 
     // We require at least one JSON item to append
@@ -496,7 +496,7 @@ fn json_arr_append(ctx: &Context, args: Vec<String>) -> RedisResult {
             .map_err(|e| e.into())
         })
         .and_then(|v: RedisValue| {
-            ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrappend", key.as_str());
+            ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrappend", &key);
             ctx.replicate_verbatim();
             Ok(v)
         })
@@ -504,14 +504,14 @@ fn json_arr_append(ctx: &Context, args: Vec<String>) -> RedisResult {
 
 fn do_json_arr_append<I>(args: I, value: &mut Value) -> Result<Value, Error>
 where
-    I: Iterator<Item = String>,
+    I: Iterator<Item = RedisString>,
 {
     if !value.is_array() {
         return Err(err_json(value, "array"));
     }
 
     let mut items: Vec<Value> = args
-        .map(|json| serde_json::from_str(&json))
+        .map(|json| serde_json::from_str(&json.into_string_lossy()))
         .collect::<Result<_, _>>()?;
 
     let mut new_value = value.take();
@@ -524,14 +524,14 @@ where
 ///
 /// scalar - number, string, Boolean (true or false), or null
 ///
-fn json_arr_index(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_arr_index(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = backwards_compat_path(args.next_string()?);
     let json_scalar = args.next_string()?;
-    let start: i64 = args.next().map(|v| v.parse()).unwrap_or(Ok(0))?;
-    let end: i64 = args.next().map(|v| v.parse()).unwrap_or(Ok(0))?;
+    let start: i64 = args.next().map(|v| v.parse_integer()).unwrap_or(Ok(0))?;
+    let end: i64 = args.next().map(|v| v.parse_integer()).unwrap_or(Ok(0))?;
 
     args.done()?; // TODO: Add to other functions as well to terminate args list
 
@@ -547,10 +547,10 @@ fn json_arr_index(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 /// JSON.ARRINSERT <key> <path> <index> <json> [json ...]
 ///
-fn json_arr_insert(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_arr_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1).peekable();
 
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = backwards_compat_path(args.next_string()?);
     let index = args.next_i64()?;
 
@@ -576,7 +576,7 @@ fn json_arr_insert(ctx: &Context, args: Vec<String>) -> RedisResult {
             .map_err(|e| e.into())
         })
         .and_then(|v: RedisValue| {
-            ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrinsert", key.as_str());
+            ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrinsert", &key);
             ctx.replicate_verbatim();
             Ok(v)
         })
@@ -584,7 +584,7 @@ fn json_arr_insert(ctx: &Context, args: Vec<String>) -> RedisResult {
 
 fn do_json_arr_insert<I>(args: I, index: i64, value: &mut Value) -> Result<Value, Error>
 where
-    I: Iterator<Item = String>,
+    I: Iterator<Item = RedisString>,
 {
     if let Some(array) = value.as_array() {
         // Verify legal index in bounds
@@ -596,7 +596,7 @@ where
         let index = index as usize;
 
         let items: Vec<Value> = args
-            .map(|json| serde_json::from_str(&json))
+            .map(|json| serde_json::from_str(&json.into_string_lossy()))
             .collect::<Result<_, _>>()?;
         let mut new_value = value.take();
         let curr = new_value.as_array_mut().unwrap();
@@ -610,22 +610,22 @@ where
 ///
 /// JSON.ARRLEN <key> [path]
 ///
-fn json_arr_len(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_arr_len(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     json_len(ctx, args, |doc, path| doc.arr_len(path))
 }
 
 ///
 /// JSON.ARRPOP <key> [path [index]]
 ///
-fn json_arr_pop(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_arr_pop(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
 
     let (path, index) = args
         .next()
         .map(|p| {
-            let path = backwards_compat_path(p);
+            let path = backwards_compat_path(p.to_string());
             let index = args.next_i64().unwrap_or(-1);
             (path, index)
         })
@@ -648,7 +648,7 @@ fn json_arr_pop(ctx: &Context, args: Vec<String>) -> RedisResult {
             .map_err(|e| e.into())
         })
         .and_then(|v| {
-            ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrpop", key.as_str());
+            ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrpop", &key);
             ctx.replicate_verbatim();
             Ok(v)
         })?;
@@ -687,10 +687,10 @@ fn do_json_arr_pop(index: i64, res: &mut Option<Value>, value: &mut Value) -> Re
 ///
 /// JSON.ARRTRIM <key> <path> <start> <stop>
 ///
-fn json_arr_trim(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_arr_trim(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = backwards_compat_path(args.next_string()?);
     let start = args.next_i64()?;
     let stop = args.next_i64()?;
@@ -714,7 +714,7 @@ fn json_arr_trim(ctx: &Context, args: Vec<String>) -> RedisResult {
             .map_err(|e| e.into())
         })
         .and_then(|v: RedisValue| {
-            ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrtrim", key.as_str());
+            ctx.notify_keyspace_event(NotifyEvent::MODULE, "json.arrtrim", &key);
             ctx.replicate_verbatim();
             Ok(v)
         })
@@ -745,9 +745,9 @@ fn do_json_arr_trim(start: i64, stop: i64, value: &mut Value) -> Result<Value, E
 ///
 /// JSON.OBJKEYS <key> [path]
 ///
-fn json_obj_keys(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_obj_keys(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = backwards_compat_path(args.next_string()?);
 
     let key = ctx.open_key(&key);
@@ -763,17 +763,19 @@ fn json_obj_keys(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 /// JSON.OBJLEN <key> [path]
 ///
-fn json_obj_len(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_obj_len(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     json_len(ctx, args, |doc, path| doc.obj_len(path))
 }
 
 ///
 /// JSON.CLEAR <key> [path ...]
 ///
-fn json_clear(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_clear(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_string()?;
-    let paths = args.map(Path::new).collect::<Vec<_>>();
+    let key = args.next_redis_string()?;
+    let paths = args
+        .map(|arg| Path::new(arg.to_string()))
+        .collect::<Vec<_>>();
 
     let paths = if paths.is_empty() {
         vec![Path::new(JSON_ROOT_PATH.to_string())]
@@ -800,11 +802,11 @@ fn json_clear(ctx: &Context, args: Vec<String>) -> RedisResult {
 /// MEMORY <key> [path]
 /// HELP
 ///
-fn json_debug(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_debug(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     match args.next_string()?.to_uppercase().as_str() {
         "MEMORY" => {
-            let key = args.next_string()?;
+            let key = args.next_redis_string()?;
             let path = backwards_compat_path(args.next_string()?);
 
             let key = ctx.open_key(&key);
@@ -830,10 +832,10 @@ fn json_debug(ctx: &Context, args: Vec<String>) -> RedisResult {
 ///
 /// JSON.RESP <key> [path]
 ///
-fn json_resp(ctx: &Context, args: Vec<String>) -> RedisResult {
+fn json_resp(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = args
         .next_string()
         .map_or_else(|_| JSON_ROOT_PATH.to_string(), |v| backwards_compat_path(v));
@@ -879,11 +881,11 @@ fn resp_serialize(doc: &Value) -> RedisValue {
 
 fn json_len<F: Fn(&RedisJSON, &String) -> Result<usize, Error>>(
     ctx: &Context,
-    args: Vec<String>,
+    args: Vec<RedisString>,
     fun: F,
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = backwards_compat_path(args.next_string()?);
 
     let key = ctx.open_key(&key);
@@ -895,15 +897,15 @@ fn json_len<F: Fn(&RedisJSON, &String) -> Result<usize, Error>>(
     Ok(length)
 }
 
-fn json_cache_info(_ctx: &Context, _args: Vec<String>) -> RedisResult {
+fn json_cache_info(_ctx: &Context, _args: Vec<RedisString>) -> RedisResult {
     Err(RedisError::Str("Command was not implemented"))
 }
 
-fn json_cache_init(_ctx: &Context, _args: Vec<String>) -> RedisResult {
+fn json_cache_init(_ctx: &Context, _args: Vec<RedisString>) -> RedisResult {
     Err(RedisError::Str("Command was not implemented"))
 }
 
-fn init(ctx: &Context, _args: &Vec<String>) -> rawmod::Status {
+fn init(ctx: &Context, _args: &Vec<RedisString>) -> rawmod::Status {
     export_shared_api(ctx);
     rawmod::Status::Ok
 }

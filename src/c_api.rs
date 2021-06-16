@@ -9,7 +9,7 @@ use std::{
 use redis_module::key::verify_type;
 use redis_module::key::RedisKeyWritable;
 use redis_module::logging::log_notice;
-use redis_module::{raw as rawmod, RedisError};
+use redis_module::{raw as rawmod, RedisError, RedisString};
 use redis_module::{Context, Status};
 use serde_json::Value;
 
@@ -82,8 +82,9 @@ impl<'a> JSONApiKey<'a> {
         ctx: *mut rawmod::RedisModuleCtx,
         key_str: *mut rawmod::RedisModuleString,
     ) -> Result<JSONApiKey<'a>, RedisError> {
+        let key = RedisString::new(ctx, key_str);
         let ctx = Context::new(ctx);
-        let key = ctx.open_with_redis_string(key_str);
+        let key = ctx.open_key_writable(&key);
         JSONApiKey::new_from_key(key)
     }
 
@@ -91,9 +92,10 @@ impl<'a> JSONApiKey<'a> {
         ctx: *mut rawmod::RedisModuleCtx,
         path: *const c_char,
     ) -> Result<JSONApiKey<'a>, RedisError> {
-        let ctx = Context::new(ctx);
         let path = unsafe { CStr::from_ptr(path).to_str().unwrap() };
-        let key = ctx.open_key_writable(path);
+        let key = RedisString::create(ctx, path);
+        let ctx = Context::new(ctx);
+        let key = ctx.open_key_writable(&key);
         JSONApiKey::new_from_key(key)
     }
 }
