@@ -430,9 +430,9 @@ dependencies = [
 
 [[package]]
 name = "redis-module"
-version = "0.17.0"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5fde97356730663eae116656956afb48db5c178221693333585372f50d511f3c"
+checksum = "7977889a981324b3fdd56b2cc366d315639d34d264f8a750b2d75a23b4bd78fd"
 dependencies = [
  "bindgen",
  "bitflags",
@@ -530,9 +530,9 @@ checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
 
 [[package]]
 name = "strum_macros"
-version = "0.20.1"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee8bc6b87a5112aeeab1f4a9f7ab634fe6cbefc4850006df31267f4cfb9e3149"
+checksum = "d06aaeeee809dbc59eb4556183dd927df67db1540de5be8d3ec0b6636358a5ec"
 dependencies = [
  "heck",
  "proc-macro2",
