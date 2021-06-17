@@ -4,21 +4,22 @@
 // User-provided JSON is converted to a tree. This tree is stored transparently in Redis.
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
-use crate::backward;
-use crate::c_api::JSONType;
-use crate::error::Error;
-use crate::formatter::RedisJsonFormatter;
-use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
-use crate::REDIS_JSON_TYPE_VERSION;
+use std::io::Cursor;
+use std::mem;
+use std::os::raw::{c_int, c_void};
 
 use bson::decode_document;
 use jsonpath_lib::SelectorMut;
 use redis_module::raw::{self, Status};
 use serde::Serialize;
 use serde_json::{Map, Value};
-use std::io::Cursor;
-use std::mem;
-use std::os::raw::{c_int, c_void};
+
+use crate::backward;
+use crate::c_api::JSONType;
+use crate::error::Error;
+use crate::formatter::RedisJsonFormatter;
+use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
+use crate::REDIS_JSON_TYPE_VERSION;
 
 #[derive(Debug, PartialEq)]
 pub enum SetOptions {
@@ -494,8 +495,9 @@ pub mod type_methods {
     #[allow(non_snake_case, unused)]
     pub extern "C" fn rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
         let json = match encver {
-            0 => RedisJSON {
-                data: backward::json_rdb_load(rdb),
+            0 => match backward::json_rdb_load(rdb) {
+                Ok(d) => RedisJSON { data: d },
+                Err(e) => return 0 as *mut c_void,
             },
             2 => {
                 let data = raw::load_string(rdb);
@@ -530,7 +532,7 @@ pub mod type_methods {
         raw::save_string(rdb, &json.data.to_string());
     }
 
-    fn is_io_error(rdb: *mut raw::RedisModuleIO) -> bool {
+    pub fn is_io_error(rdb: *mut raw::RedisModuleIO) -> bool {
         unsafe { raw::RedisModule_IsIOError.unwrap()(rdb) != 0 }
     }
 
