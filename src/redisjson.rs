@@ -334,13 +334,10 @@ impl RedisJSON {
             };
 
             // Normalize end
-            let end = if end == 0 {
-                len
-            } else if end < 0 {
-                len + end
-            } else {
-                // end > 0
-                end.min(len)
+            let end = match end {
+                0 => len,
+                e if e < 0 => len + end,
+                _ => end.min(len),
             };
 
             if end < start {
