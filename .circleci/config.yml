@@ -41,6 +41,7 @@ commands:
             apt-get -q install -y git openssh-client curl ca-certificates make tar gzip
             bash <(curl -fsSL https://get.docker.com)
       - setup_remote_docker:
+          version: 20.10.2
           docker_layer_caching: true
 
   setup-automation:
@@ -348,7 +349,7 @@ workflows:
           <<: *on-integ-and-version-tags
           matrix:
             parameters:
-              platform: [focal, bionic, xenial, centos7]
+              platform: [focal, bionic, xenial, centos7, buster]
       - build-macos:
           <<: *on-integ-and-version-tags
       - deploy-artifacts:
