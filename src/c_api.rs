@@ -173,7 +173,7 @@ pub extern "C" fn JSONAPI_getType(json: JSONApiPathRef) -> c_int {
     if !json.is_null() {
         let json = unsafe { &*json };
         let (t, _) = get_type_and_size(&*json);
-        return t as c_int;
+        t as c_int
     } else {
         panic!("aborting due to null parameter");
     }
@@ -258,13 +258,10 @@ pub extern "C" fn JSONAPI_isJSON(key: *mut rawmod::RedisModuleKey) -> c_int {
 }
 
 fn get_int_value(value: &Value) -> Option<c_long> {
-    match value {
-        Value::Number(ref n) => {
-            if let Some(i) = n.as_i64() {
-                return Some(i);
-            }
+    if let Value::Number(ref n) = value {
+        if let Some(i) = n.as_i64() {
+            return Some(i);
         }
-        _ => {}
     }
     None
 }
