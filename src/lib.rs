@@ -25,7 +25,41 @@ mod redisjson;
 // use crate::readies_wd40::{BB, _BB, getenv};
 
 const JSON_ROOT_PATH: &'static str = "$";
+const CMD_ARG_NOESCAPE: &str = "NOESCAPE";
+const CMD_ARG_INDENT: &str = "INDENT";
+const CMD_ARG_NEWLINE: &str = "NEWLINE";
+const CMD_ARG_SPACE: &str = "SPACE";
+const CMD_ARG_FORMAT: &str = "FORMAT";
+
 pub const REDIS_JSON_TYPE_VERSION: i32 = 3;
+
+// Compile time evaluation of the max len() of all elements of the array
+const fn max_strlen(arr: &[&str]) -> usize {
+    let mut max_strlen = 0;
+    let arr_len = arr.len();
+    if arr_len < 1 {
+        return max_strlen;
+    }
+    let mut pos = 0;
+    while pos < arr_len {
+        let curr_strlen = arr[pos].len();
+        if max_strlen < curr_strlen {
+            max_strlen = curr_strlen;
+        }
+        pos += 1;
+    }
+    max_strlen
+}
+
+// We use this constant to further optimize json_get command, by calculating the max subcommand length
+// Any subcommand added to JSON.GET should be included on the following array
+const JSONGET_SUBCOMMANDS_MAXSTRLEN: usize = max_strlen(&[
+    CMD_ARG_NOESCAPE,
+    CMD_ARG_INDENT,
+    CMD_ARG_NEWLINE,
+    CMD_ARG_SPACE,
+    CMD_ARG_FORMAT,
+]);
 
 static REDIS_JSON_TYPE: RedisType = RedisType::new(
     "ReJSON-RL",
@@ -175,26 +209,19 @@ fn json_get(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut space = String::new();
     let mut newline = String::new();
     while let Ok(arg) = args.next_string() {
-        match arg.to_uppercase().as_str() {
-            "INDENT" => {
-                indent = args.next_string()?;
+        match arg {
+            // fast way to consider arg a path by using the max length of all possible subcommands
+            // See #390 for the comparison of this function with/without this optimization
+            arg if arg.len() > JSONGET_SUBCOMMANDS_MAXSTRLEN => paths.push(Path::new(arg)),
+            arg if arg.eq_ignore_ascii_case(CMD_ARG_INDENT) => indent = args.next_string()?,
+            arg if arg.eq_ignore_ascii_case(CMD_ARG_NEWLINE) => newline = args.next_string()?,
+            arg if arg.eq_ignore_ascii_case(CMD_ARG_SPACE) => space = args.next_string()?,
+            // Silently ignore. Compatibility with ReJSON v1.0 which has this option. See #168 TODO add support
+            arg if arg.eq_ignore_ascii_case(CMD_ARG_NOESCAPE) => continue,
+            arg if arg.eq_ignore_ascii_case(CMD_ARG_FORMAT) => {
+                format = Format::from_str(args.next_string()?.as_str())?
             }
-            "NEWLINE" => {
-                newline = args.next_string()?;
-            }
-            "SPACE" => {
-                space = args.next_string()?;
-            }
-            "NOESCAPE" => {
-                // Silently ignore. Compatibility with ReJSON v1.0 which has this option. See #168
-                continue;
-            } // TODO add support
-            "FORMAT" => {
-                format = Format::from_str(args.next_string()?.as_str())?;
-            }
-            _ => {
-                paths.push(Path::new(arg));
-            }
+            _ => paths.push(Path::new(arg)),
         };
     }
 
