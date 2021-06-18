@@ -383,6 +383,5 @@ workflows:
                 - master
                 - /^feature-.*$/
     jobs:
-      - nightly-automation
       - performance-automation:
           context: common
