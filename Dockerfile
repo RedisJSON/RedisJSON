@@ -36,7 +36,7 @@ RUN set -ex ;\
     if [ "$TEST" = "1" ]; then \
         mkdir -p bin/artifacts ;\
         bash -l -c "TEST= make test" ;\
-        tar -C  /build/pytest/logs/ -czf /build/bin/artifacts/pytest-logs-${ARCH}-${OSNICK}.tgz . ;\
+        tar -C  /build/tests/pytest/logs/ -czf /build/bin/artifacts/pytest-logs-${ARCH}-${OSNICK}.tgz . ;\
     fi
 RUN set -ex ;\
     mkdir -p bin/artifacts ;\
