@@ -1,6 +1,6 @@
 version: 0.2
 name: "json_get_[8].zero_jsonsl-1"
-description: "JSON.GET jsonsl-1 $.[8].0 ||  {jsonsl-1.json size: 1.4 KB} https://oss.redislabs.com/redisjson/performance/"
+description: "JSON.GET jsonsl-1 $[8].0 ||  {jsonsl-1.json size: 1.4 KB} https://oss.redislabs.com/redisjson/performance/"
 remote:
  - type: oss-standalone
  - setup: redisearch-m5d
@@ -14,4 +14,4 @@ clientconfig:
     - requests: 5000000
     - threads: 2
     - pipeline: 1
-    - command: 'JSON.GET jsonsl-1 $.[8].zero'
+    - command: 'JSON.GET jsonsl-1 $[8].zero'

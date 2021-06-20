@@ -1,6 +1,6 @@
 version: 0.2
 name: "json_set_[0]foo_jsonsl-1"
-description: "JSON.SET jsonsl-1 $.[0] foo ||  {jsonsl-1.json size: 1.4 KB} https://oss.redislabs.com/redisjson/performance/"
+description: "JSON.SET jsonsl-1 $[0] foo ||  {jsonsl-1.json size: 1.4 KB} https://oss.redislabs.com/redisjson/performance/"
 remote:
  - type: oss-standalone
  - setup: redisearch-m5d
@@ -14,4 +14,4 @@ clientconfig:
     - requests: 5000000
     - threads: 2
     - pipeline: 1
-    - command: 'JSON.SET jsonsl-1 $.[0] "\"foo\""'
+    - command: 'JSON.SET jsonsl-1 $[0] "\"foo\""'
