@@ -65,7 +65,10 @@ impl Path {
             }
             Some(cloned)
         };
-        Path { original_path: path, fixed_path }
+        Path {
+            original_path: path,
+            fixed_path,
+        }
     }
 
     pub fn get_path(&self) -> &String {
