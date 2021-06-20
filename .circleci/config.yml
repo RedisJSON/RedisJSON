@@ -89,8 +89,10 @@ commands:
       - run:
           name: Cleanup test log dir
           command: |
-            cd tests/pytest/logs
-            rm -f *.aof *.rdb
+            if [[ -d tests/pytest/logs ]]; then
+              cd tests/pytest/logs
+              rm -f *.aof *.rdb
+            fi
       - store_artifacts:
           path: tests/pytest/logs
 
@@ -170,8 +172,13 @@ commands:
       - run:
           name: Build for platform
           command: |
+            ROOT=$PWD
             cd build/platforms
             make build OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH ARTIFACTS=1 TEST=1 SHOW=1
+            cd $ROOT
+            mkdir -p tests/pytest/logs
+            tar -C tests/pytest/logs -xzf bin/artifacts/pytest-logs*.tgz
+      - save-tests-logs
       - early-return-for-forked-pull-requests
       - run:
           name: Build for platform (publish)
@@ -180,7 +187,6 @@ commands:
             cd build/platforms
             make publish OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH OFFICIAL=0 SHOW=1 VERBOSE=1
       - persist-artifacts
-      - save-tests-logs
 
   benchmark-steps:
     parameters:
@@ -230,7 +236,6 @@ jobs:
     steps:
       - build-steps
       - test-steps
-      - persist-artifacts
 
   platforms-build:
     parameters:
@@ -376,7 +381,7 @@ workflows:
           <<: *on-integ-and-version-tags
           matrix:
             parameters:
-              platform: [focal, bionic, xenial, centos7, buster]
+              platform: [focal, bionic, xenial, centos8, centos7, buster]
       - build-macos:
           <<: *on-integ-and-version-tags
       - deploy-artifacts:
@@ -386,12 +391,14 @@ workflows:
           <<: *on-integ-branch
           requires:
             - platforms-build
+            - build-macos
       - deploy-artifacts:
           name: deploy_release
           context: common
           <<: *on-version-tags
           requires:
             - platforms-build
+            - build-macos
       - release-automation:
           <<: *on-version-tags
           requires:
