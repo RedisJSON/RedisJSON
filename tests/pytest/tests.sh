@@ -121,6 +121,7 @@ if [[ ! -z $TEST ]]; then
 		RLTEST_ARGS+=" -s"
 		export BB=${BB:-1}
 	fi
+	export RUST_BACKTRACE=1
 fi
 
 [[ $VERBOSE == 1 ]] && RLTEST_ARGS+=" -v"

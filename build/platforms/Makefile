@@ -8,7 +8,7 @@ OSNICK ?= buster
 
 REPO=rejson
 
-REDIS_VER=6.2.1
+REDIS_VER=6.2.4
 
 INT_BRANCHES=1.2 1.1 1.0
 

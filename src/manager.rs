@@ -272,8 +272,8 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
             };
             self.set_root(Some(val))?;
         } else {
-            self.update(&path, self.get_value().unwrap().unwrap(), |mut val| {
-                let val = if let Value::Object(mut o) = val.take() {
+            self.update(&path, self.get_value().unwrap().unwrap(), |val| {
+                let val = if let Value::Object(mut o) = val {
                     if !o.contains_key(key) {
                         updated = true;
                         o.insert(key.to_string(), v.take());

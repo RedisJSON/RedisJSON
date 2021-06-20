@@ -41,6 +41,7 @@ commands:
             apt-get -q install -y git openssh-client curl ca-certificates make tar gzip
             bash <(curl -fsSL https://get.docker.com)
       - setup_remote_docker:
+          version: 20.10.2
           docker_layer_caching: true
 
   setup-automation:
@@ -203,7 +204,7 @@ commands:
 jobs:
   build:
     docker:
-      - image: redisfab/rmbuilder:6.2.1-x64-buster
+      - image: redisfab/rmbuilder:6.2.3-x64-buster
     steps:
       - build-steps
       - test-steps
@@ -231,7 +232,7 @@ jobs:
         type: string
         default: ""
     docker:
-      - image: redisfab/rmbuilder:6.2.1-x64-buster
+      - image: redisfab/rmbuilder:6.2.3-x64-buster
     steps:
       - early-returns
       - early-return-for-forked-pull-requests
@@ -253,7 +254,7 @@ jobs:
 
   release-automation:
     docker:
-      - image: redisfab/rmbuilder:6.2.1-x64-buster
+      - image: redisfab/rmbuilder:6.2.3-x64-buster
     steps:
       - checkout
       - setup-automation
@@ -263,7 +264,7 @@ jobs:
 
   nightly-automation:
     docker:
-      - image: redisfab/rmbuilder:6.2.1-x64-buster
+      - image: redisfab/rmbuilder:6.2.3-x64-buster
     steps:
       - checkout
       - setup-automation
@@ -273,7 +274,7 @@ jobs:
 
   performance-automation:
     docker:
-      - image: redisfab/rmbuilder:6.2.1-x64-bionic
+      - image: redisfab/rmbuilder:6.2.3-x64-bionic
     steps:
       - build-steps
       - benchmark-steps
@@ -348,7 +349,7 @@ workflows:
           <<: *on-integ-and-version-tags
           matrix:
             parameters:
-              platform: [focal, bionic, xenial, centos7]
+              platform: [focal, bionic, xenial, centos7, buster]
       - build-macos:
           <<: *on-integ-and-version-tags
       - deploy-artifacts:
@@ -382,6 +383,5 @@ workflows:
                 - master
                 - /^feature-.*$/
     jobs:
-      - nightly-automation
       - performance-automation:
           context: common

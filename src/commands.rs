@@ -481,7 +481,7 @@ pub fn command_json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
             if path == "$" {
                 if *op != SetOptions::NotExists {
                     redis_key.set_value(Vec::new(), val)?;
-                    redis_key.apply_changes(ctx, "json_set")?;
+                    redis_key.apply_changes(ctx, "json.set")?;
                     REDIS_OK
                 } else {
                     Ok(RedisValue::Null)
@@ -498,8 +498,8 @@ pub fn command_json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
                             }
                         }
                     }
-                    redis_key.apply_changes(ctx, "json_set")?;
                     if res {
+                        redis_key.apply_changes(ctx, "json.set")?;
                         REDIS_OK
                     } else {
                         Ok(RedisValue::Null)
@@ -513,7 +513,7 @@ pub fn command_json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
         (None, _) => {
             if path == "$" {
                 redis_key.set_value(Vec::new(), val)?;
-                redis_key.apply_changes(ctx, "json_set")?;
+                redis_key.apply_changes(ctx, "json.set")?;
                 REDIS_OK
             } else {
                 Err(RedisError::Str(
@@ -564,7 +564,7 @@ pub fn command_json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
                 changed
             };
             if res > 0 {
-                redis_key.apply_changes(ctx, "json_del")?;
+                redis_key.apply_changes(ctx, "json.del")?;
             }
             res
         }
@@ -585,13 +585,12 @@ pub fn command_json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<String
         let results: Result<Vec<RedisValue>, RedisError> = keys
             .iter()
             .map(|key| {
-                let result = manager
+                manager
                     .open_key_read(ctx, key)?
                     .get_value()?
                     .map(|doc| KeyValue::new(doc).to_string(&path, Format::JSON))
-                    .transpose()?;
-
-                Ok(result.into())
+                    .transpose()
+                    .map_or_else(|_| Ok(RedisValue::Null), |v| Ok(v.into()))
             })
             .collect();
 

@@ -8,6 +8,7 @@ use redis_module::{Context, RedisResult};
 
 mod array_index;
 mod backward;
+pub mod c_api;
 pub mod commands;
 pub mod error;
 mod formatter;
