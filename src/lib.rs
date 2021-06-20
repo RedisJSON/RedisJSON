@@ -812,7 +812,7 @@ fn json_clear(ctx: &Context, args: Vec<String>) -> RedisResult {
     let key = ctx.open_key_writable(&key);
     let deleted = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
         Some(doc) => {
-            let res = doc.clear(paths.first().unwrap().fixed.as_str())?;
+            let res = doc.clear(paths.first().unwrap().get_path())?;
             ctx.replicate_verbatim();
             res
         }

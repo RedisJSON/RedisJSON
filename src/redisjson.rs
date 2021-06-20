@@ -46,23 +46,30 @@ impl Format {
 /// Backwards compatibility convertor for RedisJSON 1.x clients
 ///
 pub struct Path {
-    pub path: String,
-    pub fixed: String,
+    original_path: String,
+    fixed_path: Option<String>,
 }
 
 impl Path {
     pub fn new(path: String) -> Path {
-        let mut fixed = path.clone();
-        if !fixed.starts_with('$') {
-            if fixed == "." {
-                fixed.replace_range(..1, "$");
-            } else if fixed.starts_with('.') {
-                fixed.insert(0, '$');
+        let fixed_path = if path.starts_with('$') {
+            None
+        } else {
+            let mut cloned = path.clone();
+            if path == "." {
+                cloned.replace_range(..1, "$");
+            } else if path.starts_with('.') {
+                cloned.insert(0, '$')
             } else {
-                fixed.insert_str(0, "$.");
+                cloned.insert_str(0, "$.");
             }
-        }
-        Path { path, fixed }
+            Some(cloned)
+        };
+        Path { original_path: path, fixed_path }
+    }
+
+    pub fn get_path(&self) -> &String {
+        self.fixed_path.as_ref().unwrap_or(&self.original_path)
     }
 }
 
@@ -256,19 +263,19 @@ impl RedisJSON {
             // in serde_json. I'm going for this implementation anyway because serde_json isn't supposed to be
             // memory efficient and we're using it anyway. See https://github.com/serde-rs/json/issues/635.
             temp_doc = Value::Object(paths.drain(..).fold(Map::new(), |mut acc, path| {
-                let value = match selector(&path.fixed) {
+                let value = match selector(path.get_path()) {
                     Ok(s) => match s.first() {
                         Some(v) => v,
                         None => &Value::Null,
                     },
                     Err(_) => &Value::Null,
                 };
-                acc.insert(path.path, (*value).clone());
+                acc.insert(path.original_path, (*value).clone());
                 acc
             }));
             &temp_doc
         } else {
-            self.get_first(&paths[0].fixed)?
+            self.get_first(paths[0].get_path())?
         };
 
         match format {
