@@ -1,7 +1,6 @@
 version: 2.1
 
 commands:
-
   early-returns:
     steps:
       - run:
@@ -44,6 +43,13 @@ commands:
           version: 20.10.2
           docker_layer_caching: true
 
+  checkout-all:
+    steps:
+      - checkout
+      - run:
+          name: Checkout submodules
+          command: git submodule update --init --recursive
+
   setup-automation:
     steps:
       - run:
@@ -52,15 +58,45 @@ commands:
             git submodule update --init deps/readies
             ./deps/readies/bin/getpy3
 
-  checkout-all:
+  install-prerequisites:
+    parameters:
+      redis_version:
+        type: string
+        default: "6"
+      getredis_params:
+        type: string
+        default: ""
     steps:
-      - checkout
+      - setup-automation
       - run:
-          name: Checkout submodules
-          command: git submodule update --init --recursive
+          name: System setup
+          command: |
+            python3 -m pip list -v
+            ./system-setup.py
+            python3 -m pip list -v
+            source $HOME/.cargo/env
+            rustc --version
+            cargo --version
+            rustup --version
+      - run:
+          name: Install Redis
+          command: |
+            bash -l -c "./deps/readies/bin/getredis -v <<parameters.redis_version>> --force <<parameters.getredis_params>>"
+            redis-server --version
+
+  save-tests-logs:
+    steps:
+      - run:
+          name: Cleanup test log dir
+          command: |
+            cd tests/pytest/logs
+            rm -f *.aof *.rdb
+      - store_artifacts:
+          path: tests/pytest/logs
 
   persist-artifacts:
     steps:
+      - early-return-for-forked-pull-requests
       - persist_to_workspace:
           root: bin/
           paths:
@@ -70,11 +106,6 @@ commands:
             - artifacts/*.zip
             - artifacts/*.tgz
             - artifacts/*.tar
-      - run:
-          name: Cleanup test log dir
-          command: rm -f tests/pytest/logs/*.rdb
-      - store_artifacts:
-          path: tests/pytest/logs
 
   build-steps:
     parameters:
@@ -92,22 +123,9 @@ commands:
         default: ""
     steps:
       - checkout-all
-      - run:
-          name: Setup automation and install dependencies
-          command: |
-            ./deps/readies/bin/getpy3
-            python3 -m pip list -v
-            ./system-setup.py
-            python3 -m pip list -v
-            source $HOME/.cargo/env
-            rustc --version
-            cargo --version
-            rustup --version
-      - run:
-          name: Install Redis
-          command: |
-            bash -l -c "./deps/readies/bin/getredis -v <<parameters.redis_version>> --force <<parameters.getredis_params>>"
-            redis-server --version
+      - install-prerequisites
+          redis_version: <<parameters.redis_version>>
+          getredis_params: <<parameters.getredis_params>>
       - restore_cache:
           keys:
             - v3-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
@@ -128,16 +146,17 @@ commands:
 
   test-steps:
     steps:
-      - checkout-all
       - run:
           name: Run all tests
-          command: bash -l -c "make pytest"
+          command: |
+            bash -l -c "python3 -m RLTest --version"
+            bash -l -c "make pytest"
       - save_cache:
           key: v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
           paths:
             - "~/.cargo"
             - "./target"
-      - persist-artifacts
+      - save-tests-logs
 
   platforms-build-steps:
     parameters:
@@ -161,6 +180,7 @@ commands:
             cd build/platforms
             make publish OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH OFFICIAL=0 SHOW=1 VERBOSE=1
       - persist-artifacts
+      - save-tests-logs
 
   benchmark-steps:
     parameters:
@@ -201,10 +221,16 @@ commands:
               --triggering_env circleci \
               --push_results_redistimeseries
 
+#----------------------------------------------------------------------------------------------------------------------------------
+
 jobs:
   build:
     docker:
+<<<<<<< Updated upstream
       - image: redisfab/rmbuilder:6.2.3-x64-buster
+=======
+      - image: redisfab/rmbuilder:6.2.4-x64-buster
+>>>>>>> Stashed changes
     steps:
       - build-steps
       - test-steps
@@ -232,7 +258,7 @@ jobs:
         type: string
         default: ""
     docker:
-      - image: redisfab/rmbuilder:6.2.3-x64-buster
+      - image: redisfab/rmbuilder:6.2.4-x64-buster
     steps:
       - early-returns
       - early-return-for-forked-pull-requests
@@ -254,7 +280,7 @@ jobs:
 
   release-automation:
     docker:
-      - image: redisfab/rmbuilder:6.2.3-x64-buster
+      - image: redisfab/rmbuilder:6.2.4-x64-buster
     steps:
       - checkout
       - setup-automation
@@ -264,7 +290,7 @@ jobs:
 
   nightly-automation:
     docker:
-      - image: redisfab/rmbuilder:6.2.3-x64-buster
+      - image: redisfab/rmbuilder:6.2.4-x64-buster
     steps:
       - checkout
       - setup-automation
@@ -274,10 +300,12 @@ jobs:
 
   performance-automation:
     docker:
-      - image: redisfab/rmbuilder:6.2.3-x64-bionic
+      - image: redisfab/rmbuilder:6.2.4-x64-bionic
     steps:
       - build-steps
       - benchmark-steps
+
+#----------------------------------------------------------------------------------------------------------------------------------
 
 on-any-branch: &on-any-branch
   filters:
@@ -337,6 +365,7 @@ on-integ-and-version-tags: &on-integ-and-version-tags
     tags:
       only: /^v[0-9].*/
 
+#----------------------------------------------------------------------------------------------------------------------------------
 
 workflows:
   version: 2
