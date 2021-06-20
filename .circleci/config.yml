@@ -123,7 +123,7 @@ commands:
         default: ""
     steps:
       - checkout-all
-      - install-prerequisites
+      - install-prerequisites:
           redis_version: <<parameters.redis_version>>
           getredis_params: <<parameters.getredis_params>>
       - restore_cache:
