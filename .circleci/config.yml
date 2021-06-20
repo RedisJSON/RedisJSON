@@ -175,8 +175,9 @@ commands:
             ROOT=$PWD
             cd build/platforms
             make build OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH ARTIFACTS=1 TEST=1 SHOW=1
-            mkdir -p pytest/logs
-            tar -C pytest/logs -xzf $ROOT/bin/artifacts/pytest-logs*.tgz
+            cd $ROOT
+            mkdir -p tests/pytest/logs
+            tar -C tests/pytest/logs -xzf bin/artifacts/pytest-logs*.tgz
       - save-tests-logs
       - early-return-for-forked-pull-requests
       - run:
