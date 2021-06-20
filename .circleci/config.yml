@@ -185,7 +185,7 @@ commands:
           command: |
             docker login -u redisfab -p $DOCKER_REDISFAB_PWD
             cd build/platforms
-            #@@ make publish OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH OFFICIAL=0 SHOW=1 VERBOSE=1
+            make publish OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH OFFICIAL=0 SHOW=1 VERBOSE=1
       - persist-artifacts
 
   benchmark-steps:
@@ -236,7 +236,6 @@ jobs:
     steps:
       - build-steps
       - test-steps
-      - persist-artifacts
 
   platforms-build:
     parameters:
@@ -379,11 +378,10 @@ workflows:
           <<: *not-on-integ-branch
       - platforms-build:
           context: common
-          #@@<<: *on-integ-and-version-tags
-          <<: *on-any-branch
+          <<: *on-integ-and-version-tags
           matrix:
             parameters:
-              platform: [focal, centos8]#, bionic, xenial, centos7, buster]
+              platform: [focal, bionic, xenial, centos8, centos7, buster]
       - build-macos:
           <<: *on-integ-and-version-tags
       - deploy-artifacts:
