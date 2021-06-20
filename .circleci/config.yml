@@ -382,7 +382,7 @@ workflows:
           <<: *on-any-branch
           matrix:
             parameters:
-              platform: [focal]#, bionic, xenial, centos7, buster]
+              platform: [focal, centos8]#, bionic, xenial, centos7, buster]
       - build-macos:
           <<: *on-integ-and-version-tags
       - deploy-artifacts:
