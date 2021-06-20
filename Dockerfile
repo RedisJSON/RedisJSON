@@ -26,18 +26,9 @@ RUN echo "Building for ${OSNICK} (${OS}) for ${ARCH} [with Redis ${REDIS_VER}]"
 ADD ./ /build
 WORKDIR /build
 
+RUN ./deps/readies/bin/getupdates
 RUN ./deps/readies/bin/getpy3
 RUN ./system-setup.py
-RUN set -ex ;\
-    if [ -e /usr/bin/apt-get ]; then \
-        apt-get update -qq; \
-        apt-get upgrade -yqq; \
-        rm -rf /var/cache/apt; \
-    fi
-RUN if [ -e /usr/bin/yum ]; then \
-        yum update -y; \
-        rm -rf /var/cache/yum; \
-    fi
 
 RUN bash -l -c make
 
