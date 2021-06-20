@@ -242,10 +242,10 @@ impl RedisJSON {
 
     pub fn to_json(
         &self,
-        paths: &mut Vec<Path>,
-        indent: String,
-        newline: String,
-        space: String,
+        mut paths: Vec<Path>,
+        indent: Option<String>,
+        newline: Option<String>,
+        space: Option<String>,
         format: Format,
     ) -> Result<String, Error> {
         let temp_doc;
@@ -263,7 +263,7 @@ impl RedisJSON {
                     },
                     Err(_) => &Value::Null,
                 };
-                acc.insert(path.path, (*value).clone());
+                acc.insert(path.path, value.clone());
                 acc
             }));
             &temp_doc
@@ -273,11 +273,7 @@ impl RedisJSON {
 
         match format {
             Format::JSON => {
-                let formatter = RedisJsonFormatter::new(
-                    indent.as_bytes(),
-                    space.as_bytes(),
-                    newline.as_bytes(),
-                );
+                let formatter = RedisJsonFormatter::new(indent, space, newline);
 
                 let mut out = serde_json::Serializer::with_formatter(Vec::new(), formatter);
                 res.serialize(&mut out).unwrap();

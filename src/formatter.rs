@@ -29,16 +29,16 @@ DEALINGS IN THE SOFTWARE.
 use serde_json::ser::Formatter;
 use std::io;
 
-pub struct RedisJsonFormatter<'a> {
+pub struct RedisJsonFormatter {
     current_indent: usize,
     has_value: bool,
-    indent: &'a [u8],
-    space: &'a [u8],
-    newline: &'a [u8],
+    indent: Option<String>,
+    space: Option<String>,
+    newline: Option<String>,
 }
 
-impl<'a> RedisJsonFormatter<'a> {
-    pub fn new(indent: &'a [u8], space: &'a [u8], newline: &'a [u8]) -> Self {
+impl RedisJsonFormatter {
+    pub fn new(indent: Option<String>, space: Option<String>, newline: Option<String>) -> Self {
         RedisJsonFormatter {
             current_indent: 0,
             has_value: false,
@@ -48,19 +48,21 @@ impl<'a> RedisJsonFormatter<'a> {
         }
     }
 
-    fn indent<W: ?Sized>(wr: &mut W, n: usize, s: &[u8]) -> io::Result<()>
+    fn indent<W: ?Sized>(&self, wr: &mut W) -> io::Result<()>
     where
         W: io::Write,
     {
-        for _ in 0..n {
-            wr.write_all(s)?;
+        if let Some(s) = self.indent.as_ref() {
+            for _ in 0..self.current_indent {
+                wr.write_all(s.as_bytes())?;
+            }
         }
 
         Ok(())
     }
 }
 
-impl<'a> Formatter for RedisJsonFormatter<'a> {
+impl Formatter for RedisJsonFormatter {
     fn begin_array<W: ?Sized>(&mut self, writer: &mut W) -> io::Result<()>
     where
         W: io::Write,
@@ -77,8 +79,10 @@ impl<'a> Formatter for RedisJsonFormatter<'a> {
         self.current_indent -= 1;
 
         if self.has_value {
-            writer.write_all(self.newline)?;
-            Self::indent(writer, self.current_indent, self.indent)?;
+            if let Some(n) = self.newline.as_ref() {
+                writer.write_all(n.as_bytes())?;
+            }
+            self.indent(writer)?;
         }
 
         writer.write_all(b"]")
@@ -91,8 +95,10 @@ impl<'a> Formatter for RedisJsonFormatter<'a> {
         if !first {
             writer.write_all(b",")?;
         }
-        writer.write_all(self.newline)?;
-        Self::indent(writer, self.current_indent, self.indent)
+        if let Some(n) = self.newline.as_ref() {
+            writer.write_all(n.as_bytes())?;
+        }
+        self.indent(writer)
     }
 
     fn end_array_value<W: ?Sized>(&mut self, _writer: &mut W) -> io::Result<()>
@@ -119,8 +125,10 @@ impl<'a> Formatter for RedisJsonFormatter<'a> {
         self.current_indent -= 1;
 
         if self.has_value {
-            writer.write_all(self.newline)?;
-            Self::indent(writer, self.current_indent, self.indent)?;
+            if let Some(n) = self.newline.as_ref() {
+                writer.write_all(n.as_bytes())?;
+            }
+            self.indent(writer)?;
         }
 
         writer.write_all(b"}")
@@ -133,8 +141,10 @@ impl<'a> Formatter for RedisJsonFormatter<'a> {
         if !first {
             writer.write_all(b",")?;
         }
-        writer.write_all(self.newline)?;
-        Self::indent(writer, self.current_indent, self.indent)
+        if let Some(n) = self.newline.as_ref() {
+            writer.write_all(n.as_bytes())?;
+        }
+        self.indent(writer)
     }
 
     fn begin_object_value<W: ?Sized>(&mut self, writer: &mut W) -> io::Result<()>
@@ -142,7 +152,11 @@ impl<'a> Formatter for RedisJsonFormatter<'a> {
         W: io::Write,
     {
         writer.write_all(b":")?;
-        writer.write_all(self.space)
+        if let Some(s) = self.space.as_ref() {
+            writer.write_all(s.as_bytes())
+        } else {
+            Ok(())
+        }
     }
 
     fn end_object_value<W: ?Sized>(&mut self, _writer: &mut W) -> io::Result<()>

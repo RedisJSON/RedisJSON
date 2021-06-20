@@ -205,17 +205,17 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
 
     let mut paths: Vec<Path> = vec![];
     let mut format = Format::JSON;
-    let mut indent = String::new();
-    let mut space = String::new();
-    let mut newline = String::new();
+    let mut indent = None;
+    let mut space = None;
+    let mut newline = None;
     while let Ok(arg) = args.next_string() {
         match arg {
             // fast way to consider arg a path by using the max length of all possible subcommands
             // See #390 for the comparison of this function with/without this optimization
             arg if arg.len() > JSONGET_SUBCOMMANDS_MAXSTRLEN => paths.push(Path::new(arg)),
-            arg if arg.eq_ignore_ascii_case(CMD_ARG_INDENT) => indent = args.next_string()?,
-            arg if arg.eq_ignore_ascii_case(CMD_ARG_NEWLINE) => newline = args.next_string()?,
-            arg if arg.eq_ignore_ascii_case(CMD_ARG_SPACE) => space = args.next_string()?,
+            arg if arg.eq_ignore_ascii_case(CMD_ARG_INDENT) => indent = Some(args.next_string()?),
+            arg if arg.eq_ignore_ascii_case(CMD_ARG_NEWLINE) => newline = Some(args.next_string()?),
+            arg if arg.eq_ignore_ascii_case(CMD_ARG_SPACE) => space = Some(args.next_string()?),
             // Silently ignore. Compatibility with ReJSON v1.0 which has this option. See #168 TODO add support
             arg if arg.eq_ignore_ascii_case(CMD_ARG_NOESCAPE) => continue,
             arg if arg.eq_ignore_ascii_case(CMD_ARG_FORMAT) => {
@@ -233,7 +233,7 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
     let key = ctx.open_key_writable(&key);
     let value = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
         Some(doc) => doc
-            .to_json(&mut paths, indent, newline, space, format)?
+            .to_json(paths, indent, newline, space, format)?
             .into(),
         None => RedisValue::Null,
     };
