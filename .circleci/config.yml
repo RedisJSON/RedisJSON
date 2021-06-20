@@ -226,11 +226,7 @@ commands:
 jobs:
   build:
     docker:
-<<<<<<< Updated upstream
-      - image: redisfab/rmbuilder:6.2.3-x64-buster
-=======
       - image: redisfab/rmbuilder:6.2.4-x64-buster
->>>>>>> Stashed changes
     steps:
       - build-steps
       - test-steps
