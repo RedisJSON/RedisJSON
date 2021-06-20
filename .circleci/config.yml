@@ -230,6 +230,7 @@ jobs:
     steps:
       - build-steps
       - test-steps
+      - persist-artifacts
 
   platforms-build:
     parameters:
@@ -247,6 +248,7 @@ jobs:
     steps:
       - build-steps
       - test-steps
+      - persist-artifacts
 
   deploy-artifacts:
     parameters:
