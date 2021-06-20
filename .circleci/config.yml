@@ -89,8 +89,10 @@ commands:
       - run:
           name: Cleanup test log dir
           command: |
-            cd tests/pytest/logs
-            rm -f *.aof *.rdb
+            if [[ -d tests/pytest/logs ]]; then
+              cd tests/pytest/logs
+              rm -f *.aof *.rdb
+            fi
       - store_artifacts:
           path: tests/pytest/logs
 
@@ -172,6 +174,10 @@ commands:
           command: |
             cd build/platforms
             make build OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH ARTIFACTS=1 TEST=1 SHOW=1
+            mkdir -p pytest/logs
+            ROOT=$PWD
+            tar -C pytest/logs -xzf $ROOT/bin/artifacts/pytest-logs*.tgz
+      - save-tests-logs
       - early-return-for-forked-pull-requests
       - run:
           name: Build for platform (publish)
@@ -180,7 +186,6 @@ commands:
             cd build/platforms
             make publish OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH OFFICIAL=0 SHOW=1 VERBOSE=1
       - persist-artifacts
-      - save-tests-logs
 
   benchmark-steps:
     parameters:
@@ -373,10 +378,11 @@ workflows:
           <<: *not-on-integ-branch
       - platforms-build:
           context: common
-          <<: *on-integ-and-version-tags
+          #@@<<: *on-integ-and-version-tags
+          <<: *on-any-branch
           matrix:
             parameters:
-              platform: [focal, bionic, xenial, centos7, buster]
+              platform: [focal]#, bionic, xenial, centos7, buster]
       - build-macos:
           <<: *on-integ-and-version-tags
       - deploy-artifacts:
