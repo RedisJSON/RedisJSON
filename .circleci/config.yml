@@ -391,12 +391,14 @@ workflows:
           <<: *on-integ-branch
           requires:
             - platforms-build
+            - build-macos
       - deploy-artifacts:
           name: deploy_release
           context: common
           <<: *on-version-tags
           requires:
             - platforms-build
+            - build-macos
       - release-automation:
           <<: *on-version-tags
           requires:
