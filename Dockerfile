@@ -33,7 +33,7 @@ RUN ./system-setup.py
 RUN bash -l -c make
 
 RUN set -ex ;\
-    if [ "$TEST" = "1" ]; then
+    if [ "$TEST" = "1" ]; then \
         mkdir -p bin/artifacts ;\
         bash -l -c "TEST= make test" ;\
         tar -C  /build/pytest/logs/ -czf /build/bin/artifacts/pytest-logs-${ARCH}-${OSNICK}.tgz . ;\
