@@ -232,9 +232,7 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
 
     let key = ctx.open_key_writable(&key);
     let value = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
-        Some(doc) => doc
-            .to_json(paths, indent, newline, space, format)?
-            .into(),
+        Some(doc) => doc.to_json(paths, indent, newline, space, format)?.into(),
         None => RedisValue::Null,
     };
 
