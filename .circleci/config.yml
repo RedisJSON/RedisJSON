@@ -178,6 +178,8 @@ commands:
             cd $ROOT
             mkdir -p tests/pytest/logs
             tar -C tests/pytest/logs -xzf bin/artifacts/pytest-logs*.tgz
+          timeout: 60m
+          no_output_timeout: 30m
       - save-tests-logs
       - early-return-for-forked-pull-requests
       - run:
