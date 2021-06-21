@@ -1,20 +1,20 @@
 use std::ffi::CString;
 use std::os::raw::{c_double, c_int, c_long};
-use std::ptr::{null_mut, null};
+use std::ptr::{null, null_mut};
 use std::slice;
 use std::{
     ffi::CStr,
     os::raw::{c_char, c_void},
 };
 
+use crate::commands::KeyValue;
+use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
+use jsonpath_lib::select::Selector;
 use redis_module::key::verify_type;
+use redis_module::redisraw::bindings::RedisModule_StringPtrLen;
 use redis_module::{raw as rawmod, RedisError};
 use redis_module::{Context, Status};
-use redis_module::redisraw::bindings::{RedisModule_StringPtrLen};
-use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
-use jsonpath_lib::select::{Selector};
 use serde_json::Value;
-use crate::commands::KeyValue;
 
 use crate::manager::{Manager, ReadHolder, RedisJsonKeyManager};
 use crate::{redisjson::RedisJSON, REDIS_JSON_TYPE};
@@ -60,7 +60,7 @@ fn json_api_open_key_internal<M: Manager>(
 ) -> *mut M::ReadHolder {
     let ctx = Context::new(ctx);
     if let Ok(h) = manager.open_key_read(&ctx, key) {
-        if let Ok(v) = h.get_value(){
+        if let Ok(v) = h.get_value() {
             if let Some(_) = v {
                 return Box::into_raw(Box::new(h));
             }
@@ -69,7 +69,7 @@ fn json_api_open_key_internal<M: Manager>(
     null_mut()
 }
 
-fn json_api_close_key_internal<M: Manager>(_: M, json: *mut c_void){
+fn json_api_close_key_internal<M: Manager>(_: M, json: *mut c_void) {
     unsafe {
         Box::from_raw(json as *mut M::ReadHolder);
     }
@@ -104,22 +104,20 @@ pub extern "C" fn JSONAPI_closeKey(json: *mut c_void) {
 
 fn json_api_get_at<M: Manager>(
     _: M,
-    json: * const c_void,
+    json: *const c_void,
     index: libc::size_t,
     jtype: *mut c_int,
-) -> * const c_void {
-    let json = unsafe { &*(json as * const M::V) };
-    match json.get_type(){
-        SelectValueType::Array => {
-            match json.get_index(index) {
-                Some(v) => {
-                    if jtype != null_mut(){
-                        unsafe{*jtype = json_api_get_type_internal(v) as c_int};
-                    }
-                    v as *const M::V as *const c_void
-                },
-                _ => null(),
+) -> *const c_void {
+    let json = unsafe { &*(json as *const M::V) };
+    match json.get_type() {
+        SelectValueType::Array => match json.get_index(index) {
+            Some(v) => {
+                if jtype != null_mut() {
+                    unsafe { *jtype = json_api_get_type_internal(v) as c_int };
+                }
+                v as *const M::V as *const c_void
             }
+            _ => null(),
         },
         _ => null(),
     }
@@ -127,16 +125,16 @@ fn json_api_get_at<M: Manager>(
 
 #[no_mangle]
 pub extern "C" fn JSONAPI_getAt(
-    json: * const c_void,
+    json: *const c_void,
     index: libc::size_t,
     jtype: *mut c_int,
-) -> * const c_void {
+) -> *const c_void {
     json_api_get_at(RedisJsonKeyManager, json, index, jtype)
 }
 
 fn json_api_get_len<M: Manager>(_: M, json: *const c_void, count: *mut libc::size_t) -> c_int {
-    let json = unsafe { &*(json as * const M::V) };
-    let len = match json.get_type(){
+    let json = unsafe { &*(json as *const M::V) };
+    let len = match json.get_type() {
         SelectValueType::String => Some(json.get_str().len()),
         SelectValueType::Array => Some(json.len().unwrap()),
         SelectValueType::Object => Some(json.keys().unwrap().len()),
@@ -144,12 +142,11 @@ fn json_api_get_len<M: Manager>(_: M, json: *const c_void, count: *mut libc::siz
     };
     match len {
         Some(l) => {
-            unsafe{*count = l};
+            unsafe { *count = l };
             Status::Ok as c_int
-        },
-        None => Status::Err as c_int
+        }
+        None => Status::Err as c_int,
     }
-    
 }
 
 #[no_mangle]
@@ -158,7 +155,7 @@ pub extern "C" fn JSONAPI_getLen(json: *const c_void, count: *mut libc::size_t) 
 }
 
 fn json_api_get_type<M: Manager>(_: M, json: *const c_void) -> c_int {
-    json_api_get_type_internal(unsafe{&*(json as *const M::V)}) as c_int
+    json_api_get_type_internal(unsafe { &*(json as *const M::V) }) as c_int
 }
 
 #[no_mangle]
@@ -172,14 +169,14 @@ fn json_api_get_string<M: Manager>(
     str: *mut *const c_char,
     len: *mut libc::size_t,
 ) -> c_int {
-    let json = unsafe { &*(json as * const M::V) };
-    match json.get_type(){
+    let json = unsafe { &*(json as *const M::V) };
+    match json.get_type() {
         SelectValueType::String => {
             let s = json.as_str();
             set_string(s, str, len);
             Status::Ok as c_int
-        },
-        _ => Status::Err as c_int
+        }
+        _ => Status::Err as c_int,
     }
 }
 
@@ -214,7 +211,7 @@ fn json_api_get_json<M: Manager>(
     ctx: *mut rawmod::RedisModuleCtx,
     str: *mut *mut rawmod::RedisModuleString,
 ) -> c_int {
-    let json = unsafe { &*(json as * const M::V) };
+    let json = unsafe { &*(json as *const M::V) };
     let res = KeyValue::new(json).to_value(json).to_string();
     create_rmstring(ctx, &res, str)
 }
@@ -253,13 +250,13 @@ pub extern "C" fn JSONAPI_isJSON(key: *mut rawmod::RedisModuleKey) -> c_int {
 }
 
 fn json_api_get_int<M: Manager>(_: M, json: *const c_void, val: *mut c_long) -> c_int {
-    let json = unsafe { &*(json as * const M::V) };
-    match json.get_type(){
+    let json = unsafe { &*(json as *const M::V) };
+    match json.get_type() {
         SelectValueType::Long => {
-            unsafe{*val = json.get_long()};
+            unsafe { *val = json.get_long() };
             Status::Ok as c_int
-        },
-        _ => Status::Err as c_int
+        }
+        _ => Status::Err as c_int,
     }
 }
 
@@ -280,20 +277,19 @@ pub extern "C" fn JSONAPI_getIntFromKey(
         JSONAPI_getInt(v, val)
     } else {
         Status::Err as c_int
-    }   
-}
-
-fn json_api_get_double<M: Manager>(_: M, json: *const c_void, val: *mut c_double) -> c_int {
-    let json = unsafe { &*(json as * const M::V) };
-    match json.get_type(){
-        SelectValueType::Double => {
-            unsafe{*val = json.get_double()};
-            Status::Ok as c_int
-        },
-        _ => Status::Err as c_int
     }
 }
 
+fn json_api_get_double<M: Manager>(_: M, json: *const c_void, val: *mut c_double) -> c_int {
+    let json = unsafe { &*(json as *const M::V) };
+    match json.get_type() {
+        SelectValueType::Double => {
+            unsafe { *val = json.get_double() };
+            Status::Ok as c_int
+        }
+        _ => Status::Err as c_int,
+    }
+}
 
 #[no_mangle]
 pub extern "C" fn JSONAPI_getDouble(json: *const c_void, val: *mut c_double) -> c_int {
@@ -312,17 +308,17 @@ pub extern "C" fn JSONAPI_getDoubleFromKey(
         JSONAPI_getDouble(v, val)
     } else {
         Status::Err as c_int
-    }   
+    }
 }
 
 fn json_api_get_boolean<M: Manager>(_: M, json: *const c_void, val: *mut c_int) -> c_int {
-    let json = unsafe { &*(json as * const M::V) };
-    match json.get_type(){
+    let json = unsafe { &*(json as *const M::V) };
+    match json.get_type() {
         SelectValueType::Bool => {
-            unsafe{*val = json.get_bool() as c_int};
+            unsafe { *val = json.get_bool() as c_int };
             Status::Ok as c_int
-        },
-        _ => Status::Err as c_int
+        }
+        _ => Status::Err as c_int,
     }
 }
 
@@ -343,7 +339,7 @@ pub extern "C" fn JSONAPI_getBooleanFromKey(
         JSONAPI_getBoolean(v, val)
     } else {
         Status::Err as c_int
-    }   
+    }
 }
 
 //---------------------------------------------------------------------------------------------
@@ -383,7 +379,7 @@ pub fn set_string(from_str: &str, str: *mut *const c_char, len: *mut libc::size_
     Status::Err as c_int
 }
 
-fn json_api_get_type_internal<V: SelectValue>(v: &V) -> JSONType{
+fn json_api_get_type_internal<V: SelectValue>(v: &V) -> JSONType {
     match v.get_type() {
         SelectValueType::Null => JSONType::Null,
         SelectValueType::Bool => JSONType::Bool,
@@ -401,7 +397,7 @@ pub fn json_api_get<M: Manager>(
     path: *const c_char,
     jtype: *mut c_int,
 ) -> *const c_void {
-    let key = unsafe{&*(key as *mut M::ReadHolder)};
+    let key = unsafe { &*(key as *mut M::ReadHolder) };
     let v = key.get_value().unwrap().unwrap();
 
     let mut selector = Selector::new();
@@ -413,11 +409,11 @@ pub fn json_api_get<M: Manager>(
     match selector.select() {
         Ok(s) => match s.first() {
             Some(v) => {
-                if jtype != null_mut(){
-                    unsafe{*jtype = json_api_get_type_internal(*v) as c_int};
+                if jtype != null_mut() {
+                    unsafe { *jtype = json_api_get_type_internal(*v) as c_int };
                 }
                 *v as *const M::V as *const c_void
-            },
+            }
             None => null(),
         },
         Err(_) => null(),
@@ -477,11 +473,8 @@ pub struct RedisJSONAPI_V1 {
     pub closeKey: extern "C" fn(key: *mut c_void),
     pub get:
         extern "C" fn(key: *mut c_void, path: *const c_char, jtype: *mut c_int) -> *const c_void,
-    pub getAt: extern "C" fn(
-        json: *const c_void,
-        index: libc::size_t,
-        jtype: *mut c_int,
-    ) -> *const c_void,
+    pub getAt:
+        extern "C" fn(json: *const c_void, index: libc::size_t, jtype: *mut c_int) -> *const c_void,
     pub getLen: extern "C" fn(json: *const c_void, len: *mut libc::size_t) -> c_int,
     pub getType: extern "C" fn(json: *const c_void) -> c_int,
     pub getInt: extern "C" fn(json: *const c_void, val: *mut c_long) -> c_int,

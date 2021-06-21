@@ -7,7 +7,7 @@ use redis_module::raw::RedisModuleTypeMethods;
 use redis_module::{Context, RedisResult};
 
 #[cfg(not(feature = "as-library"))]
-use redis_module::{Status};
+use redis_module::Status;
 
 #[cfg(not(feature = "as-library"))]
 use crate::c_api::export_shared_api;
@@ -185,7 +185,7 @@ macro_rules! redis_json_module_create {(
 
             }
         }
-        
+
         //
         /// JSON.TOGGLE <key> <path>
         fn json_bool_toggle(ctx: &Context, args: Vec<String>) -> RedisResult {
