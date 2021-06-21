@@ -150,11 +150,11 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
 
     fn serialize_object<O: Serialize>(
         &'a self,
-        o: &O, 
+        o: &O,
         indent: String,
         newline: String,
         space: String,
-        format: Format
+        format: Format,
     ) -> Result<String, Error> {
         match format {
             Format::JSON => {
@@ -201,9 +201,15 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 acc.insert(path.path, value);
                 acc
             });
-            self.serialize_object(&temp_doc,  indent, newline, space, format)
+            self.serialize_object(&temp_doc, indent, newline, space, format)
         } else {
-            self.serialize_object(self.get_first(&paths[0].fixed)?, indent, newline, space, format)
+            self.serialize_object(
+                self.get_first(&paths[0].fixed)?,
+                indent,
+                newline,
+                space,
+                format,
+            )
         }
     }
 
