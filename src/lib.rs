@@ -185,6 +185,7 @@ macro_rules! redis_json_module_create {(
 
             }
         }
+        
         //
         /// JSON.TOGGLE <key> <path>
         fn json_bool_toggle(ctx: &Context, args: Vec<String>) -> RedisResult {
