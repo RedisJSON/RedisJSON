@@ -1,6 +1,6 @@
 version: 0.2
 name: "json_set_fulldoc_pass_100_json"
-description: "JSON.SET pass-100 . {pass-100.json size: 380 B} || https://oss.redislabs.com/redisjson/performance/"
+description: "JSON.SET pass-100 $ {pass-100.json size: 380 B} || https://oss.redislabs.com/redisjson/performance/"
 remote:
  - type: oss-standalone
  - setup: redisearch-m5d
@@ -12,4 +12,4 @@ clientconfig:
     - requests: 5000000
     - threads: 2
     - pipeline: 1
-    - command: 'JSON.SET pass-100 . "{\"sclr\":0,\"str\":\"b\",\"sub_doc\":{\"sclr\":10,\"str\":\"c\",\"arr\":[1,2,3,{\"sclr\":20,\"str\":\"d\"}]},\"array_of_docs\":[-1,{\"sclr\":11,\"str\":\"e\",\"arr\":[4,5,6,{\"sclr\":21,\"str\":\"f\"}]},{\"sclr\":12,\"str\":\"g\",\"arr\":[7,8,9,{\"sclr\":22,\"str\":\"h\"}]},-2]}"'
+    - command: 'JSON.SET pass-100 $ "{\"sclr\":0,\"str\":\"b\",\"sub_doc\":{\"sclr\":10,\"str\":\"c\",\"arr\":[1,2,3,{\"sclr\":20,\"str\":\"d\"}]},\"array_of_docs\":[-1,{\"sclr\":11,\"str\":\"e\",\"arr\":[4,5,6,{\"sclr\":21,\"str\":\"f\"}]},{\"sclr\":12,\"str\":\"g\",\"arr\":[7,8,9,{\"sclr\":22,\"str\":\"h\"}]},-2]}"'

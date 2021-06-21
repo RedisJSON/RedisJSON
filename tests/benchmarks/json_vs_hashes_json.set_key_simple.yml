@@ -1,6 +1,6 @@
 version: 0.2
 name: "json_vs_hashes_json.set_key_simple"
-description: 'JSON.SET key_json . {"field1":"value1","field2":"value2"} || Use-case to compare against HSET key_hash field1 value1 field2 value2'
+description: 'JSON.SET key_json $ {"field1":"value1","field2":"value2"} || Use-case to compare against HSET key_hash field1 value1 field2 value2'
 remote:
  - type: oss-standalone
  - setup: redisearch-m5d
@@ -12,4 +12,4 @@ clientconfig:
     - requests: 10000000
     - threads: 2
     - pipeline: 1
-    - command: 'JSON.SET key_json . "{\"field1\":\"value1\",\"field2\":\"value2\"}"'
+    - command: 'JSON.SET key_json $ "{\"field1\":\"value1\",\"field2\":\"value2\"}"'

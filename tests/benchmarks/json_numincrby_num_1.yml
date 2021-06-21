@@ -1,6 +1,6 @@
 version: 0.2
 name: "json_numincrby_num_1"
-description: "JSON.NUMINCRBY num . 1 || https://oss.redislabs.com/redisjson/performance/"
+description: "JSON.NUMINCRBY num $ 1 || https://oss.redislabs.com/redisjson/performance/"
 remote:
  - type: oss-standalone
  - setup: redisearch-m5d
@@ -14,4 +14,4 @@ clientconfig:
     - requests: 5000000
     - threads: 2
     - pipeline: 1
-    - command: 'JSON.NUMINCRBY num . 1'
+    - command: 'JSON.NUMINCRBY num $ 1'
