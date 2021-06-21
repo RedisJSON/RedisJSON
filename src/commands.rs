@@ -16,6 +16,7 @@ use crate::redisjson::SetOptions;
 use serde_json::{Map, Value};
 
 use serde::Serialize;
+use std::collections::HashMap;
 
 const JSON_ROOT_PATH: &str = "$";
 const CMD_ARG_NOESCAPE: &str = "NOESCAPE";
@@ -147,41 +148,14 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         Ok(results)
     }
 
-    fn to_json(
+    fn serialize_object<O: Serialize>(
         &'a self,
-        paths: &mut Vec<Path>,
+        o: &O, 
         indent: String,
         newline: String,
         space: String,
-        format: Format,
+        format: Format
     ) -> Result<String, Error> {
-        let temp_doc;
-        let res = if paths.len() > 1 {
-            // TODO: Creating a temp doc here duplicates memory usage. This can be very memory inefficient.
-            // A better way would be to create a doc of references to the original doc but no current support
-            // in serde_json. I'm going for this implementation anyway because serde_json isn't supposed to be
-            // memory efficient and we're using it anyway. See https://github.com/serde-rs/json/issues/635.
-            temp_doc = Value::Object(paths.drain(..).fold(Map::new(), |mut acc, path| {
-                let mut selector = Selector::new();
-                selector.value(self.val);
-                if let Err(_) = selector.str_path(&path.fixed) {
-                    return acc;
-                }
-                let value = match selector.select() {
-                    Ok(s) => match s.first() {
-                        Some(v) => self.to_value(v),
-                        None => Value::Null,
-                    },
-                    Err(_) => Value::Null,
-                };
-                acc.insert(path.path, value);
-                acc
-            }));
-            temp_doc
-        } else {
-            self.to_value(self.get_first(&paths[0].fixed)?)
-        };
-
         match format {
             Format::JSON => {
                 let formatter = RedisJsonFormatter::new(
@@ -191,10 +165,45 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 );
 
                 let mut out = serde_json::Serializer::with_formatter(Vec::new(), formatter);
-                res.serialize(&mut out).unwrap();
+                o.serialize(&mut out).unwrap();
                 Ok(String::from_utf8(out.into_inner()).unwrap())
             }
             Format::BSON => Err("Soon to come...".into()), //results.into() as Bson,
+        }
+    }
+
+    fn to_json(
+        &'a self,
+        paths: &mut Vec<Path>,
+        indent: String,
+        newline: String,
+        space: String,
+        format: Format,
+    ) -> Result<String, Error> {
+        if paths.len() > 1 {
+            // TODO: Creating a temp doc here duplicates memory usage. This can be very memory inefficient.
+            // A better way would be to create a doc of references to the original doc but no current support
+            // in serde_json. I'm going for this implementation anyway because serde_json isn't supposed to be
+            // memory efficient and we're using it anyway. See https://github.com/serde-rs/json/issues/635.
+            let temp_doc = paths.drain(..).fold(HashMap::new(), |mut acc, path| {
+                let mut selector = Selector::new();
+                selector.value(self.val);
+                if let Err(_) = selector.str_path(&path.fixed) {
+                    return acc;
+                }
+                let value = match selector.select() {
+                    Ok(s) => match s.first() {
+                        Some(v) => Some(*v),
+                        None => None,
+                    },
+                    Err(_) => None,
+                };
+                acc.insert(path.path, value);
+                acc
+            });
+            self.serialize_object(&temp_doc,  indent, newline, space, format)
+        } else {
+            self.serialize_object(self.get_first(&paths[0].fixed)?, indent, newline, space, format)
         }
     }
 
