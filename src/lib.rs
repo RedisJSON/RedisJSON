@@ -6,6 +6,12 @@ use redis_module::raw::RedisModuleTypeMethods;
 #[cfg(not(feature = "as-library"))]
 use redis_module::{Context, RedisResult};
 
+#[cfg(not(feature = "as-library"))]
+use redis_module::{Status};
+
+#[cfg(not(feature = "as-library"))]
+use crate::c_api::export_shared_api;
+
 mod array_index;
 mod backward;
 pub mod c_api;
@@ -411,6 +417,12 @@ macro_rules! redis_json_module_create {(
 }
 
 #[cfg(not(feature = "as-library"))]
+fn init(ctx: &Context, _args: &Vec<String>) -> Status {
+    export_shared_api(ctx);
+    Status::Ok
+}
+
+#[cfg(not(feature = "as-library"))]
 fn pre_command(_ctx: &Context, _args: &Vec<String>) {}
 
 #[cfg(not(feature = "as-library"))]
@@ -419,4 +431,5 @@ redis_json_module_create! {
     pre_command_function: pre_command,
     get_manage: Some(manager::RedisJsonKeyManager),
     version: 99_99_99,
+    init: init,
 }

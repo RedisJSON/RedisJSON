@@ -28,7 +28,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         KeyValue { val: v }
     }
 
-    fn to_value(&self, val: &V) -> Value {
+    pub fn to_value(&self, val: &V) -> Value {
         match val.get_type() {
             SelectValueType::Null => Value::Null,
             SelectValueType::Bool => Value::Bool(val.get_bool()),
