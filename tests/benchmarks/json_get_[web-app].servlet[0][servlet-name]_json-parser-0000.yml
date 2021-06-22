@@ -14,4 +14,4 @@ clientconfig:
     - requests: 5000000
     - threads: 2
     - pipeline: 1
-    - command: 'JSON.GET json-parser-0000 $["\"web-app\""].servlet[0]["\"servlet-name\""]'
+    - command: 'JSON.GET json-parser-0000 $.["\"web-app\""].servlet[0]["\"servlet-name\""]'
