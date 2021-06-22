@@ -525,14 +525,23 @@ pub fn command_json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
                     Ok(RedisValue::Null)
                 }
             } else {
-                let update_info = KeyValue::new(*doc).find_paths(&path, op)?;
+                let mut update_info = KeyValue::new(*doc).find_paths(&path, op)?;
                 if update_info.len() > 0 {
                     let mut res = false;
-                    for ui in update_info {
-                        res = match ui {
-                            UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, val.clone())?,
+                    if update_info.len() == 1 {
+                        res = match update_info.pop().unwrap() {
+                            UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, val)?,
                             UpdateInfo::AUI(aui) => {
-                                redis_key.dict_add(aui.path, &aui.key, val.clone())?
+                                redis_key.dict_add(aui.path, &aui.key, val)?
+                            }
+                        }
+                    } else {
+                        for ui in update_info {
+                            res = match ui {
+                                UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, val.clone())?,
+                                UpdateInfo::AUI(aui) => {
+                                    redis_key.dict_add(aui.path, &aui.key, val.clone())?
+                                }
                             }
                         }
                     }
@@ -839,19 +848,23 @@ pub fn command_json_arr_append<M: Manager>(
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_paths(&path, root, |v| v.n.get_type() == SelectValueType::Array)?;
-    if paths.len() > 0 {
-        let mut res = None;
-        for p in paths {
-            res = Some(redis_key.arr_append(p, &args)?);
-        }
-        redis_key.apply_changes(ctx, "json.arrappend")?;
-        Ok(res.unwrap().into())
-    } else {
+    let mut paths = find_paths(&path, root, |v| v.n.get_type() == SelectValueType::Array)?;
+    if paths.len() == 0 {
         Err(RedisError::String(format!(
             "Path '{}' does not exist",
             path
         )))
+    } else if paths.len() == 1 {
+        let res = redis_key.arr_append(paths.pop().unwrap(), args)?;
+        redis_key.apply_changes(ctx, "json.arrappend")?;
+        Ok(res.into())
+    } else {
+        let mut res = None;
+        for p in paths {
+            res = Some(redis_key.arr_append(p, args.clone())?);
+        }
+        redis_key.apply_changes(ctx, "json.arrappend")?;
+        Ok(res.unwrap().into())
     }
 }
 

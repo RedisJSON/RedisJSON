@@ -48,7 +48,7 @@ pub trait WriteHolder<E: Clone, V: SelectValue> {
     fn pow_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError>;
     fn bool_toggle(&mut self, path: Vec<String>) -> Result<bool, RedisError>;
     fn str_append(&mut self, path: Vec<String>, val: String) -> Result<usize, RedisError>;
-    fn arr_append(&mut self, path: Vec<String>, args: &Vec<E>) -> Result<usize, RedisError>;
+    fn arr_append(&mut self, path: Vec<String>, args: Vec<E>) -> Result<usize, RedisError>;
     fn arr_insert(
         &mut self,
         path: Vec<String>,
@@ -147,26 +147,20 @@ impl KeyHolderWrite {
         Ok(())
     }
 
-    fn do_op<F>(&mut self, paths: Vec<String>, mut op_fun: F) -> Result<Option<Value>, RedisError>
+    fn do_op<F>(&mut self, paths: Vec<String>, mut op_fun: F) -> Result<(), RedisError>
     where
         F: FnMut(Value) -> Result<Option<Value>, Error>,
     {
-        let mut new = None;
         if paths.len() == 0 {
             // updating the root require special treatment
             let root = self.get_value().unwrap().unwrap();
             let res = (op_fun)(root.take())?;
-            new = res.clone();
             self.set_root(res)?;
         } else {
-            self.update(&paths, self.get_value().unwrap().unwrap(), |v| {
-                let res = (op_fun)(v)?;
-                new = res.clone();
-                Ok(res)
-            })?;
+            self.update(&paths, self.get_value().unwrap().unwrap(), op_fun)?;
         }
 
-        Ok(new)
+        Ok(())
     }
 
     fn do_num_op<F1, F2>(
@@ -182,7 +176,8 @@ impl KeyHolderWrite {
     {
         let in_value = &serde_json::from_str(num)?;
         if let Value::Number(in_value) = in_value {
-            let res = self.do_op(path, |v| {
+            let mut res = None;
+            self.do_op(path, |v| {
                 let num_res = match (v.as_i64(), in_value.as_i64()) {
                     (Some(num1), Some(num2)) => ((op1_fun)(num1, num2)).into(),
                     _ => {
@@ -191,7 +186,8 @@ impl KeyHolderWrite {
                         Number::from_f64((op2_fun)(num1, num2)).unwrap()
                     }
                 };
-                Ok(Some(Value::Number(num_res)))
+                res = Some(Value::Number(num_res));
+                Ok(res.clone())
             })?;
             match res {
                 None => Err(RedisError::Str("path does not exists")),
@@ -312,23 +308,30 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
     }
 
     fn bool_toggle(&mut self, path: Vec<String>) -> Result<bool, RedisError> {
-        let res = self.do_op(path, |v| Ok(Some(Value::Bool(v.as_bool().unwrap() ^ true))))?;
+        let mut res = None;
+        self.do_op(path, |v| {
+            let val = v.as_bool().unwrap() ^ true;
+            res = Some(val);
+            Ok(Some(Value::Bool(val)))
+        })?;
         match res {
             None => Err(RedisError::Str("path does not exists")),
-            Some(n) => Ok(n.as_bool().unwrap()),
+            Some(n) => Ok(n),
         }
     }
 
     fn str_append(&mut self, path: Vec<String>, val: String) -> Result<usize, RedisError> {
         let json = serde_json::from_str(&val)?;
         if let Value::String(s) = json {
-            let res = self.do_op(path, |v| {
-                let new_value = [v.as_str().unwrap(), s.as_str()].concat();
-                Ok(Some(Value::String(new_value)))
+            let mut res = None;
+            self.do_op(path, |v| {
+                let new_str = [v.as_str().unwrap(), s.as_str()].concat();
+                res = Some(new_str.len());
+                Ok(Some(Value::String(new_str)))
             })?;
             match res {
                 None => Err(RedisError::Str("path does not exists")),
-                Some(n) => Ok(n.as_str().unwrap().len()),
+                Some(l) => Ok(l),
             }
         } else {
             Err(RedisError::String(format!(
@@ -338,14 +341,17 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
         }
     }
 
-    fn arr_append(&mut self, path: Vec<String>, args: &Vec<Value>) -> Result<usize, RedisError> {
-        let res = self.do_op(path, |mut v| {
-            v.as_array_mut().unwrap().append(&mut args.clone());
+    fn arr_append(&mut self, path: Vec<String>, mut args: Vec<Value>) -> Result<usize, RedisError> {
+        let mut res = None;
+        self.do_op(path, |mut v| {
+            let arr = v.as_array_mut().unwrap();
+            arr.append(&mut args);
+            res = Some(arr.len());
             Ok(Some(v))
         })?;
         match res {
             None => Err(RedisError::Str("path does not exists")),
-            Some(n) => Ok(n.as_array().unwrap().len()),
+            Some(n) => Ok(n),
         }
     }
 
@@ -355,7 +361,8 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
         args: &Vec<Value>,
         index: i64,
     ) -> Result<usize, RedisError> {
-        let res = self.do_op(paths, |mut v| {
+        let mut res = None;
+        self.do_op(paths, |mut v| {
             // Verify legal index in bounds
             let len = v.len().unwrap() as i64;
             let index = if index < 0 { len + index } else { index };
@@ -366,11 +373,12 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
             let mut new_value = v.take();
             let curr = new_value.as_array_mut().unwrap();
             curr.splice(index..index, args.clone());
+            res = Some(curr.len());
             Ok(Some(new_value))
         })?;
         match res {
             None => Err(RedisError::Str("path does not exists")),
-            Some(n) => Ok(n.as_array().unwrap().len()),
+            Some(l) => Ok(l),
         }
     }
 
@@ -404,7 +412,8 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
     }
 
     fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> Result<usize, RedisError> {
-        let res = self.do_op(path, |mut v| {
+        let mut res = None;
+        self.do_op(path, |mut v| {
             if let Some(array) = v.as_array() {
                 let len = array.len() as i64;
                 let stop = stop.normalize(len);
@@ -419,7 +428,7 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
                 let curr = new_value.as_array_mut().unwrap();
                 curr.rotate_left(range.start);
                 curr.resize(range.end - range.start, Value::Null);
-
+                res = Some(curr.len());
                 Ok(Some(new_value))
             } else {
                 Err(err_json(&v, "array"))
@@ -427,7 +436,7 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
         })?;
         match res {
             None => Err(RedisError::Str("path does not exists")),
-            Some(n) => Ok(n.as_array().unwrap().len()),
+            Some(l) => Ok(l),
         }
     }
 
