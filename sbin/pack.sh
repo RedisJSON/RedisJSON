@@ -59,19 +59,13 @@ export OSNICK=$($READIES/bin/platform --osnick)
 # RLEC naming conventions
 [[ $ARCH == x64 ]] && ARCH=x86_64
 [[ $OS == linux ]] && OS=Linux
-if [[ $OSNICK == focal ]]; then
-	OSNICK=ubuntu20.04
-elif [[ $OSNICK == bionic ]]; then
-	OSNICK=ubuntu18.04
-elif [[ $OSNICK == xenial ]]; then
-	OSNICK=ubuntu16.04
-elif [[ $OSNICK == trusty ]]; then
-	OSNICK=ubuntu14.04
-elif [[ $OSNICK == centos7 ]]; then
-	OSNICK=rhel7
-elif [[ $OSNICK == centos8 ]]; then
-	OSNICK=rhel8
-fi
+
+[[ $OSNICK == trusty ]]  && OSNICK=ubuntu14.04
+[[ $OSNICK == xenial ]]  && OSNICK=ubuntu16.04
+[[ $OSNICK == bionic ]]  && OSNICK=ubuntu18.04
+[[ $OSNICK == focal ]]   && OSNICK=ubuntu20.04
+[[ $OSNICK == centos7 ]] && OSNICK=rhel7
+[[ $OSNICK == centos8 ]] && OSNICK=rhel8
 
 export PRODUCT=rejson
 export PRODUCT_LIB=$PRODUCT.so
