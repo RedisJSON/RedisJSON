@@ -86,7 +86,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         }
     }
 
-    fn get_first(&'a self, path: &'a str) -> Result<&'a V, Error> {
+    fn get_first<'b>(&'a self, path: &'b str) -> Result<&'a V, Error> {
         let results = self.get_values(path)?;
         match results.first() {
             Some(s) => Ok(s),
@@ -122,14 +122,13 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 res.push(RedisValue::SimpleStringStatic("["));
                 v.values()
                     .unwrap()
-                    .iter()
                     .for_each(|v| res.push(self.resp_serialize_inner(v)));
                 RedisValue::Array(res)
             }
 
             SelectValueType::Object => {
                 let keys = v.keys().unwrap();
-                let mut res: Vec<RedisValue> = Vec::with_capacity(keys.len() + 1);
+                let mut res: Vec<RedisValue> = Vec::with_capacity(v.len().unwrap() + 1);
                 res.push(RedisValue::SimpleStringStatic("{"));
                 for key in keys {
                     res.push(RedisValue::BulkString(key.to_string()));
@@ -140,7 +139,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         }
     }
 
-    fn get_values(&'a self, path: &'a str) -> Result<Vec<&'a V>, Error> {
+    fn get_values<'b>(&'a self, path: &'b str) -> Result<Vec<&'a V>, Error> {
         let mut selector = Selector::new();
         selector.str_path(path)?;
         selector.value(self.val);
@@ -342,7 +341,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     pub fn obj_len(&self, path: &str) -> Result<usize, Error> {
         let first = self.get_first(path)?;
         match first.get_type() {
-            SelectValueType::Object => Ok(first.keys().unwrap().len()),
+            SelectValueType::Object => Ok(first.len().unwrap()),
             _ => Err("ERR wrong type of path value".into()),
         }
     }
@@ -367,7 +366,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 }
             }
             (SelectValueType::Object, SelectValueType::Object) => {
-                if a.keys().unwrap().len() != b.keys().unwrap().len() {
+                if a.len().unwrap() != b.len().unwrap() {
                     false
                 } else {
                     for k in a.keys().unwrap() {
@@ -439,7 +438,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         }
     }
 
-    pub fn obj_keys(&self, path: &str) -> Result<Vec<String>, Error> {
+    pub fn obj_keys(&self, path: &str) -> Result<Box<dyn Iterator<Item = &'_ String> + '_>, Error> {
         self.get_first(path)?
             .keys()
             .ok_or_else(|| "ERR wrong type of path value".into())
@@ -1040,7 +1039,7 @@ pub fn command_json_obj_keys<M: Manager>(
     let key = manager.open_key_read(ctx, &key)?;
 
     let value = match key.get_value()? {
-        Some(doc) => KeyValue::new(doc).obj_keys(&path)?.into(),
+        Some(doc) => KeyValue::new(doc).obj_keys(&path)?.collect::<Vec<&String>>().into(),
         None => RedisValue::Null,
     };
 
