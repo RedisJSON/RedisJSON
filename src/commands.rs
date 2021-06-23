@@ -473,7 +473,7 @@ pub fn command_json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
 
     // path is optional -> no path found we use root "$"
     if paths.is_empty() {
-        paths.push(Path::new("$".to_string()));
+        paths.push(Path::new(JSON_ROOT_PATH.to_string()));
     }
 
     let key = manager.open_key_read(ctx, &key)?;
@@ -515,7 +515,7 @@ pub fn command_json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
 
     match (current, set_option) {
         (Some(ref mut doc), ref op) => {
-            if path == "$" {
+            if path == JSON_ROOT_PATH {
                 if *op != SetOptions::NotExists {
                     redis_key.set_value(Vec::new(), val)?;
                     redis_key.apply_changes(ctx, "json.set")?;
@@ -557,7 +557,7 @@ pub fn command_json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
         }
         (None, SetOptions::AlreadyExists) => Ok(RedisValue::Null),
         (None, _) => {
-            if path == "$" {
+            if path == JSON_ROOT_PATH {
                 redis_key.set_value(Vec::new(), val)?;
                 redis_key.apply_changes(ctx, "json.set")?;
                 REDIS_OK
@@ -596,7 +596,7 @@ pub fn command_json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
     let mut redis_key = manager.open_key_write(ctx, &key)?;
     let deleted = match redis_key.get_value()? {
         Some(doc) => {
-            let res = if path == "$" {
+            let res = if path == JSON_ROOT_PATH {
                 redis_key.delete()?;
                 1
             } else {
@@ -1167,7 +1167,7 @@ pub fn command_json_cache_init<M: Manager>(
 fn backwards_compat_path(mut path: String) -> String {
     if !path.starts_with('$') {
         if path == "." {
-            path.replace_range(..1, "$");
+            path.replace_range(..1, JSON_ROOT_PATH);
         } else if path.starts_with('.') {
             path.insert(0, '$');
         } else {
