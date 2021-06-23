@@ -530,14 +530,14 @@ pub fn command_json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
                     if update_info.len() == 1 {
                         res = match update_info.pop().unwrap() {
                             UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, val)?,
-                            UpdateInfo::AUI(aui) => {
-                                redis_key.dict_add(aui.path, &aui.key, val)?
-                            }
+                            UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, val)?,
                         }
                     } else {
                         for ui in update_info {
                             res = match ui {
-                                UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, val.clone())?,
+                                UpdateInfo::SUI(sui) => {
+                                    redis_key.set_value(sui.path, val.clone())?
+                                }
                                 UpdateInfo::AUI(aui) => {
                                     redis_key.dict_add(aui.path, &aui.key, val.clone())?
                                 }
@@ -1039,7 +1039,10 @@ pub fn command_json_obj_keys<M: Manager>(
     let key = manager.open_key_read(ctx, &key)?;
 
     let value = match key.get_value()? {
-        Some(doc) => KeyValue::new(doc).obj_keys(&path)?.collect::<Vec<&String>>().into(),
+        Some(doc) => KeyValue::new(doc)
+            .obj_keys(&path)?
+            .collect::<Vec<&String>>()
+            .into(),
         None => RedisValue::Null,
     };
 
