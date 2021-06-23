@@ -137,7 +137,7 @@ fn json_api_get_len<M: Manager>(_: M, json: *const c_void, count: *mut libc::siz
     let len = match json.get_type() {
         SelectValueType::String => Some(json.get_str().len()),
         SelectValueType::Array => Some(json.len().unwrap()),
-        SelectValueType::Object => Some(json.keys().unwrap().collect::<Vec<&String>>().len()),
+        SelectValueType::Object => Some(json.len().unwrap()),
         _ => None,
     };
     match len {

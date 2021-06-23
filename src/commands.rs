@@ -438,7 +438,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         }
     }
 
-    pub fn obj_keys(&self, path: &str) -> Result<Box<dyn Iterator<Item = &'_ String> + '_>, Error> {
+    pub fn obj_keys(&self, path: &str) -> Result<Box<dyn Iterator<Item = &'_ str> + '_>, Error> {
         self.get_first(path)?
             .keys()
             .ok_or_else(|| "ERR wrong type of path value".into())
@@ -1041,7 +1041,7 @@ pub fn command_json_obj_keys<M: Manager>(
     let value = match key.get_value()? {
         Some(doc) => KeyValue::new(doc)
             .obj_keys(&path)?
-            .collect::<Vec<&String>>()
+            .collect::<Vec<&str>>()
             .into(),
         None => RedisValue::Null,
     };
