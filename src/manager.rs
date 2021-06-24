@@ -203,14 +203,20 @@ impl KeyHolderWrite {
 
     fn set_root(&mut self, v: Option<Value>) -> Result<(), RedisError> {
         match v {
-            Some(inner) => self
-                .key
-                .set_value(&REDIS_JSON_TYPE, RedisJSON { data: inner }),
+            Some(inner) => {
+                let v = self.key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?;
+                match v {
+                    Some(v) => v.data = inner,
+                    None => self
+                        .key
+                        .set_value(&REDIS_JSON_TYPE, RedisJSON { data: inner })?,
+                }
+            }
             None => {
                 self.key.delete()?;
-                Ok(())
             }
         }
+        Ok(())
     }
 }
 
