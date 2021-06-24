@@ -5,7 +5,7 @@ use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, REDIS_OK};
 
-use jsonpath_lib::select::{SelectResult, Selector};
+use jsonpath_lib::select::{Selector};
 
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 
@@ -245,12 +245,12 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     return Err(e.into());
                 }
                 selector.value(self.val);
-                let mut res = selector.select_with_paths()?;
+                let mut res = selector.select_with_paths(|_| true)?;
                 Ok(res
                     .drain(..)
                     .map(|v| {
                         UpdateInfo::AUI(AddUpdateInfo {
-                            path: v.path,
+                            path: v,
                             key: key.to_string(),
                         })
                     })
@@ -276,11 +276,11 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             let mut res = selector
                 .str_path(path)?
                 .value(self.val)
-                .select_with_paths()?;
+                .select_with_paths(|_| true)?;
             if res.len() > 0 {
                 return Ok(res
                     .drain(..)
-                    .map(|v| UpdateInfo::SUI(SetUpdateInfo { path: v.path }))
+                    .map(|v| UpdateInfo::SUI(SetUpdateInfo { path: v }))
                     .collect());
             }
         }
@@ -569,7 +569,7 @@ pub fn command_json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
     }
 }
 
-fn find_paths<T: SelectValue, F: FnMut(&SelectResult<T>) -> bool>(
+fn find_paths<T: SelectValue, F: FnMut(& T) -> bool>(
     path: &str,
     doc: &T,
     f: F,
@@ -577,11 +577,7 @@ fn find_paths<T: SelectValue, F: FnMut(&SelectResult<T>) -> bool>(
     Ok(Selector::default()
         .str_path(&path)?
         .value(doc)
-        .select_with_paths()?
-        .drain(..)
-        .filter(f)
-        .map(|v| v.path)
-        .collect())
+        .select_with_paths(f)?)
 }
 
 pub fn command_json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
@@ -689,7 +685,7 @@ where
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
     let paths = find_paths(&path, root, |v| {
-        v.n.get_type() == SelectValueType::Double || v.n.get_type() == SelectValueType::Long
+        v.get_type() == SelectValueType::Double || v.get_type() == SelectValueType::Long
     })?;
     if paths.len() > 0 {
         let mut res = None;
@@ -747,7 +743,7 @@ pub fn command_json_bool_toggle<M: Manager>(
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
-    let paths = find_paths(&path, root, |v| v.n.get_type() == SelectValueType::Bool)?;
+    let paths = find_paths(&path, root, |v| v.get_type() == SelectValueType::Bool)?;
     if paths.len() > 0 {
         let mut res = None;
         for p in paths {
@@ -791,7 +787,7 @@ pub fn command_json_str_append<M: Manager>(
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_paths(&path, root, |v| v.n.get_type() == SelectValueType::String)?;
+    let paths = find_paths(&path, root, |v| v.get_type() == SelectValueType::String)?;
     if paths.len() > 0 {
         let mut res = None;
         for p in paths {
@@ -846,7 +842,7 @@ pub fn command_json_arr_append<M: Manager>(
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let mut paths = find_paths(&path, root, |v| v.n.get_type() == SelectValueType::Array)?;
+    let mut paths = find_paths(&path, root, |v| v.get_type() == SelectValueType::Array)?;
     if paths.len() == 0 {
         Err(RedisError::String(format!(
             "Path '{}' does not exist",
@@ -913,7 +909,7 @@ pub fn command_json_arr_insert<M: Manager>(
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_paths(&path, root, |v| v.n.get_type() == SelectValueType::Array)?;
+    let paths = find_paths(&path, root, |v| v.get_type() == SelectValueType::Array)?;
     if paths.len() > 0 {
         let mut res = None;
         for p in paths {
@@ -971,7 +967,7 @@ pub fn command_json_arr_pop<M: Manager>(
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_paths(&path, root, |v| v.n.get_type() == SelectValueType::Array)?;
+    let paths = find_paths(&path, root, |v| v.get_type() == SelectValueType::Array)?;
     if paths.len() > 0 {
         let mut res = None;
         for p in paths {
@@ -1010,7 +1006,7 @@ pub fn command_json_arr_trim<M: Manager>(
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_paths(&path, root, |v| v.n.get_type() == SelectValueType::Array)?;
+    let paths = find_paths(&path, root, |v| v.get_type() == SelectValueType::Array)?;
     if paths.len() > 0 {
         let mut res = None;
         for p in paths {
