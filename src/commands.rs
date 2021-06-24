@@ -5,7 +5,7 @@ use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, REDIS_OK};
 
-use jsonpath_lib::select::{Selector};
+use jsonpath_lib::select::Selector;
 
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 
@@ -569,7 +569,7 @@ pub fn command_json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
     }
 }
 
-fn find_paths<T: SelectValue, F: FnMut(& T) -> bool>(
+fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
     path: &str,
     doc: &T,
     f: F,
