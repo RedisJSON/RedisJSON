@@ -78,7 +78,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             }
             SelectValueType::Object => {
                 let mut m = Map::new();
-                for (k,v) in val.items().unwrap() {
+                for (k, v) in val.items().unwrap() {
                     m.insert(k.to_string(), self.to_value(v));
                 }
                 Value::Object(m)
@@ -129,7 +129,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             SelectValueType::Object => {
                 let mut res: Vec<RedisValue> = Vec::with_capacity(v.len().unwrap() + 1);
                 res.push(RedisValue::SimpleStringStatic("{"));
-                for (k,v) in v.items().unwrap() {
+                for (k, v) in v.items().unwrap() {
                     res.push(RedisValue::BulkString(k.to_string()));
                     res.push(self.resp_serialize_inner(v));
                 }
