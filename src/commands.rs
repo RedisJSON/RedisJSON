@@ -71,8 +71,8 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             SelectValueType::Double => val.get_double().into(),
             SelectValueType::Array => {
                 let mut arr = Vec::new();
-                for i in 0..val.len().unwrap() {
-                    arr.push(self.to_value(val.get_index(i).unwrap()));
+                for v in val.values().unwrap() {
+                    arr.push(self.to_value(v));
                 }
                 Value::Array(arr)
             }
