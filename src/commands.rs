@@ -753,7 +753,7 @@ pub fn command_json_bool_toggle<M: Manager>(
         Ok(res.unwrap().to_string().into())
     } else {
         Err(RedisError::String(format!(
-            "Path '{}' does not exist",
+            "Path '{}' does not exist or not a bool",
             path
         )))
     }
@@ -797,7 +797,7 @@ pub fn command_json_str_append<M: Manager>(
         Ok(res.unwrap().into())
     } else {
         Err(RedisError::String(format!(
-            "Path '{}' does not exist",
+            "Path '{}' does not exist or not a string",
             path
         )))
     }
@@ -919,7 +919,7 @@ pub fn command_json_arr_insert<M: Manager>(
         Ok(res.unwrap().into())
     } else {
         Err(RedisError::String(format!(
-            "Path '{}' does not exist",
+            "Path '{}' does not exist or not an array",
             path
         )))
     }

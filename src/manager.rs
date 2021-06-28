@@ -37,22 +37,22 @@ pub trait ReadHolder<V: SelectValue> {
     fn get_value(&self) -> Result<Option<&V>, RedisError>;
 }
 
-pub trait WriteHolder<E: Clone, V: SelectValue> {
+pub trait WriteHolder<O: Clone, V: SelectValue> {
     fn delete(&mut self) -> Result<(), RedisError>;
     fn get_value(&self) -> Result<Option<&mut V>, RedisError>;
-    fn set_value(&mut self, path: Vec<String>, v: E) -> Result<bool, RedisError>;
-    fn dict_add(&mut self, path: Vec<String>, key: &str, v: E) -> Result<bool, RedisError>;
+    fn set_value(&mut self, path: Vec<String>, v: O) -> Result<bool, RedisError>;
+    fn dict_add(&mut self, path: Vec<String>, key: &str, v: O) -> Result<bool, RedisError>;
     fn delete_path(&mut self, path: Vec<String>) -> Result<bool, RedisError>;
     fn incr_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError>;
     fn mult_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError>;
     fn pow_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError>;
     fn bool_toggle(&mut self, path: Vec<String>) -> Result<bool, RedisError>;
     fn str_append(&mut self, path: Vec<String>, val: String) -> Result<usize, RedisError>;
-    fn arr_append(&mut self, path: Vec<String>, args: Vec<E>) -> Result<usize, RedisError>;
+    fn arr_append(&mut self, path: Vec<String>, args: Vec<O>) -> Result<usize, RedisError>;
     fn arr_insert(
         &mut self,
         path: Vec<String>,
-        args: &Vec<E>,
+        args: &Vec<O>,
         index: i64,
     ) -> Result<usize, RedisError>;
     fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<String>, RedisError>;
