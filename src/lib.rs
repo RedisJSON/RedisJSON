@@ -227,14 +227,13 @@ fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
 
     // path is optional -> no path found we use root "$"
     if paths.is_empty() {
-        paths.push(Path::new(JSON_ROOT_PATH.to_string()));
+        paths.push(Path::new(".".to_string()));
     }
 
     let key = ctx.open_key_writable(&key);
     let value = match key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)? {
         Some(doc) => doc
-            .to_json(&mut paths, indent, newline, space, format)?
-            .into(),
+            .to_json(&mut paths, indent, newline, space, format)?,
         None => RedisValue::Null,
     };
 

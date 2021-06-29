@@ -15,6 +15,7 @@ use bson::decode_document;
 use jsonpath_lib::SelectorMut;
 use redis_module::raw::{self, Status};
 use serde::Serialize;
+use redis_module::{RedisValue};
 use serde_json::{Map, Value};
 use std::io::Cursor;
 use std::mem;
@@ -48,12 +49,15 @@ impl Format {
 pub struct Path {
     pub path: String,
     pub fixed: String,
+    pub is_legacy: bool,
 }
 
 impl Path {
     pub fn new(path: String) -> Path {
         let mut fixed = path.clone();
+        let mut is_legacy = false;
         if !fixed.starts_with('$') {
+            is_legacy = true;
             if fixed == "." {
                 fixed.replace_range(..1, "$");
             } else if fixed.starts_with('.') {
@@ -62,7 +66,7 @@ impl Path {
                 fixed.insert_str(0, "$.");
             }
         }
-        Path { path, fixed }
+        Path { path, fixed ,is_legacy }
     }
 }
 
@@ -240,6 +244,24 @@ impl RedisJSON {
         Ok(res)
     }
 
+    fn serialize_json(
+        &self,
+        val: &Value,
+        indent: &str,
+        newline: &str,
+        space: &str,
+    ) -> String{
+        let formatter = RedisJsonFormatter::new(
+            indent.as_bytes(),
+            space.as_bytes(),
+            newline.as_bytes(),
+        );
+
+        let mut out = serde_json::Serializer::with_formatter(Vec::new(), formatter);
+        val.serialize(&mut out).unwrap();
+        String::from_utf8(out.into_inner()).unwrap()
+    }
+
     pub fn to_json(
         &self,
         paths: &mut Vec<Path>,
@@ -247,15 +269,17 @@ impl RedisJSON {
         newline: String,
         space: String,
         format: Format,
-    ) -> Result<String, Error> {
-        let temp_doc;
-        let res = if paths.len() > 1 {
+    ) -> Result<RedisValue, Error> {
+        if format == Format::BSON {
+            return Err("Soon to come...".into());
+        }
+        if paths.len() > 1 {
             let mut selector = jsonpath_lib::selector(&self.data);
             // TODO: Creating a temp doc here duplicates memory usage. This can be very memory inefficient.
             // A better way would be to create a doc of references to the original doc but no current support
             // in serde_json. I'm going for this implementation anyway because serde_json isn't supposed to be
             // memory efficient and we're using it anyway. See https://github.com/serde-rs/json/issues/635.
-            temp_doc = Value::Object(paths.drain(..).fold(Map::new(), |mut acc, path| {
+            let temp_doc = Value::Object(paths.drain(..).fold(Map::new(), |mut acc, path| {
                 let value = match selector(&path.fixed) {
                     Ok(s) => match s.first() {
                         Some(v) => v,
@@ -266,24 +290,15 @@ impl RedisJSON {
                 acc.insert(path.path, (*value).clone());
                 acc
             }));
-            &temp_doc
+            Ok(self.serialize_json(&temp_doc, &indent, &newline, &space).into())
         } else {
-            self.get_first(&paths[0].fixed)?
-        };
-
-        match format {
-            Format::JSON => {
-                let formatter = RedisJsonFormatter::new(
-                    indent.as_bytes(),
-                    space.as_bytes(),
-                    newline.as_bytes(),
-                );
-
-                let mut out = serde_json::Serializer::with_formatter(Vec::new(), formatter);
-                res.serialize(&mut out).unwrap();
-                Ok(String::from_utf8(out.into_inner()).unwrap())
+            let path = &paths[0];
+            if path.is_legacy {
+                let res = self.get_first(&path.fixed)?;
+                Ok(self.serialize_json(res, &indent, &newline, &space).into())
+            } else {
+                Ok(self.get_values(&path.fixed)?.drain(..).map(|v| self.serialize_json(v, &indent, &newline, &space)).collect::<Vec<String>>().into())
             }
-            Format::BSON => Err("Soon to come...".into()), //results.into() as Bson,
         }
     }
 
