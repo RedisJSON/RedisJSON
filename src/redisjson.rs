@@ -14,8 +14,8 @@ use crate::REDIS_JSON_TYPE_VERSION;
 use bson::decode_document;
 use jsonpath_lib::SelectorMut;
 use redis_module::raw::{self, Status};
+use redis_module::RedisValue;
 use serde::Serialize;
-use redis_module::{RedisValue};
 use serde_json::{Map, Value};
 use std::io::Cursor;
 use std::mem;
@@ -66,7 +66,11 @@ impl Path {
                 fixed.insert_str(0, "$.");
             }
         }
-        Path { path, fixed ,is_legacy }
+        Path {
+            path,
+            fixed,
+            is_legacy,
+        }
     }
 }
 
@@ -244,18 +248,9 @@ impl RedisJSON {
         Ok(res)
     }
 
-    fn serialize_json(
-        &self,
-        val: &Value,
-        indent: &str,
-        newline: &str,
-        space: &str,
-    ) -> String{
-        let formatter = RedisJsonFormatter::new(
-            indent.as_bytes(),
-            space.as_bytes(),
-            newline.as_bytes(),
-        );
+    fn serialize_json(&self, val: &Value, indent: &str, newline: &str, space: &str) -> String {
+        let formatter =
+            RedisJsonFormatter::new(indent.as_bytes(), space.as_bytes(), newline.as_bytes());
 
         let mut out = serde_json::Serializer::with_formatter(Vec::new(), formatter);
         val.serialize(&mut out).unwrap();
@@ -290,14 +285,21 @@ impl RedisJSON {
                 acc.insert(path.path, (*value).clone());
                 acc
             }));
-            Ok(self.serialize_json(&temp_doc, &indent, &newline, &space).into())
+            Ok(self
+                .serialize_json(&temp_doc, &indent, &newline, &space)
+                .into())
         } else {
             let path = &paths[0];
             if path.is_legacy {
                 let res = self.get_first(&path.fixed)?;
                 Ok(self.serialize_json(res, &indent, &newline, &space).into())
             } else {
-                Ok(self.get_values(&path.fixed)?.drain(..).map(|v| self.serialize_json(v, &indent, &newline, &space)).collect::<Vec<String>>().into())
+                Ok(self
+                    .get_values(&path.fixed)?
+                    .drain(..)
+                    .map(|v| self.serialize_json(v, &indent, &newline, &space))
+                    .collect::<Vec<String>>()
+                    .into())
             }
         }
     }
