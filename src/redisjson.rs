@@ -15,7 +15,7 @@ use jsonpath_lib::select::{Selector, SelectorMut};
 use bson::decode_document;
 // use index::schema_map; todo: is this needed? it breaks the build!!!
 use redis_module::raw::{self, Status};
-use serde_json::{Value};
+use serde_json::Value;
 use std::io::Cursor;
 use std::mem;
 use std::os::raw::{c_int, c_void};
