@@ -262,7 +262,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             // have reached here!!
             Err("array index out of range".into())
         } else {
-            Err("path not an object".into())
+            Err("path not an object or array".into())
         }
     }
 
