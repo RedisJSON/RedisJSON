@@ -439,10 +439,10 @@ def testClear(env):
 
     # Make sure specific obj content exists before clear
     obj_content = r'{"a":1,"b":2}'
-    r.expect('JSON.GET', 'test', '$.arr[2].n').equal(obj_content)
+    r.expect('JSON.GET', 'test', '$.arr[2].n').equal([obj_content])
     # Make sure specific arr content exists before clear
     arr_content = r'["to","be","cleared",4]'
-    r.expect('JSON.GET', 'test', '$.arr[3].n2.n').equal(arr_content)
+    r.expect('JSON.GET', 'test', '$.arr[3].n2.n').equal([arr_content])
 
     # Clear obj and arr with specific paths
     r.expect('JSON.CLEAR', 'test', '$.arr[2].n').equal(1)
@@ -452,9 +452,9 @@ def testClear(env):
     r.expect('JSON.CLEAR', 'test', '$.arr[1]').equal(0)
 
     # Make sure specific obj content was cleared
-    r.expect('JSON.GET', 'test', '$.arr[2].n').equal('{}')
+    r.expect('JSON.GET', 'test', '$.arr[2].n').equal(['{}'])
     # Make sure specific arr content was cleared
-    r.expect('JSON.GET', 'test', '$.arr[3].n2.n').equal('[]')
+    r.expect('JSON.GET', 'test', '$.arr[3].n2.n').equal(['[]'])
 
     # Make sure only appropriate content (obj and arr) was cleared - and that errors were printed for inappropriate content (string and numeric)
     # TODO: Enable when supporting multi results (and not only the first)
@@ -463,11 +463,11 @@ def testClear(env):
     # Clear root
     # TODO: switch order of the following paths and expect .equals(2) when supporting multi-paths
     r.expect('JSON.CLEAR', 'test', '$', '$.arr[2].n').equal(1)
-    r.expect('JSON.GET', 'test', '$').equal('{}')
+    r.expect('JSON.GET', 'test', '$').equal(['{}'])
 
     r.expect('JSON.SET', 'test', '$', obj_content).ok()
     r.expect('JSON.CLEAR', 'test').equal(1)
-    r.expect('JSON.GET', 'test', '$').equal('{}')
+    r.expect('JSON.GET', 'test', '$').equal(['{}'])
 
 def testArrayCRUD(env):
     """Test JSON Array CRUDness"""
@@ -840,6 +840,15 @@ def testIssue_80(env):
     # This shouldn't crash Redis
     r.execute_command('JSON.GET', 'test', '$.[?(@.code=="2")]')
 
+
+def testMultiPathResults(env):
+    env.expect("JSON.SET", "k", '$', '[1,2,3]').ok()
+    env.expect("JSON.GET", "k", '$[*]').equal(['1', '2', '3'])
+    env.expect("JSON.SET", "k", '$', '{"a":[1,2,3],"b":["c", "d", "e"],"c":"k"}').ok()
+    env.expect("JSON.GET", "k", '$.*[0,2]').equal(['1', '3', '"c"', '"e"'])
+
+    # make sure legacy json path returns single result
+    env.expect("JSON.GET", "k", '.*[0,2]').equal('1')
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property

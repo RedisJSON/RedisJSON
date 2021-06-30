@@ -149,25 +149,19 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     fn serialize_object<O: Serialize>(
         &'a self,
         o: &O,
-        indent: String,
-        newline: String,
-        space: String,
-        format: Format,
-    ) -> Result<String, Error> {
-        match format {
-            Format::JSON => {
-                let formatter = RedisJsonFormatter::new(
-                    indent.as_bytes(),
-                    space.as_bytes(),
-                    newline.as_bytes(),
-                );
+        indent: &str,
+        newline: &str,
+        space: &str,
+    ) -> String {
+        let formatter = RedisJsonFormatter::new(
+            indent.as_bytes(),
+            space.as_bytes(),
+            newline.as_bytes(),
+        );
 
-                let mut out = serde_json::Serializer::with_formatter(Vec::new(), formatter);
-                o.serialize(&mut out).unwrap();
-                Ok(String::from_utf8(out.into_inner()).unwrap())
-            }
-            Format::BSON => Err("Soon to come...".into()), //results.into() as Bson,
-        }
+        let mut out = serde_json::Serializer::with_formatter(Vec::new(), formatter);
+        o.serialize(&mut out).unwrap();
+        String::from_utf8(out.into_inner()).unwrap()
     }
 
     fn to_json(
@@ -177,7 +171,10 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         newline: String,
         space: String,
         format: Format,
-    ) -> Result<String, Error> {
+    ) -> Result<RedisValue, Error> {
+        if format == Format::BSON {
+            return Err("Soon to come...".into());
+        }
         if paths.len() > 1 {
             // TODO: Creating a temp doc here duplicates memory usage. This can be very memory inefficient.
             // A better way would be to create a doc of references to the original doc but no current support
@@ -199,15 +196,19 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 acc.insert(path.path, value);
                 acc
             });
-            self.serialize_object(&temp_doc, indent, newline, space, format)
+            Ok(self.serialize_object(&temp_doc, &indent, &newline, &space).into())
         } else {
-            self.serialize_object(
-                self.get_first(&paths[0].fixed)?,
-                indent,
-                newline,
-                space,
-                format,
-            )
+            let path = &paths[0];
+            if path.is_legacy {
+                Ok(self.serialize_object(
+                    self.get_first(&paths[0].fixed)?,
+                    &indent,
+                    &newline,
+                    &space,
+                ).into())
+            } else {
+                Ok(self.get_values(&path.fixed)?.drain(..).map(|v| self.serialize_object(v, &indent, &newline, &space)).collect::<Vec<String>>().into())
+            }
         }
     }
 
@@ -472,14 +473,13 @@ pub fn command_json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
 
     // path is optional -> no path found we use root "$"
     if paths.is_empty() {
-        paths.push(Path::new(JSON_ROOT_PATH.to_string()));
+        paths.push(Path::new(".".to_string()));
     }
 
     let key = manager.open_key_read(ctx, &key)?;
     let value = match key.get_value()? {
         Some(doc) => KeyValue::new(doc)
-            .to_json(&mut paths, indent, newline, space, format)?
-            .into(),
+            .to_json(&mut paths, indent, newline, space, format)?,
         None => RedisValue::Null,
     };
 
