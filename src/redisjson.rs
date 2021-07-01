@@ -294,11 +294,15 @@ impl RedisJSON {
                 let res = self.get_first(&path.fixed)?;
                 Ok(self.serialize_json(res, &indent, &newline, &space).into())
             } else {
+                let values = Value::Array(self.get_values(&path.fixed)?.drain(..).fold(
+                    Vec::new(),
+                    |mut acc, value| {
+                        acc.push((*value).clone());
+                        acc
+                    },
+                ));
                 Ok(self
-                    .get_values(&path.fixed)?
-                    .drain(..)
-                    .map(|v| self.serialize_json(v, &indent, &newline, &space))
-                    .collect::<Vec<String>>()
+                    .serialize_json(&values, &indent, &newline, &space)
                     .into())
             }
         }
