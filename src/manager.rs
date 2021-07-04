@@ -230,8 +230,8 @@ impl<'a> KeyHolderWrite<'a> {
                 }
             }
             None => {
-                self.key.delete()?;
                 self.val = None;
+                self.key.delete()?;
             }
         }
         Ok(())
