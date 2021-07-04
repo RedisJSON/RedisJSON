@@ -203,11 +203,9 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     .serialize_object(self.get_first(&paths[0].fixed)?, &indent, &newline, &space)
                     .into())
             } else {
+                let values = self.get_values(&path.fixed)?;
                 Ok(self
-                    .get_values(&path.fixed)?
-                    .drain(..)
-                    .map(|v| self.serialize_object(v, &indent, &newline, &space))
-                    .collect::<Vec<String>>()
+                    .serialize_object(&values, &indent, &newline, &space)
                     .into())
             }
         }
