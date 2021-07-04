@@ -85,10 +85,10 @@ fn err_json(value: &Value, expected_value: &'static str) -> Error {
     ))
 }
 
-pub struct KeyHolderWrite {
+pub struct KeyHolderWrite<'a> {
     key: RedisKeyWritable,
     key_name: String,
-    val: Option<*mut RedisJSON>,
+    val: Option<&'a mut RedisJSON>,
 }
 
 fn update<F: FnMut(Value) -> Result<Option<Value>, Error>>(
@@ -146,7 +146,7 @@ fn update<F: FnMut(Value) -> Result<Option<Value>, Error>>(
     Ok(())
 }
 
-impl KeyHolderWrite {
+impl<'a> KeyHolderWrite<'a> {
     fn do_op<F>(&mut self, paths: Vec<String>, mut op_fun: F) -> Result<(), RedisError>
     where
         F: FnMut(Value) -> Result<Option<Value>, Error>,
@@ -201,21 +201,20 @@ impl KeyHolderWrite {
         }
     }
 
-    fn get_json_holder(&mut self) -> Result<Option<&mut RedisJSON>, RedisError> {
-        match self.val {
-            Some(v) => Ok(Some(unsafe { &mut *v })),
+    fn get_json_holder(&mut self) -> Result<Option<&'a mut RedisJSON>, RedisError> {
+        let val = match self.val.take() {
+            Some(v) => v,
             None => {
-                let res = self.key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?;
-                let res = match res {
-                    Some(r) => {
-                        self.val = Some(r as *mut RedisJSON);
-                        Some(r)
-                    }
-                    None => None,
-                };
-                Ok(res)
-            }
-        }
+                let res: Option<&'a mut RedisJSON> = self.key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?;
+                match res {
+                    Some(v) => v,
+                    None => return Ok(None),
+                }
+            },
+        };
+
+        self.val = Some(unsafe{&mut *(val as *mut RedisJSON)});
+        Ok(Some(val))
     }
 
     fn set_root(&mut self, v: Option<Value>) -> Result<(), RedisError> {
@@ -238,7 +237,7 @@ impl KeyHolderWrite {
     }
 }
 
-impl WriteHolder<Value, Value> for KeyHolderWrite {
+impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
     fn apply_changes(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError> {
         if ctx.notify_keyspace_event(NotifyEvent::MODULE, command, &self.key_name) != Status::Ok {
             Err(RedisError::Str("failed notify key space event"))
@@ -498,10 +497,12 @@ impl ReadHolder<Value> for KeyHolderRead {
     }
 }
 
-pub struct RedisJsonKeyManager;
+pub struct RedisJsonKeyManager<'a>{
+    pub phantom: std::marker::PhantomData<&'a u64>,
+}
 
-impl Manager for RedisJsonKeyManager {
-    type WriteHolder = KeyHolderWrite;
+impl<'a> Manager for RedisJsonKeyManager<'a> {
+    type WriteHolder = KeyHolderWrite<'a>;
     type ReadHolder = KeyHolderRead;
     type V = Value;
     type O = Value;
@@ -511,7 +512,7 @@ impl Manager for RedisJsonKeyManager {
         Ok(KeyHolderRead { key: key })
     }
 
-    fn open_key_write(&self, ctx: &Context, key: &str) -> Result<KeyHolderWrite, RedisError> {
+    fn open_key_write(&self, ctx: &Context, key: &str) -> Result<KeyHolderWrite<'a>, RedisError> {
         let key_ptr = ctx.open_key_writable(key);
         Ok(KeyHolderWrite {
             key: key_ptr,
