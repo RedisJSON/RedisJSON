@@ -13,7 +13,6 @@ use jsonpath_lib::select::json_node::JsonValueUpdater;
 use jsonpath_lib::select::{Selector, SelectorMut};
 
 use bson::decode_document;
-// use index::schema_map; todo: is this needed? it breaks the build!!!
 use redis_module::raw::{self, Status};
 use serde_json::Value;
 use std::io::Cursor;
