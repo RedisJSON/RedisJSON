@@ -88,7 +88,7 @@ fn err_json(value: &Value, expected_value: &'static str) -> Error {
 pub struct KeyHolderWrite {
     key: RedisKeyWritable,
     key_name: String,
-    val: Option<*mut RedisJSON>
+    val: Option<*mut RedisJSON>,
 }
 
 fn update<F: FnMut(Value) -> Result<Option<Value>, Error>>(
@@ -147,7 +147,6 @@ fn update<F: FnMut(Value) -> Result<Option<Value>, Error>>(
 }
 
 impl KeyHolderWrite {
-
     fn do_op<F>(&mut self, paths: Vec<String>, mut op_fun: F) -> Result<(), RedisError>
     where
         F: FnMut(Value) -> Result<Option<Value>, Error>,
@@ -204,20 +203,18 @@ impl KeyHolderWrite {
 
     fn get_json_holder(&mut self) -> Result<Option<&mut RedisJSON>, RedisError> {
         match self.val {
-            Some(v) => {
-                Ok(Some(unsafe{&mut *v}))
-            },
+            Some(v) => Ok(Some(unsafe { &mut *v })),
             None => {
                 let res = self.key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?;
-                let res = match res{
+                let res = match res {
                     Some(r) => {
                         self.val = Some(r as *mut RedisJSON);
                         Some(r)
-                    },
+                    }
                     None => None,
                 };
                 Ok(res)
-            },
+            }
         }
     }
 
@@ -260,9 +257,7 @@ impl WriteHolder<Value, Value> for KeyHolderWrite {
         let key_value = self.get_json_holder()?;
 
         match key_value {
-            Some(v) => {
-                Ok(Some(&mut v.data))
-            },
+            Some(v) => Ok(Some(&mut v.data)),
             None => Ok(None),
         }
     }
