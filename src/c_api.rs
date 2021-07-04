@@ -4,7 +4,7 @@ use std::ptr::{null, null_mut};
 use std::slice;
 use std::{
     ffi::CStr,
-    os::raw::{c_char, c_void, c_ulong},
+    os::raw::{c_char, c_ulong, c_void},
 };
 
 use crate::commands::KeyValue;
@@ -37,7 +37,7 @@ pub enum JSONType {
     Null = 6,
 }
 
-struct ResultsIterator<'a, V:SelectValue> {
+struct ResultsIterator<'a, V: SelectValue> {
     results: Vec<&'a V>,
     pos: usize,
 }
@@ -107,17 +107,11 @@ pub extern "C" fn JSONAPI_closeKey(json: *mut c_void) {
     json_api_close_key_internal(RedisJsonKeyManager, json);
 }
 
-fn json_api_get_at<M: Manager>(
-    _: M,
-    json: *const c_void,
-    index: libc::size_t
-) -> *const c_void {
+fn json_api_get_at<M: Manager>(_: M, json: *const c_void, index: libc::size_t) -> *const c_void {
     let json = unsafe { &*(json as *const M::V) };
     match json.get_type() {
         SelectValueType::Array => match json.get_index(index) {
-            Some(v) => {
-                v as *const M::V as *const c_void
-            }
+            Some(v) => v as *const M::V as *const c_void,
             _ => null(),
         },
         _ => null(),
@@ -125,10 +119,7 @@ fn json_api_get_at<M: Manager>(
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_getAt(
-    json: *const c_void,
-    index: libc::size_t
-) -> *const c_void {
+pub extern "C" fn JSONAPI_getAt(json: *const c_void, index: libc::size_t) -> *const c_void {
     json_api_get_at(RedisJsonKeyManager, json, index)
 }
 
@@ -314,10 +305,7 @@ fn json_api_get_type_internal<V: SelectValue>(v: &V) -> JSONType {
     }
 }
 
-pub fn json_api_next<M: Manager>(
-    _: M,
-    iter: *mut c_void,
-) -> *const c_void {
+pub fn json_api_next<M: Manager>(_: M, iter: *mut c_void) -> *const c_void {
     let iter = unsafe { &mut *(iter as *mut ResultsIterator<M::V>) };
     if iter.pos >= iter.results.len() {
         null_mut()
@@ -328,28 +316,18 @@ pub fn json_api_next<M: Manager>(
     }
 }
 
-pub fn json_api_len<M: Manager>(
-    _: M,
-    iter: *const c_void,
-) -> c_ulong {
+pub fn json_api_len<M: Manager>(_: M, iter: *const c_void) -> c_ulong {
     let iter = unsafe { &*(iter as *mut ResultsIterator<M::V>) };
     iter.results.len() as c_ulong
 }
 
-pub fn json_api_free_iter<M: Manager>(
-    _: M,
-    iter: *mut c_void,
-){
+pub fn json_api_free_iter<M: Manager>(_: M, iter: *mut c_void) {
     unsafe {
         Box::from_raw(iter as *mut ResultsIterator<M::V>);
     }
 }
 
-pub fn json_api_get<M: Manager>(
-    _: M,
-    key: *mut c_void,
-    path: *const c_char
-) -> *const c_void {
+pub fn json_api_get<M: Manager>(_: M, key: *mut c_void, path: *const c_char) -> *const c_void {
     let key = unsafe { &*(key as *mut M::ReadHolder) };
     let v = key.get_value().unwrap().unwrap();
 
@@ -360,42 +338,28 @@ pub fn json_api_get<M: Manager>(
         return null();
     }
     match selector.select() {
-        Ok(s) => {
-            Box::into_raw(Box::new(ResultsIterator{
-                results: s,
-                pos: 0,
-            })) as *mut c_void
-        },
+        Ok(s) => Box::into_raw(Box::new(ResultsIterator { results: s, pos: 0 })) as *mut c_void,
         Err(_) => null(),
     }
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_get(
-    key: *mut c_void,
-    path: *const c_char,
-) -> *const c_void {
+pub extern "C" fn JSONAPI_get(key: *mut c_void, path: *const c_char) -> *const c_void {
     json_api_get(RedisJsonKeyManager, key, path)
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_len(
-    iter: *const c_void,
-) -> c_ulong {
+pub extern "C" fn JSONAPI_len(iter: *const c_void) -> c_ulong {
     json_api_len(RedisJsonKeyManager, iter)
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_freeIter(
-    iter: *mut c_void,
-) {
+pub extern "C" fn JSONAPI_freeIter(iter: *mut c_void) {
     json_api_free_iter(RedisJsonKeyManager, iter)
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_next(
-    iter: *mut c_void,
-) -> *const c_void {
+pub extern "C" fn JSONAPI_next(iter: *mut c_void) -> *const c_void {
     json_api_next(RedisJsonKeyManager, iter)
 }
 
@@ -439,16 +403,11 @@ pub struct RedisJSONAPI_V1 {
     pub openKeyFromStr:
         extern "C" fn(ctx: *mut rawmod::RedisModuleCtx, path: *const c_char) -> *mut c_void,
     pub closeKey: extern "C" fn(key: *mut c_void),
-    pub get:
-        extern "C" fn(key: *mut c_void, path: *const c_char) -> *const c_void,
-    pub next:
-        extern "C" fn(iter: *mut c_void) -> *const c_void,
-    pub len:
-        extern "C" fn(iter: *const c_void) -> c_ulong,
-    pub freeIter:
-        extern "C" fn(iter: *mut c_void),
-    pub getAt:
-        extern "C" fn(json: *const c_void, index: libc::size_t) -> *const c_void,
+    pub get: extern "C" fn(key: *mut c_void, path: *const c_char) -> *const c_void,
+    pub next: extern "C" fn(iter: *mut c_void) -> *const c_void,
+    pub len: extern "C" fn(iter: *const c_void) -> c_ulong,
+    pub freeIter: extern "C" fn(iter: *mut c_void),
+    pub getAt: extern "C" fn(json: *const c_void, index: libc::size_t) -> *const c_void,
     pub getLen: extern "C" fn(json: *const c_void, len: *mut libc::size_t) -> c_int,
     pub getType: extern "C" fn(json: *const c_void) -> c_int,
     pub getInt: extern "C" fn(json: *const c_void, val: *mut c_long) -> c_int,
