@@ -30,7 +30,7 @@ def test_keyspace_set(env):
         assert_msg(env, pubsub.get_message(), 'pmessage', 'json.strappend')
         assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key')
 
-        # Negative tests should not get an event 
+        # Negative tests should not get an event
         env.assertEqual(None, r.execute_command('JSON.SET', 'test_key', '$.foo.a', '"nono"'))
         env.assertEqual(None, pubsub.get_message())       
 

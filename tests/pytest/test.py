@@ -645,6 +645,18 @@ def testArrPopCommand(env):
     r.assertIsNone(r.execute_command('JSON.ARRPOP', 'test', '.'))
     r.assertIsNone(r.execute_command('JSON.ARRPOP', 'test', '.', 2))
 
+def testArrPopErrors(env):
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'test','.', '1'))
+    r.expect('JSON.ARRPOP', 'test').error().contains("not an array")
+
+def testArrTrimErrors(env):
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'test','.', '1'))
+    r.expect('JSON.ARRTRIM', 'test', '.', '0', '1').error().contains("not an array")
+
 def testTypeCommand(env):
     """Test JSON.TYPE command"""
     r = env
