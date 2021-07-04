@@ -205,15 +205,16 @@ impl<'a> KeyHolderWrite<'a> {
         let val = match self.val.take() {
             Some(v) => v,
             None => {
-                let res: Option<&'a mut RedisJSON> = self.key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?;
+                let res: Option<&'a mut RedisJSON> =
+                    self.key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?;
                 match res {
                     Some(v) => v,
                     None => return Ok(None),
                 }
-            },
+            }
         };
 
-        self.val = Some(unsafe{&mut *(val as *mut RedisJSON)});
+        self.val = Some(unsafe { &mut *(val as *mut RedisJSON) });
         Ok(Some(val))
     }
 
@@ -497,7 +498,7 @@ impl ReadHolder<Value> for KeyHolderRead {
     }
 }
 
-pub struct RedisJsonKeyManager<'a>{
+pub struct RedisJsonKeyManager<'a> {
     pub phantom: std::marker::PhantomData<&'a u64>,
 }
 
