@@ -200,7 +200,12 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             let path = &paths[0];
             if path.is_legacy() {
                 Ok(self
-                    .serialize_object(self.get_first(paths[0].get_path())?, &indent, &newline, &space)
+                    .serialize_object(
+                        self.get_first(paths[0].get_path())?,
+                        &indent,
+                        &newline,
+                        &space,
+                    )
                     .into())
             } else {
                 let values = self.get_values(path.get_path())?;
