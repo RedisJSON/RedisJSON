@@ -1,3 +1,4 @@
+use libc::size_t;
 use std::ffi::CString;
 use std::os::raw::{c_double, c_int, c_long};
 use std::ptr::{null, null_mut};
@@ -97,7 +98,7 @@ pub extern "C" fn JSONAPI_openKeyFromStr<'a>(
     json_api_open_key_internal(RedisJsonKeyManager, ctx, &key) as *mut c_void
 }
 
-fn json_api_get_at<M: Manager>(_: M, json: *const c_void, index: libc::size_t) -> *const c_void {
+fn json_api_get_at<M: Manager>(_: M, json: *const c_void, index: size_t) -> *const c_void {
     let json = unsafe { &*(json as *const M::V) };
     match json.get_type() {
         SelectValueType::Array => match json.get_index(index) {
@@ -109,7 +110,7 @@ fn json_api_get_at<M: Manager>(_: M, json: *const c_void, index: libc::size_t) -
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_getAt(json: *const c_void, index: libc::size_t) -> *const c_void {
+pub extern "C" fn JSONAPI_getAt(json: *const c_void, index: size_t) -> *const c_void {
     json_api_get_at(RedisJsonKeyManager, json, index)
 }
 
@@ -131,7 +132,7 @@ fn json_api_get_len<M: Manager>(_: M, json: *const c_void, count: *mut libc::siz
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_getLen(json: *const c_void, count: *mut libc::size_t) -> c_int {
+pub extern "C" fn JSONAPI_getLen(json: *const c_void, count: *mut size_t) -> c_int {
     json_api_get_len(RedisJsonKeyManager, json, count)
 }
 
@@ -148,7 +149,7 @@ fn json_api_get_string<M: Manager>(
     _: M,
     json: *const c_void,
     str: *mut *const c_char,
-    len: *mut libc::size_t,
+    len: *mut size_t,
 ) -> c_int {
     let json = unsafe { &*(json as *const M::V) };
     match json.get_type() {
@@ -165,7 +166,7 @@ fn json_api_get_string<M: Manager>(
 pub extern "C" fn JSONAPI_getString(
     json: *const c_void,
     str: *mut *const c_char,
-    len: *mut libc::size_t,
+    len: *mut size_t,
 ) -> c_int {
     json_api_get_string(RedisJsonKeyManager, json, str, len)
 }
@@ -248,7 +249,7 @@ pub extern "C" fn JSONAPI_getBoolean(json: *const c_void, val: *mut c_int) -> c_
 
 //---------------------------------------------------------------------------------------------
 
-pub fn value_from_index(value: &Value, index: libc::size_t) -> Result<&Value, RedisError> {
+pub fn value_from_index(value: &Value, index: size_t) -> Result<&Value, RedisError> {
     match value {
         Value::Array(ref vec) => {
             if index < vec.len() {
@@ -268,11 +269,11 @@ pub fn value_from_index(value: &Value, index: libc::size_t) -> Result<&Value, Re
     }
 }
 
-pub fn get_type_and_size(value: &Value) -> (JSONType, libc::size_t) {
+pub fn get_type_and_size(value: &Value) -> (JSONType, size_t) {
     RedisJSON::get_type_and_size(value)
 }
 
-pub fn set_string(from_str: &str, str: *mut *const c_char, len: *mut libc::size_t) -> c_int {
+pub fn set_string(from_str: &str, str: *mut *const c_char, len: *mut size_t) -> c_int {
     if !str.is_null() {
         unsafe {
             *str = from_str.as_ptr() as *const c_char;
@@ -306,9 +307,9 @@ pub fn json_api_next<M: Manager>(_: M, iter: *mut c_void) -> *const c_void {
     }
 }
 
-pub fn json_api_len<M: Manager>(_: M, iter: *const c_void) -> usize {
+pub fn json_api_len<M: Manager>(_: M, iter: *const c_void) -> size_t {
     let iter = unsafe { &*(iter as *mut ResultsIterator<M::V>) };
-    iter.results.len() as usize
+    iter.results.len() as size_t
 }
 
 pub fn json_api_free_iter<M: Manager>(_: M, iter: *mut c_void) {
@@ -337,7 +338,7 @@ pub extern "C" fn JSONAPI_get(key: *const c_void, path: *const c_char) -> *const
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_len(iter: *const c_void) -> usize {
+pub extern "C" fn JSONAPI_len(iter: *const c_void) -> size_t {
     json_api_len(RedisJsonKeyManager, iter)
 }
 
@@ -391,19 +392,16 @@ pub struct RedisJSONAPI_V1 {
         extern "C" fn(ctx: *mut rawmod::RedisModuleCtx, path: *const c_char) -> *mut c_void,
     pub get: extern "C" fn(val: *const c_void, path: *const c_char) -> *const c_void,
     pub next: extern "C" fn(iter: *mut c_void) -> *const c_void,
-    pub len: extern "C" fn(iter: *const c_void) -> usize,
+    pub len: extern "C" fn(iter: *const c_void) -> size_t,
     pub freeIter: extern "C" fn(iter: *mut c_void),
-    pub getAt: extern "C" fn(json: *const c_void, index: libc::size_t) -> *const c_void,
-    pub getLen: extern "C" fn(json: *const c_void, len: *mut libc::size_t) -> c_int,
+    pub getAt: extern "C" fn(json: *const c_void, index: size_t) -> *const c_void,
+    pub getLen: extern "C" fn(json: *const c_void, len: *mut size_t) -> c_int,
     pub getType: extern "C" fn(json: *const c_void) -> c_int,
     pub getInt: extern "C" fn(json: *const c_void, val: *mut c_long) -> c_int,
     pub getDouble: extern "C" fn(json: *const c_void, val: *mut c_double) -> c_int,
     pub getBoolean: extern "C" fn(json: *const c_void, val: *mut c_int) -> c_int,
-    pub getString: extern "C" fn(
-        json: *const c_void,
-        str: *mut *const c_char,
-        len: *mut libc::size_t,
-    ) -> c_int,
+    pub getString:
+        extern "C" fn(json: *const c_void, str: *mut *const c_char, len: *mut size_t) -> c_int,
     pub getJSON: extern "C" fn(
         json: *const c_void,
         ctx: *mut rawmod::RedisModuleCtx,
