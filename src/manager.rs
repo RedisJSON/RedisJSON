@@ -7,6 +7,8 @@ use redis_module::raw::Status;
 use redis_module::rediserror::RedisError;
 use redis_module::{Context, NotifyEvent};
 
+use std::marker::PhantomData;
+
 use crate::redisjson::RedisJSON;
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
@@ -489,7 +491,7 @@ impl ReadHolder<Value> for KeyHolderRead {
 }
 
 pub struct RedisJsonKeyManager<'a> {
-    pub phantom: std::marker::PhantomData<&'a u64>,
+    pub phantom: PhantomData<&'a u64>,
 }
 
 impl<'a> Manager for RedisJsonKeyManager<'a> {
