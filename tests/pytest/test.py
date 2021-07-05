@@ -182,6 +182,15 @@ def testSetWithBracketNotation(env):
     r.assertIsNone(r.execute_command('JSON.SET', 'x', '.["f3"].f2', '1'))  # Fail trying to set f2 when f3 doesn't exist
     r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x')), {'f1': {'f2': [0, {'f.]$.f': 1}, 0]}})  # Make sure it worked
 
+def testGetWithBracketNotation(env):
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'x', '.', '[1,2,3]'))
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '.[1]')), 2) # dot notation - single value
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '[1]')), 2) # implicit dot notation - single value
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$.[1]')), [2]) # dollar notation - array
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$[1]')), [2]) # dollar notation - array
+
 def testSetWithPathErrors(env):
     r = env
 
