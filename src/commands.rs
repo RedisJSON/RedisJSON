@@ -180,7 +180,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             let temp_doc = paths.drain(..).fold(HashMap::new(), |mut acc, path| {
                 let mut selector = Selector::new();
                 selector.value(self.val);
-                if let Err(_) = selector.str_path(&path.fixed) {
+                if let Err(_) = selector.str_path(path.get_path()) {
                     return acc;
                 }
                 let value = match selector.select() {
@@ -190,7 +190,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     },
                     Err(_) => None,
                 };
-                acc.insert(path.path, value);
+                acc.insert(path.take_original(), value);
                 acc
             });
             Ok(self
@@ -198,12 +198,17 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 .into())
         } else {
             let path = &paths[0];
-            if path.is_legacy {
+            if path.is_legacy() {
                 Ok(self
-                    .serialize_object(self.get_first(&paths[0].fixed)?, &indent, &newline, &space)
+                    .serialize_object(
+                        self.get_first(paths[0].get_path())?,
+                        &indent,
+                        &newline,
+                        &space,
+                    )
                     .into())
             } else {
-                let values = self.get_values(&path.fixed)?;
+                let values = self.get_values(path.get_path())?;
                 Ok(self
                     .serialize_object(&values, &indent, &newline, &space)
                     .into())
@@ -1071,7 +1076,7 @@ pub fn command_json_clear<M: Manager>(manager: M, ctx: &Context, args: Vec<Strin
         paths
     };
 
-    let path = paths.first().unwrap().fixed.as_str();
+    let path = paths.first().unwrap().get_path();
 
     // FIXME: handle multi paths
     let mut redis_key = manager.open_key_write(ctx, &key)?;
@@ -1080,7 +1085,7 @@ pub fn command_json_clear<M: Manager>(manager: M, ctx: &Context, args: Vec<Strin
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_paths(&path, root, |_v| true)?;
+    let paths = find_paths(path, root, |_v| true)?;
     if paths.len() > 0 {
         let mut res = None;
         for p in paths {
