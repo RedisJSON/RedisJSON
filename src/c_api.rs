@@ -306,9 +306,9 @@ pub fn json_api_next<M: Manager>(_: M, iter: *mut c_void) -> *const c_void {
     }
 }
 
-pub fn json_api_len<M: Manager>(_: M, iter: *const c_void) -> c_ulong {
+pub fn json_api_len<M: Manager>(_: M, iter: *const c_void) -> usize {
     let iter = unsafe { &*(iter as *mut ResultsIterator<M::V>) };
-    iter.results.len() as c_ulong
+    iter.results.len() as usize
 }
 
 pub fn json_api_free_iter<M: Manager>(_: M, iter: *mut c_void) {
@@ -337,7 +337,7 @@ pub extern "C" fn JSONAPI_get(key: *const c_void, path: *const c_char) -> *const
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_len(iter: *const c_void) -> c_ulong {
+pub extern "C" fn JSONAPI_len(iter: *const c_void) -> usize {
     json_api_len(RedisJsonKeyManager, iter)
 }
 
@@ -391,7 +391,7 @@ pub struct RedisJSONAPI_V1 {
         extern "C" fn(ctx: *mut rawmod::RedisModuleCtx, path: *const c_char) -> *mut c_void,
     pub get: extern "C" fn(val: *const c_void, path: *const c_char) -> *const c_void,
     pub next: extern "C" fn(iter: *mut c_void) -> *const c_void,
-    pub len: extern "C" fn(iter: *const c_void) -> c_ulong,
+    pub len: extern "C" fn(iter: *const c_void) -> usize,
     pub freeIter: extern "C" fn(iter: *mut c_void),
     pub getAt: extern "C" fn(json: *const c_void, index: libc::size_t) -> *const c_void,
     pub getLen: extern "C" fn(json: *const c_void, len: *mut libc::size_t) -> c_int,
