@@ -201,28 +201,18 @@ impl<'a> KeyHolderWrite<'a> {
         }
     }
 
-    fn get_json_holder(&mut self) -> Result<Option<&'a mut RedisJSON>, RedisError> {
-        let val = match self.val.take() {
-            Some(v) => v,
-            None => {
-                let res: Option<&'a mut RedisJSON> =
-                    self.key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?;
-                match res {
-                    Some(v) => v,
-                    None => return Ok(None),
-                }
-            }
-        };
-
-        self.val = Some(unsafe { &mut *(val as *mut RedisJSON) });
-        Ok(Some(val))
+    fn get_json_holder(&mut self) -> Result<(), RedisError> {
+        if self.val.is_none() {
+            self.val = self.key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?;
+        }
+        Ok(())
     }
 
     fn set_root(&mut self, v: Option<Value>) -> Result<(), RedisError> {
         match v {
             Some(inner) => {
-                let v = self.get_json_holder()?;
-                match v {
+                self.get_json_holder()?;
+                match &mut self.val {
                     Some(v) => v.data = inner,
                     None => self
                         .key
@@ -254,10 +244,10 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
     }
 
     fn get_value(&mut self) -> Result<Option<&mut Value>, RedisError> {
-        let key_value = self.get_json_holder()?;
+        self.get_json_holder()?;
 
-        match key_value {
-            Some(v) => Ok(Some(&mut v.data)),
+        match &mut self.val {
+            Some(v) => Ok(Some(&mut (*v).data)),
             None => Ok(None),
         }
     }
