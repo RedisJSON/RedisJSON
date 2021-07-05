@@ -17,18 +17,15 @@ typedef enum JSONType {
     JSONType__EOF
 } JSONType;
 
-typedef const void *RedisJSONKey;
 typedef const void *RedisJSON;
 typedef const void *ResultsIterator;
 
 typedef struct RedisJSONAPI_V1 {
   /* RedisJSONKey functions */
-  RedisJSONKey (*openKey)(RedisModuleCtx *ctx, RedisModuleString *key_name);
-  RedisJSONKey (*openKeyFromStr)(RedisModuleCtx *ctx, const char *path);
+  RedisJSON* (*openKey)(RedisModuleCtx *ctx, RedisModuleString *key_name);
+  RedisJSON* (*openKeyFromStr)(RedisModuleCtx *ctx, const char *path);
 
-  void (*closeKey)(RedisJSONKey key);
-
-  ResultsIterator* (*get)(RedisJSONKey key, const char *path);
+  ResultsIterator* (*get)(RedisJSON* json, const char *path);
   
   RedisJSON* (*next)(ResultsIterator* iter);
   size_t (*len)(ResultsIterator* iter);

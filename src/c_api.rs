@@ -62,22 +62,16 @@ fn json_api_open_key_internal<M: Manager>(
     manager: M,
     ctx: *mut rawmod::RedisModuleCtx,
     key: &str,
-) -> *mut M::ReadHolder {
+) -> *const M::V {
     let ctx = Context::new(ctx);
     if let Ok(h) = manager.open_key_read(&ctx, key) {
         if let Ok(v) = h.get_value() {
-            if let Some(_) = v {
-                return Box::into_raw(Box::new(h));
+            if let Some(v) = v {
+                return v;
             }
         }
     }
-    null_mut()
-}
-
-fn json_api_close_key_internal<M: Manager>(_: M, json: *mut c_void) {
-    unsafe {
-        Box::from_raw(json as *mut M::ReadHolder);
-    }
+    null()
 }
 
 #[no_mangle]
@@ -101,10 +95,6 @@ pub extern "C" fn JSONAPI_openKeyFromStr<'a>(
 ) -> *mut c_void {
     let key = unsafe { CStr::from_ptr(path).to_str().unwrap() };
     json_api_open_key_internal(RedisJsonKeyManager, ctx, &key) as *mut c_void
-}
-#[no_mangle]
-pub extern "C" fn JSONAPI_closeKey(json: *mut c_void) {
-    json_api_close_key_internal(RedisJsonKeyManager, json);
 }
 
 fn json_api_get_at<M: Manager>(_: M, json: *const c_void, index: libc::size_t) -> *const c_void {
@@ -327,10 +317,8 @@ pub fn json_api_free_iter<M: Manager>(_: M, iter: *mut c_void) {
     }
 }
 
-pub fn json_api_get<M: Manager>(_: M, key: *mut c_void, path: *const c_char) -> *const c_void {
-    let key = unsafe { &*(key as *mut M::ReadHolder) };
-    let v = key.get_value().unwrap().unwrap();
-
+pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -> *const c_void {
+    let v = unsafe { &*(val as *const M::V) };
     let mut selector = Selector::new();
     selector.value(v);
     let path = unsafe { CStr::from_ptr(path).to_str().unwrap() };
@@ -344,7 +332,7 @@ pub fn json_api_get<M: Manager>(_: M, key: *mut c_void, path: *const c_char) -> 
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_get(key: *mut c_void, path: *const c_char) -> *const c_void {
+pub extern "C" fn JSONAPI_get(key: *const c_void, path: *const c_char) -> *const c_void {
     json_api_get(RedisJsonKeyManager, key, path)
 }
 
@@ -376,7 +364,6 @@ pub fn export_shared_api(ctx: &Context) {
 static JSONAPI: RedisJSONAPI_V1 = RedisJSONAPI_V1 {
     openKey: JSONAPI_openKey,
     openKeyFromStr: JSONAPI_openKeyFromStr,
-    closeKey: JSONAPI_closeKey,
     get: JSONAPI_get,
     next: JSONAPI_next,
     len: JSONAPI_len,
@@ -402,8 +389,7 @@ pub struct RedisJSONAPI_V1 {
     ) -> *mut c_void,
     pub openKeyFromStr:
         extern "C" fn(ctx: *mut rawmod::RedisModuleCtx, path: *const c_char) -> *mut c_void,
-    pub closeKey: extern "C" fn(key: *mut c_void),
-    pub get: extern "C" fn(key: *mut c_void, path: *const c_char) -> *const c_void,
+    pub get: extern "C" fn(val: *const c_void, path: *const c_char) -> *const c_void,
     pub next: extern "C" fn(iter: *mut c_void) -> *const c_void,
     pub len: extern "C" fn(iter: *const c_void) -> c_ulong,
     pub freeIter: extern "C" fn(iter: *mut c_void),
