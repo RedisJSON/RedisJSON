@@ -45,30 +45,41 @@ impl Format {
 /// Backwards compatibility convertor for RedisJSON 1.x clients
 ///
 pub struct Path {
-    pub path: String,
-    pub fixed: String,
-    pub is_legacy: bool,
+    original_path: String,
+    fixed_path: Option<String>,
 }
 
 impl Path {
     pub fn new(path: String) -> Path {
-        let mut fixed = path.clone();
-        let mut is_legacy = false;
-        if !fixed.starts_with('$') {
-            is_legacy = true;
-            if fixed == "." {
-                fixed.replace_range(..1, "$");
-            } else if fixed.starts_with('.') {
-                fixed.insert(0, '$');
+        let fixed_path = if path.starts_with('$') {
+            None
+        } else {
+            let mut cloned = path.clone();
+            if path == "." {
+                cloned.replace_range(..1, "$");
+            } else if path.starts_with('.') {
+                cloned.insert(0, '$')
             } else {
-                fixed.insert_str(0, "$.");
+                cloned.insert_str(0, "$.");
             }
-        }
+            Some(cloned)
+        };
         Path {
-            path,
-            fixed,
-            is_legacy,
+            original_path: path,
+            fixed_path,
         }
+    }
+
+    pub fn is_legacy(&self) -> bool {
+        self.fixed_path.is_some()
+    }
+
+    pub fn get_path(&self) -> &String {
+        self.fixed_path.as_ref().unwrap_or(&self.original_path)
+    }
+
+    pub fn take_original(self) -> String {
+        self.original_path
     }
 }
 
