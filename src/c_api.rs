@@ -76,7 +76,7 @@ fn json_api_open_key_internal<M: Manager>(
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_openKey<'a>(
+pub extern "C" fn JSONAPI_openKey(
     ctx: *mut rawmod::RedisModuleCtx,
     key_str: *mut rawmod::RedisModuleString,
 ) -> *mut c_void {
@@ -90,7 +90,7 @@ pub extern "C" fn JSONAPI_openKey<'a>(
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_openKeyFromStr<'a>(
+pub extern "C" fn JSONAPI_openKeyFromStr(
     ctx: *mut rawmod::RedisModuleCtx,
     path: *const c_char,
 ) -> *mut c_void {
@@ -323,7 +323,7 @@ pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -
     let mut selector = Selector::new();
     selector.value(v);
     let path = unsafe { CStr::from_ptr(path).to_str().unwrap() };
-    if let Err(_) = selector.str_path(path) {
+    if selector.str_path(path).is_err() {
         return null();
     }
     match selector.select() {

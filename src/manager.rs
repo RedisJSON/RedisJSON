@@ -151,7 +151,7 @@ impl KeyHolderWrite {
     where
         F: FnMut(Value) -> Result<Option<Value>, Error>,
     {
-        if paths.len() == 0 {
+        if paths.is_empty() {
             // updating the root require special treatment
             let root = self.get_value().unwrap().unwrap();
             let res = (op_fun)(root.take())?;
@@ -489,7 +489,7 @@ impl Manager for RedisJsonKeyManager {
 
     fn open_key_read(&self, ctx: &Context, key: &str) -> Result<KeyHolderRead, RedisError> {
         let key = ctx.open_key(key);
-        Ok(KeyHolderRead { key: key })
+        Ok(KeyHolderRead { key })
     }
 
     fn open_key_write(&self, ctx: &Context, key: &str) -> Result<KeyHolderWrite, RedisError> {
