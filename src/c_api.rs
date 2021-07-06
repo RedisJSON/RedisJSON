@@ -1,7 +1,6 @@
 use std::ffi::CString;
 use std::os::raw::{c_double, c_int, c_long};
 use std::ptr::{null, null_mut};
-use std::slice;
 use std::{
     ffi::CStr,
     os::raw::{c_char, c_void},
@@ -11,9 +10,8 @@ use crate::commands::KeyValue;
 use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
 use jsonpath_lib::select::Selector;
 use redis_module::key::verify_type;
-use redis_module::redisraw::bindings::RedisModule_StringPtrLen;
 use redis_module::{raw as rawmod, RedisError};
-use redis_module::{Context, Status};
+use redis_module::{Context, RedisString, Status};
 use serde_json::Value;
 
 use crate::manager::{Manager, ReadHolder, RedisJsonKeyManager};
@@ -56,10 +54,10 @@ pub fn create_rmstring(
 fn json_api_open_key_internal<M: Manager>(
     manager: M,
     ctx: *mut rawmod::RedisModuleCtx,
-    key: &str,
+    key: RedisString,
 ) -> *mut M::ReadHolder {
     let ctx = Context::new(ctx);
-    if let Ok(h) = manager.open_key_read(&ctx, key) {
+    if let Ok(h) = manager.open_key_read(&ctx, &key) {
         if let Ok(v) = h.get_value() {
             if v.is_some() {
                 return Box::into_raw(Box::new(h));
@@ -80,13 +78,8 @@ pub extern "C" fn JSONAPI_openKey(
     ctx: *mut rawmod::RedisModuleCtx,
     key_str: *mut rawmod::RedisModuleString,
 ) -> *mut c_void {
-    let mut len = 0;
-    let key = unsafe {
-        let bytes = RedisModule_StringPtrLen.unwrap()(key_str, &mut len);
-        let bytes = slice::from_raw_parts(bytes as *const u8, len);
-        String::from_utf8_lossy(bytes).into_owned()
-    };
-    json_api_open_key_internal(RedisJsonKeyManager, ctx, &key) as *mut c_void
+    json_api_open_key_internal(RedisJsonKeyManager, ctx, RedisString::new(ctx, key_str))
+        as *mut c_void
 }
 
 #[no_mangle]
@@ -95,7 +88,8 @@ pub extern "C" fn JSONAPI_openKeyFromStr(
     path: *const c_char,
 ) -> *mut c_void {
     let key = unsafe { CStr::from_ptr(path).to_str().unwrap() };
-    json_api_open_key_internal(RedisJsonKeyManager, ctx, &key) as *mut c_void
+    json_api_open_key_internal(RedisJsonKeyManager, ctx, RedisString::create(ctx, key))
+        as *mut c_void
 }
 #[no_mangle]
 pub extern "C" fn JSONAPI_closeKey(json: *mut c_void) {

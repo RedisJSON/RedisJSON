@@ -4,7 +4,7 @@ use redis_module::{redis_command, redis_module};
 use redis_module::native_types::RedisType;
 use redis_module::raw::RedisModuleTypeMethods;
 #[cfg(not(feature = "as-library"))]
-use redis_module::{Context, RedisResult};
+use redis_module::{Context, RedisResult, RedisString};
 
 #[cfg(not(feature = "as-library"))]
 use redis_module::Status;
@@ -67,7 +67,7 @@ macro_rules! redis_json_module_create {(
         ///
         /// JSON.DEL <key> [path]
         ///
-        fn json_del(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_del(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -85,7 +85,7 @@ macro_rules! redis_json_module_create {(
         ///         [path ...]
         ///
         /// TODO add support for multi path
-        fn json_get(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_get(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -98,7 +98,7 @@ macro_rules! redis_json_module_create {(
         ///
         /// JSON.SET <key> <path> <json> [NX | XX | FORMAT <format>]
         ///
-        fn json_set(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_set(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -111,7 +111,7 @@ macro_rules! redis_json_module_create {(
         ///
         /// JSON.MGET <key> [key ...] <path>
         ///
-        fn json_mget(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_mget(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -124,7 +124,7 @@ macro_rules! redis_json_module_create {(
         ///
         /// JSON.STRLEN <key> [path]
         ///
-        fn json_str_len(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_str_len(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -137,7 +137,7 @@ macro_rules! redis_json_module_create {(
         ///
         /// JSON.TYPE <key> [path]
         ///
-        fn json_type(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_type(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -150,7 +150,7 @@ macro_rules! redis_json_module_create {(
         ///
         /// JSON.NUMINCRBY <key> <path> <number>
         ///
-        fn json_num_incrby(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_num_incrby(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -163,7 +163,7 @@ macro_rules! redis_json_module_create {(
         ///
         /// JSON.NUMMULTBY <key> <path> <number>
         ///
-        fn json_num_multby(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_num_multby(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -176,7 +176,7 @@ macro_rules! redis_json_module_create {(
         ///
         /// JSON.NUMPOWBY <key> <path> <number>
         ///
-        fn json_num_powby(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_num_powby(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -188,7 +188,7 @@ macro_rules! redis_json_module_create {(
 
         //
         /// JSON.TOGGLE <key> <path>
-        fn json_bool_toggle(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_bool_toggle(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -201,7 +201,7 @@ macro_rules! redis_json_module_create {(
         ///
         /// JSON.STRAPPEND <key> [path] <json-string>
         ///
-        fn json_str_append(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_str_append(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -214,7 +214,7 @@ macro_rules! redis_json_module_create {(
         ///
         /// JSON.ARRAPPEND <key> <path> <json> [json ...]
         ///
-        fn json_arr_append(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_arr_append(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -229,7 +229,7 @@ macro_rules! redis_json_module_create {(
         ///
         /// scalar - number, string, Boolean (true or false), or null
         ///
-        fn json_arr_index(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_arr_index(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -242,7 +242,7 @@ macro_rules! redis_json_module_create {(
         ///
         /// JSON.ARRINSERT <key> <path> <index> <json> [json ...]
         ///
-        fn json_arr_insert(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_arr_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -254,7 +254,7 @@ macro_rules! redis_json_module_create {(
         ///
         /// JSON.ARRLEN <key> [path]
         ///
-        fn json_arr_len(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_arr_len(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -267,7 +267,7 @@ macro_rules! redis_json_module_create {(
         ///
         /// JSON.ARRPOP <key> [path [index]]
         ///
-        fn json_arr_pop(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_arr_pop(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -280,7 +280,7 @@ macro_rules! redis_json_module_create {(
         ///
         /// JSON.ARRTRIM <key> <path> <start> <stop>
         ///
-        fn json_arr_trim(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_arr_trim(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -293,7 +293,7 @@ macro_rules! redis_json_module_create {(
         ///
         /// JSON.OBJKEYS <key> [path]
         ///
-        fn json_obj_keys(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_obj_keys(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -306,7 +306,7 @@ macro_rules! redis_json_module_create {(
         ///
         /// JSON.OBJLEN <key> [path]
         ///
-        fn json_obj_len(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_obj_len(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -319,7 +319,7 @@ macro_rules! redis_json_module_create {(
         ///
         /// JSON.CLEAR <key> [path ...]
         ///
-        fn json_clear(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_clear(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -336,7 +336,7 @@ macro_rules! redis_json_module_create {(
         /// MEMORY <key> [path]
         /// HELP
         ///
-        fn json_debug(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_debug(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -349,7 +349,7 @@ macro_rules! redis_json_module_create {(
         ///
         /// JSON.RESP <key> [path]
         ///
-        fn json_resp(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_resp(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -359,7 +359,7 @@ macro_rules! redis_json_module_create {(
             }
         }
 
-        fn json_cache_info(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_cache_info(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -369,7 +369,7 @@ macro_rules! redis_json_module_create {(
             }
         }
 
-        fn json_cache_init(ctx: &Context, args: Vec<String>) -> RedisResult {
+        fn json_cache_init(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             $pre_command_function_expr(ctx, &args);
             let m = $get_manager_expr;
             match m {
@@ -418,13 +418,13 @@ macro_rules! redis_json_module_create {(
 }
 
 #[cfg(not(feature = "as-library"))]
-fn init(ctx: &Context, _args: &[String]) -> Status {
+fn init(ctx: &Context, _args: &[RedisString]) -> Status {
     export_shared_api(ctx);
     Status::Ok
 }
 
 #[cfg(not(feature = "as-library"))]
-fn pre_command(_ctx: &Context, _args: &[String]) {}
+fn pre_command(_ctx: &Context, _args: &[RedisString]) {}
 
 #[cfg(not(feature = "as-library"))]
 redis_json_module_create! {

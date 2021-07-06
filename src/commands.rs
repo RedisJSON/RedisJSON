@@ -3,7 +3,7 @@ use crate::manager::{AddUpdateInfo, Manager, ReadHolder, SetUpdateInfo, UpdateIn
 use crate::redisjson::{Format, Path};
 use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
 use redis_module::{Context, RedisValue};
-use redis_module::{NextArg, RedisError, RedisResult, REDIS_OK};
+use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 
 use jsonpath_lib::select::Selector;
 
@@ -446,9 +446,13 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     }
 }
 
-pub fn command_json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
+pub fn command_json_get<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
 
     let mut paths: Vec<Path> = vec![];
     let mut format = Format::JSON;
@@ -486,10 +490,14 @@ pub fn command_json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
     Ok(value)
 }
 
-pub fn command_json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
+pub fn command_json_set<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = backwards_compat_path(args.next_string()?);
     let value = args.next_string()?;
 
@@ -497,17 +505,17 @@ pub fn command_json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
     let mut set_option = SetOptions::None;
 
     while let Some(s) = args.next() {
-        match s.to_uppercase().as_str() {
-            "NX" => set_option = SetOptions::NotExists,
-            "XX" => set_option = SetOptions::AlreadyExists,
-            "FORMAT" => {
+        match s.try_as_str()? {
+            arg if arg.eq_ignore_ascii_case("NX") => set_option = SetOptions::NotExists,
+            arg if arg.eq_ignore_ascii_case("XX") => set_option = SetOptions::AlreadyExists,
+            arg if arg.eq_ignore_ascii_case("FORMAT") => {
                 format = Format::from_str(args.next_string()?.as_str())?;
             }
-            _ => break,
+            _ => break, // TODO should return an error??
         };
     }
 
-    let mut redis_key = manager.open_key_write(ctx, &key)?;
+    let mut redis_key = manager.open_key_write(ctx, key)?;
     let current = redis_key.get_value()?;
 
     let val = manager.from_str(&value, format)?;
@@ -580,15 +588,19 @@ fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
         .select_with_paths(f)?)
 }
 
-pub fn command_json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
+pub fn command_json_del<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = args
         .next_string()
         .map_or_else(|_| JSON_ROOT_PATH.to_string(), backwards_compat_path);
 
-    let mut redis_key = manager.open_key_write(ctx, &key)?;
+    let mut redis_key = manager.open_key_write(ctx, key)?;
     let deleted = match redis_key.get_value()? {
         Some(doc) => {
             let res = if path == JSON_ROOT_PATH {
@@ -614,7 +626,11 @@ pub fn command_json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
     Ok((deleted as i64).into())
 }
 
-pub fn command_json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
+pub fn command_json_mget<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     if args.len() < 3 {
         return Err(RedisError::WrongArity);
     }
@@ -639,9 +655,13 @@ pub fn command_json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<String
     })
 }
 
-pub fn command_json_type<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
+pub fn command_json_type<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = backwards_compat_path(args.next_string()?);
 
     let key = manager.open_key_read(ctx, &key)?;
@@ -666,7 +686,7 @@ enum NumOp {
 fn command_json_num_op<M>(
     manager: M,
     ctx: &Context,
-    args: Vec<String>,
+    args: Vec<RedisString>,
     cmd: &str,
     op: NumOp,
 ) -> RedisResult
@@ -675,11 +695,11 @@ where
 {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = backwards_compat_path(args.next_string()?);
     let number = args.next_string()?;
 
-    let mut redis_key = manager.open_key_write(ctx, &key)?;
+    let mut redis_key = manager.open_key_write(ctx, key)?;
 
     let root = redis_key
         .get_value()?
@@ -709,7 +729,7 @@ where
 pub fn command_json_num_incrby<M: Manager>(
     manager: M,
     ctx: &Context,
-    args: Vec<String>,
+    args: Vec<RedisString>,
 ) -> RedisResult {
     command_json_num_op(manager, ctx, args, "json.numincrby", NumOp::Incr)
 }
@@ -717,7 +737,7 @@ pub fn command_json_num_incrby<M: Manager>(
 pub fn command_json_num_multby<M: Manager>(
     manager: M,
     ctx: &Context,
-    args: Vec<String>,
+    args: Vec<RedisString>,
 ) -> RedisResult {
     command_json_num_op(manager, ctx, args, "json.nummultby", NumOp::Mult)
 }
@@ -725,7 +745,7 @@ pub fn command_json_num_multby<M: Manager>(
 pub fn command_json_num_powby<M: Manager>(
     manager: M,
     ctx: &Context,
-    args: Vec<String>,
+    args: Vec<RedisString>,
 ) -> RedisResult {
     command_json_num_op(manager, ctx, args, "json.numpowby", NumOp::Pow)
 }
@@ -733,12 +753,12 @@ pub fn command_json_num_powby<M: Manager>(
 pub fn command_json_bool_toggle<M: Manager>(
     manager: M,
     ctx: &Context,
-    args: Vec<String>,
+    args: Vec<RedisString>,
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = backwards_compat_path(args.next_string()?);
-    let mut redis_key = manager.open_key_write(ctx, &key)?;
+    let mut redis_key = manager.open_key_write(ctx, key)?;
 
     let root = redis_key
         .get_value()?
@@ -762,11 +782,11 @@ pub fn command_json_bool_toggle<M: Manager>(
 pub fn command_json_str_append<M: Manager>(
     manager: M,
     ctx: &Context,
-    args: Vec<String>,
+    args: Vec<RedisString>,
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path_or_json = args.next_string()?;
 
     let path;
@@ -781,7 +801,7 @@ pub fn command_json_str_append<M: Manager>(
         json = path_or_json;
     }
 
-    let mut redis_key = manager.open_key_write(ctx, &key)?;
+    let mut redis_key = manager.open_key_write(ctx, key)?;
 
     let root = redis_key
         .get_value()?
@@ -806,10 +826,10 @@ pub fn command_json_str_append<M: Manager>(
 pub fn command_json_str_len<M: Manager>(
     manager: M,
     ctx: &Context,
-    args: Vec<String>,
+    args: Vec<RedisString>,
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = backwards_compat_path(args.next_string()?);
 
     let key = manager.open_key_read(ctx, &key)?;
@@ -824,20 +844,20 @@ pub fn command_json_str_len<M: Manager>(
 pub fn command_json_arr_append<M: Manager>(
     manager: M,
     ctx: &Context,
-    args: Vec<String>,
+    args: Vec<RedisString>,
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1).peekable();
 
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = backwards_compat_path(args.next_string()?);
 
     // We require at least one JSON item to append
     args.peek().ok_or(RedisError::WrongArity)?;
     let args = args
-        .map(|json| manager.from_str(&json, Format::JSON))
+        .map(|json| manager.from_str(&json.into_string_lossy(), Format::JSON))
         .collect::<Result<_, _>>()?;
 
-    let mut redis_key = manager.open_key_write(ctx, &key)?;
+    let mut redis_key = manager.open_key_write(ctx, key)?;
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
@@ -865,15 +885,15 @@ pub fn command_json_arr_append<M: Manager>(
 pub fn command_json_arr_index<M: Manager>(
     manager: M,
     ctx: &Context,
-    args: Vec<String>,
+    args: Vec<RedisString>,
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = backwards_compat_path(args.next_string()?);
     let json_scalar = args.next_string()?;
-    let start: i64 = args.next().map(|v| v.parse()).unwrap_or(Ok(0))?;
-    let end: i64 = args.next().map(|v| v.parse()).unwrap_or(Ok(0))?;
+    let start: i64 = args.next().map(|v| v.parse_integer()).unwrap_or(Ok(0))?;
+    let end: i64 = args.next().map(|v| v.parse_integer()).unwrap_or(Ok(0))?;
 
     args.done()?; // TODO: Add to other functions as well to terminate args list
 
@@ -889,21 +909,21 @@ pub fn command_json_arr_index<M: Manager>(
 pub fn command_json_arr_insert<M: Manager>(
     manager: M,
     ctx: &Context,
-    args: Vec<String>,
+    args: Vec<RedisString>,
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1).peekable();
 
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = backwards_compat_path(args.next_string()?);
     let index = args.next_i64()?;
 
     // We require at least one JSON item to append
     args.peek().ok_or(RedisError::WrongArity)?;
     let args = args
-        .map(|json| manager.from_str(&json, Format::JSON))
+        .map(|json| manager.from_str(&json.into_string_lossy(), Format::JSON))
         .collect::<Result<_, _>>()?;
 
-    let mut redis_key = manager.open_key_write(ctx, &key)?;
+    let mut redis_key = manager.open_key_write(ctx, key)?;
 
     let root = redis_key
         .get_value()?
@@ -928,10 +948,10 @@ pub fn command_json_arr_insert<M: Manager>(
 pub fn command_json_arr_len<M: Manager>(
     manager: M,
     ctx: &Context,
-    args: Vec<String>,
+    args: Vec<RedisString>,
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = backwards_compat_path(args.next_string()?);
 
     let key = manager.open_key_read(ctx, &key)?;
@@ -946,22 +966,22 @@ pub fn command_json_arr_len<M: Manager>(
 pub fn command_json_arr_pop<M: Manager>(
     manager: M,
     ctx: &Context,
-    args: Vec<String>,
+    args: Vec<RedisString>,
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
 
     let (path, index) = args
         .next()
         .map(|p| {
-            let path = backwards_compat_path(p);
+            let path = backwards_compat_path(p.to_string());
             let index = args.next_i64().unwrap_or(-1);
             (path, index)
         })
         .unwrap_or((JSON_ROOT_PATH.to_string(), i64::MAX));
 
-    let mut redis_key = manager.open_key_write(ctx, &key)?;
+    let mut redis_key = manager.open_key_write(ctx, key)?;
 
     let root = redis_key
         .get_value()?
@@ -991,16 +1011,16 @@ pub fn command_json_arr_pop<M: Manager>(
 pub fn command_json_arr_trim<M: Manager>(
     manager: M,
     ctx: &Context,
-    args: Vec<String>,
+    args: Vec<RedisString>,
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = backwards_compat_path(args.next_string()?);
     let start = args.next_i64()?;
     let stop = args.next_i64()?;
 
-    let mut redis_key = manager.open_key_write(ctx, &key)?;
+    let mut redis_key = manager.open_key_write(ctx, key)?;
 
     let root = redis_key
         .get_value()?
@@ -1025,10 +1045,10 @@ pub fn command_json_arr_trim<M: Manager>(
 pub fn command_json_obj_keys<M: Manager>(
     manager: M,
     ctx: &Context,
-    args: Vec<String>,
+    args: Vec<RedisString>,
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = backwards_compat_path(args.next_string()?);
 
     let key = manager.open_key_read(ctx, &key)?;
@@ -1047,10 +1067,10 @@ pub fn command_json_obj_keys<M: Manager>(
 pub fn command_json_obj_len<M: Manager>(
     manager: M,
     ctx: &Context,
-    args: Vec<String>,
+    args: Vec<RedisString>,
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = backwards_compat_path(args.next_string()?);
 
     let key = manager.open_key_read(ctx, &key)?;
@@ -1062,10 +1082,16 @@ pub fn command_json_obj_len<M: Manager>(
     }
 }
 
-pub fn command_json_clear<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
+pub fn command_json_clear<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_string()?;
-    let paths = args.map(Path::new).collect::<Vec<_>>();
+    let key = args.next_redis_string()?;
+    let paths = args
+        .map(|arg| Path::new(arg.to_string()))
+        .collect::<Vec<_>>();
 
     let paths = if paths.is_empty() {
         vec![Path::new(JSON_ROOT_PATH.to_string())]
@@ -1076,7 +1102,7 @@ pub fn command_json_clear<M: Manager>(manager: M, ctx: &Context, args: Vec<Strin
     let path = paths.first().unwrap().get_path();
 
     // FIXME: handle multi paths
-    let mut redis_key = manager.open_key_write(ctx, &key)?;
+    let mut redis_key = manager.open_key_write(ctx, key)?;
 
     let root = redis_key
         .get_value()?
@@ -1098,11 +1124,15 @@ pub fn command_json_clear<M: Manager>(manager: M, ctx: &Context, args: Vec<Strin
     }
 }
 
-pub fn command_json_debug<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
+pub fn command_json_debug<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     match args.next_string()?.to_uppercase().as_str() {
         "MEMORY" => {
-            let key = args.next_string()?;
+            let key = args.next_redis_string()?;
             let path = backwards_compat_path(args.next_string()?);
 
             let key = manager.open_key_read(ctx, &key)?;
@@ -1125,10 +1155,14 @@ pub fn command_json_debug<M: Manager>(manager: M, ctx: &Context, args: Vec<Strin
     }
 }
 
-pub fn command_json_resp<M: Manager>(manager: M, ctx: &Context, args: Vec<String>) -> RedisResult {
+pub fn command_json_resp<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_string()?;
+    let key = args.next_redis_string()?;
     let path = args
         .next_string()
         .map_or_else(|_| JSON_ROOT_PATH.to_string(), backwards_compat_path);
@@ -1143,7 +1177,7 @@ pub fn command_json_resp<M: Manager>(manager: M, ctx: &Context, args: Vec<String
 pub fn command_json_cache_info<M: Manager>(
     _manager: M,
     _ctx: &Context,
-    _args: Vec<String>,
+    _args: Vec<RedisString>,
 ) -> RedisResult {
     Err(RedisError::Str("Command was not implemented"))
 }
@@ -1151,7 +1185,7 @@ pub fn command_json_cache_info<M: Manager>(
 pub fn command_json_cache_init<M: Manager>(
     _manager: M,
     _ctx: &Context,
-    _args: Vec<String>,
+    _args: Vec<RedisString>,
 ) -> RedisResult {
     Err(RedisError::Str("Command was not implemented"))
 }

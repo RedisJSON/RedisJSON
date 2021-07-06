@@ -5,7 +5,7 @@ use serde_json::{Number, Value};
 use redis_module::key::{RedisKey, RedisKeyWritable};
 use redis_module::raw::Status;
 use redis_module::rediserror::RedisError;
-use redis_module::{Context, NotifyEvent};
+use redis_module::{Context, NotifyEvent, RedisString};
 
 use crate::redisjson::RedisJSON;
 use crate::Format;
@@ -71,8 +71,16 @@ pub trait Manager {
     type O: Clone;
     type WriteHolder: WriteHolder<Self::O, Self::V>;
     type ReadHolder: ReadHolder<Self::V>;
-    fn open_key_read(&self, ctx: &Context, key: &str) -> Result<Self::ReadHolder, RedisError>;
-    fn open_key_write(&self, ctx: &Context, key: &str) -> Result<Self::WriteHolder, RedisError>;
+    fn open_key_read(
+        &self,
+        ctx: &Context,
+        key: &RedisString,
+    ) -> Result<Self::ReadHolder, RedisError>;
+    fn open_key_write(
+        &self,
+        ctx: &Context,
+        key: RedisString,
+    ) -> Result<Self::WriteHolder, RedisError>;
     fn from_str(&self, val: &str, format: Format) -> Result<Self::O, Error>;
     fn get_memory(&self, v: &Self::V) -> Result<usize, RedisError>;
 }
@@ -87,7 +95,7 @@ fn err_json(value: &Value, expected_value: &'static str) -> Error {
 
 pub struct KeyHolderWrite {
     key: RedisKeyWritable,
-    key_name: String,
+    key_name: RedisString,
 }
 
 impl KeyHolderWrite {
@@ -487,16 +495,20 @@ impl Manager for RedisJsonKeyManager {
     type V = Value;
     type O = Value;
 
-    fn open_key_read(&self, ctx: &Context, key: &str) -> Result<KeyHolderRead, RedisError> {
+    fn open_key_read(&self, ctx: &Context, key: &RedisString) -> Result<KeyHolderRead, RedisError> {
         let key = ctx.open_key(key);
         Ok(KeyHolderRead { key })
     }
 
-    fn open_key_write(&self, ctx: &Context, key: &str) -> Result<KeyHolderWrite, RedisError> {
-        let key_ptr = ctx.open_key_writable(key);
+    fn open_key_write(
+        &self,
+        ctx: &Context,
+        key: RedisString,
+    ) -> Result<KeyHolderWrite, RedisError> {
+        let key_ptr = ctx.open_key_writable(&key);
         Ok(KeyHolderWrite {
             key: key_ptr,
-            key_name: key.to_string(),
+            key_name: key,
         })
     }
 
