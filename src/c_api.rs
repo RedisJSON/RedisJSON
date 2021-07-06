@@ -5,7 +5,7 @@ use std::ptr::{null, null_mut};
 use std::slice;
 use std::{
     ffi::CStr,
-    os::raw::{c_char, c_ulong, c_void},
+    os::raw::{c_char, c_void},
 };
 
 use crate::commands::KeyValue;
