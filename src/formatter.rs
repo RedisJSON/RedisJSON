@@ -52,6 +52,12 @@ impl RedisJsonFormatter {
     where
         W: io::Write,
     {
+        // Write new line if defined
+        if let Some(n) = self.newline.as_ref() {
+            wr.write_all(n.as_bytes())?;
+        }
+
+        // Ident the next line if defined
         if let Some(s) = self.indent.as_ref() {
             let bytes = s.as_bytes();
             for _ in 0..self.current_indent {
@@ -59,9 +65,6 @@ impl RedisJsonFormatter {
             }
         }
 
-        if let Some(n) = self.newline.as_ref() {
-            wr.write_all(n.as_bytes())?;
-        }
         Ok(())
     }
 }
