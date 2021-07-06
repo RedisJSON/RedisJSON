@@ -48,16 +48,20 @@ impl RedisJsonFormatter {
         }
     }
 
-    fn indent<W: ?Sized>(&self, wr: &mut W) -> io::Result<()>
+    fn new_line<W: ?Sized>(&self, wr: &mut W) -> io::Result<()>
     where
         W: io::Write,
     {
         if let Some(s) = self.indent.as_ref() {
+            let bytes = s.as_bytes();
             for _ in 0..self.current_indent {
-                wr.write_all(s.as_bytes())?;
+                wr.write_all(bytes)?;
             }
         }
 
+        if let Some(n) = self.newline.as_ref() {
+            wr.write_all(n.as_bytes())?;
+        }
         Ok(())
     }
 }
@@ -79,10 +83,7 @@ impl Formatter for RedisJsonFormatter {
         self.current_indent -= 1;
 
         if self.has_value {
-            if let Some(n) = self.newline.as_ref() {
-                writer.write_all(n.as_bytes())?;
-            }
-            self.indent(writer)?;
+            self.new_line(writer)?;
         }
 
         writer.write_all(b"]")
@@ -95,10 +96,7 @@ impl Formatter for RedisJsonFormatter {
         if !first {
             writer.write_all(b",")?;
         }
-        if let Some(n) = self.newline.as_ref() {
-            writer.write_all(n.as_bytes())?;
-        }
-        self.indent(writer)
+        self.new_line(writer)
     }
 
     fn end_array_value<W: ?Sized>(&mut self, _writer: &mut W) -> io::Result<()>
@@ -125,10 +123,7 @@ impl Formatter for RedisJsonFormatter {
         self.current_indent -= 1;
 
         if self.has_value {
-            if let Some(n) = self.newline.as_ref() {
-                writer.write_all(n.as_bytes())?;
-            }
-            self.indent(writer)?;
+            self.new_line(writer)?;
         }
 
         writer.write_all(b"}")
@@ -141,10 +136,7 @@ impl Formatter for RedisJsonFormatter {
         if !first {
             writer.write_all(b",")?;
         }
-        if let Some(n) = self.newline.as_ref() {
-            writer.write_all(n.as_bytes())?;
-        }
-        self.indent(writer)
+        self.new_line(writer)
     }
 
     fn begin_object_value<W: ?Sized>(&mut self, writer: &mut W) -> io::Result<()>
