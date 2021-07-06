@@ -18,7 +18,7 @@ typedef enum JSONType {
 } JSONType;
 
 typedef const void* RedisJSON;
-typedef const void* ResultsIterator;
+typedef const void* JSONResultsIterator;
 
 typedef struct RedisJSONAPI_V1 {
   /* RedisJSONKey functions */
