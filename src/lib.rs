@@ -421,13 +421,13 @@ macro_rules! redis_json_module_create {(
 }
 
 #[cfg(not(feature = "as-library"))]
-fn init(ctx: &Context, _args: &Vec<String>) -> Status {
+fn init(ctx: &Context, _args: &[String]) -> Status {
     export_shared_api(ctx);
     Status::Ok
 }
 
 #[cfg(not(feature = "as-library"))]
-fn pre_command(_ctx: &Context, _args: &Vec<String>) {}
+fn pre_command(_ctx: &Context, _args: &[String]) {}
 
 #[cfg(not(feature = "as-library"))]
 redis_json_module_create! {

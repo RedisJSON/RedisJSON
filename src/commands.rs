@@ -180,14 +180,11 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             let temp_doc = paths.drain(..).fold(HashMap::new(), |mut acc, path| {
                 let mut selector = Selector::new();
                 selector.value(self.val);
-                if let Err(_) = selector.str_path(path.get_path()) {
+                if selector.str_path(path.get_path()).is_err() {
                     return acc;
                 }
                 let value = match selector.select() {
-                    Ok(s) => match s.first() {
-                        Some(v) => Some(*v),
-                        None => None,
-                    },
+                    Ok(s) => s.first().map(|v| *v),
                     Err(_) => None,
                 };
                 acc.insert(path.take_original(), value);
@@ -234,7 +231,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 // Adding to the root
                 Ok(vec![UpdateInfo::AUI(AddUpdateInfo {
                     path: Vec::new(),
-                    key: key.to_string(),
+                    key,
                 })])
             } else {
                 // Adding somewhere in existing object, use jsonpath_lib::replace_with
@@ -282,7 +279,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 .str_path(path)?
                 .value(self.val)
                 .select_with_paths(|_| true)?;
-            if res.len() > 0 {
+            if !res.is_empty() {
                 return Ok(res
                     .drain(..)
                     .map(|v| UpdateInfo::SUI(SetUpdateInfo { path: v }))
@@ -527,7 +524,7 @@ pub fn command_json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
                 }
             } else {
                 let mut update_info = KeyValue::new(*doc).find_paths(&path, op)?;
-                if update_info.len() > 0 {
+                if !update_info.is_empty() {
                     let mut res = false;
                     if update_info.len() == 1 {
                         res = match update_info.pop().unwrap() {
@@ -589,7 +586,7 @@ pub fn command_json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
     let key = args.next_string()?;
     let path = args
         .next_string()
-        .map_or_else(|_| JSON_ROOT_PATH.to_string(), |v| backwards_compat_path(v));
+        .map_or_else(|_| JSON_ROOT_PATH.to_string(), backwards_compat_path);
 
     let mut redis_key = manager.open_key_write(ctx, &key)?;
     let deleted = match redis_key.get_value()? {
@@ -661,9 +658,9 @@ pub fn command_json_type<M: Manager>(manager: M, ctx: &Context, args: Vec<String
 }
 
 enum NumOp {
-    INCR,
-    MULT,
-    POW,
+    Incr,
+    Mult,
+    Pow,
 }
 
 fn command_json_num_op<M>(
@@ -690,13 +687,13 @@ where
     let paths = find_paths(&path, root, |v| {
         v.get_type() == SelectValueType::Double || v.get_type() == SelectValueType::Long
     })?;
-    if paths.len() > 0 {
+    if !paths.is_empty() {
         let mut res = None;
         for p in paths {
             res = Some(match op {
-                NumOp::INCR => redis_key.incr_by(p, &number)?,
-                NumOp::MULT => redis_key.mult_by(p, &number)?,
-                NumOp::POW => redis_key.pow_by(p, &number)?,
+                NumOp::Incr => redis_key.incr_by(p, &number)?,
+                NumOp::Mult => redis_key.mult_by(p, &number)?,
+                NumOp::Pow => redis_key.pow_by(p, &number)?,
             });
         }
         redis_key.apply_changes(ctx, cmd)?;
@@ -714,7 +711,7 @@ pub fn command_json_num_incrby<M: Manager>(
     ctx: &Context,
     args: Vec<String>,
 ) -> RedisResult {
-    command_json_num_op(manager, ctx, args, "json.numincrby", NumOp::INCR)
+    command_json_num_op(manager, ctx, args, "json.numincrby", NumOp::Incr)
 }
 
 pub fn command_json_num_multby<M: Manager>(
@@ -722,7 +719,7 @@ pub fn command_json_num_multby<M: Manager>(
     ctx: &Context,
     args: Vec<String>,
 ) -> RedisResult {
-    command_json_num_op(manager, ctx, args, "json.nummultby", NumOp::MULT)
+    command_json_num_op(manager, ctx, args, "json.nummultby", NumOp::Mult)
 }
 
 pub fn command_json_num_powby<M: Manager>(
@@ -730,7 +727,7 @@ pub fn command_json_num_powby<M: Manager>(
     ctx: &Context,
     args: Vec<String>,
 ) -> RedisResult {
-    command_json_num_op(manager, ctx, args, "json.numpowby", NumOp::POW)
+    command_json_num_op(manager, ctx, args, "json.numpowby", NumOp::Pow)
 }
 
 pub fn command_json_bool_toggle<M: Manager>(
@@ -747,7 +744,7 @@ pub fn command_json_bool_toggle<M: Manager>(
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
     let paths = find_paths(&path, root, |v| v.get_type() == SelectValueType::Bool)?;
-    if paths.len() > 0 {
+    if !paths.is_empty() {
         let mut res = None;
         for p in paths {
             res = Some(redis_key.bool_toggle(p)?);
@@ -791,7 +788,7 @@ pub fn command_json_str_append<M: Manager>(
         .ok_or_else(RedisError::nonexistent_key)?;
 
     let paths = find_paths(&path, root, |v| v.get_type() == SelectValueType::String)?;
-    if paths.len() > 0 {
+    if !paths.is_empty() {
         let mut res = None;
         for p in paths {
             res = Some(redis_key.str_append(p, json.clone())?);
@@ -846,7 +843,7 @@ pub fn command_json_arr_append<M: Manager>(
         .ok_or_else(RedisError::nonexistent_key)?;
 
     let mut paths = find_paths(&path, root, |v| v.get_type() == SelectValueType::Array)?;
-    if paths.len() == 0 {
+    if paths.is_empty() {
         Err(RedisError::String(format!(
             "Path '{}' does not exist",
             path
@@ -913,7 +910,7 @@ pub fn command_json_arr_insert<M: Manager>(
         .ok_or_else(RedisError::nonexistent_key)?;
 
     let paths = find_paths(&path, root, |v| v.get_type() == SelectValueType::Array)?;
-    if paths.len() > 0 {
+    if !paths.is_empty() {
         let mut res = None;
         for p in paths {
             res = Some(redis_key.arr_insert(p, &args, index)?);
@@ -971,7 +968,7 @@ pub fn command_json_arr_pop<M: Manager>(
         .ok_or_else(RedisError::nonexistent_key)?;
 
     let paths = find_paths(&path, root, |v| v.get_type() == SelectValueType::Array)?;
-    if paths.len() > 0 {
+    if !paths.is_empty() {
         let mut res = None;
         for p in paths {
             res = Some(redis_key.arr_pop(p, index)?);
@@ -1010,7 +1007,7 @@ pub fn command_json_arr_trim<M: Manager>(
         .ok_or_else(RedisError::nonexistent_key)?;
 
     let paths = find_paths(&path, root, |v| v.get_type() == SelectValueType::Array)?;
-    if paths.len() > 0 {
+    if !paths.is_empty() {
         let mut res = None;
         for p in paths {
             res = Some(redis_key.arr_trim(p, start, stop)?);
@@ -1086,7 +1083,7 @@ pub fn command_json_clear<M: Manager>(manager: M, ctx: &Context, args: Vec<Strin
         .ok_or_else(RedisError::nonexistent_key)?;
 
     let paths = find_paths(path, root, |_v| true)?;
-    if paths.len() > 0 {
+    if !paths.is_empty() {
         let mut res = None;
         for p in paths {
             res = Some(redis_key.clear(p)?);
@@ -1134,7 +1131,7 @@ pub fn command_json_resp<M: Manager>(manager: M, ctx: &Context, args: Vec<String
     let key = args.next_string()?;
     let path = args
         .next_string()
-        .map_or_else(|_| JSON_ROOT_PATH.to_string(), |v| backwards_compat_path(v));
+        .map_or_else(|_| JSON_ROOT_PATH.to_string(), backwards_compat_path);
 
     let key = manager.open_key_read(ctx, &key)?;
     match key.get_value()? {

@@ -61,7 +61,7 @@ fn json_api_open_key_internal<M: Manager>(
     let ctx = Context::new(ctx);
     if let Ok(h) = manager.open_key_read(&ctx, key) {
         if let Ok(v) = h.get_value() {
-            if let Some(_) = v {
+            if v.is_some() {
                 return Box::into_raw(Box::new(h));
             }
         }
@@ -76,7 +76,7 @@ fn json_api_close_key_internal<M: Manager>(_: M, json: *mut c_void) {
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_openKey<'a>(
+pub extern "C" fn JSONAPI_openKey(
     ctx: *mut rawmod::RedisModuleCtx,
     key_str: *mut rawmod::RedisModuleString,
 ) -> *mut c_void {
@@ -96,7 +96,7 @@ pub extern "C" fn JSONAPI_openKey<'a>(
 }
 
 #[no_mangle]
-pub extern "C" fn JSONAPI_openKeyFromStr<'a>(
+pub extern "C" fn JSONAPI_openKeyFromStr(
     ctx: *mut rawmod::RedisModuleCtx,
     path: *const c_char,
 ) -> *mut c_void {
@@ -129,7 +129,7 @@ fn json_api_get_at<M: Manager>(
     match json.get_type() {
         SelectValueType::Array => match json.get_index(index) {
             Some(v) => {
-                if jtype != null_mut() {
+                if !jtype.is_null() {
                     unsafe { *jtype = json_api_get_type_internal(v) as c_int };
                 }
                 v as *const M::V as *const c_void
@@ -240,7 +240,7 @@ pub extern "C" fn JSONAPI_getStringFromKey(
 ) -> c_int {
     let mut t: c_int = 0;
     let v = JSONAPI_get(key, path, &mut t);
-    if v != null() && t == JSONType::String as c_int {
+    if !v.is_null() && t == JSONType::String as c_int {
         JSONAPI_getString(v, str, len)
     } else {
         Status::Err as c_int
@@ -283,7 +283,7 @@ pub extern "C" fn JSONAPI_getJSONFromKey(
 ) -> c_int {
     let mut t: c_int = 0;
     let v = JSONAPI_get(key, path, &mut t);
-    if v != null() {
+    if !v.is_null() {
         JSONAPI_getJSON(v, ctx, str)
     } else {
         Status::Err as c_int
@@ -328,7 +328,7 @@ pub extern "C" fn JSONAPI_getIntFromKey(
 ) -> c_int {
     let mut t: c_int = 0;
     let v = JSONAPI_get(key, path, &mut t);
-    if v != null() && t == JSONType::Int as c_int {
+    if !v.is_null() && t == JSONType::Int as c_int {
         JSONAPI_getInt(v, val)
     } else {
         Status::Err as c_int
@@ -365,7 +365,7 @@ pub extern "C" fn JSONAPI_getDoubleFromKey(
 ) -> c_int {
     let mut t: c_int = 0;
     let v = JSONAPI_get(key, path, &mut t);
-    if v != null() && t == JSONType::Double as c_int {
+    if !v.is_null() && t == JSONType::Double as c_int {
         JSONAPI_getDouble(v, val)
     } else {
         Status::Err as c_int
@@ -402,7 +402,7 @@ pub extern "C" fn JSONAPI_getBooleanFromKey(
 ) -> c_int {
     let mut t: c_int = 0;
     let v = JSONAPI_get(key, path, &mut t);
-    if v != null() && t == JSONType::Bool as c_int {
+    if !v.is_null() && t == JSONType::Bool as c_int {
         JSONAPI_getBoolean(v, val)
     } else {
         Status::Err as c_int
@@ -470,13 +470,13 @@ pub fn json_api_get<M: Manager>(
     let mut selector = Selector::new();
     selector.value(v);
     let path = unsafe { CStr::from_ptr(path).to_str().unwrap() };
-    if let Err(_) = selector.str_path(path) {
+    if selector.str_path(path).is_err() {
         return null();
     }
     match selector.select() {
         Ok(s) => match s.first() {
             Some(v) => {
-                if jtype != null_mut() {
+                if jtype.is_null() {
                     unsafe { *jtype = json_api_get_type_internal(*v) as c_int };
                 }
                 *v as *const M::V as *const c_void
