@@ -149,12 +149,11 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     fn serialize_object<O: Serialize>(
         &'a self,
         o: &O,
-        indent: &str,
-        newline: &str,
-        space: &str,
+        indent: Option<String>,
+        newline: Option<String>,
+        space: Option<String>,
     ) -> String {
-        let formatter =
-            RedisJsonFormatter::new(indent.as_bytes(), space.as_bytes(), newline.as_bytes());
+        let formatter = RedisJsonFormatter::new(indent, space, newline);
 
         let mut out = serde_json::Serializer::with_formatter(Vec::new(), formatter);
         o.serialize(&mut out).unwrap();
@@ -164,9 +163,9 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     fn to_json(
         &'a self,
         paths: &mut Vec<Path>,
-        indent: String,
-        newline: String,
-        space: String,
+        indent: Option<String>,
+        newline: Option<String>,
+        space: Option<String>,
         format: Format,
     ) -> Result<RedisValue, Error> {
         if format == Format::BSON {
@@ -191,23 +190,23 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 acc
             });
             Ok(self
-                .serialize_object(&temp_doc, &indent, &newline, &space)
+                .serialize_object(&temp_doc, indent, newline, space)
                 .into())
         } else {
             let path = &paths[0];
             if path.is_legacy() {
                 Ok(self
                     .serialize_object(
-                        self.get_first(paths[0].get_path())?,
-                        &indent,
-                        &newline,
-                        &space,
+                        self.get_first(&paths[0].get_path())?,
+                        indent,
+                        newline,
+                        space,
                     )
                     .into())
             } else {
                 let values = self.get_values(path.get_path())?;
                 Ok(self
-                    .serialize_object(&values, &indent, &newline, &space)
+                    .serialize_object(&values, indent, newline, space)
                     .into())
             }
         }
@@ -452,17 +451,17 @@ pub fn command_json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<String>
 
     let mut paths: Vec<Path> = vec![];
     let mut format = Format::JSON;
-    let mut indent = String::new();
-    let mut space = String::new();
-    let mut newline = String::new();
+    let mut indent = None;
+    let mut space = None;
+    let mut newline = None;
     while let Ok(arg) = args.next_string() {
         match arg {
             // fast way to consider arg a path by using the max length of all possible subcommands
             // See #390 for the comparison of this function with/without this optimization
             arg if arg.len() > JSONGET_SUBCOMMANDS_MAXSTRLEN => paths.push(Path::new(arg)),
-            arg if arg.eq_ignore_ascii_case(CMD_ARG_INDENT) => indent = args.next_string()?,
-            arg if arg.eq_ignore_ascii_case(CMD_ARG_NEWLINE) => newline = args.next_string()?,
-            arg if arg.eq_ignore_ascii_case(CMD_ARG_SPACE) => space = args.next_string()?,
+            arg if arg.eq_ignore_ascii_case(CMD_ARG_INDENT) => indent = Some(args.next_string()?),
+            arg if arg.eq_ignore_ascii_case(CMD_ARG_NEWLINE) => newline = Some(args.next_string()?),
+            arg if arg.eq_ignore_ascii_case(CMD_ARG_SPACE) => space = Some(args.next_string()?),
             // Silently ignore. Compatibility with ReJSON v1.0 which has this option. See #168 TODO add support
             arg if arg.eq_ignore_ascii_case(CMD_ARG_NOESCAPE) => continue,
             arg if arg.eq_ignore_ascii_case(CMD_ARG_FORMAT) => {
