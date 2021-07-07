@@ -170,6 +170,14 @@ def testSetBehaviorModifyingSubcommands(env):
     r.expect('JSON.SET', 'test', '.foo[1]', 'null', 'NX').raiseError()
     # r.expect('JSON.SET', 'test', '.foo[1]', 'null', 'XX').raiseError()
 
+    # Wrong arguments
+    r.expect('JSON.SET', 'test', '.foo', '[]', '').raiseError()
+    r.expect('JSON.SET', 'test', '.foo', '[]', 'NN').raiseError()
+    r.expect('JSON.SET', 'test', '.foo', '[]', 'FORMAT', 'TT').raiseError()
+    r.expect('JSON.SET', 'test', '.foo', '[]', 'XX', 'FORMAT', '').raiseError()
+    r.expect('JSON.SET', 'test', '.foo', '[]', 'XX', 'XN').raiseError()
+    r.expect('JSON.SET', 'test', '.foo', '[]', 'XX', '').raiseError()
+
 def testSetWithBracketNotation(env):
     r = env
 

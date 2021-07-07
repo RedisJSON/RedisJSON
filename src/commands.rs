@@ -506,12 +506,16 @@ pub fn command_json_set<M: Manager>(
 
     while let Some(s) = args.next() {
         match s.try_as_str()? {
-            arg if arg.eq_ignore_ascii_case("NX") => set_option = SetOptions::NotExists,
-            arg if arg.eq_ignore_ascii_case("XX") => set_option = SetOptions::AlreadyExists,
+            arg if arg.eq_ignore_ascii_case("NX") && set_option == SetOptions::None => {
+                set_option = SetOptions::NotExists
+            }
+            arg if arg.eq_ignore_ascii_case("XX") && set_option == SetOptions::None => {
+                set_option = SetOptions::AlreadyExists
+            }
             arg if arg.eq_ignore_ascii_case("FORMAT") => {
                 format = Format::from_str(args.next_string()?.as_str())?;
             }
-            _ => break, // TODO should return an error??
+            _ => return Err(RedisError::Str("ERR syntax error")),
         };
     }
 
