@@ -453,7 +453,8 @@ pub fn command_json_get<M: Manager>(
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
 
-    let mut paths: Vec<Path> = vec![];
+    // Set Capcity to 1 assumiung the common case has one path
+    let mut paths: Vec<Path> = Vec::with_capacity(1);
     let mut format = Format::JSON;
     let mut indent = None;
     let mut space = None;
