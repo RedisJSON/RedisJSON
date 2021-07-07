@@ -7,6 +7,8 @@ use std::{
     os::raw::{c_char, c_void},
 };
 
+use std::marker::PhantomData;
+
 use crate::commands::KeyValue;
 use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
 use jsonpath_lib::select::Selector;
@@ -78,8 +80,13 @@ pub extern "C" fn JSONAPI_openKey(
     ctx: *mut rawmod::RedisModuleCtx,
     key_str: *mut rawmod::RedisModuleString,
 ) -> *mut c_void {
-    json_api_open_key_internal(RedisJsonKeyManager, ctx, RedisString::new(ctx, key_str))
-        as *mut c_void
+    json_api_open_key_internal(
+        RedisJsonKeyManager {
+            phantom: PhantomData,
+        },
+        ctx,
+        RedisString::new(ctx, key_str),
+    ) as *mut c_void
 }
 
 #[no_mangle]
@@ -88,8 +95,13 @@ pub extern "C" fn JSONAPI_openKeyFromStr(
     path: *const c_char,
 ) -> *mut c_void {
     let key = unsafe { CStr::from_ptr(path).to_str().unwrap() };
-    json_api_open_key_internal(RedisJsonKeyManager, ctx, RedisString::create(ctx, key))
-        as *mut c_void
+    json_api_open_key_internal(
+        RedisJsonKeyManager {
+            phantom: PhantomData,
+        },
+        ctx,
+        RedisString::create(ctx, key),
+    ) as *mut c_void
 }
 
 fn json_api_get_at<M: Manager>(_: M, json: *const c_void, index: size_t) -> *const c_void {
@@ -105,7 +117,13 @@ fn json_api_get_at<M: Manager>(_: M, json: *const c_void, index: size_t) -> *con
 
 #[no_mangle]
 pub extern "C" fn JSONAPI_getAt(json: *const c_void, index: size_t) -> *const c_void {
-    json_api_get_at(RedisJsonKeyManager, json, index)
+    json_api_get_at(
+        RedisJsonKeyManager {
+            phantom: PhantomData,
+        },
+        json,
+        index,
+    )
 }
 
 fn json_api_get_len<M: Manager>(_: M, json: *const c_void, count: *mut libc::size_t) -> c_int {
@@ -127,7 +145,13 @@ fn json_api_get_len<M: Manager>(_: M, json: *const c_void, count: *mut libc::siz
 
 #[no_mangle]
 pub extern "C" fn JSONAPI_getLen(json: *const c_void, count: *mut size_t) -> c_int {
-    json_api_get_len(RedisJsonKeyManager, json, count)
+    json_api_get_len(
+        RedisJsonKeyManager {
+            phantom: PhantomData,
+        },
+        json,
+        count,
+    )
 }
 
 fn json_api_get_type<M: Manager>(_: M, json: *const c_void) -> c_int {
@@ -136,7 +160,12 @@ fn json_api_get_type<M: Manager>(_: M, json: *const c_void) -> c_int {
 
 #[no_mangle]
 pub extern "C" fn JSONAPI_getType(json: *const c_void) -> c_int {
-    json_api_get_type(RedisJsonKeyManager, json)
+    json_api_get_type(
+        RedisJsonKeyManager {
+            phantom: PhantomData,
+        },
+        json,
+    )
 }
 
 fn json_api_get_string<M: Manager>(
@@ -162,7 +191,14 @@ pub extern "C" fn JSONAPI_getString(
     str: *mut *const c_char,
     len: *mut size_t,
 ) -> c_int {
-    json_api_get_string(RedisJsonKeyManager, json, str, len)
+    json_api_get_string(
+        RedisJsonKeyManager {
+            phantom: PhantomData,
+        },
+        json,
+        str,
+        len,
+    )
 }
 
 fn json_api_get_json<M: Manager>(
@@ -182,7 +218,14 @@ pub extern "C" fn JSONAPI_getJSON(
     ctx: *mut rawmod::RedisModuleCtx,
     str: *mut *mut rawmod::RedisModuleString,
 ) -> c_int {
-    json_api_get_json(RedisJsonKeyManager, json, ctx, str)
+    json_api_get_json(
+        RedisJsonKeyManager {
+            phantom: PhantomData,
+        },
+        json,
+        ctx,
+        str,
+    )
 }
 
 #[no_mangle]
@@ -206,7 +249,13 @@ fn json_api_get_int<M: Manager>(_: M, json: *const c_void, val: *mut c_long) -> 
 
 #[no_mangle]
 pub extern "C" fn JSONAPI_getInt(json: *const c_void, val: *mut c_long) -> c_int {
-    json_api_get_int(RedisJsonKeyManager, json, val)
+    json_api_get_int(
+        RedisJsonKeyManager {
+            phantom: PhantomData,
+        },
+        json,
+        val,
+    )
 }
 
 fn json_api_get_double<M: Manager>(_: M, json: *const c_void, val: *mut c_double) -> c_int {
@@ -222,7 +271,13 @@ fn json_api_get_double<M: Manager>(_: M, json: *const c_void, val: *mut c_double
 
 #[no_mangle]
 pub extern "C" fn JSONAPI_getDouble(json: *const c_void, val: *mut c_double) -> c_int {
-    json_api_get_double(RedisJsonKeyManager, json, val)
+    json_api_get_double(
+        RedisJsonKeyManager {
+            phantom: PhantomData,
+        },
+        json,
+        val,
+    )
 }
 
 fn json_api_get_boolean<M: Manager>(_: M, json: *const c_void, val: *mut c_int) -> c_int {
@@ -238,7 +293,13 @@ fn json_api_get_boolean<M: Manager>(_: M, json: *const c_void, val: *mut c_int) 
 
 #[no_mangle]
 pub extern "C" fn JSONAPI_getBoolean(json: *const c_void, val: *mut c_int) -> c_int {
-    json_api_get_boolean(RedisJsonKeyManager, json, val)
+    json_api_get_boolean(
+        RedisJsonKeyManager {
+            phantom: PhantomData,
+        },
+        json,
+        val,
+    )
 }
 
 //---------------------------------------------------------------------------------------------
@@ -328,22 +389,43 @@ pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -
 
 #[no_mangle]
 pub extern "C" fn JSONAPI_get(key: *const c_void, path: *const c_char) -> *const c_void {
-    json_api_get(RedisJsonKeyManager, key, path)
+    json_api_get(
+        RedisJsonKeyManager {
+            phantom: PhantomData,
+        },
+        key,
+        path,
+    )
 }
 
 #[no_mangle]
 pub extern "C" fn JSONAPI_len(iter: *const c_void) -> size_t {
-    json_api_len(RedisJsonKeyManager, iter)
+    json_api_len(
+        RedisJsonKeyManager {
+            phantom: PhantomData,
+        },
+        iter,
+    )
 }
 
 #[no_mangle]
 pub extern "C" fn JSONAPI_freeIter(iter: *mut c_void) {
-    json_api_free_iter(RedisJsonKeyManager, iter)
+    json_api_free_iter(
+        RedisJsonKeyManager {
+            phantom: PhantomData,
+        },
+        iter,
+    )
 }
 
 #[no_mangle]
 pub extern "C" fn JSONAPI_next(iter: *mut c_void) -> *const c_void {
-    json_api_next(RedisJsonKeyManager, iter)
+    json_api_next(
+        RedisJsonKeyManager {
+            phantom: PhantomData,
+        },
+        iter,
+    )
 }
 
 static REDISJSON_GETAPI: &str = concat!("RedisJSON_V1", "\0");
