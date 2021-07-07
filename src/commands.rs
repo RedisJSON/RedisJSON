@@ -452,7 +452,7 @@ pub fn command_json_get<M: Manager>(
     args: Vec<RedisString>,
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_redis_string()?;
+    let key = args.next_arg()?;
 
     let mut paths: Vec<Path> = vec![];
     let mut format = Format::JSON;
@@ -497,7 +497,7 @@ pub fn command_json_set<M: Manager>(
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_redis_string()?;
+    let key = args.next_arg()?;
     let path = backwards_compat_path(args.next_string()?);
     let value = args.next_string()?;
 
@@ -599,7 +599,7 @@ pub fn command_json_del<M: Manager>(
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_redis_string()?;
+    let key = args.next_arg()?;
     let path = args
         .next_string()
         .map_or_else(|_| JSON_ROOT_PATH.to_string(), backwards_compat_path);
@@ -665,7 +665,7 @@ pub fn command_json_type<M: Manager>(
     args: Vec<RedisString>,
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_redis_string()?;
+    let key = args.next_arg()?;
     let path = backwards_compat_path(args.next_string()?);
 
     let key = manager.open_key_read(ctx, &key)?;
@@ -699,7 +699,7 @@ where
 {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_redis_string()?;
+    let key = args.next_arg()?;
     let path = backwards_compat_path(args.next_string()?);
     let number = args.next_string()?;
 
@@ -760,7 +760,7 @@ pub fn command_json_bool_toggle<M: Manager>(
     args: Vec<RedisString>,
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_redis_string()?;
+    let key = args.next_arg()?;
     let path = backwards_compat_path(args.next_string()?);
     let mut redis_key = manager.open_key_write(ctx, key)?;
 
@@ -790,7 +790,7 @@ pub fn command_json_str_append<M: Manager>(
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_redis_string()?;
+    let key = args.next_arg()?;
     let path_or_json = args.next_string()?;
 
     let path;
@@ -833,7 +833,7 @@ pub fn command_json_str_len<M: Manager>(
     args: Vec<RedisString>,
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_redis_string()?;
+    let key = args.next_arg()?;
     let path = backwards_compat_path(args.next_string()?);
 
     let key = manager.open_key_read(ctx, &key)?;
@@ -852,7 +852,7 @@ pub fn command_json_arr_append<M: Manager>(
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1).peekable();
 
-    let key = args.next_redis_string()?;
+    let key = args.next_arg()?;
     let path = backwards_compat_path(args.next_string()?);
 
     // We require at least one JSON item to append
@@ -893,7 +893,7 @@ pub fn command_json_arr_index<M: Manager>(
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_redis_string()?;
+    let key = args.next_arg()?;
     let path = backwards_compat_path(args.next_string()?);
     let json_scalar = args.next_string()?;
     let start: i64 = args.next().map(|v| v.parse_integer()).unwrap_or(Ok(0))?;
@@ -917,7 +917,7 @@ pub fn command_json_arr_insert<M: Manager>(
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1).peekable();
 
-    let key = args.next_redis_string()?;
+    let key = args.next_arg()?;
     let path = backwards_compat_path(args.next_string()?);
     let index = args.next_i64()?;
 
@@ -955,7 +955,7 @@ pub fn command_json_arr_len<M: Manager>(
     args: Vec<RedisString>,
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_redis_string()?;
+    let key = args.next_arg()?;
     let path = backwards_compat_path(args.next_string()?);
 
     let key = manager.open_key_read(ctx, &key)?;
@@ -974,7 +974,7 @@ pub fn command_json_arr_pop<M: Manager>(
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_redis_string()?;
+    let key = args.next_arg()?;
 
     let (path, index) = args
         .next()
@@ -1019,7 +1019,7 @@ pub fn command_json_arr_trim<M: Manager>(
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_redis_string()?;
+    let key = args.next_arg()?;
     let path = backwards_compat_path(args.next_string()?);
     let start = args.next_i64()?;
     let stop = args.next_i64()?;
@@ -1052,7 +1052,7 @@ pub fn command_json_obj_keys<M: Manager>(
     args: Vec<RedisString>,
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_redis_string()?;
+    let key = args.next_arg()?;
     let path = backwards_compat_path(args.next_string()?);
 
     let key = manager.open_key_read(ctx, &key)?;
@@ -1074,7 +1074,7 @@ pub fn command_json_obj_len<M: Manager>(
     args: Vec<RedisString>,
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_redis_string()?;
+    let key = args.next_arg()?;
     let path = backwards_compat_path(args.next_string()?);
 
     let key = manager.open_key_read(ctx, &key)?;
@@ -1092,7 +1092,7 @@ pub fn command_json_clear<M: Manager>(
     args: Vec<RedisString>,
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_redis_string()?;
+    let key = args.next_arg()?;
     let paths = args
         .map(|arg| Path::new(arg.to_string()))
         .collect::<Vec<_>>();
@@ -1136,7 +1136,7 @@ pub fn command_json_debug<M: Manager>(
     let mut args = args.into_iter().skip(1);
     match args.next_string()?.to_uppercase().as_str() {
         "MEMORY" => {
-            let key = args.next_redis_string()?;
+            let key = args.next_arg()?;
             let path = backwards_compat_path(args.next_string()?);
 
             let key = manager.open_key_read(ctx, &key)?;
@@ -1166,7 +1166,7 @@ pub fn command_json_resp<M: Manager>(
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
-    let key = args.next_redis_string()?;
+    let key = args.next_arg()?;
     let path = args
         .next_string()
         .map_or_else(|_| JSON_ROOT_PATH.to_string(), backwards_compat_path);

@@ -433,7 +433,7 @@ dependencies = [
 [[package]]
 name = "redis-module"
 version = "0.18.0"
-source = "git+https://github.com/RedisLabsModules/redismodule-rs.git?branch=RedisString#4debcd02bac2f93fb19e01d3c1fa59770def4559"
+source = "git+https://github.com/RedisLabsModules/redismodule-rs.git?branch=RedisString#1666452f730a62a6e95c435419e320208ac85fa3"
 dependencies = [
  "bindgen",
  "bitflags",

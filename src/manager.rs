@@ -517,7 +517,7 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
         &self,
         ctx: &Context,
         key: RedisString,
-    ) -> Result<KeyHolderWrite, RedisError> {
+    ) -> Result<KeyHolderWrite<'a>, RedisError> {
         let key_ptr = ctx.open_key_writable(&key);
         Ok(KeyHolderWrite {
             key: key_ptr,
