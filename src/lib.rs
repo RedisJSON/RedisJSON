@@ -1,19 +1,19 @@
-#[cfg(not(feature = "as-library"))]
-use redis_module::{redis_command, redis_module};
-
 use redis_module::native_types::RedisType;
 use redis_module::raw::RedisModuleTypeMethods;
+
 #[cfg(not(feature = "as-library"))]
-use redis_module::{Context, RedisResult, RedisString};
+use crate::c_api::{
+    get_llapi_ctx, json_api_free_iter, json_api_get, json_api_get_at, json_api_get_boolean,
+    json_api_get_double, json_api_get_int, json_api_get_json, json_api_get_len,
+    json_api_get_string, json_api_get_type, json_api_is_json, json_api_len, json_api_next,
+    json_api_open_key_internal, LLAPI_CTX,
+};
 
 #[cfg(not(feature = "as-library"))]
 use redis_module::Status;
 
 #[cfg(not(feature = "as-library"))]
-use crate::c_api::export_shared_api;
-
-#[cfg(not(feature = "as-library"))]
-use std::marker::PhantomData;
+use redis_module::{Context, RedisResult};
 
 mod array_index;
 mod backward;
@@ -64,8 +64,18 @@ macro_rules! redis_json_module_create {(
         pre_command_function: $pre_command_function_expr:expr,
         get_manage: $get_manager_expr:expr,
         version: $version:expr,
-        $(init: $init_func:ident,)* $(,)*
+        init: $init_func:expr,
     ) => {
+
+        use redis_module::{redis_command, redis_module, RedisString};
+        use std::marker::PhantomData;
+        use std::os::raw::{c_double, c_int, c_long};
+        use redis_module::{raw as rawmod};
+        use std::{
+            ffi::CStr,
+            os::raw::{c_char, c_void},
+        };
+        use libc::size_t;
 
         ///
         /// JSON.DEL <key> [path]
@@ -382,13 +392,21 @@ macro_rules! redis_json_module_create {(
             }
         }
 
+        redis_json_module_export_shared_api! {
+            get_manage:$get_manager_expr,
+            pre_command_function: $pre_command_function_expr,
+        }
+
+        fn intialize(ctx: &Context, args: &Vec<RedisString>) -> Status {
+            export_shared_api(ctx);
+            $init_func(ctx, args)
+        }
+
         redis_module! {
             name: "ReJSON",
             version: $version,
             data_types: [$($data_type,)*],
-            $(
-                init: $init_func,
-            )*
+            init: intialize,
             commands: [
                 ["json.del", json_del, "write", 1,1,1],
                 ["json.get", json_get, "readonly", 1,1,1],
@@ -421,13 +439,12 @@ macro_rules! redis_json_module_create {(
 }
 
 #[cfg(not(feature = "as-library"))]
-fn init(ctx: &Context, _args: &[RedisString]) -> Status {
-    export_shared_api(ctx);
-    Status::Ok
-}
+fn pre_command(_ctx: &Context, _args: &Vec<RedisString>) {}
 
 #[cfg(not(feature = "as-library"))]
-fn pre_command(_ctx: &Context, _args: &[RedisString]) {}
+fn dummy_init(_ctx: &Context, _args: &Vec<RedisString>) -> Status {
+    Status::Ok
+}
 
 #[cfg(not(feature = "as-library"))]
 redis_json_module_create! {
@@ -435,5 +452,5 @@ redis_json_module_create! {
     pre_command_function: pre_command,
     get_manage: Some(manager::RedisJsonKeyManager{phantom:PhantomData}),
     version: 99_99_99,
-    init: init,
+    init: dummy_init,
 }

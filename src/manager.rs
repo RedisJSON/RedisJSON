@@ -2,8 +2,8 @@ use jsonpath_lib::select::select_value::SelectValue;
 use serde_json::map::Entry;
 use serde_json::{Number, Value};
 
-use redis_module::key::{RedisKey, RedisKeyWritable};
-use redis_module::raw::Status;
+use redis_module::key::{verify_type, RedisKey, RedisKeyWritable};
+use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::rediserror::RedisError;
 use redis_module::{Context, NotifyEvent, RedisString};
 
@@ -85,6 +85,7 @@ pub trait Manager {
     ) -> Result<Self::WriteHolder, RedisError>;
     fn from_str(&self, val: &str, format: Format) -> Result<Self::O, Error>;
     fn get_memory(&self, v: &Self::V) -> Result<usize, RedisError>;
+    fn is_json(&self, key: *mut RedisModuleKey) -> Result<bool, RedisError>;
 }
 
 fn err_json(value: &Value, expected_value: &'static str) -> Error {
@@ -554,5 +555,12 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
             Value::Object(v) => mem::size_of_val(v),
         };
         Ok(res)
+    }
+
+    fn is_json(&self, key: *mut RedisModuleKey) -> Result<bool, RedisError> {
+        match verify_type(key, &REDIS_JSON_TYPE) {
+            Ok(_) => Ok(true),
+            Err(_) => Ok(false),
+        }
     }
 }
