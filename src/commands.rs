@@ -152,12 +152,20 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         indent: Option<String>,
         newline: Option<String>,
         space: Option<String>,
-    ) -> String {
-        let formatter = RedisJsonFormatter::new(indent, space, newline);
+    ) -> Vec<u8> {
 
-        let mut out = serde_json::Serializer::with_formatter(Vec::new(), formatter);
-        o.serialize(&mut out).unwrap();
-        String::from_utf8(out.into_inner()).unwrap()
+        if indent.is_some() || newline.is_some() || space.is_some() { 
+            let formatter = RedisJsonFormatter::new(indent, space, newline);
+            let mut out = serde_json::Serializer::with_formatter(Vec::new(), formatter);
+            o.serialize(&mut out).unwrap(); // unwrap is called since it should never fail  
+            out.into_inner()
+        } else {
+            let mut out = serde_json::Serializer::new(Vec::new());
+            o.serialize(&mut out).unwrap(); // unwrap is called since it should never fail  
+            out.into_inner()
+        }
+         
+       
     }
 
     fn to_json(
