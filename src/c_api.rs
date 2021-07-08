@@ -278,7 +278,8 @@ macro_rules! redis_json_module_export_shared_api {
 
             let m = $get_manager_expr;
             match m {
-                Some(mngr) => json_api_open_key_internal(mngr, ctx, RedisString::new(ctx, key_str)) as *mut c_void,
+                Some(mngr) => json_api_open_key_internal(mngr, ctx, RedisString::new(ctx, key_str))
+                    as *mut c_void,
                 None => json_api_open_key_internal(
                     manager::RedisJsonKeyManager {
                         phantom: PhantomData,
@@ -299,7 +300,8 @@ macro_rules! redis_json_module_export_shared_api {
             let key = unsafe { CStr::from_ptr(path).to_str().unwrap() };
             let m = $get_manager_expr;
             match m {
-                Some(mngr) => json_api_open_key_internal(mngr, ctx, RedisString::create(ctx, key)) as *mut c_void,
+                Some(mngr) => json_api_open_key_internal(mngr, ctx, RedisString::create(ctx, key))
+                    as *mut c_void,
                 None => json_api_open_key_internal(
                     manager::RedisJsonKeyManager {
                         phantom: PhantomData,
