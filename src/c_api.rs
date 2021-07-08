@@ -11,7 +11,7 @@ use crate::commands::KeyValue;
 use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
 use jsonpath_lib::select::Selector;
 use redis_module::{raw as rawmod, RedisError};
-use redis_module::{Context, Status};
+use redis_module::{Context, RedisString, Status};
 use serde_json::Value;
 
 use crate::manager::{Manager, ReadHolder};
@@ -61,10 +61,10 @@ pub fn create_rmstring(
 pub fn json_api_open_key_internal<M: Manager>(
     manager: M,
     ctx: *mut rawmod::RedisModuleCtx,
-    key: &str,
+    key: RedisString,
 ) -> *const M::V {
     let ctx = Context::new(ctx);
-    if let Ok(h) = manager.open_key_read(&ctx, key) {
+    if let Ok(h) = manager.open_key_read(&ctx, &key) {
         if let Ok(v) = h.get_value() {
             if let Some(v) = v {
                 return v;
@@ -276,21 +276,15 @@ macro_rules! redis_json_module_export_shared_api {
         ) -> *mut c_void {
             $pre_command_function_expr(&get_llapi_ctx(), &Vec::new());
 
-            let mut len = 0;
-            let key = unsafe {
-                let bytes = RedisModule_StringPtrLen.unwrap()(key_str, &mut len);
-                let bytes = slice::from_raw_parts(bytes as *const u8, len);
-                String::from_utf8_lossy(bytes).into_owned()
-            };
             let m = $get_manager_expr;
             match m {
-                Some(mngr) => json_api_open_key_internal(mngr, ctx, &key) as *mut c_void,
+                Some(mngr) => json_api_open_key_internal(mngr, ctx, RedisString::new(ctx, key_str)) as *mut c_void,
                 None => json_api_open_key_internal(
                     manager::RedisJsonKeyManager {
                         phantom: PhantomData,
                     },
                     ctx,
-                    &key,
+                    RedisString::new(ctx, key_str),
                 ) as *mut c_void,
             }
         }
@@ -305,13 +299,13 @@ macro_rules! redis_json_module_export_shared_api {
             let key = unsafe { CStr::from_ptr(path).to_str().unwrap() };
             let m = $get_manager_expr;
             match m {
-                Some(mngr) => json_api_open_key_internal(mngr, ctx, &key) as *mut c_void,
+                Some(mngr) => json_api_open_key_internal(mngr, ctx, RedisString::create(ctx, key)) as *mut c_void,
                 None => json_api_open_key_internal(
                     manager::RedisJsonKeyManager {
                         phantom: PhantomData,
                     },
                     ctx,
-                    &key,
+                    RedisString::create(ctx, key),
                 ) as *mut c_void,
             }
         }
