@@ -600,9 +600,9 @@ pub fn command_json_del<M: Manager>(
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;
-    let path = match args.next_arg() {
-        Err(_) => Path::new(JSON_ROOT_PATH),
-        Ok(s) => Path::new(s.try_as_str()?),
+    let path = match args.next() {
+        None => Path::new(JSON_ROOT_PATH),
+        Some(s) => Path::new(s.try_as_str()?),
     };
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
