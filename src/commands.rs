@@ -862,9 +862,15 @@ pub fn command_json_arr_append<M: Manager>(
 
     // We require at least one JSON item to append
     args.peek().ok_or(RedisError::WrongArity)?;
-    let args = args
-        .map(|json| manager.from_str(&json.to_string_lossy(), Format::JSON))
-        .collect::<Result<_, _>>()?;
+
+    let args = args.try_fold::<_, _, Result<_, RedisError>>(
+        Vec::with_capacity(args.len()),
+        |mut acc, arg| {
+            let json = arg.try_as_str()?;
+            acc.push(manager.from_str(json, Format::JSON)?);
+            Ok(acc)
+        },
+    )?;
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
     let root = redis_key
