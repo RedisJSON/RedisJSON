@@ -27,17 +27,17 @@ pub enum VisitStatus {
     Valid,
 }
 
-pub struct StaticPathParser {
+pub struct StaticPathParser<'a> {
     pub valid: VisitStatus,
-    last_token: Option<ParseToken>,
+    last_token: Option<ParseToken<'a>>,
     pub static_path_elements: Vec<StaticPathElement>,
 }
 
-impl StaticPathParser {
+impl<'a> StaticPathParser<'a> {
     ///
     /// Checks if path is static & valid
     ///
-    pub fn check(input: &str) -> Result<Self, String> {
+    pub fn check(input: &'a str) -> Result<Self, String> {
         let node = Parser::compile(input)?;
         let mut visitor = StaticPathParser {
             valid: VisitStatus::PartialValid,
@@ -49,8 +49,8 @@ impl StaticPathParser {
     }
 }
 
-impl NodeVisitor for StaticPathParser {
-    fn visit_token(&mut self, token: &ParseToken) {
+impl<'a> NodeVisitor<'a> for StaticPathParser<'a> {
+    fn visit_token(&mut self, token: &ParseToken<'a>) {
         if self.valid != VisitStatus::NotValid {
             //eprintln!("visit token: {:?} -> {:?}", self.last_token, token);
             self.valid = match (&self.last_token, token) {
@@ -77,7 +77,7 @@ impl NodeVisitor for StaticPathParser {
                 (Some(ParseToken::In), ParseToken::Key(key))
                 | (Some(ParseToken::Key(key)), ParseToken::ArrayEof) => {
                     self.static_path_elements
-                        .push(StaticPathElement::ObjectKey(key.clone()));
+                        .push(StaticPathElement::ObjectKey(key.to_string()));
                     VisitStatus::Valid
                 }
 
