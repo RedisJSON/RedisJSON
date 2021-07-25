@@ -170,6 +170,14 @@ def testSetBehaviorModifyingSubcommands(env):
     r.expect('JSON.SET', 'test', '.foo[1]', 'null', 'NX').raiseError()
     # r.expect('JSON.SET', 'test', '.foo[1]', 'null', 'XX').raiseError()
 
+    # Wrong arguments
+    r.expect('JSON.SET', 'test', '.foo', '[]', '').raiseError()
+    r.expect('JSON.SET', 'test', '.foo', '[]', 'NN').raiseError()
+    r.expect('JSON.SET', 'test', '.foo', '[]', 'FORMAT', 'TT').raiseError()
+    r.expect('JSON.SET', 'test', '.foo', '[]', 'XX', 'FORMAT', '').raiseError()
+    r.expect('JSON.SET', 'test', '.foo', '[]', 'XX', 'XN').raiseError()
+    r.expect('JSON.SET', 'test', '.foo', '[]', 'XX', '').raiseError()
+
 def testSetWithBracketNotation(env):
     r = env
 
@@ -181,6 +189,15 @@ def testSetWithBracketNotation(env):
     r.assertOk(r.execute_command('JSON.SET', 'x', '.["f1"]["f2"][1]["f.]$.f"]', '1'))  # Replace existing value
     r.assertIsNone(r.execute_command('JSON.SET', 'x', '.["f3"].f2', '1'))  # Fail trying to set f2 when f3 doesn't exist
     r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x')), {'f1': {'f2': [0, {'f.]$.f': 1}, 0]}})  # Make sure it worked
+
+def testGetWithBracketNotation(env):
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'x', '.', '[1,2,3]'))
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '.[1]')), 2) # dot notation - single value
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '[1]')), 2) # implicit dot notation - single value
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$.[1]')), [2]) # dollar notation - array
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$[1]')), [2]) # dollar notation - array
 
 def testSetWithPathErrors(env):
     r = env
@@ -430,19 +447,22 @@ def testClear(env):
     """Test JSON.CLEAR command"""
 
     r = env
-    r.expect('JSON.SET', 'test', '.', r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}')\
-        .ok()
+    multi_content = r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}'
+    r.expect('JSON.SET', 'test', '.', multi_content).ok()
 
     # Test get multi results (using .. recursive descent)
-    # TODO: Enable when supporting multi results (and not only the first)
-    #r.expect('JSON.GET', 'test', '$..n').equal([42,44,{"a": 1,"b": 2},["to","be","cleared",4]])
+    r.expect('JSON.GET', 'test', '$..n').equal(r'[42,44,{"a":1,"b":2},["to","be","cleared",4]]')
 
     # Make sure specific obj content exists before clear
-    obj_content = r'{"a":1,"b":2}'
+    obj_content = r'[{"a":1,"b":2}]'
+    obj_content_legacy = r'{"a":1,"b":2}'
     r.expect('JSON.GET', 'test', '$.arr[2].n').equal(obj_content)
+    r.expect('JSON.GET', 'test', '.arr[2].n').equal(obj_content_legacy)
     # Make sure specific arr content exists before clear
-    arr_content = r'["to","be","cleared",4]'
+    arr_content = r'[["to","be","cleared",4]]'
+    arr_content_legacy = r'["to","be","cleared",4]'
     r.expect('JSON.GET', 'test', '$.arr[3].n2.n').equal(arr_content)
+    r.expect('JSON.GET', 'test', '.arr[3].n2.n').equal(arr_content_legacy)
 
     # Clear obj and arr with specific paths
     r.expect('JSON.CLEAR', 'test', '$.arr[2].n').equal(1)
@@ -452,22 +472,25 @@ def testClear(env):
     r.expect('JSON.CLEAR', 'test', '$.arr[1]').equal(0)
 
     # Make sure specific obj content was cleared
-    r.expect('JSON.GET', 'test', '$.arr[2].n').equal('{}')
+    r.expect('JSON.GET', 'test', '$.arr[2].n').equal('[{}]')
+    r.expect('JSON.GET', 'test', '.arr[2].n').equal('{}')
     # Make sure specific arr content was cleared
-    r.expect('JSON.GET', 'test', '$.arr[3].n2.n').equal('[]')
+    r.expect('JSON.GET', 'test', '$.arr[3].n2.n').equal('[[]]')
+    r.expect('JSON.GET', 'test', '.arr[3].n2.n').equal('[]')
 
     # Make sure only appropriate content (obj and arr) was cleared - and that errors were printed for inappropriate content (string and numeric)
-    # TODO: Enable when supporting multi results (and not only the first)
-    #r.expect('JSON.GET', 'test', '$..n').equal([42, 44, {}, []])
+    r.expect('JSON.GET', 'test', '$..n').equal('[42,44,{},[]]')
 
     # Clear root
-    # TODO: switch order of the following paths and expect .equals(2) when supporting multi-paths
+    r.expect('JSON.SET', 'test', '.', r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}') \
+        .ok()
+    # TODO: switch order of the following paths and expect .equals(2) when supporting multi-paths in JSON.CLEAR
     r.expect('JSON.CLEAR', 'test', '$', '$.arr[2].n').equal(1)
-    r.expect('JSON.GET', 'test', '$').equal('{}')
+    r.expect('JSON.GET', 'test', '$').equal('[{}]')
 
-    r.expect('JSON.SET', 'test', '$', obj_content).ok()
+    r.expect('JSON.SET', 'test', '$', obj_content_legacy).ok()
     r.expect('JSON.CLEAR', 'test').equal(1)
-    r.expect('JSON.GET', 'test', '$').equal('{}')
+    r.expect('JSON.GET', 'test', '$').equal('[{}]')
 
 def testArrayCRUD(env):
     """Test JSON Array CRUDness"""
@@ -638,6 +661,18 @@ def testArrPopCommand(env):
     r.assertIsNone(r.execute_command('JSON.ARRPOP', 'test'))
     r.assertIsNone(r.execute_command('JSON.ARRPOP', 'test', '.'))
     r.assertIsNone(r.execute_command('JSON.ARRPOP', 'test', '.', 2))
+
+def testArrPopErrors(env):
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'test','.', '1'))
+    r.expect('JSON.ARRPOP', 'test').error().contains("not an array")
+
+def testArrTrimErrors(env):
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'test','.', '1'))
+    r.expect('JSON.ARRTRIM', 'test', '.', '0', '1').error().contains("not an array")
 
 def testTypeCommand(env):
     """Test JSON.TYPE command"""
@@ -828,6 +863,15 @@ def testIssue_80(env):
     # This shouldn't crash Redis
     r.execute_command('JSON.GET', 'test', '$.[?(@.code=="2")]')
 
+
+def testMultiPathResults(env):
+    env.expect("JSON.SET", "k", '$', '[1,2,3]').ok()
+    env.expect("JSON.GET", "k", '$[*]').equal('[1,2,3]')
+    env.expect("JSON.SET", "k", '$', '{"a":[1,2,3],"b":["c","d","e"],"c":"k"}').ok()
+    env.expect("JSON.GET", "k", '$.*[0,2]').equal('[1,3,"c","e"]')
+
+    # make sure legacy json path returns single result
+    env.expect("JSON.GET", "k", '.*[0,2]').equal('1')
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property
