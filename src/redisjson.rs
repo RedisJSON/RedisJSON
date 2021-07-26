@@ -464,16 +464,32 @@ pub mod type_methods {
             },
             2 => {
                 let data = raw::load_string(rdb);
+                if is_io_error(rdb) {
+                    return 0 as *mut c_void;
+                }
                 // Backward support for modules that had AUX field for RediSarch
                 // TODO remove in future versions
-                if raw::load_unsigned(rdb) > 0 {
+                let u = raw::load_unsigned(rdb);
+                if is_io_error(rdb) {
+                    return 0 as *mut c_void;
+                }
+                if u > 0 {
                     raw::load_string(rdb);
+                    if is_io_error(rdb) {
+                        return 0 as *mut c_void;
+                    }
                     raw::load_string(rdb);
+                    if is_io_error(rdb) {
+                        return 0 as *mut c_void;
+                    }
                 }
                 RedisJSON::from_str(&data, Format::JSON).unwrap()
             }
             3 => {
                 let data = raw::load_string(rdb);
+                if is_io_error(rdb) {
+                    return 0 as *mut c_void;
+                }
                 RedisJSON::from_str(&data, Format::JSON).unwrap()
             }
             _ => panic!("Can't load old RedisJSON RDB"),
