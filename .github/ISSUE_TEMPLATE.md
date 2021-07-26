@@ -39,7 +39,7 @@ body:
   - type: input
     id: was_redis_docker
     attributes:
-      label: Docker Instllatio
+      label: Docker Installation
       description: What version of this redis module was installed?
       placeholder: latest
 
