@@ -20,6 +20,9 @@ use crate::error::Error;
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 use crate::REDIS_JSON_TYPE_VERSION;
 
+use std::fmt;
+use std::fmt::Display;
+
 #[derive(Debug, PartialEq)]
 pub enum SetOptions {
     NotExists,
@@ -45,17 +48,17 @@ impl Format {
 ///
 /// Backwards compatibility convertor for RedisJSON 1.x clients
 ///
-pub struct Path {
-    original_path: String,
+pub struct Path<'a> {
+    original_path: &'a str,
     fixed_path: Option<String>,
 }
 
-impl Path {
-    pub fn new(path: String) -> Path {
+impl<'a> Path<'a> {
+    pub fn new(path: &'a str) -> Path {
         let fixed_path = if path.starts_with('$') {
             None
         } else {
-            let mut cloned = path.clone();
+            let mut cloned = path.to_string();
             if path == "." {
                 cloned.replace_range(..1, "$");
             } else if path.starts_with('.') {
@@ -75,12 +78,22 @@ impl Path {
         self.fixed_path.is_some()
     }
 
-    pub fn get_path(&self) -> &String {
-        self.fixed_path.as_ref().unwrap_or(&self.original_path)
+    pub fn get_path(&'a self) -> &'a str {
+        if let Some(s) = &self.fixed_path {
+            s.as_str()
+        } else {
+            self.original_path
+        }
     }
 
-    pub fn take_original(self) -> String {
+    pub fn get_original(&self) -> &'a str {
         self.original_path
+    }
+}
+
+impl Display for Path<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.get_path())
     }
 }
 

@@ -29,16 +29,16 @@ DEALINGS IN THE SOFTWARE.
 use serde_json::ser::Formatter;
 use std::io;
 
-pub struct RedisJsonFormatter {
+pub struct RedisJsonFormatter<'a> {
     current_indent: usize,
     has_value: bool,
-    indent: Option<String>,
-    space: Option<String>,
-    newline: Option<String>,
+    indent: Option<&'a str>,
+    space: Option<&'a str>,
+    newline: Option<&'a str>,
 }
 
-impl RedisJsonFormatter {
-    pub fn new(indent: Option<String>, space: Option<String>, newline: Option<String>) -> Self {
+impl<'a> RedisJsonFormatter<'a> {
+    pub fn new(indent: Option<&'a str>, space: Option<&'a str>, newline: Option<&'a str>) -> Self {
         RedisJsonFormatter {
             current_indent: 0,
             has_value: false,
@@ -69,7 +69,7 @@ impl RedisJsonFormatter {
     }
 }
 
-impl Formatter for RedisJsonFormatter {
+impl Formatter for RedisJsonFormatter<'_> {
     fn begin_array<W: ?Sized>(&mut self, writer: &mut W) -> io::Result<()>
     where
         W: io::Write,
