@@ -399,17 +399,48 @@ macro_rules! redis_json_module_create {(
             pre_command_function: $pre_command_function_expr,
         }
 
+        struct Version {
+            major: c_int,
+            minor: c_int,
+            patch: c_int,
+        }
+
+        impl From<c_int> for Version {
+            fn from(ver: c_int) -> Self {
+                // Expected format: 0x00MMmmpp for Major, minor, patch
+                Version {
+                    major: (ver&0x00FF0000) >> 16,
+                    minor: (ver & 0x0000FF00) >> 8,
+                    patch: ver & 0x000000FF
+                }
+            }
+        }
+
+        fn check_minimal_version_for_short_read() -> bool {
+            // Minimal versions: 6.2.5 or 6.0.15
+            let v = unsafe { Version::from(rawmod::RedisModule_GetServerVersion.unwrap()()) };
+            match v {
+                Version {major: 6, minor: 2, patch } => patch >= 5,
+                Version {major: 6, minor: 0, patch } => patch >= 15,
+                Version {major: 255, minor: 255, patch: 255 } => true,
+                _ => false
+            }
+        }
+
         fn intialize(ctx: &Context, args: &Vec<RedisString>) -> Status {
             export_shared_api(ctx);
-            // Enable RDB short read
-            unsafe {
-                rawmod::RedisModule_SetModuleOptions.unwrap()(
-                    ctx.get_raw(),
-                    rawmod::REDISMODULE_OPTIONS_HANDLE_IO_ERRORS
-                        .try_into()
-                        .unwrap(),
-                )
-            };
+            if check_minimal_version_for_short_read() {
+                // Enable RDB short read
+                unsafe {
+                    rawmod::RedisModule_SetModuleOptions.unwrap()(
+                        ctx.get_raw(),
+                        rawmod::REDISMODULE_OPTIONS_HANDLE_IO_ERRORS
+                            .try_into()
+                            .unwrap(),
+                    )
+                };
+                ctx.log_notice("Enabled diskless replication");
+            }
             $init_func(ctx, args)
         }
 
