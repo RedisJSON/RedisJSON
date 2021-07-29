@@ -247,17 +247,21 @@ workflows:
           requires:
             - build
       - package_release:
+          context: common
           <<: *on-version-tags
           requires:
             - build
       - deploy_branch:
+          context: common
           <<: *on-master
           requires:
             - package_branch
       - release_automation:
+          context: common
           requires:
             - deploy_branch
       - deploy_release:
+          context: common
           <<: *on-version-tags
           requires:
             - package_release
