@@ -65,10 +65,8 @@ pub fn json_api_open_key_internal<M: Manager>(
 ) -> *const M::V {
     let ctx = Context::new(ctx);
     if let Ok(h) = manager.open_key_read(&ctx, &key) {
-        if let Ok(v) = h.get_value() {
-            if let Some(v) = v {
-                return v;
-            }
+        if let Ok(Some(v)) = h.get_value() {
+            return v;
         }
     }
     null()
@@ -222,7 +220,7 @@ pub fn json_api_next<M: Manager>(_: M, iter: *mut c_void) -> *const c_void {
         null_mut()
     } else {
         let res = iter.results[iter.pos] as *const M::V as *const c_void;
-        iter.pos = iter.pos + 1;
+        iter.pos += 1;
         res
     }
 }
