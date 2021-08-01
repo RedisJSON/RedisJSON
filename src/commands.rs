@@ -183,7 +183,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     return acc;
                 }
                 let value = match selector.select() {
-                    Ok(s) => s.first().map(|v| *v),
+                    Ok(s) => s.first().copied(),
                     Err(_) => None,
                 };
                 acc.insert(path.get_original(), value);
@@ -197,7 +197,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             if path.is_legacy() {
                 Ok(self
                     .serialize_object(
-                        self.get_first(&paths[0].get_path())?,
+                        self.get_first(paths[0].get_path())?,
                         indent,
                         newline,
                         space,
@@ -370,8 +370,8 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     false
                 } else {
                     for k in a.keys().unwrap() {
-                        let temp1 = a.get_key(&k);
-                        let temp2 = b.get_key(&k);
+                        let temp1 = a.get_key(k);
+                        let temp2 = b.get_key(k);
                         match (temp1, temp2) {
                             (Some(a1), Some(b1)) => {
                                 if !self.is_eqaul(a1, b1) {
