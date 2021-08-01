@@ -3,6 +3,7 @@ extern crate redis_module;
 use std::convert::TryInto;
 
 use redis_module::native_types::RedisType;
+use redis_module::raw::check_minimal_version_for_short_read;
 use redis_module::raw::RedisModuleTypeMethods;
 #[cfg(not(feature = "as-library"))]
 use redis_module::Status;
@@ -397,34 +398,6 @@ macro_rules! redis_json_module_create {(
         redis_json_module_export_shared_api! {
             get_manage:$get_manager_expr,
             pre_command_function: $pre_command_function_expr,
-        }
-
-        struct Version {
-            major: c_int,
-            minor: c_int,
-            patch: c_int,
-        }
-
-        impl From<c_int> for Version {
-            fn from(ver: c_int) -> Self {
-                // Expected format: 0x00MMmmpp for Major, minor, patch
-                Version {
-                    major: (ver&0x00FF0000) >> 16,
-                    minor: (ver & 0x0000FF00) >> 8,
-                    patch: ver & 0x000000FF
-                }
-            }
-        }
-
-        fn check_minimal_version_for_short_read() -> bool {
-            // Minimal versions: 6.2.5 or 6.0.15
-            let v = unsafe { Version::from(rawmod::RedisModule_GetServerVersion.unwrap()()) };
-            match v {
-                Version {major: 6, minor: 2, patch } => patch >= 5,
-                Version {major: 6, minor: 0, patch } => patch >= 15,
-                Version {major: 255, minor: 255, patch: 255 } => true,
-                _ => false
-            }
         }
 
         fn intialize(ctx: &Context, args: &Vec<RedisString>) -> Status {

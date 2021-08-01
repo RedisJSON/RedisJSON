@@ -467,47 +467,43 @@ impl RedisJSON {
 
 pub mod type_methods {
     use super::*;
+    use std::ptr::null_mut;
+
+    pub extern "C" fn rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
+        match rdb_load_json(rdb, encver) {
+            Ok(res) => res,
+            Err(_) => null_mut(),
+        }
+    }
 
     #[allow(non_snake_case, unused)]
-    pub extern "C" fn rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
+    pub fn rdb_load_json(
+        rdb: *mut raw::RedisModuleIO,
+        encver: c_int,
+    ) -> Result<*mut c_void, Error> {
         let json = match encver {
-            0 => match backward::json_rdb_load(rdb) {
-                Ok(d) => RedisJSON { data: d },
-                Err(e) => return 0 as *mut c_void,
-            },
+            0 => {
+                let d = backward::json_rdb_load(rdb)?;
+                RedisJSON { data: d }
+            }
             2 => {
-                let data = raw::load_string(rdb);
-                if is_io_error(rdb) {
-                    return 0 as *mut c_void;
-                }
+                let data = raw::load_string(rdb)?;
                 // Backward support for modules that had AUX field for RediSarch
                 // TODO remove in future versions
-                let u = raw::load_unsigned(rdb);
-                if is_io_error(rdb) {
-                    return 0 as *mut c_void;
-                }
+                let u = raw::load_unsigned(rdb)?;
                 if u > 0 {
-                    raw::load_string(rdb);
-                    if is_io_error(rdb) {
-                        return 0 as *mut c_void;
-                    }
-                    raw::load_string(rdb);
-                    if is_io_error(rdb) {
-                        return 0 as *mut c_void;
-                    }
+                    raw::load_string(rdb)?;
+                    raw::load_string(rdb)?;
                 }
                 RedisJSON::from_str(&data, Format::JSON).unwrap()
             }
             3 => {
-                let data = raw::load_string(rdb);
-                if is_io_error(rdb) {
-                    return 0 as *mut c_void;
-                }
+                let data = raw::load_string(rdb)?;
                 RedisJSON::from_str(&data, Format::JSON).unwrap()
             }
             _ => panic!("Can't load old RedisJSON RDB"),
         };
-        Box::into_raw(Box::new(json)) as *mut c_void
+        Ok(Box::into_raw(Box::new(json)) as *mut c_void)
     }
 
     #[allow(non_snake_case, unused)]
@@ -524,47 +520,35 @@ pub mod type_methods {
         raw::save_string(rdb, &json.data.to_string());
     }
 
-    pub fn is_io_error(rdb: *mut raw::RedisModuleIO) -> bool {
-        unsafe { raw::RedisModule_IsIOError.unwrap()(rdb) != 0 }
+    pub unsafe extern "C" fn aux_load(rdb: *mut raw::RedisModuleIO, encver: i32, when: i32) -> i32 {
+        match json_aux_load(rdb, encver, when) {
+            Ok(v) => v,
+            Err(_) => Status::Err.into(),
+        }
     }
 
     #[allow(non_snake_case, unused)]
-    pub unsafe extern "C" fn aux_load(rdb: *mut raw::RedisModuleIO, encver: i32, when: i32) -> i32 {
+    fn json_aux_load(rdb: *mut raw::RedisModuleIO, encver: i32, when: i32) -> Result<i32, Error> {
         if (encver > REDIS_JSON_TYPE_VERSION) {
-            return Status::Err as i32; // could not load rdb created with higher RedisJSON version!
+            return Err(Error::from(
+                "could not load rdb created with higher RedisJSON version!",
+            ));
         }
 
         // Backward support for modules that had AUX field for RediSarch
         // TODO remove in future versions
         if (encver == 2 && when == raw::Aux::Before as i32) {
-            let map_size = raw::load_unsigned(rdb);
-            if is_io_error(rdb) {
-                return Status::Err as i32;
-            }
-
+            let map_size = raw::load_unsigned(rdb)?;
             for _ in 0..map_size {
-                let index_name = raw::load_string(rdb);
-                if is_io_error(rdb) {
-                    return Status::Err as i32;
-                }
-                let fields_size = raw::load_unsigned(rdb);
-                if is_io_error(rdb) {
-                    return Status::Err as i32;
-                }
+                let index_name = raw::load_string(rdb)?;
+                let fields_size = raw::load_unsigned(rdb)?;
                 for _ in 0..fields_size {
-                    let field_name = raw::load_string(rdb);
-                    if is_io_error(rdb) {
-                        return Status::Err as i32;
-                    }
-                    let path = raw::load_string(rdb);
-                    if is_io_error(rdb) {
-                        return Status::Err as i32;
-                    }
-                    // index::add_field(&index_name, &field_name, &path);
+                    let field_name = raw::load_string(rdb)?;
+                    let path = raw::load_string(rdb)?;
                 }
             }
         }
 
-        Status::Ok as i32
+        Ok(Status::Ok.into())
     }
 }

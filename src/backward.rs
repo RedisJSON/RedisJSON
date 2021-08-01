@@ -6,7 +6,6 @@ use serde_json::Number;
 use serde_json::Value;
 
 use crate::error::Error;
-use crate::redisjson::type_methods::is_io_error;
 
 #[derive(Debug, PartialEq)]
 enum NodeType {
@@ -40,62 +39,40 @@ impl From<u64> for NodeType {
 }
 
 pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> Result<Value, Error> {
-    let node_type = raw::load_unsigned(rdb).into();
-    if is_io_error(rdb) {
-        return Err(Error::from("short read"));
-    }
+    let node_type = raw::load_unsigned(rdb)?.into();
     match node_type {
         NodeType::Null => Ok(Value::Null),
         NodeType::Boolean => {
-            let buffer = raw::load_string_buffer(rdb);
-            if is_io_error(rdb) {
-                return Err(Error::from("short read"));
-            }
+            let buffer = raw::load_string_buffer(rdb)?;
             Ok(Value::Bool(buffer.as_ref()[0] == b'1'))
         }
         NodeType::Integer => {
-            let n = raw::load_signed(rdb);
-            if is_io_error(rdb) {
-                return Err(Error::from("short read"));
-            }
+            let n = raw::load_signed(rdb)?;
             Ok(Value::Number(n.into()))
         }
         NodeType::Number => {
-            let n = raw::load_double(rdb);
-            if is_io_error(rdb) {
-                return Err(Error::from("short read"));
-            }
+            let n = raw::load_double(rdb)?;
             Ok(Value::Number(Number::from_f64(n).unwrap()))
         }
         NodeType::String => {
-            let buffer = raw::load_string_buffer(rdb);
-            if is_io_error(rdb) {
-                return Err(Error::from("short read"));
-            }
+            let buffer = raw::load_string_buffer(rdb)?;
             Ok(Value::String(buffer.to_string().unwrap()))
         }
         NodeType::Dict => {
-            let len = raw::load_unsigned(rdb);
-            if is_io_error(rdb) {
-                return Err(Error::from("short read"));
-            }
+            let len = raw::load_unsigned(rdb)?;
             let mut m = Map::with_capacity(len as usize);
             for _ in 0..len {
-                let u = raw::load_unsigned(rdb);
-                if is_io_error(rdb) {
-                    return Err(Error::from("short read"));
-                }
-                let t: NodeType = u.into();
+                let t: NodeType = raw::load_unsigned(rdb)?.into();
                 if t != NodeType::KeyVal {
                     return Err(Error::from("Can't load old RedisJSON RDB"));
                 }
-                let buffer = raw::load_string_buffer(rdb);
+                let buffer = raw::load_string_buffer(rdb)?;
                 m.insert(buffer.to_string().unwrap(), json_rdb_load(rdb)?);
             }
             Ok(Value::Object(m))
         }
         NodeType::Array => {
-            let len = raw::load_unsigned(rdb);
+            let len = raw::load_unsigned(rdb)?;
             let mut v = Vec::with_capacity(len as usize);
             for _ in 0..len {
                 let nested = json_rdb_load(rdb)?;
