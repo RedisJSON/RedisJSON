@@ -668,6 +668,13 @@ def testArrPopErrors(env):
     r.assertOk(r.execute_command('JSON.SET', 'test','.', '1'))
     r.expect('JSON.ARRPOP', 'test').error().contains("not an array")
 
+def testArrWrongChars(env):
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'test','.', '{"arr":[1,2]}'))
+    r.expect('JSON.ARRINSERT', 'test', '.arr', 0, b'\x80abc').error().contains("Couldn't parse as UTF-8 string")
+    r.expect('JSON.ARRAPPEND', 'test', '.arr', b'\x80abc').error().contains("Couldn't parse as UTF-8 string")
+
 def testArrTrimErrors(env):
     r = env
 
