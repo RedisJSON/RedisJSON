@@ -157,16 +157,15 @@ impl RedisJSON {
                 Ok(res)
             } else {
                 // Adding somewhere in existing object, use jsonpath_lib::replace_with
+                let p = parsed_static_path
+                            .static_path_elements
+                            .iter()
+                            .map(|e| e.to_string())
+                            .collect::<Vec<String>>()
+                            .join("");
                 let mut set = false;
                 let mut selector = SelectorMut::default();
-                if let Err(e) = selector.str_path(
-                    &parsed_static_path
-                        .static_path_elements
-                        .iter()
-                        .map(|e| e.to_string())
-                        .collect::<Vec<String>>()
-                        .join(""),
-                ) {
+                if let Err(e) = selector.str_path(&p) {
                     return Err(e.into());
                 }
                 selector.value(&mut self.data);

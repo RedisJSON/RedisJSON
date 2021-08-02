@@ -229,15 +229,14 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 })])
             } else {
                 // Adding somewhere in existing object, use jsonpath_lib::replace_with
-                let mut selector = Selector::default();
-                if let Err(e) = selector.str_path(
-                    &parsed_static_path
+                let p = parsed_static_path
                         .static_path_elements
                         .iter()
                         .map(|e| e.to_string())
                         .collect::<Vec<String>>()
-                        .join(""),
-                ) {
+                        .join("");
+                let mut selector = Selector::default();
+                if let Err(e) = selector.str_path(&p) {
                     return Err(e.into());
                 }
                 selector.value(self.val);
