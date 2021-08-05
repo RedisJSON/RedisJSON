@@ -23,6 +23,26 @@ commands:
             ./deps/readies/bin/getpy2
             python2 -m pip install -r ./deps/readies/paella/requirements.txt
 
+  install-prerequisites:
+    parameters:
+      redis_version:
+        type: string
+        default: "6"
+      getredis_params:
+        type: string
+        default: ""
+    steps:
+      - setup-automation
+      - run:
+          name: System setup
+          command: |
+            ./system-setup.py
+      - run:
+          name: Install Redis
+          command: |
+            bash -l -c "./deps/readies/bin/getredis -v \"<<parameters.redis_version>>\" --force <<parameters.getredis_params>>"
+            redis-server --version
+
   benchmark-steps:
     parameters:
       github_actor:
@@ -35,8 +55,7 @@ commands:
       - run:
           name: Install remote benchmark tool dependencies
           command: |
-            mkdir -p /workspace
-            TF_EXE_FILE_NAME=/workspace/terraform ./tests/benchmarks/remote/install_deps.sh
+            VERSION=0.14.8 ./deps/readies/bin/getterraform
       - run:
           name: Install remote benchmark python dependencies
           command: python3 -m pip install -r ./tests/benchmarks/requirements.txt
@@ -51,9 +70,9 @@ commands:
             export AWS_DEFAULT_REGION=$PERFORMANCE_EC2_REGION
             export EC2_PRIVATE_PEM=$PERFORMANCE_EC2_PRIVATE_PEM
             redisbench-admin run-remote \
-              --terraform_bin_path /workspace/terraform \
-              --module_path << parameters.module_path >> \
-              --github_actor << parameters.github_actor >> \
+              --required-module ReJSON \
+              --module_path "<< parameters.module_path >>" \
+              --github_actor "<< parameters.github_actor >>" \
               --github_repo $CIRCLE_PROJECT_REPONAME \
               --github_org $CIRCLE_PROJECT_USERNAME \
               --github_sha $CIRCLE_SHA1 \
@@ -61,6 +80,8 @@ commands:
               --upload_results_s3 \
               --triggering_env circleci \
               --push_results_redistimeseries
+
+#----------------------------------------------------------------------------------------------------------------------------------
 
 jobs:
   build:
@@ -192,6 +213,8 @@ jobs:
           command: make -j `nproc`
       - benchmark-steps
 
+#----------------------------------------------------------------------------------------------------------------------------------
+
 on-any-branch: &on-any-branch
   filters:
     branches:
@@ -210,19 +233,33 @@ on-master: &on-master
   filters:
     branches:
       only: master
+    tags:
+      ignore: /.*/
+
+on-integ-branch: &on-integ-branch
+  filters:
+    branches:
+      only:
+        - master
+        - /^\d+\.\d+.*$/
+        - /^feature-.*$/
+    tags:
+      ignore: /.*/
+
+not-on-integ-branch: &not-on-integ-branch
+  filters:
+    branches:
+      ignore:
+        - master
+        - /^\d+\.\d+.*$/
+        - /^feature-.*$/
+    tags:
+      ignore: /.*/
 
 on-version-tags: &on-version-tags
   filters:
     branches:
       ignore: /.*/
-    tags:
-      only: /^v[0-9].*/
-
-on-master-and-version-tags: &on-master-and-version-tags
-  filters:
-    branches:
-      only:
-        - master
     tags:
       only: /^v[0-9].*/
 
@@ -236,14 +273,16 @@ on-integ-and-version-tags: &on-integ-and-version-tags
     tags:
       only: /^v[0-9].*/
 
+#----------------------------------------------------------------------------------------------------------------------------------
+
 workflows:
   version: 2
-  build_and_package:
+  default-flow:
     jobs:
       - build:
           <<: *on-any-branch
       - package_branch:
-          <<: *on-master
+          <<: *on-integ-branch
           requires:
             - build
       - package_release:
@@ -253,26 +292,33 @@ workflows:
             - build
       - deploy_branch:
           context: common
-          <<: *on-master
+          <<: *on-integ-branch
           requires:
             - package_branch
-      - release_automation:
-          context: common
-          requires:
-            - deploy_branch
       - deploy_release:
           context: common
           <<: *on-version-tags
           requires:
             - package_release
-      - performance-automation:
-          <<: *on-integ-and-version-tags
+      - release_automation:
+          <<: *on-version-tags
           context: common
+          requires:
+            - deploy_release
+      - performance-automation:
+          context: common
+          <<: *on-integ-and-version-tags
 
   nightly:
     triggers:
       - schedule:
           cron: "07 20 * * *"
-          <<: *on-master
+          filters:
+            branches:
+              only:
+                - master
+                - /^\d+\.\d+.*$/
+                - /^feature-.*$/
     jobs:
-      - nightly_automation
+      - performance-automation:
+          context: common
