@@ -233,7 +233,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     .static_path_elements
                     .iter()
                     .map(|e| e.to_string())
-                    .collect::<Vec<String>>()
+                    .collect::<Vec<_>>()
                     .join("");
                 let mut selector = Selector::default();
                 if let Err(e) = selector.str_path(&p) {
