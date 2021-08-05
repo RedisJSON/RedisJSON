@@ -52,6 +52,7 @@ commands:
         type: string
         default: ../../src/rejson.so
     steps:
+      - setup-automation
       - run:
           name: Install remote benchmark tool dependencies
           command: |
@@ -69,6 +70,7 @@ commands:
             export AWS_SECRET_ACCESS_KEY=$PERFORMANCE_EC2_SECRET_KEY
             export AWS_DEFAULT_REGION=$PERFORMANCE_EC2_REGION
             export EC2_PRIVATE_PEM=$PERFORMANCE_EC2_PRIVATE_PEM
+
             redisbench-admin run-remote \
               --required-module ReJSON \
               --module_path "<< parameters.module_path >>" \
@@ -86,7 +88,7 @@ commands:
 jobs:
   build:
     docker:
-      - image: redisfab/rmbuilder:6.0.9-x64-buster
+      - image: redisfab/rmbuilder:6.2.5-x64-buster
     steps:
       - checkout
 
@@ -115,7 +117,7 @@ jobs:
             - build
   package_branch:
     docker:
-      - image: redisfab/rmbuilder:6.0.9-x64-buster
+      - image: redisfab/rmbuilder:6.2.5-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -134,7 +136,7 @@ jobs:
 
   package_release:
     docker:
-      - image: redisfab/rmbuilder:6.0.9-x64-buster
+      - image: redisfab/rmbuilder:6.2.5-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -159,7 +161,7 @@ jobs:
 
   deploy_branch:
     docker:
-      - image: redisfab/rmbuilder:6.0.9-x64-buster
+      - image: redisfab/rmbuilder:6.2.5-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -170,7 +172,7 @@ jobs:
 
   deploy_release:
     docker:
-      - image: redisfab/rmbuilder:6.0.9-x64-buster
+      - image: redisfab/rmbuilder:6.2.5-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -181,7 +183,7 @@ jobs:
 
   release_automation:
     docker:
-      - image: redisfab/rmbuilder:6.0.9-x64-buster
+      - image: redisfab/rmbuilder:6.2.5-x64-buster
     steps:
       - checkout
       - setup-automation
@@ -191,7 +193,7 @@ jobs:
 
   nightly_automation:
     docker:
-      - image: redisfab/rmbuilder:6.0.9-x64-buster
+      - image: redisfab/rmbuilder:6.2.5-x64-buster
     steps:
       - checkout
       - setup-automation
@@ -201,7 +203,7 @@ jobs:
 
   performance-automation:
     docker:
-      - image: redisfab/rmbuilder:6.2.1-x64-bionic
+      - image: redisfab/rmbuilder:6.2.5-x64-bionic
     steps:
       - early_return_for_forked_pull_requests
       - checkout
