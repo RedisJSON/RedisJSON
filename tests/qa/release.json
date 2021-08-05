@@ -13,11 +13,6 @@
     "cycle_environments_setup": [
       {
         "teardown": true,
-        "name":"trusty-amd64-aws",
-        "concurrency": 1
-      },
-      {
-        "teardown": true,
         "name": "xenial-amd64-aws",
         "concurrency": 1
       },
