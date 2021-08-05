@@ -161,7 +161,7 @@ impl RedisJSON {
                     .static_path_elements
                     .iter()
                     .map(|e| e.to_string())
-                    .collect::<Vec<String>>()
+                    .collect::<Vec<_>>()
                     .join("");
                 let mut set = false;
                 let mut selector = SelectorMut::default();
