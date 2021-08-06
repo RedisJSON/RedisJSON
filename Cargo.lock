@@ -270,7 +270,7 @@ checksum = "dd25036021b0de88a0aff6b850051563c6516d0bf53f8638938edbb9de732736"
 [[package]]
 name = "jsonpath_lib"
 version = "0.2.6"
-source = "git+https://github.com/RedisJSON/jsonpath.git?branch=generic_json_path#eb1195919b5113a1967df452f5e985823009a9a7"
+source = "git+https://github.com/RedisJSON/jsonpath.git?branch=generic_json_path#14af7aa5435f3e676ceb3441ad78b9c8cb3ffa3a"
 dependencies = [
  "array_tool",
  "log",
@@ -458,8 +458,8 @@ dependencies = [
 
 [[package]]
 name = "redis-module"
-version = "0.21.0"
-source = "git+https://github.com/RedisLabsModules/redismodule-rs.git?branch=omer-short-read#f63305311f15dcb5da2462aa39a3d8aa2a5402bb"
+version = "99.99.99"
+source = "git+https://github.com/RedisLabsModules/redismodule-rs.git?branch=omer-short-read#231262c1b012efc10b3ca888f58eb4b29c62b038"
 dependencies = [
  "bindgen",
  "bitflags",
@@ -467,6 +467,7 @@ dependencies = [
  "enum-primitive-derive",
  "libc",
  "num-traits 0.2.14",
+ "regex",
  "strum_macros",
 ]
 
