@@ -4,7 +4,7 @@ use std::convert::TryInto;
 
 use redis_module::native_types::RedisType;
 use redis_module::raw::RedisModuleTypeMethods;
-use redis_module::raw::Version;
+
 #[cfg(not(feature = "as-library"))]
 use redis_module::Status;
 #[cfg(not(feature = "as-library"))]
@@ -400,45 +400,17 @@ macro_rules! redis_json_module_create {(
             pre_command_function: $pre_command_function_expr,
         }
 
-        pub fn check_minimal_version_for_short_read(ctx: &Context) -> bool {
-            // Minimal versions: 6.2.5
-            // (6.0.15 is not supporting the required event notification for modules)
-            // Also supported on master/unstable (255.255.255)
-            let res = ctx.get_redis_version();
-            match res {
-                Ok(v) =>
-                    match v {
-                        Version {
-                            major: 6,
-                            minor: 2,
-                            patch,
-                        } => patch >= 5,
-                        Version {
-                            major: 255,
-                            minor: 255,
-                            patch: 255,
-                        } => true,
-                        _ => false,
-                    },
-                Err(_) => false
-            }
-        }
-
-
         fn intialize(ctx: &Context, args: &Vec<RedisString>) -> Status {
             export_shared_api(ctx);
-            if check_minimal_version_for_short_read(ctx) {
-                // Enable RDB short read
-                unsafe {
-                    rawmod::RedisModule_SetModuleOptions.unwrap()(
-                        ctx.get_raw(),
-                        rawmod::REDISMODULE_OPTIONS_HANDLE_IO_ERRORS
-                            .try_into()
-                            .unwrap(),
-                    )
-                };
-                ctx.log_notice("Enabled diskless replication");
-            }
+            unsafe {
+                rawmod::RedisModule_SetModuleOptions.unwrap()(
+                    ctx.get_raw(),
+                    rawmod::REDISMODULE_OPTIONS_HANDLE_IO_ERRORS
+                        .try_into()
+                        .unwrap(),
+                )
+            };
+            ctx.log_notice("Enabled diskless replication");
             $init_func(ctx, args)
         }
 
