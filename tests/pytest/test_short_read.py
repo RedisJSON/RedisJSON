@@ -96,7 +96,7 @@ def add_keys(env, num_keys, prefix):
     for i in range(1, num_keys + 1):
         json_val = random_json_value(0, random.randint(0, 5))
         cmd = ['json.set', prefix + ':' + str(i), '$', json.dumps(json_val)]
-        env.assertOk(env.cmd(*cmd))
+        env.assertCmdOk(*cmd)
 
 
 def random_json_value(nesting_level, max_nesting_level):
@@ -191,7 +191,10 @@ class Connection(object):
         self.sockf.flush()
 
     def encoder(self, value):
-        return value.encode('utf-8')
+        if isinstance(value, str):
+            return value.encode('utf-8')
+        else:
+            return value
 
     def decoder(self, value):
         if isinstance(value, bytes):
@@ -393,13 +396,14 @@ class Debug:
         if len(data):
             ch = data[self.dbg_ndx]
             printable_ch = ch
-            if ord(ch) < 32 or ord(ch) == 127:
+            if ch < 32 or ch == 127:
                 printable_ch = '\?'
+            else:
+                printable_ch = chr(printable_ch)
         else:
             ch = '\0'
             printable_ch = '\!'  # no data (zero length)
-        self.dbg_str = '{} {:=0{}n}:{:<2}({:<3})'.format(self.dbg_str, self.dbg_ndx, byte_count_width, printable_ch,
-                                                         ord(ch))
+        self.dbg_str = '{} {:=0{}n}:{:<2}({:<3})'.format(self.dbg_str, self.dbg_ndx, byte_count_width, printable_ch, ch)
         if not (self.dbg_ndx + 1) % 10:
             self.dbg_str = self.dbg_str + "\n"
         self.dbg_ndx = self.dbg_ndx + 1
@@ -409,7 +413,7 @@ class Debug:
 
 def testShortReadJson(env):
     env.skipOnCluster()
-    if env.env.endswith('existing-env'):
+    if env.env.endswith('existing-env') and os.environ.get('CI'):
         env.skip()
 
     with tempfile.TemporaryDirectory(prefix="short-read_") as temp_dir:
@@ -426,12 +430,11 @@ def testShortReadJson(env):
 
 
 def sendShortReads(env, rdb_file):
+
     # Add some initial content (keys) to test backup/restore/discard when short read fails
-    # When entire rdb is successfully sent and loaded (from swapdb) - backup should be discarded
     env.assertCmdOk('replicaof', 'no', 'one')
     env.flush()
     add_keys(env, 10, 'backup:key')
-
     env.assertIsNotNone(env.cmd('json.get', 'backup:key:1', '$'))
     env.assertIsNotNone(env.cmd('json.get', 'backup:key:10', '$'))
 
@@ -446,6 +449,7 @@ def sendShortReads(env, rdb_file):
     for b in r:
         rdb = full_rdb[0:b]
         runShortRead(env, rdb, total_len)
+
 
 
 @Debug(False)
@@ -479,14 +483,15 @@ def runShortRead(env, data, total_len):
             res = conn.read_request()
 
         # Send RDB to replica
-        some_guid = 'af4e30b5d14dce9f96fbb7769d0ec794cdc0bbcc'
+        some_guid = 'c43cf134fd16468b1e26a3d000f2053fef1c5f8c'
         conn.send_status('FULLRESYNC ' + some_guid + ' 0')
         is_shortread = total_len != len(data)
+        binary_data = f'${total_len:d}\r\n'.encode('utf-8') + data
         if is_shortread:
-            conn.send('$%d\r\n%s' % (total_len, data))
+            conn.send(binary_data)
         else:
             # Allow to succeed with a full read (protocol expects a trailing '\r\n')
-            conn.send('$%d\r\n%s\r\n' % (total_len, data))
+            conn.send(binary_data + b'\r\n')
         conn.flush()
 
         # Close during replica is waiting for more RDB data (so replica will re-connect to master)
