@@ -183,7 +183,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     return acc;
                 }
                 let value = match selector.select() {
-                    Ok(s) => s.first().map(|v| *v),
+                    Ok(s) => s.first().copied(),
                     Err(_) => None,
                 };
                 acc.insert(path.get_original(), value);
@@ -196,12 +196,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             let path = &paths[0];
             if path.is_legacy() {
                 Ok(self
-                    .serialize_object(
-                        self.get_first(&paths[0].get_path())?,
-                        indent,
-                        newline,
-                        space,
-                    )
+                    .serialize_object(self.get_first(paths[0].get_path())?, indent, newline, space)
                     .into())
             } else {
                 let values = self.get_values(path.get_path())?;
@@ -234,15 +229,14 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 })])
             } else {
                 // Adding somewhere in existing object, use jsonpath_lib::replace_with
+                let p = parsed_static_path
+                    .static_path_elements
+                    .iter()
+                    .map(|e| e.to_string())
+                    .collect::<Vec<_>>()
+                    .join("");
                 let mut selector = Selector::default();
-                if let Err(e) = selector.str_path(
-                    &parsed_static_path
-                        .static_path_elements
-                        .iter()
-                        .map(|e| e.to_string())
-                        .collect::<Vec<String>>()
-                        .join(""),
-                ) {
+                if let Err(e) = selector.str_path(&p) {
                     return Err(e.into());
                 }
                 selector.value(self.val);
@@ -370,8 +364,8 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     false
                 } else {
                     for k in a.keys().unwrap() {
-                        let temp1 = a.get_key(&k);
-                        let temp2 = b.get_key(&k);
+                        let temp1 = a.get_key(k);
+                        let temp2 = b.get_key(k);
                         match (temp1, temp2) {
                             (Some(a1), Some(b1)) => {
                                 if !self.is_eqaul(a1, b1) {
@@ -862,9 +856,15 @@ pub fn command_json_arr_append<M: Manager>(
 
     // We require at least one JSON item to append
     args.peek().ok_or(RedisError::WrongArity)?;
-    let args = args
-        .map(|json| manager.from_str(&json.to_string_lossy(), Format::JSON))
-        .collect::<Result<_, _>>()?;
+
+    let args = args.try_fold::<_, _, Result<_, RedisError>>(
+        Vec::with_capacity(args.len()),
+        |mut acc, arg| {
+            let json = arg.try_as_str()?;
+            acc.push(manager.from_str(json, Format::JSON)?);
+            Ok(acc)
+        },
+    )?;
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
     let root = redis_key
@@ -930,9 +930,14 @@ pub fn command_json_arr_insert<M: Manager>(
 
     // We require at least one JSON item to append
     args.peek().ok_or(RedisError::WrongArity)?;
-    let args = args
-        .map(|json| manager.from_str(&json.to_string_lossy(), Format::JSON))
-        .collect::<Result<_, _>>()?;
+    let args = args.try_fold::<_, _, Result<_, RedisError>>(
+        Vec::with_capacity(args.len()),
+        |mut acc, arg| {
+            let json = arg.try_as_str()?;
+            acc.push(manager.from_str(json, Format::JSON)?);
+            Ok(acc)
+        },
+    )?;
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
 
