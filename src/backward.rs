@@ -52,11 +52,13 @@ pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> Result<Value, Error> {
         }
         NodeType::Number => {
             let n = raw::load_double(rdb)?;
-            Ok(Value::Number(Number::from_f64(n).unwrap()))
+            Ok(Value::Number(
+                Number::from_f64(n).ok_or_else(|| Error::from("Can't load as float"))?,
+            ))
         }
         NodeType::String => {
             let buffer = raw::load_string_buffer(rdb)?;
-            Ok(Value::String(buffer.to_string().unwrap()))
+            Ok(Value::String(buffer.to_string()?))
         }
         NodeType::Dict => {
             let len = raw::load_unsigned(rdb)?;
@@ -67,7 +69,7 @@ pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> Result<Value, Error> {
                     return Err(Error::from("Can't load old RedisJSON RDB"));
                 }
                 let buffer = raw::load_string_buffer(rdb)?;
-                m.insert(buffer.to_string().unwrap(), json_rdb_load(rdb)?);
+                m.insert(buffer.to_string()?, json_rdb_load(rdb)?);
             }
             Ok(Value::Object(m))
         }

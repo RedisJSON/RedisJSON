@@ -494,11 +494,11 @@ pub mod type_methods {
                     raw::load_string(rdb)?;
                     raw::load_string(rdb)?;
                 }
-                RedisJSON::from_str(&data, Format::JSON).unwrap()
+                RedisJSON::from_str(data.try_as_str()?, Format::JSON).unwrap()
             }
             3 => {
                 let data = raw::load_string(rdb)?;
-                RedisJSON::from_str(&data, Format::JSON).unwrap()
+                RedisJSON::from_str(data.try_as_str()?, Format::JSON).unwrap()
             }
             _ => panic!("Can't load old RedisJSON RDB"),
         };

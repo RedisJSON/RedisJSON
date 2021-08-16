@@ -10,8 +10,9 @@ import gevent.queue
 import gevent.server
 import gevent.socket
 from RLTest import Defaults
-
+from enum import Enum, auto
 from common import TimeLimit
+
 
 Defaults.decode_responses = True
 
@@ -99,35 +100,64 @@ def add_keys(env, num_keys, prefix):
         env.assertCmdOk(*cmd)
 
 
+class JSON_Value_Kind(Enum):
+    FIRST = auto()
+    NULL = FIRST
+    INT = auto()
+    FLOAT = auto()
+    STRING = auto()
+    BOOL = auto()
+    ARRAY = auto()
+    OBJECT = auto()
+    LAST = OBJECT
+
+
+# class JSON_String_Value_Kind(Enum):
+#     FIRST = auto()
+#     NONE_ESCAPED = FIRST
+#     QUOTE = auto()
+#     REVERSE_SOLIDUS = auto()
+#     SOLIDUS = auto()
+#     BACKSPACE = auto()
+#     FORMFEED = auto()
+#     LINEFEED = auto()
+#     CR = auto()
+#     HORIZ_TAB = auto()
+#     HEX = auto()
+#     LAST = HEX
+
+
 def random_json_value(nesting_level, max_nesting_level):
     # Favor a top-level object/array
     if nesting_level == 0 and nesting_level != max_nesting_level and not random.randint(0, 5):
-        kind = random.randint(6, 7)
+        kind = JSON_Value_Kind(random.randint(JSON_Value_Kind.ARRAY.value, JSON_Value_Kind.OBJECT.value))
     else:
-        kind = random.randint(1, 7)
-    if kind == 1:
+        kind = JSON_Value_Kind(random.randint(JSON_Value_Kind.FIRST.value, JSON_Value_Kind.LAST.value))
+
+    if kind == JSON_Value_Kind.NULL:
         # null
         return None
-    elif kind == 2:
+    elif kind == JSON_Value_Kind.INT:
         # int
         return int(rand_num(3))
-    elif kind == 3:
+    elif kind == JSON_Value_Kind.FLOAT:
         # float
         return float(rand_num(3) + '.' + rand_num(2))
-    elif kind == 4:
+    elif kind == JSON_Value_Kind.STRING:
         # string
+        # TODO: Allow also escaped sequenced
         return rand_name(6)
-    elif kind == 5:
+    elif kind == JSON_Value_Kind.BOOL:
         # bool
         return rand_bool()
-    elif kind == 6:
+    elif kind == JSON_Value_Kind.ARRAY:
         # array
         arr = []
         count = 0 if nesting_level == max_nesting_level else random.randint(1, 10)
         for i in range(0, count):
             arr.append(random_json_value(nesting_level + 1, max_nesting_level))
         return arr
-    elif kind == 7:
+    elif kind == JSON_Value_Kind.OBJECT:
         # object
         obj = {}
         count = 0 if nesting_level == max_nesting_level else random.randint(1, 10)
@@ -205,31 +235,17 @@ class Connection(object):
     def readline(self):
         return self.decoder(self.sockf.readline())
 
-    def send_bulk_header(self, data_len):
-        self.sockf.write(self.encoder('$%d\r\n' % data_len))
-        self.sockf.flush()
-
     def send_bulk(self, data):
-        self.sockf.write(self.encoder(('$%d\r\n%s\r\n' % (len(data), data))))
+        data = self.encoder(data)
+        binary_data = b'$%d\r\n%s\r\n' % (len(data), data)
+        self.sockf.write(binary_data)
         self.sockf.flush()
 
     def send_status(self, data):
-        self.sockf.write(self.encoder(('+%s\r\n' % data)))
+        binary_data = b'+%s\r\n' % self.encoder(data)
+        self.sockf.write(binary_data)
         self.sockf.flush()
 
-    def send_error(self, data):
-        self.sockf.write(self.encoder('-%s\r\n' % data))
-        self.sockf.flush()
-
-    def send_integer(self, data):
-        self.sockf.write(self.encoder(':%u\r\n' % data))
-        self.sockf.flush()
-
-    def send_mbulk(self, data):
-        self.sockf.write(self.encoder('*%d\r\n' % len(data)))
-        for elem in data:
-            self.sockf.write(self.encoder('$%d\r\n%s\r\n' % (len(elem), elem)))
-        self.sockf.flush()
 
     def read_mbulk(self, args_count=None):
         if args_count is None:
@@ -269,21 +285,6 @@ class Connection(object):
         self.current_request = req
         self.send_status(status)
 
-    def wait_until_writable(self, timeout=None):
-        try:
-            gevent.socket.wait_write(self.sockf.fileno(), timeout)
-        except gevent.socket.error:
-            return False
-        return True
-
-    def wait_until_readable(self, timeout=None):
-        if self.closed:
-            return False
-        try:
-            gevent.socket.wait_read(self.sockf.fileno(), timeout)
-        except gevent.socket.error:
-            return False
-        return True
 
     def read_response(self):
         line = self.readline()
@@ -397,12 +398,12 @@ class Debug:
             ch = data[self.dbg_ndx]
             printable_ch = ch
             if ch < 32 or ch == 127:
-                printable_ch = '\?'
+                printable_ch = '\\?'
             else:
                 printable_ch = chr(printable_ch)
         else:
             ch = '\0'
-            printable_ch = '\!'  # no data (zero length)
+            printable_ch = '\\!'  # no data (zero length)
         self.dbg_str = '{} {:=0{}n}:{:<2}({:<3})'.format(self.dbg_str, self.dbg_ndx, byte_count_width, printable_ch, ch)
         if not (self.dbg_ndx + 1) % 10:
             self.dbg_str = self.dbg_str + "\n"
@@ -451,7 +452,6 @@ def sendShortReads(env, rdb_file):
         runShortRead(env, rdb, total_len)
 
 
-
 @Debug(False)
 def runShortRead(env, data, total_len):
     with ShardMock(env) as shardMock:
@@ -486,12 +486,13 @@ def runShortRead(env, data, total_len):
         some_guid = 'c43cf134fd16468b1e26a3d000f2053fef1c5f8c'
         conn.send_status('FULLRESYNC ' + some_guid + ' 0')
         is_shortread = total_len != len(data)
-        binary_data = f'${total_len:d}\r\n'.encode('utf-8') + data
         if is_shortread:
+            # Send without the trailing '\r\n' (send data not according to RESP protocol)
+            binary_data = b'$%d\r\n%s' % (total_len, data)
             conn.send(binary_data)
         else:
-            # Allow to succeed with a full read (protocol expects a trailing '\r\n')
-            conn.send(binary_data + b'\r\n')
+            # Allow to succeed with a full read (send data according to RESP protocol)
+            conn.send_bulk(data)
         conn.flush()
 
         # Close during replica is waiting for more RDB data (so replica will re-connect to master)

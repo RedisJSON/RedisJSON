@@ -1,4 +1,5 @@
 use jsonpath_lib::select::JsonPathError;
+use redis_module::RedisError;
 use std::num::ParseIntError;
 
 #[derive(Debug)]
@@ -37,6 +38,12 @@ impl From<redis_module::error::Error> for Error {
             redis_module::error::Error::FromUtf8(err) => err.into(),
             redis_module::error::Error::ParseInt(err) => err.into(),
         }
+    }
+}
+
+impl From<RedisError> for Error {
+    fn from(e: RedisError) -> Self {
+        Self::from(format!("ERR {}", e))
     }
 }
 

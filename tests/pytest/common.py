@@ -1,22 +1,16 @@
 import signal
+from contextlib import contextmanager
 
 
-class TimeLimit(object):
-    """
-    A context manager that fires a TimeExpired exception if it does not
-    return within the specified amount of time.
-    """
+@contextmanager
+def TimeLimit(timeout):
+    def handler(signum, frame):
+        raise Exception('TimeLimit timeout')
 
-    def __init__(self, timeout):
-        self.timeout = timeout
-
-    def __enter__(self):
-        signal.signal(signal.SIGALRM, self.handler)
-        signal.setitimer(signal.ITIMER_REAL, self.timeout, 0)
-
-    def __exit__(self, exc_type, exc_value, traceback):
+    signal.signal(signal.SIGALRM, handler)
+    signal.setitimer(signal.ITIMER_REAL, timeout, 0)
+    try:
+        yield
+    finally:
         signal.setitimer(signal.ITIMER_REAL, 0)
         signal.signal(signal.SIGALRM, signal.SIG_DFL)
-
-    def handler(self, signum, frame):
-        raise Exception('timeout')

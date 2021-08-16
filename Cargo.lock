@@ -68,9 +68,9 @@ dependencies = [
 
 [[package]]
 name = "bitflags"
-version = "1.2.1"
+version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
+checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "bitvec"
@@ -459,7 +459,7 @@ dependencies = [
 [[package]]
 name = "redis-module"
 version = "99.99.99"
-source = "git+https://github.com/RedisLabsModules/redismodule-rs.git?branch=omer-short-read#25711d81727dad30a30829220cacca93c4c18cfb"
+source = "git+https://github.com/RedisLabsModules/redismodule-rs.git?branch=omer-short-read#c32d9854581a3cabb50c901ce6b1b9e5bc718b60"
 dependencies = [
  "bindgen",
  "bitflags",

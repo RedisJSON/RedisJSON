@@ -44,6 +44,7 @@ struct ResultsIterator<'a, V: SelectValue> {
 
 pub static mut LLAPI_CTX: Option<*mut rawmod::RedisModuleCtx> = None;
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn create_rmstring(
     ctx: *mut rawmod::RedisModuleCtx,
     from_str: &str,
@@ -83,6 +84,7 @@ pub fn json_api_get_at<M: Manager>(_: M, json: *const c_void, index: size_t) -> 
     }
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn json_api_get_len<M: Manager>(_: M, json: *const c_void, count: *mut libc::size_t) -> c_int {
     let json = unsafe { &*(json as *const M::V) };
     let len = match json.get_type() {
@@ -132,6 +134,7 @@ pub fn json_api_get_json<M: Manager>(
     create_rmstring(ctx, &res, str)
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn json_api_get_int<M: Manager>(_: M, json: *const c_void, val: *mut c_long) -> c_int {
     let json = unsafe { &*(json as *const M::V) };
     match json.get_type() {
@@ -143,6 +146,7 @@ pub fn json_api_get_int<M: Manager>(_: M, json: *const c_void, val: *mut c_long)
     }
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn json_api_get_double<M: Manager>(_: M, json: *const c_void, val: *mut c_double) -> c_int {
     let json = unsafe { &*(json as *const M::V) };
     match json.get_type() {
@@ -154,6 +158,7 @@ pub fn json_api_get_double<M: Manager>(_: M, json: *const c_void, val: *mut c_do
     }
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn json_api_get_boolean<M: Manager>(_: M, json: *const c_void, val: *mut c_int) -> c_int {
     let json = unsafe { &*(json as *const M::V) };
     match json.get_type() {
@@ -191,6 +196,7 @@ pub fn get_type_and_size(value: &Value) -> (JSONType, size_t) {
     RedisJSON::get_type_and_size(value)
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn set_string(from_str: &str, str: *mut *const c_char, len: *mut size_t) -> c_int {
     if !str.is_null() {
         unsafe {
@@ -236,6 +242,7 @@ pub fn json_api_free_iter<M: Manager>(_: M, iter: *mut c_void) {
     }
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -> *const c_void {
     let v = unsafe { &*(val as *const M::V) };
     let mut selector = Selector::new();
@@ -289,6 +296,7 @@ macro_rules! redis_json_module_export_shared_api {
         }
 
         #[no_mangle]
+        #[allow(clippy::not_unsafe_ptr_arg_deref)]
         pub extern "C" fn JSONAPI_openKeyFromStr(
             ctx: *mut rawmod::RedisModuleCtx,
             path: *const c_char,
