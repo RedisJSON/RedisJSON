@@ -391,10 +391,12 @@ workflows:
           name: deploy_snapshot
           location: snapshots
           context: common
+          #@@ <<: *on-integ-branch
           <<: *on-any-branch
           requires:
-            - platforms-build
-            - build-macos
+            - build
+            #@@ - platforms-build
+            #@@ - build-macos
       - deploy-artifacts:
           name: deploy_release
           context: common
