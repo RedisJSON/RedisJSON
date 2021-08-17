@@ -145,6 +145,7 @@ commands:
           paths:
             - "~/.cargo"
             - "./target"
+      - persist-artifacts
 
   test-steps:
     steps:
@@ -390,7 +391,7 @@ workflows:
           name: deploy_snapshot
           location: snapshots
           context: common
-          <<: *on-integ-branch
+          <<: *on-any-branch
           requires:
             - platforms-build
             - build-macos
