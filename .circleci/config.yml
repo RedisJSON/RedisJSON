@@ -382,6 +382,7 @@ workflows:
       - platforms-build:
           context: common
           #@@ <<: *on-integ-and-version-tags
+          <<: *on-any-branch
           matrix:
             parameters:
               platform: [focal, bionic, xenial, centos8, centos7, buster]
@@ -395,7 +396,7 @@ workflows:
           <<: *on-any-branch
           requires:
             - build
-            #@@ - platforms-build
+            - platforms-build
             #@@ - build-macos
       - deploy-artifacts:
           name: deploy_release
