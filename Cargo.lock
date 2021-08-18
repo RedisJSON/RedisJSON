@@ -459,7 +459,7 @@ dependencies = [
 [[package]]
 name = "redis-module"
 version = "99.99.99"
-source = "git+https://github.com/RedisLabsModules/redismodule-rs.git?branch=omer-short-read#7ba2b7d4e07cb3f2febdd9ef8f782b12b7ae9b86"
+source = "git+https://github.com/RedisLabsModules/redismodule-rs.git?branch=omer-short-read#d488912b2a4febd210648eb90d9332af302ed65a"
 dependencies = [
  "bindgen",
  "bitflags",

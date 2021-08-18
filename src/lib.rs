@@ -1,7 +1,5 @@
 extern crate redis_module;
 
-use std::convert::TryInto;
-
 use redis_module::native_types::RedisType;
 use redis_module::raw::RedisModuleTypeMethods;
 
@@ -74,6 +72,7 @@ macro_rules! redis_json_module_create {(
         use std::marker::PhantomData;
         use std::os::raw::{c_double, c_int, c_long};
         use redis_module::{raw as rawmod};
+        use rawmod::ModuleOptions;
         use std::{
             ffi::CStr,
             os::raw::{c_char, c_void},
@@ -402,14 +401,7 @@ macro_rules! redis_json_module_create {(
 
         fn intialize(ctx: &Context, args: &Vec<RedisString>) -> Status {
             export_shared_api(ctx);
-            unsafe {
-                rawmod::RedisModule_SetModuleOptions.unwrap()(
-                    ctx.get_raw(),
-                    rawmod::REDISMODULE_OPTIONS_HANDLE_IO_ERRORS
-                        .try_into()
-                        .unwrap(),
-                )
-            };
+            ctx.set_module_options(ModuleOptions::HANDLE_IO_ERRORS);
             ctx.log_notice("Enabled diskless replication");
             $init_func(ctx, args)
         }

@@ -9,6 +9,7 @@ import zipfile
 import gevent.queue
 import gevent.server
 import gevent.socket
+import time
 from RLTest import Defaults
 from enum import Enum, auto
 from common import TimeLimit
@@ -416,6 +417,10 @@ def testShortReadJson(env):
     env.skipOnCluster()
     if env.env.endswith('existing-env') and os.environ.get('CI'):
         env.skip()
+
+    seed = str(time.time())
+    env.assertNotEqual(seed, None, message='random seed ' + seed)
+    random.seed(seed)
 
     with tempfile.TemporaryDirectory(prefix="short-read_") as temp_dir:
         if not downloadFiles(temp_dir):
