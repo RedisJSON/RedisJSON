@@ -515,11 +515,15 @@ def runShortRead(env, data, total_len):
             env.assertIsNotNone(env.cmd('json.get', 'backup:key:10', '$'))
 
             env.assertIsNone(env.cmd('json.get', 'content:key:1', '$'))
+            env.assertIsNone(env.cmd('json.get', 'content:key:2', '$'))
+            env.assertIsNone(env.cmd('json.get', 'content:key:39', '$'))
             env.assertIsNone(env.cmd('json.get', 'content:key:40', '$'))
         else:
             # Verify new data was loaded and the backup was discarded
             # TODO: How to verify internal backup was indeed discarded
             env.assertIsNotNone(env.cmd('json.get', 'content:key:1', '$'))
+            env.assertIsNotNone(env.cmd('json.get', 'content:key:2', '$'))
+            env.assertIsNotNone(env.cmd('json.get', 'content:key:39', '$'))
             env.assertIsNotNone(env.cmd('json.get', 'content:key:40', '$'))
 
             env.assertIsNone(env.cmd('json.get', 'backup:key:1', '$'))
