@@ -49,6 +49,7 @@ class RedisJSONSetup(paella.Setup):
         self.pip_install("-r %s/tests/pytest/requirements.txt" % ROOT)
         self.pip_install("toml")
         self.pip_install("awscli")
+        self.pip_install("gevent")
 
 #----------------------------------------------------------------------------------------------
 

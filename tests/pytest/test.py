@@ -7,7 +7,11 @@ import json
 from RLTest import Env
 from includes import *
 
-#----------------------------------------------------------------------------------------------
+from RLTest import Defaults
+
+Defaults.decode_responses = True
+
+# ----------------------------------------------------------------------------------------------
 
 # Path to JSON test case files
 HERE = os.path.abspath(os.path.dirname(__file__))
@@ -15,7 +19,7 @@ ROOT = os.path.abspath(os.path.join(HERE, "../.."))
 TESTS_ROOT = os.path.abspath(os.path.join(HERE, ".."))
 JSON_PATH = os.path.join(TESTS_ROOT, 'files')
 
-#----------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------
 
 # TODO: these are currently not supported so ignore them
 json_ignore = [
