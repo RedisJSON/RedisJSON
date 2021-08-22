@@ -11,14 +11,13 @@ use std::os::raw::{c_int, c_void};
 use bson::decode_document;
 use jsonpath_lib::select::json_node::JsonValueUpdater;
 use jsonpath_lib::select::{Selector, SelectorMut};
-use redis_module::raw::{self, Status};
+use redis_module::raw::{self};
 use serde_json::Value;
 
 use crate::backward;
 use crate::c_api::JSONType;
 use crate::error::Error;
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
-use crate::REDIS_JSON_TYPE_VERSION;
 
 use std::fmt;
 use std::fmt::Display;
@@ -517,37 +516,5 @@ pub mod type_methods {
     pub unsafe extern "C" fn rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
         let json = &*(value as *mut RedisJSON);
         raw::save_string(rdb, &json.data.to_string());
-    }
-
-    pub unsafe extern "C" fn aux_load(rdb: *mut raw::RedisModuleIO, encver: i32, when: i32) -> i32 {
-        match json_aux_load(rdb, encver, when) {
-            Ok(v) => v,
-            Err(_) => Status::Err.into(),
-        }
-    }
-
-    #[allow(non_snake_case, unused)]
-    fn json_aux_load(rdb: *mut raw::RedisModuleIO, encver: i32, when: i32) -> Result<i32, Error> {
-        if (encver > REDIS_JSON_TYPE_VERSION) {
-            return Err(Error::from(
-                "could not load rdb created with higher RedisJSON version!",
-            ));
-        }
-
-        // Backward support for modules that had AUX field for RediSarch
-        // TODO remove in future versions
-        if (encver == 2 && when == raw::Aux::Before as i32) {
-            let map_size = raw::load_unsigned(rdb)?;
-            for _ in 0..map_size {
-                let index_name = raw::load_string(rdb)?;
-                let fields_size = raw::load_unsigned(rdb)?;
-                for _ in 0..fields_size {
-                    let field_name = raw::load_string(rdb)?;
-                    let path = raw::load_string(rdb)?;
-                }
-            }
-        }
-
-        Ok(Status::Ok.into())
     }
 }
