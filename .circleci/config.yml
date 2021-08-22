@@ -145,7 +145,6 @@ commands:
           paths:
             - "~/.cargo"
             - "./target"
-      - persist-artifacts
 
   test-steps:
     steps:
@@ -381,24 +380,20 @@ workflows:
           <<: *not-on-integ-branch
       - platforms-build:
           context: common
-          #@@ <<: *on-integ-and-version-tags
-          <<: *on-any-branch
+          <<: *on-integ-and-version-tags
           matrix:
             parameters:
-              #@@ platform: [focal, bionic, xenial, centos8, centos7, buster]
-              platform: [focal, bionic, xenial, centos8, centos7]
+              platform: [focal, bionic, xenial, centos8, centos7, buster]
       - build-macos:
           <<: *on-integ-and-version-tags
       - deploy-artifacts:
           name: deploy_snapshot
           location: snapshots
           context: common
-          #@@ <<: *on-integ-branch
-          <<: *on-any-branch
+          <<: *on-integ-branch
           requires:
-            - build
             - platforms-build
-            #@@ - build-macos
+            - build-macos
       - deploy-artifacts:
           name: deploy_release
           context: common

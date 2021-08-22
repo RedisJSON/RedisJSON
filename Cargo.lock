@@ -458,8 +458,9 @@ dependencies = [
 
 [[package]]
 name = "redis-module"
-version = "99.99.99"
-source = "git+https://github.com/RedisLabsModules/redismodule-rs.git?branch=omer-short-read#cdd8b0fd493415c95a1229b5eebbdc219db65e62"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa35d4a0a162f70f156bc58fa120f45e2cd61d43a7e07130bcb6822f77501a03"
 dependencies = [
  "bindgen",
  "bitflags",
