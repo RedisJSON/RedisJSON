@@ -21,6 +21,7 @@ CREATE_INDICES_TARGET_DIR = '/tmp/test'
 BASE_RDBS_URL = 'https://s3.amazonaws.com/redismodules/redisearch-enterprise/rdbs/'
 
 SHORT_READ_BYTES_DELTA = int(os.getenv('SHORT_READ_BYTES_DELTA', '1'))
+OS = os.getenv('OS')
 
 RDBS = ['short-reads/rejson_keys_2.0.0.rdb.zip']
 
@@ -416,6 +417,9 @@ class Debug:
 def testShortReadJson(env):
     env.skipOnCluster()
     if env.env.endswith('existing-env') and os.environ.get('CI'):
+        env.skip()
+
+    if OS == 'macos':
         env.skip()
 
     seed = str(time.time())
