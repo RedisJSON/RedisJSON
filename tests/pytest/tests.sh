@@ -4,8 +4,9 @@
 [[ $IGNERR == 1 ]] || set -e
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+READIES=$ROOT/deps/readies
 export ROOT=$(cd $HERE/../.. && pwd)
-. $ROOT/deps/readies/shibumi/functions
+. $READIES/shibumi/functions
 
 cd $HERE
 
@@ -126,6 +127,8 @@ fi
 
 [[ $VERBOSE == 1 ]] && RLTEST_ARGS+=" -v"
 [[ $GDB == 1 ]] && RLTEST_ARGS+=" -i --verbose"
+
+export OS=$($READIES/bin/platform --os)
 
 #----------------------------------------------------------------------------------------------
 
