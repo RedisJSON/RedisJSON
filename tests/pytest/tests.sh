@@ -4,8 +4,8 @@
 [[ $IGNERR == 1 ]] || set -e
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-READIES=$ROOT/deps/readies
 export ROOT=$(cd $HERE/../.. && pwd)
+READIES=$ROOT/deps/readies
 . $READIES/shibumi/functions
 
 cd $HERE
