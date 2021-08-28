@@ -1,4 +1,6 @@
 use jsonpath_lib::select::JsonPathError;
+use redis_module::RedisError;
+use std::num::ParseIntError;
 
 #[derive(Debug)]
 pub struct Error {
@@ -8,6 +10,40 @@ pub struct Error {
 impl From<String> for Error {
     fn from(e: String) -> Self {
         Error { msg: e }
+    }
+}
+
+impl From<redis_module::error::GenericError> for Error {
+    fn from(err: redis_module::error::GenericError) -> Error {
+        err.to_string().into()
+    }
+}
+
+impl From<std::string::FromUtf8Error> for Error {
+    fn from(err: std::string::FromUtf8Error) -> Error {
+        err.to_string().into()
+    }
+}
+
+impl From<ParseIntError> for Error {
+    fn from(err: ParseIntError) -> Error {
+        err.to_string().into()
+    }
+}
+
+impl From<redis_module::error::Error> for Error {
+    fn from(e: redis_module::error::Error) -> Self {
+        match e {
+            redis_module::error::Error::Generic(err) => err.into(),
+            redis_module::error::Error::FromUtf8(err) => err.into(),
+            redis_module::error::Error::ParseInt(err) => err.into(),
+        }
+    }
+}
+
+impl From<RedisError> for Error {
+    fn from(e: RedisError) -> Self {
+        Self::from(format!("ERR {}", e))
     }
 }
 

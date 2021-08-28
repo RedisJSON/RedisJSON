@@ -1,5 +1,12 @@
+extern crate redis_module;
+
 use redis_module::native_types::RedisType;
 use redis_module::raw::RedisModuleTypeMethods;
+
+#[cfg(not(feature = "as-library"))]
+use redis_module::Status;
+#[cfg(not(feature = "as-library"))]
+use redis_module::{Context, RedisResult};
 
 #[cfg(not(feature = "as-library"))]
 use crate::c_api::{
@@ -8,12 +15,7 @@ use crate::c_api::{
     json_api_get_string, json_api_get_type, json_api_is_json, json_api_len, json_api_next,
     json_api_open_key_internal, LLAPI_CTX,
 };
-
-#[cfg(not(feature = "as-library"))]
-use redis_module::Status;
-
-#[cfg(not(feature = "as-library"))]
-use redis_module::{Context, RedisResult};
+use crate::redisjson::Format;
 
 mod array_index;
 mod backward;
@@ -25,7 +27,6 @@ pub mod manager;
 mod nodevisitor;
 pub mod redisjson;
 
-use crate::redisjson::Format;
 pub const REDIS_JSON_TYPE_VERSION: i32 = 3;
 
 pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
@@ -44,7 +45,7 @@ pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
         digest: None,
 
         // Auxiliary data (v2)
-        aux_load: Some(redisjson::type_methods::aux_load),
+        aux_load: None,
         aux_save: None,
         aux_save_triggers: 0,
 
@@ -71,6 +72,7 @@ macro_rules! redis_json_module_create {(
         use std::marker::PhantomData;
         use std::os::raw::{c_double, c_int, c_long};
         use redis_module::{raw as rawmod};
+        use rawmod::ModuleOptions;
         use std::{
             ffi::CStr,
             os::raw::{c_char, c_void},
@@ -399,6 +401,8 @@ macro_rules! redis_json_module_create {(
 
         fn intialize(ctx: &Context, args: &Vec<RedisString>) -> Status {
             export_shared_api(ctx);
+            ctx.set_module_options(ModuleOptions::HANDLE_IO_ERRORS);
+            ctx.log_notice("Enabled diskless replication");
             $init_func(ctx, args)
         }
 
