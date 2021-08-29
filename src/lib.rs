@@ -70,7 +70,7 @@ macro_rules! redis_json_module_create {(
 
         use redis_module::{redis_command, redis_module, RedisString};
         use std::marker::PhantomData;
-        use std::os::raw::{c_double, c_int, c_long};
+        use std::os::raw::{c_double, c_int, c_longlong};
         use redis_module::{raw as rawmod};
         use rawmod::ModuleOptions;
         use std::{
