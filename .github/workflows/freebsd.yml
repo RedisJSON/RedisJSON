@@ -18,6 +18,6 @@ jobs:
       with:
         usesh: true
         sync: rsync
-        prepare: pkg install -y bash lang/rust
+        prepare: pkg install -y bash lang/rust devel/llvm-devel
         run: >
           cargo build --all --all-targets --verbose
