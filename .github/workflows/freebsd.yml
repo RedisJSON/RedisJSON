@@ -1,0 +1,23 @@
+name: macos
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: build
+      uses: vmactions/freebsd-vm@v0.1.4
+      with:
+        usesh: true
+        sync: rsync
+        prepare: pkg install -y bash lang/rust
+        run: >
+          cargo build --all --all-targets --verbose
