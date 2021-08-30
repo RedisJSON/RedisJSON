@@ -18,8 +18,9 @@ jobs:
       with:
         usesh: true
         sync: rsync
-        prepare: pkg install -y bash lang/rust devel/llvm-devel
+        prepare: pkg install -y bash curl lang/rust devel/llvm-devel
         run: |
           cargo build --all --all-targets --verbose 
+          curl https://sh.rustup.rs -sSf | sh
           rustup target add i686-unknown-freebsd
           cargo build --all --all-targets --verbose --target i686-unknown-freebsd
