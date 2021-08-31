@@ -1,6 +1,6 @@
 use libc::size_t;
 use std::ffi::CString;
-use std::os::raw::{c_double, c_int, c_long};
+use std::os::raw::{c_double, c_int, c_longlong};
 use std::ptr::{null, null_mut};
 use std::{
     ffi::CStr,
@@ -135,7 +135,7 @@ pub fn json_api_get_json<M: Manager>(
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub fn json_api_get_int<M: Manager>(_: M, json: *const c_void, val: *mut c_long) -> c_int {
+pub fn json_api_get_int<M: Manager>(_: M, json: *const c_void, val: *mut c_longlong) -> c_int {
     let json = unsafe { &*(json as *const M::V) };
     match json.get_type() {
         SelectValueType::Long => {
@@ -434,7 +434,7 @@ macro_rules! redis_json_module_export_shared_api {
         }
 
         #[no_mangle]
-        pub extern "C" fn JSONAPI_getInt(json: *const c_void, val: *mut c_long) -> c_int {
+        pub extern "C" fn JSONAPI_getInt(json: *const c_void, val: *mut c_longlong) -> c_int {
             $pre_command_function_expr(&get_llapi_ctx(), &Vec::new());
 
             let m = $get_manager_expr;
@@ -594,7 +594,7 @@ macro_rules! redis_json_module_export_shared_api {
             pub getAt: extern "C" fn(json: *const c_void, index: size_t) -> *const c_void,
             pub getLen: extern "C" fn(json: *const c_void, len: *mut size_t) -> c_int,
             pub getType: extern "C" fn(json: *const c_void) -> c_int,
-            pub getInt: extern "C" fn(json: *const c_void, val: *mut c_long) -> c_int,
+            pub getInt: extern "C" fn(json: *const c_void, val: *mut c_longlong) -> c_int,
             pub getDouble: extern "C" fn(json: *const c_void, val: *mut c_double) -> c_int,
             pub getBoolean: extern "C" fn(json: *const c_void, val: *mut c_int) -> c_int,
             pub getString: extern "C" fn(
