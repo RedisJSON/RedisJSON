@@ -2,11 +2,11 @@
 
 ARG REDIS_VER=6.2.4
 
-# OSNICK=focal|bionic|xenial|stretch|buster|centos8|centos7
-ARG OSNICK=buster
+# OSNICK=focal|bionic|xenial|bullseye|centos8|centos7
+ARG OSNICK=bullseye
 
-# OS=debian:buster-slim|debian:stretch-slim|ubuntu:bionic
-ARG OS=debian:buster-slim
+# OS=debian:bullseye-slim|ubuntu:bionic|centos:7
+ARG OS=debian:bullseye-slim
 
 # ARCH=x64|arm64v8|arm32v7
 ARG ARCH=x64
