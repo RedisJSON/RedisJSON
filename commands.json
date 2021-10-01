@@ -1,7 +1,7 @@
 {
   "JSON.DEL": {
     "summary": "Deletes a value",
-    "complexity": "O(N)",
+    "complexity": "O(N), where N is the size of the deleted value",
     "arguments": [
       {
         "name": "key",
@@ -18,7 +18,7 @@
   },
   "JSON.GET": {
     "summary": "Gets the value at one or more paths in JSON serialized form",
-    "complexity": "O(N)",
+    "complexity": "O(N), where N is the size of the value",
     "arguments": [
       {
         "name": "key",
