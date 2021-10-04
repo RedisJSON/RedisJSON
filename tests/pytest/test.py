@@ -505,10 +505,10 @@ def testClear(env):
     # Clear none existing path
     r.expect('JSON.SET', 'test', '.', r'{"a":[1,2], "b":{"c":"d"}}').ok()
     r.expect('JSON.CLEAR', 'test', '$.c').equal(0)
-    r.expect('JSON.GET', 'test', '$').equal('[{"a":[1,2], "b":{"c":"d"}}]')
+    r.expect('JSON.GET', 'test', '$').equal('[{"a":[1,2],"b":{"c":"d"}}]')
 
     r.expect('JSON.CLEAR', 'test', '$.b..a').equal(0)
-    r.expect('JSON.GET', 'test', '$').equal('[{"a":[1,2], "b":{"c":"d"}}]')
+    r.expect('JSON.GET', 'test', '$').equal('[{"a":[1,2],"b":{"c":"d"}}]')
 
     # Key doesn't exist 
     r.expect('JSON.CLEAR', 'not_test_key', '$').raiseError()
