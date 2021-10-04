@@ -1,0 +1,38 @@
+ARG REDIS_VER={{REDIS_VERSION}}
+
+# OS=debian:bullseye-slim|ubuntu:bionic|centos:7
+ARG OS=debian:bullseye-slim
+
+#----------------------------------------------------------------------------------------------
+FROM redisfab/redis:{{REDIS_VERSION}}-{{REDIS_ARCH}}-{{REDIS_OSNICK}} AS redis
+FROM {{REDIS_OS}} AS builder
+
+RUN echo "Building for {{REDIS_OSNICK}} ({{REDIS_OS}}) for {{REDIS_ARCH}} [with Redis {{REDIS_VERSION}}]"
+
+WORKDIR /build
+COPY --from=redis /usr/local/ /usr/local/
+
+ADD . /build
+
+{% include 'setup_environment.yml' %}
+RUN ./system-setup.py
+
+RUN bash -l -c make
+
+RUN mkdir -p bin/artifacts
+{% if REDIS_PACK == "1" %}
+RUN bash -e -l -c "make pack"
+{% endif %}
+
+{% if REDIS_TEST == "1" %}
+RUN set -e ;\
+    bash -l -c "TEST= make test" ;\
+	cd /build/tests/pytest/logs ;\
+    rm -f *.aof *.rdb ;\
+    tar -czf /build/bin/artifacts/pytest-logs-{{REDIS_ARCH}}-{{REDIS_OSNICK}}.tgz .
+{% endif %}
+
+#----------------------------------------------------------------------------------------------
+{% with redis_module="rejson.so", redis_module_srcpath="/build/target/release/rejson.so" %}
+{% include "redis_docker.yml" %}
+{% endwith %}
