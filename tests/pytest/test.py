@@ -488,7 +488,7 @@ def testClear(env):
     # Clear dynamic path
     r.expect('JSON.SET', 'test', '.', r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}') \
         .ok()
-    r.expect('JSON.CLEAR', 'test', '$', '$.arr[2].*').equal(3)
+    r.expect('JSON.CLEAR', 'test', '$.arr.*').equal(3)
     r.expect('JSON.GET', 'test', '$').equal('[{"n":42,"s":"42","arr":[{},"s",{},{}]}]')
 
     # Clear root
@@ -501,6 +501,16 @@ def testClear(env):
     r.expect('JSON.SET', 'test', '$', obj_content_legacy).ok()
     r.expect('JSON.CLEAR', 'test').equal(1)
     r.expect('JSON.GET', 'test', '$').equal('[{}]')
+
+    # Clear none existing path
+    r.expect('JSON.SET', 'test', '.', r'{"a":[1,2], "b":{"c":"d"}}').ok()
+    r.expect('JSON.CLEAR', 'test', '$.c').equal(0)
+    r.expect('JSON.GET', 'test', '$').equal('{"a":[1,2], "b":{"c":"d"}}')
+
+    r.expect('JSON.CLEAR', 'test', '$.b..a').equal(0)
+    r.expect('JSON.GET', 'test', '$').equal('{"a":[1,2], "b":{"c":"d"}}')
+
+    r.expect('JSON.CLEAR', 'not_test_key', '$').equal(0)
 
 def testArrayCRUD(env):
     """Test JSON Array CRUDness"""
