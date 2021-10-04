@@ -482,7 +482,7 @@ def testClear(env):
     r.expect('JSON.GET', 'test', '$.arr[3].n2.n').equal('[[]]')
     r.expect('JSON.GET', 'test', '.arr[3].n2.n').equal('[]')
 
-    # Make sure only appropriate content (obj and arr) was cleared - and that errors were printed for inappropriate content (string and numeric)
+    # Make sure only appropriate content (obj and arr) was cleared
     r.expect('JSON.GET', 'test', '$..n').equal('[42,44,{},[]]')
 
     # Clear dynamic path
