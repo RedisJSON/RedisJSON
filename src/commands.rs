@@ -1137,11 +1137,11 @@ pub fn command_json_clear<M: Manager>(
 
     let paths = find_paths(path, root, |_v| true)?;
     let mut cleared = 0;
-    if !paths.is_empty() {        
+    if !paths.is_empty() {
         for p in paths {
             cleared += redis_key.clear(p)?;
         }
-    } 
+    }
     if cleared > 0 {
         redis_key.apply_changes(ctx, "json.clear")?;
     }
