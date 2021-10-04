@@ -1135,7 +1135,9 @@ pub fn command_json_clear<M: Manager>(
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_paths(path, root, |_v| true)?;
+    let paths = find_paths(path, root, |v| {
+        v.get_type() == SelectValueType::Array || v.get_type() == SelectValueType::Object
+    })?;
     let mut cleared = 0;
     if !paths.is_empty() {
         for p in paths {
