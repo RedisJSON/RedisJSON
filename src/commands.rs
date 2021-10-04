@@ -1137,12 +1137,12 @@ pub fn command_json_clear<M: Manager>(
 
     let paths = find_paths(path, root, |_v| true)?;
     if !paths.is_empty() {
-        let mut res = None;
+        let mut cleared = 0;
         for p in paths {
-            res = Some(redis_key.clear(p)?);
+            cleared += redis_key.clear(p)?;
         }
         redis_key.apply_changes(ctx, "json.clear")?;
-        Ok(res.unwrap().into())
+        Ok(cleared.into())
     } else {
         Err(RedisError::String(format!(
             "Path '{}' does not exist",
