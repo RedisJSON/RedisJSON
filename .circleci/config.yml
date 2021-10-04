@@ -175,8 +175,7 @@ commands:
           name: Build for platform
           command: |
             ROOT=$PWD
-            cd build/platforms
-            make build OSNICK="<<parameters.platform>>" VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH ARTIFACTS=1 TEST=1 SHOW=1
+            make -C build/docker build DOCKER_SUFFIX=".<<parameters.platform>>" OSNICK=<<parameters.platform>> PACK=1 TEST=1 VERBOSE=1
             cd $ROOT
             mkdir -p tests/pytest/logs
             tar -C tests/pytest/logs -xzf bin/artifacts/pytest-logs*.tgz
@@ -184,12 +183,11 @@ commands:
           no_output_timeout: 30m
       - save-tests-logs
       - early-return-for-forked-pull-requests
-      - run:
-          name: Build for platform (publish)
-          command: |
-            docker login -u redisfab -p $DOCKER_REDISFAB_PWD
-            cd build/platforms
-            make publish OSNICK="<<parameters.platform>>" VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH OFFICIAL=0 SHOW=1 VERBOSE=1
+#      - run:
+#          name: Build for platform (publish)
+#          command: |
+#            docker login -u redisfab -p $DOCKER_REDISFAB_PWD
+#            make -C build/docker build DOCKER_SUFFIX=".<<parameters.platform>>" OSNICK=<<parameters.platform>> PACK=1 TEST=1 VERBOSE=1 PUBLISH=1 DOCKERWRAPPER_EXTRA_VARS="DOCKER_PUSH_ONLY=1"
       - persist-artifacts
 
   benchmark-steps:
@@ -382,7 +380,8 @@ workflows:
           <<: *not-on-integ-branch
       - platforms-build:
           context: common
-          <<: *on-integ-and-version-tags
+#         <<: *on-integ-and-version-tags
+          <<: *on-any-branch
           matrix:
             parameters:
               platform: [focal, bionic, xenial, centos8, centos7, bullseye]
