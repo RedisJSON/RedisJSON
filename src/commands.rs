@@ -1135,20 +1135,19 @@ pub fn command_json_clear<M: Manager>(
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_paths(path, root, |_v| true)?;
+    let paths = find_paths(path, root, |v| {
+        v.get_type() == SelectValueType::Array || v.get_type() == SelectValueType::Object
+    })?;
+    let mut cleared = 0;
     if !paths.is_empty() {
-        let mut res = None;
         for p in paths {
-            res = Some(redis_key.clear(p)?);
+            cleared += redis_key.clear(p)?;
         }
-        redis_key.apply_changes(ctx, "json.clear")?;
-        Ok(res.unwrap().into())
-    } else {
-        Err(RedisError::String(format!(
-            "Path '{}' does not exist",
-            path
-        )))
     }
+    if cleared > 0 {
+        redis_key.apply_changes(ctx, "json.clear")?;
+    }
+    Ok(cleared.into())
 }
 
 pub fn command_json_debug<M: Manager>(
