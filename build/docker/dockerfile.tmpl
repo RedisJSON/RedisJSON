@@ -1,7 +1,7 @@
 ARG REDIS_VER={{REDIS_VERSION}}
 
 # OS=debian:bullseye-slim|ubuntu:bionic|centos:7
-ARG OS=debian:bullseye-slim
+ARG OS={{REDIS_OS}}
 
 #----------------------------------------------------------------------------------------------
 FROM redisfab/redis:{{REDIS_VERSION}}-{{REDIS_ARCH}}-{{REDIS_OSNICK}} AS redis
