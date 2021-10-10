@@ -34,5 +34,10 @@ RUN set -e ;\
 
 #----------------------------------------------------------------------------------------------
 {% with redis_module="rejson.so", redis_module_srcpath="/build/target/release/rejson.so" %}
+{% set redis_docker_extra_content ="
+RUN mkdir -p /var/opt/redislabs/artifacts
+RUN chown -R redis:redis /var/opt/redislabs
+COPY --from=builder /build/bin/artifacts/ /var/opt/redislabs/artifacts
+" %}
 {% include "redis_docker.yml" %}
 {% endwith %}
