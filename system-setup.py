@@ -17,6 +17,7 @@ class RedisJSONSetup(paella.Setup):
 
     def common_first(self):
         self.install_downloaders()
+        self.install("unzip")
         self.pip_install("wheel")
         self.pip_install("setuptools --upgrade")
 
