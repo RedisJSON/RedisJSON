@@ -46,7 +46,7 @@ else
 
 	[[ $os == linux ]] && os=Linux
 	[[ $arch == x64 ]] && arch=x86_64
-	
+
 	if [[ $dist == "ubuntu" ]]; then
 		if [[ $nick == "focal" ]]; then
 			nick="ubuntu20.04"
@@ -60,6 +60,8 @@ else
 	elif [[ $dist == debian ]]; then
 		if [[ $nick != "bullseye" ]]; then
 			nick=ubuntu18.04
+        else
+			nick=ubuntu20.04
 		fi
 	elif [[ $dist == centos || $dist == redhat || $dist == fedora ]]; then
 		if [[ $nick == "centos8" ]]; then

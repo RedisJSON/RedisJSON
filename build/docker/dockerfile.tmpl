@@ -1,8 +1,3 @@
-ARG REDIS_VER={{REDIS_VERSION}}
-
-# OS=debian:bullseye-slim|ubuntu:bionic|centos:7
-ARG OS=debian:bullseye-slim
-
 #----------------------------------------------------------------------------------------------
 FROM redisfab/redis:{{REDIS_VERSION}}-{{REDIS_ARCH}}-{{REDIS_OSNICK}} AS redis
 FROM {{REDIS_OS}} AS builder
@@ -31,8 +26,16 @@ RUN set -e ;\
     rm -f *.aof *.rdb ;\
     tar -czf /build/bin/artifacts/pytest-logs-{{REDIS_ARCH}}-{{REDIS_OSNICK}}.tgz .
 {% endif %}
+RUN BRANCH={{REDISEARCH_VERSION}} ./sbin/get-redisearch
 
 #----------------------------------------------------------------------------------------------
-{% with redis_module="rejson.so", redis_module_srcpath="/build/target/release/rejson.so" %}
-{% include "redis_docker.yml" %}
-{% endwith %}
+FROM redisfab/redis:{{REDIS_VERSION}}-{{REDIS_ARCH}}-{{REDIS_OSNICK}}
+WORKDIR /data
+{% set LIBDIR= "/usr/lib/redis/modules" %}
+RUN mkdir -p {{LIBDIR}}
+
+COPY --from=builder /build/target/release/rejson.so {{LIBDIR}}/rejson.so
+COPY --from=builder /build/bin/linux-{{REDIS_OSNICK}}-{{REDIS_ARCH}}/RediSearch/module-enterprise.so {{LIBDIR}}/redisearch.so
+RUN chown -R redis:redis {{LIBDIR}}
+EXPOSE 6379
+CMD ["redis-server", "--loadmodule", "{{LIBDIR}}/rejson.so", "--loadmodule", "{{LIBDIR}}/redisearch.so"]
