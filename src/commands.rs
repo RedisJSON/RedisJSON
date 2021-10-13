@@ -382,8 +382,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         }
     }
 
-
-    pub fn arr_index (
+    pub fn arr_index(
         &self,
         path: &str,
         scalar_json: &str,
@@ -395,7 +394,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         Ok(self.arr_index_single(arr, v, start, end).into())
     }
 
-    pub fn arr_index_legacy (
+    pub fn arr_index_legacy(
         &self,
         path: &str,
         scalar_json: &str,
@@ -405,21 +404,14 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         let arr = self.get_first(path)?;
         let v = serde_json::from_str(scalar_json)?;
         Ok(self.arr_index_single(arr, v, start, end)[0].into())
-    } 
+    }
 
-    fn arr_index_single (
-        &self,
-        arr: &V,
-        v: Value,
-        start: i64,
-        end: i64,
-    ) -> Vec<i64> {        
+    fn arr_index_single(&self, arr: &V, v: Value, start: i64, end: i64) -> Vec<i64> {
         if arr.is_array() {
             // end=-1/0 means INFINITY to support backward with RedisJSON
             if arr.len().unwrap() == 0 || end < -1 {
                 return vec![-1];
             }
-            
 
             let len = arr.len().unwrap() as i64;
 
@@ -443,7 +435,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 return vec![-1];
             }
 
-            let mut indexes = vec!();
+            let mut indexes = vec![];
             for index in start..end {
                 if self.is_eqaul(arr.get_index(index as usize).unwrap(), &v) {
                     indexes.push(index);
@@ -938,13 +930,15 @@ pub fn command_json_arr_index<M: Manager>(
 
     let key = manager.open_key_read(ctx, &key)?;
 
-    let res = key.get_value()?.map_or(Ok(RedisValue::Integer(-1)), |doc| {
-        if path.is_legacy() { 
-            KeyValue::new(doc).arr_index_legacy(path.get_path(), json_scalar, start, end)
-        } else {
-            KeyValue::new(doc).arr_index(path.get_path(), json_scalar, start, end)
-        }
-    })?;
+    let res = key
+        .get_value()?
+        .map_or(Ok(RedisValue::Integer(-1)), |doc| {
+            if path.is_legacy() {
+                KeyValue::new(doc).arr_index_legacy(path.get_path(), json_scalar, start, end)
+            } else {
+                KeyValue::new(doc).arr_index(path.get_path(), json_scalar, start, end)
+            }
+        })?;
 
     Ok(res)
 }
