@@ -38,7 +38,7 @@ commands:
           command: |
             apt-get -qq update
             apt-get -q install -y git openssh-client curl ca-certificates make tar gzip
-            bash <(curl -fsSL https://get.docker.com)
+            bash <(curl -fsSL https://raw.githubusercontent.com/docker/docker-install/master/install.sh)
       - setup_remote_docker:
           version: 20.10.2
           docker_layer_caching: true
@@ -153,6 +153,8 @@ commands:
           command: |
             bash -l -c "python3 -m RLTest --version"
             bash -l -c "make pytest"
+          timeout: 30m
+          no_output_timeout: 30m
       - save_cache:
           key: v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
           paths:
@@ -234,7 +236,7 @@ commands:
 jobs:
   build:
     docker:
-      - image: redisfab/rmbuilder:6.2.4-x64-buster
+      - image: redisfab/rmbuilder:6.2.5-x64-bullseye
     steps:
       - build-steps
       - test-steps
@@ -263,7 +265,7 @@ jobs:
         type: string
         default: ""
     docker:
-      - image: redisfab/rmbuilder:6.2.4-x64-buster
+      - image: redisfab/rmbuilder:6.2.5-x64-bullseye
     steps:
       - early-returns
       - early-return-for-forked-pull-requests
@@ -285,7 +287,7 @@ jobs:
 
   release-automation:
     docker:
-      - image: redisfab/rmbuilder:6.2.4-x64-buster
+      - image: redisfab/rmbuilder:6.2.5-x64-bullseye
     steps:
       - checkout
       - setup-automation
@@ -295,7 +297,7 @@ jobs:
 
   nightly-automation:
     docker:
-      - image: redisfab/rmbuilder:6.2.4-x64-buster
+      - image: redisfab/rmbuilder:6.2.5-x64-bullseye
     steps:
       - checkout
       - setup-automation
@@ -383,7 +385,7 @@ workflows:
           <<: *on-integ-and-version-tags
           matrix:
             parameters:
-              platform: [focal, bionic, xenial, centos8, centos7, buster]
+              platform: [focal, bionic, xenial, centos8, centos7, bullseye]
       - build-macos:
           <<: *on-integ-and-version-tags
       - deploy-artifacts:

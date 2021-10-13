@@ -1,12 +1,16 @@
+use std::vec::Vec;
+
 use redis_module::raw;
 use serde_json::map::Map;
 use serde_json::Number;
 use serde_json::Value;
-use std::vec::Vec;
+
+use crate::error::Error;
 
 #[derive(Debug, PartialEq)]
 enum NodeType {
-    Null, // used in masks and consistent type checking
+    Null,
+    // used in masks and consistent type checking
     String,
     Number,
     Integer,
@@ -34,41 +38,50 @@ impl From<u64> for NodeType {
     }
 }
 
-pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> Value {
-    let node_type = raw::load_unsigned(rdb).into();
+pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> Result<Value, Error> {
+    let node_type = raw::load_unsigned(rdb)?.into();
     match node_type {
-        NodeType::Null => Value::Null,
+        NodeType::Null => Ok(Value::Null),
         NodeType::Boolean => {
-            let buffer = raw::load_string_buffer(rdb);
-            Value::Bool(buffer.as_ref()[0] == b'1')
+            let buffer = raw::load_string_buffer(rdb)?;
+            Ok(Value::Bool(buffer.as_ref()[0] == b'1'))
         }
-        NodeType::Integer => Value::Number(raw::load_signed(rdb).into()),
-        NodeType::Number => Value::Number(Number::from_f64(raw::load_double(rdb)).unwrap()),
+        NodeType::Integer => {
+            let n = raw::load_signed(rdb)?;
+            Ok(Value::Number(n.into()))
+        }
+        NodeType::Number => {
+            let n = raw::load_double(rdb)?;
+            Ok(Value::Number(
+                Number::from_f64(n).ok_or_else(|| Error::from("Can't load as float"))?,
+            ))
+        }
         NodeType::String => {
-            let buffer = raw::load_string_buffer(rdb);
-            Value::String(buffer.to_string().unwrap())
+            let buffer = raw::load_string_buffer(rdb)?;
+            Ok(Value::String(buffer.to_string()?))
         }
         NodeType::Dict => {
-            let len = raw::load_unsigned(rdb);
+            let len = raw::load_unsigned(rdb)?;
             let mut m = Map::with_capacity(len as usize);
             for _ in 0..len {
-                let t: NodeType = raw::load_unsigned(rdb).into();
+                let t: NodeType = raw::load_unsigned(rdb)?.into();
                 if t != NodeType::KeyVal {
-                    panic!("Can't load old RedisJSON RDB");
+                    return Err(Error::from("Can't load old RedisJSON RDB"));
                 }
-                let buffer = raw::load_string_buffer(rdb);
-                m.insert(buffer.to_string().unwrap(), json_rdb_load(rdb));
+                let buffer = raw::load_string_buffer(rdb)?;
+                m.insert(buffer.to_string()?, json_rdb_load(rdb)?);
             }
-            Value::Object(m)
+            Ok(Value::Object(m))
         }
         NodeType::Array => {
-            let len = raw::load_unsigned(rdb);
+            let len = raw::load_unsigned(rdb)?;
             let mut v = Vec::with_capacity(len as usize);
             for _ in 0..len {
-                v.push(json_rdb_load(rdb))
+                let nested = json_rdb_load(rdb)?;
+                v.push(nested);
             }
-            Value::Array(v)
+            Ok(Value::Array(v))
         }
-        NodeType::KeyVal => panic!("Can't load old RedisJSON RDB"),
+        NodeType::KeyVal => Err(Error::from("Can't load old RedisJSON RDB")),
     }
 }

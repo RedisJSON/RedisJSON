@@ -7,7 +7,11 @@ import json
 from RLTest import Env
 from includes import *
 
-#----------------------------------------------------------------------------------------------
+from RLTest import Defaults
+
+Defaults.decode_responses = True
+
+# ----------------------------------------------------------------------------------------------
 
 # Path to JSON test case files
 HERE = os.path.abspath(os.path.dirname(__file__))
@@ -15,7 +19,7 @@ ROOT = os.path.abspath(os.path.join(HERE, "../.."))
 TESTS_ROOT = os.path.abspath(os.path.join(HERE, ".."))
 JSON_PATH = os.path.join(TESTS_ROOT, 'files')
 
-#----------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------
 
 # TODO: these are currently not supported so ignore them
 json_ignore = [
@@ -170,6 +174,14 @@ def testSetBehaviorModifyingSubcommands(env):
     r.expect('JSON.SET', 'test', '.foo[1]', 'null', 'NX').raiseError()
     # r.expect('JSON.SET', 'test', '.foo[1]', 'null', 'XX').raiseError()
 
+    # Wrong arguments
+    r.expect('JSON.SET', 'test', '.foo', '[]', '').raiseError()
+    r.expect('JSON.SET', 'test', '.foo', '[]', 'NN').raiseError()
+    r.expect('JSON.SET', 'test', '.foo', '[]', 'FORMAT', 'TT').raiseError()
+    r.expect('JSON.SET', 'test', '.foo', '[]', 'XX', 'FORMAT', '').raiseError()
+    r.expect('JSON.SET', 'test', '.foo', '[]', 'XX', 'XN').raiseError()
+    r.expect('JSON.SET', 'test', '.foo', '[]', 'XX', '').raiseError()
+
 def testSetWithBracketNotation(env):
     r = env
 
@@ -181,6 +193,15 @@ def testSetWithBracketNotation(env):
     r.assertOk(r.execute_command('JSON.SET', 'x', '.["f1"]["f2"][1]["f.]$.f"]', '1'))  # Replace existing value
     r.assertIsNone(r.execute_command('JSON.SET', 'x', '.["f3"].f2', '1'))  # Fail trying to set f2 when f3 doesn't exist
     r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x')), {'f1': {'f2': [0, {'f.]$.f': 1}, 0]}})  # Make sure it worked
+
+def testGetWithBracketNotation(env):
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'x', '.', '[1,2,3]'))
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '.[1]')), 2) # dot notation - single value
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '[1]')), 2) # implicit dot notation - single value
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$.[1]')), [2]) # dollar notation - array
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$[1]')), [2]) # dollar notation - array
 
 def testSetWithPathErrors(env):
     r = env
@@ -461,8 +482,14 @@ def testClear(env):
     r.expect('JSON.GET', 'test', '$.arr[3].n2.n').equal('[[]]')
     r.expect('JSON.GET', 'test', '.arr[3].n2.n').equal('[]')
 
-    # Make sure only appropriate content (obj and arr) was cleared - and that errors were printed for inappropriate content (string and numeric)
+    # Make sure only appropriate content (obj and arr) was cleared
     r.expect('JSON.GET', 'test', '$..n').equal('[42,44,{},[]]')
+
+    # Clear dynamic path
+    r.expect('JSON.SET', 'test', '.', r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}') \
+        .ok()
+    r.expect('JSON.CLEAR', 'test', '$.arr.*').equal(3)
+    r.expect('JSON.GET', 'test', '$').equal('[{"n":42,"s":"42","arr":[{},"s",{},{}]}]')
 
     # Clear root
     r.expect('JSON.SET', 'test', '.', r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}') \
@@ -474,6 +501,17 @@ def testClear(env):
     r.expect('JSON.SET', 'test', '$', obj_content_legacy).ok()
     r.expect('JSON.CLEAR', 'test').equal(1)
     r.expect('JSON.GET', 'test', '$').equal('[{}]')
+
+    # Clear none existing path
+    r.expect('JSON.SET', 'test', '.', r'{"a":[1,2], "b":{"c":"d"}}').ok()
+    r.expect('JSON.CLEAR', 'test', '$.c').equal(0)
+    r.expect('JSON.GET', 'test', '$').equal('[{"a":[1,2],"b":{"c":"d"}}]')
+
+    r.expect('JSON.CLEAR', 'test', '$.b..a').equal(0)
+    r.expect('JSON.GET', 'test', '$').equal('[{"a":[1,2],"b":{"c":"d"}}]')
+
+    # Key doesn't exist 
+    r.expect('JSON.CLEAR', 'not_test_key', '$').raiseError()
 
 def testArrayCRUD(env):
     """Test JSON Array CRUDness"""
@@ -644,6 +682,25 @@ def testArrPopCommand(env):
     r.assertIsNone(r.execute_command('JSON.ARRPOP', 'test'))
     r.assertIsNone(r.execute_command('JSON.ARRPOP', 'test', '.'))
     r.assertIsNone(r.execute_command('JSON.ARRPOP', 'test', '.', 2))
+
+def testArrPopErrors(env):
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'test','.', '1'))
+    r.expect('JSON.ARRPOP', 'test').error().contains("not an array")
+
+def testArrWrongChars(env):
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'test','.', '{"arr":[1,2]}'))
+    r.expect('JSON.ARRINSERT', 'test', '.arr', 0, b'\x80abc').error().contains("Couldn't parse as UTF-8 string")
+    r.expect('JSON.ARRAPPEND', 'test', '.arr', b'\x80abc').error().contains("Couldn't parse as UTF-8 string")
+
+def testArrTrimErrors(env):
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'test','.', '1'))
+    r.expect('JSON.ARRTRIM', 'test', '.', '0', '1').error().contains("not an array")
 
 def testTypeCommand(env):
     """Test JSON.TYPE command"""

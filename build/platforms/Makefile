@@ -3,12 +3,12 @@ ROOT=../..
 MK.pyver:=3
 include $(ROOT)/deps/readies/mk/main
 
-# OSNICK=buster|stretch|bionic|xenial|centos7
-OSNICK ?= buster
+# OSNICK=bullseye|bionic|xenial|centos7|centos8
+OSNICK ?= bullseye
 
 REPO=rejson
 
-REDIS_VER=6.2.4
+REDIS_VER=6.2.5
 
 INT_BRANCHES=2.0 1.2 1.1 1.0
 
