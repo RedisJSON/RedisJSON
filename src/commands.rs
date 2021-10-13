@@ -382,20 +382,44 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         }
     }
 
-    pub fn arr_index(
+
+    pub fn arr_index (
         &self,
         path: &str,
         scalar_json: &str,
         start: i64,
         end: i64,
-    ) -> Result<i64, Error> {
+    ) -> Result<RedisValue, Error> {
         let res = self.get_first(path)?;
-        if res.get_type() == SelectValueType::Array {
+        let v = serde_json::from_str(scalar_json)?;
+        Ok(self.arr_index_single(res, v, start, end).into())
+    }
+
+    pub fn arr_index_legacy (
+        &self,
+        path: &str,
+        scalar_json: &str,
+        start: i64,
+        end: i64,
+    ) -> Result<RedisValue, Error> {
+        let res = self.get_first(path)?;
+        let v = serde_json::from_str(scalar_json)?;
+        Ok(self.arr_index_single(res, v, start, end)[0].into())
+    } 
+
+    fn arr_index_single (
+        &self,
+        res: &V,
+        v: Value,
+        start: i64,
+        end: i64,
+    ) -> Vec<i64> {        
+        if res.is_array() {
             // end=-1/0 means INFINITY to support backward with RedisJSON
             if res.len().unwrap() == 0 || end < -1 {
-                return Ok(-1);
+                return vec![-1];
             }
-            let v: Value = serde_json::from_str(scalar_json)?;
+            
 
             let len = res.len().unwrap() as i64;
 
@@ -416,19 +440,19 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
 
             if end < start {
                 // don't search at all
-                return Ok(-1);
+                return vec![-1];
             }
-            let mut i = -1;
+
+            let mut indexes = vec!();
             for index in start..end {
                 if self.is_eqaul(res.get_index(index as usize).unwrap(), &v) {
-                    i = index;
-                    break;
+                    indexes.push(index);
                 }
             }
 
-            Ok(i)
+            indexes
         } else {
-            Ok(-1)
+            vec![-1]
         }
     }
 
@@ -910,11 +934,15 @@ pub fn command_json_arr_index<M: Manager>(
 
     let key = manager.open_key_read(ctx, &key)?;
 
-    let index = key.get_value()?.map_or(Ok(-1), |doc| {
-        KeyValue::new(doc).arr_index(path.get_path(), json_scalar, start, end)
+    let res = key.get_value()?.map_or(Ok(RedisValue::Integer(-1)), |doc| {
+        if path.is_legacy() { 
+            KeyValue::new(doc).arr_index_legacy(path.get_path(), json_scalar, start, end)
+        } else {
+            KeyValue::new(doc).arr_index(path.get_path(), json_scalar, start, end)
+        }
     })?;
 
-    Ok(index.into())
+    Ok(res)
 }
 
 pub fn command_json_arr_insert<M: Manager>(
