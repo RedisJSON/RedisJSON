@@ -390,9 +390,9 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         start: i64,
         end: i64,
     ) -> Result<RedisValue, Error> {
-        let res = self.get_first(path)?;
+        let arr = self.get_first(path)?;
         let v = serde_json::from_str(scalar_json)?;
-        Ok(self.arr_index_single(res, v, start, end).into())
+        Ok(self.arr_index_single(arr, v, start, end).into())
     }
 
     pub fn arr_index_legacy (
@@ -402,26 +402,26 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         start: i64,
         end: i64,
     ) -> Result<RedisValue, Error> {
-        let res = self.get_first(path)?;
+        let arr = self.get_first(path)?;
         let v = serde_json::from_str(scalar_json)?;
-        Ok(self.arr_index_single(res, v, start, end)[0].into())
+        Ok(self.arr_index_single(arr, v, start, end)[0].into())
     } 
 
     fn arr_index_single (
         &self,
-        res: &V,
+        arr: &V,
         v: Value,
         start: i64,
         end: i64,
     ) -> Vec<i64> {        
-        if res.is_array() {
+        if arr.is_array() {
             // end=-1/0 means INFINITY to support backward with RedisJSON
-            if res.len().unwrap() == 0 || end < -1 {
+            if arr.len().unwrap() == 0 || end < -1 {
                 return vec![-1];
             }
             
 
-            let len = res.len().unwrap() as i64;
+            let len = arr.len().unwrap() as i64;
 
             // Normalize start
             let start = if start < 0 {
@@ -445,9 +445,13 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
 
             let mut indexes = vec!();
             for index in start..end {
-                if self.is_eqaul(res.get_index(index as usize).unwrap(), &v) {
+                if self.is_eqaul(arr.get_index(index as usize).unwrap(), &v) {
                     indexes.push(index);
                 }
+            }
+
+            if indexes.is_empty() {
+                indexes.push(-1)
             }
 
             indexes
