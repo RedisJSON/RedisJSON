@@ -137,6 +137,27 @@ Delete a value.
 
 [Integer][2], specifically the number of paths deleted (0 or 1).
 
+### JSON.CLEAR
+
+> **Available since 2.0.0.**  
+> **Time complexity:**  O(N), where N is the number of cleared values
+
+#### Syntax
+
+```
+JSON.CLEAR <key> [path]
+```
+
+#### Description
+
+Clear a container value (Array/Object).
+
+`path` defaults to root if not provided. Non-existing keys and paths are ignored.
+
+#### Return value
+
+[Integer][2], specifically the number of containers cleared.
+
 ### JSON.NUMINCRBY
 
 > **Available since 1.0.0.**  
@@ -175,6 +196,25 @@ Multiplies the number value stored at `path` by `number`.
 #### Return value
 
 [Bulk String][3], specifically the stringified new value.
+
+### JSON.TOGGLE
+
+> **Available since 2.0.0.**  
+> **Time complexity:**  O(1).
+
+#### Syntax
+
+```
+JSON.TOGGLE <key> <path>
+```
+
+#### Description
+
+Toggle a boolean value stored at `path`.
+
+#### Return value
+
+[Integer][2], specifically the new value (0-false or 1-true).
 
 ### JSON.STRAPPEND
 
