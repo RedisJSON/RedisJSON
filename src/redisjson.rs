@@ -19,8 +19,46 @@ use crate::c_api::JSONType;
 use crate::error::Error;
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 
+//use crate::normalize_arr_start_index;
 use std::fmt;
 use std::fmt::Display;
+
+#[macro_export]
+/// Returns normalized start index
+macro_rules! normalize_arr_start_index {
+    (
+        $start:ident,
+        $len:ident
+    ) => {
+        // Normalize start
+        if $start < 0 {
+            0.max($len + $start)
+        } else {
+            // start >= 0
+            $start.min($len - 1)
+        }
+    };
+}
+
+#[macro_export]
+/// Return normalized `(start, end)` indices as a tuple
+macro_rules! normalize_arr_indices {
+    (
+        $start:ident,
+        $end:ident,
+        $len:ident
+    ) => {{
+        // Normalize start
+        let start = normalize_arr_start_index!($start, $len);
+        // Normalize end
+        let end = match $end {
+            0 => $len,
+            e if e < 0 => $len + $end,
+            _ => $end.min($len),
+        };
+        (start, end)
+    }};
+}
 
 #[derive(Debug, PartialEq)]
 pub enum SetOptions {
@@ -308,20 +346,7 @@ impl RedisJSON {
 
             let len = arr.len() as i64;
 
-            // Normalize start
-            let start = if start < 0 {
-                0.max(len + start)
-            } else {
-                // start >= 0
-                start.min(len - 1)
-            };
-
-            // Normalize end
-            let end = match end {
-                0 => len,
-                e if e < 0 => len + end,
-                _ => end.min(len),
-            };
+            let (start, end) = normalize_arr_indices!(start, end, len);
 
             if end < start {
                 // don't search at all

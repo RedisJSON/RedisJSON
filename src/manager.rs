@@ -19,6 +19,7 @@ use std::io::Cursor;
 
 use crate::array_index::ArrayIndex;
 
+use crate::normalize_arr_start_index;
 use std::mem;
 
 pub struct SetUpdateInfo {
@@ -417,11 +418,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
                 }
                 // Verify legel index in bounds
                 let len = array.len() as i64;
-                let index = if index < 0 {
-                    0.max(len + index)
-                } else {
-                    index.min(len - 1)
-                } as usize;
+                let index = normalize_arr_start_index!(index, len) as usize;
 
                 let mut new_value = v.take();
                 let curr = new_value.as_array_mut().unwrap();

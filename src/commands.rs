@@ -12,6 +12,7 @@ use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 use crate::error::Error;
 
 use crate::redisjson::SetOptions;
+use crate::{normalize_arr_indices, normalize_arr_start_index};
 
 use serde_json::{Map, Value};
 
@@ -389,24 +390,34 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         start: i64,
         end: i64,
     ) -> Result<RedisValue, Error> {
-        let arr = self.get_first(path)?;
-        let v = serde_json::from_str(scalar_json)?;
-        Ok(self.arr_index_single(arr, v, start, end).into())
+        let scalar_value = serde_json::from_str(scalar_json)?;
+        // FIXME: make sure scalar_value is indeed scalar
+        let values = self.get_values(path)?;
+        let mut res: Vec<RedisValue> = vec![];
+        for value in values {
+            res.push(
+                match self.arr_index_single(value, &scalar_value, start, end)[0] {
+                    -2 => RedisValue::Null,
+                    i => RedisValue::Integer(i),
+                },
+            );
+        }
+        Ok(res.into())
     }
 
     pub fn arr_index_legacy(
         &self,
         path: &str,
+        end: i64,
         scalar_json: &str,
         start: i64,
-        end: i64,
     ) -> Result<RedisValue, Error> {
         let arr = self.get_first(path)?;
         let v = serde_json::from_str(scalar_json)?;
-        Ok(self.arr_index_single(arr, v, start, end)[0].into())
+        Ok(self.arr_index_single(arr, &v, start, end)[0].into())
     }
 
-    fn arr_index_single(&self, arr: &V, v: Value, start: i64, end: i64) -> Vec<i64> {
+    fn arr_index_single(&self, arr: &V, v: &Value, start: i64, end: i64) -> Vec<i64> {
         if arr.is_array() {
             // end=-1/0 means INFINITY to support backward with RedisJSON
             if arr.len().unwrap() == 0 || end < -1 {
@@ -414,21 +425,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             }
 
             let len = arr.len().unwrap() as i64;
-
-            // Normalize start
-            let start = if start < 0 {
-                0.max(len + start)
-            } else {
-                // start >= 0
-                start.min(len - 1)
-            };
-
-            // Normalize end
-            let end = match end {
-                0 => len,
-                e if e < 0 => len + end,
-                _ => end.min(len),
-            };
+            let (start, end) = normalize_arr_indices!(start, end, len);
 
             if end < start {
                 // don't search at all
@@ -437,7 +434,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
 
             let mut indexes = vec![];
             for index in start..end {
-                if self.is_eqaul(arr.get_index(index as usize).unwrap(), &v) {
+                if self.is_eqaul(arr.get_index(index as usize).unwrap(), v) {
                     indexes.push(index);
                 }
             }
@@ -448,7 +445,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
 
             indexes
         } else {
-            vec![-1]
+            vec![-2]
         }
     }
 
@@ -934,7 +931,7 @@ pub fn command_json_arr_index<M: Manager>(
         .get_value()?
         .map_or(Ok(RedisValue::Integer(-1)), |doc| {
             if path.is_legacy() {
-                KeyValue::new(doc).arr_index_legacy(path.get_path(), json_scalar, start, end)
+                KeyValue::new(doc).arr_index_legacy(path.get_path(), end, json_scalar, start)
             } else {
                 KeyValue::new(doc).arr_index(path.get_path(), json_scalar, start, end)
             }
