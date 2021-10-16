@@ -401,7 +401,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         let mut res: Vec<RedisValue> = vec![];
         for value in values {
             res.push(
-                match self.arr_index_single(value, &scalar_value, start, end)[0] {
+                match self.arr_first_index_single(value, &scalar_value, start, end) {
                     -2 => RedisValue::Null,
                     i => RedisValue::Integer(i),
                 },
@@ -419,38 +419,33 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     ) -> Result<RedisValue, Error> {
         let arr = self.get_first(path)?;
         let v = serde_json::from_str(scalar_json)?;
-        Ok(self.arr_index_single(arr, &v, start, end)[0].into())
+        Ok(self.arr_first_index_single(arr, &v, start, end).into())
     }
 
-    fn arr_index_single(&self, arr: &V, v: &Value, start: i64, end: i64) -> Vec<i64> {
+    /// Returns first array index of `v` in `arr`, or -1 if not found in `arr`, or -2 if `arr` is not an array
+    fn arr_first_index_single(&self, arr: &V, v: &Value, start: i64, end: i64) -> i64 {
         if arr.is_array() {
-            // end=-1/0 means INFINITY to support backward with RedisJSON
-            if arr.len().unwrap() == 0 || end < -1 {
-                return vec![-1];
-            }
-
             let len = arr.len().unwrap() as i64;
+            if len == 0 {
+                return -1;
+            }
+            // end=0 means INFINITY to support backward with RedisJSON
             let (start, end) = normalize_arr_indices!(start, end, len);
 
             if end < start {
                 // don't search at all
-                return vec![-1];
+                return -1;
             }
 
-            let mut indexes = vec![];
             for index in start..end {
                 if self.is_eqaul(arr.get_index(index as usize).unwrap(), v) {
-                    indexes.push(index);
+                    return index;
                 }
             }
 
-            if indexes.is_empty() {
-                indexes.push(-1)
-            }
-
-            indexes
+            -1
         } else {
-            vec![-2]
+            -2
         }
     }
 

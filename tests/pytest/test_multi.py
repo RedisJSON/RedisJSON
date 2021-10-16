@@ -23,7 +23,6 @@ JSON_PATH = os.path.join(TESTS_ROOT, 'files')
 def testArrIndexCommand(env):
     """Test JSON.ARRINDEX command"""
     r = env
-    BB()
     # Test index of int scalar in multi values using filter expression
     r.assertOk(r.execute_command('JSON.SET',
                                  'store',
@@ -77,8 +76,10 @@ def testArrIndexCommand(env):
     r.assertEqual(res, [6, 8, -1, None, -1])
     res = r.execute_command('JSON.ARRINDEX', 'test_string', '$..arr', '"baz"', 4, 0)
     r.assertEqual(res, [6, 8, -1, None, -1])
-    res = r.execute_command('JSON.ARRINDEX', 'test_string', '$..arr', '"baz"', 7, -1)
-    r.assertEqual(res, [-1, 8, -1, None, -1])
+    res = r.execute_command('JSON.ARRINDEX', 'test_string', '$..arr', '5', 7, -1)
+    r.assertEqual(res, [-1, -1, -1, None, -1])
+    res = r.execute_command('JSON.ARRINDEX', 'test_string', '$..arr', '5', 7, 0)
+    r.assertEqual(res, [-1, 11, -1, None, -1])
 
     # Test index of null scalar in multi values
     r.assertOk(r.execute_command('JSON.SET', 'test_null',

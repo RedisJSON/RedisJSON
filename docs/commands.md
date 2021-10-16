@@ -253,10 +253,8 @@ JSON.ARRINDEX <key> <path> <json-scalar> [start [stop]]
 Search for the first occurrence of a scalar JSON value in an array.
 
 The optional inclusive `start` (default 0) and exclusive `stop` (default 0, meaning that the last element is included) specify a slice of the array to search.
+Negative values are interpreted as starting from the end.
 
-Negative `start` values are interpreted as starting from the end.
-
-0 or -1 `stop` values are interpreted as including the last element)
 
 Note: out of range errors are treated by rounding the index to the array's start and end. An inverse index range (e.g. from 1 to 0) will return unfound.
 
