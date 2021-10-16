@@ -602,7 +602,7 @@ def testArrIndexCommand(env):
 
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 1), 1)
 
-    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '$.arr', 1), [1, 6])
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '$.arr', 1), [1])
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '$.arr', 2, 1, 4), [2])
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '$.arr', 6), [-1])
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '$.arr', 3, 0, 2), [-1])

@@ -390,8 +390,13 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         start: i64,
         end: i64,
     ) -> Result<RedisValue, Error> {
-        let scalar_value = serde_json::from_str(scalar_json)?;
-        // FIXME: make sure scalar_value is indeed scalar
+        let scalar_value: Value = serde_json::from_str(scalar_json)?;
+        if scalar_value.is_array() || scalar_value.is_object() {
+            return Err(Error::from(format!(
+                "ERR expected scalar but found {}",
+                scalar_json
+            )));
+        }
         let values = self.get_values(path)?;
         let mut res: Vec<RedisValue> = vec![];
         for value in values {
