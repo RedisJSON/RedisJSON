@@ -21,7 +21,7 @@ jobs:
         cargo install cargo-kcov
         cargo kcov --features test --all --verbose
     - name: Upload coverage
-      run: bash <(curl -s https://codecov.io/bash)
+      run: bash <(curl -s https://raw.githubusercontent.com/codecov/codecov-bash/master/codecov)
         
 
 
