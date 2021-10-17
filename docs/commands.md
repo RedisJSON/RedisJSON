@@ -135,7 +135,7 @@ Delete a value.
 
 #### Return value
 
-[Integer][2], specifically the number of paths deleted (0 or 1).
+[Integer][2], specifically the number of paths deleted (0 or more).
 
 ### JSON.NUMINCRBY
 
