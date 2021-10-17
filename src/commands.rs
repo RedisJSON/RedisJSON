@@ -160,17 +160,14 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         String::from_utf8(out.into_inner()).unwrap()
     }
 
-    fn to_json(
+    fn to_json_legacy(
         &'a self,
         paths: &mut Vec<Path>,
         indent: Option<&str>,
         newline: Option<&str>,
         space: Option<&str>,
-        format: Format,
+        _format: Format,
     ) -> Result<RedisValue, Error> {
-        if format == Format::BSON {
-            return Err("Soon to come...".into());
-        }
         if paths.len() > 1 {
             // TODO: Creating a temp doc here duplicates memory usage. This can be very memory inefficient.
             // A better way would be to create a doc of references to the original doc but no current support
@@ -193,17 +190,62 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 .serialize_object(&temp_doc, indent, newline, space)
                 .into())
         } else {
-            let path = &paths[0];
-            if path.is_legacy() {
-                Ok(self
-                    .serialize_object(self.get_first(paths[0].get_path())?, indent, newline, space)
-                    .into())
-            } else {
+            Ok(self
+                .serialize_object(self.get_first(paths[0].get_path())?, indent, newline, space)
+                .into())
+        }
+    }
+
+    fn to_json_multi(
+        &'a self,
+        paths: &Vec<Path>,
+        indent: Option<&str>,
+        newline: Option<&str>,
+        space: Option<&str>,
+        _format: Format,
+    ) -> Result<RedisValue, Error> {
+        // let result = paths
+        //     .iter()
+        //     .map(|path| {
+        //         let values = self.get_values(path.get_path())?;
+        //         Ok(self.serialize_object(&values, indent, newline, space))
+        //     })
+        //     .into_iter()
+        //     .collect::<Vec<_>>();
+        if paths.len() > 1 {
+            let mut res: Vec<RedisValue> = vec![];
+            for path in paths {
                 let values = self.get_values(path.get_path())?;
-                Ok(self
-                    .serialize_object(&values, indent, newline, space)
-                    .into())
+                res.push(
+                    self.serialize_object(&values, indent, newline, space)
+                        .into(),
+                );
             }
+            Ok(res.into())
+        } else {
+            let values = self.get_values(paths[0].get_path())?;
+            Ok(self
+                .serialize_object(&values, indent, newline, space)
+                .into())
+        }
+    }
+
+    fn to_json(
+        &'a self,
+        paths: &mut Vec<Path>,
+        indent: Option<&str>,
+        newline: Option<&str>,
+        space: Option<&str>,
+        format: Format,
+    ) -> Result<RedisValue, Error> {
+        if format == Format::BSON {
+            return Err("Soon to come...".into());
+        }
+        let is_legacy = paths.iter().skip_while(|p| p.is_legacy()).next().is_none();
+        if is_legacy {
+            self.to_json_legacy(paths, indent, newline, space, format)
+        } else {
+            self.to_json_multi(paths, indent, newline, space, format)
         }
     }
 
