@@ -13,8 +13,15 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: Set env
+      run: |
+        rustup toolchain install nightly
+        rustup default nightly
+        rustup component add llvm-tools-preview        
     - name: Build
-      run: cargo build --all --all-targets --verbose
+      run: |
+        export RUSTFLAGS="-Zinstrument-coverage"
+        cargo build --all --all-targets --verbose
     - name: Run tests
       run: |
         sudo apt install kcov
