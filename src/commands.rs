@@ -397,16 +397,16 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 scalar_json
             )));
         }
-        let values = self.get_values(path)?;
-        let mut res: Vec<RedisValue> = vec![];
-        for value in values {
-            res.push(
-                match self.arr_first_index_single(value, &scalar_value, start, end) {
+        let res = self
+            .get_values(path)?
+            .iter()
+            .map(
+                |value| match self.arr_first_index_single(value, &scalar_value, start, end) {
                     -2 => RedisValue::Null,
                     i => RedisValue::Integer(i),
                 },
-            );
-        }
+            )
+            .collect::<Vec<_>>();
         Ok(res.into())
     }
 
