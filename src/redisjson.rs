@@ -12,7 +12,7 @@ use bson::decode_document;
 use jsonpath_lib::select::json_node::JsonValueUpdater;
 use jsonpath_lib::select::{Selector, SelectorMut};
 use redis_module::raw::{self};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::backward;
 use crate::c_api::JSONType;
@@ -160,7 +160,7 @@ impl RedisJSON {
                 let p = parsed_static_path
                     .static_path_elements
                     .iter()
-                    .map(|e| e.to_string())
+                    .map(ToString::to_string)
                     .collect::<Vec<_>>()
                     .join("");
                 let mut set = false;
@@ -274,21 +274,21 @@ impl RedisJSON {
         self.get_first(path)?
             .as_str()
             .ok_or_else(|| "ERR wrong type of path value".into())
-            .map(|s| s.len())
+            .map(str::len)
     }
 
     pub fn arr_len(&self, path: &str) -> Result<usize, Error> {
         self.get_first(path)?
             .as_array()
             .ok_or_else(|| "ERR wrong type of path value".into())
-            .map(|arr| arr.len())
+            .map(Vec::len)
     }
 
     pub fn obj_len(&self, path: &str) -> Result<usize, Error> {
         self.get_first(path)?
             .as_object()
             .ok_or_else(|| "ERR wrong type of path value".into())
-            .map(|obj| obj.len())
+            .map(Map::len)
     }
 
     pub fn obj_keys<'a>(&'a self, path: &'a str) -> Result<Vec<&'a String>, Error> {
@@ -464,7 +464,7 @@ impl RedisJSON {
 }
 
 pub mod type_methods {
-    use super::*;
+    use super::{Error, Format, RedisJSON, backward, c_int, c_void, raw};
     use std::ptr::null_mut;
 
     pub extern "C" fn rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
@@ -501,12 +501,12 @@ pub mod type_methods {
             }
             _ => panic!("Can't load old RedisJSON RDB"),
         };
-        Ok(Box::into_raw(Box::new(json)) as *mut c_void)
+        Ok(Box::into_raw(Box::new(json)).cast::<c_void>())
     }
 
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn free(value: *mut c_void) {
-        let json = value as *mut RedisJSON;
+        let json = value.cast::<RedisJSON>();
 
         // Take ownership of the data from Redis (causing it to be dropped when we return)
         Box::from_raw(json);
@@ -514,7 +514,7 @@ pub mod type_methods {
 
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
-        let json = &*(value as *mut RedisJSON);
+        let json = &*(value.cast::<RedisJSON>());
         raw::save_string(rdb, &json.data.to_string());
     }
 }
