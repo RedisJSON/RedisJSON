@@ -54,6 +54,10 @@ def testSetAndGetCommands(env):
     res = r.execute_command('JSON.GET', 'doc1', '$')
     r.assertEqual(res, '[' + nested_large_key + ']')
     r.assertIsNone(r.execute_command('JSON.SET', 'doc1', '$', nested_large_key, 'NX'))
+    # Test single path
+    res = r.execute_command('JSON.GET', 'doc1', '$..tm')
+    r.assertEqual(res, '[[46,876.85],[134.761,"jcoels",null]]')
+
     # Test multi get and set
     res = r.execute_command('JSON.GET', 'doc1', '$..foobar')
     r.assertEqual(res, '[3.141592,1.61803398875]')
@@ -75,10 +79,16 @@ def testSetAndGetCommands(env):
 
     # Test multi paths
     res = r.execute_command('JSON.GET', 'doc1', '$..tm', '$..nu')
-    r.assertEqual(res, '[[[134.761,"jcoels",null],[46,876.85]],[[377,"qda",true]]]')
-    #r.assertEqual(res, '[[134.761,"jcoels",null],[377,"qda",true]]')
+    r.assertEqual(res, '[[[46,876.85],[134.761,"jcoels",null]],[[377,"qda",true]]]')
+    # Test multi paths - if one path is none-legacy - result format is not legacy
+    res = r.execute_command('JSON.GET', 'doc1', '..tm', '$..nu')
+    r.assertEqual(res, '[[[46,876.85],[134.761,"jcoels",null]],[[377,"qda",true]]]')
 
-    # Test legacy path
-    res = r.execute_command('JSON.GET', 'doc1', '$..tm', '..nu')
-    r.assertEqual(res, '[[134.761,"jcoels",null],[377,"qda",true]]')
+    # Test legacy multi path (all paths are legacy)
+    res = r.execute_command('JSON.GET', 'doc1', '..nu', '..tm')
+    r.assertEqual(res, '{"..nu":[377,"qda",true],"..tm":[46,876.85]}')
+    # Test legacy single path
+    res = r.execute_command('JSON.GET', 'doc1', '..tm')
+    r.assertEqual(res, '[46,876.85]')
+
 

@@ -204,24 +204,13 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         space: Option<&str>,
         _format: Format,
     ) -> Result<RedisValue, Error> {
-        // let result = paths
-        //     .iter()
-        //     .map(|path| {
-        //         let values = self.get_values(path.get_path())?;
-        //         Ok(self.serialize_object(&values, indent, newline, space))
-        //     })
-        //     .into_iter()
-        //     .collect::<Vec<_>>();
         if paths.len() > 1 {
-            let mut res: Vec<RedisValue> = vec![];
+            let mut res: Vec<Vec<&V>> = vec![];
             for path in paths {
                 let values = self.get_values(path.get_path())?;
-                res.push(
-                    self.serialize_object(&values, indent, newline, space)
-                        .into(),
-                );
+                res.push(values);
             }
-            Ok(res.into())
+            Ok(self.serialize_object(&res, indent, newline, space).into())
         } else {
             let values = self.get_values(paths[0].get_path())?;
             Ok(self
@@ -241,7 +230,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         if format == Format::BSON {
             return Err("Soon to come...".into());
         }
-        let is_legacy = paths.iter().skip_while(|p| p.is_legacy()).next().is_none();
+        let is_legacy = !paths.iter().any(|p| !p.is_legacy());
         if is_legacy {
             self.to_json_legacy(paths, indent, newline, space, format)
         } else {
