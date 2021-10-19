@@ -26,6 +26,9 @@ if [[ ${1} == --help || ${1} == help || $HELP == 1 ]]; then
 fi
 
 BRANCH=${BRANCH:-master}
+if [ ${BRANCH} == "edge" ]; then
+    BRANCH=master
+fi
 
 OP=""
 [[ $NOP == 1 ]] && OP=echo
