@@ -189,7 +189,7 @@ pack:
 #----------------------------------------------------------------------------------------------
 
 docker:
-	docker build --pull -t rejson:latest .
+	@$(MAKE) -C ./build/docker
 
 docker_push:
 	docker push redislabs/rejson:latest
