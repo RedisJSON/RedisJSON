@@ -1,8 +1,9 @@
 import time
 
 import redis
-from RLTest import Env
+from RLTest import Env,Defaults
 import time
+Defaults.decode_responses = True
 
 def assert_msg(env, msg, expected_type, expected_data):
     env.assertEqual(expected_type, msg['type']) 
@@ -40,7 +41,7 @@ def test_keyspace_set(env):
         env.assertEqual('["gogototo"]', r.execute_command('JSON.GET', 'test_key', '$.foo'))
         env.assertEqual(None, pubsub.get_message())       
 
-        env.assertEqual(['"gogototo"', None], r.execute_command('JSON.MGET', 'test_key', 'test_key1', '$.foo'))
+        env.assertEqual(['["gogototo"]', None], r.execute_command('JSON.MGET', 'test_key', 'test_key1', '$.foo'))
         env.assertEqual(None, pubsub.get_message())       
 
         env.assertEqual(['foo'], r.execute_command('JSON.OBJKEYS', 'test_key', '$'))

@@ -83,12 +83,50 @@ def testSetAndGetCommands(env):
     # Test multi paths - if one path is none-legacy - result format is not legacy
     res = r.execute_command('JSON.GET', 'doc1', '..tm', '$..nu')
     r.assertEqual(res, '[[[46,876.85],[134.761,"jcoels",null]],[[377,"qda",true]]]')
+    # Test missing key
+    r.assertIsNone(r.execute_command('JSON.GET', 'docX', '..tm', '$..nu'))
+    # Test missing path
+    res = r.execute_command('JSON.GET', 'doc1', '..tm', '$..back_in_nov')
+    r.assertEqual(res, '[[[46,876.85],[134.761,"jcoels",null]],[]]')
+    res = r.execute_command('JSON.GET', 'doc2', '..a', '..b', '$.back_in_nov')
+    r.assertEqual(res, '[[4.2,4.2],[3],[]]')
 
     # Test legacy multi path (all paths are legacy)
     res = r.execute_command('JSON.GET', 'doc1', '..nu', '..tm')
-    r.assertEqual(res, '{"..nu":[377,"qda",true],"..tm":[46,876.85]}')
+    r.assertEqual(json.loads(res), json.loads('{"..nu":[377,"qda",true],"..tm":[46,876.85]}'))
     # Test legacy single path
     res = r.execute_command('JSON.GET', 'doc1', '..tm')
     r.assertEqual(res, '[46,876.85]')
+
+    # Test missing legacy path
+    # FIXME: Should return an error for a missing path (currently the returned dict has a null value for a missing path - but this is valid json value)
+    #  r.expect('JSON.GET', 'doc2', '.a', '.nested.b', '.back_in_nov').raiseError()
+    res = r.execute_command('JSON.GET', 'doc2', '.a', '.nested.b', '.back_in_nov')
+    r.assertEqual(json.loads(res), json.loads('{".nested.b":3,".back_in_nov":null,".a":4.2}'))
+
+def testMGetCommand(env):
+    """Test REJSON.MGET command"""
+    r = env
+    # Test mget with multi paths
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":1, "b": 2, "nested": {"a": 3}, "c": null, "nested2": {"a": null}} '))
+    r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '{"a":4, "b": 5, "nested": {"a": 6}, "c": null, "nested2": {"a": [null]}}'))
+    res1 = r.execute_command('JSON.GET', 'doc1', '$..a')
+    res2 = r.execute_command('JSON.GET', 'doc2', '$..a')
+    r.assertEqual(res1, '[1,3,null]')
+    r.assertEqual(res2, '[4,6,[null]]')
+
+    res = r.execute_command('JSON.MGET', 'doc1', '$..a')
+    r.assertEqual([res1], res)
+
+    res = r.execute_command('JSON.MGET', 'doc1', 'doc2', '$..a')
+    r.assertEqual(res, [res1,res2])
+
+
+def testNumIncrMulCommands(env):
+    """
+    Test REJSON.NUMINCRBY command
+    Test REJSON.NUMMULTBY command
+    """
+    r = env
 
 

@@ -186,6 +186,9 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 acc.insert(path.get_original(), value);
                 acc
             });
+            // if temp_doc.iter().any(|p| p.1.is_none()) {
+            //     return Err("ERR path {} does not exist".into());
+            // }
             Ok(self
                 .serialize_object(&temp_doc, indent, newline, space)
                 .into())
@@ -205,6 +208,10 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         _format: Format,
     ) -> Result<RedisValue, Error> {
         if paths.len() > 1 {
+            // let res = paths.iter().fold(Vec::new(), |mut acc, p| {
+            //     acc.push(self.get_values(p.get_path()));
+            //     acc
+            // });
             let mut res: Vec<Vec<&V>> = vec![];
             for path in paths {
                 let values = self.get_values(path.get_path())?;
@@ -212,9 +219,8 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             }
             Ok(self.serialize_object(&res, indent, newline, space).into())
         } else {
-            let values = self.get_values(paths[0].get_path())?;
             Ok(self
-                .serialize_object(&values, indent, newline, space)
+                .to_string_multi(paths[0].get_path(), indent, newline, space)?
                 .into())
         }
     }
@@ -328,6 +334,17 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     pub fn to_string(&self, path: &str, format: Format) -> Result<String, Error> {
         let results = self.get_first(path)?;
         Self::serialize(results, format)
+    }
+
+    pub fn to_string_multi(
+        &self,
+        path: &str,
+        indent: Option<&str>,
+        newline: Option<&str>,
+        space: Option<&str>,
+    ) -> Result<String, Error> {
+        let results = self.get_values(path)?;
+        Ok(self.serialize_object(&results, indent, newline, space))
     }
 
     pub fn get_type(&self, path: &str) -> Result<String, Error> {
@@ -675,7 +692,9 @@ pub fn command_json_mget<M: Manager>(
                 manager
                     .open_key_read(ctx, key)?
                     .get_value()?
-                    .map(|doc| KeyValue::new(doc).to_string(path.get_path(), Format::JSON))
+                    .map(|doc| {
+                        KeyValue::new(doc).to_string_multi(path.get_path(), None, None, None)
+                    })
                     .transpose()
                     .map_or_else(|_| Ok(RedisValue::Null), |v| Ok(v.into()))
             })

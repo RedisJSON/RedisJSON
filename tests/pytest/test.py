@@ -308,22 +308,22 @@ def testMgetCommand(env):
     r.assertEqual(len(raw), 5)
     for d in range(0, 5):
         key = 'doc:{}'.format(d)
-        r.assertEqual(json.loads(raw[d]), docs['basic'], d)
+        r.assertEqual(json.loads(raw[d]), [docs['basic']], d)
 
     # Test an MGET that fails for one key
     r.cmd('DEL', 'test')
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"bool":false}'))
     raw = r.execute_command('JSON.MGET', 'test', 'doc:0', 'foo', '.bool')
     r.assertEqual(len(raw), 3)
-    r.assertFalse(json.loads(raw[0]))
-    r.assertTrue(json.loads(raw[1]))
+    r.assertFalse(json.loads(raw[0])[0])
+    r.assertTrue(json.loads(raw[1])[0])
     r.assertEqual(raw[2], None)
 
     # Test that MGET on missing path
     raw = r.execute_command('JSON.MGET', 'doc:0', 'doc:1', '42isnotapath')
     r.assertEqual(len(raw), 2)
-    r.assertEqual(raw[0], None)
-    r.assertEqual(raw[1], None)
+    r.assertEqual(raw[0], '[]')
+    r.assertEqual(raw[1], '[]')
 
     # Test that MGET fails on path errors
     r.cmd('DEL', 'test')
@@ -331,7 +331,7 @@ def testMgetCommand(env):
     raw = r.execute_command('JSON.MGET', 'doc:0', 'test', 'doc:1', '.bool')
     r.assertEqual(len(raw), 3)
     r.assertTrue(json.loads(raw[0]))
-    r.assertEqual(raw[1], None)
+    r.assertEqual(raw[1], '[]')
     r.assertTrue(json.loads(raw[2]))
 
 def testToggleCommand(env):
