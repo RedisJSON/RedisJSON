@@ -147,7 +147,6 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     }
 
     fn serialize_object<O: Serialize>(
-        &'a self,
         o: &O,
         indent: Option<&str>,
         newline: Option<&str>,
@@ -189,13 +188,17 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             // if temp_doc.iter().any(|p| p.1.is_none()) {
             //     return Err("ERR path {} does not exist".into());
             // }
-            Ok(self
-                .serialize_object(&temp_doc, indent, newline, space)
-                .into())
+            Ok(Self::serialize_object(&temp_doc, indent, newline, space).into())
         } else {
-            Ok(self
-                .serialize_object(self.get_first(paths[0].get_path())?, indent, newline, space)
-                .into())
+            Ok(
+                Self::serialize_object(
+                    self.get_first(paths[0].get_path())?,
+                    indent,
+                    newline,
+                    space,
+                )
+                .into(),
+            )
         }
     }
 
@@ -217,7 +220,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 let values = self.get_values(path.get_path())?;
                 res.push(values);
             }
-            Ok(self.serialize_object(&res, indent, newline, space).into())
+            Ok(Self::serialize_object(&res, indent, newline, space).into())
         } else {
             Ok(self
                 .to_string_multi(paths[0].get_path(), indent, newline, space)?
@@ -344,7 +347,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         space: Option<&str>,
     ) -> Result<String, Error> {
         let results = self.get_values(path)?;
-        Ok(self.serialize_object(&results, indent, newline, space))
+        Ok(Self::serialize_object(&results, indent, newline, space))
     }
 
     pub fn get_type(&self, path: &str) -> Result<String, Error> {
@@ -634,6 +637,27 @@ fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
         .select_with_paths(f)?)
 }
 
+/// Return paths matching the filter `f` and `None` for paths not matching the filter while keeping order of visiting
+///
+fn find_all_paths<T: SelectValue, F: Fn(&T) -> bool>(
+    path: &str,
+    doc: &T,
+    f: F,
+) -> Result<Vec<Option<Vec<String>>>, RedisError> {
+    let mut def = Selector::default();
+    let sel = def.str_path(path)?.value(doc);
+    let nodes = sel.select()?;
+    let paths = sel.select_with_paths(|_| true)?;
+    Ok(nodes
+        .iter()
+        .zip(paths.into_iter())
+        .map(|p| match f(p.0) {
+            true => Some(p.1),
+            _ => None,
+        })
+        .collect::<Vec<Option<Vec<String>>>>())
+}
+
 pub fn command_json_del<M: Manager>(
     manager: M,
     ctx: &Context,
@@ -753,23 +777,34 @@ where
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
-    let paths = find_paths(path.get_path(), root, |v| {
+    let paths = find_all_paths(path.get_path(), root, |v| {
         v.get_type() == SelectValueType::Double || v.get_type() == SelectValueType::Long
     })?;
     if !paths.is_empty() {
-        let mut res = None;
+        let mut res = vec![];
         for p in paths {
-            res = Some(match op {
-                NumOp::Incr => redis_key.incr_by(p, number)?,
-                NumOp::Mult => redis_key.mult_by(p, number)?,
-                NumOp::Pow => redis_key.pow_by(p, number)?,
+            res.push(match p {
+                Some(p) => Some(match op {
+                    NumOp::Incr => redis_key.incr_by(p, number)?,
+                    NumOp::Mult => redis_key.mult_by(p, number)?,
+                    NumOp::Pow => redis_key.pow_by(p, number)?,
+                }),
+                None => None,
             });
         }
         redis_key.apply_changes(ctx, cmd)?;
-        Ok(res.unwrap().to_string().into())
+
+        let res = res
+            .iter()
+            .map(|n| match n {
+                Some(n) => Value::Number(n.clone()),
+                _ => Value::Null,
+            })
+            .collect::<Vec<Value>>();
+        Ok(KeyValue::<M::V>::serialize_object(&res, None, None, None).into())
     } else {
         Err(RedisError::String(format!(
-            "Path '{}' does not exist or does not contains a number",
+            "Path '{}' does not exist",
             path
         )))
     }

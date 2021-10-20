@@ -757,28 +757,28 @@ def testNumIncrCommand(env):
     r = env
 
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{ "foo": 0, "bar": "baz" }'))
-    r.assertEqual('1', r.execute_command('JSON.NUMINCRBY', 'test', '.foo', 1))
+    r.assertEqual('[1]', r.execute_command('JSON.NUMINCRBY', 'test', '.foo', 1))
     r.assertEqual('1', r.execute_command('JSON.GET', 'test', '.foo'))
-    r.assertEqual('3', r.execute_command('JSON.NUMINCRBY', 'test', '.foo', 2))
-    r.assertEqual('3.5', r.execute_command('JSON.NUMINCRBY', 'test', '.foo', .5))
+    r.assertEqual('[3]', r.execute_command('JSON.NUMINCRBY', 'test', '.foo', 2))
+    r.assertEqual('[3.5]', r.execute_command('JSON.NUMINCRBY', 'test', '.foo', .5))
 
     # test a wrong type
-    r.expect('JSON.NUMINCRBY', 'test', '.bar', 1).raiseError()
-#
-#         # test a missing path
-#         r.expect('JSON.NUMINCRBY', 'test', '.fuzz', 1).raiseError()
-#
+    r.assertEqual('[null]', r.execute_command('JSON.NUMINCRBY', 'test', '.bar', 1))
+
+    # test a missing path
+    r.expect('JSON.NUMINCRBY', 'test', '.fuzz', 1).raiseError()
+
     # test issue #9
     r.assertOk(r.execute_command('JSON.SET', 'num', '.', '0'))
-    r.assertEqual('1', r.execute_command('JSON.NUMINCRBY', 'num', '.', 1))
-    r.assertEqual('2.5', r.execute_command('JSON.NUMINCRBY', 'num', '.', 1.5))
+    r.assertEqual('[1]', r.execute_command('JSON.NUMINCRBY', 'num', '.', 1))
+    r.assertEqual('[2.5]', r.execute_command('JSON.NUMINCRBY', 'num', '.', 1.5))
 
     # test issue 55
     r.assertOk(r.execute_command('JSON.SET', 'foo', '.', '{"foo":0,"bar":42}'))
     # Get the document once
     r.execute_command('JSON.GET', 'foo', '.')
-    r.assertEqual('1', r.execute_command('JSON.NUMINCRBY', 'foo', 'foo', 1))
-    r.assertEqual('84', r.execute_command('JSON.NUMMULTBY', 'foo', 'bar', 2))
+    r.assertEqual('[1]', r.execute_command('JSON.NUMINCRBY', 'foo', 'foo', 1))
+    r.assertEqual('[84]', r.execute_command('JSON.NUMMULTBY', 'foo', 'bar', 2))
     res = json.loads(r.execute_command('JSON.GET', 'foo', '.'))
     r.assertEqual(1, res['foo'])
     r.assertEqual(84, res['bar'])
