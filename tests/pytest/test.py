@@ -291,7 +291,9 @@ def testSetBSON(env):
     r = env
     bson = open(os.path.join(JSON_PATH , 'bson_bytes_1.bson'), 'rb').read()
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', bson, 'FORMAT', 'BSON'))
-    data = json.loads(r.execute_command('JSON.GET', 'test', *docs['values'].keys()))
+    data = json.loads(r.execute_command('JSON.GET', 'test', '.a'))
+    r.assertEqual(data, '"b"')
+    r.expect(r.execute_command('JSON.GET', 'test', *docs['values'].keys())).raiseError()
 
 def testMgetCommand(env):
     """Test REJSON.MGET command"""

@@ -638,25 +638,14 @@ fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
         .select_with_paths(f)?)
 }
 
-/// Return paths matching the filter `f` and `None` for paths not matching the filter while keeping order of visiting
-///
-fn find_all_paths<T: SelectValue, F: Fn(&T) -> bool>(
+fn get_all_values_and_paths<'a, T: SelectValue>(
     path: &str,
-    doc: &T,
-    f: F,
-) -> Result<Vec<Option<Vec<String>>>, RedisError> {
-    let mut def = Selector::default();
-    let sel = def.str_path(path)?.value(doc);
-    let nodes = sel.select()?;
-    let paths = sel.select_with_paths(|_| true)?;
-    Ok(nodes
-        .iter()
-        .zip(paths.into_iter())
-        .map(|p| match f(p.0) {
-            true => Some(p.1),
-            _ => None,
-        })
-        .collect::<Vec<Option<Vec<String>>>>())
+    doc: &'a T,
+) -> Result<Vec<(&'a T, Vec<String>)>, RedisError> {
+    Ok(Selector::default()
+        .str_path(path)?
+        .value(doc)
+        .select_values_with_paths()?)
 }
 
 pub fn command_json_del<M: Manager>(
@@ -778,9 +767,14 @@ where
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
-    let paths = find_all_paths(path.get_path(), root, |v| {
-        v.get_type() == SelectValueType::Double || v.get_type() == SelectValueType::Long
-    })?;
+    let mut paths = get_all_values_and_paths(path.get_path(), root)?;
+    let paths = paths
+        .drain(..)
+        .map(|(v, p)| match v.get_type() {
+            SelectValueType::Double | SelectValueType::Long => Some(p),
+            _ => None,
+        })
+        .collect::<Vec<Option<Vec<String>>>>();
     if !paths.is_empty() {
         let mut res = vec![];
         for p in paths {
@@ -790,7 +784,7 @@ where
                     NumOp::Mult => redis_key.mult_by(p, number)?,
                     NumOp::Pow => redis_key.pow_by(p, number)?,
                 }),
-                None => None,
+                _ => None,
             });
         }
         redis_key.apply_changes(ctx, cmd)?;
