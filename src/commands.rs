@@ -648,6 +648,22 @@ fn get_all_values_and_paths<'a, T: SelectValue>(
         .select_values_with_paths()?)
 }
 
+// FIXME: Remove this function and use get_all_values_and_paths instead once it is working well
+fn find_all_paths<'a, T: SelectValue>(
+    path: &str,
+    doc: &'a T,
+) -> Result<Vec<(&'a T, Vec<String>)>, RedisError> {
+    let mut def = Selector::default();
+    let sel = def.str_path(path)?.value(doc);
+    let nodes = sel.select()?;
+    // FIXME: Avoid selecting twice (paths and values)
+    let paths = sel.select_with_paths(|_| true)?;
+    Ok(nodes
+        .into_iter()
+        .zip(paths.into_iter())
+        .collect::<Vec<(&'a T, Vec<String>)>>())
+}
+
 pub fn command_json_del<M: Manager>(
     manager: M,
     ctx: &Context,
@@ -767,7 +783,7 @@ where
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
-    let mut paths = get_all_values_and_paths(path.get_path(), root)?;
+    let mut paths = find_all_paths(path.get_path(), root)?;
     let paths = paths
         .drain(..)
         .map(|(v, p)| match v.get_type() {
