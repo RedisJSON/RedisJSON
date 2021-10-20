@@ -53,7 +53,9 @@ pub fn create_rmstring(
     if let Ok(s) = CString::new(from_str) {
         let p = s.as_bytes_with_nul().as_ptr().cast::<c_char>();
         let len = s.as_bytes().len();
-        unsafe { *str = rawmod::RedisModule_CreateString.unwrap()(ctx, p, len); };
+        unsafe {
+            *str = rawmod::RedisModule_CreateString.unwrap()(ctx, p, len);
+        };
         return Status::Ok as c_int;
     }
     Status::Err as c_int
@@ -86,7 +88,7 @@ pub fn json_api_get_at<M: Manager>(_: M, json: *const c_void, index: size_t) -> 
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn json_api_get_len<M: Manager>(_: M, json: *const c_void, count: *mut libc::size_t) -> c_int {
-    let json = unsafe { &*(json.cast::<M::V>())};
+    let json = unsafe { &*(json.cast::<M::V>()) };
     let len = match json.get_type() {
         SelectValueType::String => Some(json.get_str().len()),
         SelectValueType::Array | SelectValueType::Object => Some(json.len().unwrap()),
@@ -94,7 +96,9 @@ pub fn json_api_get_len<M: Manager>(_: M, json: *const c_void, count: *mut libc:
     };
     match len {
         Some(l) => {
-            unsafe { *count = l; };
+            unsafe {
+                *count = l;
+            };
             Status::Ok as c_int
         }
         None => Status::Err as c_int,
@@ -138,7 +142,9 @@ pub fn json_api_get_int<M: Manager>(_: M, json: *const c_void, val: *mut c_longl
     let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
         SelectValueType::Long => {
-            unsafe { *val = json.get_long(); };
+            unsafe {
+                *val = json.get_long();
+            };
             Status::Ok as c_int
         }
         _ => Status::Err as c_int,
@@ -150,7 +156,9 @@ pub fn json_api_get_double<M: Manager>(_: M, json: *const c_void, val: *mut c_do
     let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
         SelectValueType::Double => {
-            unsafe { *val = json.get_double(); };
+            unsafe {
+                *val = json.get_double();
+            };
             Status::Ok as c_int
         }
         _ => Status::Err as c_int,
@@ -162,7 +170,9 @@ pub fn json_api_get_boolean<M: Manager>(_: M, json: *const c_void, val: *mut c_i
     let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
         SelectValueType::Bool => {
-            unsafe { *val = json.get_bool() as c_int; };
+            unsafe {
+                *val = json.get_bool() as c_int;
+            };
             Status::Ok as c_int
         }
         _ => Status::Err as c_int,
