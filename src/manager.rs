@@ -445,15 +445,15 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
                 let stop = stop.normalize(len);
 
                 let range = if start > len || start > stop as i64 {
-                    0..0 // Return an empty array
+                    0..=0 // Return an empty array
                 } else {
-                    start.normalize(len)..(stop + 1)
+                    start.normalize(len)..=stop
                 };
 
                 let mut new_value = v.take();
                 let curr = new_value.as_array_mut().unwrap();
-                curr.rotate_left(range.start);
-                curr.resize(range.end - range.start, Value::Null);
+                curr.rotate_left(*range.start());
+                curr.resize(range.end() - range.start(), Value::Null);
                 res = Some(curr.len());
                 Ok(Some(new_value))
             } else {
@@ -530,8 +530,9 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
     fn from_str(&self, val: &str, format: Format) -> Result<Value, Error> {
         match format {
             Format::JSON => Ok(serde_json::from_str(val)?),
-            Format::BSON => decode_document(&mut Cursor::new(val.as_bytes()))
-                .map(|docs| {
+            Format::BSON => decode_document(&mut Cursor::new(val.as_bytes())).map_or_else(
+                |e| Err(e.to_string().into()),
+                |docs| {
                     let v = if !docs.is_empty() {
                         docs.iter()
                             .next()
@@ -540,8 +541,8 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
                         Value::Null
                     };
                     Ok(v)
-                })
-                .unwrap_or_else(|e| Err(e.to_string().into())),
+                },
+            ),
         }
     }
 

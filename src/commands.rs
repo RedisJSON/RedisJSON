@@ -104,10 +104,10 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             SelectValueType::Null => RedisValue::Null,
 
             SelectValueType::Bool => {
-                let bool_val = v.get_bool();
-                match bool_val {
-                    true => RedisValue::SimpleString("true".to_string()),
-                    false => RedisValue::SimpleString("false".to_string()),
+                if v.get_bool() {
+                    RedisValue::SimpleString("true".to_string())
+                } else {
+                    RedisValue::SimpleString("false".to_string())
                 }
             }
 
@@ -232,7 +232,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 let p = parsed_static_path
                     .static_path_elements
                     .iter()
-                    .map(|e| e.to_string())
+                    .map(ToString::to_string)
                     .collect::<Vec<_>>()
                     .join("");
                 let mut selector = Selector::default();
@@ -464,7 +464,7 @@ pub fn command_json_get<M: Manager>(
             // Silently ignore. Compatibility with ReJSON v1.0 which has this option. See #168 TODO add support
             arg if arg.eq_ignore_ascii_case(CMD_ARG_NOESCAPE) => continue,
             arg if arg.eq_ignore_ascii_case(CMD_ARG_FORMAT) => {
-                format = Format::from_str(args.next_str()?)?
+                format = Format::from_str(args.next_str()?)?;
             }
             _ => paths.push(Path::new(arg)),
         };
@@ -501,10 +501,10 @@ pub fn command_json_set<M: Manager>(
     while let Some(s) = args.next() {
         match s.try_as_str()? {
             arg if arg.eq_ignore_ascii_case("NX") && set_option == SetOptions::None => {
-                set_option = SetOptions::NotExists
+                set_option = SetOptions::NotExists;
             }
             arg if arg.eq_ignore_ascii_case("XX") && set_option == SetOptions::None => {
-                set_option = SetOptions::AlreadyExists
+                set_option = SetOptions::AlreadyExists;
             }
             arg if arg.eq_ignore_ascii_case("FORMAT") => {
                 format = Format::from_str(args.next_str()?)?;
@@ -622,7 +622,7 @@ pub fn command_json_del<M: Manager>(
         }
         None => 0,
     };
-    Ok((deleted as i64).into())
+    Ok(i64::from(deleted).into())
 }
 
 pub fn command_json_mget<M: Manager>(
@@ -903,8 +903,8 @@ pub fn command_json_arr_index<M: Manager>(
     let key = args.next_arg()?;
     let path = Path::new(args.next_str()?);
     let json_scalar = args.next_str()?;
-    let start: i64 = args.next().map(|v| v.parse_integer()).unwrap_or(Ok(0))?;
-    let end: i64 = args.next().map(|v| v.parse_integer()).unwrap_or(Ok(0))?;
+    let start: i64 = args.next().map_or(Ok(0), |v| v.parse_integer())?;
+    let end: i64 = args.next().map_or(Ok(0), |v| v.parse_integer())?;
 
     args.done()?; // TODO: Add to other functions as well to terminate args list
 

@@ -45,7 +45,7 @@ impl Format {
 }
 
 ///
-/// Backwards compatibility convertor for RedisJSON 1.x clients
+/// Backwards compatibility convertor for `RedisJSON` 1.x clients
 ///
 pub struct Path<'a> {
     original_path: &'a str,
@@ -61,7 +61,7 @@ impl<'a> Path<'a> {
             if path == "." {
                 cloned.replace_range(..1, "$");
             } else if path.starts_with('.') {
-                cloned.insert(0, '$')
+                cloned.insert(0, '$');
             } else {
                 cloned.insert_str(0, "$.");
             }
@@ -78,11 +78,9 @@ impl<'a> Path<'a> {
     }
 
     pub fn get_path(&'a self) -> &'a str {
-        if let Some(s) = &self.fixed_path {
-            s.as_str()
-        } else {
-            self.original_path
-        }
+        self.fixed_path
+            .as_ref()
+            .map_or(self.original_path, String::as_str)
     }
 
     pub fn get_original(&self) -> &'a str {
@@ -106,8 +104,9 @@ impl RedisJSON {
     pub fn parse_str(data: &str, format: Format) -> Result<Value, Error> {
         match format {
             Format::JSON => Ok(serde_json::from_str(data)?),
-            Format::BSON => decode_document(&mut Cursor::new(data.as_bytes()))
-                .map(|docs| {
+            Format::BSON => decode_document(&mut Cursor::new(data.as_bytes())).map_or_else(
+                |e| Err(e.to_string().into()),
+                |docs| {
                     let v = if !docs.is_empty() {
                         docs.iter()
                             .next()
@@ -116,8 +115,8 @@ impl RedisJSON {
                         Value::Null
                     };
                     Ok(v)
-                })
-                .unwrap_or_else(|e| Err(e.to_string().into())),
+                },
+            ),
         }
     }
 
@@ -464,7 +463,7 @@ impl RedisJSON {
 }
 
 pub mod type_methods {
-    use super::{Error, Format, RedisJSON, backward, c_int, c_void, raw};
+    use super::{backward, c_int, c_void, raw, Error, Format, RedisJSON};
     use std::ptr::null_mut;
 
     pub extern "C" fn rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
