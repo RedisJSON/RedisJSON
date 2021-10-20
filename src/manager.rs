@@ -445,15 +445,15 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
                 let stop = stop.normalize(len);
 
                 let range = if start > len || start > stop as i64 {
-                    0..=0 // Return an empty array
+                    0..0 // Return an empty array
                 } else {
-                    start.normalize(len)..=stop
+                    start.normalize(len)..(stop + 1)
                 };
 
                 let mut new_value = v.take();
                 let curr = new_value.as_array_mut().unwrap();
-                curr.rotate_left(*range.start());
-                curr.resize(range.end() - range.start(), Value::Null);
+                curr.rotate_left(range.start);
+                curr.resize(range.end - range.start, Value::Null);
                 res = Some(curr.len());
                 Ok(Some(new_value))
             } else {
