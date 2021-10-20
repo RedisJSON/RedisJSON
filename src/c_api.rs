@@ -209,7 +209,7 @@ pub fn get_type_and_size(value: &Value) -> (JSONType, size_t) {
 pub fn set_string(from_str: &str, str: *mut *const c_char, len: *mut size_t) -> c_int {
     if !str.is_null() {
         unsafe {
-            *str = from_str.as_ptr().cast::<i8>();
+            *str = from_str.as_ptr().cast::<c_char>();
             *len = from_str.len();
         }
         return Status::Ok as c_int;
