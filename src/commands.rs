@@ -172,6 +172,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             // A better way would be to create a doc of references to the original doc but no current support
             // in serde_json. I'm going for this implementation anyway because serde_json isn't supposed to be
             // memory efficient and we're using it anyway. See https://github.com/serde-rs/json/issues/635.
+            let mut missing_path = None;
             let temp_doc = paths.drain(..).fold(HashMap::new(), |mut acc, path| {
                 let mut selector = Selector::new();
                 selector.value(self.val);
@@ -182,12 +183,16 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     Ok(s) => s.first().copied(),
                     Err(_) => None,
                 };
+                if value.is_none() && missing_path.is_none() {
+                    missing_path = Some(path.get_original().to_string());
+                }
                 acc.insert(path.get_original(), value);
                 acc
             });
-            // if temp_doc.iter().any(|p| p.1.is_none()) {
-            //     return Err("ERR path {} does not exist".into());
-            // }
+            if let Some(p) = missing_path {
+                return Err(format!("ERR path {} does not exist", p).into());
+            }
+
             Ok(Self::serialize_object(&temp_doc, indent, newline, space).into())
         } else {
             Ok(
@@ -211,10 +216,6 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         _format: Format,
     ) -> Result<RedisValue, Error> {
         if paths.len() > 1 {
-            // let res = paths.iter().fold(Vec::new(), |mut acc, p| {
-            //     acc.push(self.get_values(p.get_path()));
-            //     acc
-            // });
             let mut res: Vec<Vec<&V>> = vec![];
             for path in paths {
                 let values = self.get_values(path.get_path())?;

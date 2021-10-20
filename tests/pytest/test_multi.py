@@ -105,11 +105,11 @@ def testSetAndGetCommands(env):
     res = r.execute_command('JSON.GET', 'doc1', '..tm')
     r.assertEqual(res, '[46,876.85]')
 
-    # Test missing legacy path
-    # FIXME: Should return an error for a missing path (currently the returned dict has a null value for a missing path - but this is valid json value)
-    #  r.expect('JSON.GET', 'doc2', '.a', '.nested.b', '.back_in_nov').raiseError()
-    res = r.execute_command('JSON.GET', 'doc2', '.a', '.nested.b', '.back_in_nov')
-    r.assertEqual(json.loads(res), json.loads('{".nested.b":3,".back_in_nov":null,".a":4.2}'))
+    # Test missing legacy path (should return an error for a missing path)
+    r.assertOk(r.execute_command('JSON.SET', 'doc2', '$.nested.b', 'null'))
+    r.expect('JSON.GET', 'doc2', '.a', '.nested.b', '.back_in_nov', '.ttyl').raiseError()
+    r.expect('JSON.GET', 'doc2', '.back_in_nov').raiseError()
+
 
 def testMGetCommand(env):
     """Test REJSON.MGET command"""
