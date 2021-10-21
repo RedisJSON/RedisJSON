@@ -9,7 +9,7 @@ use redis_module::{Context, NotifyEvent, RedisString};
 
 use std::marker::PhantomData;
 
-use crate::redisjson::RedisJSON;
+use crate::redisjson::{normalize_arr_start_index, RedisJSON};
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
 
@@ -19,7 +19,6 @@ use std::io::Cursor;
 
 use crate::array_index::ArrayIndex;
 
-use crate::normalize_arr_start_index;
 use std::mem;
 
 pub struct SetUpdateInfo {
@@ -418,7 +417,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
                 }
                 // Verify legel index in bounds
                 let len = array.len() as i64;
-                let index = normalize_arr_start_index!(index, len) as usize;
+                let index = normalize_arr_start_index(index, len) as usize;
 
                 let mut new_value = v.take();
                 let curr = new_value.as_array_mut().unwrap();

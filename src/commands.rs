@@ -1,6 +1,6 @@
 use crate::formatter::RedisJsonFormatter;
 use crate::manager::{AddUpdateInfo, Manager, ReadHolder, SetUpdateInfo, UpdateInfo, WriteHolder};
-use crate::redisjson::{Format, Path};
+use crate::redisjson::{normalize_arr_indices, Format, Path};
 use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
@@ -12,7 +12,6 @@ use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 use crate::error::Error;
 
 use crate::redisjson::SetOptions;
-use crate::{normalize_arr_indices, normalize_arr_start_index};
 
 use serde_json::{Map, Value};
 
@@ -341,7 +340,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         }
     }
 
-    pub fn is_eqaul<T1: SelectValue, T2: SelectValue>(&self, a: &T1, b: &T2) -> bool {
+    pub fn is_equal<T1: SelectValue, T2: SelectValue>(&self, a: &T1, b: &T2) -> bool {
         match (a.get_type(), b.get_type()) {
             (SelectValueType::Null, SelectValueType::Null) => true,
             (SelectValueType::Bool, SelectValueType::Bool) => a.get_bool() == b.get_bool(),
@@ -353,7 +352,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     false
                 } else {
                     for (i, e) in a.values().unwrap().into_iter().enumerate() {
-                        if !self.is_eqaul(e, b.get_index(i).unwrap()) {
+                        if !self.is_equal(e, b.get_index(i).unwrap()) {
                             return false;
                         }
                     }
@@ -369,7 +368,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                         let temp2 = b.get_key(k);
                         match (temp1, temp2) {
                             (Some(a1), Some(b1)) => {
-                                if !self.is_eqaul(a1, b1) {
+                                if !self.is_equal(a1, b1) {
                                     return false;
                                 }
                             }
@@ -402,8 +401,8 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             .iter()
             .map(
                 |value| match self.arr_first_index_single(value, &scalar_value, start, end) {
-                    -2 => RedisValue::Null,
-                    i => RedisValue::Integer(i),
+                    FoundIndex::NotArray => RedisValue::Null,
+                    i => i.into(),
                 },
             )
             .collect::<Vec<_>>();
@@ -422,30 +421,30 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         Ok(self.arr_first_index_single(arr, &v, start, end).into())
     }
 
-    /// Returns first array index of `v` in `arr`, or -1 if not found in `arr`, or -2 if `arr` is not an array
-    fn arr_first_index_single(&self, arr: &V, v: &Value, start: i64, end: i64) -> i64 {
+    /// Returns first array index of `v` in `arr`, or NotFound if not found in `arr`, or NotArray if `arr` is not an array
+    fn arr_first_index_single(&self, arr: &V, v: &Value, start: i64, end: i64) -> FoundIndex {
         if arr.is_array() {
             let len = arr.len().unwrap() as i64;
             if len == 0 {
-                return -1;
+                return FoundIndex::NotFound;
             }
             // end=0 means INFINITY to support backward with RedisJSON
-            let (start, end) = normalize_arr_indices!(start, end, len);
+            let (start, end) = normalize_arr_indices(start, end, len);
 
             if end < start {
                 // don't search at all
-                return -1;
+                return FoundIndex::NotFound;
             }
 
             for index in start..end {
-                if self.is_eqaul(arr.get_index(index as usize).unwrap(), v) {
-                    return index;
+                if self.is_equal(arr.get_index(index as usize).unwrap(), v) {
+                    return FoundIndex::Index(index);
                 }
             }
 
-            -1
+            FoundIndex::NotFound
         } else {
-            -2
+            FoundIndex::NotArray
         }
     }
 
@@ -907,6 +906,22 @@ pub fn command_json_arr_append<M: Manager>(
         }
         redis_key.apply_changes(ctx, "json.arrappend")?;
         Ok(res.unwrap().into())
+    }
+}
+
+enum FoundIndex {
+    Index(i64),
+    NotFound,
+    NotArray,
+}
+
+impl From<FoundIndex> for RedisValue {
+    fn from(e: FoundIndex) -> Self {
+        match e {
+            FoundIndex::NotFound => RedisValue::Integer(-1),
+            FoundIndex::NotArray => RedisValue::Integer(-2),
+            FoundIndex::Index(i) => RedisValue::Integer(i),
+        }
     }
 }
 
