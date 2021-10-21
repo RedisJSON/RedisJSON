@@ -15,6 +15,7 @@ jobs:
     - uses: actions/checkout@v2
     - name: Set env
       run: |
+        make setup
         rustup toolchain install nightly
         rustup default nightly
         rustup component add llvm-tools-preview        
