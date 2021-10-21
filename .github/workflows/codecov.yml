@@ -27,7 +27,7 @@ jobs:
       run: |
         cargo install grcov
         export LLVM_PROFILE_FILE="your_name-%p-%m.profraw"
-        MODULE=~/redislabsmodules/rejson/target/debug/librejson.so ./tests/pytest/tests.sh
+        MODULE=`pwd`/target/debug/librejson.so ./tests/pytest/tests.sh
     - name: Upload coverage
       run: bash <(curl -s https://raw.githubusercontent.com/codecov/codecov-bash/master/codecov)
         
