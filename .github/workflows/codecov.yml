@@ -16,7 +16,6 @@ jobs:
     - name: Set env
       run: |
         git submodule update --init --recursive
-        make setup
         rustup toolchain install nightly
         rustup default nightly
         rustup component add llvm-tools-preview        
