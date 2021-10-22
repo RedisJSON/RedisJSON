@@ -13,11 +13,10 @@ use crate::error::Error;
 
 use crate::redisjson::SetOptions;
 
-use serde_json::{Map, Value};
+use serde_json::{Map, Number, Value};
 
 use serde::Serialize;
 use std::collections::HashMap;
-
 const JSON_ROOT_PATH: &str = "$";
 const CMD_ARG_NOESCAPE: &str = "NOESCAPE";
 const CMD_ARG_INDENT: &str = "INDENT";
@@ -638,6 +637,7 @@ fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
         .select_with_paths(f)?)
 }
 
+/// Returns tuples of Value and its concrete path which match the given `path`
 fn get_all_values_and_paths<'a, T: SelectValue>(
     path: &str,
     doc: &'a T,
@@ -648,20 +648,84 @@ fn get_all_values_and_paths<'a, T: SelectValue>(
         .select_values_with_paths()?)
 }
 
-// FIXME: Remove this function and use get_all_values_and_paths instead once it is working well
-fn find_all_paths<'a, T: SelectValue>(
+/// Returns a Vec of paths with `None` for Values that do not match the filter
+fn filter_paths<T, F>(
+    mut values_and_paths: Vec<(&T, Vec<String>)>,
+    f: F,
+) -> Vec<Option<Vec<String>>>
+where
+    F: Fn(&T) -> bool,
+{
+    values_and_paths
+        .drain(..)
+        .map(|(v, p)| match f(v) {
+            true => Some(p),
+            _ => None,
+        })
+        .collect::<Vec<Option<Vec<String>>>>()
+}
+
+/// Returns a Vec of Values with `None` for Values that do not match the filter
+fn filter_values<T, F>(mut values_and_paths: Vec<(&T, Vec<String>)>, f: F) -> Vec<Option<&T>>
+where
+    F: Fn(&T) -> bool,
+{
+    values_and_paths
+        .drain(..)
+        .map(|(v, _)| match f(v) {
+            true => Some(v),
+            _ => None,
+        })
+        .collect::<Vec<Option<&T>>>()
+}
+
+fn find_all_paths<T: SelectValue, F: FnMut(&T) -> bool>(
+    path: &str,
+    doc: &T,
+    f: F,
+) -> Result<Vec<Option<Vec<String>>>, RedisError>
+where
+    F: Fn(&T) -> bool,
+{
+    let res = get_all_values_and_paths(path, doc)?;
+    match res.is_empty() {
+        false => Ok(filter_paths(res, f)),
+        _ => Err(RedisError::String(format!(
+            "Path '{}' does not exist",
+            path
+        ))),
+    }
+}
+
+fn find_all_values<'a, T: SelectValue, F: FnMut(&T) -> bool>(
     path: &str,
     doc: &'a T,
-) -> Result<Vec<(&'a T, Vec<String>)>, RedisError> {
-    let mut def = Selector::default();
-    let sel = def.str_path(path)?.value(doc);
-    let nodes = sel.select()?;
-    // FIXME: Avoid selecting twice (paths and values)
-    let paths = sel.select_with_paths(|_| true)?;
-    Ok(nodes
+    f: F,
+) -> Result<Vec<Option<&'a T>>, RedisError>
+where
+    F: Fn(&T) -> bool,
+{
+    let res = get_all_values_and_paths(path, doc)?;
+    match res.is_empty() {
+        false => Ok(filter_values(res, f)),
+        _ => Err(RedisError::String(format!(
+            "Path '{}' does not exist",
+            path
+        ))),
+    }
+}
+
+fn to_json_value<T>(values: Vec<Option<T>>, none_value: Value) -> Vec<Value>
+where
+    Value: From<T>,
+{
+    values
         .into_iter()
-        .zip(paths.into_iter())
-        .collect::<Vec<(&'a T, Vec<String>)>>())
+        .map(|n| match n {
+            Some(t) => t.into(),
+            _ => none_value.clone(),
+        })
+        .collect::<Vec<Value>>()
 }
 
 pub fn command_json_del<M: Manager>(
@@ -783,42 +847,26 @@ where
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
-    let mut paths = find_all_paths(path.get_path(), root)?;
-    let paths = paths
-        .drain(..)
-        .map(|(v, p)| match v.get_type() {
-            SelectValueType::Double | SelectValueType::Long => Some(p),
-            _ => None,
-        })
-        .collect::<Vec<Option<Vec<String>>>>();
-    if !paths.is_empty() {
-        let mut res = vec![];
-        for p in paths {
-            res.push(match p {
-                Some(p) => Some(match op {
-                    NumOp::Incr => redis_key.incr_by(p, number)?,
-                    NumOp::Mult => redis_key.mult_by(p, number)?,
-                    NumOp::Pow => redis_key.pow_by(p, number)?,
-                }),
-                _ => None,
-            });
-        }
-        redis_key.apply_changes(ctx, cmd)?;
+    let paths = find_all_paths(path.get_path(), root, |v| match v.get_type() {
+        SelectValueType::Double | SelectValueType::Long => true,
+        _ => false,
+    })?;
 
-        let res = res
-            .iter()
-            .map(|n| match n {
-                Some(n) => Value::Number(n.clone()),
-                _ => Value::Null,
-            })
-            .collect::<Vec<Value>>();
-        Ok(KeyValue::<M::V>::serialize_object(&res, None, None, None).into())
-    } else {
-        Err(RedisError::String(format!(
-            "Path '{}' does not exist",
-            path
-        )))
+    let mut res = vec![];
+    for p in paths {
+        res.push(match p {
+            Some(p) => Some(match op {
+                NumOp::Incr => redis_key.incr_by(p, number)?,
+                NumOp::Mult => redis_key.mult_by(p, number)?,
+                NumOp::Pow => redis_key.pow_by(p, number)?,
+            }),
+            _ => None,
+        });
     }
+    redis_key.apply_changes(ctx, cmd)?;
+
+    let res = to_json_value::<Number>(res, Value::Null);
+    Ok(KeyValue::<M::V>::serialize_object(&res, None, None, None).into())
 }
 
 pub fn command_json_num_incrby<M: Manager>(
@@ -904,22 +952,19 @@ pub fn command_json_str_append<M: Manager>(
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_paths(path.get_path(), root, |v| {
+    let paths = find_all_paths(path.get_path(), root, |v| {
         v.get_type() == SelectValueType::String
     })?;
-    if !paths.is_empty() {
-        let mut res = None;
-        for p in paths {
-            res = Some(redis_key.str_append(p, json.to_string())?);
-        }
-        redis_key.apply_changes(ctx, "json.strappend")?;
-        Ok(res.unwrap().into())
-    } else {
-        Err(RedisError::String(format!(
-            "Path '{}' does not exist or not a string",
-            path
-        )))
+
+    let mut res: Vec<RedisValue> = vec![];
+    for p in paths {
+        res.push(match p {
+            Some(p) => (redis_key.str_append(p, json.to_string())?).into(),
+            _ => RedisValue::Null,
+        });
     }
+    redis_key.apply_changes(ctx, "json.strappend")?;
+    Ok(res.into())
 }
 
 pub fn command_json_str_len<M: Manager>(
@@ -932,12 +977,18 @@ pub fn command_json_str_len<M: Manager>(
     let path = Path::new(args.next_str()?);
 
     let key = manager.open_key_read(ctx, &key)?;
-    match key.get_value()? {
-        Some(doc) => Ok(RedisValue::Integer(
-            KeyValue::new(doc).str_len(path.get_path())? as i64,
-        )),
-        None => Ok(RedisValue::Null),
+    let root = key.get_value()?.ok_or_else(RedisError::nonexistent_key)?;
+    let values = find_all_values(path.get_path(), root, |v| {
+        v.get_type() == SelectValueType::String
+    })?;
+    let mut res: Vec<RedisValue> = vec![];
+    for v in values {
+        res.push(match v {
+            Some(v) => (v.get_str().len() as i64).into(),
+            _ => RedisValue::Null,
+        });
     }
+    Ok(res.into())
 }
 
 pub fn command_json_arr_append<M: Manager>(

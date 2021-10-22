@@ -720,15 +720,15 @@ def testLenCommands(env):
 
     # test elements with valid lengths
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', json.dumps(docs['basic'])))
-    r.assertEqual(r.execute_command('JSON.STRLEN', 'test', '.string'), 12)
+    r.assertEqual(r.execute_command('JSON.STRLEN', 'test', '.string'), [12])
     r.assertEqual(r.execute_command('JSON.OBJLEN', 'test', '.dict'), 3)
     r.assertEqual(r.execute_command('JSON.ARRLEN', 'test', '.arr'), 6)
 
     # test elements with undefined lengths
     r.expect('JSON.ARRLEN', 'test', '.bool').raiseError()
-    r.expect('JSON.STRLEN', 'test', '.none').raiseError()
+    r.assertEqual(r.execute_command('JSON.STRLEN', 'test', '.none'), [None])
     r.expect('JSON.OBJLEN', 'test', '.int').raiseError()
-    r.expect('JSON.STRLEN', 'test', '.num').raiseError()
+    r.assertEqual(r.execute_command('JSON.STRLEN', 'test', '.num'), [None])
 
     # test a non existing key
     r.expect('JSON.LEN', 'test', '.foo').raiseError()
@@ -791,7 +791,7 @@ def testStrCommands(env):
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', '"foo"'))
     r.assertEqual('string', r.execute_command('JSON.TYPE', 'test', '.'))
     r.assertEqual(3, r.execute_command('JSON.STRLEN', 'test', '.'))
-    r.assertEqual(6, r.execute_command('JSON.STRAPPEND', 'test', '.', '"bar"'))
+    r.assertEqual([6], r.execute_command('JSON.STRAPPEND', 'test', '.', '"bar"'))
     r.assertEqual('"foobar"', r.execute_command('JSON.GET', 'test', '.'))
 
 def testRespCommand(env):

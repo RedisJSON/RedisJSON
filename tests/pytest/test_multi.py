@@ -117,16 +117,24 @@ def testMGetCommand(env):
     # Test mget with multi paths
     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":1, "b": 2, "nested": {"a": 3}, "c": null, "nested2": {"a": null}} '))
     r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '{"a":4, "b": 5, "nested": {"a": 6}, "c": null, "nested2": {"a": [null]}}'))
+    # Compare also to single JSON.GET
     res1 = r.execute_command('JSON.GET', 'doc1', '$..a')
     res2 = r.execute_command('JSON.GET', 'doc2', '$..a')
     r.assertEqual(res1, '[1,3,null]')
     r.assertEqual(res2, '[4,6,[null]]')
 
+    # Test mget with single path
     res = r.execute_command('JSON.MGET', 'doc1', '$..a')
     r.assertEqual([res1], res)
-
+    # Test mget with multi path
     res = r.execute_command('JSON.MGET', 'doc1', 'doc2', '$..a')
     r.assertEqual(res, [res1,res2])
+
+    # Test missing key
+    res = r.execute_command('JSON.MGET', 'doc1', 'missing_doc', '$..a')
+    r.assertEqual(res, [res1, None])
+    res = r.execute_command('JSON.MGET', 'missing_doc1', 'missing_doc2', '$..a')
+    r.assertEqual(res, [None, None])
 
 
 def testNumByCommands(env):
@@ -138,49 +146,103 @@ def testNumByCommands(env):
     r = env
 
     # Test NUMINCRBY
-    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":"b","b":[{"a":2}, {"a":5}, {"a":"c"}]}'))
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":"b","b":[{"a":2}, {"a":5.0}, {"a":"c"}]}'))
     # Test multi
     res = r.execute_command('JSON.NUMINCRBY', 'doc1', '$..a', '2')
-    r.assertEqual(json.loads(res), [None, 4, 7, None])
-    res = r.execute_command('JSON.NUMINCRBY', 'doc1', '$..a', '2')
-    r.assertEqual(json.loads(res), [None, 6, 9, None])
+    r.assertEqual(json.loads(res), [None, 4, 7.0, None])
+    res = r.execute_command('JSON.NUMINCRBY', 'doc1', '$..a', '2.5')
+    r.assertEqual(json.loads(res), [None, 6.5, 9.5, None])
     # Test single
     res = r.execute_command('JSON.NUMINCRBY', 'doc1', '$.b[1].a', '2')
-    r.assertEqual(res, '[11]')
+    #  Avoid json.loads to verify the underlying type (integer/float)
+    r.assertEqual(res, '[11.5]')
     res = r.execute_command('JSON.NUMINCRBY', 'doc1', '$.b[2].a', '2')
     r.assertEqual(res, '[null]')
-    res = r.execute_command('JSON.NUMINCRBY', 'doc1', '$.b[1].a', '3')
-    r.assertEqual(res, '[14]')
+    res = r.execute_command('JSON.NUMINCRBY', 'doc1', '$.b[1].a', '3.5')
+    r.assertEqual(res, '[15.0]')
 
     # Test NUMMULTBY
-    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":"b","b":[{"a":2}, {"a":5}, {"a":"c"}]}'))
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":"b","b":[{"a":2}, {"a":5.0}, {"a":"c"}]}'))
     # Test multi
     res = r.execute_command('JSON.NUMMULTBY', 'doc1', '$..a', '2')
     r.assertEqual(json.loads(res), [None, 4, 10, None])
-    res = r.execute_command('JSON.NUMMULTBY', 'doc1', '$..a', '2')
-    r.assertEqual(json.loads(res), [None, 8, 20, None])
+    res = r.execute_command('JSON.NUMMULTBY', 'doc1', '$..a', '2.5')
+    #  Avoid json.loads to verify the underlying type (integer/float)
+    r.assertEqual(res, '[null,10.0,25.0,null]')
     # Test single
     res = r.execute_command('JSON.NUMMULTBY', 'doc1', '$.b[1].a', '2')
-    r.assertEqual(res, '[40]')
+    r.assertEqual(res, '[50.0]')
     res = r.execute_command('JSON.NUMMULTBY', 'doc1', '$.b[2].a', '2')
     r.assertEqual(res, '[null]')
     res = r.execute_command('JSON.NUMMULTBY', 'doc1', '$.b[1].a', '3')
-    r.assertEqual(res, '[120]')
+    r.assertEqual(res, '[150.0]')
 
     # Test NUMPOWBY
-    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":"b","b":[{"a":2}, {"a":5}, {"a":"c"}]}'))
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":"b","b":[{"a":2}, {"a":5.0}, {"a":"c"}]}'))
     # Test multi
     res = r.execute_command('JSON.NUMPOWBY', 'doc1', '$..a', '2')
     r.assertEqual(json.loads(res), [None, 4, 25, None])
+    #  Avoid json.loads to verify the underlying type (integer/float)
     res = r.execute_command('JSON.NUMPOWBY', 'doc1', '$..a', '2')
-    r.assertEqual(json.loads(res), [None, 16, 625, None])
+    r.assertEqual(res, '[null,16,625.0,null]')
     # Test single
     res = r.execute_command('JSON.NUMPOWBY', 'doc1', '$.b[1].a', '2')
-    r.assertEqual(res, '[390625]')
+    r.assertEqual(res, '[390625.0]')
     res = r.execute_command('JSON.NUMPOWBY', 'doc1', '$.b[2].a', '2')
     r.assertEqual(res, '[null]')
     res = r.execute_command('JSON.NUMPOWBY', 'doc1', '$.b[1].a', '3')
-    r.assertEqual(res, '[59604644775390625]')
+    r.assertEqual(res, '[5.960464477539062e16]')
+
+    # Test missing key
+    r.expect('JSON.NUMINCRBY', 'non_existing_doc', '$..a', '2').raiseError()
+    r.expect('JSON.NUMMULTBY', 'non_existing_doc', '$..a', '2').raiseError()
+    r.expect('JSON.NUMPOWBY', 'non_existing_doc', '$..a', '2').raiseError()
+
+
+def testStrAppendCommand(env):
+    """
+    Test REJSON.STRAPPEND command
+    """
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":"foo", "nested1": {"a": "hello"}, "nested2": {"a": 31}}'))
+    # Test multi
+    res = r.execute_command('JSON.STRAPPEND', 'doc1', '$..a', '"bar"')
+    r.assertEqual(res, [6, 8, None])
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(res, '[{"a":"foobar","nested1":{"a":"hellobar"},"nested2":{"a":31}}]')
+    # Test single
+    res = r.execute_command('JSON.STRAPPEND', 'doc1', '$.nested1.a', '"baz"')
+    r.assertEqual(res, [11])
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(res, '[{"a":"foobar","nested1":{"a":"hellobarbaz"},"nested2":{"a":31}}]')
+
+    # Test missing key
+    r.expect('JSON.STRAPPEND', 'non_existing_doc', '$..a', '"err"').raiseError()
+
+def testStrLenCommand(env):
+    """
+    Test REJSON.STRLEN command
+    """
+    r = env
+
+    # Test multi
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":"foo", "nested1": {"a": "hello"}, "nested2": {"a": 31}}'))
+    res1 = r.execute_command('JSON.STRLEN', 'doc1', '$..a')
+    r.assertEqual(res1, [3, 5, None])
+    res2 = r.execute_command('JSON.STRAPPEND', 'doc1', '$..a', '"bar"')
+    r.assertEqual(res2, [6, 8, None])
+    res1 = r.execute_command('JSON.STRLEN', 'doc1', '$..a')
+    r.assertEqual(res1, res2)
+
+    # Test single
+    res = r.execute_command('JSON.STRLEN', 'doc1', '$.nested1.a')
+    r.assertEqual(res, [8])
+    res = r.execute_command('JSON.STRLEN', 'doc1', '$.nested2.a')
+    r.assertEqual(res, [None])
+
+    # Test missing key
+    r.expect('JSON.STRLEN', 'non_existing_doc', '$..a').raiseError()
 
 
 
