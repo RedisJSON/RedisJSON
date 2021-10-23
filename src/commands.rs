@@ -1022,8 +1022,8 @@ pub fn command_json_arr_append<M: Manager>(
     }
 }
 
-fn json_arr_append_legacy<'a, M>(
-    redis_key: &'a mut M::WriteHolder,
+fn json_arr_append_legacy<M>(
+    redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &str,
     args: Vec<M::O>,
@@ -1114,7 +1114,7 @@ pub fn command_json_arr_insert<M: Manager>(
     let path = Path::new(args.next_str()?);
     let index = args.next_i64()?;
 
-    // We require at least one JSON item to append
+    // We require at least one JSON item to insert
     args.peek().ok_or(RedisError::WrongArity)?;
     let args = args.try_fold::<_, _, Result<_, RedisError>>(
         Vec::with_capacity(args.len()),
@@ -1124,16 +1124,57 @@ pub fn command_json_arr_insert<M: Manager>(
             Ok(acc)
         },
     )?;
-
     let mut redis_key = manager.open_key_write(ctx, key)?;
+    if !path.is_legacy() {
+        json_arr_insert::<M>(&mut redis_key, ctx, path.get_path(), index, args)
+    } else {
+        json_arr_insert_legacy::<M>(&mut redis_key, ctx, path.get_path(), index, args)
+    }
+}
 
+fn json_arr_insert<M>(
+    redis_key: &mut M::WriteHolder,
+    ctx: &Context,
+    path: &str,
+    index: i64,
+    args: Vec<M::O>,
+) -> RedisResult
+where
+    M: Manager,
+{
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_paths(path.get_path(), root, |v| {
-        v.get_type() == SelectValueType::Array
-    })?;
+    let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
+
+    let mut res: Vec<RedisValue> = vec![];
+    for p in paths {
+        res.push(match p {
+            Some(p) => (redis_key.arr_insert(p, &args, index)? as i64).into(),
+            _ => RedisValue::Null,
+        });
+    }
+
+    redis_key.apply_changes(ctx, "json.arrinsert")?;
+    Ok(res.into())
+}
+
+fn json_arr_insert_legacy<M>(
+    redis_key: &mut M::WriteHolder,
+    ctx: &Context,
+    path: &str,
+    index: i64,
+    args: Vec<M::O>,
+) -> RedisResult
+where
+    M: Manager,
+{
+    let root = redis_key
+        .get_value()?
+        .ok_or_else(RedisError::nonexistent_key)?;
+
+    let paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
     if !paths.is_empty() {
         let mut res = None;
         for p in paths {

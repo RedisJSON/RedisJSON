@@ -288,3 +288,41 @@ def testArrAppendCommand(env):
     r.expect('JSON.ARRAPPEND', 'non_existing_doc', '..a').raiseError()
 
 
+def testArrInsertCommand(env):
+    """
+    Test REJSON.ARRINSERT command
+    """
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":["foo"], "nested1": {"a": ["hello", null, "world"]}, "nested2": {"a": 31}}'))
+    # Test multi
+    res = r.execute_command('JSON.ARRINSERT', 'doc1', '$..a', '1', '"bar"', '"racuda"')
+    r.assertEqual(res, [3, 5, None])
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", "bar", "racuda", None, "world"]}, "nested2": {"a": 31}}])
+    # Test single
+    res = r.execute_command('JSON.ARRINSERT', 'doc1', '$.nested1.a', -2, '"baz"')
+    r.assertEqual(res, [6])
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", "bar", "racuda", "baz", None, "world"]}, "nested2": {"a": 31}}])
+
+    # Test missing key
+    r.expect('JSON.ARRINSERT', 'non_existing_doc', '$..a', '0').raiseError()
+
+    # Test legacy
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":["foo"], "nested1": {"a": ["hello", null, "world"]}, "nested2": {"a": 31}}'))
+    # Test multi (all paths are updated, but return result of last
+    res = r.execute_command('JSON.ARRINSERT', 'doc1', '..a', '1', '"bar"', '"racuda"')
+    r.assertEqual(res, 5)
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", "bar", "racuda", None, "world"]}, "nested2": {"a": 31}}])
+    # Test single
+    res = r.execute_command('JSON.ARRINSERT', 'doc1', '.nested1.a', -2, '"baz"')
+    r.assertEqual(res, 6)
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", "bar", "racuda", "baz", None, "world"]}, "nested2": {"a": 31}}])
+
+    # Test missing key
+    r.expect('JSON.ARRINSERT', 'non_existing_doc', '..a').raiseError()
+
+
