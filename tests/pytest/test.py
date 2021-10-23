@@ -725,7 +725,7 @@ def testLenCommands(env):
     r.assertEqual(r.execute_command('JSON.ARRLEN', 'test', '.arr'), 6)
 
     # test elements with undefined lengths
-    r.expect('JSON.ARRLEN', 'test', '.bool').raiseError()
+    r.assertEqual(r.execute_command('JSON.ARRLEN', 'test', '.bool'), None)
     r.assertEqual(r.execute_command('JSON.STRLEN', 'test', '.none'), [None])
     r.expect('JSON.OBJLEN', 'test', '.int').raiseError()
     r.assertEqual(r.execute_command('JSON.STRLEN', 'test', '.num'), [None])
@@ -790,7 +790,7 @@ def testStrCommands(env):
 
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', '"foo"'))
     r.assertEqual('string', r.execute_command('JSON.TYPE', 'test', '.'))
-    r.assertEqual(3, r.execute_command('JSON.STRLEN', 'test', '.'))
+    r.assertEqual([3], r.execute_command('JSON.STRLEN', 'test', '.'))
     r.assertEqual([6], r.execute_command('JSON.STRAPPEND', 'test', '.', '"bar"'))
     r.assertEqual('"foobar"', r.execute_command('JSON.GET', 'test', '.'))
 

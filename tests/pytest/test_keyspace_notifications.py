@@ -35,7 +35,7 @@ def test_keyspace_set(env):
         env.assertEqual(None, r.execute_command('JSON.SET', 'test_key', '$.foo.a', '"nono"'))
         env.assertEqual(None, pubsub.get_message())       
 
-        env.assertEqual(8, r.execute_command('JSON.STRLEN', 'test_key', '$.foo'))
+        env.assertEqual([8], r.execute_command('JSON.STRLEN', 'test_key', '$.foo'))
         env.assertEqual(None, pubsub.get_message())       
 
         env.assertEqual('["gogototo"]', r.execute_command('JSON.GET', 'test_key', '$.foo'))
@@ -64,11 +64,11 @@ def test_keyspace_arr(env):
         assert_msg(env, pubsub.get_message(), 'pmessage', 'json.set')
         assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key_arr')
 
-        env.assertEqual(2, r.execute_command('JSON.ARRAPPEND', 'test_key_arr', '$.foo', '"gogo1"', '"gogo2"'))
+        env.assertEqual([2], r.execute_command('JSON.ARRAPPEND', 'test_key_arr', '$.foo', '"gogo1"', '"gogo2"'))
         assert_msg(env, pubsub.get_message(), 'pmessage', 'json.arrappend')
         assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key_arr')
 
-        env.assertEqual(4, r.execute_command('JSON.ARRINSERT', 'test_key_arr', '$.foo', 1, '"gogo3"', '"gogo4"'))
+        env.assertEqual([4], r.execute_command('JSON.ARRINSERT', 'test_key_arr', '$.foo', 1, '"gogo3"', '"gogo4"'))
         assert_msg(env, pubsub.get_message(), 'pmessage', 'json.arrinsert')
         assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key_arr')
 
@@ -84,7 +84,7 @@ def test_keyspace_arr(env):
         env.assertEqual(0, r.execute_command('JSON.ARRINDEX', 'test_key_arr', '$.foo', '"gogo1"'))
         env.assertEqual(None, pubsub.get_message())   
 
-        env.assertEqual(2, r.execute_command('JSON.ARRLEN', 'test_key_arr', '$.foo'))
+        env.assertEqual([2], r.execute_command('JSON.ARRLEN', 'test_key_arr', '$.foo'))
         env.assertEqual(None, pubsub.get_message())   
 
         # TODO add more negative test for arr path not found

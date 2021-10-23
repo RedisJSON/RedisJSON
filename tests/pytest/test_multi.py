@@ -273,7 +273,7 @@ def testArrAppendCommand(env):
 
     # Test legacy
     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":["foo"], "nested1": {"a": ["hello", null, "world"]}, "nested2": {"a": 31}}'))
-    # Test multi (all paths are updated, but return result of last
+    # Test multi (all paths are updated, but return result of last path)
     res = r.execute_command('JSON.ARRAPPEND', 'doc1', '..a', '"bar"', '"racuda"')
     r.assertEqual(res, 5)
     res = r.execute_command('JSON.GET', 'doc1', '$')
@@ -311,7 +311,7 @@ def testArrInsertCommand(env):
 
     # Test legacy
     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":["foo"], "nested1": {"a": ["hello", null, "world"]}, "nested2": {"a": 31}}'))
-    # Test multi (all paths are updated, but return result of last
+    # Test multi (all paths are updated, but return result of last path)
     res = r.execute_command('JSON.ARRINSERT', 'doc1', '..a', '1', '"bar"', '"racuda"')
     r.assertEqual(res, 5)
     res = r.execute_command('JSON.GET', 'doc1', '$')
@@ -326,3 +326,38 @@ def testArrInsertCommand(env):
     r.expect('JSON.ARRINSERT', 'non_existing_doc', '..a').raiseError()
 
 
+def testArrLenCommand(env):
+    """
+    Test REJSON.ARRLEN command
+    """
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":["foo"], "nested1": {"a": ["hello", null, "world"]}, "nested2": {"a": 31}}'))
+    # Test multi
+    res = r.execute_command('JSON.ARRLEN', 'doc1', '$..a')
+    r.assertEqual(res, [1, 3, None])
+    res = r.execute_command('JSON.ARRAPPEND', 'doc1', '$..a', '"non"', '"abba"', '"stanza"')
+    r.assertEqual(res, [4, 6, None])
+    r.execute_command('JSON.CLEAR', 'doc1', '$.a')
+    res = r.execute_command('JSON.ARRLEN', 'doc1', '$..a')
+    r.assertEqual(res, [0, 6, None])
+    # Test single
+    res = r.execute_command('JSON.ARRLEN', 'doc1', '$.nested1.a')
+    r.assertEqual(res, [6])
+
+    # Test missing key
+    r.expect('JSON.ARRLEN', 'non_existing_doc', '$..a').raiseError()
+
+    # Test legacy
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":["foo"], "nested1": {"a": ["hello", null, "world"]}, "nested2": {"a": 31}}'))
+    # Test multi (return result of last path)
+    res = r.execute_command('JSON.ARRLEN', 'doc1', '$..a')
+    r.assertEqual(res, [1, 3, None])
+    res = r.execute_command('JSON.ARRAPPEND', 'doc1', '..a', '"non"', '"abba"', '"stanza"')
+    r.assertEqual(res, 6)
+    # Test single
+    res = r.execute_command('JSON.ARRLEN', 'doc1', '.nested1.a')
+    r.assertEqual(res, 6)
+
+    # Test missing key
+    r.assertEqual(r.execute_command('JSON.ARRLEN', 'non_existing_doc', '..a'), None)

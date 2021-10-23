@@ -977,7 +977,16 @@ pub fn command_json_str_len<M: Manager>(
     let path = Path::new(args.next_str()?);
 
     let key = manager.open_key_read(ctx, &key)?;
-    let root = key.get_value()?.ok_or_else(RedisError::nonexistent_key)?;
+    //let root = key.get_value()?.ok_or_else(RedisError::nonexistent_key)?;
+    let root = match key.get_value()? {
+        Some(k) => k,
+        None if path.is_legacy() => {
+            return Ok(RedisValue::Null);
+        }
+        None => {
+            return Err(RedisError::nonexistent_key());
+        }
+    };
     let values = find_all_values(path.get_path(), root, |v| {
         v.get_type() == SelectValueType::String
     })?;
@@ -1198,14 +1207,37 @@ pub fn command_json_arr_len<M: Manager>(
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
     let path = Path::new(args.next_str()?);
-
+    let is_legacy = path.is_legacy();
     let key = manager.open_key_read(ctx, &key)?;
-    match key.get_value()? {
-        Some(doc) => Ok(RedisValue::Integer(
-            KeyValue::new(doc).arr_len(path.get_path())? as i64,
-        )),
-        None => Ok(RedisValue::Null),
+    let root = match key.get_value()? {
+        Some(k) => k,
+        None if is_legacy => {
+            return Ok(RedisValue::Null);
+        }
+        None => {
+            return Err(RedisError::nonexistent_key());
+        }
+    };
+    // let root = key
+    //     .get_value()?
+    //     .ok_or_else(RedisError::nonexistent_key)?;
+    let values = find_all_values(path.get_path(), root, |v| {
+        v.get_type() == SelectValueType::Array
+    })?;
+
+    let mut res = vec![];
+    for v in values {
+        let cur_val: RedisValue = match v {
+            Some(v) => (v.len().unwrap() as i64).into(),
+            _ => RedisValue::Null,
+        };
+        if !is_legacy {
+            res.push(cur_val);
+        } else {
+            return Ok(cur_val);
+        }
     }
+    Ok(res.into())
 }
 
 pub fn command_json_arr_pop<M: Manager>(
