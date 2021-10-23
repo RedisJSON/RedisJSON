@@ -198,6 +198,8 @@ def testNumByCommands(env):
     r.expect('JSON.NUMMULTBY', 'non_existing_doc', '$..a', '2').raiseError()
     r.expect('JSON.NUMPOWBY', 'non_existing_doc', '$..a', '2').raiseError()
 
+    # FIXME: Test legacy
+
 
 def testStrAppendCommand(env):
     """
@@ -219,6 +221,8 @@ def testStrAppendCommand(env):
 
     # Test missing key
     r.expect('JSON.STRAPPEND', 'non_existing_doc', '$..a', '"err"').raiseError()
+
+    # FIXME: Test legacy
 
 def testStrLenCommand(env):
     """
@@ -244,5 +248,43 @@ def testStrLenCommand(env):
     # Test missing key
     r.expect('JSON.STRLEN', 'non_existing_doc', '$..a').raiseError()
 
+    # FIXME: Test legacy
+
+def testArrAppendCommand(env):
+    """
+    Test REJSON.ARRAPPEND command
+    """
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":["foo"], "nested1": {"a": ["hello", null, "world"]}, "nested2": {"a": 31}}'))
+    # Test multi
+    res = r.execute_command('JSON.ARRAPPEND', 'doc1', '$..a', '"bar"', '"racuda"')
+    r.assertEqual(res, [3, 5, None])
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", None, "world", "bar", "racuda"]}, "nested2": {"a": 31}}])
+    # Test single
+    res = r.execute_command('JSON.ARRAPPEND', 'doc1', '$.nested1.a', '"baz"')
+    r.assertEqual(res, [6])
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", None, "world", "bar", "racuda", "baz"]}, "nested2": {"a": 31}}])
+
+    # Test missing key
+    r.expect('JSON.ARRAPPEND', 'non_existing_doc', '$..a').raiseError()
+
+    # Test legacy
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":["foo"], "nested1": {"a": ["hello", null, "world"]}, "nested2": {"a": 31}}'))
+    # Test multi (all paths are updated, but return result of last
+    res = r.execute_command('JSON.ARRAPPEND', 'doc1', '..a', '"bar"', '"racuda"')
+    r.assertEqual(res, 5)
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", None, "world", "bar", "racuda"]}, "nested2": {"a": 31}}])
+    # Test single
+    res = r.execute_command('JSON.ARRAPPEND', 'doc1', '.nested1.a', '"baz"')
+    r.assertEqual(res, 6)
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", None, "world", "bar", "racuda", "baz"]}, "nested2": {"a": 31}}])
+
+    # Test missing key
+    r.expect('JSON.ARRAPPEND', 'non_existing_doc', '..a').raiseError()
 
 

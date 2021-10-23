@@ -1014,13 +1014,27 @@ pub fn command_json_arr_append<M: Manager>(
     )?;
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
+
+    if !path.is_legacy() {
+        json_arr_append::<M>(&mut redis_key, ctx, path.get_path(), args)
+    } else {
+        json_arr_append_legacy::<M>(&mut redis_key, ctx, path.get_path(), args)
+    }
+}
+
+fn json_arr_append_legacy<'a, M>(
+    redis_key: &'a mut M::WriteHolder,
+    ctx: &Context,
+    path: &str,
+    args: Vec<M::O>,
+) -> RedisResult
+where
+    M: Manager,
+{
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
-
-    let mut paths = find_paths(path.get_path(), root, |v| {
-        v.get_type() == SelectValueType::Array
-    })?;
+    let mut paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
     if paths.is_empty() {
         Err(RedisError::String(format!(
             "Path '{}' does not exist",
@@ -1031,13 +1045,38 @@ pub fn command_json_arr_append<M: Manager>(
         redis_key.apply_changes(ctx, "json.arrappend")?;
         Ok(res.into())
     } else {
-        let mut res = None;
+        let mut res = 0;
         for p in paths {
-            res = Some(redis_key.arr_append(p, args.clone())?);
+            res = redis_key.arr_append(p, args.clone())?;
         }
         redis_key.apply_changes(ctx, "json.arrappend")?;
-        Ok(res.unwrap().into())
+        Ok(res.into())
     }
+}
+
+fn json_arr_append<'a, M>(
+    redis_key: &'a mut M::WriteHolder,
+    ctx: &Context,
+    path: &str,
+    args: Vec<M::O>,
+) -> RedisResult
+where
+    M: Manager,
+{
+    let root = redis_key
+        .get_value()?
+        .ok_or_else(RedisError::nonexistent_key)?;
+    let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
+
+    let mut res = vec![];
+    for p in paths {
+        res.push(match p {
+            Some(p) => (redis_key.arr_append(p, args.clone())? as i64).into(),
+            _ => RedisValue::Null,
+        });
+    }
+    redis_key.apply_changes(ctx, "json.arrappend")?;
+    Ok(res.into())
 }
 
 pub fn command_json_arr_index<M: Manager>(
