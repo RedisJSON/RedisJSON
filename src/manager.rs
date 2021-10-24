@@ -444,7 +444,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
                 let len = array.len() as i64;
                 let stop = stop.normalize(len);
 
-                let range = if start > len || start > stop as i64 {
+                let range = if start > len || start > stop as i64 || len == 0 {
                     0..0 // Return an empty array
                 } else {
                     start.normalize(len)..(stop + 1)

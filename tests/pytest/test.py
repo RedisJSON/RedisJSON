@@ -663,8 +663,7 @@ def testArrTrimCommand(env):
     r.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', '.arr', 99, 2), 0)
     r.assertListEqual(json.loads(r.execute_command('JSON.GET', 'test', '.arr')), [])
 
-    # FIXME: Should not crash?
-    #  r.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', '.arr', -1, 0), 0)
+    r.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', '.arr', -1, 0), 0)
 
 
 def testArrPopCommand(env):
