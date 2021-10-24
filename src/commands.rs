@@ -737,7 +737,7 @@ pub fn command_json_del<M: Manager>(
 
     let key = args.next_arg()?;
     let path = match args.next() {
-        None => Path::new(JSON_ROOT_PATH),
+        None => Path::new("."),
         Some(s) => Path::new(s.try_as_str()?),
     };
 
@@ -1063,8 +1063,8 @@ where
     }
 }
 
-fn json_arr_append<'a, M>(
-    redis_key: &'a mut M::WriteHolder,
+fn json_arr_append<M>(
+    redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &str,
     args: Vec<M::O>,
@@ -1250,7 +1250,7 @@ pub fn command_json_arr_pop<M: Manager>(
     let key = args.next_arg()?;
 
     let (path, index) = match args.next() {
-        None => (Path::new(JSON_ROOT_PATH), i64::MAX),
+        None => (Path::new("."), i64::MAX),
         Some(s) => {
             let path = Path::new(s.try_as_str()?);
             let index = args.next_i64().unwrap_or(-1);
@@ -1259,14 +1259,61 @@ pub fn command_json_arr_pop<M: Manager>(
     };
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
+    if !path.is_legacy() {
+        json_arr_pop::<M>(&mut redis_key, ctx, path.get_path(), index)
+    } else {
+        json_arr_pop_legacy::<M>(&mut redis_key, ctx, path.get_path(), index)
+    }
+}
 
+fn json_arr_pop<M>(
+    redis_key: &mut M::WriteHolder,
+    ctx: &Context,
+    path: &str,
+    index: i64,
+) -> RedisResult
+where
+    M: Manager,
+{
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_paths(path.get_path(), root, |v| {
-        v.get_type() == SelectValueType::Array
-    })?;
+    let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
+    let mut res: Vec<RedisValue> = vec![];
+    let mut need_notify = false;
+    for p in paths {
+        res.push(match p {
+            Some(p) => match redis_key.arr_pop(p, index)? {
+                Some(v) => {
+                    need_notify = true;
+                    v.into()
+                }
+                _ => RedisValue::Null, // Empty array
+            },
+            _ => RedisValue::Null, // Not an array
+        });
+    }
+    if need_notify {
+        redis_key.apply_changes(ctx, "json.arrpop")?;
+    }
+    Ok(res.into())
+}
+
+fn json_arr_pop_legacy<M>(
+    redis_key: &mut M::WriteHolder,
+    ctx: &Context,
+    path: &str,
+    index: i64,
+) -> RedisResult
+where
+    M: Manager,
+{
+    let root = redis_key
+        .get_value()?
+        .ok_or_else(RedisError::nonexistent_key)?;
+
+    let paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
     if !paths.is_empty() {
         let mut res = None;
         for p in paths {

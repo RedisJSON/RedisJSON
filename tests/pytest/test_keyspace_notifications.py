@@ -72,7 +72,7 @@ def test_keyspace_arr(env):
         assert_msg(env, pubsub.get_message(), 'pmessage', 'json.arrinsert')
         assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key_arr')
 
-        env.assertEqual('"gogo3"', r.execute_command('JSON.ARRPOP', 'test_key_arr', '$.foo', 1))
+        env.assertEqual(['"gogo3"'], r.execute_command('JSON.ARRPOP', 'test_key_arr', '$.foo', 1))
         assert_msg(env, pubsub.get_message(), 'pmessage', 'json.arrpop')
         assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key_arr')
 
@@ -85,7 +85,15 @@ def test_keyspace_arr(env):
         env.assertEqual(None, pubsub.get_message())   
 
         env.assertEqual([2], r.execute_command('JSON.ARRLEN', 'test_key_arr', '$.foo'))
-        env.assertEqual(None, pubsub.get_message())   
+        env.assertEqual(None, pubsub.get_message())
+
+        env.assertEqual(1, r.execute_command('JSON.CLEAR', 'test_key_arr', '$.foo'))
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'json.clear')
+        assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key_arr')
+        env.assertEqual([None], r.execute_command('JSON.ARRPOP', 'test_key_arr', '$.foo'))  # Empty array
+        env.assertEqual(None, pubsub.get_message())
+        env.assertEqual([None], r.execute_command('JSON.ARRPOP', 'test_key_arr', '$'))  # Not an array
+        env.assertEqual(None, pubsub.get_message())
 
         # TODO add more negative test for arr path not found
 
