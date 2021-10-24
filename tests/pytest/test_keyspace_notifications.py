@@ -76,7 +76,7 @@ def test_keyspace_arr(env):
         assert_msg(env, pubsub.get_message(), 'pmessage', 'json.arrpop')
         assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key_arr')
 
-        env.assertEqual(2, r.execute_command('JSON.ARRTRIM', 'test_key_arr', '$.foo', 0, 1))
+        env.assertEqual([2], r.execute_command('JSON.ARRTRIM', 'test_key_arr', '$.foo', 0, 1))
         assert_msg(env, pubsub.get_message(), 'pmessage', 'json.arrtrim')
         assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key_arr')
 

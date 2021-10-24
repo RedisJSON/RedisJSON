@@ -1348,13 +1348,53 @@ pub fn command_json_arr_trim<M: Manager>(
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
 
+    if !path.is_legacy() {
+        json_arr_trim::<M>(&mut redis_key, ctx, path.get_path(), start, stop)
+    } else {
+        json_arr_trim_legacy::<M>(&mut redis_key, ctx, path.get_path(), start, stop)
+    }
+}
+fn json_arr_trim<M>(
+    redis_key: &mut M::WriteHolder,
+    ctx: &Context,
+    path: &str,
+    start: i64,
+    stop: i64,
+) -> RedisResult
+where
+    M: Manager,
+{
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_paths(path.get_path(), root, |v| {
-        v.get_type() == SelectValueType::Array
-    })?;
+    let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
+    let mut res: Vec<RedisValue> = vec![];
+    for p in paths {
+        res.push(match p {
+            Some(p) => (redis_key.arr_trim(p, start, stop)?).into(),
+            _ => RedisValue::Null,
+        });
+    }
+    redis_key.apply_changes(ctx, "json.arrtrim")?;
+    Ok(res.into())
+}
+
+fn json_arr_trim_legacy<M>(
+    redis_key: &mut M::WriteHolder,
+    ctx: &Context,
+    path: &str,
+    start: i64,
+    stop: i64,
+) -> RedisResult
+where
+    M: Manager,
+{
+    let root = redis_key
+        .get_value()?
+        .ok_or_else(RedisError::nonexistent_key)?;
+
+    let paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
     if !paths.is_empty() {
         let mut res = None;
         for p in paths {

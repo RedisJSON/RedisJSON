@@ -413,3 +413,46 @@ def testArrPopCommand(env):
 
     # Test missing key
     r.expect('JSON.ARRPOP', 'non_existing_doc', '..a').raiseError()
+
+def testArrTrimCommand(env):
+    """
+    Test REJSON.ARRTRIM command
+    """
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":["foo"], "nested1": {"a": ["hello", null, "world"]}, "nested2": {"a": 31}}'))
+    # Test multi
+    res = r.execute_command('JSON.ARRTRIM', 'doc1', '$..a', '1', -1)
+    r.assertEqual(res, [0, 2, None])
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [{"a": [], "nested1": {"a": [None, "world"]}, "nested2": {"a": 31}}])
+
+    res = r.execute_command('JSON.ARRTRIM', 'doc1', '$..a', '1', '1')
+    r.assertEqual(res, [0, 1, None])
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [{"a": [], "nested1": {"a": ["world"]}, "nested2": {"a": 31}}])
+    # Test single
+    res = r.execute_command('JSON.ARRTRIM', 'doc1', '$.nested1.a', 1, 0)
+    r.assertEqual(res, [0])
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [{"a": [], "nested1": {"a": []}, "nested2": {"a": 31}}])
+
+    # Test missing key
+    r.expect('JSON.ARRTRIM', 'non_existing_doc', '$..a', '0').raiseError()
+
+    # Test legacy
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":["foo"], "nested1": {"a": ["hello", null, "world"]}, "nested2": {"a": 31}}'))
+    # Test multi (all paths are updated, but return result of last path)
+    res = r.execute_command('JSON.ARRTRIM', 'doc1', '..a', '1', '-1')
+    r.assertEqual(res, 2)
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [{"a": [], "nested1": {"a": [None, "world"]}, "nested2": {"a": 31}}])
+    # Test single
+    res = r.execute_command('JSON.ARRTRIM', 'doc1', '.nested1.a', '1', '1')
+    r.assertEqual(res, 1)
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [{"a": [], "nested1": {"a": ["world"]}, "nested2": {"a": 31}}])
+
+    # Test missing key
+    r.expect('JSON.ARRTRIM', 'non_existing_doc', '..a').raiseError()
+
