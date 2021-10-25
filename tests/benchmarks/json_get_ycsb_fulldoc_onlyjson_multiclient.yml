@@ -1,0 +1,20 @@
+version: 0.2
+name: "json_get_ycsb_fulldoc_onlyjson_multiclient"
+description: "JSON.GET JSON.GET product129341 || YCSB dataset JSON. Each json size ~= 450 Bytes
+              The rdb was generated with the YCSB redisjson binding in the following manner (within the YCSB project folder):
+                ./bin/ycsb load redisjson2 -s -P workloads/workload-ecommerce -p recordcount=1000000 -p create.search.index=false -p json.root=."
+remote:
+ - type: oss-standalone
+ - setup: redisearch-m5d
+dbconfig:
+  - dataset: "https://s3.amazonaws.com/benchmarks.redislabs/redisjson/performance.docs/performance.docs.ycsb/1.0/performance-docs-ycsb-1M-onlyjson.rdb"
+clientconfig:
+  - benchmark_type: "read-only"
+  - tool: redis-benchmark
+  - min-tool-version: "6.2.0"
+  - parameters:
+    - clients: 50
+    - requests: 6000000
+    - threads: 2
+    - pipeline: 1
+    - command: 'JSON.GET product129341'

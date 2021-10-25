@@ -1,0 +1,16 @@
+version: 0.2
+name: "json_set_ycsb_fulldoc_onlyjson_singleclient_v1"
+description: "JSON.SET JSON.SET __rand_int__ . <FULL DOC> || YCSB dataset JSON. Each json size ~= 450 Bytes"
+remote:
+ - type: oss-standalone
+ - setup: redisearch-m5d
+clientconfig:
+  - tool: redis-benchmark
+  - min-tool-version: "6.2.0"
+  - parameters:
+    - clients: 1
+    - requests: 3000000
+    - threads: 1
+    - pipeline: 1
+    - keyspacelen: 1000000
+    - command: 'JSON.SET __rand_int__ . "{\"productScore\": 0.9899964893235115 , \"image\":\"https://pigment.github.io/fake-logos/logos/medium/color/2.png\",\"creator\":\"Warhol\",\"code\":\"5175758128520\",\"color\":\"indigo\",\"productName\":\"PEN DARKORCHID POLKADOT\",\"inSale\":\"1\",\"material\":\"Iron\",\"price\":\"18.72\",\"inStock\":\"1\",\"shipsFrom\":\"fsm\",\"department\":\"Health\",\"currencyCode\":\"XAF\",\"brand\":\"Mohr O Conner\",\"productDescription\":\"Enterprise-wide upward-trending knowledge base\",\"stockCount\":\"58\"}"'
