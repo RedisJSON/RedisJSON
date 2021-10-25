@@ -456,3 +456,26 @@ def testArrTrimCommand(env):
     # Test missing key
     r.expect('JSON.ARRTRIM', 'non_existing_doc', '..a').raiseError()
 
+def testObjKeysCommand(env):
+    """Test JSON.OBJKEYS command"""
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"nested1": {"a": {"foo": 10, "bar": 20}}, "a":["foo"], "nested2": {"a": {"baz":50}}}'))
+    # Test multi
+    res = r.execute_command('JSON.OBJKEYS', 'doc1', '$..a')
+    r.assertEqual(res, [["foo", "bar"], None, ["baz"]])
+    # Test single
+    res = r.execute_command('JSON.OBJKEYS', 'doc1', '$.nested1.a')
+    r.assertEqual(res, [["foo", "bar"]])
+
+    # Test legacy
+    res = r.execute_command('JSON.OBJKEYS', 'doc1', '.*.a')
+    r.assertEqual(res, ["foo", "bar"])
+    # Test single
+    res = r.execute_command('JSON.OBJKEYS', 'doc1', '.nested2.a')
+    r.assertEqual(res, ["baz"])
+
+    # Test missing key
+    res = r.execute_command('JSON.OBJKEYS', 'non_existing_doc', '..a')
+    r.assertEqual(res, None)
+

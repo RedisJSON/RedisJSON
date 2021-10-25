@@ -1419,11 +1419,43 @@ pub fn command_json_obj_keys<M: Manager>(
     let key = args.next_arg()?;
     let path = Path::new(args.next_str()?);
 
-    let key = manager.open_key_read(ctx, &key)?;
+    let mut key = manager.open_key_read(ctx, &key)?;
+    if !path.is_legacy() {
+        json_obj_keys::<M>(&mut key, path.get_path())
+    } else {
+        json_obj_keys_legacy::<M>(&mut key, path.get_path())
+    }
+}
 
-    let value = match key.get_value()? {
+fn json_obj_keys<M>(redis_key: &mut M::ReadHolder, path: &str) -> RedisResult
+where
+    M: Manager,
+{
+    let root = redis_key.get_value()?;
+    let res: RedisValue = match root {
+        Some(root) => {
+            let values = find_all_values(path, root, |v| v.get_type() == SelectValueType::Object)?;
+            let mut res: Vec<RedisValue> = vec![];
+            for v in values {
+                res.push(match v {
+                    Some(v) => v.keys().unwrap().collect::<Vec<&str>>().into(),
+                    _ => RedisValue::Null,
+                });
+            }
+            res.into()
+        }
+        None => RedisValue::Null,
+    };
+    Ok(res.into())
+}
+
+fn json_obj_keys_legacy<M>(redis_key: &mut M::ReadHolder, path: &str) -> RedisResult
+where
+    M: Manager,
+{
+    let value = match redis_key.get_value()? {
         Some(doc) => KeyValue::new(doc)
-            .obj_keys(path.get_path())?
+            .obj_keys(path)?
             .collect::<Vec<&str>>()
             .into(),
         None => RedisValue::Null,

@@ -44,7 +44,7 @@ def test_keyspace_set(env):
         env.assertEqual(['["gogototo"]', None], r.execute_command('JSON.MGET', 'test_key', 'test_key1', '$.foo'))
         env.assertEqual(None, pubsub.get_message())       
 
-        env.assertEqual(['foo'], r.execute_command('JSON.OBJKEYS', 'test_key', '$'))
+        env.assertEqual([['foo']], r.execute_command('JSON.OBJKEYS', 'test_key', '$'))
         env.assertEqual(None, pubsub.get_message())       
 
         env.assertEqual(1, r.execute_command('JSON.OBJLEN', 'test_key', '$'))
