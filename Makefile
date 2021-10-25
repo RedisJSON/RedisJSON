@@ -189,10 +189,10 @@ pack:
 #----------------------------------------------------------------------------------------------
 
 docker:
-	@$(MAKE) -C ./build/docker
+	@make -C build/platforms build
 
 docker_push:
-	docker push redislabs/rejson:latest
+	@make -C build/platforms publish
 
 .PHONY: docker docker_push
 

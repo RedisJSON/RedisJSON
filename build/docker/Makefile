@@ -9,6 +9,7 @@ OSNICK_OFFICIAL=bullseye
 # VERSION=master, VERSION=2.0 is requireed.
 REDISEARCH_VERSION=${VERSION}
 export REDISEARCH_VERSION
+export ART_INT_DIR=/usr/lib/redis/modules/
 
 ROOT=../../
 READIES=${ROOT}/deps/readies
