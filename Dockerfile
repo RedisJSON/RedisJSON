@@ -1,6 +1,7 @@
 # BUILD redisfab/rejson:${VERSION}-${ARCH}-${OSNICK}
 
-ARG REDIS_VER=6.2.4
+ARG REDIS_VER=6.2.5
+ARG REDISEARCH_BRANCH=master
 
 # OSNICK=focal|bionic|xenial|bullseye|centos8|centos7
 ARG OSNICK=bullseye
@@ -24,6 +25,7 @@ ARG ARCH
 ARG REDIS_VER
 ARG PACK
 ARG TEST
+ARG REDISEARCH_BRANCH
 
 RUN echo "Building for ${OSNICK} (${OS}) for ${ARCH} [with Redis ${REDIS_VER}]"
 
@@ -48,11 +50,16 @@ RUN set -e ;\
         rm -f *.aof *.rdb ;\
         tar -czf /build/bin/artifacts/pytest-logs-${ARCH}-${OSNICK}.tgz . ;\
     fi
+RUN set -e ;\
+    BRANCH=$REDISEARCH_BRANCH ./sbin/get-redisearch ;\
+    cp /build/bin/linux-${OSNICK}-${ARCH}/RediSearch/redisearch.so /build/bin/
 
 #----------------------------------------------------------------------------------------------
 FROM redisfab/redis:${REDIS_VER}-${ARCH}-${OSNICK}
 
 ARG REDIS_VER
+ARG OSNICK
+ARG ARCH
 
 ENV LIBDIR /usr/lib/redis/modules
 WORKDIR /data
@@ -61,7 +68,12 @@ RUN mkdir -p "$LIBDIR"
 RUN mkdir -p /var/opt/redislabs/artifacts
 RUN chown -R redis:redis /var/opt/redislabs
 COPY --from=builder /build/bin/artifacts/ /var/opt/redislabs/artifacts
+RUN true
 COPY --from=builder /build/target/release/rejson.so "$LIBDIR"
+RUN true
+COPY --from=builder /build/bin/redisearch.so "$LIBDIR"
 
 EXPOSE 6379
-CMD ["redis-server", "--loadmodule", "/usr/lib/redis/modules/rejson.so"]
+CMD ["redis-server", \
+     "--loadmodule", "/usr/lib/redis/modules/rejson.so", \
+	 "--loadmodule", "/usr/lib/redis/modules/redisearch.so"]
