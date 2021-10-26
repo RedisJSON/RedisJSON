@@ -270,7 +270,7 @@ checksum = "b71991ff56294aa922b450139ee08b3bfc70982c6b2c7562771375cf73542dd4"
 [[package]]
 name = "jsonpath_lib"
 version = "0.2.6"
-source = "git+https://github.com/RedisJSON/jsonpath.git?branch=omer-multipath-api#4b115401580516bbdee49ec6cbf073bc949d33f6"
+source = "git+https://github.com/RedisJSON/jsonpath.git?branch=omer-multipath-api#8bc230c23c2c910cce5e58570dfdcc8238783628"
 dependencies = [
  "array_tool",
  "log",

@@ -823,10 +823,10 @@ where
 {
     let root = redis_key.get_value()?;
     let res = match root {
-        Some(root) => find_all_values(path, root, |_| true)?
+        Some(root) => KeyValue::new(root)
+            .get_values(path)?
             .iter()
-            // find_all_values will not return any None Optional, so unwrap is safe
-            .map(|v| (v.unwrap().get_type_name()).into())
+            .map(|v| (KeyValue::value_name(*v)).into())
             .collect::<Vec<RedisValue>>()
             .into(),
         None => RedisValue::Null,
