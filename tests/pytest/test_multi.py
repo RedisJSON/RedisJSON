@@ -672,3 +672,62 @@ def testDebugCommand(env):
 
     # Test missing key
     r.expect('JSON.DEBUG', 'non_existing_doc', '$..a').raiseError()
+
+def testRespCommand(env):
+    """Test REJSON.RESP command"""
+    r = env
+    data = {
+        'L1': {
+            'a': {
+                'A1_B1': 10,
+                'A1_B2': False,
+                'A1_B3': {
+                    'A1_B3_C1': None,
+                    'A1_B3_C2': [ 'A1_B3_C2_D1_1', 'A1_B3_C2_D1_2', -19.5, 'A1_B3_C2_D1_4', 'A1_B3_C2_D1_5', {
+                        'A1_B3_C2_D1_6_E1': True
+                        }
+                    ],
+                    'A1_B3_C3': [1]
+                },
+                'A1_B4': {
+                    'A1_B4_C1': "foo",
+                }
+            },
+        },
+        'L2': {
+            'a': {
+                'A2_B1': 20,
+                'A2_B2': False,
+                'A2_B3': {
+                    'A2_B3_C1': None,
+                    'A2_B3_C2': [ 'A2_B3_C2_D1_1', 'A2_B3_C2_D1_2', -37.5, 'A2_B3_C2_D1_4', 'A2_B3_C2_D1_5', {
+                        'A2_B3_C2_D1_6_E1': False
+                        }
+                    ],
+                    'A2_B3_C3': [2]
+                },
+                'A2_B4': {
+                    'A2_B4_C1': "bar",
+                }
+            },
+        },
+    }
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', json.dumps(data)))
+    # Test multi
+    res = r.execute_command('JSON.RESP', 'doc1', '$..a')
+    r.assertEqual(res, [['{', 'A1_B1', 10, 'A1_B2', 'false', 'A1_B3', ['{', 'A1_B3_C1', None, 'A1_B3_C2', ['[', 'A1_B3_C2_D1_1', 'A1_B3_C2_D1_2', '-19.5', 'A1_B3_C2_D1_4', 'A1_B3_C2_D1_5', ['{', 'A1_B3_C2_D1_6_E1', 'true']], 'A1_B3_C3', ['[', 1]], 'A1_B4', ['{', 'A1_B4_C1', 'foo']], ['{', 'A2_B1', 20, 'A2_B2', 'false', 'A2_B3', ['{', 'A2_B3_C1', None, 'A2_B3_C2', ['[', 'A2_B3_C2_D1_1', 'A2_B3_C2_D1_2', '-37.5', 'A2_B3_C2_D1_4', 'A2_B3_C2_D1_5', ['{', 'A2_B3_C2_D1_6_E1', 'false']], 'A2_B3_C3', ['[', 2]], 'A2_B4', ['{', 'A2_B4_C1', 'bar']]])
+
+    # Test single
+    resSingle = r.execute_command('JSON.RESP', 'doc1', '$.L1.a')
+    r.assertEqual(resSingle, [['{', 'A1_B1', 10, 'A1_B2', 'false', 'A1_B3', ['{', 'A1_B3_C1', None, 'A1_B3_C2', ['[', 'A1_B3_C2_D1_1', 'A1_B3_C2_D1_2', '-19.5', 'A1_B3_C2_D1_4', 'A1_B3_C2_D1_5', ['{', 'A1_B3_C2_D1_6_E1', 'true']], 'A1_B3_C3', ['[', 1]], 'A1_B4', ['{', 'A1_B4_C1', 'foo']]])
+
+    # Test missing path
+    r.expect('JSON.RESP', 'doc1', '$.nowhere').raiseError()
+
+    # Test missing key
+    res = r.execute_command('JSON.RESP', 'non_existing_doc', '$..a')
+    r.assertEqual(res, None)
+
+    # Test legacy
+    res = r.execute_command('JSON.RESP', 'doc1', '.L1.a')
+    r.assertEqual([res], resSingle)

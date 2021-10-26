@@ -94,9 +94,25 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         }
     }
 
-    fn resp_serialize(&'a self, path: &'a str) -> RedisResult {
-        let v = self.get_first(path)?;
-        Ok(self.resp_serialize_inner(v))
+    fn resp_serialize(&'a self, path: Path) -> RedisResult {
+        if path.is_legacy() {
+            let v = self.get_first(path.get_path())?;
+            Ok(self.resp_serialize_inner(v))
+        } else {
+            let res = self.get_values(path.get_path())?;
+            if !res.is_empty() {
+                Ok(res
+                    .iter()
+                    .map(|v| self.resp_serialize_inner(v))
+                    .collect::<Vec<RedisValue>>()
+                    .into())
+            } else {
+                Err(RedisError::String(format!(
+                    "Path '{}' does not exist",
+                    path.get_path()
+                )))
+            }
+        }
     }
 
     fn resp_serialize_inner(&'a self, v: &V) -> RedisValue {
@@ -1691,7 +1707,7 @@ pub fn command_json_resp<M: Manager>(
 
     let key = manager.open_key_read(ctx, &key)?;
     match key.get_value()? {
-        Some(doc) => KeyValue::new(doc).resp_serialize(path.get_path()),
+        Some(doc) => KeyValue::new(doc).resp_serialize(path),
         None => Ok(RedisValue::Null),
     }
 }
