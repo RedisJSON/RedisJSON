@@ -931,19 +931,66 @@ pub fn command_json_bool_toggle<M: Manager>(
     let path = Path::new(args.next_str()?);
     let mut redis_key = manager.open_key_write(ctx, key)?;
 
+    if !path.is_legacy() {
+        json_bool_toggle::<M>(&mut redis_key, ctx, path.get_path())
+    } else {
+        json_bool_toggle_legacy::<M>(&mut redis_key, ctx, path.get_path())
+    }
+}
+
+fn json_bool_toggle<M>(redis_key: &mut M::WriteHolder, ctx: &Context, path: &str) -> RedisResult
+where
+    M: Manager,
+{
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
-    let paths = find_paths(path.get_path(), root, |v| {
-        v.get_type() == SelectValueType::Bool
-    })?;
+    let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Bool)?;
+    // let res = paths
+    //     .iter()
+    //     .map(|p| match *p {
+    //         Some(p) => redis_key.bool_toggle(p),
+    //         None => Ok(RedisValue::Null),
+    //     })
+    //     .collect::<Vec<Result<RedisValue>>>()
+    //     .into();
+
+    let mut res: Vec<RedisValue> = vec![];
+    let mut need_notify = false;
+    for p in paths {
+        res.push(match p {
+            Some(p) => {
+                need_notify = true;
+                RedisValue::Integer((redis_key.bool_toggle(p)?).into())
+            }
+            None => RedisValue::Null,
+        });
+    }
+    if need_notify {
+        redis_key.apply_changes(ctx, "json.arrpop")?;
+    }
+    Ok(res.into())
+}
+
+fn json_bool_toggle_legacy<M>(
+    redis_key: &mut M::WriteHolder,
+    ctx: &Context,
+    path: &str,
+) -> RedisResult
+where
+    M: Manager,
+{
+    let root = redis_key
+        .get_value()?
+        .ok_or_else(RedisError::nonexistent_key)?;
+    let paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Bool)?;
     if !paths.is_empty() {
-        let mut res = None;
+        let mut res = false;
         for p in paths {
-            res = Some(redis_key.bool_toggle(p)?);
+            res = redis_key.bool_toggle(p)?;
         }
         redis_key.apply_changes(ctx, "json.toggle")?;
-        Ok(res.unwrap().to_string().into())
+        Ok(res.to_string().into())
     } else {
         Err(RedisError::String(format!(
             "Path '{}' does not exist or not a bool",
@@ -1562,7 +1609,6 @@ pub fn command_json_clear<M: Manager>(
 
     let path = paths.first().unwrap().get_path();
 
-    // FIXME: handle multi paths
     let mut redis_key = manager.open_key_write(ctx, key)?;
 
     let root = redis_key

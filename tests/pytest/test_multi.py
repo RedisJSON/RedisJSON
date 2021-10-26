@@ -480,7 +480,7 @@ def testObjKeysCommand(env):
     r.assertEqual(res, None)
 
     # Test missing key
-    r.expect('JSON.OBJLEN', 'doc1', '$.nowhere').raiseError()
+    r.expect('JSON.OBJKEYS', 'doc1', '$.nowhere').raiseError()
 
 
 def testObjLenCommand(env):
@@ -551,4 +551,59 @@ def testTypeCommand(env):
     # Test missing path (defaults to root)
     res = r.execute_command('JSON.TYPE', 'doc1')
     r.assertEqual(res, 'object')
+
+    # Test missing key
+    res = r.execute_command('JSON.TYPE', 'non_existing_doc', '..a')
+    r.assertEqual(res, None)
+
+def testClearCommand(env):
+    """Test JSON.CLEAR command"""
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"nested1": {"a": {"foo": 10, "bar": 20}}, "a":["foo"], "nested2": {"a": "claro"}, "nested3": {"a": {"baz":50}}}'))
+    # Test multi
+    res = r.execute_command('JSON.CLEAR', 'doc1', '$..a')
+    r.assertEqual(res, 3)
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [{"nested1": {"a": {}}, "a": [], "nested2": {"a": "claro"}, "nested3": {"a": {}}}])
+
+    # Test single
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"nested1": {"a": {"foo": 10, "bar": 20}}, "a":["foo"], "nested2": {"a": "claro"}, "nested3": {"a": {"baz":50}}}'))
+    res = r.execute_command('JSON.CLEAR', 'doc1', '$.nested1.a')
+    r.assertEqual(res, 1)
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [{"nested1": {"a": {}}, "a": ["foo"], "nested2": {"a": "claro"}, "nested3": {"a": {"baz": 50}}}])
+
+    # Test missing path (defaults to root)
+    res = r.execute_command('JSON.CLEAR', 'doc1')
+    r.assertEqual(res, 1)
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [{}])
+
+    # Test missing key
+    r.expect('JSON.CLEAR', 'non_existing_doc', '$..a').raiseError()
+
+
+
+def testToggleCommand(env):
+    """
+    Test REJSON.TOGGLE command
+    """
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":["foo"], "nested1": {"a": false}, "nested2": {"a": 31}, "nested3": {"a": true}}'))
+    # Test multi
+    res = r.execute_command('JSON.TOGGLE', 'doc1', '$..a')
+    r.assertEqual(res, [None, 1, None, 0])
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [{"a": ["foo"], "nested1": {"a": True}, "nested2": {"a": 31}, "nested3": {"a": False}}])
+
+    # Test single
+    res = r.execute_command('JSON.TOGGLE', 'doc1', '$.nested1.a')
+    r.assertEqual(res, [0])
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [{"a": ["foo"], "nested1": {"a": False}, "nested2": {"a": 31}, "nested3": {"a": False}}])
+
+    # Test missing key
+    r.expect('JSON.TOGGLE', 'non_existing_doc', '$..a').raiseError()
 
