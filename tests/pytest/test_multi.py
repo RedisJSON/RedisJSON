@@ -479,3 +479,76 @@ def testObjKeysCommand(env):
     res = r.execute_command('JSON.OBJKEYS', 'non_existing_doc', '..a')
     r.assertEqual(res, None)
 
+    # Test missing key
+    r.expect('JSON.OBJLEN', 'doc1', '$.nowhere').raiseError()
+
+
+def testObjLenCommand(env):
+    """Test JSON.OBJLEN command"""
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"nested1": {"a": {"foo": 10, "bar": 20}}, "a":["foo"], "nested2": {"a": {"baz":50}}}'))
+    # Test multi
+    res = r.execute_command('JSON.OBJLEN', 'doc1', '$..a')
+    r.assertEqual(res, [2, None, 1])
+    # Test single
+    res = r.execute_command('JSON.OBJLEN', 'doc1', '$.nested1.a')
+    r.assertEqual(res, [2])
+
+    # Test missing key
+    res = r.execute_command('JSON.OBJLEN', 'non_existing_doc', '$..a')
+    r.assertEqual(res, None)
+
+    # Test missing path
+    r.expect('JSON.OBJLEN', 'doc1', '$.nowhere').raiseError()
+
+
+    # Test legacy
+    res = r.execute_command('JSON.OBJLEN', 'doc1', '.*.a')
+    r.assertEqual(res, 2)
+    # Test single
+    res = r.execute_command('JSON.OBJLEN', 'doc1', '.nested2.a')
+    r.assertEqual(res, 1)
+
+    # Test missing key
+    res = r.execute_command('JSON.OBJLEN', 'non_existing_doc', '..a')
+    r.assertEqual(res, None)
+
+    # Test missing path
+    r.expect('JSON.OBJLEN', 'doc1', '.nowhere').raiseError()
+
+
+def testTypeCommand(env):
+    """Test JSON.TYPE command"""
+    types = {
+        'null':     None,
+        'boolean':  False,
+        'integer':  42,
+        'number':   1.2,
+        'string':   'str',
+        'object':   {},
+        'array':    [],
+    }
+    jdata = {}
+    jexpected = []
+    for i, (k, v) in zip(range(1, len(types)), iter(types.items())):
+        jdata["nested" + str(i)] = {'a': v}
+        jexpected.append(k)
+
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', json.dumps(jdata)))
+    # Test multi
+    res = r.execute_command('JSON.TYPE', 'doc1', '$..a')
+    r.assertEqual(res, jexpected)
+    # Test single
+    res = r.execute_command('JSON.TYPE', 'doc1', '$.nested2.a')
+    r.assertEqual(res, [jexpected[1]])
+
+    # Test legacy
+    res = r.execute_command('JSON.TYPE', 'doc1', '..a')
+    r.assertEqual(res, jexpected[0])
+    # Test missing path (defaults to root)
+    res = r.execute_command('JSON.TYPE', 'doc1')
+    r.assertEqual(res, 'object')
+

@@ -805,13 +805,41 @@ pub fn command_json_type<M: Manager>(
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
-    let path = Path::new(args.next_str()?);
+    let path = Path::new(args.next_str().unwrap_or("."));
 
     let key = manager.open_key_read(ctx, &key)?;
 
-    let value = key.get_value()?.map_or_else(
+    if !path.is_legacy() {
+        json_type::<M>(&key, path.get_path())
+    } else {
+        json_type_legacy::<M>(&key, path.get_path())
+    }
+}
+
+fn json_type<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
+where
+    M: Manager,
+{
+    let root = redis_key.get_value()?;
+    let res = match root {
+        Some(root) => find_all_values(path, root, |_| true)?
+            .iter()
+            // find_all_values will not return any None Optional, so unwrap is safe
+            .map(|v| (v.unwrap().get_type_name()).into())
+            .collect::<Vec<RedisValue>>()
+            .into(),
+        None => RedisValue::Null,
+    };
+    Ok(res)
+}
+
+fn json_type_legacy<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
+where
+    M: Manager,
+{
+    let value = redis_key.get_value()?.map_or_else(
         || RedisValue::Null,
-        |doc| match KeyValue::new(doc).get_type(path.get_path()) {
+        |doc| match KeyValue::new(doc).get_type(path) {
             Ok(s) => s.into(),
             Err(_) => RedisValue::Null,
         },
@@ -1474,10 +1502,38 @@ pub fn command_json_obj_len<M: Manager>(
     let path = Path::new(args.next_str()?);
 
     let key = manager.open_key_read(ctx, &key)?;
-    match key.get_value()? {
-        Some(doc) => Ok(RedisValue::Integer(
-            KeyValue::new(doc).obj_len(path.get_path())? as i64,
-        )),
+    if !path.is_legacy() {
+        json_obj_len::<M>(&key, path.get_path())
+    } else {
+        json_obj_len_legacy::<M>(&key, path.get_path())
+    }
+}
+
+fn json_obj_len<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
+where
+    M: Manager,
+{
+    let root = redis_key.get_value()?;
+    let res = match root {
+        Some(root) => find_all_values(path, root, |v| v.get_type() == SelectValueType::Object)?
+            .iter()
+            .map(|v| match *v {
+                Some(v) => RedisValue::Integer(v.len().unwrap() as i64),
+                None => RedisValue::Null,
+            })
+            .collect::<Vec<RedisValue>>()
+            .into(),
+        None => RedisValue::Null,
+    };
+    Ok(res)
+}
+
+fn json_obj_len_legacy<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
+where
+    M: Manager,
+{
+    match redis_key.get_value()? {
+        Some(doc) => Ok(RedisValue::Integer(KeyValue::new(doc).obj_len(path)? as i64)),
         None => Ok(RedisValue::Null),
     }
 }
