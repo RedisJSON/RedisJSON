@@ -552,36 +552,43 @@ def testObjLenCommand(env):
     r.expect('JSON.OBJLEN', 'doc1', '.nowhere').raiseError()
 
 
-def testTypeCommand(env):
-    """Test JSON.TYPE command"""
-    types = {
-        'null':     None,
-        'boolean':  False,
-        'integer':  42,
-        'number':   1.2,
-        'string':   'str',
+def load_types_data(nested_key_name):
+    types_data = {
         'object':   {},
         'array':    [],
+        'string':   'str',
+        'integer':  42,
+        'number':   1.2,
+        'boolean':  False,
+        'null':     None,
+
     }
     jdata = {}
-    jexpected = []
-    for i, (k, v) in zip(range(1, len(types)), iter(types.items())):
-        jdata["nested" + str(i)] = {'a': v}
-        jexpected.append(k)
+    types = []
+    for i, (k, v) in zip(range(1, len(types_data) + 1), iter(types_data.items())):
+        jdata["nested" + str(i)] = {nested_key_name: v}
+        types.append(k)
 
+    return jdata, types
+
+
+def testTypeCommand(env):
+    """Test JSON.TYPE command"""
+
+    jdata, jtypes = load_types_data('a')
     r = env
 
     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', json.dumps(jdata)))
     # Test multi
     res = r.execute_command('JSON.TYPE', 'doc1', '$..a')
-    r.assertEqual(res, jexpected)
+    r.assertEqual(res, jtypes)
     # Test single
     res = r.execute_command('JSON.TYPE', 'doc1', '$.nested2.a')
-    r.assertEqual(res, [jexpected[1]])
+    r.assertEqual(res, [jtypes[1]])
 
     # Test legacy
     res = r.execute_command('JSON.TYPE', 'doc1', '..a')
-    r.assertEqual(res, jexpected[0])
+    r.assertEqual(res, jtypes[0])
     # Test missing path (defaults to root)
     res = r.execute_command('JSON.TYPE', 'doc1')
     r.assertEqual(res, 'object')
@@ -646,18 +653,22 @@ def testDebugCommand(env):
         Test REJSON.DEBUG MEMORY command
             """
     r = env
+    jdata, jtypes = load_types_data('a')
 
-    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":["foo"], "nested1": {"a": false}, "nested2": {"a": 31}, "nested3": {"a": true}}'))
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', json.dumps(jdata)))
     # Test multi
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1', '$..a')
-    r.assertEqual(res, [24, 1, 16, 1])
+    r.assertEqual(res, [72, 24, 24, 16, 16, 1, 0])
     # Test single
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1', '$.nested2.a')
-    r.assertEqual(res, [16])
+    r.assertEqual(res, [24])
 
     # Test legacy
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1', '..a')
-    r.assertEqual(res, 24)
+    r.assertEqual(res, 72)
+    # Test missing path (defaults to root)
+    res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1')
+    r.assertEqual(res, 72)
 
     # Test missing key
     r.expect('JSON.DEBUG', 'non_existing_doc', '$..a').raiseError()

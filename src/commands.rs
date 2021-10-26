@@ -18,6 +18,7 @@ use serde_json::{Map, Number, Value};
 use serde::Serialize;
 use std::collections::HashMap;
 const JSON_ROOT_PATH: &str = "$";
+const JSON_ROOT_PATH_LEGACY: &str = ".";
 const CMD_ARG_NOESCAPE: &str = "NOESCAPE";
 const CMD_ARG_INDENT: &str = "INDENT";
 const CMD_ARG_NEWLINE: &str = "NEWLINE";
@@ -523,7 +524,7 @@ pub fn command_json_get<M: Manager>(
 
     // path is optional -> no path found we use root "$"
     if paths.is_empty() {
-        paths.push(Path::new("."));
+        paths.push(Path::new(JSON_ROOT_PATH_LEGACY));
     }
 
     let key = manager.open_key_read(ctx, &key)?;
@@ -737,7 +738,7 @@ pub fn command_json_del<M: Manager>(
 
     let key = args.next_arg()?;
     let path = match args.next() {
-        None => Path::new("."),
+        None => Path::new(JSON_ROOT_PATH_LEGACY),
         Some(s) => Path::new(s.try_as_str()?),
     };
 
@@ -805,7 +806,7 @@ pub fn command_json_type<M: Manager>(
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
-    let path = Path::new(args.next_str().unwrap_or("."));
+    let path = Path::new(args.next_str().unwrap_or(JSON_ROOT_PATH_LEGACY));
 
     let key = manager.open_key_read(ctx, &key)?;
 
@@ -1325,7 +1326,7 @@ pub fn command_json_arr_pop<M: Manager>(
     let key = args.next_arg()?;
 
     let (path, index) = match args.next() {
-        None => (Path::new("."), i64::MAX),
+        None => (Path::new(JSON_ROOT_PATH_LEGACY), i64::MAX),
         Some(s) => {
             let path = Path::new(s.try_as_str()?);
             let index = args.next_i64().unwrap_or(-1);
@@ -1639,7 +1640,7 @@ pub fn command_json_debug<M: Manager>(
     match args.next_str()?.to_uppercase().as_str() {
         "MEMORY" => {
             let key = args.next_arg()?;
-            let path = Path::new(args.next_str()?);
+            let path = Path::new(args.next_str().unwrap_or(JSON_ROOT_PATH_LEGACY));
 
             let key = manager.open_key_read(ctx, &key)?;
             if path.is_legacy() {
