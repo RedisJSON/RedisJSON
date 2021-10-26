@@ -61,6 +61,40 @@ def testDelCommand(env):
     res = r.execute_command('JSON.DEL', 'non_existing_doc', '..a')
     r.assertEqual(res, 0)
 
+def testForgetCommand(env):
+    """Test REJSON.FORGET command"""
+    """Alias of REJSON.DEL"""
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a": 1, "nested": {"a": 2, "b": 3}}'))
+    res = r.execute_command('JSON.FORGET', 'doc1', '$..a')
+    r.assertEqual(res, 2)
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(res, '[{"nested":{"b":3}}]')
+
+    # Test deletion of nested hierarchy - only higher hierarchy is deleted
+    r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '{"a": {"a": 2, "b": 3}, "b": ["a", "b"], "nested": {"b":[true, "a","b"]}}'))
+    res = r.execute_command('JSON.FORGET', 'doc2', '$..a')
+    r.assertEqual(res, 1)
+    res = r.execute_command('JSON.GET', 'doc2', '$')
+    r.assertEqual(res, '[{"nested":{"b":[true,"a","b"]},"b":["a","b"]}]')
+
+    r.assertOk(r.execute_command('JSON.SET', 'doc3', '$', '[{"ciao":["non ancora"],"nested":[{"ciao":[1,"a"]}, {"ciao":[2,"a"]}, {"ciaoc":[3,"non","ciao"]}, {"ciao":[4,"a"]}, {"e":[5,"non","ciao"]}]}]'))
+    res = r.execute_command('JSON.FORGET', 'doc3', '$.[0]["nested"]..ciao')
+    r.assertEqual(res, 3)
+    res = r.execute_command('JSON.GET', 'doc3', '$')
+    r.assertEqual(res, '[[{"ciao":["non ancora"],"nested":[{},{},{"ciaoc":[3,"non","ciao"]},{},{"e":[5,"non","ciao"]}]}]]')
+
+    # Test default path
+    res = r.execute_command('JSON.FORGET', 'doc3')
+    r.assertEqual(res, 1)
+    res = r.execute_command('JSON.GET', 'doc3', '$')
+    r.assertEqual(res, None)
+
+    # Test missing key
+    res = r.execute_command('JSON.FORGET', 'non_existing_doc', '..a')
+    r.assertEqual(res, 0)
+
 
 def testSetAndGetCommands(env):
     """Test REJSON.SET command"""
@@ -607,3 +641,23 @@ def testToggleCommand(env):
     # Test missing key
     r.expect('JSON.TOGGLE', 'non_existing_doc', '$..a').raiseError()
 
+def testDebugCommand(env):
+    """
+        Test REJSON.DEBUG MEMORY command
+            """
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":["foo"], "nested1": {"a": false}, "nested2": {"a": 31}, "nested3": {"a": true}}'))
+    # Test multi
+    res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1', '$..a')
+    r.assertEqual(res, [24, 1, 16, 1])
+    # Test single
+    res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1', '$.nested2.a')
+    r.assertEqual(res, [16])
+
+    # Test legacy
+    res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1', '..a')
+    r.assertEqual(res, 24)
+
+    # Test missing key
+    r.expect('JSON.DEBUG', 'non_existing_doc', '$..a').raiseError()

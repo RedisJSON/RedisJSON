@@ -1642,11 +1642,25 @@ pub fn command_json_debug<M: Manager>(
             let path = Path::new(args.next_str()?);
 
             let key = manager.open_key_read(ctx, &key)?;
-            let value = match key.get_value()? {
-                Some(doc) => manager.get_memory(KeyValue::new(doc).get_first(path.get_path())?)?,
-                None => 0,
-            };
-            Ok(value.into())
+            if path.is_legacy() {
+                Ok(match key.get_value()? {
+                    Some(doc) => {
+                        manager.get_memory(KeyValue::new(doc).get_first(path.get_path())?)?
+                    }
+                    None => 0,
+                }
+                .into())
+            } else {
+                Ok(match key.get_value()? {
+                    Some(doc) => KeyValue::new(doc)
+                        .get_values(path.get_path())?
+                        .iter()
+                        .map(|v| manager.get_memory(v).unwrap())
+                        .collect::<Vec<usize>>(),
+                    None => vec![],
+                }
+                .into())
+            }
         }
         "HELP" => {
             let results = vec![
