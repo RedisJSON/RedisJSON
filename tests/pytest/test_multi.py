@@ -242,8 +242,20 @@ def testNumByCommands(env):
     r.expect('JSON.NUMMULTBY', 'non_existing_doc', '$..a', '2').raiseError()
     r.expect('JSON.NUMPOWBY', 'non_existing_doc', '$..a', '2').raiseError()
 
-    # FIXME: Test legacy
+    # Test legacy NUMINCRBY
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":"b","b":[{"a":2}, {"a":5.0}, {"a":"c"}]}'))
+    res = r.execute_command('JSON.NUMINCRBY', 'doc1', '.b[0].a', '3')
+    r.assertEqual(res, '5')
 
+    # Test legacy NUMMULTBY
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":"b","b":[{"a":2}, {"a":5.0}, {"a":"c"}]}'))
+    res = r.execute_command('JSON.NUMMULTBY', 'doc1', '.b[0].a', '3')
+    r.assertEqual(res, '6')
+
+    # Test legacy NUMPOWBY
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":"b","b":[{"a":2}, {"a":5.0}, {"a":"c"}]}'))
+    res = r.execute_command('JSON.NUMPOWBY', 'doc1', '.b[0].a', '4')
+    r.assertEqual(res, '16')
 
 def testStrAppendCommand(env):
     """
@@ -266,7 +278,17 @@ def testStrAppendCommand(env):
     # Test missing key
     r.expect('JSON.STRAPPEND', 'non_existing_doc', '$..a', '"err"').raiseError()
 
-    # FIXME: Test legacy
+    # Test legacy
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":"foo", "nested1": {"a": "hello"}, "nested2": {"a": 31}}'))
+    # Test multi
+    res = r.execute_command('JSON.STRAPPEND', 'doc1', '.*.a', '"bar"')
+    r.assertEqual(res, 8)
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(res, '[{"a":"foo","nested1":{"a":"hellobar"},"nested2":{"a":31}}]')
+
+    # Test missing path
+    r.expect('JSON.STRAPPEND', 'doc1', '"piu"').raiseError()
+
 
 def testStrLenCommand(env):
     """
@@ -292,7 +314,10 @@ def testStrLenCommand(env):
     # Test missing key
     r.expect('JSON.STRLEN', 'non_existing_doc', '$..a').raiseError()
 
-    # FIXME: Test legacy
+    # Test legacy
+    res1 = r.execute_command('JSON.STRLEN', 'doc1', '..a')
+    r.assertEqual(res1, 6)
+
 
 def testArrAppendCommand(env):
     """

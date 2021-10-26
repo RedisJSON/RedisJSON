@@ -889,10 +889,28 @@ where
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
 
+    if !path.is_legacy() {
+        json_num_op::<M>(&mut redis_key, ctx, path.get_path(), number, op, cmd)
+    } else {
+        json_num_op_legacy::<M>(&mut redis_key, ctx, path.get_path(), number, op, cmd)
+    }
+}
+
+fn json_num_op<M>(
+    redis_key: &mut M::WriteHolder,
+    ctx: &Context,
+    path: &str,
+    number: &str,
+    op: NumOp,
+    cmd: &str,
+) -> RedisResult
+where
+    M: Manager,
+{
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
-    let paths = find_all_paths(path.get_path(), root, |v| match v.get_type() {
+    let paths = find_all_paths(path, root, |v| match v.get_type() {
         SelectValueType::Double | SelectValueType::Long => true,
         _ => false,
     })?;
@@ -912,6 +930,42 @@ where
 
     let res = to_json_value::<Number>(res, Value::Null);
     Ok(KeyValue::<M::V>::serialize_object(&res, None, None, None).into())
+}
+
+fn json_num_op_legacy<M>(
+    redis_key: &mut M::WriteHolder,
+    ctx: &Context,
+    path: &str,
+    number: &str,
+    op: NumOp,
+    cmd: &str,
+) -> RedisResult
+where
+    M: Manager,
+{
+    let root = redis_key
+        .get_value()?
+        .ok_or_else(RedisError::nonexistent_key)?;
+    let paths = find_paths(path, root, |v| {
+        v.get_type() == SelectValueType::Double || v.get_type() == SelectValueType::Long
+    })?;
+    if !paths.is_empty() {
+        let mut res = None;
+        for p in paths {
+            res = Some(match op {
+                NumOp::Incr => redis_key.incr_by(p, number)?,
+                NumOp::Mult => redis_key.mult_by(p, number)?,
+                NumOp::Pow => redis_key.pow_by(p, number)?,
+            });
+        }
+        redis_key.apply_changes(ctx, cmd)?;
+        Ok(res.unwrap().to_string().into())
+    } else {
+        Err(RedisError::String(format!(
+            "Path '{}' does not exist or does not contains a number",
+            path
+        )))
+    }
 }
 
 pub fn command_json_num_incrby<M: Manager>(
@@ -1034,19 +1088,33 @@ pub fn command_json_str_append<M: Manager>(
         path = Path::new(path_or_json);
         json = val.try_as_str()?;
     } else {
-        path = Path::new(JSON_ROOT_PATH);
+        path = Path::new(JSON_ROOT_PATH_LEGACY);
         json = path_or_json;
     }
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
 
+    if !path.is_legacy() {
+        json_str_append::<M>(&mut redis_key, ctx, path.get_path(), json)
+    } else {
+        json_str_append_legacy::<M>(&mut redis_key, ctx, path.get_path(), json)
+    }
+}
+
+fn json_str_append<M>(
+    redis_key: &mut M::WriteHolder,
+    ctx: &Context,
+    path: &str,
+    json: &str,
+) -> RedisResult
+where
+    M: Manager,
+{
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_all_paths(path.get_path(), root, |v| {
-        v.get_type() == SelectValueType::String
-    })?;
+    let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::String)?;
 
     let mut res: Vec<RedisValue> = vec![];
     for p in paths {
@@ -1059,6 +1127,35 @@ pub fn command_json_str_append<M: Manager>(
     Ok(res.into())
 }
 
+fn json_str_append_legacy<M>(
+    redis_key: &mut M::WriteHolder,
+    ctx: &Context,
+    path: &str,
+    json: &str,
+) -> RedisResult
+where
+    M: Manager,
+{
+    let root = redis_key
+        .get_value()?
+        .ok_or_else(RedisError::nonexistent_key)?;
+
+    let paths = find_paths(path, root, |v| v.get_type() == SelectValueType::String)?;
+    if !paths.is_empty() {
+        let mut res = None;
+        for p in paths {
+            res = Some(redis_key.str_append(p, json.to_string())?);
+        }
+        redis_key.apply_changes(ctx, "json.strappend")?;
+        Ok(res.unwrap().into())
+    } else {
+        Err(RedisError::String(format!(
+            "Path '{}' does not exist or not a string",
+            path
+        )))
+    }
+}
+
 pub fn command_json_str_len<M: Manager>(
     manager: M,
     ctx: &Context,
@@ -1069,19 +1166,22 @@ pub fn command_json_str_len<M: Manager>(
     let path = Path::new(args.next_str()?);
 
     let key = manager.open_key_read(ctx, &key)?;
-    //let root = key.get_value()?.ok_or_else(RedisError::nonexistent_key)?;
-    let root = match key.get_value()? {
-        Some(k) => k,
-        None if path.is_legacy() => {
-            return Ok(RedisValue::Null);
-        }
-        None => {
-            return Err(RedisError::nonexistent_key());
-        }
-    };
-    let values = find_all_values(path.get_path(), root, |v| {
-        v.get_type() == SelectValueType::String
-    })?;
+
+    if !path.is_legacy() {
+        json_str_len::<M>(&key, path.get_path())
+    } else {
+        json_str_len_legacy::<M>(&key, path.get_path())
+    }
+}
+
+fn json_str_len<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
+where
+    M: Manager,
+{
+    let root = redis_key
+        .get_value()?
+        .ok_or_else(RedisError::nonexistent_key)?;
+    let values = find_all_values(path, root, |v| v.get_type() == SelectValueType::String)?;
     let mut res: Vec<RedisValue> = vec![];
     for v in values {
         res.push(match v {
@@ -1090,6 +1190,16 @@ pub fn command_json_str_len<M: Manager>(
         });
     }
     Ok(res.into())
+}
+
+fn json_str_len_legacy<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
+where
+    M: Manager,
+{
+    match redis_key.get_value()? {
+        Some(doc) => Ok(RedisValue::Integer(KeyValue::new(doc).str_len(path)? as i64)),
+        None => Ok(RedisValue::Null),
+    }
 }
 
 pub fn command_json_arr_append<M: Manager>(
