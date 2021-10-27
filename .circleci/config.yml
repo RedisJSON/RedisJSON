@@ -175,6 +175,7 @@ commands:
           name: Build for platform
           command: |
             ROOT=$PWD
+            # make -C build/docker build DOCKER_SUFFIX=".<<parameters.platform>>" OSNICK=<<parameters.platform>> PACK=1 TEST=1 VERBOSE=1
             cd build/platforms
             make build OSNICK="<<parameters.platform>>" VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH ARTIFACTS=1 TEST=1 SHOW=1
             cd $ROOT
@@ -188,6 +189,7 @@ commands:
           name: Build for platform (publish)
           command: |
             docker login -u redisfab -p $DOCKER_REDISFAB_PWD
+            # make -C build/docker build DOCKER_SUFFIX=".<<parameters.platform>>" OSNICK=<<parameters.platform>> PACK=1 TEST=1 VERBOSE=1 PUBLISH=1 DOCKERWRAPPER_EXTRA_VARS="DOCKER_PUSH_ONLY=1"
             cd build/platforms
             make publish OSNICK="<<parameters.platform>>" VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH OFFICIAL=0 SHOW=1 VERBOSE=1
       - persist-artifacts
@@ -423,3 +425,4 @@ workflows:
     jobs:
       - performance-automation:
           context: common
+
