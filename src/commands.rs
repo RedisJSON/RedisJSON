@@ -385,67 +385,62 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     pub fn arr_index(
         &self,
         path: &str,
-        scalar_json: &str,
+        scalar_value: Value,
         start: i64,
         end: i64,
     ) -> Result<RedisValue, Error> {
-        let scalar_value: Value = serde_json::from_str(scalar_json)?;
-        if scalar_value.is_array() || scalar_value.is_object() {
-            return Err(Error::from(format!(
-                "ERR expected scalar but found {}",
-                scalar_json
-            )));
-        }
         let res = self
             .get_values(path)?
             .iter()
-            .map(
-                |value| match self.arr_first_index_single(value, &scalar_value, start, end) {
-                    FoundIndex::NotArray => RedisValue::Null,
-                    i => i.into(),
-                },
-            )
-            .collect::<Vec<_>>();
+            .map(|value| {
+                self.arr_first_index_single(value, &scalar_value, start, end)
+                    .into()
+            })
+            .collect::<Vec<RedisValue>>();
         Ok(res.into())
     }
 
     pub fn arr_index_legacy(
         &self,
         path: &str,
-        end: i64,
-        scalar_json: &str,
+        scalar_value: Value,
         start: i64,
+        end: i64,
     ) -> Result<RedisValue, Error> {
         let arr = self.get_first(path)?;
-        let v = serde_json::from_str(scalar_json)?;
-        Ok(self.arr_first_index_single(arr, &v, start, end).into())
+        Ok(
+            match self.arr_first_index_single(arr, &scalar_value, start, end) {
+                FoundIndex::NotArray => RedisValue::Integer(-1),
+                i => i.into(),
+            },
+        )
     }
 
     /// Returns first array index of `v` in `arr`, or NotFound if not found in `arr`, or NotArray if `arr` is not an array
     fn arr_first_index_single(&self, arr: &V, v: &Value, start: i64, end: i64) -> FoundIndex {
-        if arr.is_array() {
-            let len = arr.len().unwrap() as i64;
-            if len == 0 {
-                return FoundIndex::NotFound;
-            }
-            // end=0 means INFINITY to support backward with RedisJSON
-            let (start, end) = normalize_arr_indices(start, end, len);
-
-            if end < start {
-                // don't search at all
-                return FoundIndex::NotFound;
-            }
-
-            for index in start..end {
-                if self.is_equal(arr.get_index(index as usize).unwrap(), v) {
-                    return FoundIndex::Index(index);
-                }
-            }
-
-            FoundIndex::NotFound
-        } else {
-            FoundIndex::NotArray
+        if !arr.is_array() {
+            return FoundIndex::NotArray;
         }
+
+        let len = arr.len().unwrap() as i64;
+        if len == 0 {
+            return FoundIndex::NotFound;
+        }
+        // end=0 means INFINITY to support backward with RedisJSON
+        let (start, end) = normalize_arr_indices(start, end, len);
+
+        if end < start {
+            // don't search at all
+            return FoundIndex::NotFound;
+        }
+
+        for index in start..end {
+            if self.is_equal(arr.get_index(index as usize).unwrap(), v) {
+                return FoundIndex::Index(index);
+            }
+        }
+
+        FoundIndex::NotFound
     }
 
     pub fn obj_keys(&self, path: &str) -> Result<Box<dyn Iterator<Item = &'_ str> + '_>, Error> {
@@ -919,7 +914,7 @@ impl From<FoundIndex> for RedisValue {
     fn from(e: FoundIndex) -> Self {
         match e {
             FoundIndex::NotFound => RedisValue::Integer(-1),
-            FoundIndex::NotArray => RedisValue::Integer(-2),
+            FoundIndex::NotArray => RedisValue::Null,
             FoundIndex::Index(i) => RedisValue::Integer(i),
         }
     }
@@ -942,13 +937,22 @@ pub fn command_json_arr_index<M: Manager>(
 
     let key = manager.open_key_read(ctx, &key)?;
 
+    let is_legacy = path.is_legacy();
+    let scalar_value: Value = serde_json::from_str(json_scalar)?;
+    if !is_legacy && (scalar_value.is_array() || scalar_value.is_object()) {
+        return Err(RedisError::String(format!(
+            "ERR expected scalar but found {}",
+            json_scalar
+        )));
+    }
+
     let res = key
         .get_value()?
         .map_or(Ok(RedisValue::Integer(-1)), |doc| {
             if path.is_legacy() {
-                KeyValue::new(doc).arr_index_legacy(path.get_path(), end, json_scalar, start)
+                KeyValue::new(doc).arr_index_legacy(path.get_path(), scalar_value, start, end)
             } else {
-                KeyValue::new(doc).arr_index(path.get_path(), json_scalar, start, end)
+                KeyValue::new(doc).arr_index(path.get_path(), scalar_value, start, end)
             }
         })?;
 

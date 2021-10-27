@@ -92,11 +92,11 @@ def testArrIndexCommand(env):
     r.assertEqual(res, [3, 8, -1, None, -1])
 
     # Fail with none-scalar value
-    r.expect('JSON.ARRINDEX', 'test_null', '$..nested42_empty_arr', '{"arr":[]}').raiseError()
+    r.expect('JSON.ARRINDEX', 'test_null', '$..nested42_empty_arr.arr', '{"arr":[]}').raiseError()
 
     # Do not fail with none-scalar value in legacy mode
-    res = r.execute_command('JSON.ARRINDEX', 'test_null', '.[4][1].nested42_empty_arr', '{"arr":[]}')
-    r.assertEqual(res, -2)
+    res = r.execute_command('JSON.ARRINDEX', 'test_null', '.[4][1].nested42_empty_arr.arr', '{"arr":[]}')
+    r.assertEqual(res, -1)
 
     # Test legacy (path begins with dot)
     # Test index of int scalar in single value
