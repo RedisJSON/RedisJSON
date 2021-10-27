@@ -384,7 +384,8 @@ workflows:
           <<: *not-on-integ-branch
       - platforms-build:
           context: common
-          <<: *on-integ-and-version-tags
+          #@@ <<: *on-integ-and-version-tags
+          <<: *not-on-integ-branch
           matrix:
             parameters:
               platform: [focal, bionic, xenial, centos8, centos7, bullseye]
@@ -395,14 +396,16 @@ workflows:
           name: deploy_snapshot
           location: snapshots
           context: common
-          <<: *on-integ-branch
+          #@@<<: *on-integ-branch
+          <<: *not-on-integ-branch
           requires:
             - platforms-build
             - build-macos
       - deploy-artifacts:
           name: deploy_release
           context: common
-          <<: *on-version-tags
+          #@@ <<: *on-version-tags
+          <<: *not-on-integ-branch
           requires:
             - platforms-build
             - build-macos
