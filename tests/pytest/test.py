@@ -592,6 +592,7 @@ def testArrIndexCommand(env):
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 6), 6)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 4, -0), 6)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 5, -1), -1)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 5, 0), 6)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, -2, 6), -1)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '"foo"'), -1)
 
@@ -599,6 +600,14 @@ def testArrIndexCommand(env):
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 3), 3)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, 3), 5)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '[4]'), 4)
+
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 1), 1)
+
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '$.arr', 1), [1])
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '$.arr', 2, 1, 4), [2])
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '$.arr', 6), [-1])
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '$.arr', 3, 0, 2), [-1])
+
 
 def testArrInsertCommand(env):
     """Test JSON.ARRINSERT command"""
