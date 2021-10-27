@@ -13,7 +13,7 @@ use crate::error::Error;
 
 use crate::redisjson::SetOptions;
 
-use serde_json::{Map, Number, Value};
+use serde_json::{Number, Value};
 
 use serde::Serialize;
 use std::collections::HashMap;
@@ -60,30 +60,6 @@ pub struct KeyValue<'a, V: SelectValue> {
 impl<'a, V: SelectValue> KeyValue<'a, V> {
     pub fn new(v: &'a V) -> KeyValue<'a, V> {
         KeyValue { val: v }
-    }
-
-    pub fn to_value(&self, val: &V) -> Value {
-        match val.get_type() {
-            SelectValueType::Null => Value::Null,
-            SelectValueType::Bool => Value::Bool(val.get_bool()),
-            SelectValueType::String => Value::String(val.get_str()),
-            SelectValueType::Long => val.get_long().into(),
-            SelectValueType::Double => val.get_double().into(),
-            SelectValueType::Array => {
-                let mut arr = Vec::new();
-                for v in val.values().unwrap() {
-                    arr.push(self.to_value(v));
-                }
-                Value::Array(arr)
-            }
-            SelectValueType::Object => {
-                let mut m = Map::new();
-                for (k, v) in val.items().unwrap() {
-                    m.insert(k.to_string(), self.to_value(v));
-                }
-                Value::Object(m)
-            }
-        }
     }
 
     fn get_first<'b>(&'a self, path: &'b str) -> Result<&'a V, Error> {
@@ -162,7 +138,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         Ok(results)
     }
 
-    fn serialize_object<O: Serialize>(
+    pub fn serialize_object<O: Serialize>(
         o: &O,
         indent: Option<&str>,
         newline: Option<&str>,
