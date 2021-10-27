@@ -157,7 +157,6 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         indent: Option<&str>,
         newline: Option<&str>,
         space: Option<&str>,
-        _format: Format,
     ) -> Result<RedisValue, Error> {
         if paths.len() > 1 {
             // TODO: Creating a temp doc here duplicates memory usage. This can be very memory inefficient.
@@ -205,7 +204,6 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         indent: Option<&str>,
         newline: Option<&str>,
         space: Option<&str>,
-        _format: Format,
     ) -> Result<RedisValue, Error> {
         if paths.len() > 1 {
             let mut res: Vec<Vec<&V>> = vec![];
@@ -234,9 +232,9 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         }
         let is_legacy = !paths.iter().any(|p| !p.is_legacy());
         if is_legacy {
-            self.to_json_legacy(paths, indent, newline, space, format)
+            self.to_json_legacy(paths, indent, newline, space)
         } else {
-            self.to_json_multi(paths, indent, newline, space, format)
+            self.to_json_multi(paths, indent, newline, space)
         }
     }
 
@@ -1004,15 +1002,6 @@ where
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
     let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Bool)?;
-    // let res = paths
-    //     .iter()
-    //     .map(|p| match *p {
-    //         Some(p) => redis_key.bool_toggle(p),
-    //         None => Ok(RedisValue::Null),
-    //     })
-    //     .collect::<Vec<Result<RedisValue>>>()
-    //     .into();
-
     let mut res: Vec<RedisValue> = vec![];
     let mut need_notify = false;
     for p in paths {
