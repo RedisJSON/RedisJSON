@@ -1,7 +1,6 @@
 # BUILD redisfab/rejson:${VERSION}-${ARCH}-${OSNICK}
 
 ARG REDIS_VER=6.2.5
-ARG REDISEARCH_BRANCH=master
 
 # OSNICK=focal|bionic|xenial|bullseye|centos8|centos7
 ARG OSNICK=bullseye
@@ -25,7 +24,6 @@ ARG ARCH
 ARG REDIS_VER
 ARG PACK
 ARG TEST
-ARG REDISEARCH_BRANCH
 
 RUN echo "Building for ${OSNICK} (${OS}) for ${ARCH} [with Redis ${REDIS_VER}]"
 
@@ -67,8 +65,6 @@ RUN chown -R redis:redis /var/opt/redislabs
 COPY --from=builder /build/bin/artifacts/ /var/opt/redislabs/artifacts
 RUN true
 COPY --from=builder /build/target/release/rejson.so "$LIBDIR"
-RUN true
-COPY --from=builder /build/bin/redisearch.so "$LIBDIR"
 
 EXPOSE 6379
 CMD ["redis-server", \
