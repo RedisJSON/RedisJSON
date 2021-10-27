@@ -384,7 +384,7 @@ workflows:
           <<: *not-on-integ-branch
       - platforms-build:
           context: common
-          <<: *not-on-integ-branch
+          <<: *on-integ-and-version-tags
           matrix:
             parameters:
               platform: [focal, bionic, xenial, centos8, centos7, bullseye]
