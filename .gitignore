@@ -27,3 +27,4 @@
 .cproject
 .project
 .settings/
+lcov.*
