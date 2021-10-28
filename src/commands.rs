@@ -901,17 +901,23 @@ where
     })?;
 
     let mut res = vec![];
+    let mut need_notify = false;
     for p in paths {
         res.push(match p {
-            Some(p) => Some(match op {
-                NumOp::Incr => redis_key.incr_by(p, number)?,
-                NumOp::Mult => redis_key.mult_by(p, number)?,
-                NumOp::Pow => redis_key.pow_by(p, number)?,
-            }),
+            Some(p) => {
+                need_notify = true;
+                Some(match op {
+                    NumOp::Incr => redis_key.incr_by(p, number)?,
+                    NumOp::Mult => redis_key.mult_by(p, number)?,
+                    NumOp::Pow => redis_key.pow_by(p, number)?,
+                })
+            }
             _ => None,
         });
     }
-    redis_key.apply_changes(ctx, cmd)?;
+    if need_notify {
+        redis_key.apply_changes(ctx, cmd)?;
+    }
 
     let res = to_json_value::<Number>(res, Value::Null);
     Ok(KeyValue::<M::V>::serialize_object(&res, None, None, None).into())
@@ -1093,13 +1099,19 @@ where
     let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::String)?;
 
     let mut res: Vec<RedisValue> = vec![];
+    let mut need_notify = false;
     for p in paths {
         res.push(match p {
-            Some(p) => (redis_key.str_append(p, json.to_string())?).into(),
+            Some(p) => {
+                need_notify = true;
+                (redis_key.str_append(p, json.to_string())?).into()
+            }
             _ => RedisValue::Null,
         });
     }
-    redis_key.apply_changes(ctx, "json.strappend")?;
+    if need_notify {
+        redis_key.apply_changes(ctx, "json.strappend")?;
+    }
     Ok(res.into())
 }
 
@@ -1256,13 +1268,19 @@ where
     let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
 
     let mut res = vec![];
+    let mut need_notify = false;
     for p in paths {
         res.push(match p {
-            Some(p) => (redis_key.arr_append(p, args.clone())? as i64).into(),
+            Some(p) => {
+                need_notify = true;
+                (redis_key.arr_append(p, args.clone())? as i64).into()
+            }
             _ => RedisValue::Null,
         });
     }
-    redis_key.apply_changes(ctx, "json.arrappend")?;
+    if need_notify {
+        redis_key.apply_changes(ctx, "json.arrappend")?;
+    }
     Ok(res.into())
 }
 
@@ -1367,14 +1385,20 @@ where
     let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
 
     let mut res: Vec<RedisValue> = vec![];
+    let mut need_notify = false;
     for p in paths {
         res.push(match p {
-            Some(p) => (redis_key.arr_insert(p, &args, index)? as i64).into(),
+            Some(p) => {
+                need_notify = true;
+                (redis_key.arr_insert(p, &args, index)? as i64).into()
+            }
             _ => RedisValue::Null,
         });
     }
 
-    redis_key.apply_changes(ctx, "json.arrinsert")?;
+    if need_notify {
+        redis_key.apply_changes(ctx, "json.arrinsert")?;
+    }
     Ok(res.into())
 }
 
@@ -1579,13 +1603,19 @@ where
 
     let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
     let mut res: Vec<RedisValue> = vec![];
+    let mut need_notify = false;
     for p in paths {
         res.push(match p {
-            Some(p) => (redis_key.arr_trim(p, start, stop)?).into(),
+            Some(p) => {
+                need_notify = true;
+                (redis_key.arr_trim(p, start, stop)?).into()
+            }
             _ => RedisValue::Null,
         });
     }
-    redis_key.apply_changes(ctx, "json.arrtrim")?;
+    if need_notify {
+        redis_key.apply_changes(ctx, "json.arrtrim")?;
+    }
     Ok(res.into())
 }
 
