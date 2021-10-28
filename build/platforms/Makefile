@@ -3,6 +3,8 @@ ROOT=../..
 MK.pyver:=3
 include $(ROOT)/deps/readies/mk/main
 
+DOCKERFILE_STEM=$(ROOT)/build/platforms/Dockerfile
+
 # OSNICK=bullseye|bionic|xenial|centos7|centos8
 OSNICK ?= bullseye
 
