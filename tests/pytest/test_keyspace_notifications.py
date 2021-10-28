@@ -80,7 +80,7 @@ def test_keyspace_arr(env):
         assert_msg(env, pubsub.get_message(), 'pmessage', 'test_key_arr')
 
         # Negative tests should not get an event 
-        env.assertEqual(0, r.execute_command('JSON.ARRINDEX', 'test_key_arr', '$.foo', '"gogo1"'))
+        env.assertEqual([0], r.execute_command('JSON.ARRINDEX', 'test_key_arr', '$.foo', '"gogo1"'))
         env.assertEqual(None, pubsub.get_message())   
 
         env.assertEqual(2, r.execute_command('JSON.ARRLEN', 'test_key_arr', '$.foo'))

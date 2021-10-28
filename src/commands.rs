@@ -1,6 +1,6 @@
 use crate::formatter::RedisJsonFormatter;
 use crate::manager::{AddUpdateInfo, Manager, ReadHolder, SetUpdateInfo, UpdateInfo, WriteHolder};
-use crate::redisjson::{Format, Path};
+use crate::redisjson::{normalize_arr_indices, Format, Path};
 use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
@@ -13,7 +13,7 @@ use crate::error::Error;
 
 use crate::redisjson::SetOptions;
 
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use serde::Serialize;
 use std::collections::HashMap;
@@ -60,30 +60,6 @@ pub struct KeyValue<'a, V: SelectValue> {
 impl<'a, V: SelectValue> KeyValue<'a, V> {
     pub fn new(v: &'a V) -> KeyValue<'a, V> {
         KeyValue { val: v }
-    }
-
-    pub fn to_value(&self, val: &V) -> Value {
-        match val.get_type() {
-            SelectValueType::Null => Value::Null,
-            SelectValueType::Bool => Value::Bool(val.get_bool()),
-            SelectValueType::String => Value::String(val.get_str()),
-            SelectValueType::Long => val.get_long().into(),
-            SelectValueType::Double => val.get_double().into(),
-            SelectValueType::Array => {
-                let mut arr = Vec::new();
-                for v in val.values().unwrap() {
-                    arr.push(self.to_value(v));
-                }
-                Value::Array(arr)
-            }
-            SelectValueType::Object => {
-                let mut m = Map::new();
-                for (k, v) in val.items().unwrap() {
-                    m.insert(k.to_string(), self.to_value(v));
-                }
-                Value::Object(m)
-            }
-        }
     }
 
     fn get_first<'b>(&'a self, path: &'b str) -> Result<&'a V, Error> {
@@ -146,8 +122,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         Ok(results)
     }
 
-    fn serialize_object<O: Serialize>(
-        &'a self,
+    pub fn serialize_object<O: Serialize>(
         o: &O,
         indent: Option<&str>,
         newline: Option<&str>,
@@ -189,20 +164,20 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 acc.insert(path.get_original(), value);
                 acc
             });
-            Ok(self
-                .serialize_object(&temp_doc, indent, newline, space)
-                .into())
+            Ok(Self::serialize_object(&temp_doc, indent, newline, space).into())
         } else {
             let path = &paths[0];
             if path.is_legacy() {
-                Ok(self
-                    .serialize_object(self.get_first(paths[0].get_path())?, indent, newline, space)
-                    .into())
+                Ok(Self::serialize_object(
+                    self.get_first(paths[0].get_path())?,
+                    indent,
+                    newline,
+                    space,
+                )
+                .into())
             } else {
                 let values = self.get_values(path.get_path())?;
-                Ok(self
-                    .serialize_object(&values, indent, newline, space)
-                    .into())
+                Ok(Self::serialize_object(&values, indent, newline, space).into())
             }
         }
     }
@@ -340,7 +315,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         }
     }
 
-    pub fn is_eqaul<T1: SelectValue, T2: SelectValue>(&self, a: &T1, b: &T2) -> bool {
+    pub fn is_equal<T1: SelectValue, T2: SelectValue>(&self, a: &T1, b: &T2) -> bool {
         match (a.get_type(), b.get_type()) {
             (SelectValueType::Null, SelectValueType::Null) => true,
             (SelectValueType::Bool, SelectValueType::Bool) => a.get_bool() == b.get_bool(),
@@ -352,7 +327,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     false
                 } else {
                     for (i, e) in a.values().unwrap().into_iter().enumerate() {
-                        if !self.is_eqaul(e, b.get_index(i).unwrap()) {
+                        if !self.is_equal(e, b.get_index(i).unwrap()) {
                             return false;
                         }
                     }
@@ -368,7 +343,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                         let temp2 = b.get_key(k);
                         match (temp1, temp2) {
                             (Some(a1), Some(b1)) => {
-                                if !self.is_eqaul(a1, b1) {
+                                if !self.is_equal(a1, b1) {
                                     return false;
                                 }
                             }
@@ -385,51 +360,62 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     pub fn arr_index(
         &self,
         path: &str,
-        scalar_json: &str,
+        scalar_value: Value,
         start: i64,
         end: i64,
-    ) -> Result<i64, Error> {
-        let res = self.get_first(path)?;
-        if res.get_type() == SelectValueType::Array {
-            // end=-1/0 means INFINITY to support backward with RedisJSON
-            if res.len().unwrap() == 0 || end < -1 {
-                return Ok(-1);
-            }
-            let v: Value = serde_json::from_str(scalar_json)?;
+    ) -> Result<RedisValue, Error> {
+        let res = self
+            .get_values(path)?
+            .iter()
+            .map(|value| {
+                self.arr_first_index_single(value, &scalar_value, start, end)
+                    .into()
+            })
+            .collect::<Vec<RedisValue>>();
+        Ok(res.into())
+    }
 
-            let len = res.len().unwrap() as i64;
+    pub fn arr_index_legacy(
+        &self,
+        path: &str,
+        scalar_value: Value,
+        start: i64,
+        end: i64,
+    ) -> Result<RedisValue, Error> {
+        let arr = self.get_first(path)?;
+        Ok(
+            match self.arr_first_index_single(arr, &scalar_value, start, end) {
+                FoundIndex::NotArray => RedisValue::Integer(-1),
+                i => i.into(),
+            },
+        )
+    }
 
-            // Normalize start
-            let start = if start < 0 {
-                0.max(len + start)
-            } else {
-                // start >= 0
-                start.min(len - 1)
-            };
-
-            // Normalize end
-            let end = match end {
-                0 => len,
-                e if e < 0 => len + end,
-                _ => end.min(len),
-            };
-
-            if end < start {
-                // don't search at all
-                return Ok(-1);
-            }
-            let mut i = -1;
-            for index in start..end {
-                if self.is_eqaul(res.get_index(index as usize).unwrap(), &v) {
-                    i = index;
-                    break;
-                }
-            }
-
-            Ok(i)
-        } else {
-            Ok(-1)
+    /// Returns first array index of `v` in `arr`, or NotFound if not found in `arr`, or NotArray if `arr` is not an array
+    fn arr_first_index_single(&self, arr: &V, v: &Value, start: i64, end: i64) -> FoundIndex {
+        if !arr.is_array() {
+            return FoundIndex::NotArray;
         }
+
+        let len = arr.len().unwrap() as i64;
+        if len == 0 {
+            return FoundIndex::NotFound;
+        }
+        // end=0 means INFINITY to support backward with RedisJSON
+        let (start, end) = normalize_arr_indices(start, end, len);
+
+        if end < start {
+            // don't search at all
+            return FoundIndex::NotFound;
+        }
+
+        for index in start..end {
+            if self.is_equal(arr.get_index(index as usize).unwrap(), v) {
+                return FoundIndex::Index(index);
+            }
+        }
+
+        FoundIndex::NotFound
     }
 
     pub fn obj_keys(&self, path: &str) -> Result<Box<dyn Iterator<Item = &'_ str> + '_>, Error> {
@@ -893,6 +879,22 @@ pub fn command_json_arr_append<M: Manager>(
     }
 }
 
+enum FoundIndex {
+    Index(i64),
+    NotFound,
+    NotArray,
+}
+
+impl From<FoundIndex> for RedisValue {
+    fn from(e: FoundIndex) -> Self {
+        match e {
+            FoundIndex::NotFound => RedisValue::Integer(-1),
+            FoundIndex::NotArray => RedisValue::Null,
+            FoundIndex::Index(i) => RedisValue::Integer(i),
+        }
+    }
+}
+
 pub fn command_json_arr_index<M: Manager>(
     manager: M,
     ctx: &Context,
@@ -910,11 +912,26 @@ pub fn command_json_arr_index<M: Manager>(
 
     let key = manager.open_key_read(ctx, &key)?;
 
-    let index = key.get_value()?.map_or(Ok(-1), |doc| {
-        KeyValue::new(doc).arr_index(path.get_path(), json_scalar, start, end)
-    })?;
+    let is_legacy = path.is_legacy();
+    let scalar_value: Value = serde_json::from_str(json_scalar)?;
+    if !is_legacy && (scalar_value.is_array() || scalar_value.is_object()) {
+        return Err(RedisError::String(format!(
+            "ERR expected scalar but found {}",
+            json_scalar
+        )));
+    }
 
-    Ok(index.into())
+    let res = key
+        .get_value()?
+        .map_or(Ok(RedisValue::Integer(-1)), |doc| {
+            if path.is_legacy() {
+                KeyValue::new(doc).arr_index_legacy(path.get_path(), scalar_value, start, end)
+            } else {
+                KeyValue::new(doc).arr_index(path.get_path(), scalar_value, start, end)
+            }
+        })?;
+
+    Ok(res)
 }
 
 pub fn command_json_arr_insert<M: Manager>(
