@@ -25,3 +25,4 @@ as-library = []
 
 [profile.release]
 debug = 1
+lto = true
