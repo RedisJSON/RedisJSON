@@ -40,7 +40,7 @@ pub fn normalize_arr_indices(start: i64, end: i64, len: i64) -> (i64, i64) {
     // Normalize end
     let end = match end {
         0 => len,
-        e if e < 0 => len + end,
+        e if e < 0 => 0.max(len + end),
         _ => end.min(len),
     };
     (start, end)

@@ -291,7 +291,7 @@ def testSetBSON(env):
     r = env
     bson = open(os.path.join(JSON_PATH , 'bson_bytes_1.bson'), 'rb').read()
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', bson, 'FORMAT', 'BSON'))
-    data = json.loads(r.execute_command('JSON.GET', 'test', *docs['values'].keys()))
+    r.expect('JSON.GET', 'test', *docs['values'].keys()).raiseError()
 
 def testMgetCommand(env):
     """Test REJSON.MGET command"""
@@ -308,22 +308,22 @@ def testMgetCommand(env):
     r.assertEqual(len(raw), 5)
     for d in range(0, 5):
         key = 'doc:{}'.format(d)
-        r.assertEqual(json.loads(raw[d]), docs['basic'], d)
+        r.assertEqual(json.loads(raw[d]), [docs['basic']], d)
 
     # Test an MGET that fails for one key
     r.cmd('DEL', 'test')
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"bool":false}'))
     raw = r.execute_command('JSON.MGET', 'test', 'doc:0', 'foo', '.bool')
     r.assertEqual(len(raw), 3)
-    r.assertFalse(json.loads(raw[0]))
-    r.assertTrue(json.loads(raw[1]))
+    r.assertFalse(json.loads(raw[0])[0])
+    r.assertTrue(json.loads(raw[1])[0])
     r.assertEqual(raw[2], None)
 
     # Test that MGET on missing path
     raw = r.execute_command('JSON.MGET', 'doc:0', 'doc:1', '42isnotapath')
     r.assertEqual(len(raw), 2)
-    r.assertEqual(raw[0], None)
-    r.assertEqual(raw[1], None)
+    r.assertEqual(raw[0], '[]')
+    r.assertEqual(raw[1], '[]')
 
     # Test that MGET fails on path errors
     r.cmd('DEL', 'test')
@@ -331,7 +331,7 @@ def testMgetCommand(env):
     raw = r.execute_command('JSON.MGET', 'doc:0', 'test', 'doc:1', '.bool')
     r.assertEqual(len(raw), 3)
     r.assertTrue(json.loads(raw[0]))
-    r.assertEqual(raw[1], None)
+    r.assertEqual(raw[1], '[]')
     r.assertTrue(json.loads(raw[2]))
 
 def testToggleCommand(env):
@@ -672,6 +672,9 @@ def testArrTrimCommand(env):
     r.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', '.arr', 99, 2), 0)
     r.assertListEqual(json.loads(r.execute_command('JSON.GET', 'test', '.arr')), [])
 
+    r.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', '.arr', -1, 0), 0)
+
+
 def testArrPopCommand(env):
     """Test JSON.ARRPOP command"""
 
@@ -734,7 +737,7 @@ def testLenCommands(env):
     r.assertEqual(r.execute_command('JSON.ARRLEN', 'test', '.arr'), 6)
 
     # test elements with undefined lengths
-    r.expect('JSON.ARRLEN', 'test', '.bool').raiseError()
+    r.assertEqual(r.execute_command('JSON.ARRLEN', 'test', '.bool'), None)
     r.expect('JSON.STRLEN', 'test', '.none').raiseError()
     r.expect('JSON.OBJLEN', 'test', '.int').raiseError()
     r.expect('JSON.STRLEN', 'test', '.num').raiseError()
@@ -773,10 +776,10 @@ def testNumIncrCommand(env):
 
     # test a wrong type
     r.expect('JSON.NUMINCRBY', 'test', '.bar', 1).raiseError()
-#
-#         # test a missing path
-#         r.expect('JSON.NUMINCRBY', 'test', '.fuzz', 1).raiseError()
-#
+
+    # test a missing path
+    r.expect('JSON.NUMINCRBY', 'test', '.fuzz', 1).raiseError()
+
     # test issue #9
     r.assertOk(r.execute_command('JSON.SET', 'num', '.', '0'))
     r.assertEqual('1', r.execute_command('JSON.NUMINCRBY', 'num', '.', 1))

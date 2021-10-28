@@ -92,9 +92,7 @@ Pretty-formatted JSON is producible with `redis-cli` by following this example:
 
 #### Return value
 
-[Bulk String][3], specifically the JSON serialization.
-
-The reply's structure depends on the number of paths. A single path results in the value itself being returned, whereas multiple paths are returned as a JSON object in which each path is a key.
+[Array][4] of [Bulk Strings][3], specifically, each string is the JSON serialization of each JSON value matching a path.
 
 ### JSON.MGET
 
@@ -135,7 +133,7 @@ Delete a value.
 
 #### Return value
 
-[Integer][2], specifically the number of paths deleted (0 or 1).
+[Integer][2], specifically the number of paths deleted (0 or more).
 
 ### JSON.NUMINCRBY
 
