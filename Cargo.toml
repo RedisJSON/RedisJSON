@@ -22,3 +22,6 @@ redis-module = { version="0.23", features = ["experimental-api"]}
 # This requires running the tests with `--features test`
 test = ["redis-module/test"]
 as-library = []
+
+[profile.release]
+debug = 1
