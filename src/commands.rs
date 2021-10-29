@@ -205,18 +205,12 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         newline: Option<&str>,
         space: Option<&str>,
     ) -> Result<RedisValue, Error> {
-        if paths.len() > 1 {
-            let mut res: Vec<Vec<&V>> = vec![];
-            for path in paths {
-                let values = self.get_values(path.get_path())?;
-                res.push(values);
-            }
-            Ok(Self::serialize_object(&res, indent, newline, space).into())
-        } else {
-            Ok(self
-                .to_string_multi(paths[0].get_path(), indent, newline, space)?
-                .into())
+        let mut res: Vec<Vec<&V>> = vec![];
+        for path in paths {
+            let values = self.get_values(path.get_path())?;
+            res.push(values);
         }
+        Ok(Self::serialize_object(&res, indent, newline, space).into())
     }
 
     fn to_json(

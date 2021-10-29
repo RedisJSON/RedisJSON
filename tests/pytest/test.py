@@ -200,8 +200,8 @@ def testGetWithBracketNotation(env):
     r.assertOk(r.execute_command('JSON.SET', 'x', '.', '[1,2,3]'))
     r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '.[1]')), 2) # dot notation - single value
     r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '[1]')), 2) # implicit dot notation - single value
-    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$.[1]')), [2]) # dollar notation - array
-    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$[1]')), [2]) # dollar notation - array
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$.[1]')), [[2]]) # dollar notation - array
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$[1]')), [[2]]) # dollar notation - array
 
 def testSetWithPathErrors(env):
     r = env
@@ -455,16 +455,17 @@ def testClear(env):
     r.expect('JSON.SET', 'test', '.', multi_content).ok()
 
     # Test get multi results (using .. recursive descent)
-    r.expect('JSON.GET', 'test', '$..n').equal(r'[42,44,{"a":1,"b":2},["to","be","cleared",4]]')
+    r.expect('JSON.GET', 'test', '$..n').equal(r'[[42,44,{"a":1,"b":2},["to","be","cleared",4]]]')
 
     # Make sure specific obj content exists before clear
-    obj_content = r'[{"a":1,"b":2}]'
+    obj_content = r'[[{"a":1,"b":2}]]'
     obj_content_legacy = r'{"a":1,"b":2}'
     r.expect('JSON.GET', 'test', '$.arr[2].n').equal(obj_content)
     r.expect('JSON.GET', 'test', '.arr[2].n').equal(obj_content_legacy)
     # Make sure specific arr content exists before clear
-    arr_content = r'[["to","be","cleared",4]]'
+    arr_content = r'[[["to","be","cleared",4]]]'
     arr_content_legacy = r'["to","be","cleared",4]'
+    res = r.execute_command('JSON.GET', 'test', '$.arr[3].n2.n')
     r.expect('JSON.GET', 'test', '$.arr[3].n2.n').equal(arr_content)
     r.expect('JSON.GET', 'test', '.arr[3].n2.n').equal(arr_content_legacy)
 
@@ -476,39 +477,39 @@ def testClear(env):
     r.expect('JSON.CLEAR', 'test', '$.arr[1]').equal(0)
 
     # Make sure specific obj content was cleared
-    r.expect('JSON.GET', 'test', '$.arr[2].n').equal('[{}]')
+    r.expect('JSON.GET', 'test', '$.arr[2].n').equal('[[{}]]')
     r.expect('JSON.GET', 'test', '.arr[2].n').equal('{}')
     # Make sure specific arr content was cleared
-    r.expect('JSON.GET', 'test', '$.arr[3].n2.n').equal('[[]]')
+    r.expect('JSON.GET', 'test', '$.arr[3].n2.n').equal('[[[]]]')
     r.expect('JSON.GET', 'test', '.arr[3].n2.n').equal('[]')
 
     # Make sure only appropriate content (obj and arr) was cleared
-    r.expect('JSON.GET', 'test', '$..n').equal('[42,44,{},[]]')
+    r.expect('JSON.GET', 'test', '$..n').equal('[[42,44,{},[]]]')
 
     # Clear dynamic path
     r.expect('JSON.SET', 'test', '.', r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}') \
         .ok()
     r.expect('JSON.CLEAR', 'test', '$.arr.*').equal(3)
-    r.expect('JSON.GET', 'test', '$').equal('[{"n":42,"s":"42","arr":[{},"s",{},{}]}]')
+    r.expect('JSON.GET', 'test', '$').equal('[[{"n":42,"s":"42","arr":[{},"s",{},{}]}]]')
 
     # Clear root
     r.expect('JSON.SET', 'test', '.', r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}') \
         .ok()
     # TODO: switch order of the following paths and expect .equals(2) when supporting multi-paths in JSON.CLEAR
     r.expect('JSON.CLEAR', 'test', '$', '$.arr[2].n').equal(1)
-    r.expect('JSON.GET', 'test', '$').equal('[{}]')
+    r.expect('JSON.GET', 'test', '$').equal('[[{}]]')
 
     r.expect('JSON.SET', 'test', '$', obj_content_legacy).ok()
     r.expect('JSON.CLEAR', 'test').equal(1)
-    r.expect('JSON.GET', 'test', '$').equal('[{}]')
+    r.expect('JSON.GET', 'test', '$').equal('[[{}]]')
 
     # Clear none existing path
     r.expect('JSON.SET', 'test', '.', r'{"a":[1,2], "b":{"c":"d"}}').ok()
     r.expect('JSON.CLEAR', 'test', '$.c').equal(0)
-    r.expect('JSON.GET', 'test', '$').equal('[{"a":[1,2],"b":{"c":"d"}}]')
+    r.expect('JSON.GET', 'test', '$').equal('[[{"a":[1,2],"b":{"c":"d"}}]]')
 
     r.expect('JSON.CLEAR', 'test', '$.b..a').equal(0)
-    r.expect('JSON.GET', 'test', '$').equal('[{"a":[1,2],"b":{"c":"d"}}]')
+    r.expect('JSON.GET', 'test', '$').equal('[[{"a":[1,2],"b":{"c":"d"}}]]')
 
     # Key doesn't exist 
     r.expect('JSON.CLEAR', 'not_test_key', '$').raiseError()
@@ -906,9 +907,9 @@ def testIssue_80(env):
 
 def testMultiPathResults(env):
     env.expect("JSON.SET", "k", '$', '[1,2,3]').ok()
-    env.expect("JSON.GET", "k", '$[*]').equal('[1,2,3]')
+    env.expect("JSON.GET", "k", '$[*]').equal('[[1,2,3]]')
     env.expect("JSON.SET", "k", '$', '{"a":[1,2,3],"b":["c","d","e"],"c":"k"}').ok()
-    env.expect("JSON.GET", "k", '$.*[0,2]').equal('[1,3,"c","e"]')
+    env.expect("JSON.GET", "k", '$.*[0,2]').equal('[[1,3,"c","e"]]')
 
     # make sure legacy json path returns single result
     env.expect("JSON.GET", "k", '.*[0,2]').equal('1')

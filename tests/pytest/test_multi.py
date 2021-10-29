@@ -36,20 +36,20 @@ def testDelCommand(env):
     res = r.execute_command('JSON.DEL', 'doc1', '$..a')
     r.assertEqual(res, 2)
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(res, '[{"nested":{"b":3}}]')
+    r.assertEqual(res, '[[{"nested":{"b":3}}]]')
 
     # Test deletion of nested hierarchy - only higher hierarchy is deleted
     r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '{"a": {"a": 2, "b": 3}, "b": ["a", "b"], "nested": {"b":[true, "a","b"]}}'))
     res = r.execute_command('JSON.DEL', 'doc2', '$..a')
     r.assertEqual(res, 1)
     res = r.execute_command('JSON.GET', 'doc2', '$')
-    r.assertEqual(res, '[{"nested":{"b":[true,"a","b"]},"b":["a","b"]}]')
+    r.assertEqual(res, '[[{"nested":{"b":[true,"a","b"]},"b":["a","b"]}]]')
 
     r.assertOk(r.execute_command('JSON.SET', 'doc3', '$', '[{"ciao":["non ancora"],"nested":[{"ciao":[1,"a"]}, {"ciao":[2,"a"]}, {"ciaoc":[3,"non","ciao"]}, {"ciao":[4,"a"]}, {"e":[5,"non","ciao"]}]}]'))
     res = r.execute_command('JSON.DEL', 'doc3', '$.[0]["nested"]..ciao')
     r.assertEqual(res, 3)
     res = r.execute_command('JSON.GET', 'doc3', '$')
-    r.assertEqual(res, '[[{"ciao":["non ancora"],"nested":[{},{},{"ciaoc":[3,"non","ciao"]},{},{"e":[5,"non","ciao"]}]}]]')
+    r.assertEqual(res, '[[[{"ciao":["non ancora"],"nested":[{},{},{"ciaoc":[3,"non","ciao"]},{},{"e":[5,"non","ciao"]}]}]]]')
 
     # Test default path
     res = r.execute_command('JSON.DEL', 'doc3')
@@ -70,20 +70,20 @@ def testForgetCommand(env):
     res = r.execute_command('JSON.FORGET', 'doc1', '$..a')
     r.assertEqual(res, 2)
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(res, '[{"nested":{"b":3}}]')
+    r.assertEqual(res, '[[{"nested":{"b":3}}]]')
 
     # Test deletion of nested hierarchy - only higher hierarchy is deleted
     r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '{"a": {"a": 2, "b": 3}, "b": ["a", "b"], "nested": {"b":[true, "a","b"]}}'))
     res = r.execute_command('JSON.FORGET', 'doc2', '$..a')
     r.assertEqual(res, 1)
     res = r.execute_command('JSON.GET', 'doc2', '$')
-    r.assertEqual(res, '[{"nested":{"b":[true,"a","b"]},"b":["a","b"]}]')
+    r.assertEqual(res, '[[{"nested":{"b":[true,"a","b"]},"b":["a","b"]}]]')
 
     r.assertOk(r.execute_command('JSON.SET', 'doc3', '$', '[{"ciao":["non ancora"],"nested":[{"ciao":[1,"a"]}, {"ciao":[2,"a"]}, {"ciaoc":[3,"non","ciao"]}, {"ciao":[4,"a"]}, {"e":[5,"non","ciao"]}]}]'))
     res = r.execute_command('JSON.FORGET', 'doc3', '$.[0]["nested"]..ciao')
     r.assertEqual(res, 3)
     res = r.execute_command('JSON.GET', 'doc3', '$')
-    r.assertEqual(res, '[[{"ciao":["non ancora"],"nested":[{},{},{"ciaoc":[3,"non","ciao"]},{},{"e":[5,"non","ciao"]}]}]]')
+    r.assertEqual(res, '[[[{"ciao":["non ancora"],"nested":[{},{},{"ciaoc":[3,"non","ciao"]},{},{"e":[5,"non","ciao"]}]}]]]')
 
     # Test default path
     res = r.execute_command('JSON.FORGET', 'doc3')
@@ -103,29 +103,29 @@ def testSetAndGetCommands(env):
     r.assertIsNone(r.execute_command('JSON.SET', 'doc1', '$', nested_large_key, 'XX'))
     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', nested_large_key, 'NX'))
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(res, '[' + nested_large_key + ']')
+    r.assertEqual(res, '[[' + nested_large_key + ']]')
     r.assertIsNone(r.execute_command('JSON.SET', 'doc1', '$', nested_large_key, 'NX'))
     # Test single path
     res = r.execute_command('JSON.GET', 'doc1', '$..tm')
-    r.assertEqual(res, '[[46,876.85],[134.761,"jcoels",null]]')
+    r.assertEqual(res, '[[[46,876.85],[134.761,"jcoels",null]]]')
 
     # Test multi get and set
     res = r.execute_command('JSON.GET', 'doc1', '$..foobar')
-    r.assertEqual(res, '[3.141592,1.61803398875]')
+    r.assertEqual(res, '[[3.141592,1.61803398875]]')
     # Set multi existing values
     res = r.execute_command('JSON.SET', 'doc1', '$..foobar', '"new_val"')
     res = r.execute_command('JSON.GET', 'doc1', '$..foobar')
-    r.assertEqual(res, '["new_val","new_val"]')
+    r.assertEqual(res, '[["new_val","new_val"]]')
 
     # Test multi set and get on small nested key
     nested_simple_key = r'{"a":1,"nested":{"a":2,"b":3}}'
     r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', nested_simple_key))
     res = r.execute_command('JSON.GET', 'doc2', '$')
-    r.assertEqual(res, '[' + nested_simple_key + ']')
+    r.assertEqual(res, '[[' + nested_simple_key + ']]')
     # Set multi existing values
     r.assertOk(r.execute_command('JSON.SET', 'doc2', '$..a', '4.2'))
     res = r.execute_command('JSON.GET', 'doc2', '$')
-    r.assertEqual(res, '[{"a":4.2,"nested":{"a":4.2,"b":3}}]')
+    r.assertEqual(res, '[[{"a":4.2,"nested":{"a":4.2,"b":3}}]]')
 
 
     # Test multi paths
@@ -164,19 +164,19 @@ def testMGetCommand(env):
     # Compare also to single JSON.GET
     res1 = r.execute_command('JSON.GET', 'doc1', '$..a')
     res2 = r.execute_command('JSON.GET', 'doc2', '$..a')
-    r.assertEqual(res1, '[1,3,null]')
-    r.assertEqual(res2, '[4,6,[null]]')
+    r.assertEqual(res1, '[[1,3,null]]')
+    r.assertEqual(res2, '[[4,6,[null]]]')
 
     # Test mget with single path
     res = r.execute_command('JSON.MGET', 'doc1', '$..a')
-    r.assertEqual([res1], res)
+    r.assertEqual(json.loads(res1)[0], json.loads(res[0]))
     # Test mget with multi path
     res = r.execute_command('JSON.MGET', 'doc1', 'doc2', '$..a')
-    r.assertEqual(res, [res1,res2])
+    r.assertEqual([json.loads(s) for s in res], [json.loads(res1)[0], json.loads(res2)[0]])
 
     # Test missing key
     res = r.execute_command('JSON.MGET', 'doc1', 'missing_doc', '$..a')
-    r.assertEqual(res, [res1, None])
+    r.assertEqual([json.loads(res[0]), None], [json.loads(res1)[0], None])
     res = r.execute_command('JSON.MGET', 'missing_doc1', 'missing_doc2', '$..a')
     r.assertEqual(res, [None, None])
 
@@ -268,12 +268,12 @@ def testStrAppendCommand(env):
     res = r.execute_command('JSON.STRAPPEND', 'doc1', '$..a', '"bar"')
     r.assertEqual(res, [6, 8, None])
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(res, '[{"a":"foobar","nested1":{"a":"hellobar"},"nested2":{"a":31}}]')
+    r.assertEqual(res, '[[{"a":"foobar","nested1":{"a":"hellobar"},"nested2":{"a":31}}]]')
     # Test single
     res = r.execute_command('JSON.STRAPPEND', 'doc1', '$.nested1.a', '"baz"')
     r.assertEqual(res, [11])
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(res, '[{"a":"foobar","nested1":{"a":"hellobarbaz"},"nested2":{"a":31}}]')
+    r.assertEqual(res, '[[{"a":"foobar","nested1":{"a":"hellobarbaz"},"nested2":{"a":31}}]]')
 
     # Test missing key
     r.expect('JSON.STRAPPEND', 'non_existing_doc', '$..a', '"err"').raiseError()
@@ -284,7 +284,7 @@ def testStrAppendCommand(env):
     res = r.execute_command('JSON.STRAPPEND', 'doc1', '.*.a', '"bar"')
     r.assertEqual(res, 8)
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(res, '[{"a":"foo","nested1":{"a":"hellobar"},"nested2":{"a":31}}]')
+    r.assertEqual(res, '[[{"a":"foo","nested1":{"a":"hellobar"},"nested2":{"a":31}}]]')
 
     # Test missing path
     r.expect('JSON.STRAPPEND', 'doc1', '"piu"').raiseError()
@@ -330,12 +330,12 @@ def testArrAppendCommand(env):
     res = r.execute_command('JSON.ARRAPPEND', 'doc1', '$..a', '"bar"', '"racuda"')
     r.assertEqual(res, [3, 5, None])
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", None, "world", "bar", "racuda"]}, "nested2": {"a": 31}}])
+    r.assertEqual(json.loads(res), [[{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", None, "world", "bar", "racuda"]}, "nested2": {"a": 31}}]])
     # Test single
     res = r.execute_command('JSON.ARRAPPEND', 'doc1', '$.nested1.a', '"baz"')
     r.assertEqual(res, [6])
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", None, "world", "bar", "racuda", "baz"]}, "nested2": {"a": 31}}])
+    r.assertEqual(json.loads(res), [[{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", None, "world", "bar", "racuda", "baz"]}, "nested2": {"a": 31}}]])
 
     # Test missing key
     r.expect('JSON.ARRAPPEND', 'non_existing_doc', '$..a').raiseError()
@@ -346,12 +346,12 @@ def testArrAppendCommand(env):
     res = r.execute_command('JSON.ARRAPPEND', 'doc1', '..a', '"bar"', '"racuda"')
     r.assertEqual(res, 5)
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", None, "world", "bar", "racuda"]}, "nested2": {"a": 31}}])
+    r.assertEqual(json.loads(res), [[{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", None, "world", "bar", "racuda"]}, "nested2": {"a": 31}}]])
     # Test single
     res = r.execute_command('JSON.ARRAPPEND', 'doc1', '.nested1.a', '"baz"')
     r.assertEqual(res, 6)
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", None, "world", "bar", "racuda", "baz"]}, "nested2": {"a": 31}}])
+    r.assertEqual(json.loads(res), [[{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", None, "world", "bar", "racuda", "baz"]}, "nested2": {"a": 31}}]])
 
     # Test missing key
     r.expect('JSON.ARRAPPEND', 'non_existing_doc', '..a').raiseError()
@@ -368,12 +368,12 @@ def testArrInsertCommand(env):
     res = r.execute_command('JSON.ARRINSERT', 'doc1', '$..a', '1', '"bar"', '"racuda"')
     r.assertEqual(res, [3, 5, None])
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", "bar", "racuda", None, "world"]}, "nested2": {"a": 31}}])
+    r.assertEqual(json.loads(res), [[{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", "bar", "racuda", None, "world"]}, "nested2": {"a": 31}}]])
     # Test single
     res = r.execute_command('JSON.ARRINSERT', 'doc1', '$.nested1.a', -2, '"baz"')
     r.assertEqual(res, [6])
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", "bar", "racuda", "baz", None, "world"]}, "nested2": {"a": 31}}])
+    r.assertEqual(json.loads(res), [[{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", "bar", "racuda", "baz", None, "world"]}, "nested2": {"a": 31}}]])
 
     # Test missing key
     r.expect('JSON.ARRINSERT', 'non_existing_doc', '$..a', '0').raiseError()
@@ -384,12 +384,12 @@ def testArrInsertCommand(env):
     res = r.execute_command('JSON.ARRINSERT', 'doc1', '..a', '1', '"bar"', '"racuda"')
     r.assertEqual(res, 5)
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", "bar", "racuda", None, "world"]}, "nested2": {"a": 31}}])
+    r.assertEqual(json.loads(res), [[{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", "bar", "racuda", None, "world"]}, "nested2": {"a": 31}}]])
     # Test single
     res = r.execute_command('JSON.ARRINSERT', 'doc1', '.nested1.a', -2, '"baz"')
     r.assertEqual(res, 6)
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", "bar", "racuda", "baz", None, "world"]}, "nested2": {"a": 31}}])
+    r.assertEqual(json.loads(res), [[{"a": ["foo", "bar", "racuda"], "nested1": {"a": ["hello", "bar", "racuda", "baz", None, "world"]}, "nested2": {"a": 31}}]])
 
     # Test missing key
     r.expect('JSON.ARRINSERT', 'non_existing_doc', '..a').raiseError()
@@ -442,17 +442,17 @@ def testArrPopCommand(env):
     res = r.execute_command('JSON.ARRPOP', 'doc1', '$..a', '1')
     r.assertEqual(res, ['"foo"', 'null', None])
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"a": [], "nested1": {"a": ["hello", "world"]}, "nested2": {"a": 31}}])
+    r.assertEqual(json.loads(res), [[{"a": [], "nested1": {"a": ["hello", "world"]}, "nested2": {"a": 31}}]])
 
     res = r.execute_command('JSON.ARRPOP', 'doc1', '$..a', '-1')
     r.assertEqual(res, [None, '"world"', None])
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"a": [], "nested1": {"a": ["hello"]}, "nested2": {"a": 31}}])
+    r.assertEqual(json.loads(res), [[{"a": [], "nested1": {"a": ["hello"]}, "nested2": {"a": 31}}]])
     # Test single
     res = r.execute_command('JSON.ARRPOP', 'doc1', '$.nested1.a', -2)
     r.assertEqual(res, ['"hello"'])
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"a": [], "nested1": {"a": []}, "nested2": {"a": 31}}])
+    r.assertEqual(json.loads(res), [[{"a": [], "nested1": {"a": []}, "nested2": {"a": 31}}]])
 
     # Test missing key
     r.expect('JSON.ARRPOP', 'non_existing_doc', '$..a', '0').raiseError()
@@ -463,12 +463,12 @@ def testArrPopCommand(env):
     res = r.execute_command('JSON.ARRPOP', 'doc1', '..a', '1')
     r.assertEqual(res, 'null')
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"a": [], "nested1": {"a": ["hello", "world"]}, "nested2": {"a": 31}}])
+    r.assertEqual(json.loads(res), [[{"a": [], "nested1": {"a": ["hello", "world"]}, "nested2": {"a": 31}}]])
     # Test single
     res = r.execute_command('JSON.ARRPOP', 'doc1', '.nested1.a', -2, '"baz"')
     r.assertEqual(res, '"hello"')
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"a": [], "nested1": {"a": ["world"]}, "nested2": {"a": 31}}])
+    r.assertEqual(json.loads(res), [[{"a": [], "nested1": {"a": ["world"]}, "nested2": {"a": 31}}]])
 
     # Test missing key
     r.expect('JSON.ARRPOP', 'non_existing_doc', '..a').raiseError()
@@ -484,17 +484,17 @@ def testArrTrimCommand(env):
     res = r.execute_command('JSON.ARRTRIM', 'doc1', '$..a', '1', -1)
     r.assertEqual(res, [0, 2, None])
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"a": [], "nested1": {"a": [None, "world"]}, "nested2": {"a": 31}}])
+    r.assertEqual(json.loads(res), [[{"a": [], "nested1": {"a": [None, "world"]}, "nested2": {"a": 31}}]])
 
     res = r.execute_command('JSON.ARRTRIM', 'doc1', '$..a', '1', '1')
     r.assertEqual(res, [0, 1, None])
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"a": [], "nested1": {"a": ["world"]}, "nested2": {"a": 31}}])
+    r.assertEqual(json.loads(res), [[{"a": [], "nested1": {"a": ["world"]}, "nested2": {"a": 31}}]])
     # Test single
     res = r.execute_command('JSON.ARRTRIM', 'doc1', '$.nested1.a', 1, 0)
     r.assertEqual(res, [0])
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"a": [], "nested1": {"a": []}, "nested2": {"a": 31}}])
+    r.assertEqual(json.loads(res), [[{"a": [], "nested1": {"a": []}, "nested2": {"a": 31}}]])
 
     # Test missing key
     r.expect('JSON.ARRTRIM', 'non_existing_doc', '$..a', '0').raiseError()
@@ -505,12 +505,12 @@ def testArrTrimCommand(env):
     res = r.execute_command('JSON.ARRTRIM', 'doc1', '..a', '1', '-1')
     r.assertEqual(res, 2)
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"a": [], "nested1": {"a": [None, "world"]}, "nested2": {"a": 31}}])
+    r.assertEqual(json.loads(res), [[{"a": [], "nested1": {"a": [None, "world"]}, "nested2": {"a": 31}}]])
     # Test single
     res = r.execute_command('JSON.ARRTRIM', 'doc1', '.nested1.a', '1', '1')
     r.assertEqual(res, 1)
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"a": [], "nested1": {"a": ["world"]}, "nested2": {"a": 31}}])
+    r.assertEqual(json.loads(res), [[{"a": [], "nested1": {"a": ["world"]}, "nested2": {"a": 31}}]])
 
     # Test missing key
     r.expect('JSON.ARRTRIM', 'non_existing_doc', '..a').raiseError()
@@ -631,20 +631,20 @@ def testClearCommand(env):
     res = r.execute_command('JSON.CLEAR', 'doc1', '$..a')
     r.assertEqual(res, 3)
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"nested1": {"a": {}}, "a": [], "nested2": {"a": "claro"}, "nested3": {"a": {}}}])
+    r.assertEqual(json.loads(res), [[{"nested1": {"a": {}}, "a": [], "nested2": {"a": "claro"}, "nested3": {"a": {}}}]])
 
     # Test single
     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"nested1": {"a": {"foo": 10, "bar": 20}}, "a":["foo"], "nested2": {"a": "claro"}, "nested3": {"a": {"baz":50}}}'))
     res = r.execute_command('JSON.CLEAR', 'doc1', '$.nested1.a')
     r.assertEqual(res, 1)
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"nested1": {"a": {}}, "a": ["foo"], "nested2": {"a": "claro"}, "nested3": {"a": {"baz": 50}}}])
+    r.assertEqual(json.loads(res), [[{"nested1": {"a": {}}, "a": ["foo"], "nested2": {"a": "claro"}, "nested3": {"a": {"baz": 50}}}]])
 
     # Test missing path (defaults to root)
     res = r.execute_command('JSON.CLEAR', 'doc1')
     r.assertEqual(res, 1)
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{}])
+    r.assertEqual(json.loads(res), [[{}]])
 
     # Test missing key
     r.expect('JSON.CLEAR', 'non_existing_doc', '$..a').raiseError()
@@ -662,13 +662,13 @@ def testToggleCommand(env):
     res = r.execute_command('JSON.TOGGLE', 'doc1', '$..a')
     r.assertEqual(res, [None, 1, None, 0])
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"a": ["foo"], "nested1": {"a": True}, "nested2": {"a": 31}, "nested3": {"a": False}}])
+    r.assertEqual(json.loads(res), [[{"a": ["foo"], "nested1": {"a": True}, "nested2": {"a": 31}, "nested3": {"a": False}}]])
 
     # Test single
     res = r.execute_command('JSON.TOGGLE', 'doc1', '$.nested1.a')
     r.assertEqual(res, [0])
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"a": ["foo"], "nested1": {"a": False}, "nested2": {"a": 31}, "nested3": {"a": False}}])
+    r.assertEqual(json.loads(res), [[{"a": ["foo"], "nested1": {"a": False}, "nested2": {"a": 31}, "nested3": {"a": False}}]])
 
     # Test missing key
     r.expect('JSON.TOGGLE', 'non_existing_doc', '$..a').raiseError()
@@ -769,7 +769,7 @@ def testArrIndexCommand(env):
     res = r.execute_command('JSON.GET',
                             'store',
                             '$.store.book[?(@.price<10)].size')
-    r.assertEqual(res, '[[10,20,30,40],[5,10,20,30]]')
+    r.assertEqual(res, '[[[10,20,30,40],[5,10,20,30]]]')
     res = r.execute_command('JSON.ARRINDEX',
                             'store',
                             '$.store.book[?(@.price<10)].size',
@@ -782,7 +782,7 @@ def testArrIndexCommand(env):
                                  '[{"arr":[0,1,3.0,3,2,1,0,3]},{"nested1_found":{"arr":[5,4,3,2,1,0,1,2,3.0,2,4,5]}},{"nested2_not_found":{"arr":[2,4,6]}},{"nested3_scalar":{"arr":"3"}},[{"nested41_not_arr":{"arr_renamed":[1,2,3]}},{"nested42_empty_arr":{"arr":[]}}]]'))
 
     res = r.execute_command('JSON.GET', 'test_num', '$..arr')
-    r.assertEqual(res, '[[0,1,3.0,3,2,1,0,3],[5,4,3,2,1,0,1,2,3.0,2,4,5],[2,4,6],"3",[]]')
+    r.assertEqual(res, '[[[0,1,3.0,3,2,1,0,3],[5,4,3,2,1,0,1,2,3.0,2,4,5],[2,4,6],"3",[]]]')
 
     res = r.execute_command('JSON.ARRINDEX', 'test_num', '$..arr', 3)
     r.assertEqual(res, [3, 2, -1, None, -1])
@@ -796,7 +796,7 @@ def testArrIndexCommand(env):
                                  '.',
                                  '[{"arr":["bazzz","bar",2,"baz",2,"ba","baz",3]},{"nested1_found":{"arr":[null,"baz2","buzz",2,1,0,1,"2","baz",2,4,5]}},{"nested2_not_found":{"arr":["baz2",4,6]}},{"nested3_scalar":{"arr":"3"}},[{"nested41_arr":{"arr_renamed":[1,"baz",3]}},{"nested42_empty_arr":{"arr":[]}}]]'))
     res = r.execute_command('JSON.GET', 'test_string', '$..arr')
-    r.assertEqual(res, '[["bazzz","bar",2,"baz",2,"ba","baz",3],[null,"baz2","buzz",2,1,0,1,"2","baz",2,4,5],["baz2",4,6],"3",[]]')
+    r.assertEqual(res, '[[["bazzz","bar",2,"baz",2,"ba","baz",3],[null,"baz2","buzz",2,1,0,1,"2","baz",2,4,5],["baz2",4,6],"3",[]]]')
 
     res = r.execute_command('JSON.ARRINDEX', 'test_string', '$..arr', '"baz"')
     r.assertEqual(res, [3, 8, -1, None, -1])
@@ -823,7 +823,7 @@ def testArrIndexCommand(env):
                                  '.',
                                  '[{"arr":["bazzz","null",2,null,2,"ba","baz",3]},{"nested1_found":{"arr":["zaz","baz2","buzz",2,1,0,1,"2",null,2,4,5]}},{"nested2_not_found":{"arr":["null",4,6]}},{"nested3_scalar":{"arr":null}},[{"nested41_arr":{"arr_renamed":[1,null,3]}},{"nested42_empty_arr":{"arr":[]}}]]'))
     res = r.execute_command('JSON.GET', 'test_null', '$..arr')
-    r.assertEqual(res, '[["bazzz","null",2,null,2,"ba","baz",3],["zaz","baz2","buzz",2,1,0,1,"2",null,2,4,5],["null",4,6],null,[]]')
+    r.assertEqual(res, '[[["bazzz","null",2,null,2,"ba","baz",3],["zaz","baz2","buzz",2,1,0,1,"2",null,2,4,5],["null",4,6],null,[]]]')
 
     res = r.execute_command('JSON.ARRINDEX', 'test_null', '$..arr', 'null')
     r.assertEqual(res, [3, 8, -1, None, -1])
