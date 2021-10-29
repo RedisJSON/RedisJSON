@@ -28,76 +28,60 @@ nested_large_key = r'{"jkra":[154,4472,[8567,false,363.84,5276,"ha","rizkzs",93]
 #  Union, e.g., $.arr[1,2,4] and  $.[field1, field5]
 #  Boolean filter, e.g., $.arr[?(@.field>3 && @.id==null)]
 
-def testDelCommand(env):
-    """Test REJSON.DEL command"""
+def DelCommands(env, cmd_name):
+    """Helper for DEL command"""
     r = env
+    env.debugPrint("DelCommand {}".format(cmd_name), force=True)
 
     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a": 1, "nested": {"a": 2, "b": 3}}'))
-    res = r.execute_command('JSON.DEL', 'doc1', '$..a')
+    res = r.execute_command(cmd_name, 'doc1', '$..a')
     r.assertEqual(res, 2)
     res = r.execute_command('JSON.GET', 'doc1', '$')
     r.assertEqual(res, '[[{"nested":{"b":3}}]]')
 
     # Test deletion of nested hierarchy - only higher hierarchy is deleted
     r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '{"a": {"a": 2, "b": 3}, "b": ["a", "b"], "nested": {"b":[true, "a","b"]}}'))
-    res = r.execute_command('JSON.DEL', 'doc2', '$..a')
+    res = r.execute_command(cmd_name, 'doc2', '$..a')
     r.assertEqual(res, 1)
     res = r.execute_command('JSON.GET', 'doc2', '$')
     r.assertEqual(res, '[[{"nested":{"b":[true,"a","b"]},"b":["a","b"]}]]')
 
     r.assertOk(r.execute_command('JSON.SET', 'doc3', '$', '[{"ciao":["non ancora"],"nested":[{"ciao":[1,"a"]}, {"ciao":[2,"a"]}, {"ciaoc":[3,"non","ciao"]}, {"ciao":[4,"a"]}, {"e":[5,"non","ciao"]}]}]'))
-    res = r.execute_command('JSON.DEL', 'doc3', '$.[0]["nested"]..ciao')
+    res = r.execute_command(cmd_name, 'doc3', '$.[0]["nested"]..ciao')
     r.assertEqual(res, 3)
     res = r.execute_command('JSON.GET', 'doc3', '$')
     r.assertEqual(res, '[[[{"ciao":["non ancora"],"nested":[{},{},{"ciaoc":[3,"non","ciao"]},{},{"e":[5,"non","ciao"]}]}]]]')
 
     # Test default path
-    res = r.execute_command('JSON.DEL', 'doc3')
+    res = r.execute_command(cmd_name, 'doc3')
     r.assertEqual(res, 1)
     res = r.execute_command('JSON.GET', 'doc3', '$')
     r.assertEqual(res, None)
 
     # Test missing key
-    res = r.execute_command('JSON.DEL', 'non_existing_doc', '..a')
+    res = r.execute_command(cmd_name, 'non_existing_doc', '..a')
     r.assertEqual(res, 0)
 
 def testForgetCommand(env):
-    """Test REJSON.FORGET command"""
-    """Alias of REJSON.DEL"""
-    r = env
+    """
+    Test REJSON.FORGET command
+    Alias of REJSON.DEL
+    """
 
-    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a": 1, "nested": {"a": 2, "b": 3}}'))
-    res = r.execute_command('JSON.FORGET', 'doc1', '$..a')
-    r.assertEqual(res, 2)
-    res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(res, '[[{"nested":{"b":3}}]]')
+    DelCommands(env, 'JSON.FORGET')
 
-    # Test deletion of nested hierarchy - only higher hierarchy is deleted
-    r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '{"a": {"a": 2, "b": 3}, "b": ["a", "b"], "nested": {"b":[true, "a","b"]}}'))
-    res = r.execute_command('JSON.FORGET', 'doc2', '$..a')
-    r.assertEqual(res, 1)
-    res = r.execute_command('JSON.GET', 'doc2', '$')
-    r.assertEqual(res, '[[{"nested":{"b":[true,"a","b"]},"b":["a","b"]}]]')
+def testDelCommand(env):
+    """Test REJSON.DEL"""
 
-    r.assertOk(r.execute_command('JSON.SET', 'doc3', '$', '[{"ciao":["non ancora"],"nested":[{"ciao":[1,"a"]}, {"ciao":[2,"a"]}, {"ciaoc":[3,"non","ciao"]}, {"ciao":[4,"a"]}, {"e":[5,"non","ciao"]}]}]'))
-    res = r.execute_command('JSON.FORGET', 'doc3', '$.[0]["nested"]..ciao')
-    r.assertEqual(res, 3)
-    res = r.execute_command('JSON.GET', 'doc3', '$')
-    r.assertEqual(res, '[[[{"ciao":["non ancora"],"nested":[{},{},{"ciaoc":[3,"non","ciao"]},{},{"e":[5,"non","ciao"]}]}]]]')
-
-    # Test default path
-    res = r.execute_command('JSON.FORGET', 'doc3')
-    r.assertEqual(res, 1)
-    res = r.execute_command('JSON.GET', 'doc3', '$')
-    r.assertEqual(res, None)
-
-    # Test missing key
-    res = r.execute_command('JSON.FORGET', 'non_existing_doc', '..a')
-    r.assertEqual(res, 0)
+    DelCommands(env, 'JSON.DEL')
 
 
 def testSetAndGetCommands(env):
-    """Test REJSON.SET command"""
+    """
+    Test REJSON.SET command
+    Test REJSON.GET command
+    """
+
     r = env
     # Test set and get on large nested key
     r.assertIsNone(r.execute_command('JSON.SET', 'doc1', '$', nested_large_key, 'XX'))
@@ -153,6 +137,66 @@ def testSetAndGetCommands(env):
     r.assertOk(r.execute_command('JSON.SET', 'doc2', '$.nested.b', 'null'))
     r.expect('JSON.GET', 'doc2', '.a', '.nested.b', '.back_in_nov', '.ttyl').raiseError()
     r.expect('JSON.GET', 'doc2', '.back_in_nov').raiseError()
+
+def testGetCommand(env):
+    """
+    Test REJSON.GET command
+    (also tested in testSetAndGetCommands)
+    """
+
+    r = env
+    # Test multi paths
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":1, "b": 2, "c": 3,'
+                                                          '"nested": {"a": 4},'
+                                                          '"nested2": {"c": null},'
+                                                          '"nested3": {"a": null},'
+                                                          '"nested4": {"b": 5},'
+                                                          '"nested5": {"b": null},'
+                                                          '"nested6": {"c": 6},'
+                                                          '"nested7": {"a": 7, "c": 8,"b": 9},'
+                                                          '"nested8": {"b": null, "a": null, "c":null}}'))
+    # Test multi with single path
+    res1 = r.execute_command('JSON.GET', 'doc1', '$..a')
+    r.assertEqual(json.loads(res1), [[1, 4, None, 7, None]])
+    res2 = r.execute_command('JSON.GET', 'doc1', '$..b')
+    r.assertEqual(json.loads(res2), [[2, 5, None, 9, None]])
+    res3 = r.execute_command('JSON.GET', 'doc1', '$..c')
+    r.assertEqual(json.loads(res3), [[3, None, 6, 8, None]])
+
+    # Test multi with several paths
+    res = r.execute_command('JSON.GET', 'doc1', '$..a', '$..b', '$..c')
+    r.assertEqual(json.loads(res), [json.loads(res1)[0], json.loads(res2)[0], json.loads(res3)[0]])
+    # If one path is none-legacy - result format is none-legacy
+    res = r.execute_command('JSON.GET', 'doc1', '..a', '..b', '$..c')
+    r.assertEqual(json.loads(res), [json.loads(res1)[0], json.loads(res2)[0], json.loads(res3)[0]])
+
+    # Test missing key
+    res = r.execute_command('JSON.GET', 'missing_doc', '$..a')
+    r.assertEqual(res, None)
+
+    # Test missing path
+    res = r.execute_command('JSON.GET', 'doc1', '$.devnull')
+    r.assertEqual(res, '[[]]')
+
+    # Test legacy
+    # Test single path
+    res1 = r.execute_command('JSON.GET', 'doc1', '..a')
+    r.assertEqual(json.loads(res1), 1)
+    res2 = r.execute_command('JSON.GET', 'doc1', '..b')
+    r.assertEqual(json.loads(res2), 2)
+    res3 = r.execute_command('JSON.GET', 'doc1', '..c')
+    r.assertEqual(json.loads(res3), 3)
+
+    # Test several paths
+    res = r.execute_command('JSON.GET', 'doc1', '..a', '..b', '..c')
+    r.assertEqual(json.loads(res), json.loads(r'{"..a":' + res1 + r',"..b":' + res2 + r',"..c":' + res3 + '}'))
+
+    # Test missing key
+    res = r.execute_command('JSON.GET', 'missing_doc', '..a')
+    r.assertEqual(res, None)
+
+    # Test missing path
+    r.expect('JSON.GET', 'doc1', '.devnull').raiseError()
 
 
 def testMGetCommand(env):
@@ -674,9 +718,8 @@ def testToggleCommand(env):
     r.expect('JSON.TOGGLE', 'non_existing_doc', '$..a').raiseError()
 
 def testDebugCommand(env):
-    """
-        Test REJSON.DEBUG MEMORY command
-            """
+    """Test REJSON.DEBUG MEMORY command"""
+
     r = env
     jdata, jtypes = load_types_data('a')
 
