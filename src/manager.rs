@@ -439,11 +439,15 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
             if let Some(array) = v.as_array() {
                 let len = array.len() as i64;
                 let stop = stop.normalize(len);
-
-                let range = if start > len || start > stop as i64 || len == 0 {
+                let start = if start < 0 || start < len {
+                    start.normalize(len)
+                } else {
+                    stop + 1 //  start >=0 && start >= len
+                };
+                let range = if start > stop || len == 0 {
                     0..0 // Return an empty array
                 } else {
-                    start.normalize(len)..(stop + 1)
+                    start..(stop + 1)
                 };
 
                 let mut new_value = v.take();
