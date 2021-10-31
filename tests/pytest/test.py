@@ -674,6 +674,14 @@ def testArrTrimCommand(env):
 
     r.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', '.arr', -1, 0), 0)
 
+    r.assertOk(r.execute_command('JSON.SET', 'test',
+                                 '.', '{ "arr": [0, 1, 2, 3, 2, 1, 0] }'))
+    r.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', '.arr', -1, 0), 0)
+
+    r.assertOk(r.execute_command('JSON.SET', 'test',
+                                 '.', '{ "arr": [0, 1, 2, 3, 2, 1, 0] }'))
+    r.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', '.arr', -4, 1), 0)
+
 
 def testArrPopCommand(env):
     """Test JSON.ARRPOP command"""
