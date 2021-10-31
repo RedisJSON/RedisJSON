@@ -782,6 +782,12 @@ pub fn command_json_mget<M: Manager>(
         let path = Path::new(path.try_as_str()?);
         let keys = &args[1..args.len() - 1];
 
+        let to_string =
+            |doc: &M::V| KeyValue::new(doc).to_string_multi(path.get_path(), None, None, None);
+        let to_string_legacy =
+            |doc: &M::V| KeyValue::new(doc).to_string(path.get_path(), Format::JSON);
+        let is_legacy = path.is_legacy();
+
         let results: Result<Vec<RedisValue>, RedisError> = keys
             .iter()
             .map(|key| {
@@ -789,7 +795,11 @@ pub fn command_json_mget<M: Manager>(
                     .open_key_read(ctx, key)?
                     .get_value()?
                     .map(|doc| {
-                        KeyValue::new(doc).to_string_multi(path.get_path(), None, None, None)
+                        if !is_legacy {
+                            to_string(doc)
+                        } else {
+                            to_string_legacy(doc)
+                        }
                     })
                     .transpose()
                     .map_or_else(|_| Ok(RedisValue::Null), |v| Ok(v.into()))

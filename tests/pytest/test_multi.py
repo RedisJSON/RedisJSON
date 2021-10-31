@@ -159,7 +159,7 @@ def testMGetCommand(env):
     """Test REJSON.MGET command"""
     r = env
     # Test mget with multi paths
-    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":1, "b": 2, "nested": {"a": 3}, "c": null, "nested2": {"a": null}} '))
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":1, "b": 2, "nested": {"a": 3}, "c": null, "nested2": {"a": null}}'))
     r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '{"a":4, "b": 5, "nested": {"a": 6}, "c": null, "nested2": {"a": [null]}}'))
     # Compare also to single JSON.GET
     res1 = r.execute_command('JSON.GET', 'doc1', '$..a')
@@ -172,12 +172,34 @@ def testMGetCommand(env):
     r.assertEqual([res1], res)
     # Test mget with multi path
     res = r.execute_command('JSON.MGET', 'doc1', 'doc2', '$..a')
-    r.assertEqual(res, [res1,res2])
+    r.assertEqual(res, [res1, res2])
 
     # Test missing key
     res = r.execute_command('JSON.MGET', 'doc1', 'missing_doc', '$..a')
     r.assertEqual(res, [res1, None])
     res = r.execute_command('JSON.MGET', 'missing_doc1', 'missing_doc2', '$..a')
+    r.assertEqual(res, [None, None])
+
+    # Test missing path
+    res = r.execute_command('JSON.MGET', 'doc1', 'missing_doc2', '$..niente')
+    r.assertEqual(res, ['[]', None])
+
+    # Test legacy (for each path only the first value is returned as a json string)
+    # Test mget with single path
+    res = r.execute_command('JSON.MGET', 'doc1', '..a')
+    r.assertEqual(res, [json.dumps(json.loads(res1)[0])])
+    # Test mget with multi path
+    res = r.execute_command('JSON.MGET', 'doc1', 'doc2', '..a')
+    r.assertEqual(res, [json.dumps(json.loads(res1)[0]), json.dumps(json.loads(res2)[0])])
+
+    # Test missing key
+    res = r.execute_command('JSON.MGET', 'doc1', 'missing_doc', '..a')
+    r.assertEqual(res, [json.dumps(json.loads(res1)[0]), None])
+    res = r.execute_command('JSON.MGET', 'missing_doc1', 'missing_doc2', '..a')
+    r.assertEqual(res, [None, None])
+
+    # Test missing path
+    res = r.execute_command('JSON.MGET', 'doc1', 'missing_doc2', '..niente')
     r.assertEqual(res, [None, None])
 
 
