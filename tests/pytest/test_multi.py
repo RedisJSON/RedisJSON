@@ -177,6 +177,8 @@ def testMGetCommand(env):
     # Test missing key/path
     res = r.execute_command('JSON.MGET', 'doc1', 'missing_doc', '$..a')
     r.assertEqual(res, [res1, None])
+    res = r.execute_command('JSON.MGET', 'doc1', 'doc2', 'missing_doc', '$.nested1.a')
+    r.assertEqual(res, [json.dumps([json.loads(res1)[1]]), '[]', None])
     res = r.execute_command('JSON.MGET', 'missing_doc1', 'missing_doc2', '$..a')
     r.assertEqual(res, [None, None])
 
