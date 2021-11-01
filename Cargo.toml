@@ -1,6 +1,6 @@
 [package]
 name = "redisjson"
-version = "2.0.0"
+version = "2.0.2"
 authors = ["Gavrie Philipson <gavrie@redislabs.com>"]
 edition = "2018"
 
