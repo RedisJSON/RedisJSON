@@ -98,6 +98,8 @@ def testForgetCommand(env):
 
 def testSetAndGetCommands(env):
     """Test REJSON.SET command"""
+    """Test REJSON.GET command"""
+
     r = env
     # Test set and get on large nested key
     r.assertIsNone(r.execute_command('JSON.SET', 'doc1', '$', nested_large_key, 'XX'))
@@ -153,6 +155,12 @@ def testSetAndGetCommands(env):
     r.assertOk(r.execute_command('JSON.SET', 'doc2', '$.nested.b', 'null'))
     r.expect('JSON.GET', 'doc2', '.a', '.nested.b', '.back_in_nov', '.ttyl').raiseError()
     r.expect('JSON.GET', 'doc2', '.back_in_nov').raiseError()
+
+    # Test missing path (defaults to root)
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '"inizio"'))
+    res = r.execute_command('JSON.GET', 'doc1')
+    r.assertEqual(res, '"inizio"')
+
 
 
 def testMGetCommand(env):
@@ -310,8 +318,10 @@ def testStrAppendCommand(env):
     res = r.execute_command('JSON.GET', 'doc1', '$')
     r.assertEqual(res, '[{"a":"foo","nested1":{"a":"hellobar"},"nested2":{"a":31}}]')
 
-    # Test missing path
-    r.expect('JSON.STRAPPEND', 'doc1', '"piu"').raiseError()
+    # Test missing path (defaults to root)
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '"abcd"'))
+    res = r.execute_command('JSON.STRAPPEND', 'doc1', '"piu"')
+    r.assertEqual(res, 7)
 
 
 def testStrLenCommand(env):
@@ -341,6 +351,11 @@ def testStrLenCommand(env):
     # Test legacy
     res1 = r.execute_command('JSON.STRLEN', 'doc1', '..a')
     r.assertEqual(res1, 6)
+
+    # Test missing path
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '"kantele"'))
+    res = r.execute_command('JSON.STRLEN', 'doc1')
+    r.assertEqual(res, 7)
 
 
 def testArrAppendCommand(env):
@@ -455,7 +470,7 @@ def testArrLenCommand(env):
     # Test missing key
     r.assertEqual(r.execute_command('JSON.ARRLEN', 'non_existing_doc', '..a'), None)
 
-    # Test missing path
+    # Test missing path (defaults to root)
     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '[0, 1, 2, 3, 4]'))
     res = r.execute_command('JSON.ARRLEN', 'doc1')
     r.assertEqual(res, 5)
@@ -494,13 +509,24 @@ def testArrPopCommand(env):
     res = r.execute_command('JSON.GET', 'doc1', '$')
     r.assertEqual(json.loads(res), [{"a": [], "nested1": {"a": ["hello", "world"]}, "nested2": {"a": 31}}])
     # Test single
-    res = r.execute_command('JSON.ARRPOP', 'doc1', '.nested1.a', -2, '"baz"')
+    res = r.execute_command('JSON.ARRPOP', 'doc1', '.nested1.a', -2)
     r.assertEqual(res, '"hello"')
     res = r.execute_command('JSON.GET', 'doc1', '$')
     r.assertEqual(json.loads(res), [{"a": [], "nested1": {"a": ["world"]}, "nested2": {"a": 31}}])
 
     # Test missing key
     r.expect('JSON.ARRPOP', 'non_existing_doc', '..a').raiseError()
+
+    # Test default path/index
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '[0, 1, 2]'))
+    res = r.execute_command('JSON.ARRPOP', 'doc1')
+    r.assertEqual(res, '2')
+    res = r.execute_command('JSON.ARRPOP', 'doc1', '$')
+    r.assertEqual(res, ['1'])
+    res = r.execute_command('JSON.ARRPOP', 'doc1', '.')
+    r.assertEqual(res, '0')
+
+
 
 def testArrTrimCommand(env):
     """
@@ -570,6 +596,10 @@ def testObjKeysCommand(env):
     # Test missing key
     r.expect('JSON.OBJKEYS', 'doc1', '$.nowhere').raiseError()
 
+    # Test default path
+    res = r.execute_command('JSON.OBJKEYS', 'doc1')
+    r.assertEqual(res, ["nested1", "a", "nested2"])
+
 
 def testObjLenCommand(env):
     """Test JSON.OBJLEN command"""
@@ -604,6 +634,10 @@ def testObjLenCommand(env):
 
     # Test missing path
     r.expect('JSON.OBJLEN', 'doc1', '.nowhere').raiseError()
+
+    # Test default path
+    res = r.execute_command('JSON.OBJLEN', 'doc1')
+    r.assertEqual(res, 3)
 
 
 def load_types_data(nested_key_name):
@@ -785,6 +819,11 @@ def testRespCommand(env):
     # Test legacy
     res = r.execute_command('JSON.RESP', 'doc1', '.L1.a')
     r.assertEqual([res], resSingle)
+
+    # Test default path
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '[[1],[2]]'))
+    res = r.execute_command('JSON.RESP', 'doc1')
+    r.assertEqual(res, ['[', ['[', 1], ['[', 2]])
 
 def testArrIndexCommand(env):
     """Test JSON.ARRINDEX command"""
