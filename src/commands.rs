@@ -1449,7 +1449,7 @@ pub fn command_json_arr_len<M: Manager>(
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
-    let path = Path::new(args.next_str()?);
+    let path = Path::new(args.next_str().unwrap_or(JSON_ROOT_PATH_LEGACY));
     let is_legacy = path.is_legacy();
     let key = manager.open_key_read(ctx, &key)?;
     let root = match key.get_value()? {

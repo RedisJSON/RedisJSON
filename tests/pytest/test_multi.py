@@ -455,6 +455,11 @@ def testArrLenCommand(env):
     # Test missing key
     r.assertEqual(r.execute_command('JSON.ARRLEN', 'non_existing_doc', '..a'), None)
 
+    # Test missing path
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '[0, 1, 2, 3, 4]'))
+    res = r.execute_command('JSON.ARRLEN', 'doc1')
+    r.assertEqual(res, 5)
+
 def testArrPopCommand(env):
     """
     Test REJSON.ARRPOP command
