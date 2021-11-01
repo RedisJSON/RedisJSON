@@ -92,9 +92,7 @@ Pretty-formatted JSON is producible with `redis-cli` by following this example:
 
 #### Return value
 
-[Bulk String][3], specifically the JSON serialization.
-
-The reply's structure depends on the number of paths. A single path results in the value itself being returned, whereas multiple paths are returned as a JSON object in which each path is a key.
+[Array][4] of [Bulk Strings][3], specifically, each string is the JSON serialization of each JSON value matching a path.
 
 ### JSON.MGET
 
@@ -135,7 +133,7 @@ Delete a value.
 
 #### Return value
 
-[Integer][2], specifically the number of paths deleted (0 or 1).
+[Integer][2], specifically the number of paths deleted (0 or more).
 
 ### JSON.NUMINCRBY
 
@@ -253,12 +251,14 @@ JSON.ARRINDEX <key> <path> <json-scalar> [start [stop]]
 Search for the first occurrence of a scalar JSON value in an array.
 
 The optional inclusive `start` (default 0) and exclusive `stop` (default 0, meaning that the last element is included) specify a slice of the array to search.
+Negative values are interpreted as starting from the end.
+
 
 Note: out of range errors are treated by rounding the index to the array's start and end. An inverse index range (e.g. from 1 to 0) will return unfound.
 
 #### Return value
 
-[Integer][2], specifically the position of the scalar value in the array, or -1 if unfound.
+[Array][4], specifically, for each JSON value matching the path, the first position of the scalar value in the array, -1 if unfound in the array, or [null][6] element if the matching JSON value is not an array.
 
 ### JSON.ARRINSERT
 
@@ -474,3 +474,4 @@ Return the JSON in `key` in [Redis Serialization Protocol (RESP)][5].
 [3]:  http://redis.io/topics/protocol#resp-bulk-strings
 [4]:  http://redis.io/topics/protocol#resp-arrays
 [5]:  http://redis.io/topics/protocol
+[6]:  https://redis.io/topics/protocol#null-elements-in-arrays

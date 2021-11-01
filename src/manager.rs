@@ -9,7 +9,7 @@ use redis_module::{Context, NotifyEvent, RedisString};
 
 use std::marker::PhantomData;
 
-use crate::redisjson::RedisJSON;
+use crate::redisjson::{normalize_arr_start_index, RedisJSON};
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
 
@@ -417,11 +417,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
                 }
                 // Verify legel index in bounds
                 let len = array.len() as i64;
-                let index = if index < 0 {
-                    0.max(len + index)
-                } else {
-                    index.min(len - 1)
-                } as usize;
+                let index = normalize_arr_start_index(index, len) as usize;
 
                 let mut new_value = v.take();
                 let curr = new_value.as_array_mut().unwrap();
@@ -443,11 +439,15 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
             if let Some(array) = v.as_array() {
                 let len = array.len() as i64;
                 let stop = stop.normalize(len);
-
-                let range = if start > len || start > stop as i64 {
+                let start = if start < 0 || start < len {
+                    start.normalize(len)
+                } else {
+                    stop + 1 //  start >=0 && start >= len
+                };
+                let range = if start > stop || len == 0 {
                     0..0 // Return an empty array
                 } else {
-                    start.normalize(len)..(stop + 1)
+                    start..(stop + 1)
                 };
 
                 let mut new_value = v.take();
