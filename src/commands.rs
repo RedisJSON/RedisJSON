@@ -1161,7 +1161,7 @@ pub fn command_json_str_len<M: Manager>(
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
-    let path = Path::new(args.next_str()?);
+    let path = Path::new(args.next_str().unwrap_or(JSON_ROOT_PATH_LEGACY));
 
     let key = manager.open_key_read(ctx, &key)?;
 
@@ -1449,7 +1449,7 @@ pub fn command_json_arr_len<M: Manager>(
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
-    let path = Path::new(args.next_str()?);
+    let path = Path::new(args.next_str().unwrap_or(JSON_ROOT_PATH_LEGACY));
     let is_legacy = path.is_legacy();
     let key = manager.open_key_read(ctx, &key)?;
     let root = match key.get_value()? {
@@ -1666,7 +1666,7 @@ pub fn command_json_obj_keys<M: Manager>(
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
-    let path = Path::new(args.next_str()?);
+    let path = Path::new(args.next_str().unwrap_or(JSON_ROOT_PATH_LEGACY));
 
     let mut key = manager.open_key_read(ctx, &key)?;
     if !path.is_legacy() {
@@ -1720,7 +1720,7 @@ pub fn command_json_obj_len<M: Manager>(
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
-    let path = Path::new(args.next_str()?);
+    let path = Path::new(args.next_str().unwrap_or(JSON_ROOT_PATH_LEGACY));
 
     let key = manager.open_key_read(ctx, &key)?;
     if !path.is_legacy() {
@@ -1858,7 +1858,7 @@ pub fn command_json_resp<M: Manager>(
 
     let key = args.next_arg()?;
     let path = match args.next() {
-        None => Path::new(JSON_ROOT_PATH),
+        None => Path::new(JSON_ROOT_PATH_LEGACY),
         Some(s) => Path::new(s.try_as_str()?),
     };
 
