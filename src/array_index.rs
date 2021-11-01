@@ -7,7 +7,11 @@ impl ArrayIndex for i64 {
         let index = if self < 0 {
             len - len.min(-self)
         } else {
-            (len - 1).min(self)
+            if len > 0 {
+                (len - 1).min(self)
+            } else {
+                0
+            }
         };
         index as usize
     }
@@ -29,5 +33,8 @@ mod tests {
         assert_eq!(4.normalize(5), 4);
         assert_eq!(5.normalize(5), 4);
         assert_eq!(6.normalize(5), 4);
+        assert_eq!(0.normalize(0), 0);
+        assert_eq!((-1).normalize(0), 0);
+        assert_eq!(1.normalize(0), 0);
     }
 }
