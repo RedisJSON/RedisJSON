@@ -61,6 +61,15 @@ def testDelCommand(env):
     res = r.execute_command('JSON.DEL', 'non_existing_doc', '..a')
     r.assertEqual(res, 0)
 
+    r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '[1, 2, 3]'))
+    res = r.execute_command('JSON.DEL', 'doc2', '$[*]')
+    r.assertGreater(res, 0)
+
+    r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '[1, 2, 3]'))
+    res = r.execute_command('JSON.DEL', 'doc2', '$[2,1,0]')
+    r.assertGreater(res, 0)
+
+
 def testForgetCommand(env):
     """Test REJSON.FORGET command"""
     """Alias of REJSON.DEL"""

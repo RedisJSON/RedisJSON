@@ -131,11 +131,13 @@ fn update<F: FnMut(Value) -> Result<Option<Value>, Error>>(
             Value::Array(ref mut vec) => {
                 if let Ok(x) = token.parse::<usize>() {
                     if is_last {
-                        let v = std::mem::replace(&mut vec[x], Value::Null);
-                        if let Some(res) = (func)(v)? {
-                            vec[x] = res;
-                        } else {
-                            vec.remove(x);
+                        if x < vec.len() {
+                            let v = std::mem::replace(&mut vec[x], Value::Null);
+                            if let Some(res) = (func)(v)? {
+                                vec[x] = res;
+                            } else {
+                                vec.remove(x);
+                            }
                         }
                         return Ok(());
                     }
