@@ -248,7 +248,7 @@ impl RedisJSON {
     pub fn delete_path(&mut self, path: &str) -> Result<usize, Error> {
         let mut deleted = 0;
         self.data = jsonpath_lib::replace_with(self.data.take(), path, |_v| {
-            deleted += 1;  // might delete more than a single value
+            deleted += 1; // might delete more than a single value
             None
         })?;
         Ok(deleted)
