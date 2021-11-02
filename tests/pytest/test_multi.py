@@ -69,6 +69,13 @@ def testDelCommand(env):
     res = r.execute_command('JSON.DEL', 'doc2', '$[2,1,0]')
     r.assertGreater(res, 0)
 
+    # Test deleting a null value
+    r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '[ true, { "answer": 42}, null ]'))
+    res = r.execute_command('JSON.DEL', 'doc2', '[-1]')
+    r.assertEqual(res, 1)
+    res = r.execute_command('JSON.GET', 'doc2', '$')
+    r.assertEqual(json.loads(res), [[True, {"answer": 42}]])
+
 
 def testForgetCommand(env):
     """Test REJSON.FORGET command"""
