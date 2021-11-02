@@ -30,7 +30,7 @@ The time complexity of the command does not include that of the [path](path.md#t
 
 ### JSON.SET
 
-> **Available since 1.0.0.**  
+> **Available since 1.0.0.**
 > **Time complexity:**  O(M+N), where M is the size of the original value (if it exists) and N is
 > the size of the new value.
 
@@ -59,7 +59,7 @@ conditions were not met.
 
 ### JSON.GET
 
-> **Available since 1.0.0.**  
+> **Available since 1.0.0.**
 > **Time complexity:**  O(N), where N is the size of the value.
 
 #### Syntax
@@ -96,7 +96,7 @@ Pretty-formatted JSON is producible with `redis-cli` by following this example:
 
 ### JSON.MGET
 
-> **Available since 1.0.0.**  
+> **Available since 1.0.0.**
 > **Time complexity:**  O(M*N), where M is the number of keys and N is the size of the value.
 
 #### Syntax
@@ -116,7 +116,7 @@ path.
 
 ### JSON.DEL
 
-> **Available since 1.0.0.**  
+> **Available since 1.0.0.**
 > **Time complexity:**  O(N), where N is the size of the deleted value.
 
 #### Syntax
@@ -137,7 +137,7 @@ Delete a value.
 
 ### JSON.NUMINCRBY
 
-> **Available since 1.0.0.**  
+> **Available since 1.0.0.**
 > **Time complexity:**  O(1).
 
 #### Syntax
@@ -156,8 +156,8 @@ Increments the number value stored at `path` by `number`.
 
 ### JSON.NUMMULTBY
 
-> **Deprecated - might be dropped in a future version**  
-> **Available since 1.0.0.**  
+> **Deprecated - might be dropped in a future version**
+> **Available since 1.0.0.**
 > **Time complexity:**  O(1).
 
 #### Syntax
@@ -176,7 +176,7 @@ Multiplies the number value stored at `path` by `number`.
 
 ### JSON.STRAPPEND
 
-> **Available since 1.0.0.**  
+> **Available since 1.0.0.**
 > **Time complexity:**  O(N), where N is the new string's length.
 
 #### Syntax
@@ -197,7 +197,7 @@ Append the `json-string` value(s) the string at `path`.
 
 ### JSON.STRLEN
 
-> **Available since 1.0.0.**  
+> **Available since 1.0.0.**
 > **Time complexity:**  O(1).
 
 #### Syntax
@@ -220,7 +220,7 @@ Report the length of the JSON String at `path` in `key`.
 
 ### JSON.ARRAPPEND
 
-> **Available since 1.0.0.**  
+> **Available since 1.0.0.**
 > **Time complexity:**  O(1).
 
 #### Syntax
@@ -239,7 +239,7 @@ Append the `json` value(s) into the array at `path` after the last element in it
 
 ### JSON.ARRINDEX
 
-> **Available since 1.0.0.**  
+> **Available since 1.0.0.**
 > **Time complexity:**  O(N), where N is the array's size.
 
 #### Syntax
@@ -262,7 +262,7 @@ Note: out of range errors are treated by rounding the index to the array's start
 
 ### JSON.ARRINSERT
 
-> **Available since 1.0.0.**  
+> **Available since 1.0.0.**
 > **Time complexity:**  O(N), where N is the array's size.
 
 #### Syntax
@@ -283,7 +283,7 @@ The index must be in the array's range. Inserting at `index` 0 prepends to the a
 
 ### JSON.ARRLEN
 
-> **Available since 1.0.0.**  
+> **Available since 1.0.0.**
 > **Time complexity:**  O(1).
 
 #### Syntax
@@ -302,7 +302,7 @@ Report the length of the JSON Array at `path` in `key`.
 
 ### JSON.ARRPOP
 
-> **Available since 1.0.0.**  
+> **Available since 1.0.0.**
 > **Time complexity:**  O(N), where N is the array's size for `index` other than the last element,
 > O(1) otherwise.
 
@@ -324,7 +324,7 @@ Remove and return element from the index in the array.
 
 ### JSON.ARRTRIM
 
-> **Available since 1.0.0.**  
+> **Available since 1.0.0.**
 > **Time complexity:**  O(N), where N is the array's size.
 
 #### Syntax
@@ -337,7 +337,7 @@ JSON.ARRTRIM <key> <path> <start> <stop>
 
 Trim an array so that it contains only the specified inclusive range of elements.
 
-This command is extremely forgiving and using it with out of range indexes will not produce an error. If `start` is larger than the array's size or `start` > `stop`, the result will be an empty array. If `start` is < 0 then it will be treated as 0. If `stop` is larger than the end of the array, it will be treated like the last element in it.
+This command is extremely forgiving and using it with out of range indexes will not produce an error. If `start` is larger than the array's size or `start` > `stop`, the result will be 0. If `start` is < 0 then it will be treated as 0. If `stop` is larger than the end of the array, it will be treated like the last element in it.
 
 #### Return value
 
@@ -347,7 +347,7 @@ This command is extremely forgiving and using it with out of range indexes will 
 
 ### JSON.OBJKEYS
 
-> **Available since 1.0.0.**  
+> **Available since 1.0.0.**
 > **Time complexity:**  O(N), where N is the number of keys in the object.
 
 #### Syntax
@@ -368,7 +368,7 @@ Return the keys in the object that's referenced by `path`.
 
 ### JSON.OBJLEN
 
-> **Available since 1.0.0.**  
+> **Available since 1.0.0.**
 > **Time complexity:**  O(1).
 
 #### Syntax
@@ -391,7 +391,7 @@ Report the number of keys in the JSON Object at `path` in `key`.
 
 ### JSON.TYPE
 
-> **Available since 1.0.0.**  
+> **Available since 1.0.0.**
 > **Time complexity:**  O(1).
 
 #### Syntax
@@ -412,7 +412,7 @@ Report the type of JSON value at `path`.
 
 ### JSON.DEBUG
 
-> **Available since 1.0.0.**  
+> **Available since 1.0.0.**
 > **Time complexity:**  O(N), where N is the size of the JSON value.
 
 #### Syntax
@@ -444,7 +444,7 @@ An alias for [`JSON.DEL`](#jsondel).
 
 ### JSON.RESP
 
-> **Available since 1.0.0.**  
+> **Available since 1.0.0.**
 > **Time complexity:**  O(N), where N is the size of the JSON value.
 
 #### Syntax
