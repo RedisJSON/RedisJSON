@@ -314,10 +314,8 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
 
     fn delete_path(&mut self, path: Vec<String>) -> Result<bool, RedisError> {
         let mut deleted = false;
-        update(&path, self.get_value().unwrap().unwrap(), |v| {
-            if !v.is_null() {
-                deleted = true; // might delete more than a single value
-            }
+        update(&path, self.get_value().unwrap().unwrap(), |_v| {
+            deleted = true; // might delete more than a single value
             Ok(None)
         })?;
         Ok(deleted)
