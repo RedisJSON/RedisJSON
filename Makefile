@@ -123,6 +123,12 @@ lint:
 
 #----------------------------------------------------------------------------------------------
 
+define extract_symbols
+$(SHOW)objcopy --only-keep-debug $1 $1.debug
+$(SHOW)objcopy --strip-debug $1
+$(SHOW)objcopy --add-gnu-debuglink $1.debug $1
+endef
+
 RUST_SOEXT.linux=so
 RUST_SOEXT.freebsd=so
 RUST_SOEXT.macos=dylib
@@ -137,6 +143,9 @@ else
 	cargo $(CARGO_TOOLCHAIN) build --target $(RUST_TARGET) $(CARGO_FLAGS)
 endif
 	cp $(TARGET_DIR)/librejson.$(RUST_SOEXT.$(OS)) $(TARGET)
+ifneq ($(DEBUG),1)
+	$(call extract_symbols,$(TARGET))
+endif
 
 clean:
 ifneq ($(ALL),1)

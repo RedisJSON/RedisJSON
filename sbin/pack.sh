@@ -40,8 +40,8 @@ fi
 [[ $V == 1 || $VERBOSE == 1 ]] && set -x
 
 RAMP=${RAMP:-1}
-DEPS=${DEPS:-0}
-SYM=${SYM:-0}
+DEPS=${DEPS:-1}
+SYM=${SYM:-1}
 
 [[ -z $BINDIR ]] && BINDIR=target/release
 BINDIR=$(cd $BINDIR && pwd)
