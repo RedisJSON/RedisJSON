@@ -15,7 +15,7 @@ use crate::redisjson::SetOptions;
 
 use serde_json::{Number, Value};
 
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 use std::collections::HashMap;
 const JSON_ROOT_PATH: &str = "$";
 const JSON_ROOT_PATH_LEGACY: &str = ".";
@@ -52,6 +52,23 @@ const JSONGET_SUBCOMMANDS_MAXSTRLEN: usize = max_strlen(&[
     CMD_ARG_SPACE,
     CMD_ARG_FORMAT,
 ]);
+
+enum Values<'a, V: SelectValue> {
+    Single(&'a V),
+    Multi(Vec<&'a V>),
+}
+
+impl<'a, V: SelectValue> Serialize for Values<'a, V> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Values::Single(v) => v.serialize(serializer),
+            Values::Multi(v) => v.serialize(serializer),
+        }
+    }
+}
 
 pub struct KeyValue<'a, V: SelectValue> {
     val: &'a V,
@@ -164,53 +181,28 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         // in serde_json. I'm going for this implementation anyway because serde_json isn't supposed to be
         // memory efficient and we're using it anyway. See https://github.com/serde-rs/json/issues/635.
         let mut missing_path = None;
-        let res = match is_legacy {
-            true => {
-                let temp_doc = paths.drain(..).fold(HashMap::new(), |mut acc, path| {
-                    let mut selector = Selector::new();
-                    selector.value(self.val);
-                    if selector.str_path(path.get_path()).is_err() {
-                        return acc;
-                    }
-                    let value = match selector.select() {
-                        Ok(s) if !s.is_empty() => Some(s[0]),
-                        _ => None,
-                    };
-
-                    if value.is_none() && missing_path.is_none() {
-                        missing_path = Some(path.get_original().to_string());
-                    }
-                    acc.insert(path.get_original(), value);
-                    acc
-                });
-                Self::serialize_object(&temp_doc, indent, newline, space).into()
+        let temp_doc = paths.drain(..).fold(HashMap::new(), |mut acc, path: Path| {
+            let mut selector = Selector::new();
+            selector.value(self.val);
+            if selector.str_path(path.get_path()).is_err() {
+                return acc;
             }
-            false => {
-                let temp_doc = paths.drain(..).fold(HashMap::new(), |mut acc, path| {
-                    let mut selector = Selector::new();
-                    selector.value(self.val);
-                    if selector.str_path(path.get_path()).is_err() {
-                        return acc;
-                    }
-                    let value = match selector.select() {
-                        Ok(s) => Some(s),
-                        Err(_) => None,
-                    };
+            let value = match selector.select() {
+                Ok(s) if is_legacy && !s.is_empty() => Some(Values::Single(s[0])),
+                Ok(s) if !is_legacy => Some(Values::Multi(s)),
+                _ => None,
+            };
 
-                    if value.is_none() && missing_path.is_none() {
-                        missing_path = Some(path.get_original().to_string());
-                    }
-                    acc.insert(path.get_original(), value);
-                    acc
-                });
-                Self::serialize_object(&temp_doc, indent, newline, space).into()
+            if value.is_none() && missing_path.is_none() {
+                missing_path = Some(path.get_original().to_string());
             }
-        };
+            acc.insert(path.get_original(), value);
+            acc
+        });
         if let Some(p) = missing_path {
             return Err(format!("ERR path {} does not exist", p).into());
         }
-
-        Ok(res)
+        Ok(Self::serialize_object(&temp_doc, indent, newline, space).into())
     }
 
     fn to_json_single(
