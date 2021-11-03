@@ -151,67 +151,80 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         String::from_utf8(out.into_inner()).unwrap()
     }
 
-    fn to_json_legacy(
+    fn to_json_multi(
         &'a self,
         paths: &mut Vec<Path>,
         indent: Option<&str>,
         newline: Option<&str>,
         space: Option<&str>,
+        is_legacy: bool,
     ) -> Result<RedisValue, Error> {
-        if paths.len() > 1 {
-            // TODO: Creating a temp doc here duplicates memory usage. This can be very memory inefficient.
-            // A better way would be to create a doc of references to the original doc but no current support
-            // in serde_json. I'm going for this implementation anyway because serde_json isn't supposed to be
-            // memory efficient and we're using it anyway. See https://github.com/serde-rs/json/issues/635.
-            let mut missing_path = None;
-            let temp_doc = paths.drain(..).fold(HashMap::new(), |mut acc, path| {
-                let mut selector = Selector::new();
-                selector.value(self.val);
-                if selector.str_path(path.get_path()).is_err() {
-                    return acc;
-                }
-                let value = match selector.select() {
-                    Ok(s) => s.first().copied(),
-                    Err(_) => None,
-                };
-                if value.is_none() && missing_path.is_none() {
-                    missing_path = Some(path.get_original().to_string());
-                }
-                acc.insert(path.get_original(), value);
-                acc
-            });
-            if let Some(p) = missing_path {
-                return Err(format!("ERR path {} does not exist", p).into());
-            }
+        // TODO: Creating a temp doc here duplicates memory usage. This can be very memory inefficient.
+        // A better way would be to create a doc of references to the original doc but no current support
+        // in serde_json. I'm going for this implementation anyway because serde_json isn't supposed to be
+        // memory efficient and we're using it anyway. See https://github.com/serde-rs/json/issues/635.
+        let mut missing_path = None;
+        let res = match is_legacy {
+            true => {
+                let temp_doc = paths.drain(..).fold(HashMap::new(), |mut acc, path| {
+                    let mut selector = Selector::new();
+                    selector.value(self.val);
+                    if selector.str_path(path.get_path()).is_err() {
+                        return acc;
+                    }
+                    let value = match selector.select() {
+                        Ok(s) if !s.is_empty() => Some(s[0]),
+                        _ => None,
+                    };
 
-            Ok(Self::serialize_object(&temp_doc, indent, newline, space).into())
-        } else {
-            Ok(
-                Self::serialize_object(
-                    self.get_first(paths[0].get_path())?,
-                    indent,
-                    newline,
-                    space,
-                )
-                .into(),
-            )
+                    if value.is_none() && missing_path.is_none() {
+                        missing_path = Some(path.get_original().to_string());
+                    }
+                    acc.insert(path.get_original(), value);
+                    acc
+                });
+                Self::serialize_object(&temp_doc, indent, newline, space).into()
+            }
+            false => {
+                let temp_doc = paths.drain(..).fold(HashMap::new(), |mut acc, path| {
+                    let mut selector = Selector::new();
+                    selector.value(self.val);
+                    if selector.str_path(path.get_path()).is_err() {
+                        return acc;
+                    }
+                    let value = match selector.select() {
+                        Ok(s) => Some(s),
+                        Err(_) => None,
+                    };
+
+                    if value.is_none() && missing_path.is_none() {
+                        missing_path = Some(path.get_original().to_string());
+                    }
+                    acc.insert(path.get_original(), value);
+                    acc
+                });
+                Self::serialize_object(&temp_doc, indent, newline, space).into()
+            }
+        };
+        if let Some(p) = missing_path {
+            return Err(format!("ERR path {} does not exist", p).into());
         }
+
+        Ok(res)
     }
 
-    fn to_json_multi(
+    fn to_json_single(
         &'a self,
         paths: &Vec<Path>,
         indent: Option<&str>,
         newline: Option<&str>,
         space: Option<&str>,
+        is_legacy: bool,
     ) -> Result<RedisValue, Error> {
-        if paths.len() > 1 {
-            let mut res: Vec<Vec<&V>> = vec![];
-            for path in paths {
-                let values = self.get_values(path.get_path())?;
-                res.push(values);
-            }
-            Ok(Self::serialize_object(&res, indent, newline, space).into())
+        if is_legacy {
+            Ok(self
+                .to_string_single(paths[0].get_path(), indent, newline, space)?
+                .into())
         } else {
             Ok(self
                 .to_string_multi(paths[0].get_path(), indent, newline, space)?
@@ -231,10 +244,10 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             return Err("Soon to come...".into());
         }
         let is_legacy = !paths.iter().any(|p| !p.is_legacy());
-        if is_legacy {
-            self.to_json_legacy(paths, indent, newline, space)
+        if paths.len() > 1 {
+            self.to_json_multi(paths, indent, newline, space, is_legacy)
         } else {
-            self.to_json_multi(paths, indent, newline, space)
+            self.to_json_single(paths, indent, newline, space, is_legacy)
         }
     }
 
@@ -328,6 +341,17 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     pub fn to_string(&self, path: &str, format: Format) -> Result<String, Error> {
         let results = self.get_first(path)?;
         Self::serialize(results, format)
+    }
+
+    pub fn to_string_single(
+        &self,
+        path: &str,
+        indent: Option<&str>,
+        newline: Option<&str>,
+        space: Option<&str>,
+    ) -> Result<String, Error> {
+        let result = self.get_first(path)?;
+        Ok(Self::serialize_object(&result, indent, newline, space))
     }
 
     pub fn to_string_multi(
@@ -785,7 +809,7 @@ pub fn command_json_mget<M: Manager>(
         let to_string =
             |doc: &M::V| KeyValue::new(doc).to_string_multi(path.get_path(), None, None, None);
         let to_string_legacy =
-            |doc: &M::V| KeyValue::new(doc).to_string(path.get_path(), Format::JSON);
+            |doc: &M::V| KeyValue::new(doc).to_string_single(path.get_path(), None, None, None);
         let is_legacy = path.is_legacy();
 
         let results: Result<Vec<RedisValue>, RedisError> = keys
