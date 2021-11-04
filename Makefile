@@ -134,6 +134,7 @@ RUST_SOEXT.freebsd=so
 RUST_SOEXT.macos=dylib
 
 build:
+CARGO_FLAGS = cargo:rustc-env=GITHASH=$(git rev-parse HEAD); $(CARGO_FLAGS)
 ifeq ($(SAN),)
 	export RUSTFLAGS=$(RUSTFLAGS) ;\
 	cargo build --all --all-targets $(CARGO_FLAGS)

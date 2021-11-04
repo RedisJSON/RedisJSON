@@ -400,6 +400,10 @@ macro_rules! redis_json_module_create {(
         }
 
         fn intialize(ctx: &Context, args: &Vec<RedisString>) -> Status {
+            ctx.log_notice(format!("git_sha={}",
+                option_env!("GITHASH")
+                .unwrap_or("unknown")
+            ));
             export_shared_api(ctx);
             ctx.set_module_options(ModuleOptions::HANDLE_IO_ERRORS);
             ctx.log_notice("Enabled diskless replication");
