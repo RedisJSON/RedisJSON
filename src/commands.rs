@@ -4,6 +4,7 @@ use crate::redisjson::{normalize_arr_indices, Format, Path};
 use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
+use std::cmp::Ordering;
 
 use jsonpath_lib::select::Selector;
 
@@ -15,8 +16,11 @@ use crate::redisjson::SetOptions;
 
 use serde_json::{Number, Value};
 
+use itertools::FoldWhile::{Continue, Done};
+use itertools::Itertools;
 use serde::{Serialize, Serializer};
 use std::collections::HashMap;
+
 const JSON_ROOT_PATH: &str = "$";
 const JSON_ROOT_PATH_LEGACY: &str = ".";
 const CMD_ARG_NOESCAPE: &str = "NOESCAPE";
@@ -742,6 +746,43 @@ where
         .collect::<Vec<Value>>()
 }
 
+/// Sort the paths so higher indices precede lower indices on the same on the same array
+/// And objects with higher hierarchy (closer to the top-level) preceded objects with deeper hierarchy
+fn prepare_paths_for_deletion(paths: &mut Vec<Vec<String>>) {
+    paths.sort_by(|v1, v2| match (v1.len(), v2.len()) {
+        (l1, l2) if l1 < l2 => Ordering::Less, // Shorter paths before longer paths
+        (l1, l2) if l1 > l2 => Ordering::Greater, // Shorter paths before longer paths
+        _ => v1
+            .iter()
+            .zip(v2.iter())
+            .fold_while(Ordering::Equal, |_acc, (p1, p2)| {
+                let i1 = p1.parse::<usize>();
+                let i2 = p2.parse::<usize>();
+                match (i1, i2) {
+                    (Err(_), Err(_)) => match p1.cmp(p2) {
+                        // String compare
+                        Ordering::Less => Done(Ordering::Less),
+                        Ordering::Equal => Continue(Ordering::Equal),
+                        Ordering::Greater => Done(Ordering::Greater),
+                    },
+                    (Ok(_), Err(_)) => Done(Ordering::Greater), //String before Numeric
+                    (Err(_), Ok(_)) => Done(Ordering::Less),    //String before Numeric
+                    (Ok(i1), Ok(i2)) => {
+                        // Numeric compare - higher indices before lower ones
+                        if i1 < i2 {
+                            Done(Ordering::Greater)
+                        } else if i2 < i1 {
+                            Done(Ordering::Less)
+                        } else {
+                            Continue(Ordering::Equal)
+                        }
+                    }
+                }
+            })
+            .into_inner(),
+    });
+}
+
 pub fn command_json_del<M: Manager>(
     manager: M,
     ctx: &Context,
@@ -762,7 +803,8 @@ pub fn command_json_del<M: Manager>(
                 redis_key.delete()?;
                 1
             } else {
-                let paths = find_paths(path.get_path(), doc, |_| true)?;
+                let mut paths = find_paths(path.get_path(), doc, |_| true)?;
+                prepare_paths_for_deletion(&mut paths);
                 let mut changed = 0;
                 for p in paths {
                     if redis_key.delete_path(p)? {
