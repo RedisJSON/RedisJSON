@@ -750,10 +750,10 @@ pub fn command_json_del<M: Manager>(
                 redis_key.delete()?;
                 1
             } else {
-                let paths = find_paths(path.get_path(), doc, |_| true)?;
+                let mut paths = find_paths(path.get_path(), doc, |_| true)?;
                 let mut changed = 0;
-                for p in paths {
-                    if redis_key.delete_path(p)? {
+                for i in 0..paths.len() {
+                    if redis_key.delete_path(&mut paths, i)? {
                         changed += 1;
                     }
                 }

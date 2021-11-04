@@ -34,6 +34,20 @@ pub enum UpdateInfo {
     SUI(SetUpdateInfo),
     AUI(AddUpdateInfo),
 }
+use itertools::{EitherOrBoth, Itertools};
+
+fn is_prefix_of(prefix: &Vec<String>, other: &Vec<String>) -> bool {
+    // TODO: Use fold_while instead of try_fold
+    match prefix
+        .iter()
+        .zip_longest(other)
+        .try_fold(0, |c, pair| match pair {
+            EitherOrBoth::Both(s1, s2) if s1 == s2 => Ok(c + 1),
+            _ => Err(c),
+        }) {
+        Ok(count) | Err(count) => count + 1 == prefix.len(),
+    }
+}
 
 pub trait ReadHolder<V: SelectValue> {
     fn get_value(&self) -> Result<Option<&V>, RedisError>;
@@ -44,7 +58,8 @@ pub trait WriteHolder<O: Clone, V: SelectValue> {
     fn get_value(&mut self) -> Result<Option<&mut V>, RedisError>;
     fn set_value(&mut self, path: Vec<String>, v: O) -> Result<bool, RedisError>;
     fn dict_add(&mut self, path: Vec<String>, key: &str, v: O) -> Result<bool, RedisError>;
-    fn delete_path(&mut self, path: Vec<String>) -> Result<bool, RedisError>;
+    fn delete_path(&mut self, paths: &mut Vec<Vec<String>>, pos: usize)
+        -> Result<bool, RedisError>;
     fn incr_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError>;
     fn mult_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError>;
     fn pow_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError>;
@@ -312,12 +327,38 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
         Ok(updated)
     }
 
-    fn delete_path(&mut self, path: Vec<String>) -> Result<bool, RedisError> {
+    fn delete_path(
+        &mut self,
+        paths: &mut Vec<Vec<String>>,
+        pos: usize,
+    ) -> Result<bool, RedisError> {
         let mut deleted = false;
-        update(&path, self.get_value().unwrap().unwrap(), |_v| {
+        update(&paths[pos], self.get_value().unwrap().unwrap(), |_v| {
             deleted = true; // might delete more than a single value
             Ok(None)
         })?;
+        if deleted {
+            // Update other paths affected by the deletion
+            let cur = paths[pos].iter().map(|e| e.clone()).collect::<Vec<_>>();
+            if let Ok(cur_index) = cur.last().unwrap().parse::<usize>() {
+                for (i, p) in paths.into_iter().enumerate() {
+                    if i > pos && is_prefix_of(&cur, &p) {
+                        if p.len() == cur.len() {
+                            // Same path except for last token - a sibling in the same array
+                            if let Ok(x) = p.last().unwrap().parse::<usize>() {
+                                if x > cur_index {
+                                    p.pop();
+                                    p.push((x - 1).to_string());
+                                }
+                            }
+                        } else {
+                            // A nested child of the deleted element - skip deleting
+                            p.clear();
+                        }
+                    }
+                }
+            }
+        }
         Ok(deleted)
     }
 

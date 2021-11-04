@@ -63,11 +63,11 @@ def testDelCommand(env):
 
     r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '[1, 2, 3]'))
     res = r.execute_command('JSON.DEL', 'doc2', '$[*]')
-    r.assertGreater(res, 0)
+    r.assertEqual(res, 3)
 
     r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '[1, 2, 3]'))
     res = r.execute_command('JSON.DEL', 'doc2', '$[2,1,0]')
-    r.assertGreater(res, 0)
+    r.assertEqual(res, 3)
 
     # Test deleting a null value
     r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '[ true, { "answer": 42}, null ]'))
