@@ -131,11 +131,13 @@ fn update<F: FnMut(Value) -> Result<Option<Value>, Error>>(
             Value::Array(ref mut vec) => {
                 if let Ok(x) = token.parse::<usize>() {
                     if is_last {
-                        let v = std::mem::replace(&mut vec[x], Value::Null);
-                        if let Some(res) = (func)(v)? {
-                            vec[x] = res;
-                        } else {
-                            vec.remove(x);
+                        if x < vec.len() {
+                            let v = std::mem::replace(&mut vec[x], Value::Null);
+                            if let Some(res) = (func)(v)? {
+                                vec[x] = res;
+                            } else {
+                                vec.remove(x);
+                            }
                         }
                         return Ok(());
                     }
@@ -312,10 +314,8 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
 
     fn delete_path(&mut self, path: Vec<String>) -> Result<bool, RedisError> {
         let mut deleted = false;
-        update(&path, self.get_value().unwrap().unwrap(), |v| {
-            if !v.is_null() {
-                deleted = true; // might delete more than a single value
-            }
+        update(&path, self.get_value().unwrap().unwrap(), |_v| {
+            deleted = true; // might delete more than a single value
             Ok(None)
         })?;
         Ok(deleted)
