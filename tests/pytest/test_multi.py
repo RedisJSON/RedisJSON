@@ -69,6 +69,18 @@ def testDelCommand(env):
     res = r.execute_command('JSON.DEL', 'doc2', '$[2,1,0]')
     r.assertEqual(res, 3)
 
+    r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '{"b": [1,2,3], "a": {"b": [1, 2, 3], "c": [1, 2, 3]}, "x": {"b": [1, 2, 3], "c": [1, 2, 3]}}'))
+    res = r.execute_command('JSON.DEL', 'doc2', '$..x.b[*]')
+    r.assertEqual(res, 3)
+    res = r.execute_command('JSON.GET', 'doc2', '$')
+    r.assertEqual(json.loads(res), [{"b": [1, 2, 3], "a": {"b": [1, 2, 3], "c": [1, 2, 3]}, "x": {"b": [], "c": [1, 2, 3]}}])
+
+    r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '{"b": [1,2,3], "a": {"b": [1, 2, 3], "c": [1, 2, 3]}, "x": {"b": [1, 2, 3], "c": [1, 2, 3]}}'))
+    res = r.execute_command('JSON.DEL', 'doc2', '$..x.b[1,0,2]')
+    r.assertEqual(res, 3)
+    res = r.execute_command('JSON.GET', 'doc2', '$')
+    r.assertEqual(json.loads(res), [{"b": [1, 2, 3], "a": {"b": [1, 2, 3], "c": [1, 2, 3]}, "x": {"b": [], "c": [1, 2, 3]}}])
+
     # Test deleting a null value
     r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '[ true, { "answer": 42}, null ]'))
     res = r.execute_command('JSON.DEL', 'doc2', '[-1]')
