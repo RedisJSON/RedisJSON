@@ -623,14 +623,6 @@ def testObjKeysCommand(env):
     res = r.execute_command('JSON.OBJKEYS', 'doc1')
     r.assertEqual(res, ["nested1", "a", "nested2"])
 
-    r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '{"a":{}, "nested":{"a":{"buz":"zer"}}}'))
-    res = r.execute_command('JSON.OBJKEYS', 'doc2', '$..a')
-    r.assertEqual(res, [[], ["buz"]])
-
-    r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '{}'))
-    res = r.execute_command('JSON.OBJKEYS', 'doc2', '$')
-    r.assertEqual(res, [[]])
-
 
 def testObjLenCommand(env):
     """Test JSON.OBJLEN command"""

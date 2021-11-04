@@ -207,7 +207,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
 
     fn to_json_single(
         &'a self,
-        paths: &Vec<Path>,
+        path: &str,
         indent: Option<&str>,
         newline: Option<&str>,
         space: Option<&str>,
@@ -215,11 +215,11 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     ) -> Result<RedisValue, Error> {
         if is_legacy {
             Ok(self
-                .to_string_single(paths[0].get_path(), indent, newline, space)?
+                .to_string_single(path, indent, newline, space)?
                 .into())
         } else {
             Ok(self
-                .to_string_multi(paths[0].get_path(), indent, newline, space)?
+                .to_string_multi(path, indent, newline, space)?
                 .into())
         }
     }
@@ -239,7 +239,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         if paths.len() > 1 {
             self.to_json_multi(paths, indent, newline, space, is_legacy)
         } else {
-            self.to_json_single(paths, indent, newline, space, is_legacy)
+            self.to_json_single(paths[0].get_path(), indent, newline, space, is_legacy)
         }
     }
 
