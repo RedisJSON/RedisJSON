@@ -214,13 +214,9 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         is_legacy: bool,
     ) -> Result<RedisValue, Error> {
         if is_legacy {
-            Ok(self
-                .to_string_single(path, indent, newline, space)?
-                .into())
+            Ok(self.to_string_single(path, indent, newline, space)?.into())
         } else {
-            Ok(self
-                .to_string_multi(path, indent, newline, space)?
-                .into())
+            Ok(self.to_string_multi(path, indent, newline, space)?.into())
         }
     }
 
