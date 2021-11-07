@@ -1,3 +1,4 @@
+use crate::error::Error;
 use crate::formatter::RedisJsonFormatter;
 use crate::manager::err_msg_json_path_doesnt_exist_with_param;
 use crate::manager::{err_msg_json_expected, err_msg_json_path_doesnt_exist_with_param_or};
@@ -9,8 +10,6 @@ use jsonpath_lib::select::Selector;
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use std::cmp::Ordering;
-
-use crate::error::Error;
 
 use crate::redisjson::SetOptions;
 
@@ -87,7 +86,9 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         let results = self.get_values(path)?;
         match results.first() {
             Some(s) => Ok(s),
-            None => Err(err_msg_json_path_doesnt_exist_with_param(path).into()),
+            None => Err(err_msg_json_path_doesnt_exist_with_param(path)
+                .as_str()
+                .into()),
         }
     }
 
@@ -377,7 +378,11 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         let first = self.get_first(path)?;
         match first.get_type() {
             SelectValueType::String => Ok(first.get_str().len()),
-            _ => Err("ERR wrong type of path value".into()),
+            _ => Err(
+                err_msg_json_expected("string", self.get_type(path).unwrap().as_str())
+                    .as_str()
+                    .into(),
+            ),
         }
     }
 
@@ -385,7 +390,11 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         let first = self.get_first(path)?;
         match first.get_type() {
             SelectValueType::Array => Ok(first.len().unwrap()),
-            _ => Err("ERR wrong type of path value".into()),
+            _ => Err(
+                err_msg_json_expected("array", self.get_type(path).unwrap().as_str())
+                    .as_str()
+                    .into(),
+            ),
         }
     }
 
@@ -393,7 +402,11 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         let first = self.get_first(path)?;
         match first.get_type() {
             SelectValueType::Object => Ok(first.len().unwrap()),
-            _ => Err("ERR wrong type of path value".into()),
+            _ => Err(
+                err_msg_json_expected("object", self.get_type(path).unwrap().as_str())
+                    .as_str()
+                    .into(),
+            ),
         }
     }
 
@@ -501,9 +514,11 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     }
 
     pub fn obj_keys(&self, path: &str) -> Result<Box<dyn Iterator<Item = &'_ str> + '_>, Error> {
-        self.get_first(path)?
-            .keys()
-            .ok_or_else(|| "ERR wrong type of path value".into())
+        self.get_first(path)?.keys().ok_or_else(|| {
+            err_msg_json_expected("object", self.get_type(path).unwrap().as_str())
+                .as_str()
+                .into()
+        })
     }
 }
 

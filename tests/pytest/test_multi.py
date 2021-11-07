@@ -793,8 +793,9 @@ def testDebugCommand(env):
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1')
     r.assertEqual(res, 72)
 
-    # Test missing key
+    # Test missing subcommand
     r.expect('JSON.DEBUG', 'non_existing_doc', '$..a').raiseError()
+
 
 def testRespCommand(env):
     """Test REJSON.RESP command"""
@@ -964,6 +965,113 @@ def testErrorMessage(env):
     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', json.dumps(types_data)))
     res = r.execute_command('JSON.GET', 'doc1', '$')
     r.assertEqual([types_data], json.loads(res))
-    BB()
+
+    # Notice: redis client is parsing error responses and trimming prefixes such as 'ERR'
+
+    # ARRAPPEND
+    r.assertEqual(r.execute_command('JSON.ARRAPPEND', 'doc1', '$.string', '"abc"'), [None])
+    r.expect('JSON.ARRAPPEND', 'doc_none', '$.string', '"abc"').raiseError().contains("doesn't exist")
+
     r.expect('JSON.ARRAPPEND', 'doc1', '.string', '"abc"').raiseError().contains("not an array")
+    r.expect('JSON.ARRAPPEND', 'doc_none', '.string', '"abc"').raiseError().contains("doesn't exist")
+
+    # ARRPOP
+    r.assertEqual(r.execute_command('JSON.ARRPOP', 'doc1', '$.string', '"abc"'), [None])
+    r.expect('JSON.ARRPOP', 'doc_none', '$..string', '"abc"').raiseError().contains("doesn't exist")
+
+    r.expect('JSON.ARRPOP', 'doc1', '.string', '"abc"').raiseError().contains("not an array")
+    r.expect('JSON.ARRPOP', 'doc_none', '.string', '"abc"').raiseError().contains("doesn't exist")
+
+    # ARRINDEX
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'doc1', '$.number', '"abc"'), [None])
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'doc_none', '$.number', '"abc"'), -1)
+
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'doc1', '.number', '"abc"'), -1)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'doc_none', '.number', '"abc"'), -1)
+
+    # ARRINSERT
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'doc1', '$.string', 0, '"abc"'), [None])
+    r.expect('JSON.ARRINSERT', 'doc_none', '$.string', 0, '"abc"').raiseError().contains("doesn't exist")
+
+    r.expect('JSON.ARRINSERT', 'doc1', '.string', 0, '"abc"').raiseError().contains("not an array")
+    r.expect('JSON.ARRINSERT', 'doc_none', '.string', 0, '"abc"').raiseError().contains("doesn't exist")
+
+    # ARRLEN
+    r.assertEqual(r.execute_command('JSON.ARRLEN', 'doc1', '$.string', '"abc"'), [None])
+    r.expect('JSON.ARRLEN', 'doc_none', '$.string', '"abc"').raiseError().contains("doesn't exist")
+
+    r.assertEqual(r.execute_command('JSON.ARRLEN', 'doc1', '.string', '"abc"'), None)
+    r.assertEqual(r.execute_command('JSON.ARRLEN', 'doc_none', '.string', '"abc"'), None)
+
+    # ARRTRIM
+    r.assertEqual(r.execute_command('JSON.ARRTRIM', 'doc1', '$.string', 0, 1), [None])
+    r.expect('JSON.ARRTRIM', 'doc_none', '$.string', 0, 1).raiseError().contains("doesn't exist")
+
+    r.expect('JSON.ARRTRIM', 'doc1', '.string', 0, 1).raiseError().contains("not an array")
+    r.expect('JSON.ARRTRIM', 'doc_none', '.string', 0, 1).raiseError().contains("doesn't exist")
+
+    # OBJKEYS
+    r.assertEqual(r.execute_command('JSON.OBJKEYS', 'doc1', '$.string'), [None])
+    r.assertEqual(r.execute_command('JSON.OBJKEYS', 'doc_none', '$.string'), None)
+
+    r.expect('JSON.OBJKEYS', 'doc1', '.string').raiseError().contains("expected object but found string")
+    r.assertEqual(r.execute_command('JSON.OBJKEYS', 'doc_none', '.string'), None)
+
+    # OBJLEN
+    r.assertEqual(r.execute_command('JSON.OBJLEN', 'doc1', '$.string'), [None])
+    r.assertEqual(r.execute_command('JSON.OBJLEN', 'doc_none', '$.string'), None)
+
+    r.expect('JSON.OBJLEN', 'doc1', '.boolean').raiseError().contains("expected object but found boolean")
+    r.assertEqual(r.execute_command('JSON.OBJLEN', 'doc_none', '.string'), None)
+
+    # NUMINCRBY
+    r.assertEqual(r.execute_command('JSON.NUMINCRBY', 'doc1', '$.string', 3), '[null]')
+    r.expect('JSON.NUMINCRBY', 'doc_none', '$.string', 3).raiseError().contains("doesn't exist")
+
+    r.expect('JSON.NUMINCRBY', 'doc1', '.string', 3).raiseError().contains("does not contains a number")
+    r.expect('JSON.NUMINCRBY', 'doc_none', '.string', 3).raiseError().contains("doesn't exist")
+
+    # NUMMULTBY
+    r.assertEqual(r.execute_command('JSON.NUMMULTBY', 'doc1', '$.string', 3), '[null]')
+    r.expect('JSON.NUMMULTBY', 'doc_none', '$.string', 3).raiseError().contains("doesn't exist")
+
+    r.expect('JSON.NUMMULTBY', 'doc1', '.string', 3).raiseError().contains("does not contains a number")
+    r.expect('JSON.NUMMULTBY', 'doc_none', '.string', 3).raiseError().contains("doesn't exist")
+
+    # STRAPPEND
+    r.assertEqual(r.execute_command('JSON.STRAPPEND', 'doc1', '$.number', '"abc"'), [None])
+    r.expect('JSON.STRAPPEND', 'doc_none', '$.number', '"abc"').raiseError().contains("doesn't exist")
+
+    r.expect('JSON.STRAPPEND', 'doc1', '.number', '"abc"').raiseError().contains("not a string")
+    r.expect('JSON.STRAPPEND', 'doc_none', '.number', '"abc"').raiseError().contains("doesn't exist")
+
+    # STRLEN
+    r.assertEqual(r.execute_command('JSON.STRLEN', 'doc1', '$.object', '"abc"'), [None])
+    r.expect('JSON.STRLEN', 'doc_none', '$.object', '"abc"').raiseError().contains("doesn't exist")
+
+    r.expect('JSON.STRLEN', 'doc1', '.object', '"abc"').raiseError().contains("expected string but found object")
+    r.assertEqual(r.execute_command('JSON.STRLEN', 'doc_none', '.object', '"abc"'), None)
+
+    # DEL
+    r.assertEqual(r.execute_command('JSON.DEL', 'doc1', '$.nowhere'), 0)
+    r.assertEqual(r.execute_command('JSON.DEL', 'doc_none', '$.object', '"abc"'), 0)
+
+    r.assertEqual(r.execute_command('JSON.DEL', 'doc1', '.nowhere'), 0)
+    r.assertEqual(r.execute_command('JSON.DEL', 'doc_none', '.object'), 0)
+
+    # DEBUG
+    r.assertEqual(r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1', '$.nowhere'), [])
+    r.assertEqual(r.execute_command('JSON.DEBUG', 'MEMORY', 'doc_none', '$.object'), [])
+
+    r.expect('JSON.DEBUG', 'MEMORY', 'doc1', '.nowhere').raiseError().contains("does not exist")
+    r.assertEqual(r.execute_command('JSON.DEBUG', 'MEMORY', 'doc_none', '.object'), 0)
+
+    # RESP
+    r.expect('JSON.RESP', 'doc1', '$.nowhere').raiseError().contains("does not exist")
+    r.assertEqual(r.execute_command('JSON.RESP', 'doc_none', '$.object'), None)
+
+    r.expect('JSON.RESP', 'doc1', '.nowhere').raiseError().contains("does not exist")
+    r.assertEqual(r.execute_command('JSON.RESP', 'doc_none', '.object'), None)
+
+
 
