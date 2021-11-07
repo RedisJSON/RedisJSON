@@ -87,7 +87,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         let results = self.get_values(path)?;
         match results.first() {
             Some(s) => Ok(s),
-            None => Err("ERR path does not exist".into()),
+            None => Err(err_msg_json_path_doesnt_exist_with_param(path).into()),
         }
     }
 
@@ -105,7 +105,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     .into())
             } else {
                 Err(RedisError::String(
-                    err_msg_json_path_doesnt_exist_with_param(path.get_path()),
+                    err_msg_json_path_doesnt_exist_with_param(path.get_original()),
                 ))
             }
         }
@@ -1275,14 +1275,14 @@ pub fn command_json_arr_append<M: Manager>(
     if !path.is_legacy() {
         json_arr_append::<M>(&mut redis_key, ctx, path.get_path(), args)
     } else {
-        json_arr_append_legacy::<M>(&mut redis_key, ctx, path.get_path(), args)
+        json_arr_append_legacy::<M>(&mut redis_key, ctx, &path, args)
     }
 }
 
 fn json_arr_append_legacy<M>(
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
-    path: &str,
+    path: &Path,
     args: Vec<M::O>,
 ) -> RedisResult
 where
@@ -1291,10 +1291,12 @@ where
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
-    let mut paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
+    let mut paths = find_paths(path.get_path(), root, |v| {
+        v.get_type() == SelectValueType::Array
+    })?;
     if paths.is_empty() {
         Err(RedisError::String(
-            err_msg_json_path_doesnt_exist_with_param(path),
+            err_msg_json_path_doesnt_exist_with_param_or(path.get_original(), "not an array"),
         ))
     } else if paths.len() == 1 {
         let res = redis_key.arr_append(paths.pop().unwrap(), args)?;

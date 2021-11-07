@@ -950,3 +950,20 @@ def testArrIndexCommand(env):
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test_null', '.[0].arr', 'null'), 3)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test_null', '..nested2_not_found.arr', 'null'), -1)
 
+def testErrorMessage(env):
+
+    r = env
+    types_data = {
+        'object':   {},
+        'array':    [],
+        'string':   'str',
+        'integer':  42,
+        'number':   1.2,
+        'boolean':  False
+    }
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', json.dumps(types_data)))
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual([types_data], json.loads(res))
+    BB()
+    r.expect('JSON.ARRAPPEND', 'doc1', '.string', '"abc"').raiseError().contains("not an array")
+
