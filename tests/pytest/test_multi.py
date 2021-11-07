@@ -63,11 +63,23 @@ def testDelCommand(env):
 
     r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '[1, 2, 3]'))
     res = r.execute_command('JSON.DEL', 'doc2', '$[*]')
-    r.assertGreater(res, 0)
+    r.assertEqual(res, 3)
 
     r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '[1, 2, 3]'))
     res = r.execute_command('JSON.DEL', 'doc2', '$[2,1,0]')
-    r.assertGreater(res, 0)
+    r.assertEqual(res, 3)
+
+    r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '{"b": [1,2,3], "a": {"b": [1, 2, 3], "c": [1, 2, 3]}, "x": {"b": [1, 2, 3], "c": [1, 2, 3]}}'))
+    res = r.execute_command('JSON.DEL', 'doc2', '$..x.b[*]')
+    r.assertEqual(res, 3)
+    res = r.execute_command('JSON.GET', 'doc2', '$')
+    r.assertEqual(json.loads(res), [{"b": [1, 2, 3], "a": {"b": [1, 2, 3], "c": [1, 2, 3]}, "x": {"b": [], "c": [1, 2, 3]}}])
+
+    r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '{"b": [1,2,3], "a": {"b": [1, 2, 3], "c": [1, 2, 3]}, "x": {"b": [1, 2, 3], "c": [1, 2, 3]}}'))
+    res = r.execute_command('JSON.DEL', 'doc2', '$..x.b[1,0,2]')
+    r.assertEqual(res, 3)
+    res = r.execute_command('JSON.GET', 'doc2', '$')
+    r.assertEqual(json.loads(res), [{"b": [1, 2, 3], "a": {"b": [1, 2, 3], "c": [1, 2, 3]}, "x": {"b": [], "c": [1, 2, 3]}}])
 
     # Test deleting a null value
     r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '[ true, { "answer": 42}, null ]'))
@@ -148,21 +160,28 @@ def testSetAndGetCommands(env):
 
     # Test multi paths
     res = r.execute_command('JSON.GET', 'doc1', '$..tm', '$..nu')
-    r.assertEqual(res, '[[[46,876.85],[134.761,"jcoels",null]],[[377,"qda",true]]]')
+    r.assertEqual(json.loads(res), {"$..tm": [[46, 876.85], [134.761, "jcoels", None]], "$..nu": [[377, "qda", True]]})
     # Test multi paths - if one path is none-legacy - result format is not legacy
     res = r.execute_command('JSON.GET', 'doc1', '..tm', '$..nu')
-    r.assertEqual(res, '[[[46,876.85],[134.761,"jcoels",null]],[[377,"qda",true]]]')
+    r.assertEqual(json.loads(res), {"..tm": [[46, 876.85], [134.761, "jcoels", None]], "$..nu": [[377, "qda", True]]})
+    # Test multi paths with formatting (using the same path in order to get a map and still avoid failure due to undefined ordering between map keys)
+    res = r.execute_command('JSON.GET', 'doc2', 'INDENT', '\\t', 'NEWLINE', '\\n', 'SPACE', ' ', '$..a', '$..a')
+    r.assertEqual(res, '{\\n\\t"$..a": [\\n\\t\\t4.2,\\n\\t\\t4.2\\n\\t]\\n}')
+
     # Test missing key
     r.assertIsNone(r.execute_command('JSON.GET', 'docX', '..tm', '$..nu'))
     # Test missing path
     res = r.execute_command('JSON.GET', 'doc1', '..tm', '$..back_in_nov')
-    r.assertEqual(res, '[[[46,876.85],[134.761,"jcoels",null]],[]]')
+    r.assertEqual(json.loads(res), {"$..back_in_nov": [], "..tm": [[46, 876.85], [134.761, "jcoels", None]]})
     res = r.execute_command('JSON.GET', 'doc2', '..a', '..b', '$.back_in_nov')
-    r.assertEqual(res, '[[4.2,4.2],[3],[]]')
+    r.assertEqual(json.loads(res), {"$.back_in_nov": [], "..a": [4.2, 4.2], "..b": [3]})
 
     # Test legacy multi path (all paths are legacy)
     res = r.execute_command('JSON.GET', 'doc1', '..nu', '..tm')
     r.assertEqual(json.loads(res), json.loads('{"..nu":[377,"qda",true],"..tm":[46,876.85]}'))
+    # Test multi paths with formatting (using the same path in order to get a map and still avoid failure due to undefined ordering between map keys)
+    res = r.execute_command('JSON.GET', 'doc2', 'INDENT', '\\t', 'NEWLINE', '\\n', 'SPACE', ' ', '..a', '..a')
+    r.assertEqual(res, '{\\n\\t"..a": 4.2\\n}')
     # Test legacy single path
     res = r.execute_command('JSON.GET', 'doc1', '..tm')
     r.assertEqual(res, '[46,876.85]')
