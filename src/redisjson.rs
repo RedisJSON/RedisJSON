@@ -19,7 +19,7 @@ use crate::c_api::JSONType;
 use crate::error::Error;
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 
-//use crate::normalize_arr_start_index;
+use crate::manager::err_msg_json_path_doesnt_exist_with_param;
 use std::fmt;
 use std::fmt::Display;
 
@@ -287,7 +287,7 @@ impl RedisJSON {
     pub fn serialize(results: &Value, format: Format) -> Result<String, Error> {
         let res = match format {
             Format::JSON => serde_json::to_string(results)?,
-            Format::BSON => return Err("Soon to come...".into()), //results.into() as Bson,
+            Format::BSON => return Err("ERR Soon to come...".into()), //results.into() as Bson,
         };
         Ok(res)
     }
@@ -435,7 +435,7 @@ impl RedisJSON {
         match errors.len() {
             0 => match result {
                 Some(r) => Ok(r),
-                None => Err(format!("Path '{}' does not exist", path).into()),
+                None => Err(err_msg_json_path_doesnt_exist_with_param(path).into()),
             },
             1 => Err(errors.remove(0)),
             _ => Err(errors.into_iter().map(|e| e.msg).collect::<String>().into()),

@@ -1,14 +1,14 @@
 use crate::formatter::RedisJsonFormatter;
+use crate::manager::err_msg_json_path_doesnt_exist_with_param;
+use crate::manager::{err_msg_json_expected, err_msg_json_path_doesnt_exist_with_param_or};
 use crate::manager::{AddUpdateInfo, Manager, ReadHolder, SetUpdateInfo, UpdateInfo, WriteHolder};
+use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 use crate::redisjson::{normalize_arr_indices, Format, Path};
 use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
+use jsonpath_lib::select::Selector;
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use std::cmp::Ordering;
-
-use jsonpath_lib::select::Selector;
-
-use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 
 use crate::error::Error;
 
@@ -104,10 +104,9 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     .collect::<Vec<RedisValue>>()
                     .into())
             } else {
-                Err(RedisError::String(format!(
-                    "Path '{}' does not exist",
-                    path.get_path()
-                )))
+                Err(RedisError::String(
+                    err_msg_json_path_doesnt_exist_with_param(path.get_path()),
+                ))
             }
         }
     }
@@ -204,7 +203,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             acc
         });
         if let Some(p) = missing_path {
-            return Err(format!("ERR path {} does not exist", p).into());
+            return Err(err_msg_json_path_doesnt_exist_with_param(p.as_str()).into());
         }
         Ok(Self::serialize_object(&temp_doc, indent, newline, space).into())
     }
@@ -233,7 +232,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         format: Format,
     ) -> Result<RedisValue, Error> {
         if format == Format::BSON {
-            return Err("Soon to come...".into());
+            return Err("ERR Soon to come...".into());
         }
         let is_legacy = !paths.iter().any(|p| !p.is_legacy());
         if paths.len() > 1 {
@@ -291,9 +290,9 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             // if we reach here with array path we must be out of range
             // otherwise the path would be valid to be set and we would not
             // have reached here!!
-            Err("array index out of range".into())
+            Err("ERR array index out of range".into())
         } else {
-            Err("path not an object or array".into())
+            Err("ERR path not an object or array".into())
         }
     }
 
@@ -325,7 +324,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     pub fn serialize(results: &V, format: Format) -> Result<String, Error> {
         let res = match format {
             Format::JSON => serde_json::to_string(results)?,
-            Format::BSON => return Err("Soon to come...".into()), //results.into() as Bson,
+            Format::BSON => return Err("ERR Soon to come...".into()), //results.into() as Bson,
         };
         Ok(res)
     }
@@ -708,10 +707,9 @@ where
     let res = get_all_values_and_paths(path, doc)?;
     match res.is_empty() {
         false => Ok(filter_paths(res, f)),
-        _ => Err(RedisError::String(format!(
-            "Path '{}' does not exist",
-            path
-        ))),
+        _ => Err(RedisError::String(
+            err_msg_json_path_doesnt_exist_with_param(path),
+        )),
     }
 }
 
@@ -726,10 +724,9 @@ where
     let res = get_all_values_and_paths(path, doc)?;
     match res.is_empty() {
         false => Ok(filter_values(res, f)),
-        _ => Err(RedisError::String(format!(
-            "Path '{}' does not exist",
-            path
-        ))),
+        _ => Err(RedisError::String(
+            err_msg_json_path_doesnt_exist_with_param(path),
+        )),
     }
 }
 
@@ -1016,10 +1013,9 @@ where
         redis_key.apply_changes(ctx, cmd)?;
         Ok(res.unwrap().to_string().into())
     } else {
-        Err(RedisError::String(format!(
-            "Path '{}' does not exist or does not contains a number",
-            path
-        )))
+        Err(RedisError::String(
+            err_msg_json_path_doesnt_exist_with_param_or(path, "does not contains a number"),
+        ))
     }
 }
 
@@ -1109,10 +1105,9 @@ where
         redis_key.apply_changes(ctx, "json.toggle")?;
         Ok(res.to_string().into())
     } else {
-        Err(RedisError::String(format!(
-            "Path '{}' does not exist or not a bool",
-            path
-        )))
+        Err(RedisError::String(
+            err_msg_json_path_doesnt_exist_with_param_or(path, "not a bool"),
+        ))
     }
 }
 
@@ -1201,10 +1196,9 @@ where
         redis_key.apply_changes(ctx, "json.strappend")?;
         Ok(res.unwrap().into())
     } else {
-        Err(RedisError::String(format!(
-            "Path '{}' does not exist or not a string",
-            path
-        )))
+        Err(RedisError::String(
+            err_msg_json_path_doesnt_exist_with_param_or(path, "not a string"),
+        ))
     }
 }
 
@@ -1299,10 +1293,9 @@ where
         .ok_or_else(RedisError::nonexistent_key)?;
     let mut paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
     if paths.is_empty() {
-        Err(RedisError::String(format!(
-            "Path '{}' does not exist",
-            path
-        )))
+        Err(RedisError::String(
+            err_msg_json_path_doesnt_exist_with_param(path),
+        ))
     } else if paths.len() == 1 {
         let res = redis_key.arr_append(paths.pop().unwrap(), args)?;
         redis_key.apply_changes(ctx, "json.arrappend")?;
@@ -1384,9 +1377,9 @@ pub fn command_json_arr_index<M: Manager>(
     let is_legacy = path.is_legacy();
     let scalar_value: Value = serde_json::from_str(json_scalar)?;
     if !is_legacy && (scalar_value.is_array() || scalar_value.is_object()) {
-        return Err(RedisError::String(format!(
-            "ERR expected scalar but found {}",
-            json_scalar
+        return Err(RedisError::String(err_msg_json_expected(
+            "scalar",
+            json_scalar,
         )));
     }
 
@@ -1489,10 +1482,9 @@ where
         redis_key.apply_changes(ctx, "json.arrinsert")?;
         Ok(res.unwrap().into())
     } else {
-        Err(RedisError::String(format!(
-            "Path '{}' does not exist or not an array",
-            path
-        )))
+        Err(RedisError::String(
+            err_msg_json_path_doesnt_exist_with_param_or(path, "not an array"),
+        ))
     }
 }
 
@@ -1624,10 +1616,9 @@ where
             None => Ok(().into()),
         }
     } else {
-        Err(RedisError::String(format!(
-            "Path '{}' does not exist or not an array",
-            path
-        )))
+        Err(RedisError::String(
+            err_msg_json_path_doesnt_exist_with_param_or(path, "not an array"),
+        ))
     }
 }
 
@@ -1706,10 +1697,9 @@ where
         redis_key.apply_changes(ctx, "json.arrtrim")?;
         Ok(res.unwrap().into())
     } else {
-        Err(RedisError::String(format!(
-            "Path '{}' does not exist or not an array",
-            path
-        )))
+        Err(RedisError::String(
+            err_msg_json_path_doesnt_exist_with_param_or(path, "not an array"),
+        ))
     }
 }
 

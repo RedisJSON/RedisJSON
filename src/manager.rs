@@ -89,11 +89,29 @@ pub trait Manager {
 }
 
 fn err_json(value: &Value, expected_value: &'static str) -> Error {
-    Error::from(format!(
-        "ERR wrong type of path value - expected {} but found {}",
+    Error::from(err_msg_json_expected(
         expected_value,
-        RedisJSON::value_name(value)
+        RedisJSON::value_name(value),
     ))
+}
+
+pub(crate) fn err_msg_json_expected(expected_value: &'static str, found: &str) -> String {
+    format!(
+        "WRONGTYPE wrong type of path value - expected {} but found {}",
+        expected_value, found
+    )
+}
+
+pub(crate) fn err_msg_json_path_doesnt_exist_with_param(path: &str) -> String {
+    format!("ERR Path '{}' does not exist", path)
+}
+
+pub(crate) fn err_msg_json_path_doesnt_exist() -> String {
+    "ERR Path does not exist".to_string()
+}
+
+pub(crate) fn err_msg_json_path_doesnt_exist_with_param_or(path: &str, or: &str) -> String {
+    format!("ERR Path '{}' does not exist or {}", path, or)
 }
 
 pub struct KeyHolderWrite<'a> {
@@ -203,7 +221,7 @@ impl<'a> KeyHolderWrite<'a> {
                 Ok(res.clone())
             })?;
             match res {
-                None => Err(RedisError::Str("path does not exists")),
+                None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
                 Some(n) => match n {
                     Value::Number(n) => Ok(n),
                     _ => Err(RedisError::Str("return value is not a number")),
@@ -341,7 +359,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
             Ok(Some(Value::Bool(val)))
         })?;
         match res {
-            None => Err(RedisError::Str("path does not exists")),
+            None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
             Some(n) => Ok(n),
         }
     }
@@ -356,13 +374,13 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
                 Ok(Some(Value::String(new_str)))
             })?;
             match res {
-                None => Err(RedisError::Str("path does not exists")),
+                None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
                 Some(l) => Ok(l),
             }
         } else {
-            Err(RedisError::String(format!(
-                "ERR wrong type of value - expected string but found {}",
-                val
+            Err(RedisError::String(err_msg_json_expected(
+                "string",
+                val.as_str(),
             )))
         }
     }
@@ -376,7 +394,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
             Ok(Some(v))
         })?;
         match res {
-            None => Err(RedisError::Str("path does not exists")),
+            None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
             Some(n) => Ok(n),
         }
     }
@@ -403,7 +421,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
             Ok(Some(new_value))
         })?;
         match res {
-            None => Err(RedisError::Str("path does not exists")),
+            None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
             Some(l) => Ok(l),
         }
     }
@@ -461,7 +479,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
             }
         })?;
         match res {
-            None => Err(RedisError::Str("path does not exists")),
+            None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
             Some(l) => Ok(l),
         }
     }
