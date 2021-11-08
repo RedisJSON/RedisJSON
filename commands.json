@@ -57,7 +57,7 @@
     "group": "json"
   },
   "JSON.SET": {
-    "summary": " Sets the JSON value at path in key ",
+    "summary": "Sets the JSON value at path in key",
     "complexity": "O(M+N), where M is the size of the original value (if it exists) and N is the size of the new value",
     "arguments": [
       {
@@ -84,5 +84,23 @@
     ],
     "since": "1.0.0",
     "group": "json"
+  },
+  "JSON.OBJLEN": {
+    "summary": "Report the number of keys in the JSON Object at path in key",
+    "complexity": "O(1)",
+    "arguments": [
+      {
+        "name": "key",
+        "type": "key"
+      },
+      {
+        "name": "path",
+        "type": "string",
+        "optional": true
+      }
+    ],
+    "since": "1.0.0",
+    "group": "json"
   }
+  
 }
