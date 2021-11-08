@@ -9,8 +9,8 @@ import json
 import requests
 
 HERE = os.path.dirname(__file__)
-ROOT = os.path.abspath(os.path.join(HERE, ".."))
-READIES = "/w/rafi_1/readies"
+ROOT = os.path.abspath(os.path.join(HERE, "../.."))
+READIES = os.path.abspath(os.path.join(ROOT, "deps/readies"))
 sys.path.insert(0, READIES)
 import paella
 
@@ -65,7 +65,7 @@ RS_VERSIONS file includes Redis Enterprive versions for release tests.
 
 
 class Test:
-    def __init__(self, token, test_fname, modver, snapshot, rsver, osnick, light):
+    def __init__(self, token, test_fname, modver, snapshot, rsver, osnick):
         global NOP, VERBOSE
 
         self.token = token
@@ -74,7 +74,6 @@ class Test:
         self.snapshot = snapshot
         self.rsver = rsver
         self.osnick = osnick
-        self.light = light
 
         os.environ['RS_MODULE_DIR'] = 'rejson'
         self.rsmod = 'ReJSON'
@@ -126,7 +125,6 @@ class Test:
         if NOP:
             return 0
 
-        BB()
         res = requests.post(f"https://{OPERETO3_URL}/processes", verify=False,
                             headers={'Authorization': f'Bearer {self.token}',
                                      'Content-Type': 'application/json'},
@@ -157,7 +155,7 @@ class Test:
 @click.option('--nop', is_flag=True, default=False, help='Dry run')
 @click.option('--verbose', '-v', is_flag=True, default=False, help='Be verbose')
 @click.option('--verbosity', type=int, default=0, help='Verbosity level')
-def main(token, test, modver, snapshot, rsver, osnick, light, quick, nop, verbose, verbosity, *args, **kwargs):
+def main(token, test, modver, snapshot, rsver, osnick, common, quick, nop, verbose, verbosity, *args, **kwargs):
     BB()
     global NOP, VERBOSE
     VERBOSE = 1 if verbose else verbosity
@@ -172,13 +170,13 @@ def main(token, test, modver, snapshot, rsver, osnick, light, quick, nop, verbos
         raise click.ClickException(f"Invalid test name: {test}")
 
     if rsver is not None:
-        Test(token, test_fname, modver, snapshot, rsver, osnick, light).run()
+        Test(token, test_fname, modver, snapshot, rsver, osnick).run()
     else:
         rs_versions = paella.flines(os.path.join(HERE, 'RS_VERSIONS'))
         if quick:
             rs_versions = [rs_versions[0]]
         for rsver in rs_versions:
-            Test(token, test_fname, modver, snapshot, rsver, osnick, light).run()
+            Test(token, test_fname, modver, snapshot, rsver, osnick).run()
 
 
 if __name__ == '__main__':

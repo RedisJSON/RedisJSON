@@ -123,10 +123,17 @@ lint:
 
 #----------------------------------------------------------------------------------------------
 
+ifeq ($(OS),macos)
+BINUTILS_PREFIX:=$(shell brew --prefix binutils)
+OBJCOPY:=$(BINUTILS_PREFIX)/bin/objcopy
+else
+OBJCOPY:=objcopy
+endif
+
 define extract_symbols
-$(SHOW)objcopy --only-keep-debug $1 $1.debug
-$(SHOW)objcopy --strip-debug $1
-$(SHOW)objcopy --add-gnu-debuglink $1.debug $1
+$(SHOW)$(OBJCOPY) --only-keep-debug $1 $1.debug
+$(SHOW)$(OBJCOPY) --strip-debug $1
+$(SHOW)$(OBJCOPY) --add-gnu-debuglink $1.debug $1
 endef
 
 RUST_SOEXT.linux=so
