@@ -43,6 +43,7 @@ class RedisJSONSetup(paella.Setup):
 
     def macos(self):
         self.install_gnu_utils()
+        self.install("binutils")
         self.run("%s/bin/getgcc" % READIES)
 
     def common_last(self):

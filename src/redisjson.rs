@@ -19,7 +19,7 @@ use crate::c_api::JSONType;
 use crate::error::Error;
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 
-//use crate::normalize_arr_start_index;
+use crate::manager::{err_msg_json_expected, err_msg_json_path_doesnt_exist_with_param};
 use std::fmt;
 use std::fmt::Display;
 
@@ -287,7 +287,7 @@ impl RedisJSON {
     pub fn serialize(results: &Value, format: Format) -> Result<String, Error> {
         let res = match format {
             Format::JSON => serde_json::to_string(results)?,
-            Format::BSON => return Err("Soon to come...".into()), //results.into() as Bson,
+            Format::BSON => return Err("ERR Soon to come...".into()), //results.into() as Bson,
         };
         Ok(res)
     }
@@ -295,28 +295,44 @@ impl RedisJSON {
     pub fn str_len(&self, path: &str) -> Result<usize, Error> {
         self.get_first(path)?
             .as_str()
-            .ok_or_else(|| "ERR wrong type of path value".into())
+            .ok_or_else(|| {
+                err_msg_json_expected("string", self.get_type(path).unwrap().as_str())
+                    .as_str()
+                    .into()
+            })
             .map(|s| s.len())
     }
 
     pub fn arr_len(&self, path: &str) -> Result<usize, Error> {
         self.get_first(path)?
             .as_array()
-            .ok_or_else(|| "ERR wrong type of path value".into())
+            .ok_or_else(|| {
+                err_msg_json_expected("array", self.get_type(path).unwrap().as_str())
+                    .as_str()
+                    .into()
+            })
             .map(|arr| arr.len())
     }
 
     pub fn obj_len(&self, path: &str) -> Result<usize, Error> {
         self.get_first(path)?
             .as_object()
-            .ok_or_else(|| "ERR wrong type of path value".into())
+            .ok_or_else(|| {
+                err_msg_json_expected("object", self.get_type(path).unwrap().as_str())
+                    .as_str()
+                    .into()
+            })
             .map(|obj| obj.len())
     }
 
     pub fn obj_keys<'a>(&'a self, path: &'a str) -> Result<Vec<&'a String>, Error> {
         self.get_first(path)?
             .as_object()
-            .ok_or_else(|| "ERR wrong type of path value".into())
+            .ok_or_else(|| {
+                err_msg_json_expected("object", self.get_type(path).unwrap().as_str())
+                    .as_str()
+                    .into()
+            })
             .map(|obj| obj.keys().collect())
     }
 
@@ -435,7 +451,7 @@ impl RedisJSON {
         match errors.len() {
             0 => match result {
                 Some(r) => Ok(r),
-                None => Err(format!("Path '{}' does not exist", path).into()),
+                None => Err(err_msg_json_path_doesnt_exist_with_param(path).into()),
             },
             1 => Err(errors.remove(0)),
             _ => Err(errors.into_iter().map(|e| e.msg).collect::<String>().into()),
