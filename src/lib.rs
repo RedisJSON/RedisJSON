@@ -463,6 +463,6 @@ redis_json_module_create! {
     data_types: [REDIS_JSON_TYPE],
     pre_command_function: pre_command,
     get_manage: Some(manager::RedisJsonKeyManager{phantom:PhantomData}),
-    version: 02_00_02,
+    version: 02_00_03,
     init: dummy_init,
 }
