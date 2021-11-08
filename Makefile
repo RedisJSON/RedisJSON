@@ -123,17 +123,10 @@ lint:
 
 #----------------------------------------------------------------------------------------------
 
-ifeq ($(OS),macos)
-BINUTILS_PREFIX:=$(shell brew --prefix binutils)
-OBJCOPY:=$(BINUTILS_PREFIX)/bin/objcopy
-else
-OBJCOPY:=objcopy
-endif
-
 define extract_symbols
-$(SHOW)$(OBJCOPY) --only-keep-debug $1 $1.debug
-$(SHOW)$(OBJCOPY) --strip-debug $1
-$(SHOW)$(OBJCOPY) --add-gnu-debuglink $1.debug $1
+$(SHOW)objcopy --only-keep-debug $1 $1.debug
+$(SHOW)objcopy --strip-debug $1
+$(SHOW)objcopy --add-gnu-debuglink $1.debug $1
 endef
 
 RUST_SOEXT.linux=so
@@ -151,7 +144,9 @@ else
 endif
 	cp $(TARGET_DIR)/librejson.$(RUST_SOEXT.$(OS)) $(TARGET)
 ifneq ($(DEBUG),1)
+ifneq ($(OS),macos)
 	$(call extract_symbols,$(TARGET))
+endif
 endif
 
 clean:
