@@ -66,11 +66,11 @@
       },
       {
         "name": "path",
-        "type": "string",
+        "type": "string"
       },
       {
         "name": "json",
-        "type": "string",
+        "type": "string"
       },
       {
         "name": "condition",
