@@ -94,6 +94,31 @@ Pretty-formatted JSON is producible with `redis-cli` by following this example:
 
 [Array][4] of [Bulk Strings][3], specifically, each string is the JSON serialization of each JSON value matching a path.
 
+When using a JSONPath (as opposed to the legacy path) the root of the matching values is always an array. As opposed to the legacy path, wich returns a single value.
+
+It there is multiple paths mixing both legacy path and JSONPath, the returned value conforms to the JSONPath version (an array of values). 
+
+__Examples__:
+
+```sql
+127.0.0.1:6379> JSON.SET doc $ '{"a":2, "b": 3, "nested": {"a": 4, "b": null}}'
+OK
+```
+
+With a single JSONPath (json array bulk string):
+
+```sql
+127.0.0.1:6379> JSON.GET doc $..b
+"[3,null]"
+```
+
+Using multiple paths with at least one JSONPath (map with array of json values per path):
+
+```sql
+127.0.0.1:6379> JSON.GET doc ..a $..b
+"{\"$..b\":[3,null],\"..a\":[2,4]}"
+```
+
 ### JSON.MGET
 
 > **Available since 1.0.0.**  
@@ -113,6 +138,23 @@ Returns the values at `path` from multiple `key`s. Non-existing keys and non-exi
 
 [Array][4] of [Bulk Strings][3], specifically the JSON serialization of the value at each key's
 path.
+
+__examples:__
+
+Given the following documents:
+
+```sql
+127.0.0.1:6379> JSON.SET doc1 $ '{"a":1, "b": 2, "nested": {"a": 3}, "c": null}'
+OK
+127.0.0.1:6379> JSON.SET doc2 $ '{"a":4, "b": 5, "nested": {"a": 6}, "c": null}'
+OK
+```
+
+```sql
+127.0.0.1:6379> JSON.MGET doc1 doc2 $..a
+1) "[1,3]"
+2) "[4,6]"
+```
 
 ### JSON.DEL
 

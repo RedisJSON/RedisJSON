@@ -2,6 +2,22 @@
 
 Since there does not exist a standard for path syntax, RedisJSON implements its own. RedisJSON's syntax is a subset of common best practices and resembles [JSONPath](http://goessner.net/articles/JsonPath/) not by accident.
 
+There is currently two concurrent implementations. One is a legacy from the first version of RedisJSON. Describe below as the `legacy path syntax`.
+
+RedisJSON decide which implementation to used depending on the first character of the path query. If the query starts with the character `$` it is considered as a JSONPath query. Otherwise is is interpreted as a legacy path syntax.
+
+## JSONPath support (RedisJSON v2)
+
+RedisJSON 2.0 introduces the support of [JSONPath](http://goessner.net/articles/JsonPath/). It follows the syntax described by Goessner in his article.
+
+JSONPath query can resolve to several location in the JSON documents. In this case, the JSON commands are applying the operation to every possible location. This is a major improvement over the legacy support, which was operating only on the first path.
+
+Notice that the structure of the command response is most of the time different when using JSONPath. This two behavior are described in the [Commands](/commands) page.
+
+## Legacy Path syntax (RedisJSON v1)
+
+The first version of RedisJSON came with the following implementation. It is still supported in RedisJSON v2.
+
 Paths always begin at the root of a RedisJSON value. The root is denoted by the period character (`.`). For paths referencing the root's children, prefixing the path with the root is optional.
 
 Dotted- and square-bracketed, single-or-double-quoted-child notation are both supported for object keys, so the following paths all refer to _bar_, child of _foo_ under the root:
