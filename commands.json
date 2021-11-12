@@ -1,7 +1,7 @@
 {
   "JSON.DEL": {
     "summary": "Deletes a value",
-    "complexity": "O(N) where N is the size of the deleted value",
+    "complexity": "O(N) when path is evaluated to a single value where N is the size of the deleted value, O(N) when path is evaluated to multiple values, where N is the size of the key",
     "arguments": [
       {
         "name": "key",
@@ -18,7 +18,7 @@
   },
   "JSON.GET": {
     "summary": "Gets the value at one or more paths in JSON serialized form",
-    "complexity": "O(N) where N is the size of the value",
+    "complexity": "O(N) when path is evaluated to a single value where N is the size of the value, O(N) when path is evaluated to multiple values, where N is the size of the key",
     "arguments": [
       {
         "name": "key",
@@ -71,7 +71,7 @@
   },
   "JSON.CLEAR": {
     "summary": "Clears all values from an array or an object",
-    "complexity": "O(N) where N is the size of the value",
+    "complexity": "O(N) when path is evaluated to a single value where N is the size of the values, O(N) when path is evaluated to multiple values, where N is the size of the key",
     "arguments": [
       {
         "name": "key",
@@ -88,7 +88,7 @@
   },
   "JSON.SET": {
     "summary": "Sets or updates the JSON value at a path",
-    "complexity": "O(M+N) where M is the size of the original value (if it exists) and N is the size of the new value",
+    "complexity": "O(M+N) when path is evaluated to a single value where M is the size of the original value (if it exists) and N is the size of the new value, O(M+N) when path is evaluated to multiple values where M is the size of the key and N is the size of the new value",
     "arguments": [
       {
         "name": "key",
@@ -117,7 +117,7 @@
   },
   "JSON.MGET": {
     "summary": "Returns the values at a path from one or more keys",
-    "complexity": "O(M*N) where M is the number of keys and N is the size of the value",
+    "complexity": "O(M*N) when path is evaluated to a single value where M is the number of keys and N is the size of the value, O(N1+N2+...+Nm) when path is evaluated to multiple values where m is the number of keys and Ni is the size of the i-th key",
     "arguments": [
       {
         "name": "key",
@@ -145,8 +145,8 @@
         "type": "string"
       },
       {
-        "name": "number",
-        "type": "number"
+        "name": "value",
+        "type": "double"
       }
     ],
     "since": "1.0.0",
