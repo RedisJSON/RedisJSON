@@ -144,7 +144,9 @@ else
 endif
 	cp $(TARGET_DIR)/librejson.$(RUST_SOEXT.$(OS)) $(TARGET)
 ifneq ($(DEBUG),1)
+ifneq ($(OS),macos)
 	$(call extract_symbols,$(TARGET))
+endif
 endif
 
 clean:

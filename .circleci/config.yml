@@ -295,7 +295,7 @@ jobs:
       - setup-automation
       - run:
           name: Run QA Automation
-          command: ./tests/qa/qatests -v -t release -m "$CIRCLE_TAG"
+          command: MODULE_VERSION=$CIRCLE_TAG VERBOSE=1 TEST=release ./tests/qa/run
 
   nightly-automation:
     docker:
@@ -305,7 +305,7 @@ jobs:
       - setup-automation
       - run:
           name: Run QA Automation
-          command: ./tests/qa/qatests -v -t nightly -m "$CIRCLE_BRANCH" --snapshot --quick
+          command: MODULE_VERSION=$CIRCLE_BRANCH VERBOSE=1 TEST=nightly QUICK=1 ./tests/qa/run
 
   performance-automation:
     docker:
