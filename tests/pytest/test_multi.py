@@ -66,7 +66,7 @@ def testDelCommand(env):
     r.assertEqual(res, 3)
 
     r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '[1, 2, 3]'))
-    res = r.execute_command('JSON.DEL', 'doc2', '$[1,2,0]')
+    res = r.execute_command('JSON.DEL', 'doc2', '$[2,1,0]')
     r.assertEqual(res, 3)
 
     r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '{"b": [1,2,3], "a": {"b": [1, 2, 3], "c": [1, 2, 3]}, "x": {"b": [1, 2, 3], "c": [1, 2, 3]}}'))
@@ -87,14 +87,6 @@ def testDelCommand(env):
     r.assertEqual(res, 1)
     res = r.execute_command('JSON.GET', 'doc2', '$')
     r.assertEqual(json.loads(res), [[True, {"answer": 42}]])
-
-def testDelCommand_issue529(env):
-    r = env
-    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '[{"a00": [{"a00": "a00_00"}, {"a01": "a00_01"}, {"a02": "a00_02"}, {"a03": "a00_03"}]}, {"a01": [{"a00": "a01_00"}, {"a01": "a01_01"}, {"a02": "a01_02"}, {"a03": "a01_03"}]}, {"a02": [{"a00": "a02_00"}, {"a01": "a02_01"}, {"a02": "a02_02"}, {"a03": "a02_03"}]}, {"a03": [{"a00": "a03_00"}, {"a01": "a03_01"}, {"a02": "a03_02"}, {"a03": "a03_03"}]}]'))
-    res = r.execute_command('JSON.DEL', 'doc1', '$..[2]')
-    r.assertEqual(res, 4)
-    res = r.execute_command('JSON.ARRLEN', 'doc1', '$.*[*]')
-    r.assertEqual(res, [3, 3, 3])
 
 
 def testForgetCommand(env):
