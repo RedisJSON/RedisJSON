@@ -66,6 +66,10 @@ def testDelCommand(env):
     r.assertEqual(res, 3)
 
     r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '[1, 2, 3]'))
+    res = r.execute_command('JSON.DEL', 'doc2', '$[2,1,0]')
+    r.assertEqual(res, 3)
+
+    r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '[1, 2, 3]'))
     res = r.execute_command('JSON.DEL', 'doc2', '$[1,2,0]')
     r.assertEqual(res, 3)
 
