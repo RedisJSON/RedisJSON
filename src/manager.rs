@@ -95,7 +95,7 @@ fn err_json(value: &Value, expected_value: &'static str) -> Error {
     ))
 }
 
-pub(crate) fn err_msg_json_expected<'a>(expected_value: &'static str, found: &str) -> String {
+pub(crate) fn err_msg_json_expected(expected_value: &'static str, found: &str) -> String {
     format!(
         "WRONGTYPE wrong type of path value - expected {} but found {}",
         expected_value, found
