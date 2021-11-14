@@ -541,7 +541,7 @@ dependencies = [
 
 [[package]]
 name = "redisjson"
-version = "2.0.3"
+version = "2.0.4"
 dependencies = [
  "bson",
  "itertools",

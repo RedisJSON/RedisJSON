@@ -9,7 +9,7 @@
       },
       {
         "name": "path",
-        "type": "json path string",
+        "type": "string",
         "optional": true
       }
     ],
@@ -49,11 +49,58 @@
       },
       {
         "name": "paths",
-        "type": "json path string",
+        "type": "string",
+        "optional": true
+      }
+    ],
+    "since": "1.0.0",
+    "group": "json"
+  },
+  "JSON.SET": {
+    "summary": "Sets the JSON value at path in key",
+    "complexity": "O(M+N), where M is the size of the original value (if it exists) and N is the size of the new value",
+    "arguments": [
+      {
+        "name": "key",
+        "type": "key"
+      },
+      {
+        "name": "path",
+        "type": "string"
+      },
+      {
+        "name": "json",
+        "type": "string"
+      },
+      {
+        "name": "condition",
+        "type": "enum",
+        "enum": [
+          "NX",
+          "XX"
+        ],
+        "optional": true
+      }
+    ],
+    "since": "1.0.0",
+    "group": "json"
+  },
+  "JSON.OBJLEN": {
+    "summary": "Report the number of keys in the JSON Object at path in key",
+    "complexity": "O(1)",
+    "arguments": [
+      {
+        "name": "key",
+        "type": "key"
+      },
+      {
+        "name": "path",
+        "type": "string",
         "optional": true
       }
     ],
     "since": "1.0.0",
     "group": "json"
   }
+  
 }
