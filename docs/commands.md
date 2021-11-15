@@ -299,7 +299,7 @@ Report the length of the JSON String at `path` in `key`.
 
 #### Return value
 
-[Array][4] of [Integer][2], specifically, for each path, the string's length, or [null][6] element if the matching JSON value is not an array.
+[Array][4] of [Integer][2], specifically, for each path, the string's length, or [null][6] element if the matching JSON value is not a string.
 
 
 #### Example
