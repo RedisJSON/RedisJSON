@@ -9,7 +9,7 @@ use redis_module::{Context, NotifyEvent, RedisString};
 
 use std::marker::PhantomData;
 
-use crate::redisjson::RedisJSON;
+use crate::redisjson::{normalize_arr_start_index, RedisJSON};
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
 
@@ -89,11 +89,29 @@ pub trait Manager {
 }
 
 fn err_json(value: &Value, expected_value: &'static str) -> Error {
-    Error::from(format!(
-        "ERR wrong type of path value - expected {} but found {}",
+    Error::from(err_msg_json_expected(
         expected_value,
-        RedisJSON::value_name(value)
+        RedisJSON::value_name(value),
     ))
+}
+
+pub(crate) fn err_msg_json_expected<'a>(expected_value: &'static str, found: &str) -> String {
+    format!(
+        "WRONGTYPE wrong type of path value - expected {} but found {}",
+        expected_value, found
+    )
+}
+
+pub(crate) fn err_msg_json_path_doesnt_exist_with_param(path: &str) -> String {
+    format!("ERR Path '{}' does not exist", path)
+}
+
+pub(crate) fn err_msg_json_path_doesnt_exist() -> String {
+    "ERR Path does not exist".to_string()
+}
+
+pub(crate) fn err_msg_json_path_doesnt_exist_with_param_or(path: &str, or: &str) -> String {
+    format!("ERR Path '{}' does not exist or {}", path, or)
 }
 
 pub struct KeyHolderWrite<'a> {
@@ -131,11 +149,13 @@ fn update<F: FnMut(Value) -> Result<Option<Value>, Error>>(
             Value::Array(ref mut vec) => {
                 if let Ok(x) = token.parse::<usize>() {
                     if is_last {
-                        let v = std::mem::replace(&mut vec[x], Value::Null);
-                        if let Some(res) = (func)(v)? {
-                            vec[x] = res;
-                        } else {
-                            vec.remove(x);
+                        if x < vec.len() {
+                            let v = std::mem::replace(&mut vec[x], Value::Null);
+                            if let Some(res) = (func)(v)? {
+                                vec[x] = res;
+                            } else {
+                                vec.remove(x);
+                            }
                         }
                         return Ok(());
                     }
@@ -201,7 +221,7 @@ impl<'a> KeyHolderWrite<'a> {
                 Ok(res.clone())
             })?;
             match res {
-                None => Err(RedisError::Str("path does not exists")),
+                None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
                 Some(n) => match n {
                     Value::Number(n) => Ok(n),
                     _ => Err(RedisError::Str("return value is not a number")),
@@ -312,10 +332,8 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
 
     fn delete_path(&mut self, path: Vec<String>) -> Result<bool, RedisError> {
         let mut deleted = false;
-        update(&path, self.get_value().unwrap().unwrap(), |v| {
-            if !v.is_null() {
-                deleted = true; // might delete more than a single value
-            }
+        update(&path, self.get_value().unwrap().unwrap(), |_v| {
+            deleted = true; // might delete more than a single value
             Ok(None)
         })?;
         Ok(deleted)
@@ -341,7 +359,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
             Ok(Some(Value::Bool(val)))
         })?;
         match res {
-            None => Err(RedisError::Str("path does not exists")),
+            None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
             Some(n) => Ok(n),
         }
     }
@@ -356,13 +374,13 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
                 Ok(Some(Value::String(new_str)))
             })?;
             match res {
-                None => Err(RedisError::Str("path does not exists")),
+                None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
                 Some(l) => Ok(l),
             }
         } else {
-            Err(RedisError::String(format!(
-                "ERR wrong type of value - expected string but found {}",
-                val
+            Err(RedisError::String(err_msg_json_expected(
+                "string",
+                val.as_str(),
             )))
         }
     }
@@ -376,7 +394,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
             Ok(Some(v))
         })?;
         match res {
-            None => Err(RedisError::Str("path does not exists")),
+            None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
             Some(n) => Ok(n),
         }
     }
@@ -403,7 +421,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
             Ok(Some(new_value))
         })?;
         match res {
-            None => Err(RedisError::Str("path does not exists")),
+            None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
             Some(l) => Ok(l),
         }
     }
@@ -417,11 +435,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
                 }
                 // Verify legel index in bounds
                 let len = array.len() as i64;
-                let index = if index < 0 {
-                    0.max(len + index)
-                } else {
-                    index.min(len - 1)
-                } as usize;
+                let index = normalize_arr_start_index(index, len) as usize;
 
                 let mut new_value = v.take();
                 let curr = new_value.as_array_mut().unwrap();
@@ -443,11 +457,15 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
             if let Some(array) = v.as_array() {
                 let len = array.len() as i64;
                 let stop = stop.normalize(len);
-
-                let range = if start > len || start > stop as i64 {
+                let start = if start < 0 || start < len {
+                    start.normalize(len)
+                } else {
+                    stop + 1 //  start >=0 && start >= len
+                };
+                let range = if start > stop || len == 0 {
                     0..0 // Return an empty array
                 } else {
-                    start.normalize(len)..(stop + 1)
+                    start..(stop + 1)
                 };
 
                 let mut new_value = v.take();
@@ -461,7 +479,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
             }
         })?;
         match res {
-            None => Err(RedisError::Str("path does not exists")),
+            None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
             Some(l) => Ok(l),
         }
     }

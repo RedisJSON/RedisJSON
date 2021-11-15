@@ -133,7 +133,7 @@ pub fn json_api_get_json<M: Manager>(
     str: *mut *mut rawmod::RedisModuleString,
 ) -> c_int {
     let json = unsafe { &*(json.cast::<M::V>()) };
-    let res = KeyValue::new(json).to_value(json).to_string();
+    let res = KeyValue::<M::V>::serialize_object(json, None, None, None);
     create_rmstring(ctx, &res, str)
 }
 

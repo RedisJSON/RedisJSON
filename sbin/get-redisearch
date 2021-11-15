@@ -45,13 +45,12 @@ else
 	fi
 
 	dist="$($READIES/bin/platform --dist)"
+	nick="$($READIES/bin/platform --osnick)"
 
 	[[ $os == linux ]] && os=Linux
 	[[ $arch == x64 ]] && arch=x86_64
 
-	if [[ -n $OSNICK ]]; then
-		nick="$OSNICK"
-	elif [[ $dist == ubuntu ]]; then
+	if [[ $dist == ubuntu ]]; then
 		if [[ $nick == focal ]]; then
 			nick="ubuntu20.04"
 		elif [[ $nick == bionic ]]; then
