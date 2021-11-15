@@ -2,17 +2,19 @@
 
 Since there does not exist a standard for path syntax, RedisJSON implements its own. RedisJSON's syntax is a subset of common best practices and resembles [JSONPath](http://goessner.net/articles/JsonPath/) not by accident.
 
-There is currently two concurrent implementations. One is a legacy from the first version of RedisJSON. Describe below as the `legacy path syntax`.
+Two query syntaxes are currently supported . One is a legacy from the first version of RedisJSON. Describe below as the `legacy path syntax`.
 
-RedisJSON decide which implementation to used depending on the first character of the path query. If the query starts with the character `$` it is considered as a JSONPath query. Otherwise is is interpreted as a legacy path syntax.
+RedisJSON decides which syntax to use depending on the first character of the path query. If the query starts with the character `$` it is considered as a JSONPath query. Otherwise it is interpreted as a legacy path syntax.
 
 ## JSONPath support (RedisJSON v2)
 
 RedisJSON 2.0 introduces the support of [JSONPath](http://goessner.net/articles/JsonPath/). It follows the syntax described by Goessner in his article.
 
-JSONPath query can resolve to several location in the JSON documents. In this case, the JSON commands are applying the operation to every possible location. This is a major improvement over the legacy support, which was operating only on the first path.
+JSONPath query can resolve to several locations in the JSON documents. In this case, the JSON commands are applying the operation to every possible location. This is a major improvement over the legacy support, which was operating only on the first path.
 
-Notice that the structure of the command response is most of the time different when using JSONPath. This two behavior are described in the [Commands](/commands) page.
+Notice that the structure of the command response is most of the time different when using JSONPath. These two behaviors are described in the [Commands](/commands) page.
+
+The new syntax supports the bracket notation, allowing the use of special characters like colon ":" of whitespaces in key names.
 
 ## Legacy Path syntax (RedisJSON v1)
 
