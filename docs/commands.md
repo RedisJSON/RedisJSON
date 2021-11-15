@@ -332,7 +332,7 @@ Append the `json` value(s) into the array at `path` after the last element in it
 
 #### Return value
 
-[Array][4] of [Integer][2], specifically, for each path, the array's new size, or [null][6] element if the matching JSON value is not an array
+[Array][4] of [Integer][2], specifically, for each path, the array's new size, or [null][6] element if the matching JSON value is not an array.
 
 #### Example
 
