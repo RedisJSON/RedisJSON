@@ -36,7 +36,7 @@ The time complexity of the command does not include that of the [path](path.md#t
 
 #### Syntax
 
-```
+```sql
 JSON.SET <key> <path> <json>
          [NX | XX]
 ```
@@ -64,7 +64,7 @@ conditions were not met.
 
 #### Syntax
 
-```
+```sql
 JSON.GET <key>
          [INDENT indentation-string]
          [NEWLINE line-break-string]
@@ -98,7 +98,7 @@ When using a JSONPath (as opposed to the legacy path) the root of the matching v
 
 It there is multiple paths mixing both legacy path and JSONPath, the returned value conforms to the JSONPath version (an array of values). 
 
-__Examples__:
+#### Examples:
 
 ```sql
 127.0.0.1:6379> JSON.SET doc $ '{"a":2, "b": 3, "nested": {"a": 4, "b": null}}'
@@ -126,7 +126,7 @@ Using multiple paths with at least one JSONPath (map with array of json values p
 
 #### Syntax
 
-```
+```sql
 JSON.MGET <key> [key ...] <path>
 ```
 
@@ -139,7 +139,7 @@ Returns the values at `path` from multiple `key`s. Non-existing keys and non-exi
 [Array][4] of [Bulk Strings][3], specifically the JSON serialization of the value at each key's
 path.
 
-__examples:__
+#### Example
 
 Given the following documents:
 
@@ -163,7 +163,7 @@ OK
 
 #### Syntax
 
-```
+```sql
 JSON.DEL <key> [path]
 ```
 
@@ -177,6 +177,15 @@ Delete a value.
 
 [Integer][2], specifically the number of paths deleted (0 or more).
 
+#### Example
+
+```sql
+127.0.0.1:6379> JSON.SET doc $ '{"a": 1, "nested": {"a": 2, "b": 3}}'
+OK
+127.0.0.1:6379> JSON.DEL doc $..a
+(integer) 2
+```
+
 ### JSON.NUMINCRBY
 
 > **Available since 1.0.0.**  
@@ -184,7 +193,7 @@ Delete a value.
 
 #### Syntax
 
-```
+```sql
 JSON.NUMINCRBY <key> <path> <number>
 ```
 
@@ -198,13 +207,13 @@ Increments the number value stored at `path` by `number`.
 
 ### JSON.NUMMULTBY
 
-> **Deprecated - might be dropped in a future version**  
+> **Deprecated - will be dropped in the next version**  
 > **Available since 1.0.0.**  
 > **Time complexity:**  O(1).
 
 #### Syntax
 
-```
+```sql
 JSON.NUMMULTBY <key> <path> <number>
 ```
 
@@ -214,7 +223,18 @@ Multiplies the number value stored at `path` by `number`.
 
 #### Return value
 
-[Bulk String][3], specifically the stringified new value.
+[Bulk String][3], specifically the stringified new values for each path.
+
+#### Example
+
+```sql
+127.0.0.1:6379> JSON.SET doc . '{"a":"b","b":[{"a":2}, {"a":5}, {"a":"c"}]}'
+OK
+127.0.0.1:6379> JSON.NUMINCRBY doc $.a 2
+"[null]"
+127.0.0.1:6379> JSON.NUMINCRBY doc $..a 2
+"[null,4,7,null]"
+```
 
 ### JSON.STRAPPEND
 
@@ -223,7 +243,7 @@ Multiplies the number value stored at `path` by `number`.
 
 #### Syntax
 
-```
+```sql
 JSON.STRAPPEND <key> [path] <json-string>
 ```
 
@@ -235,7 +255,20 @@ Append the `json-string` value(s) the string at `path`.
 
 #### Return value
 
-[Integer][2], specifically the string's new length.
+[Array][4] of [Integer][2], specifically, for each path, the string's new length, or [null][6] element if the matching JSON value is not an array.
+
+#### Example
+
+```sql
+127.0.0.1:6379> JSON.SET doc $ '{"a":"foo", "nested": {"a": "hello"}, "nested2": {"a": 31}}'
+OK
+127.0.0.1:6379> JSON.STRAPPEND doc $..a '"baz"'
+1) (integer) 6
+2) (integer) 8
+3) (nil)
+127.0.0.1:6379> JSON.GET doc $
+"[{\"a\":\"foobaz\",\"nested\":{\"a\":\"hellobaz\"},\"nested2\":{\"a\":31}}]"
+```
 
 ### JSON.STRLEN
 
@@ -244,7 +277,7 @@ Append the `json-string` value(s) the string at `path`.
 
 #### Syntax
 
-```
+```sql
 JSON.STRLEN <key> [path]
 ```
 
@@ -256,7 +289,19 @@ Report the length of the JSON String at `path` in `key`.
 
 #### Return value
 
-[Integer][2], specifically the string's length.
+[Array][4] of [Integer][2], specifically, for each path, the string's length, or [null][6] element if the matching JSON value is not an array.
+
+
+#### Example
+
+```sql
+127.0.0.1:6379> JSON.SET doc $ '{"a":"foo", "nested": {"a": "hello"}, "nested2": {"a": 31}}'
+OK
+127.0.0.1:6379> JSON.STRLEN doc $..a
+1) (integer) 3
+2) (integer) 5
+3) (nil)
+```
 
 ## Array commands
 
@@ -267,7 +312,7 @@ Report the length of the JSON String at `path` in `key`.
 
 #### Syntax
 
-```
+```sql
 JSON.ARRAPPEND <key> <path> <json> [json ...]
 ```
 
@@ -277,7 +322,20 @@ Append the `json` value(s) into the array at `path` after the last element in it
 
 #### Return value
 
-[Integer][2], specifically the array's new size.
+[Array][4] of [Integer][2], specifically, for each path, the array's new size, or [null][6] element if the matching JSON value is not an array
+
+#### Example
+
+```sql
+127.0.0.1:6379> JSON.SET doc $ '{"a":[1], "nested": {"a": [1,2]}, "nested2": {"a": 42}}'
+OK
+127.0.0.1:6379> JSON.ARRAPPEND doc $..a 3 4
+1) (integer) 3
+2) (integer) 4
+3) (nil)
+127.0.0.1:6379> JSON.GET doc $
+"[{\"a\":[1,3,4],\"nested\":{\"a\":[1,2,3,4]},\"nested2\":{\"a\":42}}]"
+```
 
 ### JSON.ARRINDEX
 
@@ -286,7 +344,7 @@ Append the `json` value(s) into the array at `path` after the last element in it
 
 #### Syntax
 
-```
+```sql
 JSON.ARRINDEX <key> <path> <json-scalar> [start [stop]]
 ```
 
@@ -300,7 +358,25 @@ Note: out of range errors are treated by rounding the index to the array's start
 
 #### Return value
 
-[Array][4], specifically, for each JSON value matching the path, the first position of the scalar value in the array, -1 if unfound in the array, or [null][6] element if the matching JSON value is not an array.
+[Array][4] of [Integer][2], specifically, for each JSON value matching the path, the first position of the scalar value in the array, -1 if unfound in the array, or [null][6] element if the matching JSON value is not an array.
+
+#### Examples
+
+```sql
+127.0.0.1:6379> JSON.SET doc $ '{"a":[1,2,3,2], "nested": {"a": [3,4]}}'
+OK
+127.0.0.1:6379> JSON.ARRINDEX doc $..a 2
+1) (integer) 1
+2) (integer) -1
+```
+
+```sql
+127.0.0.1:6379> JSON.SET doc $ '{"a":[1,2,3,2], "nested": {"a": false}}'
+OK
+127.0.0.1:6379> JSON.ARRINDEX doc $..a 2
+1) (integer) 1
+2) (nil)
+```
 
 ### JSON.ARRINSERT
 
@@ -309,7 +385,7 @@ Note: out of range errors are treated by rounding the index to the array's start
 
 #### Syntax
 
-```
+```sql
 JSON.ARRINSERT <key> <path> <index> <json> [json ...]
 ```
 
@@ -321,7 +397,27 @@ The index must be in the array's range. Inserting at `index` 0 prepends to the a
 
 #### Return value
 
-[Integer][2], specifically the array's new size.
+[Array][4] of [Integer][2], specifically, for each path, the array's new size, or [null][6] element if the matching JSON value is not an array.
+
+#### Examples
+
+```sql
+127.0.0.1:6379> JSON.SET doc $ '{"a":[3], "nested": {"a": [3,4]}}'
+OK
+127.0.0.1:6379> JSON.ARRINSERT doc $..a 0 1 2
+1) (integer) 3
+2) (integer) 4
+127.0.0.1:6379> JSON.GET doc $
+"[{\"a\":[1,2,3],\"nested\":{\"a\":[1,2,3,4]}}]"
+```
+
+```sql
+127.0.0.1:6379> JSON.SET doc $ '{"a":[1,2,3,2], "nested": {"a": false}}'
+OK
+127.0.0.1:6379> JSON.ARRINSERT doc $..a 0 1 2
+1) (integer) 6
+2) (nil)
+```
 
 ### JSON.ARRLEN
 
@@ -330,7 +426,7 @@ The index must be in the array's range. Inserting at `index` 0 prepends to the a
 
 #### Syntax
 
-```
+```sql
 JSON.ARRLEN <key> [path]
 ```
 
@@ -340,7 +436,25 @@ Report the length of the JSON Array at `path` in `key`.
 
 #### Return value
 
-[Integer][2], specifically the array's length.
+[Array][4] of [Integer][2], specifically, for each path, the array's length, or [null][6] element if the matching JSON value is not an array.
+
+#### Examples
+
+```sql
+127.0.0.1:6379> JSON.SET doc $ '{"a":[3], "nested": {"a": [3,4]}}'
+OK
+127.0.0.1:6379> JSON.ARRLEN doc $..a
+1) (integer) 1
+2) (integer) 2
+```
+
+```sql
+127.0.0.1:6379> JSON.SET doc $ '{"a":[1,2,3,2], "nested": {"a": false}}'
+OK
+127.0.0.1:6379> JSON.ARRLEN doc $..a
+1) (integer) 4
+2) (nil)
+```
 
 ### JSON.ARRPOP
 
@@ -350,7 +464,7 @@ Report the length of the JSON Array at `path` in `key`.
 
 #### Syntax
 
-```
+```sql
 JSON.ARRPOP <key> [path [index]]
 ```
 
@@ -362,7 +476,28 @@ Remove and return element from the index in the array.
 
 #### Return value
 
-[Bulk String][3], specifically the popped JSON value.
+[Array][4] of [Bulk String][3], specifically, for each path, the popped JSON value, or [null][6] element if the matching JSON value is not an array.
+
+#### Examples
+
+```sql
+127.0.0.1:6379> JSON.SET doc $ '{"a":[3], "nested": {"a": [3,4]}}'
+OK
+127.0.0.1:6379> JSON.ARRPOP doc $..a
+1) "3"
+2) "4"
+127.0.0.1:6379> JSON.GET doc $
+"[{\"a\":[],\"nested\":{\"a\":[3]}}]"
+```
+
+```sql
+127.0.0.1:6379> JSON.SET doc $ '{"a":["foo", "bar"], "nested": {"a": false}, "nested2": {"a":[]}}'
+OK
+127.0.0.1:6379> JSON.ARRPOP doc $..a
+1) "\"bar\""
+2) (nil)
+3) (nil)
+```
 
 ### JSON.ARRTRIM
 
@@ -371,7 +506,7 @@ Remove and return element from the index in the array.
 
 #### Syntax
 
-```
+```sql
 JSON.ARRTRIM <key> <path> <start> <stop>
 ```
 
@@ -383,7 +518,25 @@ This command is extremely forgiving and using it with out of range indexes will 
 
 #### Return value
 
-[Integer][2], specifically the array's new size.
+[Array][4] of [Integer][2], specifically, for each path, the array's new size, or [null][6] element if the matching JSON value is not an array.
+
+#### Examples
+
+```sql
+127.0.0.1:6379> JSON.ARRTRIM doc $..a 1 1
+1) (integer) 0
+2) (integer) 1
+127.0.0.1:6379> JSON.GET doc $
+"[{\"a\":[],\"nested\":{\"a\":[4]}}]"
+```
+
+```sql
+127.0.0.1:6379> JSON.SET doc $ '{"a":[1,2,3,2], "nested": {"a": false}}'
+OK
+127.0.0.1:6379> JSON.ARRTRIM doc $..a 1 1
+1) (integer) 1
+2) (nil)
+```
 
 ## Object commands
 
@@ -394,7 +547,7 @@ This command is extremely forgiving and using it with out of range indexes will 
 
 #### Syntax
 
-```
+```sql
 JSON.OBJKEYS <key> [path]
 ```
 
@@ -406,7 +559,18 @@ Return the keys in the object that's referenced by `path`.
 
 #### Return value
 
-[Array][4], specifically the key names in the object as [Bulk Strings][3].
+[Array][4] of [Array][4], specifically, for each path, an array of the key names in the object as [Bulk Strings][3], or [null][6] element if the matching JSON value is not an object. 
+
+#### Example
+
+```sql
+127.0.0.1:6379> JSON.SET doc $ '{"a":[3], "nested": {"a": {"b":2, "c": 1}}}'
+OK
+127.0.0.1:6379> JSON.OBJKEYS doc $..a
+1) (nil)
+2) 1) "b"
+   2) "c"
+```
 
 ### JSON.OBJLEN
 
@@ -415,7 +579,7 @@ Return the keys in the object that's referenced by `path`.
 
 #### Syntax
 
-```
+```sql
 JSON.OBJLEN <key> [path]
 ```
 
@@ -438,7 +602,7 @@ Report the number of keys in the JSON Object at `path` in `key`.
 
 #### Syntax
 
-```
+```sql
 JSON.TYPE <key> [path]
 ```
 
@@ -450,7 +614,21 @@ Report the type of JSON value at `path`.
 
 #### Return value
 
-[Simple String][1], specifically the type of value.
+[Array][4] of [Simple String][1], specifically, for each path, the type of value.
+
+#### Examples
+
+```sql
+127.0.0.1:6379> JSON.SET doc $ '{"a":2, "nested": {"a": true}, "foo": "bar"}'
+OK
+127.0.0.1:6379> JSON.TYPE doc $..foo
+1) "string"
+127.0.0.1:6379> JSON.TYPE doc $..a
+1) "integer"
+2) "boolean"
+127.0.0.1:6379> JSON.TYPE doc $..dummy
+(empty array)
+```
 
 ### JSON.DEBUG
 
@@ -459,7 +637,7 @@ Report the type of JSON value at `path`.
 
 #### Syntax
 
-```
+```sql
 JSON.DEBUG <subcommand & arguments>
 ```
 
@@ -491,7 +669,7 @@ An alias for [`JSON.DEL`](#jsondel).
 
 #### Syntax
 
-```
+```sql
 JSON.RESP <key> [path]
 ```
 
