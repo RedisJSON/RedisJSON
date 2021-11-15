@@ -31,8 +31,7 @@ The time complexity of the command does not include that of the [path](path.md#t
 ### JSON.SET
 
 > **Available since 1.0.0.**  
-> **Time complexity:**  O(M+N), where M is the size of the original value (if it exists) and N is
-> the size of the new value.
+> **Time complexity:**  O(M+N) when path is evaluated to a single value where M is the size of the original value (if it exists) and N is the size of the new value, O(M+N) when path is evaluated to multiple values where M is the size of the key and N is the size of the new value.
 
 #### Syntax
 
@@ -60,7 +59,7 @@ conditions were not met.
 ### JSON.GET
 
 > **Available since 1.0.0.**  
-> **Time complexity:**  O(N), where N is the size of the value.
+> **Time complexity:**  O(N) when path is evaluated to a single value where N is the size of the value, O(N) when path is evaluated to multiple values, where N is the size of the key.
 
 #### Syntax
 
@@ -122,7 +121,7 @@ Using multiple paths with at least one JSONPath (map with array of json values p
 ### JSON.MGET
 
 > **Available since 1.0.0.**  
-> **Time complexity:**  O(M*N), where M is the number of keys and N is the size of the value.
+> **Time complexity:**  O(M*N) when path is evaluated to a single value where M is the number of keys and N is the size of the value, O(N1+N2+...+Nm) when path is evaluated to multiple values where m is the number of keys and Ni is the size of the i-th key.
 
 #### Syntax
 
@@ -159,7 +158,7 @@ OK
 ### JSON.DEL
 
 > **Available since 1.0.0.**  
-> **Time complexity:**  O(N), where N is the size of the deleted value.
+> **Time complexity:**  O(N) when path is evaluated to a single value where N is the size of the deleted value, O(N) when path is evaluated to multiple values, where N is the size of the key.
 
 #### Syntax
 
@@ -189,7 +188,7 @@ OK
 ### JSON.NUMINCRBY
 
 > **Available since 1.0.0.**  
-> **Time complexity:**  O(1).
+> **Time complexity:**  O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key.
 
 #### Syntax
 
@@ -239,7 +238,7 @@ OK
 ### JSON.STRAPPEND
 
 > **Available since 1.0.0.**  
-> **Time complexity:**  O(N), where N is the new string's length.
+> **Time complexity:**  O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key.
 
 #### Syntax
 
@@ -273,7 +272,7 @@ OK
 ### JSON.STRLEN
 
 > **Available since 1.0.0.**  
-> **Time complexity:**  O(1).
+> **Time complexity:**  O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key.
 
 #### Syntax
 
@@ -308,7 +307,7 @@ OK
 ### JSON.ARRAPPEND
 
 > **Available since 1.0.0.**  
-> **Time complexity:**  O(1).
+> **Time complexity:**  O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key.
 
 #### Syntax
 
@@ -340,7 +339,7 @@ OK
 ### JSON.ARRINDEX
 
 > **Available since 1.0.0.**  
-> **Time complexity:**  O(N), where N is the array's size.
+> **Time complexity:**  O(N) when path is evaluated to a single value where N is the size of the array, O(N) when path is evaluated to multiple values, where N is the size of the key.
 
 #### Syntax
 
@@ -381,7 +380,7 @@ OK
 ### JSON.ARRINSERT
 
 > **Available since 1.0.0.**  
-> **Time complexity:**  O(N), where N is the array's size.
+> **Time complexity:**  O(N) when path is evaluated to a single value where N is the size of the array, O(N) when path is evaluated to multiple values, where N is the size of the key.
 
 #### Syntax
 
@@ -422,7 +421,7 @@ OK
 ### JSON.ARRLEN
 
 > **Available since 1.0.0.**  
-> **Time complexity:**  O(1).
+> **Time complexity:**  O(1) where path is evaluated to a single value, O(N) where path is evaluated to multiple values, where N is the size of the key.
 
 #### Syntax
 
@@ -459,8 +458,7 @@ OK
 ### JSON.ARRPOP
 
 > **Available since 1.0.0.**  
-> **Time complexity:**  O(N), where N is the array's size for `index` other than the last element,
-> O(1) otherwise.
+> **Time complexity:**  O(N) when path is evaluated to a single value where N is the size of the array and the specified index is not the last element, O(1) when path is evaluated to a single value and the specified index is the last element, or O(N) when path is evaluated to multiple values, where N is the size of the key.
 
 #### Syntax
 
@@ -502,7 +500,7 @@ OK
 ### JSON.ARRTRIM
 
 > **Available since 1.0.0.**  
-> **Time complexity:**  O(N), where N is the array's size.
+> **Time complexity:**  O(N) when path is evaluated to a single value where N is the size of the array, O(N) when path is evaluated to multiple values, where N is the size of the key.
 
 #### Syntax
 
@@ -543,7 +541,7 @@ OK
 ### JSON.OBJKEYS
 
 > **Available since 1.0.0.**  
-> **Time complexity:**  O(N), where N is the number of keys in the object.
+> **Time complexity:**  O(N) when path is evaluated to a single value, where N is the number of keys in the object, O(N) when path is evaluated to multiple values, where N is the size of the key.
 
 #### Syntax
 
@@ -575,7 +573,7 @@ OK
 ### JSON.OBJLEN
 
 > **Available since 1.0.0.**  
-> **Time complexity:**  O(1).
+> **Time complexity:**  O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key.
 
 #### Syntax
 
@@ -598,7 +596,7 @@ Report the number of keys in the JSON Object at `path` in `key`.
 ### JSON.TYPE
 
 > **Available since 1.0.0.**  
-> **Time complexity:**  O(1).
+> **Time complexity:**  O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key.
 
 #### Syntax
 
@@ -665,7 +663,7 @@ An alias for [`JSON.DEL`](#jsondel).
 ### JSON.RESP
 
 > **Available since 1.0.0.**  
-> **Time complexity:**  O(N), where N is the size of the JSON value.
+> **Time complexity:**  O(N) when path is evaluated to a single value, where N is the size of the value, O(N) when path is evaluated to multiple values, where N is the size of the key.
 
 #### Syntax
 
