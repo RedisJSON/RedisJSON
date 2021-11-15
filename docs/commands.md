@@ -202,7 +202,18 @@ Increments the number value stored at `path` by `number`.
 
 #### Return value
 
-[Bulk String][3], specifically the stringified new value.
+[Bulk String][3], specifically the stringified new value for each path, or [null][6] element if the matching JSON value is not a number
+
+#### Example
+
+```sql
+127.0.0.1:6379> JSON.SET doc . '{"a":"b","b":[{"a":2}, {"a":5}, {"a":"c"}]}'
+OK
+127.0.0.1:6379> JSON.NUMINCRBY doc $.a 2
+"[null]"
+127.0.0.1:6379> JSON.NUMINCRBY doc $..a 2
+"[null,4,7,null]"
+```
 
 ### JSON.NUMMULTBY
 
@@ -222,17 +233,17 @@ Multiplies the number value stored at `path` by `number`.
 
 #### Return value
 
-[Bulk String][3], specifically the stringified new values for each path.
+[Bulk String][3], specifically the stringified new values for each path, or [null][6] element if the matching JSON value is not a number.
 
 #### Example
 
 ```sql
 127.0.0.1:6379> JSON.SET doc . '{"a":"b","b":[{"a":2}, {"a":5}, {"a":"c"}]}'
 OK
-127.0.0.1:6379> JSON.NUMINCRBY doc $.a 2
+127.0.0.1:6379> JSON.NUMMULTBY doc $.a 2
 "[null]"
-127.0.0.1:6379> JSON.NUMINCRBY doc $..a 2
-"[null,4,7,null]"
+127.0.0.1:6379> JSON.NUMMULTBY doc $..a 2
+"[null,4,10,null]"
 ```
 
 ### JSON.STRAPPEND
@@ -248,7 +259,7 @@ JSON.STRAPPEND <key> [path] <json-string>
 
 #### Description
 
-Append the `json-string` value(s) the string at `path`.
+Appends the `json-string` value(s) to the string at `path`.
 
 `path` defaults to root if not provided.
 
