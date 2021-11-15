@@ -93,7 +93,7 @@ Pretty-formatted JSON is producible with `redis-cli` by following this example:
 
 [Array][4] of [Bulk Strings][3], specifically, each string is the JSON serialization of each JSON value matching a path.
 
-When using a JSONPath (as opposed to the legacy path) the root of the matching values is always an array. As opposed to the legacy path, wich returns a single value.
+When using a JSONPath (as opposed to the legacy path) the root of the matching values is always an array. As opposed to the legacy path, which returns a single value.
 
 If there are multiple paths mixing both legacy path and JSONPath, the returned value conforms to the JSONPath version (an array of values). 
 
