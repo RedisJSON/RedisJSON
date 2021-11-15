@@ -75,6 +75,7 @@ pub fn json_api_open_key_internal<M: Manager>(
     null()
 }
 
+#[must_use]
 pub fn json_api_get_at<M: Manager>(_: M, json: *const c_void, index: size_t) -> *const c_void {
     let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
@@ -105,6 +106,7 @@ pub fn json_api_get_len<M: Manager>(_: M, json: *const c_void, count: *mut libc:
     }
 }
 
+#[must_use]
 pub fn json_api_get_type<M: Manager>(_: M, json: *const c_void) -> c_int {
     json_api_get_type_internal(unsafe { &*(json.cast::<M::V>()) }) as c_int
 }
@@ -201,6 +203,7 @@ pub fn value_from_index(value: &Value, index: size_t) -> Result<&Value, RedisErr
     }
 }
 
+#[must_use]
 pub fn get_type_and_size(value: &Value) -> (JSONType, size_t) {
     RedisJSON::get_type_and_size(value)
 }
@@ -240,6 +243,7 @@ pub fn json_api_next<M: Manager>(_: M, iter: *mut c_void) -> *const c_void {
     }
 }
 
+#[must_use]
 pub fn json_api_len<M: Manager>(_: M, iter: *const c_void) -> size_t {
     let iter = unsafe { &*(iter.cast::<ResultsIterator<M::V>>()) };
     iter.results.len() as size_t
@@ -252,6 +256,7 @@ pub fn json_api_free_iter<M: Manager>(_: M, iter: *mut c_void) {
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[must_use]
 pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -> *const c_void {
     let v = unsafe { &*(val.cast::<M::V>()) };
     let mut selector = Selector::new();
@@ -273,6 +278,7 @@ pub fn json_api_is_json<M: Manager>(m: M, key: *mut rawmod::RedisModuleKey) -> c
     }
 }
 
+#[must_use]
 pub fn get_llapi_ctx() -> Context {
     Context::new(unsafe { LLAPI_CTX.unwrap() })
 }

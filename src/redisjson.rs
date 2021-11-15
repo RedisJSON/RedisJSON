@@ -24,6 +24,7 @@ use std::fmt;
 use std::fmt::Display;
 
 /// Returns normalized start index
+#[must_use]
 pub fn normalize_arr_start_index(start: i64, len: i64) -> i64 {
     if start < 0 {
         0.max(len + start)
@@ -34,6 +35,7 @@ pub fn normalize_arr_start_index(start: i64, len: i64) -> i64 {
 }
 
 /// Return normalized `(start, end)` indices as a tuple
+#[must_use]
 pub fn normalize_arr_indices(start: i64, end: i64, len: i64) -> (i64, i64) {
     // Normalize start
     let start = normalize_arr_start_index(start, len);
@@ -77,6 +79,8 @@ pub struct Path<'a> {
 }
 
 impl<'a> Path<'a> {
+    
+    #[must_use]
     pub fn new(path: &'a str) -> Path {
         let fixed_path = if path.starts_with('$') {
             None
@@ -97,16 +101,19 @@ impl<'a> Path<'a> {
         }
     }
 
+    #[must_use]
     pub fn is_legacy(&self) -> bool {
         self.fixed_path.is_some()
     }
 
+    #[must_use]
     pub fn get_path(&'a self) -> &'a str {
         self.fixed_path
             .as_ref()
             .map_or(self.original_path, String::as_str)
     }
 
+    #[must_use]
     pub fn get_original(&self) -> &'a str {
         self.original_path
     }
@@ -368,6 +375,7 @@ impl RedisJSON {
         Ok(s.to_string())
     }
 
+    #[must_use]
     pub fn value_name(value: &Value) -> &str {
         match value {
             Value::Null => "null",
@@ -385,6 +393,7 @@ impl RedisJSON {
         }
     }
 
+    #[must_use]
     pub fn get_type_and_size(data: &Value) -> (JSONType, libc::size_t) {
         match data {
             Value::Null => (JSONType::Null, 0),
