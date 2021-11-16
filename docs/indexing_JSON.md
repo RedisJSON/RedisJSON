@@ -28,6 +28,8 @@ And here's a concrete example:
 
     FT.CREATE userIdx ON JSON SCHEMA $.user.name AS name TEXT $.user.tag AS country TAG
 
+Note: The attribute is optional, but it is mandatory as you can't use a JSON Path expression inside the query (FT.SEARCH).
+
 ## Adding JSON document to the index
 
 As soon as the index is created, any pre-existing JSON document or any new JSON document added or modified is automatically indexed.
@@ -190,8 +192,9 @@ FT.SEARCH orgIdx "suite 250"
 ### JSON strings and numbers as to be indexed as TEXT and NUMERIC
 
 - JSON Strings can only be indexed as TEXT, TAG, and GEO (using the correct syntax).
-- JSON numbers can only be indexes as NUMERIC.
-- Boolean and NULL values are ignored.
+- JSON numbers can only be indexed as NUMERIC.
+- JSON booleans can only be indexed as TAG.
+- NULL values are ignored.
 
 ### SORTABLE is not supported on TAG
 
