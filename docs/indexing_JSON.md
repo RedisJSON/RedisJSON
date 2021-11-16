@@ -28,7 +28,7 @@ And here's a concrete example:
 
     FT.CREATE userIdx ON JSON SCHEMA $.user.name AS name TEXT $.user.tag AS country TAG
 
-Note: The attribute is optional, but it is mandatory as you can't use a JSON Path expression inside the query (FT.SEARCH).
+Note: The attribute is optional in `FT.CREATE`, but it is required to use attributes in attribute modifiers in the query of `FT.SEARCH` and  `FT.AGGREGATE`, and avoid using JSON Path expressions, which are not fully supported by the query parser.
 
 ## Adding JSON document to the index
 
