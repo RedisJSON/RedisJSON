@@ -27,6 +27,7 @@ theme:
 nav:
   - 'Quickstart': 'index.md'
   - 'Commands': 'commands.md'
+  - 'Search/Indexing': 'indexing_JSON.md'
   - 'Path syntax': 'path.md'
   - 'Performance': 'performance.md'
   - 'RAM usage': 'ram.md'
