@@ -1,6 +1,7 @@
 /bin/
 /target/
 /tests/pytest/logs/
+/1/
 
 # Object files
 *.o

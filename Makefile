@@ -21,7 +21,7 @@ endif
 
 #----------------------------------------------------------------------------------------------
 
-define HELP
+define HELPTEXT
 make setup         # install prerequisites
 
 make build
@@ -83,22 +83,23 @@ CARGO_FLAGS=
 
 ifeq ($(DEBUG),1)
 ifeq ($(SAN),)
-TARGET_DIR=target/debug
+TARGET_DIR=$(BINDIR)/target/debug
 else
-TARGET_DIR=target/$(RUST_TARGET)/debug
+TARGET_DIR=$(BINDIR)/target/$(RUST_TARGET)/debug
 CARGO_TOOLCHAIN = +nightly
 CARGO_FLAGS += -Zbuild-std
 endif
 else
 CARGO_FLAGS += --release
-TARGET_DIR=target/release
+TARGET_DIR=$(BINDIR)/target/release
 endif
 
 ifeq ($(PROFILE),1)
 RUSTFLAGS += " -g -C force-frame-pointers=yes"
 endif
 
-TARGET=$(TARGET_DIR)/$(MODULE_NAME)
+export CARGO_TARGET_DIR=$(BINDIR)/target
+TARGET=$(BINDIR)/$(MODULE_NAME)
 
 #----------------------------------------------------------------------------------------------
 
@@ -110,7 +111,7 @@ all: build
 
 setup:
 	./deps/readies/bin/getpy3
-	./system-setup.py
+	./sbin/system-setup.py
 
 .PHONY: setup
 
