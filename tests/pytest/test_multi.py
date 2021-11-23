@@ -1224,6 +1224,27 @@ def testErrorMessage(env):
     (nil)
     """
 
+    # TOGGLE
+    r.assertEqual(r.execute_command('JSON.TOGGLE', 'doc1', '$.object'), [None])
+    r.expect('JSON.TOGGLE', 'doc1', '$.nowhere').raiseError().contains("does not exist")
+    r.expect('JSON.TOGGLE', 'doc_none', '$.object').raiseError().contains("doesn't exist")
+    r.expect('JSON.TOGGLE', 'hash_key', '$.object').raiseError().contains("wrong Redis type")
+
+    r.expect('JSON.TOGGLE', 'doc1', '.object').raiseError().contains("not a bool")
+    r.expect('JSON.TOGGLE', 'doc1', '.nowhere').raiseError().contains("not a bool")
+    r.expect('JSON.TOGGLE', 'doc_none', '.object').raiseError().contains("doesn't exist")
+    """ Legacy 1.0.8: not relevant (only since 2.0) """
+
+    # CLEAR
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'doc1', '$.string'), 0)
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'doc1', '$.nowhere'), 0)
+    r.expect('JSON.CLEAR', 'doc_none', '$.string').raiseError().contains("doesn't exist")
+    r.expect('JSON.CLEAR', 'hash_key', '$.string').raiseError().contains("wrong Redis type")
+
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'doc1', '.string'), 0)
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'doc1', '.nowhere'), 0)
+    r.expect('JSON.CLEAR', 'doc_none', '.string').raiseError().contains("doesn't exist")
+    """ Legacy 1.0.8: not relevant (only since 2.0) """
 
     # Commands that operate on all json types
 
