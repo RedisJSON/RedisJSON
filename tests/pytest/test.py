@@ -745,19 +745,20 @@ def testLenCommands(env):
     r.assertEqual(r.execute_command('JSON.ARRLEN', 'test', '.arr'), 6)
 
     # test elements with undefined lengths
-    r.expect('JSON.ARRLEN', 'test', '.bool').raiseError()
-    r.expect('JSON.STRLEN', 'test', '.none').raiseError()
-    r.expect('JSON.OBJLEN', 'test', '.int').raiseError()
-    r.expect('JSON.STRLEN', 'test', '.num').raiseError()
+    r.expect('JSON.ARRLEN', 'test', '.bool').raiseError().contains("not an array")
+    r.expect('JSON.STRLEN', 'test', '.none').raiseError().contains("expected string but found null")
+    r.expect('JSON.OBJLEN', 'test', '.int').raiseError().contains("expected object but found integer")
+    r.expect('JSON.STRLEN', 'test', '.num').raiseError().contains("expected string but found number")
 
     # test a non existing key
-    r.expect('JSON.LEN', 'test', '.foo').raiseError()
+    r.expect('JSON.ARRLEN', 'test', '.foo').raiseError().contains("does not exist")
 
     # test an out of bounds index
-    r.expect('JSON.LEN', 'test', '.arr[999]').raiseError()
+    r.expect('JSON.ARRLEN', 'test', '.arr[999]').raiseError().contains("does not exist")
 
     # test an infinite index
-    r.expect('JSON.LEN', 'test', '.arr[-inf]').raiseError()
+    r.expect('JSON.ARRLEN', 'test', '.arr[-inf]').raiseError().contains("path error")
+    r.expect('JSON.ARRLEN', 'test', '.arr[4294967295]').raiseError().contains("does not exist")
 
 def testObjKeysCommand(env):
     """Test JSON.OBJKEYS command"""
