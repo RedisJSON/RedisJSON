@@ -435,8 +435,7 @@ workflows:
             parameters:
               platform: [focal, bionic, xenial, centos8, centos7, bullseye]
       - build-arm-platforms:
-          #@@ <<: *on-integ-and-version-tags
-          <<: *on-any-branch
+          <<: *on-integ-and-version-tags
           context: common
           matrix:
             parameters:
@@ -481,4 +480,3 @@ workflows:
     jobs:
       - performance-automation:
           context: common
-
