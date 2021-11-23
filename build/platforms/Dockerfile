@@ -34,7 +34,7 @@ ADD . /build
 
 RUN ./deps/readies/bin/getupdates
 RUN ./deps/readies/bin/getpy3
-RUN ./system-setup.py
+RUN ./sbin/system-setup.py
 
 RUN bash -l -c make
 
