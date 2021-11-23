@@ -1,7 +1,7 @@
 # BUILD redisfab/rejson:${VERSION}-${ARCH}-${OSNICK}
 
 ARG REDIS_VER=6.2.5
-ARG REDISEARCH_BRANCH=master
+ARG REDISEARCH_BRANCH=2.2
 
 # OSNICK=focal|bionic|xenial|bullseye|centos8|centos7
 ARG OSNICK=bullseye
