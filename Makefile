@@ -110,15 +110,15 @@ all: build
 #----------------------------------------------------------------------------------------------
 
 setup:
-	./deps/readies/bin/getpy3
-	./sbin/system-setup.py
+	$(SHOW)./deps/readies/bin/getpy3
+	$(SHOW)./sbin/system-setup.py
 
 .PHONY: setup
 
 #----------------------------------------------------------------------------------------------
 
 lint:
-	cargo fmt -- --check
+	$(SHOW)cargo fmt -- --check
 
 .PHONY: lint
 
@@ -136,25 +136,27 @@ RUST_SOEXT.macos=dylib
 
 build:
 ifeq ($(SAN),)
+	$(SHOW)set -e ;\
 	export RUSTFLAGS=$(RUSTFLAGS) ;\
 	cargo build --all --all-targets $(CARGO_FLAGS)
 else
+	$(SHOW)set -e ;\
 	export RUSTFLAGS=-Zsanitizer=$(SAN) ;\
 	export RUSTDOCFLAGS=-Zsanitizer=$(SAN) ;\
 	cargo $(CARGO_TOOLCHAIN) build --target $(RUST_TARGET) $(CARGO_FLAGS)
 endif
-	cp $(TARGET_DIR)/librejson.$(RUST_SOEXT.$(OS)) $(TARGET)
+	$(SHOW)cp $(TARGET_DIR)/librejson.$(RUST_SOEXT.$(OS)) $(TARGET)
 ifneq ($(DEBUG),1)
 ifneq ($(OS),macos)
-	$(call extract_symbols,$(TARGET))
+	$(SHOW)$(call extract_symbols,$(TARGET))
 endif
 endif
 
 clean:
 ifneq ($(ALL),1)
-	cargo clean
+	$(SHOW)cargo clean
 else
-	rm -rf target
+	$(SHOW)rm -rf target
 endif
 
 .PHONY: build clean
@@ -164,10 +166,10 @@ endif
 test: pytest
 
 pytest:
-	MODULE=$(abspath $(TARGET)) ./tests/pytest/tests.sh
+	$(SHOW)MODULE=$(abspath $(TARGET)) ./tests/pytest/tests.sh
 
 cargo_test:
-	cargo $(CARGO_TOOLCHAIN) test --features test --all
+	$(SHOW)cargo $(CARGO_TOOLCHAIN) test --features test --all
 
 .PHONY: pytest cargo_test
 
@@ -186,7 +188,8 @@ BENCHMARK_ARGS += --test $(BENCHMARK)
 endif
 
 bench benchmark: $(TARGET)
-	cd ./tests/benchmarks ;\
+	$(SHOW)set -e ;\
+	cd tests/benchmarks ;\
 	redisbench-admin $(BENCHMARK_ARGS)
 
 .PHONY: bench benchmark
@@ -194,48 +197,48 @@ bench benchmark: $(TARGET)
 #----------------------------------------------------------------------------------------------
 
 pack:
-	./sbin/pack.sh
+	$(SHOW)./sbin/pack.sh
 
 .PHONY: pack
 
 #----------------------------------------------------------------------------------------------
 
 docker:
-	@make -C build/platforms build
+	$(SHOW)make -C build/platforms build
 
 docker_push:
-	@make -C build/platforms publish
+	$(SHOW)make -C build/platforms publish
 
 .PHONY: docker docker_push
 
 #----------------------------------------------------------------------------------------------
 
 platform:
-	@make -C build/platforms build
+	$(SHOW)make -C build/platforms build
 ifeq ($(PUBLISH),1)
-	@make -C build/platforms publish
+	$(SHOW)make -C build/platforms publish
 endif
 
 #----------------------------------------------------------------------------------------------
 
 builddocs:
-	mkdocs build
+	$(SHOW)mkdocs build
 
 localdocs: builddocs
-	mkdocs serve
+	$(SHOW)mkdocs serve
 
 deploydocs: builddocs
-	mkdocs gh-deploy
+	$(SHOW)mkdocs gh-deploy
 
 .PHONY: builddocs localdocs deploydocs
 
 #----------------------------------------------------------------------------------------------
 
 nightly:
-	rustup default nightly
-	rustup component add rust-src
+	$(SHOW)rustup default nightly
+	$(SHOW)rustup component add rust-src
 
 stable:
-	rustup default stable
+	$(SHOW)rustup default stable
 
 .PHONY: nightly stable
