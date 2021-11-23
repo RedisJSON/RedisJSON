@@ -745,7 +745,7 @@ def testLenCommands(env):
     r.assertEqual(r.execute_command('JSON.ARRLEN', 'test', '.arr'), 6)
 
     # test elements with undefined lengths
-    r.assertEqual(r.execute_command('JSON.ARRLEN', 'test', '.bool'), None)
+    r.expect('JSON.ARRLEN', 'test', '.bool').raiseError()
     r.expect('JSON.STRLEN', 'test', '.none').raiseError()
     r.expect('JSON.OBJLEN', 'test', '.int').raiseError()
     r.expect('JSON.STRLEN', 'test', '.num').raiseError()

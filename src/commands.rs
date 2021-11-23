@@ -1,7 +1,7 @@
 use crate::error::Error;
 use crate::formatter::RedisJsonFormatter;
-use crate::manager::err_msg_json_path_doesnt_exist_with_param;
 use crate::manager::{err_msg_json_expected, err_msg_json_path_doesnt_exist_with_param_or};
+use crate::manager::{err_msg_json_path_doesnt_exist, err_msg_json_path_doesnt_exist_with_param};
 use crate::manager::{AddUpdateInfo, Manager, ReadHolder, SetUpdateInfo, UpdateInfo, WriteHolder};
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 use crate::redisjson::{normalize_arr_indices, Format, Path};
@@ -398,15 +398,17 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         }
     }
 
-    pub fn obj_len(&self, path: &str) -> Result<usize, Error> {
-        let first = self.get_first(path)?;
-        match first.get_type() {
-            SelectValueType::Object => Ok(first.len().unwrap()),
-            _ => Err(
-                err_msg_json_expected("object", self.get_type(path).unwrap().as_str())
-                    .as_str()
-                    .into(),
-            ),
+    pub fn obj_len(&self, path: &str) -> Result<ObjectLen, Error> {
+        match self.get_first(path) {
+            Ok(first) => match first.get_type() {
+                SelectValueType::Object => Ok(ObjectLen::Len(first.len().unwrap())),
+                _ => Err(
+                    err_msg_json_expected("object", self.get_type(path).unwrap().as_str())
+                        .as_str()
+                        .into(),
+                ),
+            },
+            _ => Ok(ObjectLen::NoneExisting),
         }
     }
 
@@ -467,7 +469,11 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     .into()
             })
             .collect::<Vec<RedisValue>>();
-        Ok(res.into())
+        if res.is_empty() {
+            Err(Error::from(err_msg_json_path_doesnt_exist()))
+        } else {
+            Ok(res.into())
+        }
     }
 
     pub fn arr_index_legacy(
@@ -478,12 +484,13 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         end: i64,
     ) -> Result<RedisValue, Error> {
         let arr = self.get_first(path)?;
-        Ok(
-            match self.arr_first_index_single(arr, &scalar_value, start, end) {
-                FoundIndex::NotArray => RedisValue::Integer(-1),
-                i => i.into(),
-            },
-        )
+        match self.arr_first_index_single(arr, &scalar_value, start, end) {
+            FoundIndex::NotArray => Err(Error::from(err_msg_json_expected(
+                "array",
+                self.get_type(path).unwrap().as_str(),
+            ))),
+            i => Ok(i.into()),
+        }
     }
 
     /// Returns first array index of `v` in `arr`, or NotFound if not found in `arr`, or NotArray if `arr` is not an array
@@ -1377,6 +1384,12 @@ impl From<FoundIndex> for RedisValue {
     }
 }
 
+pub enum ObjectLen {
+    Len(usize),
+    NoneExisting,
+    NotObject,
+}
+
 pub fn command_json_arr_index<M: Manager>(
     manager: M,
     ctx: &Context,
@@ -1403,15 +1416,20 @@ pub fn command_json_arr_index<M: Manager>(
         )));
     }
 
-    let res = key
-        .get_value()?
-        .map_or(Ok(RedisValue::Integer(-1)), |doc| {
+    let res = key.get_value()?.map_or_else(
+        || {
+            Err(Error::from(err_msg_json_path_doesnt_exist_with_param(
+                path.get_original(),
+            )))
+        },
+        |doc| {
             if path.is_legacy() {
                 KeyValue::new(doc).arr_index_legacy(path.get_path(), scalar_value, start, end)
             } else {
                 KeyValue::new(doc).arr_index(path.get_path(), scalar_value, start, end)
             }
-        })?;
+        },
+    )?;
 
     Ok(res)
 }
@@ -1527,9 +1545,6 @@ pub fn command_json_arr_len<M: Manager>(
             return Err(RedisError::nonexistent_key());
         }
     };
-    // let root = key
-    //     .get_value()?
-    //     .ok_or_else(RedisError::nonexistent_key)?;
     let values = find_all_values(path.get_path(), root, |v| {
         v.get_type() == SelectValueType::Array
     })?;
@@ -1538,7 +1553,18 @@ pub fn command_json_arr_len<M: Manager>(
     for v in values {
         let cur_val: RedisValue = match v {
             Some(v) => (v.len().unwrap() as i64).into(),
-            _ => RedisValue::Null,
+            _ => {
+                if !is_legacy {
+                    RedisValue::Null
+                } else {
+                    return Err(RedisError::String(
+                        err_msg_json_path_doesnt_exist_with_param_or(
+                            path.get_original(),
+                            "not an array",
+                        ),
+                    ));
+                }
+            }
         };
         if !is_legacy {
             res.push(cur_val);
@@ -1744,20 +1770,19 @@ fn json_obj_keys<M>(redis_key: &mut M::ReadHolder, path: &str) -> RedisResult
 where
     M: Manager,
 {
-    let root = redis_key.get_value()?;
-    let res: RedisValue = match root {
-        Some(root) => {
-            let values = find_all_values(path, root, |v| v.get_type() == SelectValueType::Object)?;
-            let mut res: Vec<RedisValue> = vec![];
-            for v in values {
-                res.push(match v {
-                    Some(v) => v.keys().unwrap().collect::<Vec<&str>>().into(),
-                    _ => RedisValue::Null,
-                });
-            }
-            res.into()
+    let root = redis_key
+        .get_value()?
+        .ok_or_else(RedisError::nonexistent_key)?;
+    let res: RedisValue = {
+        let values = find_all_values(path, root, |v| v.get_type() == SelectValueType::Object)?;
+        let mut res: Vec<RedisValue> = vec![];
+        for v in values {
+            res.push(match v {
+                Some(v) => v.keys().unwrap().collect::<Vec<&str>>().into(),
+                _ => RedisValue::Null,
+            });
         }
-        None => RedisValue::Null,
+        res.into()
     };
     Ok(res.into())
 }
@@ -1766,14 +1791,21 @@ fn json_obj_keys_legacy<M>(redis_key: &mut M::ReadHolder, path: &str) -> RedisRe
 where
     M: Manager,
 {
-    let value = match redis_key.get_value()? {
-        Some(doc) => KeyValue::new(doc)
-            .obj_keys(path)?
-            .collect::<Vec<&str>>()
-            .into(),
-        None => RedisValue::Null,
+    let root = match redis_key.get_value()? {
+        Some(v) => v,
+        _ => return Ok(RedisValue::Null),
     };
-
+    let value = match KeyValue::new(root).get_first(path) {
+        Ok(v) => match v.get_type() {
+            SelectValueType::Object => v.keys().unwrap().collect::<Vec<&str>>().into(),
+            _ => {
+                return Err(RedisError::String(
+                    err_msg_json_path_doesnt_exist_with_param_or(path, "not an object"),
+                ))
+            }
+        },
+        _ => RedisValue::Null,
+    };
     Ok(value)
 }
 
@@ -1808,7 +1840,11 @@ where
             })
             .collect::<Vec<RedisValue>>()
             .into(),
-        None => RedisValue::Null,
+        None => {
+            return Err(RedisError::String(
+                err_msg_json_path_doesnt_exist_with_param_or(path, "not an object"),
+            ))
+        }
     };
     Ok(res)
 }
@@ -1818,7 +1854,10 @@ where
     M: Manager,
 {
     match redis_key.get_value()? {
-        Some(doc) => Ok(RedisValue::Integer(KeyValue::new(doc).obj_len(path)? as i64)),
+        Some(doc) => match KeyValue::new(doc).obj_len(path)? {
+            ObjectLen::Len(l) => Ok(RedisValue::Integer(l as i64)),
+            _ => Ok(RedisValue::Null),
+        },
         None => Ok(RedisValue::Null),
     }
 }
