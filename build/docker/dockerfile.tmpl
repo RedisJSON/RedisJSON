@@ -10,7 +10,7 @@ COPY --from=redis /usr/local/ /usr/local/
 ADD . /build
 
 {% include 'setup_environment.yml' %}
-RUN ./system-setup.py
+RUN ./sbin/system-setup.py
 
 RUN bash -l -c make
 
