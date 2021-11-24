@@ -641,7 +641,7 @@ def testObjKeysCommand(env):
     r.assertEqual(res, None)
 
     # Test missing key
-    r.expect('JSON.OBJKEYS', 'doc1', '$.nowhere').raiseError()
+    r.assertEqual(r.execute_command('JSON.OBJKEYS', 'doc1', '$.nowhere'), [])
 
     # Test default path
     res = r.execute_command('JSON.OBJKEYS', 'doc1')
@@ -664,7 +664,7 @@ def testObjLenCommand(env):
     r.expect('JSON.OBJLEN', 'non_existing_doc', '$..a').raiseError().contains("does not exist")
 
     # Test missing path
-    r.expect('JSON.OBJLEN', 'doc1', '$.nowhere').raiseError().contains("does not exist")
+    r.assertEqual(r.execute_command('JSON.OBJLEN', 'doc1', '$.nowhere'), [])
 
 
     # Test legacy
@@ -858,7 +858,7 @@ def testRespCommand(env):
     r.assertEqual(resSingle, [['{', 'A1_B1', 10, 'A1_B2', 'false', 'A1_B3', ['{', 'A1_B3_C1', None, 'A1_B3_C2', ['[', 'A1_B3_C2_D1_1', 'A1_B3_C2_D1_2', '-19.5', 'A1_B3_C2_D1_4', 'A1_B3_C2_D1_5', ['{', 'A1_B3_C2_D1_6_E1', 'true']], 'A1_B3_C3', ['[', 1]], 'A1_B4', ['{', 'A1_B4_C1', 'foo']]])
 
     # Test missing path
-    r.expect('JSON.RESP', 'doc1', '$.nowhere').raiseError()
+    r.assertEqual(r.execute_command('JSON.RESP', 'doc1', '$.nowhere'), [])
 
     # Test missing key
     res = r.execute_command('JSON.RESP', 'non_existing_doc', '$..a')
@@ -984,7 +984,7 @@ def testErrorMessage(env):
 
     # ARRAPPEND
     r.assertEqual(r.execute_command('JSON.ARRAPPEND', 'doc1', '$.string', '"abc"'), [None])
-    r.expect('JSON.ARRAPPEND', 'doc1', '$.nowhere', '"abc"').raiseError().contains("does not exist")
+    r.assertEqual(r.execute_command('JSON.ARRAPPEND', 'doc1', '$.nowhere', '"abc"'), [])
     r.expect('JSON.ARRAPPEND', 'doc_none', '$.string', '"abc"').raiseError().contains("doesn't exist")
     r.expect('JSON.ARRAPPEND', 'hash_key', '$.string', '"abc"').raiseError().contains("wrong Redis type")
 
@@ -1004,7 +1004,7 @@ def testErrorMessage(env):
 
     # ARRPOP
     r.assertEqual(r.execute_command('JSON.ARRPOP', 'doc1', '$.string', '"abc"'), [None])
-    r.expect('JSON.ARRPOP', 'doc1', '$.nowhere', '"abc"').raiseError().contains("does not exist")
+    r.assertEqual(r.execute_command('JSON.ARRPOP', 'doc1', '$.nowhere', '"abc"'), [])
     r.expect('JSON.ARRPOP', 'doc_none', '$..string', '"abc"').raiseError().contains("doesn't exist")
     r.expect('JSON.ARRPOP', 'hash_key', '$..string', '"abc"').raiseError().contains("wrong Redis type")
 
@@ -1024,7 +1024,7 @@ def testErrorMessage(env):
 
     # ARRINDEX
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'doc1', '$.number', '"abc"'), [None])
-    r.expect('JSON.ARRINDEX', 'doc1', '$.nowhere', '"abc"').raiseError().contains("does not exist")
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'doc1', '$.nowhere', '"abc"'), [])
     r.expect('JSON.ARRINDEX', 'doc_none', '$.number', '"abc"').raiseError().contains("does not exist")
     r.expect('JSON.ARRINDEX', 'hash_key', '$.number', '"abc"').raiseError().contains("wrong Redis type")
 
@@ -1044,7 +1044,7 @@ def testErrorMessage(env):
 
     # ARRINSERT
     r.assertEqual(r.execute_command('JSON.ARRINSERT', 'doc1', '$.string', 0, '"abc"'), [None])
-    r.expect('JSON.ARRINSERT', 'doc1', '$.nowhere', 0, '"abc"').raiseError().contains("does not exist")
+    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'doc1', '$.nowhere', 0, '"abc"'), [])
     r.expect('JSON.ARRINSERT', 'doc_none', '$.string', 0, '"abc"').raiseError().contains("doesn't exist")
     r.expect('JSON.ARRINSERT', 'hash_key', '$.string', 0, '"abc"').raiseError().contains("wrong Redis type")
 
@@ -1064,7 +1064,7 @@ def testErrorMessage(env):
 
     # ARRLEN
     r.assertEqual(r.execute_command('JSON.ARRLEN', 'doc1', '$.string', '"abc"'), [None])
-    r.expect('JSON.ARRLEN', 'doc1', '$.nowhere', '"abc"').raiseError().contains("does not exist")
+    r.assertEqual(r.execute_command('JSON.ARRLEN', 'doc1', '$.nowhere', '"abc"'), [])
     r.expect('JSON.ARRLEN', 'doc_none', '$.string', '"abc"').raiseError().contains("doesn't exist")
     r.expect('JSON.ARRLEN', 'hash_key', '$.string', '"abc"').raiseError().contains("wrong Redis type")
 
@@ -1084,7 +1084,7 @@ def testErrorMessage(env):
 
 # ARRTRIM
     r.assertEqual(r.execute_command('JSON.ARRTRIM', 'doc1', '$.string', 0, 1), [None])
-    r.expect('JSON.ARRTRIM', 'doc1', '$.nowhere', 0, 1).raiseError().contains("does not exist")
+    r.assertEqual(r.execute_command('JSON.ARRTRIM', 'doc1', '$.nowhere', 0, 1), [])
     r.expect('JSON.ARRTRIM', 'doc_none', '$.string', 0, 1).raiseError().contains("doesn't exist")
     r.expect('JSON.ARRTRIM', 'hash_key', '$.string', 0, 1).raiseError().contains("wrong Redis type")
 
@@ -1104,7 +1104,7 @@ def testErrorMessage(env):
 
     # OBJKEYS
     r.assertEqual(r.execute_command('JSON.OBJKEYS', 'doc1', '$.string'), [None])
-    r.expect('JSON.OBJKEYS', 'doc1', '$.nowhere').raiseError().contains("does not exist")
+    r.assertEqual(r.execute_command('JSON.OBJKEYS', 'doc1', '$.nowhere'), [])
     r.expect('JSON.OBJKEYS', 'doc_none', '$.string').raiseError().contains("doesn't exist")
     r.expect('JSON.OBJKEYS', 'hash_key', '$.string').raiseError().contains("wrong Redis type")
 
@@ -1124,7 +1124,7 @@ def testErrorMessage(env):
 
     # OBJLEN
     r.assertEqual(r.execute_command('JSON.OBJLEN', 'doc1', '$.string'), [None])
-    r.expect('JSON.OBJLEN', 'doc1', '$.nowhere').raiseError().contains("does not exist")
+    r.assertEqual(r.execute_command('JSON.OBJLEN', 'doc1', '$.nowhere'), [])
     r.expect('JSON.OBJLEN', 'doc_none', '$.string').raiseError().contains("does not exist")
     r.expect('JSON.OBJLEN', 'hash_key', '.string').raiseError().contains("wrong Redis type")
 
@@ -1144,7 +1144,7 @@ def testErrorMessage(env):
 
     # NUMINCRBY
     r.assertEqual(r.execute_command('JSON.NUMINCRBY', 'doc1', '$.string', 3), '[null]')
-    r.expect('JSON.NUMINCRBY', 'doc1', '$.nowhere', 3).raiseError().contains("does not exist")
+    r.assertEqual(r.execute_command('JSON.NUMINCRBY', 'doc1', '$.nowhere', 3), '[]')
     r.expect('JSON.NUMINCRBY', 'doc_none', '$.string', 3).raiseError().contains("doesn't exist")
     r.expect('JSON.NUMINCRBY', 'hash_key', '$.string', 3).raiseError().contains("wrong Redis type")
 
@@ -1165,7 +1165,7 @@ def testErrorMessage(env):
 
     # NUMMULTBY
     r.assertEqual(r.execute_command('JSON.NUMMULTBY', 'doc1', '$.string', 3), '[null]')
-    r.expect('JSON.NUMMULTBY', 'doc1', '$.nowhere', 3).raiseError().contains("does not exist")
+    r.assertEqual(r.execute_command('JSON.NUMMULTBY', 'doc1', '$.nowhere', 3), '[]')
     r.expect('JSON.NUMMULTBY', 'doc_none', '$.string', 3).raiseError().contains("doesn't exist")
     r.expect('JSON.NUMMULTBY', 'hash_key', '$.string', 3).raiseError().contains("wrong Redis type")
 
@@ -1185,7 +1185,7 @@ def testErrorMessage(env):
 
     # STRAPPEND
     r.assertEqual(r.execute_command('JSON.STRAPPEND', 'doc1', '$.number', '"abc"'), [None])
-    r.expect('JSON.STRAPPEND', 'doc1', '$.nowhere', '"abc"').raiseError().contains("does not exist")
+    r.assertEqual(r.execute_command('JSON.STRAPPEND', 'doc1', '$.nowhere', '"abc"'), [])
     r.expect('JSON.STRAPPEND', 'doc_none', '$.number', '"abc"').raiseError().contains("doesn't exist")
     r.expect('JSON.STRAPPEND', 'hash_key', '$.number', '"abc"').raiseError().contains("wrong Redis type")
 
@@ -1206,7 +1206,7 @@ def testErrorMessage(env):
 
     # STRLEN
     r.assertEqual(r.execute_command('JSON.STRLEN', 'doc1', '$.object', '"abc"'), [None])
-    r.expect('JSON.STRLEN', 'doc1', '$.nowhere', '"abc"').raiseError().contains("does not exist")
+    r.assertEqual(r.execute_command('JSON.STRLEN', 'doc1', '$.nowhere', '"abc"'), [])
     r.expect('JSON.STRLEN', 'doc_none', '$.object', '"abc"').raiseError().contains("doesn't exist")
     r.expect('JSON.STRLEN', 'hash_key', '$.object', '"abc"').raiseError().contains("wrong Redis type")
 
@@ -1226,7 +1226,7 @@ def testErrorMessage(env):
 
     # TOGGLE
     r.assertEqual(r.execute_command('JSON.TOGGLE', 'doc1', '$.object'), [None])
-    r.expect('JSON.TOGGLE', 'doc1', '$.nowhere').raiseError().contains("does not exist")
+    r.assertEqual(r.execute_command('JSON.TOGGLE', 'doc1', '$.nowhere'), [])
     r.expect('JSON.TOGGLE', 'doc_none', '$.object').raiseError().contains("doesn't exist")
     r.expect('JSON.TOGGLE', 'hash_key', '$.object').raiseError().contains("wrong Redis type")
 
@@ -1273,7 +1273,7 @@ def testErrorMessage(env):
     """
 
     # RESP
-    r.expect('JSON.RESP', 'doc1', '$.nowhere').raiseError().contains("does not exist")
+    r.assertEqual(r.execute_command('JSON.RESP', 'doc1', '$.nowhere'), [])
     r.assertEqual(r.execute_command('JSON.RESP', 'doc_none', '$.object'), None)
     r.assertEqual(r.execute_command('JSON.RESP', 'doc_none', '$.object'), None)
     r.expect('JSON.RESP', 'hash_key', '$.object').raiseError().contains("wrong Redis type")
