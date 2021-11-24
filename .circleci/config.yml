@@ -72,7 +72,7 @@ commands:
           name: System setup
           command: |
             python3 -m pip list -v
-            ./system-setup.py
+            ./sbin/system-setup.py
             python3 -m pip list -v
             source $HOME/.cargo/env
             rustc --version
