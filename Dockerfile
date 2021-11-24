@@ -69,7 +69,7 @@ RUN mkdir -p /var/opt/redislabs/artifacts
 RUN chown -R redis:redis /var/opt/redislabs
 COPY --from=builder /build/bin/artifacts/ /var/opt/redislabs/artifacts
 RUN true
-COPY --from=builder /build/target/release/rejson.so "$LIBDIR"
+COPY --from=builder /build/bin/linux-${ARCH}-release/rejson.so "$LIBDIR"
 RUN true
 COPY --from=builder /build/bin/redisearch.so "$LIBDIR"
 
