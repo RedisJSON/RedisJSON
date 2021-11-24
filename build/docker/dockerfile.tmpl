@@ -26,7 +26,8 @@ RUN set -e ;\
     rm -f *.aof *.rdb ;\
     tar -czf /build/bin/artifacts/pytest-logs-{{REDIS_ARCH}}-{{REDIS_OSNICK}}.tgz .
 {% endif %}
-RUN BRANCH={{REDISEARCH_VERSION}} ./sbin/get-redisearch
+RUN BRANCH={{REDISEARCH_VERSION}} ./sbin/get-redisearch ;\
+    cp /build/bin/linux-${REDIS_OSNICK}-${REDIS_ARCH}/RediSearch/redisearch.so /build/bin/
 
 #----------------------------------------------------------------------------------------------
 FROM redisfab/redis:{{REDIS_VERSION}}-{{REDIS_ARCH}}-{{REDIS_OSNICK}}
@@ -34,8 +35,9 @@ WORKDIR /data
 {% set LIBDIR= "/usr/lib/redis/modules" %}
 RUN mkdir -p {{LIBDIR}}
 
-COPY --from=builder /build/target/release/rejson.so {{LIBDIR}}/rejson.so
-COPY --from=builder /build/bin/linux-{{REDIS_OSNICK}}-{{REDIS_ARCH}}/RediSearch/module-enterprise.so {{LIBDIR}}/redisearch.so
+COPY --from=builder /build/bin/linux-${{REDIS_ARCH}}-release/rejson.so {{LIBDIR}}/rejson.so
+RUN true
+COPY --from=builder /build/bin/redisearch.so {{LIBDIR}}/redisearch.so
 RUN chown -R redis:redis {{LIBDIR}}
 EXPOSE 6379
 CMD ["redis-server", "--loadmodule", "{{LIBDIR}}/rejson.so", "--loadmodule", "{{LIBDIR}}/redisearch.so"]
