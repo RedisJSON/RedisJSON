@@ -661,11 +661,10 @@ def testObjLenCommand(env):
     r.assertEqual(res, [2])
 
     # Test missing key
-    res = r.execute_command('JSON.OBJLEN', 'non_existing_doc', '$..a')
-    r.assertEqual(res, None)
+    r.expect('JSON.OBJLEN', 'non_existing_doc', '$..a').raiseError().contains("does not exist")
 
     # Test missing path
-    r.expect('JSON.OBJLEN', 'doc1', '$.nowhere').raiseError()
+    r.expect('JSON.OBJLEN', 'doc1', '$.nowhere').raiseError().contains("does not exist")
 
 
     # Test legacy
@@ -680,7 +679,8 @@ def testObjLenCommand(env):
     r.assertEqual(res, None)
 
     # Test missing path
-    r.expect('JSON.OBJLEN', 'doc1', '.nowhere').raiseError()
+    res = r.execute_command('JSON.OBJLEN', 'doc1', '.nowhere')
+    r.assertEqual(res, None)
 
     # Test default path
     res = r.execute_command('JSON.OBJLEN', 'doc1')
@@ -978,122 +978,280 @@ def testErrorMessage(env):
     res = r.execute_command('JSON.GET', 'doc1', '$')
     r.assertEqual([types_data], json.loads(res))
 
+    r.assertEqual(r.execute_command('HSET', 'hash_key', 'a', '1', 'b', '2'), 2)
+
     # Notice: redis client is parsing error responses and trimming prefixes such as 'ERR'
 
     # ARRAPPEND
     r.assertEqual(r.execute_command('JSON.ARRAPPEND', 'doc1', '$.string', '"abc"'), [None])
     r.expect('JSON.ARRAPPEND', 'doc1', '$.nowhere', '"abc"').raiseError().contains("does not exist")
     r.expect('JSON.ARRAPPEND', 'doc_none', '$.string', '"abc"').raiseError().contains("doesn't exist")
+    r.expect('JSON.ARRAPPEND', 'hash_key', '$.string', '"abc"').raiseError().contains("wrong Redis type")
 
     r.expect('JSON.ARRAPPEND', 'doc1', '.string', '"abc"').raiseError().contains("not an array")
-    r.expect('JSON.ARRAPPEND', 'doc1', '.nowhere', '"abc"').raiseError().contains("not an array")
+    r.expect('JSON.ARRAPPEND', 'doc1', '.nowhere', '"abc"').raiseError().contains("does not exist")
     r.expect('JSON.ARRAPPEND', 'doc_none', '.string', '"abc"').raiseError().contains("doesn't exist")
+    """ Legacy 1.0.8
+    json.set doc1 .  '{"a":[0, 1, 2, 3, 4, 5], "b":{"x":100}}'
+    OK
+    json.arrappend doc1 .b '1'
+    (error) ERR wrong type of path value - expected array but found object
+    json.arrappend doc1 .bzzz '1'
+    (error) ERR key 'bzzz' does not exist at level 0 in path
+    json.arrappend doc1zzz .b '1'
+    (error) WRONGTYPE Operation against a key holding the wrong kind of value
+    """
 
     # ARRPOP
     r.assertEqual(r.execute_command('JSON.ARRPOP', 'doc1', '$.string', '"abc"'), [None])
     r.expect('JSON.ARRPOP', 'doc1', '$.nowhere', '"abc"').raiseError().contains("does not exist")
     r.expect('JSON.ARRPOP', 'doc_none', '$..string', '"abc"').raiseError().contains("doesn't exist")
+    r.expect('JSON.ARRPOP', 'hash_key', '$..string', '"abc"').raiseError().contains("wrong Redis type")
 
     r.expect('JSON.ARRPOP', 'doc1', '.string', '"abc"').raiseError().contains("not an array")
-    r.expect('JSON.ARRPOP', 'doc1', '.nowhere', '"abc"').raiseError().contains("not an array")
+    r.expect('JSON.ARRPOP', 'doc1', '.nowhere', '"abc"').raiseError().contains("does not exist")
     r.expect('JSON.ARRPOP', 'doc_none', '.string', '"abc"').raiseError().contains("doesn't exist")
+    """ Legacy 1.0.8:
+    json.set doc1 .  '{"a":[0, 1, 2, 3, 4, 5], "b":{"x":100}}'
+    OK
+    json.arrpop doc1 .b 1
+    (error) ERR wrong type of path value - expected array but found object
+    json.arrpop doc1 .bzzz 1
+    (error) ERR key 'bzzz' does not exist at level 0 in path
+    json.arrpop doc1zzz .b 1
+    (error) WRONGTYPE Operation against a key holding the wrong kind of value    
+    """
 
     # ARRINDEX
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'doc1', '$.number', '"abc"'), [None])
-    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'doc1', '$.nowhere', '"abc"'), [])
-    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'doc_none', '$.number', '"abc"'), -1)
+    r.expect('JSON.ARRINDEX', 'doc1', '$.nowhere', '"abc"').raiseError().contains("does not exist")
+    r.expect('JSON.ARRINDEX', 'doc_none', '$.number', '"abc"').raiseError().contains("does not exist")
+    r.expect('JSON.ARRINDEX', 'hash_key', '$.number', '"abc"').raiseError().contains("wrong Redis type")
 
-    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'doc1', '.number', '"abc"'), -1)
+    r.expect('JSON.ARRINDEX', 'doc1', '.number', '"abc"').raiseError().contains("expected array")
     r.expect('JSON.ARRINDEX', 'doc1', '.nowhere', '"abc"').raiseError().contains("does not exist")
-    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'doc_none', '.number', '"abc"'), -1)
+    r.expect('JSON.ARRINDEX', 'doc_none', '.number', '"abc"').raiseError().contains("does not exist")
+    """ Legacy 1.0.8
+    json.set doc1 .  '{"a":[0, 1, 2, 3, 4, 5], "b":{"x":100}}'
+    OK
+    json.arrindex doc1 .b '1'
+    (error) ERR wrong type of path value - expected array but found object
+    json.arrindex doc1 .bzzz '1'
+    (error) ERR key 'bzzz' does not exist at level 0 in path
+    json.arrindex doc1zzz .b '1'
+    (error) WRONGTYPE Operation against a key holding the wrong kind of value
+    """
 
     # ARRINSERT
     r.assertEqual(r.execute_command('JSON.ARRINSERT', 'doc1', '$.string', 0, '"abc"'), [None])
     r.expect('JSON.ARRINSERT', 'doc1', '$.nowhere', 0, '"abc"').raiseError().contains("does not exist")
     r.expect('JSON.ARRINSERT', 'doc_none', '$.string', 0, '"abc"').raiseError().contains("doesn't exist")
+    r.expect('JSON.ARRINSERT', 'hash_key', '$.string', 0, '"abc"').raiseError().contains("wrong Redis type")
 
     r.expect('JSON.ARRINSERT', 'doc1', '.string', 0, '"abc"').raiseError().contains("not an array")
-    r.expect('JSON.ARRINSERT', 'doc1', '.nowhere', 0, '"abc"').raiseError().contains("not an array")
+    r.expect('JSON.ARRINSERT', 'doc1', '.nowhere', 0, '"abc"').raiseError().contains("does not exist")
     r.expect('JSON.ARRINSERT', 'doc_none', '.string', 0, '"abc"').raiseError().contains("doesn't exist")
+    """ Legacy 1.0.8:
+    json.set doc1 .  '{"a":[0, 1, 2, 3, 4, 5], "b":{"x":100}}'
+    OK
+    json.arrinsert doc1 .b 0 '1'
+    (error) ERR wrong type of path value - expected array but found object
+    json.arrinsert doc1 .bzzz 0 '1'
+    (error) ERR key 'bzzz' does not exist at level 0 in path
+    json.arrinsert doc1zzz .b 0 '1'
+    (error) WRONGTYPE Operation against a key holding the wrong kind of value
+    """
 
     # ARRLEN
     r.assertEqual(r.execute_command('JSON.ARRLEN', 'doc1', '$.string', '"abc"'), [None])
     r.expect('JSON.ARRLEN', 'doc1', '$.nowhere', '"abc"').raiseError().contains("does not exist")
     r.expect('JSON.ARRLEN', 'doc_none', '$.string', '"abc"').raiseError().contains("doesn't exist")
+    r.expect('JSON.ARRLEN', 'hash_key', '$.string', '"abc"').raiseError().contains("wrong Redis type")
 
-    r.assertEqual(r.execute_command('JSON.ARRLEN', 'doc1', '.string', '"abc"'), None)
+    r.expect('JSON.ARRLEN', 'doc1', '.string', '"abc"').raiseError().contains("not an array")
     r.expect('JSON.ARRLEN', 'doc1', '.nowhere', '"abc"').raiseError().contains("does not exist")
     r.assertEqual(r.execute_command('JSON.ARRLEN', 'doc_none', '.string', '"abc"'), None)
+    """ Legacy 1.0.8:
+    json.set doc1 .  '{"a":[0, 1, 2, 3, 4, 5], "b":{"x":100}}'
+    OK
+    json.arrlen doc1 .b
+    (error) ERR wrong type of path value - expected array but found object
+    json.arrlen doc1 .zzz
+    (error) ERR key 'zzz' does not exist at level 0 in path
+    json.arrlen doc1zz .zzz
+    (nil)
+    """
 
-    # ARRTRIM
+# ARRTRIM
     r.assertEqual(r.execute_command('JSON.ARRTRIM', 'doc1', '$.string', 0, 1), [None])
     r.expect('JSON.ARRTRIM', 'doc1', '$.nowhere', 0, 1).raiseError().contains("does not exist")
     r.expect('JSON.ARRTRIM', 'doc_none', '$.string', 0, 1).raiseError().contains("doesn't exist")
+    r.expect('JSON.ARRTRIM', 'hash_key', '$.string', 0, 1).raiseError().contains("wrong Redis type")
 
     r.expect('JSON.ARRTRIM', 'doc1', '.string', 0, 1).raiseError().contains("not an array")
     r.expect('JSON.ARRTRIM', 'doc1', '.nowhere', 0, 1).raiseError().contains("not an array")
     r.expect('JSON.ARRTRIM', 'doc_none', '.string', 0, 1).raiseError().contains("doesn't exist")
+    """ Legacy 1.0.8:
+    json.set doc1 .  '{"a":[0, 1, 2, 3, 4, 5], "b":{"x":100}}'
+    OK
+    json.arrtrim doc1 .b 0 3
+    (error) ERR wrong type of path value - expected array but found object
+    json.arrtrim doc1 .bzzz 0 3
+    (error) ERR key 'bzzz' does not exist at level 0 in path
+    json.arrtrim doc1zzz .b 0 3
+    (error) WRONGTYPE Operation against a key holding the wrong kind of value
+    """
 
     # OBJKEYS
     r.assertEqual(r.execute_command('JSON.OBJKEYS', 'doc1', '$.string'), [None])
     r.expect('JSON.OBJKEYS', 'doc1', '$.nowhere').raiseError().contains("does not exist")
-    r.assertEqual(r.execute_command('JSON.OBJKEYS', 'doc_none', '$.string'), None)
+    r.expect('JSON.OBJKEYS', 'doc_none', '$.string').raiseError().contains("doesn't exist")
+    r.expect('JSON.OBJKEYS', 'hash_key', '$.string').raiseError().contains("wrong Redis type")
 
-    r.expect('JSON.OBJKEYS', 'doc1', '.string').raiseError().contains("expected object but found string")
-    r.expect('JSON.OBJKEYS', 'doc1', '.nowhere').raiseError().contains("does not exist")
+    r.expect('JSON.OBJKEYS', 'doc1', '.string').raiseError().contains("not an object")
+    r.assertEqual(r.execute_command('JSON.OBJKEYS', 'doc1', '.nowhere'), None)
     r.assertEqual(r.execute_command('JSON.OBJKEYS', 'doc_none', '.string'), None)
+    """ Legacy 1.0.8:
+    json.set doc1 .  '{"a":[0, 1, 2, 3, 4, 5], "b":{"x":100}}'
+    OK
+    json.objkeys doc1 .a
+    (error) ERR wrong type of path value - expected object but found array
+    json.objkeys doc1 .azzz
+    (nil)
+    json.objkeys doc1zzz .a
+    (nil)
+    """
 
     # OBJLEN
     r.assertEqual(r.execute_command('JSON.OBJLEN', 'doc1', '$.string'), [None])
     r.expect('JSON.OBJLEN', 'doc1', '$.nowhere').raiseError().contains("does not exist")
-    r.assertEqual(r.execute_command('JSON.OBJLEN', 'doc_none', '$.string'), None)
+    r.expect('JSON.OBJLEN', 'doc_none', '$.string').raiseError().contains("does not exist")
+    r.expect('JSON.OBJLEN', 'hash_key', '.string').raiseError().contains("wrong Redis type")
 
     r.expect('JSON.OBJLEN', 'doc1', '.boolean').raiseError().contains("expected object but found boolean")
-    r.expect('JSON.OBJLEN', 'doc1', '.nowhere').raiseError().contains("does not exist")
+    r.assertEqual(r.execute_command('JSON.OBJLEN', 'doc1', '.nowhere'), None)
     r.assertEqual(r.execute_command('JSON.OBJLEN', 'doc_none', '.string'), None)
+    """ Legacy 1.0.8:
+   json.set doc1 .  '{"a":[0, 1, 2, 3, 4, 5], "b":{"x":100}}'
+   OK
+   json.objkeys doc1 .a
+   (error) ERR wrong type of path value - expected object but found array
+   json.objkeys doc1 .azzz
+   (nil)
+   json.objkeys doc1zzz .a
+   (nil)
+   """
 
     # NUMINCRBY
     r.assertEqual(r.execute_command('JSON.NUMINCRBY', 'doc1', '$.string', 3), '[null]')
     r.expect('JSON.NUMINCRBY', 'doc1', '$.nowhere', 3).raiseError().contains("does not exist")
     r.expect('JSON.NUMINCRBY', 'doc_none', '$.string', 3).raiseError().contains("doesn't exist")
+    r.expect('JSON.NUMINCRBY', 'hash_key', '$.string', 3).raiseError().contains("wrong Redis type")
 
     r.expect('JSON.NUMINCRBY', 'doc1', '.string', 3).raiseError().contains("does not contains a number")
     r.expect('JSON.NUMINCRBY', 'doc1', '.nowhere', 3).raiseError().contains("does not contains a number")
     r.expect('JSON.NUMINCRBY', 'doc_none', '.string', 3).raiseError().contains("doesn't exist")
+    """ Legacy 1.0.8:
+     json.set doc1 .  '{"a":[0, 1, 2, 3, 4, 5], "b":{"x":100}}'
+    OK
+    json.numincrby doc1 .b 1
+    (error) ERR wrong type of path value - expected a number but found object
+    json.numincrby doc1 .bzzz 1
+    (error) ERR key 'bzzz' does not exist at level 0 in path
+    json.numincrby doc1zzz .b 1
+    (error) ERR could not perform this operation on a key that doesn't exist
+    """
+
 
     # NUMMULTBY
     r.assertEqual(r.execute_command('JSON.NUMMULTBY', 'doc1', '$.string', 3), '[null]')
     r.expect('JSON.NUMMULTBY', 'doc1', '$.nowhere', 3).raiseError().contains("does not exist")
     r.expect('JSON.NUMMULTBY', 'doc_none', '$.string', 3).raiseError().contains("doesn't exist")
+    r.expect('JSON.NUMMULTBY', 'hash_key', '$.string', 3).raiseError().contains("wrong Redis type")
 
     r.expect('JSON.NUMMULTBY', 'doc1', '.string', 3).raiseError().contains("does not contains a number")
     r.expect('JSON.NUMMULTBY', 'doc1', '.nowhere', 3).raiseError().contains("does not contains a number")
     r.expect('JSON.NUMMULTBY', 'doc_none', '.string', 3).raiseError().contains("doesn't exist")
+    """ Legacy 1.0.8:
+     json.set doc1 .  '{"a":[0, 1, 2, 3, 4, 5], "b":{"x":100}}'
+    OK
+    json.nummultby doc1 .b 1
+    (error) ERR wrong type of path value - expected a number but found object
+    json.nummultby doc1 .bzzz 1
+    (error) ERR key 'bzzz' does not exist at level 0 in path
+    json.nummultby doc1zzz .b 1
+    (error) ERR could not perform this operation on a key that doesn't exist
+    """
 
     # STRAPPEND
     r.assertEqual(r.execute_command('JSON.STRAPPEND', 'doc1', '$.number', '"abc"'), [None])
     r.expect('JSON.STRAPPEND', 'doc1', '$.nowhere', '"abc"').raiseError().contains("does not exist")
     r.expect('JSON.STRAPPEND', 'doc_none', '$.number', '"abc"').raiseError().contains("doesn't exist")
+    r.expect('JSON.STRAPPEND', 'hash_key', '$.number', '"abc"').raiseError().contains("wrong Redis type")
 
     r.expect('JSON.STRAPPEND', 'doc1', '.number', '"abc"').raiseError().contains("not a string")
-    r.expect('JSON.STRAPPEND', 'doc1', '.nowhere', '"abc"').raiseError().contains("not a string")
+    r.expect('JSON.STRAPPEND', 'doc1', '.nowhere', '"abc"').raiseError().contains("does not exist")
     r.expect('JSON.STRAPPEND', 'doc_none', '.number', '"abc"').raiseError().contains("doesn't exist")
+    """ Legacy 1.0.8:
+     json.set doc1 .  '{"a":[0, 1, 2, 3, 4, 5], "b":{"x":100}}'
+    OK
+    json.strappend doc1 .b '"abc"'
+    (error) ERR wrong type of path value - expected string but found object
+    json.strappend doc1 .bzzz '"abc"'
+    (error) ERR key 'bzzz' does not exist at level 0 in path
+    json.strappend doc1zzz .b '"abc"'
+    (error) WRONGTYPE Operation against a key holding the wrong kind of value
+    """
+
 
     # STRLEN
     r.assertEqual(r.execute_command('JSON.STRLEN', 'doc1', '$.object', '"abc"'), [None])
     r.expect('JSON.STRLEN', 'doc1', '$.nowhere', '"abc"').raiseError().contains("does not exist")
     r.expect('JSON.STRLEN', 'doc_none', '$.object', '"abc"').raiseError().contains("doesn't exist")
+    r.expect('JSON.STRLEN', 'hash_key', '$.object', '"abc"').raiseError().contains("wrong Redis type")
 
     r.expect('JSON.STRLEN', 'doc1', '.object', '"abc"').raiseError().contains("expected string but found object")
     r.expect('JSON.STRLEN', 'doc1', '.nowhere', '"abc"').raiseError().contains("does not exist")
     r.assertEqual(r.execute_command('JSON.STRLEN', 'doc_none', '.object', '"abc"'), None)
+    """ Legacy 1.0.8:
+    json.set doc1 .  '{"a":[0, 1, 2, 3, 4, 5], "b":{"x":100}}'
+    OK
+    json.strlen doc1 .b 
+    (error) ERR wrong type of path value - expected string but found object
+    json.strlen doc1 .bzzz 
+    (error) ERR key 'bzzz' does not exist at level 0 in path
+    json.strlen doc1zzz .b 
+    (nil)
+    """
 
+    # TOGGLE
+    r.assertEqual(r.execute_command('JSON.TOGGLE', 'doc1', '$.object'), [None])
+    r.expect('JSON.TOGGLE', 'doc1', '$.nowhere').raiseError().contains("does not exist")
+    r.expect('JSON.TOGGLE', 'doc_none', '$.object').raiseError().contains("doesn't exist")
+    r.expect('JSON.TOGGLE', 'hash_key', '$.object').raiseError().contains("wrong Redis type")
+
+    r.expect('JSON.TOGGLE', 'doc1', '.object').raiseError().contains("not a bool")
+    r.expect('JSON.TOGGLE', 'doc1', '.nowhere').raiseError().contains("not a bool")
+    r.expect('JSON.TOGGLE', 'doc_none', '.object').raiseError().contains("doesn't exist")
+    """ Legacy 1.0.8: not relevant (only since 2.0) """
+
+    # CLEAR
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'doc1', '$.string'), 0)
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'doc1', '$.nowhere'), 0)
+    r.expect('JSON.CLEAR', 'doc_none', '$.string').raiseError().contains("doesn't exist")
+    r.expect('JSON.CLEAR', 'hash_key', '$.string').raiseError().contains("wrong Redis type")
+
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'doc1', '.string'), 0)
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'doc1', '.nowhere'), 0)
+    r.expect('JSON.CLEAR', 'doc_none', '.string').raiseError().contains("doesn't exist")
+    """ Legacy 1.0.8: not relevant (only since 2.0) """
 
     # Commands that operate on all json types
 
     # DEL
     r.assertEqual(r.execute_command('JSON.DEL', 'doc1', '$.nowhere'), 0)
     r.assertEqual(r.execute_command('JSON.DEL', 'doc_none', '$.object', '"abc"'), 0)
+    r.expect('JSON.DEL', 'hash_key', '$.object', '"abc"').raiseError().contains("wrong Redis type")
 
     r.assertEqual(r.execute_command('JSON.DEL', 'doc1', '.nowhere'), 0)
     r.assertEqual(r.execute_command('JSON.DEL', 'doc_none', '.object'), 0)
@@ -1101,16 +1259,35 @@ def testErrorMessage(env):
     # DEBUG
     r.assertEqual(r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1', '$.nowhere'), [])
     r.assertEqual(r.execute_command('JSON.DEBUG', 'MEMORY', 'doc_none', '$.object'), [])
+    r.expect('JSON.DEBUG', 'MEMORY', 'hash_key', '$.object').raiseError().contains("wrong Redis type")
 
     r.expect('JSON.DEBUG', 'MEMORY', 'doc1', '.nowhere').raiseError().contains("does not exist")
     r.assertEqual(r.execute_command('JSON.DEBUG', 'MEMORY', 'doc_none', '.object'), 0)
+    """ Legacy 1.0.8:
+    json.set doc1 .  '{"a":[0, 1, 2, 3, 4, 5], "b":{"x":100}}'
+    OK
+    json.debug memory doc1 .bzzz
+    (error) ERR key 'bzzz' does not exist at level 0 in path
+    json.debug memory doc1zzz .b
+    (nil)
+    """
 
     # RESP
     r.expect('JSON.RESP', 'doc1', '$.nowhere').raiseError().contains("does not exist")
     r.assertEqual(r.execute_command('JSON.RESP', 'doc_none', '$.object'), None)
+    r.assertEqual(r.execute_command('JSON.RESP', 'doc_none', '$.object'), None)
+    r.expect('JSON.RESP', 'hash_key', '$.object').raiseError().contains("wrong Redis type")
 
     r.expect('JSON.RESP', 'doc1', '.nowhere').raiseError().contains("does not exist")
     r.assertEqual(r.execute_command('JSON.RESP', 'doc_none', '.object'), None)
+    """ Legacy 1.0.8:
+    json.set doc1 .  '{"a":[0, 1, 2, 3, 4, 5], "b":{"x":100}}'
+    OK
+    json.resp doc1 .bzzz
+    (error) ERR key 'bzzz' does not exist at level 0 in path
+    json.resp doc1zzz .b
+    (nil)
+    """
 
 
 
