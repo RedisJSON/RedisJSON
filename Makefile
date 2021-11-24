@@ -197,7 +197,7 @@ bench benchmark: $(TARGET)
 #----------------------------------------------------------------------------------------------
 
 pack:
-	$(SHOW)./sbin/pack.sh
+	$(SHOW)MODULE=$(abspath $(TARGET)) ./sbin/pack.sh
 
 .PHONY: pack
 
