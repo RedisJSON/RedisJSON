@@ -1,7 +1,7 @@
 use crate::error::Error;
 use crate::formatter::RedisJsonFormatter;
+use crate::manager::err_msg_json_path_doesnt_exist_with_param;
 use crate::manager::{err_msg_json_expected, err_msg_json_path_doesnt_exist_with_param_or};
-use crate::manager::{err_msg_json_path_doesnt_exist, err_msg_json_path_doesnt_exist_with_param};
 use crate::manager::{AddUpdateInfo, Manager, ReadHolder, SetUpdateInfo, UpdateInfo, WriteHolder};
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 use crate::redisjson::{normalize_arr_indices, Format, Path};
@@ -97,18 +97,12 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             let v = self.get_first(path.get_path())?;
             Ok(self.resp_serialize_inner(v))
         } else {
-            let res = self.get_values(path.get_path())?;
-            if !res.is_empty() {
-                Ok(res
-                    .iter()
-                    .map(|v| self.resp_serialize_inner(v))
-                    .collect::<Vec<RedisValue>>()
-                    .into())
-            } else {
-                Err(RedisError::String(
-                    err_msg_json_path_doesnt_exist_with_param(path.get_original()),
-                ))
-            }
+            Ok(self
+                .get_values(path.get_path())?
+                .iter()
+                .map(|v| self.resp_serialize_inner(v))
+                .collect::<Vec<RedisValue>>()
+                .into())
         }
     }
 
@@ -469,11 +463,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     .into()
             })
             .collect::<Vec<RedisValue>>();
-        if res.is_empty() {
-            Err(Error::from(err_msg_json_path_doesnt_exist()))
-        } else {
-            Ok(res.into())
-        }
+        Ok(res.into())
     }
 
     pub fn arr_index_legacy(
@@ -729,9 +719,7 @@ where
     let res = get_all_values_and_paths(path, doc)?;
     match res.is_empty() {
         false => Ok(filter_paths(res, f)),
-        _ => Err(RedisError::String(
-            err_msg_json_path_doesnt_exist_with_param(path),
-        )),
+        _ => Ok(vec![]),
     }
 }
 
@@ -746,9 +734,7 @@ where
     let res = get_all_values_and_paths(path, doc)?;
     match res.is_empty() {
         false => Ok(filter_values(res, f)),
-        _ => Err(RedisError::String(
-            err_msg_json_path_doesnt_exist_with_param(path),
-        )),
+        _ => Ok(vec![]),
     }
 }
 
@@ -1548,7 +1534,11 @@ pub fn command_json_arr_len<M: Manager>(
     let values = find_all_values(path.get_path(), root, |v| {
         v.get_type() == SelectValueType::Array
     })?;
-
+    if is_legacy && values.is_empty() {
+        return Err(RedisError::String(
+            err_msg_json_path_doesnt_exist_with_param(path.get_original()),
+        ));
+    }
     let mut res = vec![];
     for v in values {
         let cur_val: RedisValue = match v {
