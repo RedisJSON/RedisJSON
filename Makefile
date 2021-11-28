@@ -1,10 +1,3 @@
-ROOT=.
-MK.pyver:=3
-
-ifeq ($(wildcard $(ROOT)/deps/readies/mk),)
-$(error Submodules not present. Please run 'git submodule update --init --recursive')
-endif
-include $(ROOT)/deps/readies/mk/main
 
 ifneq ($(SAN),)
 override DEBUG:=1
@@ -18,6 +11,13 @@ else
 $(error SAN=mem|addr|leak|thread)
 endif
 endif
+
+ROOT=.
+ifeq ($(wildcard $(ROOT)/deps/readies/mk),)
+$(error Submodules not present. Please run 'git submodule update --init --recursive')
+endif
+MK.pyver:=3
+include $(ROOT)/deps/readies/mk/main
 
 #----------------------------------------------------------------------------------------------
 
@@ -59,10 +59,6 @@ make builddocs
 make localdocs
 make deploydocs
 
-make nightly       # set rust default to nightly
-make stable        # set rust default to stable
-
-
 endef
 
 #----------------------------------------------------------------------------------------------
@@ -100,12 +96,6 @@ endif
 
 export CARGO_TARGET_DIR=$(BINDIR)/target
 TARGET=$(BINDIR)/$(MODULE_NAME)
-
-#----------------------------------------------------------------------------------------------
-
-all: build
-
-.PHONY: all
 
 #----------------------------------------------------------------------------------------------
 
@@ -231,14 +221,3 @@ deploydocs: builddocs
 	$(SHOW)mkdocs gh-deploy
 
 .PHONY: builddocs localdocs deploydocs
-
-#----------------------------------------------------------------------------------------------
-
-nightly:
-	$(SHOW)rustup default nightly
-	$(SHOW)rustup component add rust-src
-
-stable:
-	$(SHOW)rustup default stable
-
-.PHONY: nightly stable
