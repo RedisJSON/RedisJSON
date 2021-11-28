@@ -271,7 +271,7 @@ commands:
 #----------------------------------------------------------------------------------------------------------------------------------
 
 jobs:
-  build:
+  build-linux-debian:
     docker:
       - image: redisfab/rmbuilder:6.2.5-x64-bullseye
     steps:
@@ -426,8 +426,16 @@ workflows:
   version: 2
   default-flow:
     jobs:
-      - build:
+      - build-linux-debian:
+          name build
           <<: *not-on-integ-branch
+      - build-linux-debian:
+          name: build-with-redis-<<matrix.redis_version>>
+          #@@<<: *on-integ-branch
+          <<: *on-any-branch
+          matrix:
+            parameters:
+              redis_version: ["6.0", "6.2"]
       - platforms-build:
           context: common
           <<: *on-integ-and-version-tags
@@ -478,5 +486,10 @@ workflows:
                 - master
                 - /^feature-.*$/
     jobs:
+      - build-linux-debian:
+          name: build-with-redis-<<matrix.redis_version>>
+          matrix:
+            parameters:
+              redis_version: ["6.0", "6.2"]
       - performance-automation:
           context: common
