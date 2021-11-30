@@ -440,7 +440,7 @@ macro_rules! redis_json_module_create {(
                 ["json.objkeys", json_obj_keys, "readonly", 1,1,1],
                 ["json.objlen", json_obj_len, "readonly", 1,1,1],
                 ["json.clear", json_clear, "write", 1,1,1],
-                ["json.debug", json_debug, "readonly", 1,1,1],
+                ["json.debug", json_debug, "readonly", 2,2,1],
                 ["json.forget", json_del, "write", 1,1,1],
                 ["json.resp", json_resp, "readonly", 1,1,1],
                 ["json._cacheinfo", json_cache_info, "readonly", 1,1,1],
