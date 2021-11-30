@@ -155,7 +155,10 @@ Other types (numeric, geo, null) are not supported.
 ### It is not possible to index JSON objects.
 
 To be indexed, a JSONPath expression must return a single scalar value (string or number).
-If the JSONPath expression returns an object or an array, it will be ignored.
+
+If the JSONPath expression returns an object, it will be ignored.
+
+However it is possible to index the strings in separated attributes.
 
 Given the following document:
 
