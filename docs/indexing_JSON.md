@@ -147,9 +147,9 @@ FT.AGGREGATE userIdx '*' LOAD 6 $.user.hp AS hp $.user.dmg AS dmg APPLY '@hp-@dm
 
 ## Current indexing limitations
 
-### JSON arrays can only be indexed in a TAG fields.
+### JSON arrays can only be indexed in TAG identifiers.
 
-It is only possible to index an array of strings or booleans in a TAG field.
+It is only possible to index an array of strings or booleans in a TAG identifier.
 Other types (numeric, geo, null) are not supported.
 
 ### It is not possible to index JSON objects.
