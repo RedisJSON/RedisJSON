@@ -2,7 +2,7 @@
 name = "redisjson"
 version = "99.99.99"
 authors = ["Gavrie Philipson <gavrie@redislabs.com>"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
