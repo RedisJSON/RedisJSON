@@ -4,8 +4,9 @@ import sys
 import os
 import argparse
 
-ROOT = HERE = os.path.abspath(os.path.dirname(__file__))
-READIES = os.path.join(HERE, "deps/readies")
+HERE = os.path.abspath(os.path.dirname(__file__))
+ROOT = os.path.abspath(os.path.join(HERE, ".."))
+READIES = os.path.join(ROOT, "deps/readies")
 sys.path.insert(0, READIES)
 import paella
 
