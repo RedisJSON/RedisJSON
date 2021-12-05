@@ -19,8 +19,32 @@ use crate::c_api::JSONType;
 use crate::error::Error;
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 
+use crate::manager::{err_msg_json_expected, err_msg_json_path_doesnt_exist_with_param};
 use std::fmt;
 use std::fmt::Display;
+
+/// Returns normalized start index
+pub fn normalize_arr_start_index(start: i64, len: i64) -> i64 {
+    if start < 0 {
+        0.max(len + start)
+    } else {
+        // start >= 0
+        start.min(len - 1)
+    }
+}
+
+/// Return normalized `(start, end)` indices as a tuple
+pub fn normalize_arr_indices(start: i64, end: i64, len: i64) -> (i64, i64) {
+    // Normalize start
+    let start = normalize_arr_start_index(start, len);
+    // Normalize end
+    let end = match end {
+        0 => len,
+        e if e < 0 => 0.max(len + end),
+        _ => end.min(len),
+    };
+    (start, end)
+}
 
 #[derive(Debug, PartialEq)]
 pub enum SetOptions {
@@ -223,10 +247,8 @@ impl RedisJSON {
 
     pub fn delete_path(&mut self, path: &str) -> Result<usize, Error> {
         let mut deleted = 0;
-        self.data = jsonpath_lib::replace_with(self.data.take(), path, |v| {
-            if !v.is_null() {
-                deleted += 1; // might delete more than a single value
-            }
+        self.data = jsonpath_lib::replace_with(self.data.take(), path, |_v| {
+            deleted += 1; // might delete more than a single value
             None
         })?;
         Ok(deleted)
@@ -265,7 +287,7 @@ impl RedisJSON {
     pub fn serialize(results: &Value, format: Format) -> Result<String, Error> {
         let res = match format {
             Format::JSON => serde_json::to_string(results)?,
-            Format::BSON => return Err("Soon to come...".into()), //results.into() as Bson,
+            Format::BSON => return Err("ERR Soon to come...".into()), //results.into() as Bson,
         };
         Ok(res)
     }
@@ -273,28 +295,44 @@ impl RedisJSON {
     pub fn str_len(&self, path: &str) -> Result<usize, Error> {
         self.get_first(path)?
             .as_str()
-            .ok_or_else(|| "ERR wrong type of path value".into())
+            .ok_or_else(|| {
+                err_msg_json_expected("string", self.get_type(path).unwrap().as_str())
+                    .as_str()
+                    .into()
+            })
             .map(|s| s.len())
     }
 
     pub fn arr_len(&self, path: &str) -> Result<usize, Error> {
         self.get_first(path)?
             .as_array()
-            .ok_or_else(|| "ERR wrong type of path value".into())
+            .ok_or_else(|| {
+                err_msg_json_expected("array", self.get_type(path).unwrap().as_str())
+                    .as_str()
+                    .into()
+            })
             .map(|arr| arr.len())
     }
 
     pub fn obj_len(&self, path: &str) -> Result<usize, Error> {
         self.get_first(path)?
             .as_object()
-            .ok_or_else(|| "ERR wrong type of path value".into())
+            .ok_or_else(|| {
+                err_msg_json_expected("object", self.get_type(path).unwrap().as_str())
+                    .as_str()
+                    .into()
+            })
             .map(|obj| obj.len())
     }
 
     pub fn obj_keys<'a>(&'a self, path: &'a str) -> Result<Vec<&'a String>, Error> {
         self.get_first(path)?
             .as_object()
-            .ok_or_else(|| "ERR wrong type of path value".into())
+            .ok_or_else(|| {
+                err_msg_json_expected("object", self.get_type(path).unwrap().as_str())
+                    .as_str()
+                    .into()
+            })
             .map(|obj| obj.keys().collect())
     }
 
@@ -308,20 +346,7 @@ impl RedisJSON {
 
             let len = arr.len() as i64;
 
-            // Normalize start
-            let start = if start < 0 {
-                0.max(len + start)
-            } else {
-                // start >= 0
-                start.min(len - 1)
-            };
-
-            // Normalize end
-            let end = match end {
-                0 => len,
-                e if e < 0 => len + end,
-                _ => end.min(len),
-            };
+            let (start, end) = normalize_arr_indices(start, end, len);
 
             if end < start {
                 // don't search at all
@@ -426,7 +451,7 @@ impl RedisJSON {
         match errors.len() {
             0 => match result {
                 Some(r) => Ok(r),
-                None => Err(format!("Path '{}' does not exist", path).into()),
+                None => Err(err_msg_json_path_doesnt_exist_with_param(path).into()),
             },
             1 => Err(errors.remove(0)),
             _ => Err(errors.into_iter().map(|e| e.msg).collect::<String>().into()),

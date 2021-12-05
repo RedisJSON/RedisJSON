@@ -27,6 +27,9 @@ pub mod manager;
 mod nodevisitor;
 pub mod redisjson;
 
+pub const GIT_SHA: Option<&'static str> = std::option_env!("GIT_SHA");
+pub const GIT_BRANCH: Option<&'static str> = std::option_env!("GIT_BRANCH");
+
 pub const REDIS_JSON_TYPE_VERSION: i32 = 3;
 
 pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
@@ -400,6 +403,11 @@ macro_rules! redis_json_module_create {(
         }
 
         fn intialize(ctx: &Context, args: &Vec<RedisString>) -> Status {
+            ctx.log_notice(&format!("version: {} git sha: {} branch: {}",
+                $version,
+                match GIT_SHA { Some(val) => val, _ => "unknown"},
+                match GIT_BRANCH { Some(val) => val, _ => "unknown"},
+                ));
             export_shared_api(ctx);
             ctx.set_module_options(ModuleOptions::HANDLE_IO_ERRORS);
             ctx.log_notice("Enabled diskless replication");
@@ -432,7 +440,7 @@ macro_rules! redis_json_module_create {(
                 ["json.objkeys", json_obj_keys, "readonly", 1,1,1],
                 ["json.objlen", json_obj_len, "readonly", 1,1,1],
                 ["json.clear", json_clear, "write", 1,1,1],
-                ["json.debug", json_debug, "readonly", 1,1,1],
+                ["json.debug", json_debug, "readonly", 2,2,1],
                 ["json.forget", json_del, "write", 1,1,1],
                 ["json.resp", json_resp, "readonly", 1,1,1],
                 ["json._cacheinfo", json_cache_info, "readonly", 1,1,1],
