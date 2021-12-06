@@ -1,11 +1,13 @@
 use jsonpath_lib::select::select_value::SelectValue;
-use serde_json::map::Entry;
+// use serde_json::map::Entry;
 use serde_json::{Number, Value};
 
 use redis_module::key::{verify_type, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::rediserror::RedisError;
 use redis_module::{Context, NotifyEvent, RedisString};
+use ijson::{IValue, IArray, INumber, ValueType, IObject};
+use ijson::object::Entry;
 
 use std::marker::PhantomData;
 
@@ -120,59 +122,60 @@ pub struct KeyHolderWrite<'a> {
     val: Option<&'a mut RedisJSON>,
 }
 
-fn update<F: FnMut(Value) -> Result<Option<Value>, Error>>(
+fn update<F: FnMut(IValue) -> Result<Option<IValue>, Error>>(
     path: &Vec<String>,
-    root: &mut Value,
+    root: &mut IValue,
     mut func: F,
 ) -> Result<(), Error> {
-    let mut target = root;
+    // let mut target = root;
 
-    let last_index = path.len().saturating_sub(1);
-    for (i, token) in path.iter().enumerate() {
-        let target_once = target;
-        let is_last = i == last_index;
-        let target_opt = match *target_once {
-            Value::Object(ref mut map) => {
-                if is_last {
-                    if let Entry::Occupied(mut e) = map.entry(token) {
-                        let v = e.insert(Value::Null);
-                        if let Some(res) = (func)(v)? {
-                            e.insert(res);
-                        } else {
-                            e.remove();
-                        }
-                    }
-                    return Ok(());
-                }
-                map.get_mut(token)
-            }
-            Value::Array(ref mut vec) => {
-                if let Ok(x) = token.parse::<usize>() {
-                    if is_last {
-                        if x < vec.len() {
-                            let v = std::mem::replace(&mut vec[x], Value::Null);
-                            if let Some(res) = (func)(v)? {
-                                vec[x] = res;
-                            } else {
-                                vec.remove(x);
-                            }
-                        }
-                        return Ok(());
-                    }
-                    vec.get_mut(x)
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        };
+    // let last_index = path.len().saturating_sub(1);
+    // for (i, token) in path.iter().enumerate() {
+    //     let target_once = target;
+    //     let is_last = i == last_index;
+    //     let target_opt = 
+    //          if target_once.is_object() {
+    //             let map = target_once.as_object_mut().unwrap();
+    //             if is_last {
+    //                 if let Entry::Occupied(mut e) = map.entry(token) {
+    //                     let v = e.insert(IValue::NULL);
+    //                     if let Some(res) = (func)(v)? {
+    //                         e.insert(res);
+    //                     } else {
+    //                         e.remove();
+    //                     }
+    //                 }
+    //                 return Ok(());
+    //             }
+    //             map.get_mut(token)
+    //         } else if target_once.is_array() {
+    //             let vec = target_once.as_array_mut().unwrap();
+    //             if let Ok(x) = token.parse::<usize>() {
+    //                 if is_last {
+    //                     if x < vec.len() {
+    //                         let v = std::mem::replace(&mut vec[x], IValue::NULL);
+    //                         if let Some(res) = (func)(v)? {
+    //                             vec[x] = res;
+    //                         } else {
+    //                             vec.remove(x);
+    //                         }
+    //                     }
+    //                     return Ok(());
+    //                 }
+    //                 vec.get_mut(x)
+    //             } else {
+    //                 None
+    //             }
+    //         } else {
+    //             None
+    //         };
 
-        if let Some(t) = target_opt {
-            target = t;
-        } else {
-            break;
-        }
-    }
+    //     if let Some(t) = target_opt {
+    //         target = t;
+    //     } else {
+    //         break;
+    //     }
+    // }
 
     Ok(())
 }
@@ -180,7 +183,7 @@ fn update<F: FnMut(Value) -> Result<Option<Value>, Error>>(
 impl<'a> KeyHolderWrite<'a> {
     fn do_op<F>(&mut self, paths: Vec<String>, mut op_fun: F) -> Result<(), RedisError>
     where
-        F: FnMut(Value) -> Result<Option<Value>, Error>,
+        F: FnMut(IValue) -> Result<Option<IValue>, Error>,
     {
         if paths.is_empty() {
             // updating the root require special treatment
@@ -209,16 +212,16 @@ impl<'a> KeyHolderWrite<'a> {
         if let Value::Number(in_value) = in_value {
             let mut res = None;
             self.do_op(path, |v| {
-                let num_res = match (v.as_i64(), in_value.as_i64()) {
+                let num_res : IValue = match (v.to_i64(), in_value.as_i64()) {
                     (Some(num1), Some(num2)) => ((op1_fun)(num1, num2)).into(),
                     _ => {
-                        let num1 = v.as_f64().unwrap();
+                        let num1 = v.to_f64().unwrap();
                         let num2 = in_value.as_f64().unwrap();
-                        Number::from_f64((op2_fun)(num1, num2)).unwrap()
+                        ((op2_fun)(num1, num2)).into()
                     }
                 };
-                res = Some(Value::Number(num_res));
-                Ok(res.clone())
+                // res = Some(Value::Number(num_res));
+                Ok(Some(num_res))
             })?;
             match res {
                 None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
@@ -239,7 +242,7 @@ impl<'a> KeyHolderWrite<'a> {
         Ok(())
     }
 
-    fn set_root(&mut self, v: Option<Value>) -> Result<(), RedisError> {
+    fn set_root(&mut self, v: Option<IValue>) -> Result<(), RedisError> {
         match v {
             Some(inner) => {
                 self.get_json_holder()?;
@@ -259,7 +262,7 @@ impl<'a> KeyHolderWrite<'a> {
     }
 }
 
-impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
+impl<'a> WriteHolder<IValue, IValue> for KeyHolderWrite<'a> {
     fn apply_changes(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError> {
         if ctx.notify_keyspace_event(NotifyEvent::MODULE, command, &self.key_name) != Status::Ok {
             Err(RedisError::Str("failed notify key space event"))
@@ -274,7 +277,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
         Ok(())
     }
 
-    fn get_value(&mut self) -> Result<Option<&mut Value>, RedisError> {
+    fn get_value(&mut self) -> Result<Option<&mut IValue>, RedisError> {
         self.get_json_holder()?;
 
         match &mut self.val {
@@ -283,7 +286,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
         }
     }
 
-    fn set_value(&mut self, path: Vec<String>, mut v: Value) -> Result<bool, RedisError> {
+    fn set_value(&mut self, path: Vec<String>, mut v: IValue) -> Result<bool, RedisError> {
         let mut updated = false;
         if path.is_empty() {
             // update the root
@@ -298,44 +301,41 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
         Ok(updated)
     }
 
-    fn dict_add(&mut self, path: Vec<String>, key: &str, mut v: Value) -> Result<bool, RedisError> {
+    fn dict_add(&mut self, path: Vec<String>, key: &str, mut v: IValue) -> Result<bool, RedisError> {
         let mut updated = false;
-        if path.is_empty() {
-            // update the root
-            let root = self.get_value().unwrap().unwrap();
-            let val = if let Value::Object(mut o) = root.take() {
-                if !o.contains_key(key) {
-                    updated = true;
-                    o.insert(key.to_string(), v.take());
-                }
-                Value::Object(o)
-            } else {
-                root.take()
-            };
-            self.set_root(Some(val))?;
-        } else {
-            update(&path, self.get_value().unwrap().unwrap(), |val| {
-                let val = if let Value::Object(mut o) = val {
-                    if !o.contains_key(key) {
-                        updated = true;
-                        o.insert(key.to_string(), v.take());
-                    }
-                    Value::Object(o)
-                } else {
-                    val
-                };
-                Ok(Some(val))
-            })?;
-        }
+        // if path.is_empty() {
+        //     // update the root
+        //     let root = self.get_value().unwrap().unwrap();
+        //     let val = if let Some(mut o) = root.take().as_object_mut() {
+        //         if !o.contains_key(key) {
+        //             updated = true;
+        //             o.insert(key.to_string(), v.take());
+        //         }
+        //         IValue::Object(o)
+        //     } else {
+        //         root.take()
+        //     };
+        //     self.set_root(Some(val))?;
+        // } else {
+        //     update(&path, self.get_value().unwrap().unwrap(), |val| {
+        //         if let Some(mut o) = val.as_object_mut() {
+        //             if !o.contains_key(key) {
+        //                 updated = true;
+        //                 o.insert(key.to_string(), v.take());
+        //             }
+        //         }
+        //         Ok(Some(val))
+        //     })?;
+        // }
         Ok(updated)
     }
 
     fn delete_path(&mut self, path: Vec<String>) -> Result<bool, RedisError> {
         let mut deleted = false;
-        update(&path, self.get_value().unwrap().unwrap(), |_v| {
-            deleted = true; // might delete more than a single value
-            Ok(None)
-        })?;
+        // update(&path, self.get_value().unwrap().unwrap(), |_v| {
+        //     deleted = true; // might delete more than a single value
+        //     Ok(None)
+        // })?;
         Ok(deleted)
     }
 
@@ -354,9 +354,9 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
     fn bool_toggle(&mut self, path: Vec<String>) -> Result<bool, RedisError> {
         let mut res = None;
         self.do_op(path, |v| {
-            let val = v.as_bool().unwrap() ^ true;
+            let val = v.to_bool().unwrap() ^ true;
             res = Some(val);
-            Ok(Some(Value::Bool(val)))
+            Ok(Some(IValue::from(val)))
         })?;
         match res {
             None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
@@ -365,13 +365,13 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
     }
 
     fn str_append(&mut self, path: Vec<String>, val: String) -> Result<usize, RedisError> {
-        let json = serde_json::from_str(&val)?;
-        if let Value::String(s) = json {
+        let json : IValue = serde_json::from_str(&val)?;
+        if let Some(s) = json.as_string() {
             let mut res = None;
             self.do_op(path, |v| {
-                let new_str = [v.as_str().unwrap(), s.as_str()].concat();
+                let new_str = [v.as_string().unwrap(), s.as_str()].concat();
                 res = Some(new_str.len());
-                Ok(Some(Value::String(new_str)))
+                Ok(Some(IValue::from(new_str)))
             })?;
             match res {
                 None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
@@ -385,14 +385,14 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
         }
     }
 
-    fn arr_append(&mut self, path: Vec<String>, mut args: Vec<Value>) -> Result<usize, RedisError> {
+    fn arr_append(&mut self, path: Vec<String>, mut args: Vec<IValue>) -> Result<usize, RedisError> {
         let mut res = None;
-        self.do_op(path, |mut v| {
-            let arr = v.as_array_mut().unwrap();
-            arr.append(&mut args);
-            res = Some(arr.len());
-            Ok(Some(v))
-        })?;
+        // self.do_op(path, |mut v| {
+        //     let arr = v.as_array_mut().unwrap();
+        //     arr.append(&mut args);
+        //     res = Some(arr.len());
+        //     Ok(Some(v))
+        // })?;
         match res {
             None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
             Some(n) => Ok(n),
@@ -402,24 +402,24 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
     fn arr_insert(
         &mut self,
         paths: Vec<String>,
-        args: &Vec<Value>,
+        args: &Vec<IValue>,
         index: i64,
     ) -> Result<usize, RedisError> {
         let mut res = None;
-        self.do_op(paths, |mut v| {
-            // Verify legal index in bounds
-            let len = v.len().unwrap() as i64;
-            let index = if index < 0 { len + index } else { index };
-            if !(0..=len).contains(&index) {
-                return Err("ERR index out of bounds".into());
-            }
-            let index = index as usize;
-            let mut new_value = v.take();
-            let curr = new_value.as_array_mut().unwrap();
-            curr.splice(index..index, args.clone());
-            res = Some(curr.len());
-            Ok(Some(new_value))
-        })?;
+        // self.do_op(paths, |mut v| {
+        //     // Verify legal index in bounds
+        //     let len = v.len().unwrap() as i64;
+        //     let index = if index < 0 { len + index } else { index };
+        //     if !(0..=len).contains(&index) {
+        //         return Err("ERR index out of bounds".into());
+        //     }
+        //     let index = index as usize;
+        //     let mut new_value = v.take();
+        //     let curr = new_value.as_array_mut().unwrap();
+        //     curr.splice(index..index, args.clone());
+        //     res = Some(curr.len());
+        //     Ok(Some(new_value))
+        // })?;
         match res {
             None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
             Some(l) => Ok(l),
@@ -427,57 +427,59 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
     }
 
     fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<String>, RedisError> {
-        let mut res = None;
-        self.do_op(path, |mut v| {
-            if let Some(array) = v.as_array() {
-                if array.is_empty() {
-                    return Ok(Some(v));
-                }
-                // Verify legel index in bounds
-                let len = array.len() as i64;
-                let index = normalize_arr_start_index(index, len) as usize;
+        // let mut res = None;
+        // self.do_op(path, |mut v| {
+        //     if let Some(array) = v.as_array() {
+        //         if array.is_empty() {
+        //             return Ok(Some(v));
+        //         }
+        //         // Verify legel index in bounds
+        //         let len = array.len() as i64;
+        //         let index = normalize_arr_start_index(index, len) as usize;
 
-                let mut new_value = v.take();
-                let curr = new_value.as_array_mut().unwrap();
-                res = Some(curr.remove(index as usize));
-                Ok(Some(new_value))
-            } else {
-                Err(err_json(&v, "array"))
-            }
-        })?;
-        match res {
-            None => Ok(None),
-            Some(n) => Ok(Some(RedisJSON::serialize(&n, Format::JSON)?)),
-        }
+        //         let mut new_value = v.take();
+        //         let curr = new_value.as_array_mut().unwrap();
+        //         res = Some(curr.remove(index as usize));
+        //         Ok(Some(new_value))
+        //     } else {
+        //         Err(err_json(&v, "array"))
+        //     }
+        // })?;
+        // match res {
+        //     None => Ok(None),
+        //     Some(n) => Ok(Some(RedisJSON::serialize(&n, Format::JSON)?)),
+        // }
+
+        Ok(None)
     }
 
     fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> Result<usize, RedisError> {
         let mut res = None;
-        self.do_op(path, |mut v| {
-            if let Some(array) = v.as_array() {
-                let len = array.len() as i64;
-                let stop = stop.normalize(len);
-                let start = if start < 0 || start < len {
-                    start.normalize(len)
-                } else {
-                    stop + 1 //  start >=0 && start >= len
-                };
-                let range = if start > stop || len == 0 {
-                    0..0 // Return an empty array
-                } else {
-                    start..(stop + 1)
-                };
+        // self.do_op(path, |mut v| {
+        //     if let Some(array) = v.as_array() {
+        //         let len = array.len() as i64;
+        //         let stop = stop.normalize(len);
+        //         let start = if start < 0 || start < len {
+        //             start.normalize(len)
+        //         } else {
+        //             stop + 1 //  start >=0 && start >= len
+        //         };
+        //         let range = if start > stop || len == 0 {
+        //             0..0 // Return an empty array
+        //         } else {
+        //             start..(stop + 1)
+        //         };
 
-                let mut new_value = v.take();
-                let curr = new_value.as_array_mut().unwrap();
-                curr.rotate_left(range.start);
-                curr.resize(range.end - range.start, Value::Null);
-                res = Some(curr.len());
-                Ok(Some(new_value))
-            } else {
-                Err(err_json(&v, "array"))
-            }
-        })?;
+        //         let mut new_value = v.take();
+        //         let curr = new_value.as_array_mut().unwrap();
+        //         curr.rotate_left(range.start);
+        //         curr.resize(range.end - range.start, Value::Null);
+        //         res = Some(curr.len());
+        //         Ok(Some(new_value))
+        //     } else {
+        //         Err(err_json(&v, "array"))
+        //     }
+        // })?;
         match res {
             None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
             Some(l) => Ok(l),
@@ -486,19 +488,19 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
 
     fn clear(&mut self, path: Vec<String>) -> Result<usize, RedisError> {
         let mut cleared = 0;
-        self.do_op(path, |v| match v {
-            Value::Object(mut obj) => {
-                obj.clear();
-                cleared += 1;
-                Ok(Some(Value::from(obj)))
-            }
-            Value::Array(mut arr) => {
-                arr.clear();
-                cleared += 1;
-                Ok(Some(Value::from(arr)))
-            }
-            _ => Ok(Some(v)),
-        })?;
+        // self.do_op(path, |v| {
+        //     if let Some(mut obj) = v.as_object_mut() {
+        //         obj.clear();
+        //         cleared += 1;
+        //         Ok(Some(IValue::from(obj)))
+        //     } else if let Some(mut arr) = v.as_array_mut() {
+        //         arr.clear();
+        //         cleared += 1;
+        //         Ok(Some(IValue::from(arr)))
+        //     } else {
+        //         Ok(Some(v))
+        //     }
+        // })?;
         Ok(cleared)
     }
 }
@@ -507,8 +509,8 @@ pub struct KeyHolderRead {
     key: RedisKey,
 }
 
-impl ReadHolder<Value> for KeyHolderRead {
-    fn get_value(&self) -> Result<Option<&Value>, RedisError> {
+impl ReadHolder<IValue> for KeyHolderRead {
+    fn get_value(&self) -> Result<Option<&IValue>, RedisError> {
         let key_value = self.key.get_value::<RedisJSON>(&REDIS_JSON_TYPE)?;
         match key_value {
             Some(v) => Ok(Some(&v.data)),
@@ -524,8 +526,8 @@ pub struct RedisJsonKeyManager<'a> {
 impl<'a> Manager for RedisJsonKeyManager<'a> {
     type WriteHolder = KeyHolderWrite<'a>;
     type ReadHolder = KeyHolderRead;
-    type V = Value;
-    type O = Value;
+    type V = IValue;
+    type O = IValue;
 
     fn open_key_read(&self, ctx: &Context, key: &RedisString) -> Result<KeyHolderRead, RedisError> {
         let key = ctx.open_key(key);
@@ -545,34 +547,37 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
         })
     }
 
-    fn from_str(&self, val: &str, format: Format) -> Result<Value, Error> {
+    fn from_str(&self, val: &str, format: Format) -> Result<IValue, Error> {
         match format {
             Format::JSON => Ok(serde_json::from_str(val)?),
-            Format::BSON => decode_document(&mut Cursor::new(val.as_bytes()))
-                .map(|docs| {
-                    let v = if !docs.is_empty() {
-                        docs.iter()
-                            .next()
-                            .map_or_else(|| Value::Null, |(_, b)| b.clone().into())
-                    } else {
-                        Value::Null
-                    };
-                    Ok(v)
-                })
-                .unwrap_or_else(|e| Err(e.to_string().into())),
+            Format::BSON => 
+                Err("TODO".into()),
+            //   decode_document(&mut Cursor::new(val.as_bytes()))
+            //     .map(|docs| {
+            //         let v = if !docs.is_empty() {
+            //             docs.iter()
+            //                 .next()
+            //                 .map_or_else(|| IValue::NULL, |(_, b)| b.clone().into())
+            //         } else {
+            //             IValue::NULL
+            //         };
+            //         Ok(v)
+            //     })
+            //     .unwrap_or_else(|e| Err(e.to_string().into())),
         }
     }
 
-    fn get_memory(&self, v: &Value) -> Result<usize, RedisError> {
-        let res = match v {
-            Value::Null => 0,
-            Value::Bool(v) => mem::size_of_val(v),
-            Value::Number(v) => mem::size_of_val(v),
-            Value::String(v) => mem::size_of_val(v),
-            Value::Array(v) => mem::size_of_val(v),
-            Value::Object(v) => mem::size_of_val(v),
-        };
-        Ok(res)
+    fn get_memory(&self, v: &IValue) -> Result<usize, RedisError> {
+        // let res = match v.type_() {
+        //     IValue::Null => 0,
+        //     IValue::Bool(v) => mem::size_of_val(v),
+        //     IValue::Number(v) => mem::size_of_val(v),
+        //     IValue::String(v) => mem::size_of_val(v),
+        //     IValue::Array(v) => mem::size_of_val(v),
+        //     IValue::Object(v) => mem::size_of_val(v),
+        // };
+        // Ok(res)
+        Ok(0)
     }
 
     fn is_json(&self, key: *mut RedisModuleKey) -> Result<bool, RedisError> {

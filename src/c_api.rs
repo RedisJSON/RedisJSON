@@ -172,30 +172,6 @@ pub fn json_api_get_boolean<M: Manager>(_: M, json: *const c_void, val: *mut c_i
 
 //---------------------------------------------------------------------------------------------
 
-pub fn value_from_index(value: &Value, index: size_t) -> Result<&Value, RedisError> {
-    match value {
-        Value::Array(ref vec) => {
-            if index < vec.len() {
-                Ok(vec.get(index).unwrap())
-            } else {
-                Err(RedisError::Str("JSON index is out of range"))
-            }
-        }
-        Value::Object(ref map) => {
-            if index < map.len() {
-                Ok(map.iter().nth(index).unwrap().1)
-            } else {
-                Err(RedisError::Str("JSON index is out of range"))
-            }
-        }
-        _ => Err(RedisError::Str("Not a JSON Array or Object")),
-    }
-}
-
-pub fn get_type_and_size(value: &Value) -> (JSONType, size_t) {
-    RedisJSON::get_type_and_size(value)
-}
-
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn set_string(from_str: &str, str: *mut *const c_char, len: *mut size_t) -> c_int {
     if !str.is_null() {
