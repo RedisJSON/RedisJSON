@@ -144,7 +144,7 @@ impl RedisJSON {
         let value = RedisJSON::parse_str(data, format)?;
         Ok(Self { data: value })
     }
-        
+
     pub fn serialize(results: &Value, format: Format) -> Result<String, Error> {
         let res = match format {
             Format::JSON => serde_json::to_string(results)?,
