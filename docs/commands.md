@@ -1,4 +1,4 @@
-# RedisJSON Commands
+# RedisJSON commands
 
 ## Overview
 
@@ -78,11 +78,12 @@ Return the value at `path` in JSON serialized form.
 This command accepts multiple `path`s, and defaults to the value's root when none are given.
 
 The following subcommands change the reply's format and are all set to the empty string by default:
+
 *   `INDENT` sets the indentation string for nested levels
 *   `NEWLINE` sets the string that's printed at the end of each line
 *   `SPACE` sets the string that's put between a key and a value
 
-Pretty-formatted JSON is producible with `redis-cli` by following this example:
+Produce pretty-formatted JSON with `redis-cli` by following this example:
 
 ```
 ~/$ redis-cli --raw
@@ -104,14 +105,14 @@ If there are multiple paths mixing both legacy path and JSONPath, the returned v
 OK
 ```
 
-With a single JSONPath (json array bulk string):
+With a single JSONPath (JSON array bulk string):
 
 ```sql
 127.0.0.1:6379> JSON.GET doc $..b
 "[3,null]"
 ```
 
-Using multiple paths with at least one JSONPath (map with array of json values per path):
+Using multiple paths with at least one JSONPath (map with array of JSON values per path):
 
 ```sql
 127.0.0.1:6379> JSON.GET doc ..a $..b
@@ -131,7 +132,7 @@ JSON.MGET <key> [key ...] <path>
 
 #### Description
 
-Returns the values at `path` from multiple `key`s. Non-existing keys and non-existing paths are reported as null.
+Returns the values at `path` from multiple `key`s. Nonexistent keys and nonexistent paths are reported as null.
 
 #### Return value
 
@@ -170,7 +171,7 @@ JSON.DEL <key> [path]
 
 Delete a value.
 
-`path` defaults to root if not provided. Non-existing keys and paths are ignored. Deleting an object's root is equivalent to deleting the key from Redis.
+`path` defaults to root if not provided. Nonexistent keys and paths are ignored. Deleting an object's root is equivalent to deleting the key from Redis.
 
 #### Return value
 
@@ -259,13 +260,13 @@ JSON.STRAPPEND <key> [path] <json-string>
 
 #### Description
 
-Appends the `json-string` value(s) to the string at `path`.
+Appends the `json-string` values to the string at `path`.
 
 `path` defaults to root if not provided.
 
 #### Return value
 
-[Array][4] of [Integer][2], specifically, for each path, the string's new length, or [null][6] element if the matching JSON value is not an array.
+[Array][4] of [Integers][2], specifically, for each path, the string's new length, or [null][6] element if the matching JSON value is not an array.
 
 #### Example
 
@@ -299,7 +300,7 @@ Report the length of the JSON String at `path` in `key`.
 
 #### Return value
 
-[Array][4] of [Integer][2], specifically, for each path, the string's length, or [null][6] element if the matching JSON value is not a string.
+[Array][4] of [Integers][2], specifically, for each path, the string's length, or [null][6] element if the matching JSON value is not a string.
 
 
 #### Example
@@ -328,11 +329,11 @@ JSON.ARRAPPEND <key> <path> <json> [json ...]
 
 #### Description
 
-Append the `json` value(s) into the array at `path` after the last element in it.
+Append the `json` values into the array at `path` after the last element in it.
 
 #### Return value
 
-[Array][4] of [Integer][2], specifically, for each path, the array's new size, or [null][6] element if the matching JSON value is not an array.
+[Array][4] of [Integers][2], specifically, for each path, the array's new size, or [null][6] element if the matching JSON value is not an array.
 
 #### Example
 
@@ -368,7 +369,7 @@ Note: out of range errors are treated by rounding the index to the array's start
 
 #### Return value
 
-[Array][4] of [Integer][2], specifically, for each JSON value matching the path, the first position of the scalar value in the array, -1 if unfound in the array, or [null][6] element if the matching JSON value is not an array.
+[Array][4] of [Integers][2], specifically, for each JSON value matching the path, the first position of the scalar value in the array, -1 if unfound in the array, or [null][6] element if the matching JSON value is not an array.
 
 #### Examples
 
@@ -401,13 +402,13 @@ JSON.ARRINSERT <key> <path> <index> <json> [json ...]
 
 #### Description
 
-Insert the `json` value(s) into the array at `path` before the `index` (shifts to the right).
+Insert the `json` values into the array at `path` before the `index` (shifts to the right).
 
-The index must be in the array's range. Inserting at `index` 0 prepends to the array. Negative index values are interpreted as starting from the end.
+The index must be in the array's range. Inserting at `index` 0 prepends to the array. Negative index values start from the end of the array.
 
 #### Return value
 
-[Array][4] of [Integer][2], specifically, for each path, the array's new size, or [null][6] element if the matching JSON value is not an array.
+[Array][4] of [Integers][2], specifically, for each path, the array's new size, or [null][6] element if the matching JSON value is not an array.
 
 #### Examples
 
@@ -442,11 +443,11 @@ JSON.ARRLEN <key> [path]
 
 Report the length of the JSON Array at `path` in `key`.
 
-`path` defaults to root if not provided. If the `key` or `path` do not exist, null is returned.
+`path` defaults to root if not provided. Returns null if the `key` or `path` do not exist.
 
 #### Return value
 
-[Array][4] of [Integer][2], specifically, for each path, the array's length, or [null][6] element if the matching JSON value is not an array.
+[Array][4] of [Integers][2], specifically, for each path, the array's length, or [null][6] element if the matching JSON value is not an array.
 
 #### Examples
 
@@ -485,7 +486,7 @@ Remove and return element from the index in the array.
 
 #### Return value
 
-[Array][4] of [Bulk String][3], specifically, for each path, the popped JSON value, or [null][6] element if the matching JSON value is not an array.
+[Array][4] of [Bulk Strings][3], specifically, for each path, the popped JSON value, or [null][6] element if the matching JSON value is not an array.
 
 #### Examples
 
@@ -523,11 +524,22 @@ JSON.ARRTRIM <key> <path> <start> <stop>
 
 Trim an array so that it contains only the specified inclusive range of elements.
 
-This command is extremely forgiving and using it with out of range indexes will not produce an error. If `start` is larger than the array's size or `start` > `stop`, the result will be an empty array. If `start` is < 0 then it will be treated as 0. If `stop` is larger than the end of the array, it will be treated like the last element in it.
-This command is extremely forgiving and using it with out of range indexes will not produce an error. If `start` is larger than the array's size or `start` > `stop`, the return value will be 0 and the resulting array will be empty. If `start` is < 0 then it is interpreted from the end. If `stop` is larger than the end of the array, it will be treated like the last element in it.
+This command is extremely forgiving and using it with out-of-range indexes will not produce an error. There are a few differences between how RedisJSON v2.0 and legacy versions handle out-of-range indexes.
+
+Behavior as of RedisJSON v2.0:
+
+* If `start` is larger than the array's size or `start` > `stop`, the return value will be 0 and the resulting array will be empty. 
+* If `start` is < 0, then start from the end of the array.
+* If `stop` is larger than the end of the array, it will be treated like the last element.
+
+Legacy behavior:
+* If `start` is larger than the array's size or `start` > `stop`, the result will be an empty array.
+* If `start` is < 0, then it will be treated as 0.
+* If `stop` is larger than the end of the array, it will be treated like the last element.
+
 #### Return value
 
-[Array][4] of [Integer][2], specifically, for each path, the array's new size, or [null][6] element if the matching JSON value is not an array.
+[Array][4] of [Integers][2], specifically, for each path, the array's new size, or [null][6] element if the matching JSON value is not an array.
 
 #### Examples
 
