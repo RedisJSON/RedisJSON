@@ -5,21 +5,16 @@
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
 use std::io::Cursor;
-use std::mem;
 use std::os::raw::{c_int, c_void};
 
 use bson::decode_document;
-use jsonpath_lib::select::json_node::JsonValueUpdater;
-use jsonpath_lib::select::{Selector, SelectorMut};
 use redis_module::raw::{self};
 use serde_json::Value;
 
 use crate::backward;
 use crate::c_api::JSONType;
 use crate::error::Error;
-use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 
-use crate::manager::{err_msg_json_expected, err_msg_json_path_doesnt_exist_with_param};
 use std::fmt;
 use std::fmt::Display;
 
@@ -149,224 +144,13 @@ impl RedisJSON {
         let value = RedisJSON::parse_str(data, format)?;
         Ok(Self { data: value })
     }
-
-    fn add_value(&mut self, path: &str, value: Value) -> Result<bool, Error> {
-        let mut parsed_static_path = StaticPathParser::check(path)?;
-
-        if parsed_static_path.valid != VisitStatus::Valid {
-            return Err("Err: wrong static path".into());
-        }
-        if parsed_static_path.static_path_elements.len() < 2 {
-            return Err("Err: path must end with object key to set".into());
-        }
-
-        if let StaticPathElement::ObjectKey(key) =
-            parsed_static_path.static_path_elements.pop().unwrap()
-        {
-            if let StaticPathElement::Root = parsed_static_path.static_path_elements.last().unwrap()
-            {
-                // Adding to the root, can't use jsonpath_lib::replace_with
-                let mut current_data = self.data.take();
-                let res = if let Value::Object(ref mut map) = current_data {
-                    if map.contains_key(&key) {
-                        false
-                    } else {
-                        map.insert(key, value);
-                        true
-                    }
-                } else {
-                    false
-                };
-                self.data = current_data;
-                Ok(res)
-            } else {
-                // Adding somewhere in existing object, use jsonpath_lib::replace_with
-                let p = parsed_static_path
-                    .static_path_elements
-                    .iter()
-                    .map(|e| e.to_string())
-                    .collect::<Vec<_>>()
-                    .join("");
-                let mut set = false;
-                let mut selector = SelectorMut::default();
-                if let Err(e) = selector.str_path(&p) {
-                    return Err(e.into());
-                }
-                selector.value(&mut self.data);
-                let mut updater = JsonValueUpdater::new(|mut ret| {
-                    if let Value::Object(ref mut map) = ret {
-                        if map.contains_key(&key) {
-                            set = false;
-                        } else {
-                            map.insert(key.to_string(), value.clone());
-                            set = true;
-                        }
-                    }
-                    Some(ret)
-                });
-                selector.replace_with(&mut updater)?;
-                Ok(set)
-            }
-        } else {
-            Err("Err: path not an object".into())
-        }
-    }
-
-    pub fn set_value(
-        &mut self,
-        data: &str,
-        path: &str,
-        option: &SetOptions,
-        format: Format,
-    ) -> Result<bool, Error> {
-        let json: Value = RedisJSON::parse_str(data, format)?;
-        if path == "$" {
-            if SetOptions::NotExists == *option {
-                Ok(false)
-            } else {
-                self.data = json;
-                Ok(true)
-            }
-        } else {
-            let mut replaced = false;
-            if SetOptions::NotExists != *option {
-                self.data = jsonpath_lib::replace_with(self.data.take(), path, |_v| {
-                    replaced = true;
-                    Some(json.clone())
-                })?;
-            }
-            if replaced {
-                Ok(true)
-            } else if SetOptions::AlreadyExists != *option {
-                self.add_value(path, json)
-            } else {
-                Ok(false)
-            }
-        }
-    }
-
-    pub fn delete_path(&mut self, path: &str) -> Result<usize, Error> {
-        let mut deleted = 0;
-        self.data = jsonpath_lib::replace_with(self.data.take(), path, |_v| {
-            deleted += 1; // might delete more than a single value
-            None
-        })?;
-        Ok(deleted)
-    }
-
-    pub fn clear(&mut self, path: &str) -> Result<usize, Error> {
-        let current_data = self.data.take();
-        let mut cleared = 0;
-
-        let clear_func = &mut |v| match v {
-            Value::Object(mut obj) => {
-                obj.clear();
-                cleared += 1;
-                Some(Value::from(obj))
-            }
-            Value::Array(mut arr) => {
-                arr.clear();
-                cleared += 1;
-                Some(Value::from(arr))
-            }
-            _ => Some(v),
-        };
-
-        self.data = if path == "$" {
-            clear_func(current_data).unwrap()
-        } else {
-            jsonpath_lib::replace_with(current_data, path, clear_func)?
-        };
-        Ok(cleared)
-    }
-    pub fn to_string(&self, path: &str, format: Format) -> Result<String, Error> {
-        let results = self.get_first(path)?;
-        Self::serialize(results, format)
-    }
-
+        
     pub fn serialize(results: &Value, format: Format) -> Result<String, Error> {
         let res = match format {
             Format::JSON => serde_json::to_string(results)?,
             Format::BSON => return Err("ERR Soon to come...".into()), //results.into() as Bson,
         };
         Ok(res)
-    }
-
-    pub fn str_len(&self, path: &str) -> Result<usize, Error> {
-        self.get_first(path)?
-            .as_str()
-            .ok_or_else(|| {
-                err_msg_json_expected("string", self.get_type(path).unwrap().as_str())
-                    .as_str()
-                    .into()
-            })
-            .map(|s| s.len())
-    }
-
-    pub fn arr_len(&self, path: &str) -> Result<usize, Error> {
-        self.get_first(path)?
-            .as_array()
-            .ok_or_else(|| {
-                err_msg_json_expected("array", self.get_type(path).unwrap().as_str())
-                    .as_str()
-                    .into()
-            })
-            .map(|arr| arr.len())
-    }
-
-    pub fn obj_len(&self, path: &str) -> Result<usize, Error> {
-        self.get_first(path)?
-            .as_object()
-            .ok_or_else(|| {
-                err_msg_json_expected("object", self.get_type(path).unwrap().as_str())
-                    .as_str()
-                    .into()
-            })
-            .map(|obj| obj.len())
-    }
-
-    pub fn obj_keys<'a>(&'a self, path: &'a str) -> Result<Vec<&'a String>, Error> {
-        self.get_first(path)?
-            .as_object()
-            .ok_or_else(|| {
-                err_msg_json_expected("object", self.get_type(path).unwrap().as_str())
-                    .as_str()
-                    .into()
-            })
-            .map(|obj| obj.keys().collect())
-    }
-
-    pub fn arr_index(&self, path: &str, scalar: &str, start: i64, end: i64) -> Result<i64, Error> {
-        if let Value::Array(arr) = self.get_first(path)? {
-            // end=-1/0 means INFINITY to support backward with RedisJSON
-            if arr.is_empty() || end < -1 {
-                return Ok(-1);
-            }
-            let v: Value = serde_json::from_str(scalar)?;
-
-            let len = arr.len() as i64;
-
-            let (start, end) = normalize_arr_indices(start, end, len);
-
-            if end < start {
-                // don't search at all
-                return Ok(-1);
-            }
-
-            let slice = &arr[start as usize..end as usize];
-
-            match slice.iter().position(|r| r == &v) {
-                Some(i) => Ok((start as usize + i) as i64),
-                None => Ok(-1),
-            }
-        } else {
-            Ok(-1)
-        }
-    }
-
-    pub fn get_type(&self, path: &str) -> Result<String, Error> {
-        let s = RedisJSON::value_name(self.get_first(path)?);
-        Ok(s.to_string())
     }
 
     pub fn value_name(value: &Value) -> &str {
@@ -401,90 +185,6 @@ impl RedisJSON {
             Value::Array(arr) => (JSONType::Array, arr.len()),
             Value::Object(map) => (JSONType::Object, map.len()),
         }
-    }
-
-    pub fn value_op<F, R, T>(&mut self, path: &str, mut op_fun: F, res_func: R) -> Result<T, Error>
-    where
-        F: FnMut(&mut Value) -> Result<Value, Error>,
-        R: Fn(&Value) -> Result<T, Error>,
-    {
-        let mut errors = vec![];
-        let mut result = None;
-
-        // A wrapper function that is called by replace_with
-        // calls op_fun and then res_func
-        let mut collect_fun = |mut value: Value| {
-            op_fun(&mut value)
-                .and_then(|new_value| {
-                    // after calling op_fun calling res_func
-                    // to prepae the command result
-                    res_func(&new_value).map(|res| {
-                        result = Some(res);
-                        new_value
-                    })
-                })
-                .map_err(|e| {
-                    errors.push(e);
-                })
-                .unwrap_or(value)
-        };
-
-        if path == "$" {
-            // root needs special handling
-            self.data = collect_fun(self.data.take());
-        } else {
-            match SelectorMut::new().str_path(path) {
-                Ok(selector) => {
-                    let mut updater = JsonValueUpdater::new(|v| Some(collect_fun(v)));
-                    let replace_result = selector.value(&mut self.data).replace_with(&mut updater);
-
-                    if let Err(e) = replace_result {
-                        errors.push(e.into());
-                    }
-                }
-                Err(e) => {
-                    errors.push(e.into());
-                }
-            }
-        };
-
-        match errors.len() {
-            0 => match result {
-                Some(r) => Ok(r),
-                None => Err(err_msg_json_path_doesnt_exist_with_param(path).into()),
-            },
-            1 => Err(errors.remove(0)),
-            _ => Err(errors.into_iter().map(|e| e.msg).collect::<String>().into()),
-        }
-    }
-
-    pub fn get_memory<'a>(&'a self, path: &'a str) -> Result<usize, Error> {
-        // TODO add better calculation, handle wrappers, internals and length
-        let res = match self.get_first(path)? {
-            Value::Null => 0,
-            Value::Bool(v) => mem::size_of_val(v),
-            Value::Number(v) => mem::size_of_val(v),
-            Value::String(v) => mem::size_of_val(v),
-            Value::Array(v) => mem::size_of_val(v),
-            Value::Object(v) => mem::size_of_val(v),
-        };
-        Ok(res)
-    }
-
-    pub fn get_first<'a>(&'a self, path: &'a str) -> Result<&'a Value, Error> {
-        let results = self.get_values(path)?;
-        match results.first() {
-            Some(s) => Ok(s),
-            None => Err("ERR path does not exist".into()),
-        }
-    }
-
-    pub fn get_values<'a>(&'a self, path: &'a str) -> Result<Vec<&'a Value>, Error> {
-        let mut selector = Selector::new();
-        selector.str_path(path)?;
-        selector.value(&self.data);
-        let results = selector.select()?;
-        Ok(results)
     }
 }
 
