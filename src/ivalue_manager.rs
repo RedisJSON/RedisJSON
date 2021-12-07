@@ -12,10 +12,16 @@ use redis_module::rediserror::RedisError;
 use redis_module::{Context, NotifyEvent, RedisString};
 use serde_json::Number;
 use std::marker::PhantomData;
+use serde::Serialize;
 
 use crate::redisjson::RedisJSON;
 
 use crate::array_index::ArrayIndex;
+
+use std::mem;
+
+use bson::decode_document;
+use std::io::Cursor;
 
 pub struct IValueKeyHolderWrite<'a> {
     key: RedisKeyWritable,
@@ -493,33 +499,36 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     fn from_str(&self, val: &str, format: Format) -> Result<Self::O, Error> {
         match format {
             Format::JSON => Ok(serde_json::from_str(val)?),
-            Format::BSON => Err("Not yet supported".into())
-            // decode_document(&mut Cursor::new(val.as_bytes()))
-            //     .map(|docs| {
-            //         let v = if !docs.is_empty() {
-            //             docs.iter()
-            //                 .next()
-            //                 .map_or_else(|| IValue::NULL, |(_, b)| b.clone().into())
-            //         } else {
-            //             IValue::NULL
-            //         };
-            //         Ok(v)
-            //     })
-            //     .unwrap_or_else(|e| Err(e.to_string().into())),
+            Format::BSON => decode_document(&mut Cursor::new(val.as_bytes()))
+                .map(|docs| {
+                    let v = if !docs.is_empty() {
+                        docs.iter()
+                            .next()
+                            .map_or_else(|| IValue::NULL, |(_, b)| {
+                                let v: serde_json::Value = b.clone().into();
+                                let mut out = serde_json::Serializer::new(Vec::new());
+                                v.serialize(&mut out).unwrap();
+                                self.from_str(&String::from_utf8(out.into_inner()).unwrap(), Format::JSON).unwrap()
+                            })
+                    } else {
+                        IValue::NULL
+                    };
+                    Ok(v)
+                })
+                .unwrap_or_else(|e| Err(e.to_string().into())),
         }
     }
 
-    fn get_memory(&self, _v: &Self::V) -> Result<usize, RedisError> {
+    fn get_memory(&self, v: &Self::V) -> Result<usize, RedisError> {
         // todo: implement
-        let res = 0;
-        // match v {
-        //     Value::Null => 0,
-        //     Value::Bool(v) => mem::size_of_val(v),
-        //     Value::Number(v) => mem::size_of_val(v),
-        //     Value::String(v) => mem::size_of_val(v),
-        //     Value::Array(v) => mem::size_of_val(v),
-        //     Value::Object(v) => mem::size_of_val(v),
-        // };
+        let res = match v.type_() {
+            ValueType::Null => 0,
+            ValueType::Bool => mem::size_of_val(v),
+            ValueType::Number => mem::size_of_val(v),
+            ValueType::String => mem::size_of_val(v),
+            ValueType::Array => mem::size_of_val(v),
+            ValueType::Object => mem::size_of_val(v),
+        };
         Ok(res)
     }
 
