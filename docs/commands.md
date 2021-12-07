@@ -6,17 +6,17 @@
 
 RedisJSON aims to provide full support for [ECMA-404 The JSON Data Interchange Standard](http://json.org/).
 
-Below, the term _JSON Value_ refers to any of the valid values. A _Container_ is either a _JSON Array_ or a _JSON Object_. A _JSON Scalar_ is a _JSON Number_, a _JSON String_ or a literal (_JSON False_, _JSON True_ or _JSON Null_).
+Below, the term _JSON Value_ refers to any of the valid values. A _Container_ is either a _JSON Array_ or a _JSON Object_. A _JSON Scalar_ is a _JSON Number_, a _JSON String_, or a literal (_JSON False_, _JSON True_, or _JSON Null_).
 
 ### RedisJSON API
 
-Each of the module's commands is described below. Each section
+The module's commands are described below. Each section
 header shows the syntax for the command, where:
 
 *   Command and subcommand names are in uppercase, for example `JSON.SET` or `INDENT`
-*   Mandatory arguments are enclosed in angle brackets, e.g. `<path>`
-*   Optional arguments are enclosed in square brackets, e.g. `[index]`
-*   Additional optional arguments are indicated by three period characters, i.e. `...`
+*   Mandatory arguments are enclosed in angle brackets, for example `<path>`
+*   Optional arguments are enclosed in square brackets, for example `[index]`
+*   Additional optional arguments are indicated by three period characters, for example `...`
 *   The pipe character, `|`, means an exclusive or
 
 Commands usually require a key's name as their first argument. The [path](path.md) is generally assumed to be the root if not specified.
@@ -44,16 +44,16 @@ JSON.SET <key> <path> <json>
 
 Sets the JSON value at `path` in `key`
 
-For new Redis keys the `path` must be the root. For existing keys, when the entire `path` exists, the value that it contains is replaced with the `json` value.
+For new Redis keys, the `path` must be the root. For existing keys, replaces the current value with the `json` value if the entire `path` exists.
 
-A key (with its respective value) is added to a JSON Object (in a Redis RedisJSON data type key) if and only if it is the last child in the `path`. The optional subcommands modify this behavior for both new Redis RedisJSON data type keys as well as the JSON Object keys in them:
+Adds a key (with its respective value) to a JSON Object (in a RedisJSON data type key) only if it is the last child in the `path`. The optional subcommands modify this behavior for both new RedisJSON data type keys as well as the JSON Object keys in them:
 
 *   `NX` - only set the key if it does not already exist
 *   `XX` - only set the key if it already exists
 
 #### Return value
 
-[Simple String][1] `OK` if executed correctly, or [Null Bulk][3] if the specified `NX` or `XX`
+[Simple String][1] - `OK` if executed correctly, or [Null Bulk][3] if the specified `NX` or `XX`
 conditions were not met.
 
 ### JSON.GET
@@ -73,11 +73,11 @@ JSON.GET <key>
 
 #### Description
 
-Return the value at `path` in JSON serialized form.
+Returns the value at `path` in JSON serialized form.
 
-This command accepts multiple `path`s, and defaults to the value's root when none are given.
+This command accepts multiple `path` arguments. If no path is given, it defaults to the value's root.
 
-The following subcommands change the reply's format and are all set to the empty string by default:
+The following subcommands change the reply's format (all are empty string by default):
 
 *   `INDENT` sets the indentation string for nested levels
 *   `NEWLINE` sets the string that's printed at the end of each line
@@ -92,11 +92,11 @@ Produce pretty-formatted JSON with `redis-cli` by following this example:
 
 #### Return value
 
-[Array][4] of [Bulk Strings][3], specifically, each string is the JSON serialization of each JSON value matching a path.
+[Array][4] of [Bulk Strings][3] - each string is the JSON serialization of each JSON value that matches a path.
 
-When using a JSONPath (as opposed to the legacy path) the root of the matching values is always an array. As opposed to the legacy path, which returns a single value.
+When using a JSONPath, the root of the matching values is always an array. In contrast, the legacy path returns a single value.
 
-If there are multiple paths mixing both legacy path and JSONPath, the returned value conforms to the JSONPath version (an array of values). 
+If there are multiple paths that include both legacy path and JSONPath, the returned value conforms to the JSONPath version (an array of values). 
 
 #### Examples:
 
@@ -132,11 +132,11 @@ JSON.MGET <key> [key ...] <path>
 
 #### Description
 
-Returns the values at `path` from multiple `key`s. Nonexistent keys and nonexistent paths are reported as null.
+Returns the values at `path` from multiple `key` arguments. Returns null for nonexistent keys and nonexistent paths.
 
 #### Return value
 
-[Array][4] of [Bulk Strings][3], specifically the JSON serialization of the value at each key's
+[Array][4] of [Bulk Strings][3] - the JSON serialization of the value at each key's
 path.
 
 #### Example
@@ -169,13 +169,13 @@ JSON.DEL <key> [path]
 
 #### Description
 
-Delete a value.
+Deletes a value.
 
-`path` defaults to root if not provided. Nonexistent keys and paths are ignored. Deleting an object's root is equivalent to deleting the key from Redis.
+`path` defaults to root if not provided. Ignores nonexistent keys and paths. Deleting an object's root is equivalent to deleting the key from Redis.
 
 #### Return value
 
-[Integer][2], specifically the number of paths deleted (0 or more).
+[Integer][2] - the number of paths deleted (0 or more).
 
 #### Example
 
@@ -203,7 +203,7 @@ Increments the number value stored at `path` by `number`.
 
 #### Return value
 
-[Bulk String][3], specifically the stringified new value for each path, or [null][6] element if the matching JSON value is not a number
+[Bulk String][3] - the stringified new value for each path, or [null][6] if the matching JSON value is not a number.
 
 #### Example
 
@@ -234,7 +234,7 @@ Multiplies the number value stored at `path` by `number`.
 
 #### Return value
 
-[Bulk String][3], specifically the stringified new values for each path, or [null][6] element if the matching JSON value is not a number.
+[Bulk String][3] - the stringified new values for each path, or [null][6] element if the matching JSON value is not a number.
 
 #### Example
 
@@ -266,7 +266,7 @@ Appends the `json-string` values to the string at `path`.
 
 #### Return value
 
-[Array][4] of [Integers][2], specifically, for each path, the string's new length, or [null][6] element if the matching JSON value is not an array.
+[Array][4] of [Integers][2] - for each path, the string's new length, or [null][6] if the matching JSON value is not an array.
 
 #### Example
 
@@ -294,13 +294,13 @@ JSON.STRLEN <key> [path]
 
 #### Description
 
-Report the length of the JSON String at `path` in `key`.
+Reports the length of the JSON String at `path` in `key`.
 
-`path` defaults to root if not provided. If the `key` or `path` do not exist, null is returned.
+`path` defaults to root if not provided. Returns null if the `key` or `path` do not exist.
 
 #### Return value
 
-[Array][4] of [Integers][2], specifically, for each path, the string's length, or [null][6] element if the matching JSON value is not a string.
+[Array][4] of [Integers][2] - for each path, the string's length, or [null][6] if the matching JSON value is not a string.
 
 
 #### Example
@@ -333,7 +333,7 @@ Append the `json` values into the array at `path` after the last element in it.
 
 #### Return value
 
-[Array][4] of [Integers][2], specifically, for each path, the array's new size, or [null][6] element if the matching JSON value is not an array.
+[Array][4] of [Integers][2] - for each path, the array's new size, or [null][6] if the matching JSON value is not an array.
 
 #### Example
 
@@ -359,17 +359,17 @@ OK
 JSON.ARRINDEX <key> <path> <json-scalar> [start [stop]]
 ```
 
-Search for the first occurrence of a scalar JSON value in an array.
+Searches for the first occurrence of a scalar JSON value in an array.
 
 The optional inclusive `start` (default 0) and exclusive `stop` (default 0, meaning that the last element is included) specify a slice of the array to search.
 Negative values are interpreted as starting from the end.
 
 
-Note: out of range errors are treated by rounding the index to the array's start and end. An inverse index range (e.g. from 1 to 0) will return unfound.
+Note: out-of-range indexes round to the array's start and end. An inverse index range (such as the range from 1 to 0) will return unfound.
 
 #### Return value
 
-[Array][4] of [Integers][2], specifically, for each JSON value matching the path, the first position of the scalar value in the array, -1 if unfound in the array, or [null][6] element if the matching JSON value is not an array.
+[Array][4] of [Integers][2] - the first position in the array of each JSON value that matches the path, -1 if unfound in the array, or [null][6] if the matching JSON value is not an array.
 
 #### Examples
 
@@ -402,13 +402,13 @@ JSON.ARRINSERT <key> <path> <index> <json> [json ...]
 
 #### Description
 
-Insert the `json` values into the array at `path` before the `index` (shifts to the right).
+Inserts the `json` values into the array at `path` before the `index` (shifts to the right).
 
 The index must be in the array's range. Inserting at `index` 0 prepends to the array. Negative index values start from the end of the array.
 
 #### Return value
 
-[Array][4] of [Integers][2], specifically, for each path, the array's new size, or [null][6] element if the matching JSON value is not an array.
+[Array][4] of [Integers][2] - for each path, the array's new size, or [null][6] if the matching JSON value is not an array.
 
 #### Examples
 
@@ -441,13 +441,13 @@ OK
 JSON.ARRLEN <key> [path]
 ```
 
-Report the length of the JSON Array at `path` in `key`.
+Reports the length of the JSON Array at `path` in `key`.
 
 `path` defaults to root if not provided. Returns null if the `key` or `path` do not exist.
 
 #### Return value
 
-[Array][4] of [Integers][2], specifically, for each path, the array's length, or [null][6] element if the matching JSON value is not an array.
+[Array][4] of [Integers][2] - for each path, the array's length, or [null][6] if the matching JSON value is not an array.
 
 #### Examples
 
@@ -480,13 +480,13 @@ JSON.ARRPOP <key> [path [index]]
 
 #### Description
 
-Remove and return element from the index in the array.
+Removes and returns an element from the index in the array.
 
-`path` defaults to root if not provided. `index` is the position in the array to start popping from (defaults to -1, meaning the last element). Out of range indices are rounded to their respective array ends. Popping an empty array yields null.
+`path` defaults to root if not provided. `index` is the position in the array to start popping from (defaults to -1, meaning the last element). Out-of-range indexes round to their respective array ends. Popping an empty array returns null.
 
 #### Return value
 
-[Array][4] of [Bulk Strings][3], specifically, for each path, the popped JSON value, or [null][6] element if the matching JSON value is not an array.
+[Array][4] of [Bulk Strings][3] - for each path, the popped JSON value, or [null][6] if the matching JSON value is not an array.
 
 #### Examples
 
@@ -522,24 +522,24 @@ JSON.ARRTRIM <key> <path> <start> <stop>
 
 #### Description
 
-Trim an array so that it contains only the specified inclusive range of elements.
+Trims an array so that it contains only the specified inclusive range of elements.
 
 This command is extremely forgiving and using it with out-of-range indexes will not produce an error. There are a few differences between how RedisJSON v2.0 and legacy versions handle out-of-range indexes.
 
 Behavior as of RedisJSON v2.0:
 
-* If `start` is larger than the array's size or `start` > `stop`, the return value will be 0 and the resulting array will be empty. 
+* If `start` is larger than the array's size or `start` > `stop`, returns 0 and an empty array. 
 * If `start` is < 0, then start from the end of the array.
 * If `stop` is larger than the end of the array, it will be treated like the last element.
 
 Legacy behavior:
-* If `start` is larger than the array's size or `start` > `stop`, the result will be an empty array.
+* If `start` is larger than the array's size or `start` > `stop`, returns an empty array.
 * If `start` is < 0, then it will be treated as 0.
 * If `stop` is larger than the end of the array, it will be treated like the last element.
 
 #### Return value
 
-[Array][4] of [Integers][2], specifically, for each path, the array's new size, or [null][6] element if the matching JSON value is not an array.
+[Array][4] of [Integers][2] - for each path, the array's new size, or [null][6] if the matching JSON value is not an array.
 
 #### Examples
 
@@ -574,13 +574,13 @@ JSON.OBJKEYS <key> [path]
 
 #### Description
 
-Return the keys in the object that's referenced by `path`.
+Returns the keys in the object that's referenced by `path`.
 
-`path` defaults to root if not provided. If the object is empty, or either `key` or `path` do not exist, then null is returned.
+`path` defaults to root if not provided. Returns null if the object is empty or either `key` or `path` do not exist.
 
 #### Return value
 
-[Array][4] of [Array][4], specifically, for each path, an array of the key names in the object as [Bulk Strings][3], or [null][6] element if the matching JSON value is not an object. 
+[Array][4] of [Arrays][4] - for each path, an array of the key names in the object as [Bulk Strings][3], or [null][6] if the matching JSON value is not an object. 
 
 #### Example
 
@@ -606,13 +606,13 @@ JSON.OBJLEN <key> [path]
 
 #### Description
 
-Report the number of keys in the JSON Object at `path` in `key`.
+Reports the number of keys in the JSON Object at `path` in `key`.
 
-`path` defaults to root if not provided. If the `key` or `path` do not exist, null is returned.
+`path` defaults to root if not provided. Returns null if the `key` or `path` do not exist.
 
 #### Return value
 
-[Integer][2], specifically the number of keys in the object.
+[Integer][2] - the number of keys in the object.
 
 ## Module commands
 
@@ -629,13 +629,13 @@ JSON.TYPE <key> [path]
 
 #### Description
 
-Report the type of JSON value at `path`.
+Reports the type of JSON value at `path`.
 
-`path` defaults to root if not provided. If the `key` or `path` do not exist, null is returned.
+`path` defaults to root if not provided. Returns null if the `key` or `path` do not exist.
 
 #### Return value
 
-[Array][4] of [Simple String][1], specifically, for each path, the type of value.
+[Array][4] of [Simple Strings][1] - for each path, the value's type.
 
 #### Examples
 
@@ -664,11 +664,11 @@ JSON.DEBUG <subcommand & arguments>
 
 #### Description
 
-Report information.
+Reports information.
 
 Supported subcommands are:
 
-*   `MEMORY <key> [path]` - report the memory usage in bytes of a value. `path` defaults to root if
+*   `MEMORY <key> [path]` - report a value's memory usage in bytes. `path` defaults to root if
     not provided.
 *   `HELP` - reply with a helpful message
 
@@ -676,8 +676,8 @@ Supported subcommands are:
 
 Depends on the subcommand used.
 
-*   `MEMORY` returns an [integer][2], specifically the size in bytes of the value
-*   `HELP` returns an [array][4], specifically with the help message
+*   `MEMORY` returns an [integer][2] - the value's size in bytes
+*   `HELP` returns an [array][4] - with the help message
 
 ### JSON.FORGET
 
@@ -696,19 +696,20 @@ JSON.RESP <key> [path]
 
 #### Description
 
-Return the JSON in `key` in [Redis Serialization Protocol (RESP)][5].
+Returns the JSON in `key` in [Redis Serialization Protocol (RESP)][5] form.
 
 `path` defaults to root if not provided. This command uses the following mapping from JSON to RESP:
--   JSON Null is mapped to the [RESP Null Bulk String][5]
--   JSON `false` and `true` values are mapped to the respective [RESP Simple Strings][1]
--   JSON Numbers are mapped to [RESP Integers][2] or [RESP Bulk Strings][3], depending on type
--   JSON Strings are mapped to [RESP Bulk Strings][3]
--   JSON Arrays are represented as [RESP Arrays][4] in which the first element is the [simple string][1] `[` followed by the array's elements
--   JSON Objects are represented as [RESP Arrays][4] in which the first element is the [simple string][1] `{`. Each successive entry represents a key-value pair as a two-entries [array][4] of [bulk strings][3].
+
+*   JSON Null maps to the [RESP Null Bulk String][5]
+*   JSON `false` and `true` values map to [RESP Simple Strings][1]
+*   JSON Numbers map to [RESP Integers][2] or [RESP Bulk Strings][3], depending on type
+*   JSON Strings map to [RESP Bulk Strings][3]
+*   JSON Arrays are represented as [RESP Arrays][4] in which the first element is the [simple string][1] `[` followed by the array's elements
+*   JSON Objects are represented as [RESP Arrays][4] in which the first element is the [simple string][1] `{`. Each successive entry represents a key-value pair as a two-entry [array][4] of [bulk strings][3].
 
 #### Return value
 
-[Array][4], specifically the JSON's RESP form as detailed.
+[Array][4] - the JSON's RESP form as detailed.
 
 [1]:  http://redis.io/topics/protocol#resp-simple-strings
 [2]:  http://redis.io/topics/protocol#resp-integers
