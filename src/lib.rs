@@ -68,14 +68,27 @@ pub enum ManagerType {
 
 pub static MANAGER: ManagerType = ManagerType::IValue;
 
-macro_rules! run_on_manager {(
+macro_rules! run_on_manager {
+    (
     $run:expr, $ctx:ident, $args: ident
     ) => {
         match MANAGER {
-            ManagerType::IValue => $run(ivalue_manager::RedisIValueJsonKeyManager{phantom:PhantomData}, $ctx, $args),
-            ManagerType::SerdeValue => $run(manager::RedisJsonKeyManager{phantom:PhantomData}, $ctx, $args),
+            ManagerType::IValue => $run(
+                ivalue_manager::RedisIValueJsonKeyManager {
+                    phantom: PhantomData,
+                },
+                $ctx,
+                $args,
+            ),
+            ManagerType::SerdeValue => $run(
+                manager::RedisJsonKeyManager {
+                    phantom: PhantomData,
+                },
+                $ctx,
+                $args,
+            ),
         }
-    }
+    };
 }
 
 #[macro_export]

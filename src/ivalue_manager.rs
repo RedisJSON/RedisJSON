@@ -10,9 +10,9 @@ use redis_module::key::{verify_type, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::rediserror::RedisError;
 use redis_module::{Context, NotifyEvent, RedisString};
+use serde::Serialize;
 use serde_json::Number;
 use std::marker::PhantomData;
-use serde::Serialize;
 
 use crate::redisjson::RedisJSON;
 
@@ -502,14 +502,19 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
             Format::BSON => decode_document(&mut Cursor::new(val.as_bytes()))
                 .map(|docs| {
                     let v = if !docs.is_empty() {
-                        docs.iter()
-                            .next()
-                            .map_or_else(|| IValue::NULL, |(_, b)| {
+                        docs.iter().next().map_or_else(
+                            || IValue::NULL,
+                            |(_, b)| {
                                 let v: serde_json::Value = b.clone().into();
                                 let mut out = serde_json::Serializer::new(Vec::new());
                                 v.serialize(&mut out).unwrap();
-                                self.from_str(&String::from_utf8(out.into_inner()).unwrap(), Format::JSON).unwrap()
-                            })
+                                self.from_str(
+                                    &String::from_utf8(out.into_inner()).unwrap(),
+                                    Format::JSON,
+                                )
+                                .unwrap()
+                            },
+                        )
                     } else {
                         IValue::NULL
                     };
