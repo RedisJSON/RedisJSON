@@ -23,6 +23,7 @@ pub mod c_api;
 pub mod commands;
 pub mod error;
 mod formatter;
+pub mod ivalue_manager;
 pub mod manager;
 mod nodevisitor;
 pub mod redisjson;
@@ -59,6 +60,13 @@ pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
     },
 );
 /////////////////////////////////////////////////////
+
+pub enum ManagerType {
+    SerdeValue,
+    IValue,
+}
+
+pub static MANAGER: ManagerType = ManagerType::IValue;
 
 #[macro_export]
 macro_rules! redis_json_module_create {(
@@ -462,7 +470,12 @@ fn dummy_init(_ctx: &Context, _args: &Vec<RedisString>) -> Status {
 redis_json_module_create! {
     data_types: [REDIS_JSON_TYPE],
     pre_command_function: pre_command,
-    get_manage: Some(manager::RedisJsonKeyManager{phantom:PhantomData}),
+    get_manage: {
+        match MANAGER {
+            ManagerType::IValue => Some(ivalue_manager::RedisIValueJsonKeyManager{phantom:PhantomData}),
+            ManagerType::SerdeValue => None,
+        }
+    },
     version: 99_99_99,
     init: dummy_init,
 }

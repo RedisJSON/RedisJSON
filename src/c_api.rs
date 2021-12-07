@@ -10,12 +10,10 @@ use std::{
 use crate::commands::KeyValue;
 use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
 use jsonpath_lib::select::Selector;
-use redis_module::{raw as rawmod, RedisError};
+use redis_module::raw as rawmod;
 use redis_module::{Context, RedisString, Status};
-use serde_json::Value;
 
 use crate::manager::{Manager, ReadHolder};
-use crate::redisjson::RedisJSON;
 
 // extern crate readies_wd40;
 // use crate::readies_wd40::{BB, _BB, getenv};
