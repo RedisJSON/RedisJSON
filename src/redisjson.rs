@@ -1,9 +1,3 @@
-// RedisJSON Redis module.
-//
-// Translate between JSON and tree of Redis objects:
-// User-provided JSON is converted to a tree. This tree is stored transparently in Redis.
-// It can be operated on (e.g. INCR) and serialized back to JSON.
-
 use std::io::Cursor;
 use std::os::raw::{c_int, c_void};
 
