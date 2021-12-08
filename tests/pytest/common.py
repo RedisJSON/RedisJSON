@@ -18,9 +18,9 @@ def TimeLimit(timeout):
 
 def envMem(env):
     pid = env.envRunner.masterProcess.pid
-    ps = paella.sh(f"ps u -p {pid}", join=False, lines=True)
-    f = re.split(r"\s*", ps[1].strip())
-    return {'vsz': int(f[4]), 'rss': int(f[5]) }
+    vms = psutil.Process(pid).memory_info().vms / 1024
+    rss = psutil.Process(pid).memory_info().rss / 1024
+    return {'vsz': vms, 'rss': rss }
 
 def checkEnvMem(env, expected_vsz=None, vsz0=0, threshold=0.1):
     if os.getenv('MEMINFO', '0') == '1':
