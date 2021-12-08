@@ -61,27 +61,32 @@ pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
 );
 /////////////////////////////////////////////////////
 
+#[derive(Copy, Clone)]
 pub enum ManagerType {
     SerdeValue,
     IValue,
 }
 
-pub static MANAGER: ManagerType = ManagerType::IValue;
+pub static mut MANAGER: ManagerType = ManagerType::IValue;
+
+fn get_manager_type() -> ManagerType {
+    unsafe {MANAGER}
+}
 
 macro_rules! run_on_manager {
     (
     $run:expr, $ctx:ident, $args: ident
     ) => {
-        match MANAGER {
-            ManagerType::IValue => $run(
-                ivalue_manager::RedisIValueJsonKeyManager {
+        match $crate::get_manager_type() {
+            $crate::ManagerType::IValue => $run(
+                $crate::ivalue_manager::RedisIValueJsonKeyManager {
                     phantom: PhantomData,
                 },
                 $ctx,
                 $args,
             ),
-            ManagerType::SerdeValue => $run(
-                manager::RedisJsonKeyManager {
+            $crate::ManagerType::SerdeValue => $run(
+                $crate::manager::RedisJsonKeyManager {
                     phantom: PhantomData,
                 },
                 $ctx,
@@ -105,13 +110,14 @@ macro_rules! redis_json_module_create {(
         use redis_module::{redis_command, redis_module, RedisString};
         use std::marker::PhantomData;
         use std::os::raw::{c_double, c_int, c_longlong};
-        use redis_module::{raw as rawmod};
+        use redis_module::{raw as rawmod, LogLevel};
         use rawmod::ModuleOptions;
         use std::{
             ffi::CStr,
             os::raw::{c_char, c_void},
         };
         use libc::size_t;
+        use std::collections::HashMap;
 
         ///
         /// JSON.DEL <key> [path]
@@ -121,7 +127,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_del(mngr, ctx, args),
-                None => commands::command_json_del(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_del, ctx, args),
 
             }
         }
@@ -443,10 +449,35 @@ macro_rules! redis_json_module_create {(
             $init_func(ctx, args)
         }
 
+        fn json_init(ctx: &Context, args: &Vec<RedisString>) -> Status{
+            if args.len() % 2 != 0 {
+                ctx.log(LogLevel::Warning, "RedisJson arguments must be key:value pairs");
+                return Status::Err;
+            }
+            let mut args_map = HashMap::<String, String>::new();
+            for i in (0..args.len()).step_by(2) {
+                args_map.insert(args[i].to_string_lossy(), args[i + 1].to_string_lossy());
+            }
+
+            if let Some(backend) = args_map.get("JSON_BACKEND") {
+                if  backend == "SERDE_JSON" {
+                    unsafe {$crate::MANAGER = $crate::ManagerType::SerdeValue};
+                } else if backend == "IJSON" {
+                    unsafe {$crate::MANAGER = $crate::ManagerType::IValue};
+                } else {
+                    ctx.log(LogLevel::Warning, "Unsupported json backend was given");
+                    return Status::Err;
+                }
+            }
+
+            Status::Ok
+        }
+
         redis_module! {
             name: "ReJSON",
             version: $version,
             data_types: [$($data_type,)*],
+            init: json_init,
             init: intialize,
             commands: [
                 ["json.del", json_del, "write", 1,1,1],
@@ -492,7 +523,7 @@ redis_json_module_create! {
     data_types: [REDIS_JSON_TYPE],
     pre_command_function: pre_command,
     get_manage: {
-        match MANAGER {
+        match get_manager_type() {
             ManagerType::IValue => Some(ivalue_manager::RedisIValueJsonKeyManager{phantom:PhantomData}),
             _ => None,
         }

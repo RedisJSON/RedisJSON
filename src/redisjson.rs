@@ -11,7 +11,7 @@ use crate::backward;
 use crate::error::Error;
 use crate::ivalue_manager::RedisIValueJsonKeyManager;
 use crate::manager::{Manager, RedisJsonKeyManager};
-use crate::{ManagerType, MANAGER};
+use crate::{ManagerType, get_manager_type};
 use serde::Serialize;
 use std::fmt;
 use std::fmt::Display;
@@ -127,7 +127,7 @@ pub mod type_methods {
     pub extern "C" fn rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
         let json_string = value_rdb_load_json(rdb, encver);
         match json_string {
-            Ok(json_string) => match MANAGER {
+            Ok(json_string) => match get_manager_type() {
                 ManagerType::SerdeValue => {
                     let m = RedisJsonKeyManager {
                         phantom: PhantomData,
@@ -187,7 +187,7 @@ pub mod type_methods {
 
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn free(value: *mut c_void) {
-        match MANAGER {
+        match get_manager_type() {
             ManagerType::SerdeValue => {
                 let v = value as *mut RedisJSON<serde_json::Value>;
                 // Take ownership of the data from Redis (causing it to be dropped when we return)
@@ -204,7 +204,7 @@ pub mod type_methods {
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
         let mut out = serde_json::Serializer::new(Vec::new());
-        let json = match MANAGER {
+        let json = match get_manager_type() {
             ManagerType::SerdeValue => {
                 let v = unsafe { &*(value as *mut RedisJSON<serde_json::Value>) };
                 v.data.serialize(&mut out).unwrap();
