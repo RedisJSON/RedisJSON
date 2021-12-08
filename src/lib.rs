@@ -70,7 +70,7 @@ pub enum ManagerType {
 pub static mut MANAGER: ManagerType = ManagerType::IValue;
 
 fn get_manager_type() -> ManagerType {
-    unsafe {MANAGER}
+    unsafe { MANAGER }
 }
 
 macro_rules! run_on_manager {

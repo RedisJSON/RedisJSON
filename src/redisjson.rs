@@ -11,7 +11,7 @@ use crate::backward;
 use crate::error::Error;
 use crate::ivalue_manager::RedisIValueJsonKeyManager;
 use crate::manager::{Manager, RedisJsonKeyManager};
-use crate::{ManagerType, get_manager_type};
+use crate::{get_manager_type, ManagerType};
 use serde::Serialize;
 use std::fmt;
 use std::fmt::Display;
