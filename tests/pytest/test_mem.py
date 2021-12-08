@@ -1,5 +1,5 @@
 
-from includes import *
+from common import *
 
 
 JSON_FILES = [

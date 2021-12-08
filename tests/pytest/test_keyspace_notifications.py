@@ -1,5 +1,5 @@
-from includes import *
 
+from common import *
 
 
 def assert_msg(env, msg, expected_type, expected_data):

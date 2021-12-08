@@ -1,6 +1,6 @@
 # encoding=utf-8
 
-from includes import *
+from common import *
 
 import random
 import subprocess
