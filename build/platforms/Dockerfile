@@ -34,7 +34,7 @@ ADD . /build
 
 RUN ./deps/readies/bin/getupdates
 RUN ./deps/readies/bin/getpy3
-RUN ./system-setup.py
+RUN ./sbin/system-setup.py
 
 RUN bash -l -c make
 
@@ -64,7 +64,7 @@ RUN mkdir -p /var/opt/redislabs/artifacts
 RUN chown -R redis:redis /var/opt/redislabs
 COPY --from=builder /build/bin/artifacts/ /var/opt/redislabs/artifacts
 RUN true
-COPY --from=builder /build/target/release/rejson.so "$LIBDIR"
+COPY --from=builder /build/bin/linux-${ARCH}-release/rejson.so "$LIBDIR"
 
 EXPOSE 6379
 CMD ["redis-server", \
