@@ -1,11 +1,6 @@
-import json
+from includes import *
 
-import time
 
-import redis
-from RLTest import Env,Defaults
-import time
-Defaults.decode_responses = True
 
 def assert_msg(env, msg, expected_type, expected_data):
     env.assertEqual(expected_type, msg['type']) 

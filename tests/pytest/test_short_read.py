@@ -1,21 +1,16 @@
 # encoding=utf-8
-import json
-import os
+
+from includes import *
+
 import random
 import subprocess
 import tempfile
 import zipfile
-
 import gevent.queue
 import gevent.server
 import gevent.socket
-import time
-from RLTest import Defaults
 from enum import Enum, auto
-from common import TimeLimit
 
-
-Defaults.decode_responses = True
 
 CREATE_INDICES_TARGET_DIR = '/tmp/test'
 BASE_RDBS_URL = 'https://s3.amazonaws.com/redismodules/redisearch-enterprise/rdbs/'
