@@ -122,10 +122,11 @@ impl<'a> IValueKeyHolderWrite<'a> {
         if let serde_json::Value::Number(in_value) = in_value {
             let mut res = None;
             self.do_op(path, |v| {
-                let num_res = match (v.as_number().unwrap().has_decimal_point(), in_value.as_i64()) {
-                    (false, Some(num2)) => {
-                        ((op1_fun)(v.to_i64().unwrap(), num2)).into()
-                    }
+                let num_res = match (
+                    v.as_number().unwrap().has_decimal_point(),
+                    in_value.as_i64(),
+                ) {
+                    (false, Some(num2)) => ((op1_fun)(v.to_i64().unwrap(), num2)).into(),
                     _ => {
                         let num1 = v.to_f64().unwrap();
                         let num2 = in_value.as_f64().unwrap();
