@@ -33,14 +33,15 @@ make clean         # remove binary files
 
 make all           # build all libraries and packages
 
-make pytest        # run tests
-  TEST=name        # run test matching 'name'
-  TEST_ARGS="..."  # RLTest arguments
-  GEN=0|1          # run general tests on a standalone Redis topology
-  AOF=0|1          # run AOF persistency tests on a standalone Redis topology
-  SLAVES=0|1       # run replication tests on standalone Redis topology
-  CLUSTER=0|1      # run general tests on a OSS Redis Cluster topology
-  VALGRIND|VG=1    # run specified tests with Valgrind
+make pytest        # run flow tests
+  TEST=name          # run test matching 'name'
+  TEST_ARGS="..."    # RLTest arguments
+  GEN=0|1            # run general tests on a standalone Redis topology
+  AOF=0|1            # run AOF persistency tests on a standalone Redis topology
+  SLAVES=0|1         # run replication tests on standalone Redis topology
+  CLUSTER=0|1        # run general tests on a OSS Redis Cluster topology
+  VALGRIND|VG=1      # run specified tests with Valgrind
+  MEMINFO=1          # 
 
 make pack          # build package (RAMP file)
 

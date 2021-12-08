@@ -31,7 +31,7 @@ class RedisJSONSetup(paella.Setup):
         self.run("%s/bin/getcmake" % READIES)
 
     def linux(self):
-        self.install("git procps")
+        self.install("procps")
 
     def debian_compat(self):
         self.run("%s/bin/enable-utf8" % READIES)

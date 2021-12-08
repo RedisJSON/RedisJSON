@@ -34,6 +34,7 @@ help() {
 		LOG=0|1          Write to log
 		VALGRIND|VD=1    Run with Valgrind
 		CALLGRIND|CG=1   Run with Callgrind
+		MEMINFO=1        Show memory information
 		REDIS=addr       Use redis-server at addr
 
 	END

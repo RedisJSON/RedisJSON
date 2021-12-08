@@ -18,8 +18,9 @@ def TimeLimit(timeout):
 
 def envMem(env):
     pid = env.envRunner.masterProcess.pid
-    vms = psutil.Process(pid).memory_info().vms / 1024
-    rss = psutil.Process(pid).memory_info().rss / 1024
+    meminfo = psutil.Process(pid).memory_info()
+    vms = meminfo.vms / 1024
+    rss = meminfo.rss / 1024
     return {'vsz': vms, 'rss': rss }
 
 def checkEnvMem(env, expected_vsz=None, vsz0=0, threshold=0.1):
