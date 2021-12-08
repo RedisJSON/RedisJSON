@@ -122,8 +122,10 @@ impl<'a> IValueKeyHolderWrite<'a> {
         if let serde_json::Value::Number(in_value) = in_value {
             let mut res = None;
             self.do_op(path, |v| {
-                let num_res = match (v.to_i64(), in_value.as_i64()) {
-                    (Some(num1), Some(num2)) => ((op1_fun)(num1, num2)).into(),
+                let num_res = match (v.as_number().unwrap().has_decimal_point(), in_value.as_i64()) {
+                    (false, Some(num2)) => {
+                        ((op1_fun)(v.to_i64().unwrap(), num2)).into()
+                    }
                     _ => {
                         let num1 = v.to_f64().unwrap();
                         let num2 = in_value.as_f64().unwrap();
@@ -136,9 +138,9 @@ impl<'a> IValueKeyHolderWrite<'a> {
             match res {
                 None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
                 Some(n) => {
-                    if n.is_number() {
-                        if let Some(i) = n.to_i64() {
-                            Ok(i.into())
+                    if let Some(n) = n.as_number() {
+                        if !n.has_decimal_point() {
+                            Ok(n.to_i64().unwrap().into())
                         } else {
                             if let Some(f) = n.to_f64() {
                                 Ok(serde_json::Number::from_f64(f).unwrap())
