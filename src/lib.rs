@@ -449,7 +449,7 @@ macro_rules! redis_json_module_create {(
             $init_func(ctx, args)
         }
 
-        fn json_init(ctx: &Context, args: &Vec<RedisString>) -> Status{
+        fn json_init_config(ctx: &Context, args: &Vec<RedisString>) -> Status{
             if args.len() % 2 != 0 {
                 ctx.log(LogLevel::Warning, "RedisJson arguments must be key:value pairs");
                 return Status::Err;
@@ -477,7 +477,7 @@ macro_rules! redis_json_module_create {(
             name: "ReJSON",
             version: $version,
             data_types: [$($data_type,)*],
-            init: json_init,
+            init: json_init_config,
             init: intialize,
             commands: [
                 ["json.del", json_del, "write", 1,1,1],
