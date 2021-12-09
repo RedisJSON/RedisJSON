@@ -490,9 +490,9 @@ impl RedisJSON {
 
 pub mod type_methods {
     use super::*;
-    use std::ptr::null_mut;
-    use std::marker::PhantomData;
     use crate::manager::{Manager, RedisJsonKeyManager};
+    use std::marker::PhantomData;
+    use std::ptr::null_mut;
 
     pub extern "C" fn rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
         match rdb_load_json(rdb, encver) {
@@ -546,7 +546,7 @@ pub mod type_methods {
     }
 
     #[allow(non_snake_case, unused)]
-    pub unsafe extern "C" fn mem_usage(value: *const c_void) -> usize{
+    pub unsafe extern "C" fn mem_usage(value: *const c_void) -> usize {
         let json = &*(value as *mut RedisJSON);
 
         let manager = RedisJsonKeyManager {
@@ -554,5 +554,4 @@ pub mod type_methods {
         };
         manager.get_memory(&json.data).unwrap_or(0)
     }
-
 }
