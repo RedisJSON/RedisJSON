@@ -243,8 +243,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         if path.is_empty() {
             // update the root
             let root = self.get_value().unwrap().unwrap();
-            let val = if root.is_object() {
-                let o = root.as_object_mut().unwrap();
+            let val = if let Some(o) = root.as_object_mut() {
                 if !o.contains_key(key) {
                     updated = true;
                     o.insert(key.to_string(), v.take());
