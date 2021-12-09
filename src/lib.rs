@@ -402,7 +402,7 @@ macro_rules! redis_json_module_create {(
             pre_command_function: $pre_command_function_expr,
         }
 
-        fn intialize(ctx: &Context, args: &Vec<RedisString>) -> Status {
+        fn initialize(ctx: &Context, args: &Vec<RedisString>) -> Status {
             ctx.log_notice(&format!("version: {} git sha: {} branch: {}",
                 $version,
                 match GIT_SHA { Some(val) => val, _ => "unknown"},
@@ -418,7 +418,7 @@ macro_rules! redis_json_module_create {(
             name: "ReJSON",
             version: $version,
             data_types: [$($data_type,)*],
-            init: intialize,
+            init: initialize,
             commands: [
                 ["json.del", json_del, "write", 1,1,1],
                 ["json.get", json_get, "readonly", 1,1,1],
