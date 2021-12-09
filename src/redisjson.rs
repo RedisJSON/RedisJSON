@@ -187,6 +187,10 @@ pub mod type_methods {
 
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn free(value: *mut c_void) {
+        if value.is_null() {
+            // on Redis 6.0 we might get a NULL value here, so we need to handle it.
+            return;
+        }
         match get_manager_type() {
             ManagerType::SerdeValue => {
                 let v = value as *mut RedisJSON<serde_json::Value>;
