@@ -12,4 +12,5 @@ clientconfig:
     - requests: 10000000
     - threads: 2
     - pipeline: 1
-    - command: 'JSON.SET key_json $ "{\"field1\":\"value1\",\"field2\":\"value2\"}"'
+    - keyspacelen: 500000
+    - command: 'JSON.SET __rand_int__ $ "{\"field1\":\"value1\",\"field2\":\"value2\"}"'
