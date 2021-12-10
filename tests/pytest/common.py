@@ -2,6 +2,8 @@
 from contextlib import contextmanager
 from includes import *
 
+MEMINFO = os.getenv('MEMINFO', '0') == '1'
+
 
 @contextmanager
 def TimeLimit(timeout):
@@ -23,8 +25,10 @@ def envMem(env):
     rss = meminfo.rss / 1024
     return {'vsz': vms, 'rss': rss }
 
-def checkEnvMem(env, expected_vsz=None, vsz0=0, threshold=0.1):
-    if os.getenv('MEMINFO', '0') == '1':
+def checkEnvMem(env, expected_vsz=None, vsz0=0, threshold=0.1, title=None):
+    if MEMINFO:
+        if title is not None:
+            print(f"--- {title}")
         pid = env.envRunner.masterProcess.pid
         print(paella.sh(f'cat /proc/{pid}/status | grep ^Vm', join=False))
     mem = envMem(env)
