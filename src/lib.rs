@@ -73,6 +73,7 @@ fn get_manager_type() -> ManagerType {
     unsafe { MANAGER }
 }
 
+#[macro_export]
 macro_rules! run_on_manager {
     (
     $run:expr, $ctx:ident, $args: ident
