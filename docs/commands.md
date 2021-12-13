@@ -532,11 +532,6 @@ Behavior as of RedisJSON v2.0:
 * If `start` is < 0, then start from the end of the array.
 * If `stop` is larger than the end of the array, it will be treated like the last element.
 
-Legacy behavior:
-* If `start` is larger than the array's size or `start` > `stop`, returns an empty array.
-* If `start` is < 0, then it will be treated as 0.
-* If `stop` is larger than the end of the array, it will be treated like the last element.
-
 #### Return value
 
 [Array][4] of [Integers][2] - for each path, the array's new size, or [null][6] if the matching JSON value is not an array.
