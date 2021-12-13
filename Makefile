@@ -55,6 +55,8 @@ make platform      # build for specific Linux distribution
   ARTIFACTS=1        # copy artifacts from docker image
   PUBLISH=1          # publish (i.e. docker push) after build
 
+make sanbox        # create container with CLang Sanitizer
+
 make builddocs
 make localdocs
 make deploydocs
@@ -156,7 +158,7 @@ endif
 test: pytest
 
 pytest:
-	$(SHOW)MODULE=$(abspath $(TARGET)) ./tests/pytest/tests.sh
+	$(SHOW)MODULE=$(abspath $(TARGET)) $(realpath ./tests/pytest/tests.sh)
 
 cargo_test:
 	$(SHOW)cargo $(CARGO_TOOLCHAIN) test --features test --all
@@ -208,6 +210,15 @@ platform:
 ifeq ($(PUBLISH),1)
 	$(SHOW)make -C build/platforms publish
 endif
+
+ifneq ($(wildcard /w/*),)
+SANBOX_ARGS += -v /w:/w
+endif
+
+sanbox:
+	@docker run -it -v $(PWD):/search -w /search --cap-add=SYS_PTRACE --security-opt seccomp=unconfined $(SANBOX_ARGS) redisfab/clang:13-x64-bullseye bash
+
+.PHONY: sanbox
 
 #----------------------------------------------------------------------------------------------
 
