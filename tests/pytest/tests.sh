@@ -233,7 +233,7 @@ if [[ ! -z $TEST ]]; then
 	export RUST_BACKTRACE=1
 fi
 
-[[ $VERBOSE == 1 ]] && RLTEST_ARGS+=" -v"
+[[ $VERBOSE == 1 ]] && RLTEST_ARGS+=" -v -s"
 [[ $GDB == 1 ]] && RLTEST_ARGS+=" -i --verbose"
 
 export OS=$($READIES/bin/platform --os)
