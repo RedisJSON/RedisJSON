@@ -328,7 +328,7 @@ jobs:
       - run:
           name: Build & test (Search)
           shell: /bin/bash -l -eo pipefail
-          command: make SAN=<<parameters.san-type>> build test SHOW=1
+          command: make SAN=<<parameters.san-type>> build test SHOW=1 VERBOSE=1
           no_output_timeout: 30m
       - save-tests-logs
 
