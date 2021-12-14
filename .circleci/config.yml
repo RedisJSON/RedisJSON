@@ -326,7 +326,7 @@ jobs:
           name: System setup
           command: ./sbin/system-setup.py
       - run:
-          name: Build & test (Search)
+          name: Build & test
           shell: /bin/bash -l -eo pipefail
           command: make SAN=<<parameters.san-type>> build test SHOW=1 VERBOSE=1
           no_output_timeout: 30m

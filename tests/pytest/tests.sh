@@ -20,13 +20,14 @@ help() {
 		
 		Argument variables:
 		MODULE=path      Path to redisai.so
-		TESTMOD=path     Path to API test module
 		TEST=test        Run specific test (e.g. test.py:test_name)
 		REDIS=addr       Use redis-server at addr
 		
-		GEN=0|1          General tests
-		AOF=0|1          Tests with --test-aof
-		SLAVES=0|1       Tests with --test-slaves
+		GEN=1            General tests
+		AOF=1            Tests with --test-aof
+		SLAVES=1         Tests with --test-slaves
+		CLUSTER=1        Test with OSS cluster, one shard
+		QUICK=1          Run general tests only
 		
 		VALGRIND|VG=1    Run with Valgrind
 		SAN=type         Use LLVM sanitizer (type=address|memory|leak|thread) 
@@ -69,7 +70,7 @@ setup_redis_server() {
 			fi
 		fi
 
-	elif [[ $VG == 1 ]]; then
+	elif [[ $VALGRIND == 1 ]]; then
 		REDIS_SERVER=${REDIS_SERVER:-redis-server-vg}
 		if ! is_command $REDIS_SERVER; then
 			echo Building Redis for Valgrind ...
@@ -123,18 +124,13 @@ run_tests() {
 	shift
 	if [[ -n $title ]]; then
 		$READIES/bin/sep -0
-		printf "Running $title:\n\n"
+		printf "Testing $title:\n\n"
 	fi
 
 	cd $ROOT/tests/pytest
-#	[[ ! -z $TESTMOD ]] && RLTEST_ARGS+=--module $TESTMOD
-#	$OP python3 -m RLTest --clear-logs --module $MODULE --module-args "JSON_BACKEND SERDE_JSON" $RLTEST_ARGS
-#	$OP python3 -m RLTest --clear-logs --module $MODULE $RLTEST_ARGS
 
-
-
-
-
+	[[ $SERDE_JSON == 1 ]] && MODARGS+=" JSON_BACKEND SERDE_JSON"
+	
 	if [[ $EXISTING_ENV != 1 ]]; then
 		rltest_config=$(mktemp "${TMPDIR:-/tmp}/rltest.XXXXXXX")
 		rm -f $rltest_config
@@ -197,6 +193,10 @@ run_tests() {
 		kill -9 $XREDIS_PID
 	fi
 
+	if [[ $QUICK != 1 ]]; then
+		{ (SERDE_JSON=1 run_tests "$title (with serde_json)"); (( E |= $? )); } || true
+	fi
+
 	return $E
 }
 
@@ -204,9 +204,17 @@ run_tests() {
 
 [[ $1 == --help || $1 == help ]] && { help; exit 0; }
 
-GEN=${GEN:-1}
-SLAVES=${SLAVES:-0}
-AOF=${AOF:-0}
+if [[ $QUICK == 1 ]]; then
+	GEN=${GEN:-1}
+	SLAVES=${SLAVES:-0}
+	AOF=${AOF:-0}
+	CLUSTER=${CLUSTER:-0}
+else
+	GEN=${GEN:-1}
+	SLAVES=${SLAVES:-1}
+	AOF=${AOF:-1}
+	CLUSTER=${CLUSTER:-1}
+fi
 
 GDB=${GDB:-0}
 
@@ -220,9 +228,7 @@ OP=""
 MODULE=${MODULE:-$1}
 [[ -z $MODULE || ! -f $MODULE ]] && { echo "Module not found at ${MODULE}. Aborting."; exit 1; }
 
-[[ ! -z $TESTMOD ]] && echo "Test module path is ${TESTMOD}"
-
-[[ $VALGRIND == 1 || $VG == 1 ]] && valgrind_config
+[[ $VALGRIND == 1 ]] && valgrind_config
 
 if [[ ! -z $TEST ]]; then
 	RLTEST_ARGS+=" --test $TEST"
@@ -251,18 +257,29 @@ fi
 
 E=0
 
+if [[ $GEN == 1 ]]; then
+	{ (run_tests "general"); (( E |= $? )); } || true
+#	if [[ $QUICK != 1 ]]; then
+#		{ (SERDE_JSON=1 run_tests "general (with serde_json)"); (( E |= $? )); } || true
+#	fi
+fi
+if [[ $VALGRIND != 1 && $SLAVES == 1 ]]; then
+	{ (RLTEST_ARGS+=" --use-slaves" run_tests "--use-slaves"); (( E |= $? )); } || true
+#	if [[ $QUICK != 1 ]]; then
+#		{ (SERDE_JSON=1 RLTEST_ARGS+=" --use-slaves" run_tests "--use-slaves (with serde_json)"); (( E |= $? )); } || true
+#	fi
+if [[ $AOF == 1 ]]; then
+	{ (RLTEST_ARGS+=" --use-aof" run_tests "--use-aof"); (( E |= $? )); } || true
+#	if [[ $QUICK != 1 ]]; then
+#		{ (SERDE_JSON=1 RLTEST_ARGS+=" --use-aof" run_tests "--use-aof (with serde_json)"); (( E |= $? )); } || true
+#	fi
 if [[ $CLUSTER == 1 ]]; then
 	{ (RLTEST_ARGS+=" --env oss-cluster --shards-count 1" run_tests "--env oss-cluster"); (( E |= $? )); } || true
-	{ (MODARGS+=" JSON_BACKEND SERDE_JSON" RLTEST_ARGS+=" --env oss-cluster --shards-count 1" run_tests "--env oss-cluster (with serde_json)"); (( E |= $? )); } || true
-elif [[ $VALGRIND != 1 && $SLAVES == 1 ]]; then
-	{ (RLTEST_ARGS+=" --use-slaves" run_tests "--use-slaves"); (( E |= $? )); } || true
-	{ (MODARGS+=" JSON_BACKEND SERDE_JSON" RLTEST_ARGS+=" --use-slaves" run_tests "--use-slaves (with serde_json)"); (( E |= $? )); } || true
-elif [[ $AOF == 1 ]]; then
-	{ (RLTEST_ARGS+=" --use-aof" run_tests "--use-aof"); (( E |= $? )); } || true
-	{ (MODARGS+=" JSON_BACKEND SERDE_JSON" RLTEST_ARGS+=" --use-aof" run_tests "--use-aof (with serde_json)"); (( E |= $? )); } || true
-else
-	{ (run_tests "general"); (( E |= $? )); } || true
-	{ (MODARGS+=" JSON_BACKEND SERDE_JSON" run_tests "general (with serde_json)"); (( E |= $? )); } || true
+#	if [[ $QUICK != 1 ]]; then
+#		{ (SERDE_JSON=1 RLTEST_ARGS+=" --env oss-cluster --shards-count 1" run_tests "--env oss-cluster (with serde_json)"); (( E |= $? )); } || true
+#	fi
 fi
-[[ $VG == 1 ]] && valgrind_summary
+
+[[ $VALGRIND == 1 ]] && valgrind_summary
+
 exit $E
