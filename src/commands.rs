@@ -573,7 +573,7 @@ pub fn command_json_set<M: Manager>(
 
     let key = args.next_arg()?;
     let path = Path::new(args.next_str()?);
-    let value = args.next_str()?;
+    let value = args.next_arg()?;
 
     let mut format = Format::JSON;
     let mut set_option = SetOptions::None;
@@ -596,7 +596,7 @@ pub fn command_json_set<M: Manager>(
     let mut redis_key = manager.open_key_write(ctx, key)?;
     let current = redis_key.get_value()?;
 
-    let val = manager.from_str(value, format)?;
+    let val = manager.from_string(&value, format)?;
 
     match (current, set_option) {
         (Some(ref mut doc), ref op) => {
@@ -1275,8 +1275,7 @@ pub fn command_json_arr_append<M: Manager>(
     let args = args.try_fold::<_, _, Result<_, RedisError>>(
         Vec::with_capacity(args.len()),
         |mut acc, arg| {
-            let json = arg.try_as_str()?;
-            acc.push(manager.from_str(json, Format::JSON)?);
+            acc.push(manager.from_string(&arg, Format::JSON)?);
             Ok(acc)
         },
     )?;
@@ -1436,8 +1435,7 @@ pub fn command_json_arr_insert<M: Manager>(
     let args = args.try_fold::<_, _, Result<_, RedisError>>(
         Vec::with_capacity(args.len()),
         |mut acc, arg| {
-            let json = arg.try_as_str()?;
-            acc.push(manager.from_str(json, Format::JSON)?);
+            acc.push(manager.from_string(&arg, Format::JSON)?);
             Ok(acc)
         },
     )?;

@@ -132,7 +132,7 @@ pub mod type_methods {
                     let m = RedisJsonKeyManager {
                         phantom: PhantomData,
                     };
-                    let v = m.from_str(&json_string, Format::JSON);
+                    let v = m.from_str(&json_string);
                     match v {
                         Ok(res) => Box::into_raw(Box::new(res)) as *mut c_void,
                         Err(_) => null_mut(),
@@ -142,7 +142,7 @@ pub mod type_methods {
                     let m = RedisIValueJsonKeyManager {
                         phantom: PhantomData,
                     };
-                    let v = m.from_str(&json_string, Format::JSON);
+                    let v = m.from_str(&json_string);
                     match v {
                         Ok(res) => Box::into_raw(Box::new(res)) as *mut c_void,
                         Err(_) => null_mut(),

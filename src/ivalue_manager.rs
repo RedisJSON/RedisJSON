@@ -498,10 +498,14 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         })
     }
 
-    fn from_str(&self, val: &str, format: Format) -> Result<Self::O, Error> {
+    fn from_str(&self, val: &str) -> Result<Self::O, Error> {
+        Ok(serde_json::from_str(val)?)
+    }
+
+    fn from_string(&self, val: &RedisString, format: Format) -> Result<Self::O, Error> {
         match format {
-            Format::JSON => Ok(serde_json::from_str(val)?),
-            Format::BSON => decode_document(&mut Cursor::new(val.as_bytes()))
+            Format::JSON => self.from_str(val.try_as_str()?),
+            Format::BSON => decode_document(&mut Cursor::new(val.as_slice()))
                 .map(|docs| {
                     let v = if !docs.is_empty() {
                         docs.iter().next().map_or_else(
@@ -510,11 +514,8 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                                 let v: serde_json::Value = b.clone().into();
                                 let mut out = serde_json::Serializer::new(Vec::new());
                                 v.serialize(&mut out).unwrap();
-                                self.from_str(
-                                    &String::from_utf8(out.into_inner()).unwrap(),
-                                    Format::JSON,
-                                )
-                                .unwrap()
+                                self.from_str(&String::from_utf8(out.into_inner()).unwrap())
+                                    .unwrap()
                             },
                         )
                     } else {

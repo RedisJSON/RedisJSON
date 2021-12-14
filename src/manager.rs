@@ -84,7 +84,8 @@ pub trait Manager {
         ctx: &Context,
         key: RedisString,
     ) -> Result<Self::WriteHolder, RedisError>;
-    fn from_str(&self, val: &str, format: Format) -> Result<Self::O, Error>;
+    fn from_str(&self, val: &str) -> Result<Self::O, Error>;
+    fn from_string(&self, val: &RedisString, format: Format) -> Result<Self::O, Error>;
     fn get_memory(&self, v: &Self::V) -> Result<usize, RedisError>;
     fn is_json(&self, key: *mut RedisModuleKey) -> Result<bool, RedisError>;
 }
@@ -554,10 +555,14 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
         })
     }
 
-    fn from_str(&self, val: &str, format: Format) -> Result<Value, Error> {
+    fn from_str(&self, val: &str) -> Result<Self::O, Error> {
+        Ok(serde_json::from_str(val)?)
+    }
+
+    fn from_string(&self, val: &RedisString, format: Format) -> Result<Value, Error> {
         match format {
-            Format::JSON => Ok(serde_json::from_str(val)?),
-            Format::BSON => decode_document(&mut Cursor::new(val.as_bytes()))
+            Format::JSON => self.from_str(val.try_as_str()?),
+            Format::BSON => decode_document(&mut Cursor::new(val.as_slice()))
                 .map(|docs| {
                     let v = if !docs.is_empty() {
                         docs.iter()
