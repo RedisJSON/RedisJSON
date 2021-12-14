@@ -193,8 +193,8 @@ run_tests() {
 		kill -9 $XREDIS_PID
 	fi
 
-	if [[ $QUICK != 1 ]]; then
-		{ (SERDE_JSON=1 run_tests "$title (with serde_json)"); (( E |= $? )); } || true
+	if [[ $QUICK != 1 && $FINAL != 1 ]]; then
+		{ (SERDE_JSON=1 FINAL=1 run_tests "$title (with serde_json)"); (( E |= $? )); } || true
 	fi
 
 	return $E
@@ -259,25 +259,15 @@ E=0
 
 if [[ $GEN == 1 ]]; then
 	{ (run_tests "general"); (( E |= $? )); } || true
-#	if [[ $QUICK != 1 ]]; then
-#		{ (SERDE_JSON=1 run_tests "general (with serde_json)"); (( E |= $? )); } || true
-#	fi
 fi
 if [[ $VALGRIND != 1 && $SLAVES == 1 ]]; then
 	{ (RLTEST_ARGS+=" --use-slaves" run_tests "--use-slaves"); (( E |= $? )); } || true
-#	if [[ $QUICK != 1 ]]; then
-#		{ (SERDE_JSON=1 RLTEST_ARGS+=" --use-slaves" run_tests "--use-slaves (with serde_json)"); (( E |= $? )); } || true
-#	fi
+fi
 if [[ $AOF == 1 ]]; then
 	{ (RLTEST_ARGS+=" --use-aof" run_tests "--use-aof"); (( E |= $? )); } || true
-#	if [[ $QUICK != 1 ]]; then
-#		{ (SERDE_JSON=1 RLTEST_ARGS+=" --use-aof" run_tests "--use-aof (with serde_json)"); (( E |= $? )); } || true
-#	fi
+fi
 if [[ $CLUSTER == 1 ]]; then
 	{ (RLTEST_ARGS+=" --env oss-cluster --shards-count 1" run_tests "--env oss-cluster"); (( E |= $? )); } || true
-#	if [[ $QUICK != 1 ]]; then
-#		{ (SERDE_JSON=1 RLTEST_ARGS+=" --env oss-cluster --shards-count 1" run_tests "--env oss-cluster (with serde_json)"); (( E |= $? )); } || true
-#	fi
 fi
 
 [[ $VALGRIND == 1 ]] && valgrind_summary
