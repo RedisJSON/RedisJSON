@@ -27,7 +27,7 @@ different paths:
 ### A bigger array
 
 Moving on to bigger values, we use the 1.4 kB array in
-[/test/files/pass-jsonsl-1.json](https://github.com/RedisLabsModules/redisjson/blob/master/test/files/pass-jsonsl-1.json):
+[/tests/files/pass-jsonsl-1.json](https://github.com/RedisLabsModules/redisjson/blob/master/tests/files/pass-jsonsl-1.json):
 
 ![ReJSONBenchmark pass-jsonsl-1.json](images/bench_pass_jsonsl_1.png)
 
@@ -36,7 +36,7 @@ Moving on to bigger values, we use the 1.4 kB array in
 ### A largish object
 
 More of the same to wrap up, now we'll take on a behemoth of no less than 3.5 kB as given by
-[/test/files/pass-json-parser-0000.json](https://github.com/RedisLabsModules/redisjson/blob/master/test/files/pass-json-parser-0000.json):
+[/tests/files/pass-json-parser-0000.json](https://github.com/RedisLabsModules/redisjson/blob/master/tests/files/pass-json-parser-0000.json):
 
 ![ReJSONBenchmark pass-json-parser-0000.json](images/bench_pass_json_parser_0000.png)
 
