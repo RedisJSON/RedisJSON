@@ -1,16 +1,22 @@
 
 ifneq ($(SAN),)
-override DEBUG:=1
 ifeq ($(SAN),mem)
-else ifeq ($(SAN),memory)
+override SAN=memory
 else ifeq ($(SAN),addr)
+override SAN=address
+endif
+
+override DEBUG:=1
+ifeq ($(SAN),memory)
 else ifeq ($(SAN),address)
 else ifeq ($(SAN),leak)
 else ifeq ($(SAN),thread)
 else
 $(error SAN=mem|addr|leak|thread)
 endif
-endif
+
+export SAN
+endif # SAN
 
 ROOT=.
 ifeq ($(wildcard $(ROOT)/deps/readies/mk),)
@@ -78,6 +84,8 @@ MODULE_NAME=rejson.so
 RUST_TARGET:=$(shell eval $$(rustc --print cfg | grep =); echo $$target_arch-$$target_vendor-$$target_os-$$target_env)
 CARGO_TOOLCHAIN=
 CARGO_FLAGS=
+RUST_FLAGS=
+RUST_DOCFLAGS=
 
 ifeq ($(DEBUG),1)
 ifeq ($(SAN),)
@@ -86,6 +94,10 @@ else
 TARGET_DIR=$(BINDIR)/target/$(RUST_TARGET)/debug
 CARGO_TOOLCHAIN = +nightly
 CARGO_FLAGS += -Zbuild-std
+RUST_FLAGS += -Zsanitizer=$(SAN)
+ifeq ($(SAN),memory)
+RUST_FLAGS += -Zsanitizer-memory-track-origins
+endif
 endif
 else
 CARGO_FLAGS += --release
@@ -93,7 +105,7 @@ TARGET_DIR=$(BINDIR)/target/release
 endif
 
 ifeq ($(PROFILE),1)
-RUSTFLAGS += " -g -C force-frame-pointers=yes"
+RUST_FLAGS += " -g -C force-frame-pointers=yes"
 endif
 
 export CARGO_TARGET_DIR=$(BINDIR)/target
@@ -129,12 +141,12 @@ RUST_SOEXT.macos=dylib
 build:
 ifeq ($(SAN),)
 	$(SHOW)set -e ;\
-	export RUSTFLAGS=$(RUSTFLAGS) ;\
+	export RUSTFLAGS="$(RUST_FLAGS)" ;\
 	cargo build --all --all-targets $(CARGO_FLAGS)
 else
 	$(SHOW)set -e ;\
-	export RUSTFLAGS=-Zsanitizer=$(SAN) ;\
-	export RUSTDOCFLAGS=-Zsanitizer=$(SAN) ;\
+	export RUSTFLAGS="$(RUST_FLAGS)" ;\
+	export RUSTDOCFLAGS="$(RUST_DOCFLAGS)" ;\
 	cargo $(CARGO_TOOLCHAIN) build --target $(RUST_TARGET) $(CARGO_FLAGS)
 endif
 	$(SHOW)cp $(TARGET_DIR)/librejson.$(RUST_SOEXT.$(OS)) $(TARGET)
@@ -148,7 +160,7 @@ clean:
 ifneq ($(ALL),1)
 	$(SHOW)cargo clean
 else
-	$(SHOW)rm -rf target
+	$(SHOW)rm -rf $(BINDIR)
 endif
 
 .PHONY: build clean
