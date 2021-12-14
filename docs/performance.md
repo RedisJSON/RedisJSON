@@ -16,7 +16,7 @@ unoptimized.
 ### A smallish object
 
 We test a JSON value that, while purely synthetic, is interesting. The test subject is
-[/test/files/pass-100.json](https://github.com/RedisLabsModules/redisjson/blob/master/test/files/pass-100.json),
+[/tests/files/pass-100.json](https://github.com/RedisLabsModules/redisjson/blob/master/tests/files/pass-100.json),
 who weighs in at 380 bytes and is nested. We first test SETting it, then GETting it using several
 different paths:
 
