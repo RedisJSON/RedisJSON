@@ -204,6 +204,16 @@ run_tests() {
 
 [[ $1 == --help || $1 == help ]] && { help; exit 0; }
 
+GDB=${GDB:-0}
+
+OP=""
+[[ $NOP == 1 ]] && OP="echo"
+
+[[ $VG == 1 ]] && VALGRIND=1
+[[ $SAN == addr ]] && SAN=address
+[[ $SAN == mem ]] && SAN=memory
+[[ -n $SAN ]] && QUICK=1
+
 if [[ $QUICK == 1 ]]; then
 	GEN=${GEN:-1}
 	SLAVES=${SLAVES:-0}
@@ -215,15 +225,6 @@ else
 	AOF=${AOF:-1}
 	CLUSTER=${CLUSTER:-1}
 fi
-
-GDB=${GDB:-0}
-
-OP=""
-[[ $NOP == 1 ]] && OP="echo"
-
-[[ $VG == 1 ]] && VALGRIND=1
-[[ $SAN == addr ]] && SAN=address
-[[ $SAN == mem ]] && SAN=memory
 
 MODULE=${MODULE:-$1}
 [[ -z $MODULE || ! -f $MODULE ]] && { echo "Module not found at ${MODULE}. Aborting."; exit 1; }
