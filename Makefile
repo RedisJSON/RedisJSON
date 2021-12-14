@@ -39,14 +39,16 @@ make clean         # remove binary files
 
 make all           # build all libraries and packages
 
-make pytest        # run tests
-  TEST=name        # run test matching 'name'
-  TEST_ARGS="..."  # RLTest arguments
-  GEN=0|1          # run general tests on a standalone Redis topology
-  AOF=0|1          # run AOF persistency tests on a standalone Redis topology
-  SLAVES=0|1       # run replication tests on standalone Redis topology
-  CLUSTER=0|1      # run general tests on a OSS Redis Cluster topology
-  VALGRIND|VG=1    # run specified tests with Valgrind
+make pytest        # run flow tests using RLTest
+  TEST=file:name     # run test matching `name` from `file`
+  TEST_ARGS="..."    # RLTest arguments
+  QUICK=1            # run only general tests
+  GEN=1              # run general tests on a standalone Redis topology
+  AOF=1              # run AOF persistency tests on a standalone Redis topology
+  SLAVES=1           # run replication tests on standalone Redis topology
+  CLUSTER=1          # run general tests on a OSS Redis Cluster topology
+  VALGRIND|VG=1      # run specified tests with Valgrind
+  VERBOSE=1          # display more RLTest-related information
 
 make pack          # build package (RAMP file)
 
@@ -61,7 +63,7 @@ make platform      # build for specific Linux distribution
   ARTIFACTS=1        # copy artifacts from docker image
   PUBLISH=1          # publish (i.e. docker push) after build
 
-make sanbox        # create container with CLang Sanitizer
+make sanbox        # create container for CLang Sanitizer tests
 
 make builddocs
 make localdocs
