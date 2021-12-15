@@ -4,8 +4,9 @@ import sys
 import os
 import argparse
 
-ROOT = HERE = os.path.abspath(os.path.dirname(__file__))
-READIES = os.path.join(HERE, "deps/readies")
+HERE = os.path.abspath(os.path.dirname(__file__))
+ROOT = os.path.abspath(os.path.join(HERE, ".."))
+READIES = os.path.join(ROOT, "deps/readies")
 sys.path.insert(0, READIES)
 import paella
 
@@ -43,6 +44,7 @@ class RedisJSONSetup(paella.Setup):
 
     def macos(self):
         self.install_gnu_utils()
+        self.install("binutils")
         self.run("%s/bin/getgcc" % READIES)
 
     def common_last(self):

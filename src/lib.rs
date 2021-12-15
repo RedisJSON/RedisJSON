@@ -23,9 +23,13 @@ pub mod c_api;
 pub mod commands;
 pub mod error;
 mod formatter;
+pub mod ivalue_manager;
 pub mod manager;
 mod nodevisitor;
 pub mod redisjson;
+
+pub const GIT_SHA: Option<&'static str> = std::option_env!("GIT_SHA");
+pub const GIT_BRANCH: Option<&'static str> = std::option_env!("GIT_BRANCH");
 
 pub const REDIS_JSON_TYPE_VERSION: i32 = 3;
 
@@ -57,6 +61,41 @@ pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
 );
 /////////////////////////////////////////////////////
 
+#[derive(Copy, Clone)]
+pub enum ManagerType {
+    SerdeValue,
+    IValue,
+}
+
+pub static mut MANAGER: ManagerType = ManagerType::IValue;
+
+fn get_manager_type() -> ManagerType {
+    unsafe { MANAGER }
+}
+
+macro_rules! run_on_manager {
+    (
+    $run:expr, $ctx:ident, $args: ident
+    ) => {
+        match $crate::get_manager_type() {
+            $crate::ManagerType::IValue => $run(
+                $crate::ivalue_manager::RedisIValueJsonKeyManager {
+                    phantom: PhantomData,
+                },
+                $ctx,
+                $args,
+            ),
+            $crate::ManagerType::SerdeValue => $run(
+                $crate::manager::RedisJsonKeyManager {
+                    phantom: PhantomData,
+                },
+                $ctx,
+                $args,
+            ),
+        }
+    };
+}
+
 #[macro_export]
 macro_rules! redis_json_module_create {(
         data_types: [
@@ -71,13 +110,14 @@ macro_rules! redis_json_module_create {(
         use redis_module::{redis_command, redis_module, RedisString};
         use std::marker::PhantomData;
         use std::os::raw::{c_double, c_int, c_longlong};
-        use redis_module::{raw as rawmod};
+        use redis_module::{raw as rawmod, LogLevel};
         use rawmod::ModuleOptions;
         use std::{
             ffi::CStr,
             os::raw::{c_char, c_void},
         };
         use libc::size_t;
+        use std::collections::HashMap;
 
         ///
         /// JSON.DEL <key> [path]
@@ -87,7 +127,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_del(mngr, ctx, args),
-                None => commands::command_json_del(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_del, ctx, args),
 
             }
         }
@@ -105,7 +145,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_get(mngr, ctx, args),
-                None => commands::command_json_get(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_get, ctx, args)
 
             }
         }
@@ -118,8 +158,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_set(mngr, ctx, args),
-                None => commands::command_json_set(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
-
+                None => run_on_manager!(commands::command_json_set, ctx, args)
             }
         }
 
@@ -131,7 +170,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_mget(mngr, ctx, args),
-                None => commands::command_json_mget(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_mget, ctx, args)
 
             }
         }
@@ -144,7 +183,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_str_len(mngr, ctx, args),
-                None => commands::command_json_str_len(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_str_len, ctx, args)
 
             }
         }
@@ -157,7 +196,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_type(mngr, ctx, args),
-                None => commands::command_json_type(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_type, ctx, args)
 
             }
         }
@@ -170,7 +209,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_num_incrby(mngr, ctx, args),
-                None => commands::command_json_num_incrby(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_num_incrby, ctx, args)
 
             }
         }
@@ -183,7 +222,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_num_multby(mngr, ctx, args),
-                None => commands::command_json_num_multby(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_num_multby, ctx, args)
 
             }
         }
@@ -196,7 +235,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_num_powby(mngr, ctx, args),
-                None => commands::command_json_num_powby(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_num_powby, ctx, args)
 
             }
         }
@@ -208,7 +247,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_bool_toggle(mngr, ctx, args),
-                None => commands::command_json_bool_toggle(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_bool_toggle, ctx, args)
 
             }
         }
@@ -221,7 +260,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_str_append(mngr, ctx, args),
-                None => commands::command_json_str_append(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_str_append, ctx, args)
 
             }
         }
@@ -234,7 +273,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_arr_append(mngr, ctx, args),
-                None => commands::command_json_arr_append(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_arr_append, ctx, args)
 
             }
         }
@@ -249,7 +288,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_arr_index(mngr, ctx, args),
-                None => commands::command_json_arr_index(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_arr_index, ctx, args)
 
             }
         }
@@ -262,7 +301,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_arr_insert(mngr, ctx, args),
-                None => commands::command_json_arr_insert(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_arr_insert, ctx, args)
             }
         }
 
@@ -274,7 +313,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_arr_len(mngr, ctx, args),
-                None => commands::command_json_arr_len(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_arr_len, ctx, args)
 
             }
         }
@@ -287,7 +326,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_arr_pop(mngr, ctx, args),
-                None => commands::command_json_arr_pop(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_arr_pop, ctx, args)
 
             }
         }
@@ -300,7 +339,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_arr_trim(mngr, ctx, args),
-                None => commands::command_json_arr_trim(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_arr_trim, ctx, args)
 
             }
         }
@@ -313,7 +352,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_obj_keys(mngr, ctx, args),
-                None => commands::command_json_obj_keys(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_obj_keys, ctx, args)
 
             }
         }
@@ -326,7 +365,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_obj_len(mngr, ctx, args),
-                None => commands::command_json_obj_len(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_obj_len, ctx, args)
 
             }
         }
@@ -339,7 +378,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_clear(mngr, ctx, args),
-                None => commands::command_json_clear(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_clear, ctx, args)
 
             }
         }
@@ -356,7 +395,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_debug(mngr, ctx, args),
-                None => commands::command_json_debug(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_debug, ctx, args)
 
             }
         }
@@ -369,7 +408,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_resp(mngr, ctx, args),
-                None => commands::command_json_resp(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_resp, ctx, args)
 
             }
         }
@@ -379,7 +418,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_cache_info(mngr, ctx, args),
-                None => commands::command_json_cache_info(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
+                None => run_on_manager!(commands::command_json_cache_info, ctx, args)
 
             }
         }
@@ -389,8 +428,7 @@ macro_rules! redis_json_module_create {(
             let m = $get_manager_expr;
             match m {
                 Some(mngr) => commands::command_json_cache_init(mngr, ctx, args),
-                None => commands::command_json_cache_init(manager::RedisJsonKeyManager{phantom:PhantomData}, ctx, args),
-
+                None => run_on_manager!(commands::command_json_cache_init, ctx, args)
             }
         }
 
@@ -400,16 +438,46 @@ macro_rules! redis_json_module_create {(
         }
 
         fn intialize(ctx: &Context, args: &Vec<RedisString>) -> Status {
+            ctx.log_notice(&format!("version: {} git sha: {} branch: {}",
+                $version,
+                match GIT_SHA { Some(val) => val, _ => "unknown"},
+                match GIT_BRANCH { Some(val) => val, _ => "unknown"},
+                ));
             export_shared_api(ctx);
             ctx.set_module_options(ModuleOptions::HANDLE_IO_ERRORS);
             ctx.log_notice("Enabled diskless replication");
             $init_func(ctx, args)
         }
 
+        fn json_init_config(ctx: &Context, args: &Vec<RedisString>) -> Status{
+            if args.len() % 2 != 0 {
+                ctx.log(LogLevel::Warning, "RedisJson arguments must be key:value pairs");
+                return Status::Err;
+            }
+            let mut args_map = HashMap::<String, String>::new();
+            for i in (0..args.len()).step_by(2) {
+                args_map.insert(args[i].to_string_lossy(), args[i + 1].to_string_lossy());
+            }
+
+            if let Some(backend) = args_map.get("JSON_BACKEND") {
+                if  backend == "SERDE_JSON" {
+                    unsafe {$crate::MANAGER = $crate::ManagerType::SerdeValue};
+                } else if backend == "IJSON" {
+                    unsafe {$crate::MANAGER = $crate::ManagerType::IValue};
+                } else {
+                    ctx.log(LogLevel::Warning, "Unsupported json backend was given");
+                    return Status::Err;
+                }
+            }
+
+            Status::Ok
+        }
+
         redis_module! {
             name: "ReJSON",
             version: $version,
             data_types: [$($data_type,)*],
+            init: json_init_config,
             init: intialize,
             commands: [
                 ["json.del", json_del, "write", 1,1,1],
@@ -432,7 +500,7 @@ macro_rules! redis_json_module_create {(
                 ["json.objkeys", json_obj_keys, "readonly", 1,1,1],
                 ["json.objlen", json_obj_len, "readonly", 1,1,1],
                 ["json.clear", json_clear, "write", 1,1,1],
-                ["json.debug", json_debug, "readonly", 1,1,1],
+                ["json.debug", json_debug, "readonly", 2,2,1],
                 ["json.forget", json_del, "write", 1,1,1],
                 ["json.resp", json_resp, "readonly", 1,1,1],
                 ["json._cacheinfo", json_cache_info, "readonly", 1,1,1],
@@ -454,7 +522,12 @@ fn dummy_init(_ctx: &Context, _args: &Vec<RedisString>) -> Status {
 redis_json_module_create! {
     data_types: [REDIS_JSON_TYPE],
     pre_command_function: pre_command,
-    get_manage: Some(manager::RedisJsonKeyManager{phantom:PhantomData}),
+    get_manage: {
+        match get_manager_type() {
+            ManagerType::IValue => Some(ivalue_manager::RedisIValueJsonKeyManager{phantom:PhantomData}),
+            _ => None,
+        }
+    },
     version: 99_99_99,
     init: dummy_init,
 }

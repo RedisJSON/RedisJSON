@@ -93,6 +93,7 @@ run_tests() {
 	[[ ! -z $title ]] && { $ROOT/opt/readies/bin/sep -0; printf "Tests with $title:\n\n"; }
 	cd $ROOT/tests/pytest
 	[[ ! -z $TESTMOD ]] && RLTEST_ARGS+=--module $TESTMOD
+	$OP python3 -m RLTest --clear-logs --module $MODULE --module-args "JSON_BACKEND SERDE_JSON" $RLTEST_ARGS
 	$OP python3 -m RLTest --clear-logs --module $MODULE $RLTEST_ARGS
 }
 

@@ -1,12 +1,13 @@
 [![GitHub issues](https://img.shields.io/github/release/RedisJSON/RedisJSON.svg)](https://github.com/RedisJSON/RedisJSON/releases/latest)
 [![CircleCI](https://circleci.com/gh/RedisJSON/RedisJSON/tree/master.svg?style=svg)](https://circleci.com/gh/RedisJSON/RedisJSON/tree/master)
 [![macos](https://github.com/RedisJSON/RedisJSON/workflows/macos/badge.svg)](https://github.com/RedisJSON/RedisJSON/actions?query=workflow%3Amacos)
-[![Docker Cloud Build Status](https://img.shields.io/docker/cloud/build/redislabs/rejson.svg)](https://hub.docker.com/r/redislabs/rejson/builds/)
+[![Dockerhub](https://img.shields.io/badge/dockerhub-redislabs%2Frejson-blue)](https://hub.docker.com/r/redislabs/rejson/tags/)
 [![Total alerts](https://img.shields.io/lgtm/alerts/g/RedisJSON/RedisJSON.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/RedisJSON/RedisJSON/alerts/)
+
+# RedisJSON
 [![Forum](https://img.shields.io/badge/Forum-RedisJSON-blue)](https://forum.redislabs.com/c/modules/redisjson)
 [![Discord](https://img.shields.io/discord/697882427875393627?style=flat-square)](https://discord.gg/QUkjSsk)
 
-# RedisJSON
 
 RedisJSON is a [Redis](https://redis.io/) module that implements [ECMA-404 The JSON Data Interchange Standard](https://json.org/) as a native data type. It allows storing, updating and fetching JSON values from Redis keys (documents).
 
