@@ -19,8 +19,8 @@ export SAN
 endif # SAN
 
 ROOT=.
-ifeq ($(wildcard $(ROOT)/deps/readies/mk),)
-$(error Submodules not present. Please run 'git submodule update --init --recursive')
+ifeq ($(wildcard $(ROOT)/deps/readies),)
+$(shell git submodule update --init --recursive)
 endif
 MK.pyver:=3
 include $(ROOT)/deps/readies/mk/main
@@ -107,7 +107,7 @@ TARGET_DIR=$(BINDIR)/target/release
 endif
 
 ifeq ($(PROFILE),1)
-RUST_FLAGS += " -g -C force-frame-pointers=yes"
+RUST_FLAGS += -g -C force-frame-pointers=yes
 endif
 
 export CARGO_TARGET_DIR=$(BINDIR)/target
@@ -230,7 +230,7 @@ SANBOX_ARGS += -v /w:/w
 endif
 
 sanbox:
-	@docker run -it -v $(PWD):/search -w /search --cap-add=SYS_PTRACE --security-opt seccomp=unconfined $(SANBOX_ARGS) redisfab/clang:13-x64-bullseye bash
+	@docker run -it -v $(PWD):/rejson -w /rejson --cap-add=SYS_PTRACE --security-opt seccomp=unconfined $(SANBOX_ARGS) redisfab/clang:13-x64-bullseye bash
 
 .PHONY: sanbox
 
