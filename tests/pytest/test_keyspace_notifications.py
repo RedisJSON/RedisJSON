@@ -7,6 +7,7 @@ def assert_msg(env, msg, expected_type, expected_data):
     env.assertEqual(expected_data, msg['data']) 
 
 def test_keyspace_set(env):
+    env.skipOnVersionSmaller('6.2')
     with env.getClusterConnectionIfNeeded() as r:
         r.execute_command('config', 'set', 'notify-keyspace-events', 'KEA')
 
@@ -53,6 +54,7 @@ def test_keyspace_set(env):
 
 
 def test_keyspace_arr(env):
+    env.skipOnVersionSmaller('6.2')
     with env.getClusterConnectionIfNeeded() as r:
         r.execute_command('config', 'set', 'notify-keyspace-events', 'KEA')
 
@@ -113,6 +115,7 @@ def test_keyspace_arr(env):
 
 
 def test_keyspace_del(env):
+    env.skipOnVersionSmaller('6.2')
     with env.getClusterConnectionIfNeeded() as r:
         r.execute_command('config', 'set', 'notify-keyspace-events', 'KEA')
 
@@ -138,6 +141,7 @@ def test_keyspace_del(env):
         env.assertEqual(None, pubsub.get_message())      
 
 def test_keyspace_num(env):
+    env.skipOnVersionSmaller('6.2')
     with env.getClusterConnectionIfNeeded() as r:
         r.execute_command('config', 'set', 'notify-keyspace-events', 'KEA')
 

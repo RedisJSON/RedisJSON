@@ -395,6 +395,7 @@ on-integ-branch: &on-integ-branch
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
+        - /^perf.*$/
     tags:
       ignore: /.*/
 
@@ -405,6 +406,7 @@ not-on-integ-branch: &not-on-integ-branch
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
+        - /^perf.*$/
     tags:
       ignore: /.*/
 
@@ -422,6 +424,7 @@ on-integ-and-version-tags: &on-integ-and-version-tags
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
+        - /^perf.*$/
     tags:
       only: /^v[0-9].*/
 

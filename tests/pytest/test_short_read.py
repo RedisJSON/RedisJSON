@@ -165,6 +165,7 @@ def random_json_value(nesting_level, max_nesting_level):
 
 
 def testCreateKeysRdbFile(env):
+    env.skipOnVersionSmaller('6.2')  # Another alternative is to set env var SHORT_READ_BYTES_DELTA to be greater than 1 (in redis 6.0)
     if os.environ.get('CI'):
         env.skip()
     create_keys(env, 'rejson_keys_2.0.0.rdb')
@@ -410,6 +411,7 @@ class Debug:
 
 
 def testShortReadJson(env):
+    env.skipOnVersionSmaller('6.2')  # Another alternative is to set env var SHORT_READ_BYTES_DELTA to be greater than 1 (in redis 6.0)
     env.skipOnCluster()
     if env.env.endswith('existing-env') and os.environ.get('CI'):
         env.skip()
