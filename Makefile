@@ -41,7 +41,7 @@ make pytest        # run flow tests
   SLAVES=0|1         # run replication tests on standalone Redis topology
   CLUSTER=0|1        # run general tests on a OSS Redis Cluster topology
   VALGRIND|VG=1      # run specified tests with Valgrind
-  MEMINFO=1          # 
+  MEMINFO=1          # show memory information
 
 make pack          # build package (RAMP file)
 

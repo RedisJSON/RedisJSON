@@ -30,7 +30,7 @@ class TestMem:
         def add_and_check(title):
             t0 = time.monotonic()
             for i in range(0, 100):
-                env.execute_command('json.set', f'json{i}', '.', jfile['doc'])
+                env.execute_command('json.set', f'json{i}', '$', jfile['doc'])
             title += f" t={datetime.timedelta(seconds=time.monotonic() - t0)}"
             checkEnvMem(env, expected_vsz=jfile['vsz'], vsz0=vsz0, title=title)
         def delete():
@@ -56,7 +56,7 @@ class TestMem:
             t0 = time.monotonic()
             env.execute_command('json.set', 'json', '.', '{}')
             for i in range(0, 100):
-                env.execute_command('json.set', 'json', f'.json{i}', jfile['doc'])
+                env.execute_command('json.set', 'json', f'$.json{i}', jfile['doc'])
             title += f" t={datetime.timedelta(seconds=time.monotonic() - t0)}"
             checkEnvMem(env, expected_vsz=jfile['vsz'], vsz0=vsz0, title=title)
         def delete():
