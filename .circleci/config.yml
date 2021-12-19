@@ -482,7 +482,7 @@ workflows:
           name: sanitize-<< matrix.san-type >>
           matrix:
             parameters:
-              san-type: [address, memory]
+              san-type: [address] # [address, memory]
           <<: *on-any-branch
       - deploy-artifacts:
           name: deploy_snapshot
