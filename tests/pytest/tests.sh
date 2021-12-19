@@ -15,9 +15,9 @@ cd $HERE
 help() {
 	cat <<-END
 		Run Python tests
-	
+
 		[ARGVARS...] tests.sh [--help|help] [<module-so-path>]
-		
+
 		Argument variables:
 		VERBOSE=1        Print commands
 		IGNERR=1         Do not abort on error
@@ -29,7 +29,7 @@ help() {
 		GEN=0|1          General tests
 		AOF=0|1          Tests with --test-aof
 		SLAVES=0|1       Tests with --test-slaves
-		
+
 		TEST=test        Run specific test (e.g. test.py:test_name)
 		LOG=0|1          Write to log
 		VALGRIND|VD=1    Run with Valgrind
@@ -91,11 +91,20 @@ valgrind_summary() {
 
 run_tests() {
 	local title="$1"
-	[[ ! -z $title ]] && { $ROOT/opt/readies/bin/sep -0; printf "Tests with $title:\n\n"; }
+	if [[ -z $title ]]; then
+		title="General tests"
+	else
+		title="Tests with $title"
+	fi
+
 	cd $ROOT/tests/pytest
 	[[ ! -z $TESTMOD ]] && RLTEST_ARGS+=--module $TESTMOD
-	$OP python3 -m RLTest --clear-logs --module $MODULE --module-args "JSON_BACKEND SERDE_JSON" $RLTEST_ARGS
+
+	{ $READIES/bin/sep -0; printf "$title:\n\n"; }
 	$OP python3 -m RLTest --clear-logs --module $MODULE $RLTEST_ARGS
+
+	{ $READIES/bin/sep -0; printf "$title (SERDE_JSON):\n\n"; }
+	SERDE_JSON=1 $OP python3 -m RLTest --clear-logs --module $MODULE --module-args "JSON_BACKEND SERDE_JSON" $RLTEST_ARGS
 }
 
 #----------------------------------------------------------------------------------------------

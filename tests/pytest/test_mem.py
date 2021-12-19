@@ -5,12 +5,13 @@ import datetime
 
 
 CHECK_MEMRECLAIM = os.getenv('MEMRECLAIM', '0') == '1'
+SERDE_JSON = os.getenv('SERDE_JSON', '0') == '1'
 
 JSON_FILES = [
     {'file': 'https://raw.githubusercontent.com/mloskot/json_benchmark/master/data/canada.json',
-     'vsz': 2880000},
+     'vsz': 2880000 if SERDE_JSON else 598000},
     {'file': 'https://raw.githubusercontent.com/RichardHightower/json-parsers-benchmark/master/data/citm_catalog.json',
-     'vsz': 847000},
+     'vsz': 847000 if SERDE_JSON else 200000},
 ]
 
 
@@ -64,7 +65,7 @@ class TestMem:
             for i in range(0, 100):
                 env.execute_command('json.del', 'json', f'json{i}')
             print(f"--- del: t={datetime.timedelta(seconds=time.monotonic() - t0)}")
-        
+
         fi = 0
         for jfile in JSON_FILES:
             fi += 1
