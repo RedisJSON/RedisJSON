@@ -133,7 +133,6 @@ run_tests() {
 	
 	if [[ $EXISTING_ENV != 1 ]]; then
 		rltest_config=$(mktemp "${TMPDIR:-/tmp}/rltest.XXXXXXX")
-		rm -f $rltest_config
 		cat <<-EOF > $rltest_config
 			--oss-redis-path=$REDIS_SERVER
 			--module $MODULE
@@ -147,13 +146,11 @@ run_tests() {
 
 	else # existing env
 		xredis_conf=$(mktemp "${TMPDIR:-/tmp}/xredis_conf.XXXXXXX")
-		rm -f $xredis_conf
 		cat <<-EOF > $xredis_conf
 			loadmodule $MODULE $MODARGS
 			EOF
 
 		rltest_config=$(mktemp "${TMPDIR:-/tmp}/xredis_rltest.XXXXXXX")
-		rm -f $rltest_config
 		cat <<-EOF > $rltest_config
 			--env existing-env
 			$RLTEST_ARGS
@@ -191,6 +188,7 @@ run_tests() {
 	if [[ -n $XREDIS_PID ]]; then
 		echo "killing external redis-server: $XREDIS_PID"
 		kill -9 $XREDIS_PID
+		rm -f $xredis_conf
 	fi
 
 	if [[ $QUICK != 1 && $FINAL != 1 ]]; then
