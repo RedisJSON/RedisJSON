@@ -157,7 +157,29 @@ commands:
           timeout: 30m
           no_output_timeout: 30m
       - save_cache:
-          key: v2-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
+          key: v3-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
+          paths:
+            - "~/.cargo"
+            - "./target"
+      - save-tests-logs
+
+  coverage-steps:
+    steps:
+      - run:
+          name: Run coverage
+          command: |
+            bash -l -c "rustup component add llvm-tools-preview"
+            bash -l -c "export RUSTC_BOOTSTRAP=1"
+            bash -l -c "export RUSTFLAGS=-Zinstrument-coverage"            
+            bash -l -c "make build"
+            bash -l -c "export LLVM_PROFILE_FILE=your_name-%p-%m.profraw"
+            bash -l -c "make pytest"
+            bash -l -c "grcov . --binary-path ./bin/linux-x64-release/rejson.so -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o lcov.info"
+            bash -l -c "bash <(curl -s https://raw.githubusercontent.com/codecov/codecov-bash/master/codecov) -f lcov.info"
+          timeout: 30m
+          no_output_timeout: 30m
+      - save_cache:
+          key: v3-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
           paths:
             - "~/.cargo"
             - "./target"
@@ -282,6 +304,7 @@ jobs:
       - build-steps:
           redis_version: <<parameters.redis_version>>
       - test-steps
+      - coverage-steps
 
   platforms-build:
     parameters:
