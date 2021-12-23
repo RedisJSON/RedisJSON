@@ -175,7 +175,7 @@ commands:
             bash -l -c "make build"
             bash -l -c "export LLVM_PROFILE_FILE=your_name-%p-%m.profraw"
             bash -l -c "make pytest"
-            bash -l -c "grcov . --binary-path ./bin/linux-x64-release/rejson.so -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o lcov.info"
+            bash -l -c "grcov . --binary-path ./bin/linux-x64-debug/rejson.so -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o lcov.info"
             bash -l -c "bash <(curl -s https://raw.githubusercontent.com/codecov/codecov-bash/master/codecov) -f lcov.info"
           timeout: 30m
           no_output_timeout: 30m
