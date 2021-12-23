@@ -163,7 +163,6 @@ impl Formatter for RedisJsonFormatter<'_> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,21 +170,30 @@ mod tests {
     #[test]
     fn test_default_formatter() {
         let mut formatter = RedisJsonFormatter::new(None, None, None);
-        let mut writer = vec!();
-        
+        let mut writer = vec![];
+
         assert!(matches!(formatter.begin_array(&mut writer), Ok(())));
         assert_eq!(&writer[0..], b"[");
 
-        assert!(matches!(formatter.begin_array_value(&mut writer, true), Ok(())));
+        assert!(matches!(
+            formatter.begin_array_value(&mut writer, true),
+            Ok(())
+        ));
         assert_eq!(&writer[0..], b"[");
 
         assert!(matches!(formatter.begin_object(&mut writer), Ok(())));
         assert_eq!(&writer[0..], b"[{");
 
-        assert!(matches!(formatter.begin_object_key(&mut writer, true), Ok(())));
+        assert!(matches!(
+            formatter.begin_object_key(&mut writer, true),
+            Ok(())
+        ));
         assert_eq!(&writer[0..], b"[{");
 
-        assert!(matches!(formatter.begin_object_key(&mut writer, false), Ok(())));
+        assert!(matches!(
+            formatter.begin_object_key(&mut writer, false),
+            Ok(())
+        ));
         assert_eq!(&writer[0..], b"[{,");
 
         assert!(matches!(formatter.begin_object_value(&mut writer), Ok(())));
@@ -197,38 +205,52 @@ mod tests {
         assert!(matches!(formatter.end_object(&mut writer), Ok(())));
         assert_eq!(&writer[0..], b"[{,:}");
 
-        assert!(matches!(formatter.begin_array_value(&mut writer, true), Ok(())));
+        assert!(matches!(
+            formatter.begin_array_value(&mut writer, true),
+            Ok(())
+        ));
         assert_eq!(&writer[0..], b"[{,:}");
 
         assert!(matches!(formatter.end_array_value(&mut writer), Ok(())));
         assert_eq!(&writer[0..], b"[{,:}");
 
-        assert!(matches!(formatter.begin_array_value(&mut writer, false), Ok(())));
+        assert!(matches!(
+            formatter.begin_array_value(&mut writer, false),
+            Ok(())
+        ));
         assert_eq!(&writer[0..], b"[{,:},");
 
         assert!(matches!(formatter.end_array(&mut writer), Ok(())));
         assert_eq!(&writer[0..], b"[{,:},]");
     }
 
-
     #[test]
     fn test_ident_formatter() {
         let mut formatter = RedisJsonFormatter::new(Some("_"), None, None);
-        let mut writer = vec!();
-        
+        let mut writer = vec![];
+
         assert!(matches!(formatter.begin_array(&mut writer), Ok(())));
         assert_eq!(&writer[0..], b"[");
 
-        assert!(matches!(formatter.begin_array_value(&mut writer, true), Ok(())));
+        assert!(matches!(
+            formatter.begin_array_value(&mut writer, true),
+            Ok(())
+        ));
         assert_eq!(&writer[0..], b"[_");
 
         assert!(matches!(formatter.begin_object(&mut writer), Ok(())));
         assert_eq!(&writer[0..], b"[_{");
 
-        assert!(matches!(formatter.begin_object_key(&mut writer, true), Ok(())));
+        assert!(matches!(
+            formatter.begin_object_key(&mut writer, true),
+            Ok(())
+        ));
         assert_eq!(&writer[0..], b"[_{__");
 
-        assert!(matches!(formatter.begin_object_key(&mut writer, false), Ok(())));
+        assert!(matches!(
+            formatter.begin_object_key(&mut writer, false),
+            Ok(())
+        ));
         assert_eq!(&writer[0..], b"[_{__,__");
 
         assert!(matches!(formatter.begin_object_value(&mut writer), Ok(())));
@@ -240,13 +262,19 @@ mod tests {
         assert!(matches!(formatter.end_object(&mut writer), Ok(())));
         assert_eq!(&writer[0..], b"[_{__,__:_}");
 
-        assert!(matches!(formatter.begin_array_value(&mut writer, true), Ok(())));
+        assert!(matches!(
+            formatter.begin_array_value(&mut writer, true),
+            Ok(())
+        ));
         assert_eq!(&writer[0..], b"[_{__,__:_}_");
 
         assert!(matches!(formatter.end_array_value(&mut writer), Ok(())));
         assert_eq!(&writer[0..], b"[_{__,__:_}_");
 
-        assert!(matches!(formatter.begin_array_value(&mut writer, false), Ok(())));
+        assert!(matches!(
+            formatter.begin_array_value(&mut writer, false),
+            Ok(())
+        ));
         assert_eq!(&writer[0..], b"[_{__,__:_}_,_");
 
         assert!(matches!(formatter.end_array(&mut writer), Ok(())));
@@ -256,21 +284,30 @@ mod tests {
     #[test]
     fn test_space_formatter() {
         let mut formatter = RedisJsonFormatter::new(None, Some("s"), None);
-        let mut writer = vec!();
-        
+        let mut writer = vec![];
+
         assert!(matches!(formatter.begin_array(&mut writer), Ok(())));
         assert_eq!(&writer[0..], b"[");
 
-        assert!(matches!(formatter.begin_array_value(&mut writer, true), Ok(())));
+        assert!(matches!(
+            formatter.begin_array_value(&mut writer, true),
+            Ok(())
+        ));
         assert_eq!(&writer[0..], b"[");
 
         assert!(matches!(formatter.begin_object(&mut writer), Ok(())));
         assert_eq!(&writer[0..], b"[{");
 
-        assert!(matches!(formatter.begin_object_key(&mut writer, true), Ok(())));
+        assert!(matches!(
+            formatter.begin_object_key(&mut writer, true),
+            Ok(())
+        ));
         assert_eq!(&writer[0..], b"[{");
 
-        assert!(matches!(formatter.begin_object_key(&mut writer, false), Ok(())));
+        assert!(matches!(
+            formatter.begin_object_key(&mut writer, false),
+            Ok(())
+        ));
         assert_eq!(&writer[0..], b"[{,");
 
         assert!(matches!(formatter.begin_object_value(&mut writer), Ok(())));
@@ -282,13 +319,19 @@ mod tests {
         assert!(matches!(formatter.end_object(&mut writer), Ok(())));
         assert_eq!(&writer[0..], b"[{,:s}");
 
-        assert!(matches!(formatter.begin_array_value(&mut writer, true), Ok(())));
+        assert!(matches!(
+            formatter.begin_array_value(&mut writer, true),
+            Ok(())
+        ));
         assert_eq!(&writer[0..], b"[{,:s}");
 
         assert!(matches!(formatter.end_array_value(&mut writer), Ok(())));
         assert_eq!(&writer[0..], b"[{,:s}");
 
-        assert!(matches!(formatter.begin_array_value(&mut writer, false), Ok(())));
+        assert!(matches!(
+            formatter.begin_array_value(&mut writer, false),
+            Ok(())
+        ));
         assert_eq!(&writer[0..], b"[{,:s},");
 
         assert!(matches!(formatter.end_array(&mut writer), Ok(())));
@@ -298,21 +341,30 @@ mod tests {
     #[test]
     fn test_new_line_formatter() {
         let mut formatter = RedisJsonFormatter::new(None, None, Some("n"));
-        let mut writer = vec!();
-        
+        let mut writer = vec![];
+
         assert!(matches!(formatter.begin_array(&mut writer), Ok(())));
         assert_eq!(&writer[0..], b"[");
 
-        assert!(matches!(formatter.begin_array_value(&mut writer, true), Ok(())));
+        assert!(matches!(
+            formatter.begin_array_value(&mut writer, true),
+            Ok(())
+        ));
         assert_eq!(&writer[0..], b"[n");
 
         assert!(matches!(formatter.begin_object(&mut writer), Ok(())));
         assert_eq!(&writer[0..], b"[n{");
 
-        assert!(matches!(formatter.begin_object_key(&mut writer, true), Ok(())));
+        assert!(matches!(
+            formatter.begin_object_key(&mut writer, true),
+            Ok(())
+        ));
         assert_eq!(&writer[0..], b"[n{n");
 
-        assert!(matches!(formatter.begin_object_key(&mut writer, false), Ok(())));
+        assert!(matches!(
+            formatter.begin_object_key(&mut writer, false),
+            Ok(())
+        ));
         assert_eq!(&writer[0..], b"[n{n,n");
 
         assert!(matches!(formatter.begin_object_value(&mut writer), Ok(())));
@@ -324,13 +376,19 @@ mod tests {
         assert!(matches!(formatter.end_object(&mut writer), Ok(())));
         assert_eq!(&writer[0..], b"[n{n,n:n}");
 
-        assert!(matches!(formatter.begin_array_value(&mut writer, true), Ok(())));
+        assert!(matches!(
+            formatter.begin_array_value(&mut writer, true),
+            Ok(())
+        ));
         assert_eq!(&writer[0..], b"[n{n,n:n}n");
 
         assert!(matches!(formatter.end_array_value(&mut writer), Ok(())));
         assert_eq!(&writer[0..], b"[n{n,n:n}n");
 
-        assert!(matches!(formatter.begin_array_value(&mut writer, false), Ok(())));
+        assert!(matches!(
+            formatter.begin_array_value(&mut writer, false),
+            Ok(())
+        ));
         assert_eq!(&writer[0..], b"[n{n,n:n}n,n");
 
         assert!(matches!(formatter.end_array(&mut writer), Ok(())));

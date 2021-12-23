@@ -126,8 +126,8 @@ mod tests {
 
     #[test]
     fn test_from_serde_json_error() {
-        let res : Result<Value> = serde_json::from_str("{");
-        let err : Error = res.unwrap_err().into();
+        let res: Result<Value> = serde_json::from_str("{");
+        let err: Error = res.unwrap_err().into();
         assert_eq!(err.msg, "EOF while parsing an object at line 1 column 1");
     }
 
@@ -145,7 +145,10 @@ mod tests {
 
     #[test]
     fn test_to_redis_error() {
-        let err: redis_module::RedisError = Error{msg:"to RedisError".to_string()}.into();
+        let err: redis_module::RedisError = Error {
+            msg: "to RedisError".to_string(),
+        }
+        .into();
         assert_eq!(err.to_string(), "to RedisError".to_string());
     }
 }
