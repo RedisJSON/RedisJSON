@@ -75,7 +75,6 @@ impl From<Error> for redis_module::RedisError {
 
 #[cfg(test)]
 mod tests {
-    // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
     use serde_json::{Result, Value};
 
