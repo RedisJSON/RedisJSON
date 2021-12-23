@@ -169,6 +169,7 @@ commands:
           name: Run coverage
           command: |
             bash -l -c "rustup component add llvm-tools-preview"
+            bash -l -c "cargo install grcov"
             bash -l -c "export RUSTC_BOOTSTRAP=1"
             bash -l -c "export RUSTFLAGS=-Zinstrument-coverage"            
             bash -l -c "make build"
