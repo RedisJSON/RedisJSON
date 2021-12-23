@@ -77,6 +77,7 @@ impl From<Error> for redis_module::RedisError {
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
+    use serde_json::{Result, Value};
 
     #[test]
     fn test_from_string() {
@@ -104,6 +105,12 @@ mod tests {
 
     #[test]
     fn test_from_redis_error() {
+        let err: Error = RedisError::short_read().into();
+        assert_eq!(err.msg, "ERR ERR short read or OOM loading DB");
+    }
+
+    #[test]
+    fn test_from_error() {
         let err: Error = redis_module::error::Error::generic("error from Generic").into();
         assert_eq!(err.msg, "Store error: error from Generic");
 
@@ -118,11 +125,12 @@ mod tests {
         assert_eq!(err.msg, "invalid digit found in string");
     }
 
-    // #[test]
-    // fn test_from_serde_json_error() {
-    //     let err : Error = serde_json::Error "error from str".into();
-    //     assert_eq!(err.msg, "error from str");
-    // }
+    #[test]
+    fn test_from_serde_json_error() {
+        let res : Result<Value> = serde_json::from_str("{");
+        let err : Error = res.unwrap_err().into();
+        assert_eq!(err.msg, "EOF while parsing an object at line 1 column 1");
+    }
 
     #[test]
     fn test_from_jsonpath_error() {
@@ -134,5 +142,11 @@ mod tests {
     fn test_from_str() {
         let err: Error = "error from str".into();
         assert_eq!(err.msg, "error from str");
+    }
+
+    #[test]
+    fn test_to_redis_error() {
+        let err: redis_module::RedisError = Error{msg:"to RedisError".to_string()}.into();
+        assert_eq!(err.to_string(), "to RedisError".to_string());
     }
 }
