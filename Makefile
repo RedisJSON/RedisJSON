@@ -169,7 +169,7 @@ endif
 
 #----------------------------------------------------------------------------------------------
 
-test: pytest
+test: cargo_test pytest
 
 pytest:
 	$(SHOW)MODULE=$(abspath $(TARGET)) $(realpath ./tests/pytest/tests.sh)
