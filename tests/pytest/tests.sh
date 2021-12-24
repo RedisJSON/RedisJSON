@@ -251,7 +251,7 @@ cd $ROOT/tests/pytest
 setup_redis_server
 
 if [[ ! -z $REDIS ]]; then
-	RL_TEST_ARGS+=" --env exiting-env --existing-env-addr $REDIS"
+	RLTEST_ARGS+=" --env existing-env --existing-env-addr $REDIS"
 fi
 
 E=0
