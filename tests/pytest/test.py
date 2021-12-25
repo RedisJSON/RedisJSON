@@ -807,6 +807,12 @@ def testNumIncrCommand(env):
     r.assertEqual(1, res['foo'])
     r.assertEqual(84, res['bar'])
 
+    # test overflow
+    r.assertOk(r.execute_command('JSON.SET', 'big_num', '.', '1.6350000000001313e+308'))
+    r.expect('JSON.NUMINCRBY', 'big_num', '.', '1.6350000000001313e+308').raiseError()
+    r.expect('JSON.NUMMULTBY', 'big_num', '.', '2').raiseError()
+    # (value remains)
+    r.assertEqual(r.execute_command('JSON.GET', 'big_num', '.'), '1.6350000000001313e308')
 
 def testStrCommands(env):
     """Test JSON.STRAPPEND and JSON.STRLEN commands"""

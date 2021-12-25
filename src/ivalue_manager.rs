@@ -98,8 +98,16 @@ impl<'a> IValueKeyHolderWrite<'a> {
         if paths.is_empty() {
             // updating the root require special treatment
             let root = self.get_value().unwrap().unwrap();
-            let res = (op_fun)(root.take())?;
-            self.set_root(res)?;
+            let prev_val = root.take();
+            let rollback_val = prev_val.clone();
+            let res = (op_fun)(prev_val);
+            match res {
+                Ok(res) => self.set_root(res)?,
+                Err(err) => {
+                    self.set_root(Some(rollback_val))?;
+                    return Err(RedisError::String(err.msg));
+                }
+            }
         } else {
             update(&paths, self.get_value().unwrap().unwrap(), op_fun)?;
         }
@@ -126,14 +134,18 @@ impl<'a> IValueKeyHolderWrite<'a> {
                     v.as_number().unwrap().has_decimal_point(),
                     in_value.as_i64(),
                 ) {
-                    (false, Some(num2)) => ((op1_fun)(v.to_i64().unwrap(), num2)).into(),
+                    (false, Some(num2)) => Ok(((op1_fun)(v.to_i64().unwrap(), num2)).into()),
                     _ => {
                         let num1 = v.to_f64().unwrap();
                         let num2 = in_value.as_f64().unwrap();
-                        INumber::try_from((op2_fun)(num1, num2)).unwrap()
+                        if let Ok(num) = INumber::try_from((op2_fun)(num1, num2)) {
+                            Ok(num)
+                        } else {
+                            Err(RedisError::Str("result is not a number"))
+                        }
                     }
                 };
-                res = Some(IValue::from(num_res));
+                res = Some(IValue::from(num_res?));
                 Ok(res.clone())
             })?;
             match res {
