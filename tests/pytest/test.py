@@ -271,6 +271,8 @@ def testGetFormatting(env):
 
 def testBackwardRDB(env):
     env.skipOnCluster() 
+    if env.useAof:
+        env.skip()
     dbFileName = env.cmd('config', 'get', 'dbfilename')[1]
     dbDir = env.cmd('config', 'get', 'dir')[1]
     rdbFilePath = os.path.join(dbDir, dbFileName)
@@ -284,7 +286,8 @@ def testBackwardRDB(env):
     env.start()
 
     r = env
-    data = json.loads(r.execute_command('JSON.GET', 'complex'))
+    res = r.execute_command('JSON.GET', 'complex')
+    data = json.loads(res)
     r.assertEqual(data, {"a":{"b":[{"c":{"d":[1,'2'],"e":None}},True],"a":'a'},"b":1,"c":True,"d":None})
 
 def testSetBSON(env):

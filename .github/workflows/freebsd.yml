@@ -9,12 +9,12 @@ on:
 jobs:
   build:
 
-    runs-on: macos-latest
+    runs-on: macos-10.15
 
     steps:
     - uses: actions/checkout@v2
     - name: build
-      uses: vmactions/freebsd-vm@v0.1.4
+      uses: vmactions/freebsd-vm@v0.1.5
       with:
         usesh: true
         sync: rsync
@@ -26,3 +26,4 @@ jobs:
           . $HOME/.cargo/env
           rustup target add i686-unknown-freebsd
           cargo build --all --all-targets --verbose --target i686-unknown-freebsd
+          cargo test --features test --all --all-targets --verbose

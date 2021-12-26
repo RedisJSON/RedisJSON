@@ -312,6 +312,26 @@ jobs:
       - test-steps
       - persist-artifacts
 
+  sanitize:
+    docker:
+      - image: redisfab/clang:13-x64-bullseye
+    parameters:
+      san-type:
+        type: string
+    steps:
+      - early-returns
+      - checkout-all
+      - setup-automation
+      - run:
+          name: System setup
+          command: ./sbin/system-setup.py
+      - run:
+          name: Build & test
+          shell: /bin/bash -l -eo pipefail
+          command: make SAN=<<parameters.san-type>> build test SHOW=1 VERBOSE=1
+          no_output_timeout: 30m
+      - save-tests-logs
+
   deploy-artifacts:
     parameters:
       location:
@@ -395,6 +415,7 @@ on-integ-branch: &on-integ-branch
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
+        - /^perf.*$/
     tags:
       ignore: /.*/
 
@@ -405,6 +426,7 @@ not-on-integ-branch: &not-on-integ-branch
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
+        - /^perf.*$/
     tags:
       ignore: /.*/
 
@@ -422,6 +444,7 @@ on-integ-and-version-tags: &on-integ-and-version-tags
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
+        - /^perf.*$/
     tags:
       only: /^v[0-9].*/
 
@@ -455,6 +478,12 @@ workflows:
               platform: [bionic]
       - build-macos:
           <<: *on-integ-and-version-tags          
+      - sanitize:
+          name: sanitize-<< matrix.san-type >>
+          matrix:
+            parameters:
+              san-type: [address] # [address, memory]
+          <<: *on-any-branch
       - deploy-artifacts:
           name: deploy_snapshot
           location: snapshots
