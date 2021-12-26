@@ -785,30 +785,34 @@ def testToggleCommand(env):
 
 def testDebugCommand(env):
     """
-        Test REJSON.DEBUG MEMORY command
-            """
-    env.skip() # test is currently irrelevant as the number are not correct, todo: re-enable once fixing the json.debug memory command
+    Test REJSON.DEBUG MEMORY command
+    """
+    if env.moduleArgs is not None and ['JSON_BACKEND SERDE_JSON'] in env.moduleArgs:
+        env.skip()
+
     r = env
     jdata, jtypes = load_types_data('a')
 
     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', json.dumps(jdata)))
+
     # Test multi
+    # json.get a $..a ==> "[{},[],\"str\",42,1.2,false,null]"
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1', '$..a')
-    r.assertEqual(res, [72, 24, 24, 16, 16, 1, 0])
+    r.assertEqual(res, [8, 8, 11, 8, 8, 8, 8])
+
     # Test single
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1', '$.nested2.a')
-    r.assertEqual(res, [24])
+    r.assertEqual(res, [8])
 
     # Test legacy
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1', '..a')
-    r.assertEqual(res, 72)
+    r.assertEqual(res, 8)
     # Test missing path (defaults to root)
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1')
-    r.assertEqual(res, 72)
+    r.assertEqual(res, 179)
 
     # Test missing subcommand
     r.expect('JSON.DEBUG', 'non_existing_doc', '$..a').raiseError()
-
 
 def testRespCommand(env):
     """Test REJSON.RESP command"""
