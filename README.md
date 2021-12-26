@@ -118,7 +118,7 @@ Some languages have client libraries that provide support for RedisJSON's comman
 
 [redis-py-author]: https://redislabs.com
 [redis-py-url]: https://github.com/redis/redis-py
-[redis-py-package]: https://pypi.python.org/pypi/rejson
+[redis-py-package]: https://pypi.python.org/pypi/redis
 [redis-py-stars]: https://img.shields.io/github/stars/redis/redis-py.svg?style=social&amp;label=Star&amp;maxAge=2592000
 
 [go-rejson-author]: https://github.com/nitishm
