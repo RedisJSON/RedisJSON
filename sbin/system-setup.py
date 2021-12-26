@@ -4,8 +4,9 @@ import sys
 import os
 import argparse
 
-ROOT = HERE = os.path.abspath(os.path.dirname(__file__))
-READIES = os.path.join(HERE, "deps/readies")
+HERE = os.path.abspath(os.path.dirname(__file__))
+ROOT = os.path.abspath(os.path.join(HERE, ".."))
+READIES = os.path.join(ROOT, "deps/readies")
 sys.path.insert(0, READIES)
 import paella
 
@@ -17,12 +18,13 @@ class RedisJSONSetup(paella.Setup):
 
     def common_first(self):
         self.install_downloaders()
+        self.install("unzip")
         self.pip_install("wheel")
         self.pip_install("setuptools --upgrade")
 
-        self.install("git")
+        self.install("git rsync")
 
-        if not self.has_command("clang"): 
+        if not self.has_command("clang"):
             self.run("%s/bin/getclang --modern" % READIES)
         if not self.has_command("rustc"):
             self.run("%s/bin/getrust" % READIES)
@@ -42,6 +44,7 @@ class RedisJSONSetup(paella.Setup):
 
     def macos(self):
         self.install_gnu_utils()
+        self.install("binutils")
         self.run("%s/bin/getgcc" % READIES)
 
     def common_last(self):

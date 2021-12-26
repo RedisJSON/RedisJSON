@@ -10,12 +10,10 @@ use std::{
 use crate::commands::KeyValue;
 use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
 use jsonpath_lib::select::Selector;
-use redis_module::{raw as rawmod, RedisError};
+use redis_module::raw as rawmod;
 use redis_module::{Context, RedisString, Status};
-use serde_json::Value;
 
 use crate::manager::{Manager, ReadHolder};
-use crate::redisjson::RedisJSON;
 
 // extern crate readies_wd40;
 // use crate::readies_wd40::{BB, _BB, getenv};
@@ -130,7 +128,7 @@ pub fn json_api_get_json<M: Manager>(
     str: *mut *mut rawmod::RedisModuleString,
 ) -> c_int {
     let json = unsafe { &*(json as *const M::V) };
-    let res = KeyValue::new(json).to_value(json).to_string();
+    let res = KeyValue::<M::V>::serialize_object(json, None, None, None);
     create_rmstring(ctx, &res, str)
 }
 
@@ -171,30 +169,6 @@ pub fn json_api_get_boolean<M: Manager>(_: M, json: *const c_void, val: *mut c_i
 }
 
 //---------------------------------------------------------------------------------------------
-
-pub fn value_from_index(value: &Value, index: size_t) -> Result<&Value, RedisError> {
-    match value {
-        Value::Array(ref vec) => {
-            if index < vec.len() {
-                Ok(vec.get(index).unwrap())
-            } else {
-                Err(RedisError::Str("JSON index is out of range"))
-            }
-        }
-        Value::Object(ref map) => {
-            if index < map.len() {
-                Ok(map.iter().nth(index).unwrap().1)
-            } else {
-                Err(RedisError::Str("JSON index is out of range"))
-            }
-        }
-        _ => Err(RedisError::Str("Not a JSON Array or Object")),
-    }
-}
-
-pub fn get_type_and_size(value: &Value) -> (JSONType, size_t) {
-    RedisJSON::get_type_and_size(value)
-}
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn set_string(from_str: &str, str: *mut *const c_char, len: *mut size_t) -> c_int {

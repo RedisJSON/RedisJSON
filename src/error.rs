@@ -72,3 +72,67 @@ impl From<Error> for redis_module::RedisError {
         redis_module::RedisError::String(e.msg)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+
+    #[test]
+    fn test_from_string() {
+        let err: Error = String::from("error from String").into();
+        assert_eq!(err.msg, "error from String");
+    }
+
+    #[test]
+    fn test_from_generic_error() {
+        let err: Error = redis_module::error::GenericError::new("error from GenericError").into();
+        assert_eq!(err.msg, "Store error: error from GenericError");
+    }
+
+    #[test]
+    fn test_from_utf8_error() {
+        let err: Error = String::from_utf8(vec![128, 0, 0]).unwrap_err().into();
+        assert_eq!(err.msg, "invalid utf-8 sequence of 1 bytes from index 0");
+    }
+
+    #[test]
+    fn test_from_parse_int_error() {
+        let err: Error = i32::from_str_radix("a12", 10).unwrap_err().into();
+        assert_eq!(err.msg, "invalid digit found in string");
+    }
+
+    #[test]
+    fn test_from_redis_error() {
+        let err: Error = redis_module::error::Error::generic("error from Generic").into();
+        assert_eq!(err.msg, "Store error: error from Generic");
+
+        let utf8_err: redis_module::error::Error =
+            String::from_utf8(vec![128, 0, 0]).unwrap_err().into();
+        let err: Error = utf8_err.into();
+        assert_eq!(err.msg, "invalid utf-8 sequence of 1 bytes from index 0");
+
+        let parse_int_error: redis_module::error::Error =
+            i32::from_str_radix("a12", 10).unwrap_err().into();
+        let err: Error = parse_int_error.into();
+        assert_eq!(err.msg, "invalid digit found in string");
+    }
+
+    // #[test]
+    // fn test_from_serde_json_error() {
+    //     let err : Error = serde_json::Error "error from str".into();
+    //     assert_eq!(err.msg, "error from str");
+    // }
+
+    #[test]
+    fn test_from_jsonpath_error() {
+        let err: Error = JsonPathError::Path("JsonPathError".to_string()).into();
+        assert_eq!(err.msg, "JSON Path error: path error: \\nJsonPathError\\n");
+    }
+
+    #[test]
+    fn test_from_str() {
+        let err: Error = "error from str".into();
+        assert_eq!(err.msg, "error from str");
+    }
+}

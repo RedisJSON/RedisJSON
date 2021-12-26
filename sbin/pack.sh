@@ -16,6 +16,8 @@ if [[ $1 == --help || $1 == help ]]; then
 		[ARGVARS...] pack.sh [--help|help]
 		
 		Argument variables:
+		MODULE=path       Path of module .so
+
 		RAMP=1|0          Build RAMP file
 		DEPS=0|1          Build dependencies file
 		SYM=0|1           Build debug symbols file
@@ -25,7 +27,6 @@ if [[ $1 == --help || $1 == help ]]; then
 		GITSHA=1          Append Git SHA to shapshot package names
 
 		ARTDIR=dir        Directory in which packages are created (default: bin/artifacts)
-		BINDIR=dir        Directory in which binaries are found (default: target/release)
 
 		VERBOSE=1         Print commands
 		IGNERR=1          Do not abort on error
@@ -40,11 +41,8 @@ fi
 [[ $V == 1 || $VERBOSE == 1 ]] && set -x
 
 RAMP=${RAMP:-1}
-DEPS=${DEPS:-0}
-SYM=${SYM:-0}
-
-[[ -z $BINDIR ]] && BINDIR=target/release
-BINDIR=$(cd $BINDIR && pwd)
+DEPS=${DEPS:-1}
+SYM=${SYM:-1}
 
 [[ -z $ARTDIR ]] && ARTDIR=bin/artifacts
 mkdir -p $ARTDIR $ARTDIR/snapshots
@@ -88,7 +86,7 @@ pack_ramp() {
 	local fq_package=$stem.${verspec}.zip
 
 	local packfile="$ARTDIR/$fq_package"
-	local product_so="$BINDIR/$PRODUCT.so"
+	local product_so="$MODULE"
 
 	local xtx_vars=""
 	local dep_fname=${PACKAGE_NAME}.${platform}.${verspec}.tgz
@@ -164,7 +162,7 @@ pack_deps() {
 
 prepare_symbols_dep() {
 	echo "Preparing debug symbols dependencies ..."
-	echo $BINDIR > $ARTDIR/debug.dir
+	echo $(cd "$(dirname $MODULE)" && pwd) > $ARTDIR/debug.dir
 	echo $PRODUCT.so.debug > $ARTDIR/debug.files
 	echo "" > $ARTDIR/debug.prefix
 	pack_deps debug

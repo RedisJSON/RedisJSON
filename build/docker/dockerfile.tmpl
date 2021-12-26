@@ -1,0 +1,43 @@
+#----------------------------------------------------------------------------------------------
+FROM redisfab/redis:{{REDIS_VERSION}}-{{REDIS_ARCH}}-{{REDIS_OSNICK}} AS redis
+FROM {{REDIS_OS}} AS builder
+
+RUN echo "Building for {{REDIS_OSNICK}} ({{REDIS_OS}}) for {{REDIS_ARCH}} [with Redis {{REDIS_VERSION}}]"
+
+WORKDIR /build
+COPY --from=redis /usr/local/ /usr/local/
+
+ADD . /build
+
+{% include 'setup_environment.yml' %}
+RUN ./sbin/system-setup.py
+
+RUN bash -l -c make
+
+RUN mkdir -p bin/artifacts
+{% if REDIS_PACK == "1" %}
+RUN bash -e -l -c "make pack"
+{% endif %}
+
+{% if REDIS_TEST == "1" %}
+RUN set -e ;\
+    bash -l -c "TEST= make test" ;\
+	cd /build/tests/pytest/logs ;\
+    rm -f *.aof *.rdb ;\
+    tar -czf /build/bin/artifacts/pytest-logs-{{REDIS_ARCH}}-{{REDIS_OSNICK}}.tgz .
+{% endif %}
+RUN BRANCH={{REDISEARCH_VERSION}} ./sbin/get-redisearch ;\
+    cp /build/bin/linux-${REDIS_OSNICK}-${REDIS_ARCH}/RediSearch/redisearch.so /build/bin/
+
+#----------------------------------------------------------------------------------------------
+FROM redisfab/redis:{{REDIS_VERSION}}-{{REDIS_ARCH}}-{{REDIS_OSNICK}}
+WORKDIR /data
+{% set LIBDIR= "/usr/lib/redis/modules" %}
+RUN mkdir -p {{LIBDIR}}
+
+COPY --from=builder /build/bin/linux-${{REDIS_ARCH}}-release/rejson.so {{LIBDIR}}/rejson.so
+RUN true
+COPY --from=builder /build/bin/redisearch.so {{LIBDIR}}/redisearch.so
+RUN chown -R redis:redis {{LIBDIR}}
+EXPOSE 6379
+CMD ["redis-server", "--loadmodule", "{{LIBDIR}}/rejson.so", "--loadmodule", "{{LIBDIR}}/redisearch.so"]

@@ -271,6 +271,8 @@ def testGetFormatting(env):
 
 def testBackwardRDB(env):
     env.skipOnCluster() 
+    if env.useAof:
+        env.skip()
     dbFileName = env.cmd('config', 'get', 'dbfilename')[1]
     dbDir = env.cmd('config', 'get', 'dir')[1]
     rdbFilePath = os.path.join(dbDir, dbFileName)
@@ -284,14 +286,15 @@ def testBackwardRDB(env):
     env.start()
 
     r = env
-    data = json.loads(r.execute_command('JSON.GET', 'complex'))
+    res = r.execute_command('JSON.GET', 'complex')
+    data = json.loads(res)
     r.assertEqual(data, {"a":{"b":[{"c":{"d":[1,'2'],"e":None}},True],"a":'a'},"b":1,"c":True,"d":None})
 
 def testSetBSON(env):
     r = env
     bson = open(os.path.join(JSON_PATH , 'bson_bytes_1.bson'), 'rb').read()
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', bson, 'FORMAT', 'BSON'))
-    data = json.loads(r.execute_command('JSON.GET', 'test', *docs['values'].keys()))
+    r.expect('JSON.GET', 'test', *docs['values'].keys()).raiseError()
 
 def testMgetCommand(env):
     """Test REJSON.MGET command"""
@@ -482,8 +485,14 @@ def testClear(env):
     r.expect('JSON.GET', 'test', '$.arr[3].n2.n').equal('[[]]')
     r.expect('JSON.GET', 'test', '.arr[3].n2.n').equal('[]')
 
-    # Make sure only appropriate content (obj and arr) was cleared - and that errors were printed for inappropriate content (string and numeric)
+    # Make sure only appropriate content (obj and arr) was cleared
     r.expect('JSON.GET', 'test', '$..n').equal('[42,44,{},[]]')
+
+    # Clear dynamic path
+    r.expect('JSON.SET', 'test', '.', r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}') \
+        .ok()
+    r.expect('JSON.CLEAR', 'test', '$.arr.*').equal(3)
+    r.expect('JSON.GET', 'test', '$').equal('[{"n":42,"s":"42","arr":[{},"s",{},{}]}]')
 
     # Clear root
     r.expect('JSON.SET', 'test', '.', r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}') \
@@ -495,6 +504,17 @@ def testClear(env):
     r.expect('JSON.SET', 'test', '$', obj_content_legacy).ok()
     r.expect('JSON.CLEAR', 'test').equal(1)
     r.expect('JSON.GET', 'test', '$').equal('[{}]')
+
+    # Clear none existing path
+    r.expect('JSON.SET', 'test', '.', r'{"a":[1,2], "b":{"c":"d"}}').ok()
+    r.expect('JSON.CLEAR', 'test', '$.c').equal(0)
+    r.expect('JSON.GET', 'test', '$').equal('[{"a":[1,2],"b":{"c":"d"}}]')
+
+    r.expect('JSON.CLEAR', 'test', '$.b..a').equal(0)
+    r.expect('JSON.GET', 'test', '$').equal('[{"a":[1,2],"b":{"c":"d"}}]')
+
+    # Key doesn't exist 
+    r.expect('JSON.CLEAR', 'not_test_key', '$').raiseError()
 
 def testArrayCRUD(env):
     """Test JSON Array CRUDness"""
@@ -575,6 +595,7 @@ def testArrIndexCommand(env):
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 6), 6)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 4, -0), 6)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 5, -1), -1)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 0, 5, 0), 6)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, -2, 6), -1)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '"foo"'), -1)
 
@@ -582,6 +603,14 @@ def testArrIndexCommand(env):
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 3), 3)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, 3), 5)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '[4]'), 4)
+
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 1), 1)
+
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '$.arr', 1), [1])
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '$.arr', 2, 1, 4), [2])
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '$.arr', 6), [-1])
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '$.arr', 3, 0, 2), [-1])
+
 
 def testArrInsertCommand(env):
     """Test JSON.ARRINSERT command"""
@@ -646,6 +675,17 @@ def testArrTrimCommand(env):
     r.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', '.arr', 99, 2), 0)
     r.assertListEqual(json.loads(r.execute_command('JSON.GET', 'test', '.arr')), [])
 
+    r.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', '.arr', -1, 0), 0)
+
+    r.assertOk(r.execute_command('JSON.SET', 'test',
+                                 '.', '{ "arr": [0, 1, 2, 3, 2, 1, 0] }'))
+    r.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', '.arr', -1, 0), 0)
+
+    r.assertOk(r.execute_command('JSON.SET', 'test',
+                                 '.', '{ "arr": [0, 1, 2, 3, 2, 1, 0] }'))
+    r.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', '.arr', -4, 1), 0)
+
+
 def testArrPopCommand(env):
     """Test JSON.ARRPOP command"""
 
@@ -708,19 +748,20 @@ def testLenCommands(env):
     r.assertEqual(r.execute_command('JSON.ARRLEN', 'test', '.arr'), 6)
 
     # test elements with undefined lengths
-    r.expect('JSON.ARRLEN', 'test', '.bool').raiseError()
-    r.expect('JSON.STRLEN', 'test', '.none').raiseError()
-    r.expect('JSON.OBJLEN', 'test', '.int').raiseError()
-    r.expect('JSON.STRLEN', 'test', '.num').raiseError()
+    r.expect('JSON.ARRLEN', 'test', '.bool').raiseError().contains("not an array")
+    r.expect('JSON.STRLEN', 'test', '.none').raiseError().contains("expected string but found null")
+    r.expect('JSON.OBJLEN', 'test', '.int').raiseError().contains("expected object but found integer")
+    r.expect('JSON.STRLEN', 'test', '.num').raiseError().contains("expected string but found number")
 
     # test a non existing key
-    r.expect('JSON.LEN', 'test', '.foo').raiseError()
+    r.expect('JSON.ARRLEN', 'test', '.foo').raiseError().contains("does not exist")
 
     # test an out of bounds index
-    r.expect('JSON.LEN', 'test', '.arr[999]').raiseError()
+    r.expect('JSON.ARRLEN', 'test', '.arr[999]').raiseError().contains("does not exist")
 
     # test an infinite index
-    r.expect('JSON.LEN', 'test', '.arr[-inf]').raiseError()
+    r.expect('JSON.ARRLEN', 'test', '.arr[-inf]').raiseError().contains("path error")
+    r.expect('JSON.ARRLEN', 'test', '.arr[4294967295]').raiseError().contains("does not exist")
 
 def testObjKeysCommand(env):
     """Test JSON.OBJKEYS command"""
@@ -747,10 +788,10 @@ def testNumIncrCommand(env):
 
     # test a wrong type
     r.expect('JSON.NUMINCRBY', 'test', '.bar', 1).raiseError()
-#
-#         # test a missing path
-#         r.expect('JSON.NUMINCRBY', 'test', '.fuzz', 1).raiseError()
-#
+
+    # test a missing path
+    r.expect('JSON.NUMINCRBY', 'test', '.fuzz', 1).raiseError()
+
     # test issue #9
     r.assertOk(r.execute_command('JSON.SET', 'num', '.', '0'))
     r.assertEqual('1', r.execute_command('JSON.NUMINCRBY', 'num', '.', 1))
