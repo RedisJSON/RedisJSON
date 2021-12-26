@@ -233,8 +233,8 @@ Some languages have client libraries that provide support for RedisJSON's comman
 | [redis-modules-sdk][redis-modules-sdk-url] | Node.js | BSD-3-Clause | [Dani Tseitlin @danitseitlin][redis-modules-sdk-author] | [![redis-modules-sdk-stars]][redis-modules-sdk-url] | [npm][redis-modules-sdk-package] |
 | [JRedisJSON][JRedisJSON-url] | Java | BSD-2-Clause | [Redis][JRedisJSON-author] | [![JRedisJSON-stars]][JRedisJSON-url] | [maven][JRedisJSON-package] |
 | [redis-modules-java][redis-modules-java-url] | Java | Apache-2.0 | [Liming Deng @dengliming][redis-modules-java-author] | [![redis-modules-java-stars]][redis-modules-java-url] | [maven][redis-modules-java-package] |
+| [redis-py][redis-py-url]  | Python | MIT | [Redis][redis-py-author] | [![redis-py-stars]][redis-py-url] | [pypi][redis-py-package] |
 | [redis-om-spring][redis-om-spring-url]  | Java | BSD-3-Clause | [Redis][redis-om-spring-author] | [![redis-om-spring-stars]][redis-om-spring-url] | |
-| [redisjson-py][rejson-py-url]  | Python | BSD-2-Clause | [Redis][rejson-py-author] | [![rejson-py-stars]][rejson-py-url] | [pypi][rejson-py-package] |
 | [redis-om-python][redis-om-python-url]  | Python | BSD-3-Clause | [Redis][redis-om-python-author] | [![redis-om-python-stars]][redis-om-python-url] | [PyPi][redis-om-python-package] |
 | [go-rejson][go-rejson-url] | Go | MIT | [Nitish Malhotra @nitishm][go-rejson-author] | [![go-rejson-stars]][go-rejson-url] | |
 | [rejonson][rejonson-url] | Go | Apache-2.0 | [Daniel Krom @KromDaniel][rejonson-author] | [![rejonson-stars]][rejonson-url] | |
@@ -269,10 +269,10 @@ Some languages have client libraries that provide support for RedisJSON's comman
 [redis-modules-java-package]: https://search.maven.org/artifact/io.github.dengliming.redismodule/redis-modules-java/
 [redis-modules-java-stars]: https://img.shields.io/github/stars/dengliming/redis-modules-java.svg?style=social&amp;label=Star&amp;maxAge=2592000
 
-[rejson-py-author]: https://redis.com
-[rejson-py-url]: https://github.com/RedisJSON/redisjson-py
-[rejson-py-package]: https://pypi.python.org/pypi/rejson
-[rejson-py-stars]: https://img.shields.io/github/stars/RedisJSON/redisjson-py.svg?style=social&amp;label=Star&amp;maxAge=2592000
+[redis-py-author]: https://redis.com
+[redis-py-url]: https://github.com/redis/redis-py
+[redis-py-package]: https://pypi.python.org/pypi/redis
+[redis-py-stars]: https://img.shields.io/github/stars/redis/redis-py.svg?style=social&amp;label=Star&amp;maxAge=2592000
 
 [go-rejson-author]: https://github.com/nitishm
 [go-rejson-url]: https://github.com/nitishm/go-rejson/
