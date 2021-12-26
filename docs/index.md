@@ -186,7 +186,7 @@ Then, run `make` or `cargo build --release` in the repository directory
 
 Requirements:
 
-* [Redis v5.0 or above](http://redis.io/download)
+* [Redis v6.0 or above](http://redis.io/download)
 
 We recommend you have Redis load the module during startup by adding the following to your `redis.conf` file:
 
