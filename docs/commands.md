@@ -186,6 +186,27 @@ OK
 (integer) 2
 ```
 
+### JSON.CLEAR
+
+> **Available since 2.0.0.**  
+> **Time complexity:**  O(N), where N is the number of cleared values
+
+#### Syntax
+
+```
+JSON.CLEAR <key> [path]
+```
+
+#### Description
+
+Clear a container value (Array/Object).
+
+`path` defaults to root if not provided. Non-existing keys and paths are ignored.
+
+#### Return value
+
+[Integer][2], specifically the number of containers cleared.
+
 ### JSON.NUMINCRBY
 
 > **Available since 1.0.0.**
@@ -246,6 +267,25 @@ OK
 127.0.0.1:6379> JSON.NUMMULTBY doc $..a 2
 "[null,4,10,null]"
 ```
+
+### JSON.TOGGLE
+
+> **Available since 2.0.0.**  
+> **Time complexity:**  O(1).
+
+#### Syntax
+
+```
+JSON.TOGGLE <key> <path>
+```
+
+#### Description
+
+Toggle a boolean value stored at `path`.
+
+#### Return value
+
+[Integer][2], specifically the new value (0-false or 1-true), or [null][6] element for JSON values matching the path which are not boolean.
 
 ### JSON.STRAPPEND
 
