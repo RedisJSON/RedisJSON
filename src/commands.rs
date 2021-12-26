@@ -282,10 +282,18 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     .collect())
             }
         } else if let StaticPathElement::ArrayIndex(_) = last {
-            // if we reach here with array path we must be out of range
-            // otherwise the path would be valid to be set and we would not
-            // have reached here!!
-            Err("ERR array index out of range".into())
+            // if we reach here with array path we are either out of range
+            // or no-oping an NX where the value is already present
+            let mut selector = Selector::default();
+            let res = selector
+                .str_path(path)?
+                .value(self.val)
+                .select_with_paths(|_| true)?;
+            if !res.is_empty() {
+                Ok(Vec::new())
+            } else {
+                Err("ERR array index out of range".into())
+            }
         } else {
             Err("ERR path not an object or array".into())
         }
