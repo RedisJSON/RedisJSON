@@ -222,4 +222,24 @@ pub mod type_methods {
         };
         raw::save_string(rdb, &json);
     }
+
+    #[allow(non_snake_case, unused)]
+    pub unsafe extern "C" fn mem_usage(value: *const c_void) -> usize {
+        match get_manager_type() {
+            ManagerType::SerdeValue => {
+                let json = unsafe { &*(value as *mut RedisJSON<serde_json::Value>) };
+                let manager = RedisJsonKeyManager {
+                    phantom: PhantomData,
+                };
+                manager.get_memory(&json.data).unwrap_or(0)
+            }
+            ManagerType::IValue => {
+                let json = unsafe { &*(value as *mut RedisJSON<ijson::IValue>) };
+                let manager = RedisIValueJsonKeyManager {
+                    phantom: PhantomData,
+                };
+                manager.get_memory(&json.data).unwrap_or(0)
+            }
+        }
+    }
 }

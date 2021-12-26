@@ -13,12 +13,11 @@ use redis_module::{Context, NotifyEvent, RedisString};
 use serde::Serialize;
 use serde_json::Number;
 use std::marker::PhantomData;
+use std::mem::size_of;
 
 use crate::redisjson::RedisJSON;
 
 use crate::array_index::ArrayIndex;
-
-use std::mem;
 
 use bson::decode_document;
 use std::io::Cursor;
@@ -527,15 +526,23 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     }
 
     fn get_memory(&self, v: &Self::V) -> Result<usize, RedisError> {
-        // todo: implement
-        let res = match v.type_() {
-            ValueType::Null => 0,
-            ValueType::Bool => mem::size_of_val(v),
-            ValueType::Number => mem::size_of_val(v),
-            ValueType::String => mem::size_of_val(v),
-            ValueType::Array => mem::size_of_val(v),
-            ValueType::Object => mem::size_of_val(v),
-        };
+        let res = size_of::<IValue>()
+            + match v.type_() {
+                ValueType::Null | ValueType::Bool | ValueType::Number => 0,
+                ValueType::String => v.as_string().unwrap().len(),
+                ValueType::Array => v
+                    .as_array()
+                    .unwrap()
+                    .into_iter()
+                    .map(|v| self.get_memory(v).unwrap())
+                    .sum(),
+                ValueType::Object => v
+                    .as_object()
+                    .unwrap()
+                    .into_iter()
+                    .map(|(s, v)| s.len() + self.get_memory(v).unwrap())
+                    .sum(),
+            };
         Ok(res)
     }
 

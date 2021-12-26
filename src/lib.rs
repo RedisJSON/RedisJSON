@@ -45,7 +45,7 @@ pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
         free: Some(redisjson::type_methods::free),
 
         // Currently unused by Redis
-        mem_usage: None,
+        mem_usage: Some(redisjson::type_methods::mem_usage),
         digest: None,
 
         // Auxiliary data (v2)
