@@ -17,6 +17,7 @@ JSON_FILES = [
 
 class TestMem:
     def __init__(self):
+        self.env = Env()
         for jfile in JSON_FILES:
             path = paella.wget(jfile['file'], tempdir=True)
             jfile['path'] = path
@@ -38,19 +39,20 @@ class TestMem:
             t0 = time.monotonic()
             for i in range(0, 100):
                 env.execute_command('json.del', f'json{i}')
-            print(f"--- del: t={datetime.timedelta(seconds=time.monotonic() - t0)}")
+            env.debugPrint(f"--- del: t={datetime.timedelta(seconds=time.monotonic() - t0)}")
 
+        env = self.env
         fi = 0
         for jfile in JSON_FILES:
             fi += 1
-            env = Env()
             vsz0 = checkEnvMem(env, title=f"before (keys {fi})")
             add_and_check(f"add (keys {fi})")
             if CHECK_MEMRECLAIM:
                 delete()
                 add_and_check(f"add after del (keys {fi})")
-            env.execute_command('flushall')
+            env.execute_command('flushall') # so no .rdb file is created
             env.stop()
+            env.start()
 
     def testFields(self):
         def add_and_check(title):
@@ -64,16 +66,17 @@ class TestMem:
             t0 = time.monotonic()
             for i in range(0, 100):
                 env.execute_command('json.del', 'json', f'json{i}')
-            print(f"--- del: t={datetime.timedelta(seconds=time.monotonic() - t0)}")
+            env.debugPrint(f"--- del: t={datetime.timedelta(seconds=time.monotonic() - t0)}")
 
+        env = self.env
         fi = 0
         for jfile in JSON_FILES:
             fi += 1
-            env = Env()
             vsz0 = checkEnvMem(env, title=f"before (fields {fi})")
             add_and_check(f"add (fields {fi})")
             if CHECK_MEMRECLAIM:
                 delete()
                 add_and_check(f"add after del (fields {fi})")
-            env.execute_command('flushall')
+            env.execute_command('flushall') # so no .rdb file is created
             env.stop()
+            env.start()
