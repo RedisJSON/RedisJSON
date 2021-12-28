@@ -40,7 +40,7 @@ commands:
             apt-get -q install -y git openssh-client curl ca-certificates make tar gzip
             bash <(curl -fsSL https://raw.githubusercontent.com/docker/docker-install/master/install.sh)
       - setup_remote_docker:
-          version: 20.10.2
+          version: 20.10.7
           docker_layer_caching: true
 
   checkout-all:
@@ -312,6 +312,22 @@ jobs:
       - test-steps
       - persist-artifacts
 
+  coverage:
+    docker:
+      - image: redisfab/rmbuilder:6.2.5-x64-bullseye
+    steps:
+      - early-returns
+      - checkout-all
+      - install-prerequisites
+      - run:
+          name: Build & Test
+          shell: /bin/bash -l -eo pipefail
+          command: |
+            make coverage SHOW=1
+            make upload-cov SHOW=1
+          no_output_timeout: 30m
+      - save-tests-logs
+
   sanitize:
     docker:
       - image: redisfab/clang:13-x64-bullseye
@@ -478,6 +494,9 @@ workflows:
               platform: [bionic]
       - build-macos:
           <<: *on-integ-and-version-tags          
+      - coverage:
+          context: common
+          <<: *on-any-branch
       - sanitize:
           name: sanitize-<< matrix.san-type >>
           matrix:
