@@ -2,6 +2,10 @@
 from contextlib import contextmanager
 from includes import *
 
+SANITIZER = os.getenv('SANITIZER', '') # typically 'address' or 'memory'
+VALGRIND = os.getenv('VALGRIND', '0') == '1'
+CODE_COVERAGE = os.getenv('CODE_COVERAGE', '0') == '1'
+
 MEMINFO = os.getenv('MEMINFO', '0') == '1'
 SERDE_JSON = os.getenv('SERDE_JSON', '0') == '1'
 

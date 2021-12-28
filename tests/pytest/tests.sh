@@ -54,7 +54,7 @@ install_git_lfs() {
 
 setup_redis_server() {
 	if [[ -n $SAN ]]; then
-		if [[ $SAN == addr || $SAN == address ]]; then
+		if [[ $SAN == address ]]; then
 			REDIS_SERVER=${REDIS_SERVER:-redis-server-asan-6.2}
 			if ! command -v $REDIS_SERVER > /dev/null; then
 				echo Building Redis for clang-asan ...
@@ -64,7 +64,7 @@ setup_redis_server() {
 			export ASAN_OPTIONS=detect_odr_violation=0
 			# :detect_leaks=0
 
-		elif [[ $SAN == mem || $SAN == memory ]]; then
+		elif [[ $SAN == memory ]]; then
 			REDIS_SERVER=${REDIS_SERVER:-redis-server-msan-6.2}
 			if ! command -v $REDIS_SERVER > /dev/null; then
 				echo Building Redis for clang-msan ...
@@ -92,6 +92,8 @@ setup_redis_server() {
 #----------------------------------------------------------------------------------------------
 
 valgrind_config() {
+	export VALGRIND=1 # for RLTest
+
 	export VG_OPTIONS="
 		-q \
 		--leak-check=full \
@@ -244,6 +246,11 @@ fi
 [[ $GDB == 1 ]] && RLTEST_ARGS+=" -i --verbose"
 
 export OS=$($READIES/bin/platform --os)
+
+if [[ -n $SAN ]]; then
+	# for RLTest
+	export SANITIZER="$SAN"
+fi
 
 #----------------------------------------------------------------------------------------------
 
