@@ -69,10 +69,11 @@ pub enum ManagerType {
 
 pub static mut MANAGER: ManagerType = ManagerType::IValue;
 
-fn get_manager_type() -> ManagerType {
+pub fn get_manager_type() -> ManagerType {
     unsafe { MANAGER }
 }
 
+#[macro_export]
 macro_rules! run_on_manager {
     (
     $run:expr, $ctx:ident, $args: ident
