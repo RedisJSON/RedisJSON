@@ -5,7 +5,6 @@ import datetime
 
 
 CHECK_MEMRECLAIM = os.getenv('MEMRECLAIM', '0') == '1'
-SERDE_JSON = os.getenv('SERDE_JSON', '0') == '1'
 
 JSON_FILES = [
     {'file': 'https://raw.githubusercontent.com/mloskot/json_benchmark/master/data/canada.json',

@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from includes import *
 
 MEMINFO = os.getenv('MEMINFO', '0') == '1'
+SERDE_JSON = os.getenv('SERDE_JSON', '0') == '1'
 
 
 @contextmanager
