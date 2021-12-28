@@ -28,9 +28,9 @@ def envMem(env):
 def checkEnvMem(env, expected_vsz=None, vsz0=0, threshold=0.1, title=None):
     if MEMINFO:
         if title is not None:
-            env.debugPrint(f"--- {title}")
+            print(f"--- {title}")
         pid = env.envRunner.masterProcess.pid
-        env.debugPrint(paella.sh(f'cat /proc/{pid}/status | grep ^Vm', join=False))
+        print(paella.sh(f'cat /proc/{pid}/status | grep ^Vm', join=False))
     mem = envMem(env)
     vsz = mem['vsz'] - vsz0
     if expected_vsz is not None:

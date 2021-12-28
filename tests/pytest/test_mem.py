@@ -44,7 +44,7 @@ class TestMem:
             t0 = time.monotonic()
             for i in range(0, 100):
                 env.execute_command('json.del', f'json{i}')
-            env.debugPrint(f"--- del: t={datetime.timedelta(seconds=time.monotonic() - t0)}")
+            print(f"--- del: t={datetime.timedelta(seconds=time.monotonic() - t0)}")
 
         fi = 0
         for jfile in JSON_FILES:
