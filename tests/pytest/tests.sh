@@ -36,7 +36,8 @@ help() {
 		VERBOSE=1        Print commands
 		IGNERR=1         Do not abort on error
 		NOP=1            Dry run
-		LOG=0|1          Write to log
+		LOG=1            Write to log
+		QUIET=1          Be less verbose
 
 	END
 }
@@ -124,7 +125,7 @@ run_tests() {
 	local title="$1"
 	shift
 	if [[ -n $title ]]; then
-		$READIES/bin/sep -0
+		$READIES/bin/sep
 		printf "Testing $title:\n\n"
 	fi
 
@@ -201,7 +202,7 @@ run_tests() {
 
 #----------------------------------------------------------------------------------------------
 
-[[ $1 == --help || $1 == help ]] && { help; exit 0; }
+[[ $1 == --help || $1 == help || $HELP == 1 ]] && { help; exit 0; }
 
 GDB=${GDB:-0}
 
@@ -230,9 +231,9 @@ MODULE=${MODULE:-$1}
 
 [[ $VALGRIND == 1 ]] && valgrind_config
 
-if [[ ! -z $TEST ]]; then
+if [[ -n $TEST ]]; then
 	RLTEST_ARGS+=" --test $TEST"
-	if [[ $LOG != 1 ]]; then
+	if [[ $LOG != 1 && $QUIET != 1 ]]; then
 		RLTEST_ARGS+=" -s"
 		export BB=${BB:-1}
 	fi

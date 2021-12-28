@@ -29,6 +29,11 @@ class TestMem:
             os.unlink(jfile['path'])
 
     def testKeys(self):
+        env = self.env
+        env.skipOnCluster()
+        if env.useAof:
+            env.skip()
+
         def add_and_check(title):
             t0 = time.monotonic()
             for i in range(0, 100):
@@ -41,7 +46,6 @@ class TestMem:
                 env.execute_command('json.del', f'json{i}')
             env.debugPrint(f"--- del: t={datetime.timedelta(seconds=time.monotonic() - t0)}")
 
-        env = self.env
         fi = 0
         for jfile in JSON_FILES:
             fi += 1
@@ -55,6 +59,11 @@ class TestMem:
             env.start()
 
     def testFields(self):
+        env = self.env
+        env.skipOnCluster()
+        if env.useAof:
+            env.skip()
+
         def add_and_check(title):
             t0 = time.monotonic()
             env.execute_command('json.set', 'json', '.', '{}')
@@ -68,7 +77,6 @@ class TestMem:
                 env.execute_command('json.del', 'json', f'json{i}')
             env.debugPrint(f"--- del: t={datetime.timedelta(seconds=time.monotonic() - t0)}")
 
-        env = self.env
         fi = 0
         for jfile in JSON_FILES:
             fi += 1
