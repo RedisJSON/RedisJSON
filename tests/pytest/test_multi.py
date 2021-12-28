@@ -5,6 +5,8 @@ import os
 import redis
 import json
 from RLTest import Env
+
+from common import *
 from includes import *
 
 from RLTest import Defaults
@@ -782,13 +784,15 @@ def testToggleCommand(env):
     # Test missing key
     r.expect('JSON.TOGGLE', 'non_existing_doc', '$..a').raiseError()
 
-
+@no_msan
 def testMemoryUsage(env):
     """
     Test MEMORY USAGE key
     """
     if env.moduleArgs is not None and ['JSON_BACKEND SERDE_JSON'] in env.moduleArgs:
         env.skip()
+
+    env
 
     r = env
     jdata, jtypes = load_types_data('a')    
@@ -801,7 +805,7 @@ def testMemoryUsage(env):
     res = r.execute_command('MEMORY', 'USAGE', 'doc2')
     r.assertEqual(res, 323)
 
-
+@no_msan
 def testDebugCommand(env):
     """
     Test REJSON.DEBUG MEMORY command
