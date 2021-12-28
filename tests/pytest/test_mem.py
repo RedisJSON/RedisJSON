@@ -31,7 +31,7 @@ class TestMem:
     def testKeys(self):
         env = self.env
         env.skipOnCluster()
-        if env.useAof:
+        if env.useAof or env.useSlaves:
             env.skip()
 
         def add_and_check(title):
@@ -61,7 +61,7 @@ class TestMem:
     def testFields(self):
         env = self.env
         env.skipOnCluster()
-        if env.useAof:
+        if env.useAof or env.useSlaves:
             env.skip()
 
         def add_and_check(title):
