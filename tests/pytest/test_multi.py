@@ -760,7 +760,6 @@ def testClearCommand(env):
     r.expect('JSON.CLEAR', 'non_existing_doc', '$..a').raiseError()
 
 
-
 def testToggleCommand(env):
     """
     Test REJSON.TOGGLE command
@@ -782,6 +781,26 @@ def testToggleCommand(env):
 
     # Test missing key
     r.expect('JSON.TOGGLE', 'non_existing_doc', '$..a').raiseError()
+
+
+def testMemoryUsage(env):
+    """
+    Test MEMORY USAGE key
+    """
+    if env.moduleArgs is not None and ['JSON_BACKEND SERDE_JSON'] in env.moduleArgs:
+        env.skip()
+
+    r = env
+    jdata, jtypes = load_types_data('a')    
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', json.dumps(jdata)))
+    res = r.execute_command('MEMORY', 'USAGE', 'doc1')
+    r.assertEqual(res, 211)
+
+    jdata, jtypes = load_types_data('verylongfieldname')
+    r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', json.dumps(jdata)))
+    res = r.execute_command('MEMORY', 'USAGE', 'doc2')
+    r.assertEqual(res, 323)
+
 
 def testDebugCommand(env):
     """
