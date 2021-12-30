@@ -784,7 +784,7 @@ def testToggleCommand(env):
     # Test missing key
     r.expect('JSON.TOGGLE', 'non_existing_doc', '$..a').raiseError()
 
-@no_msan
+@no_san
 def testMemoryUsage(env):
     """
     Test MEMORY USAGE key
@@ -805,7 +805,7 @@ def testMemoryUsage(env):
     res = r.execute_command('MEMORY', 'USAGE', 'doc2')
     r.assertEqual(res, 323)
 
-@no_msan
+@no_san
 def testDebugCommand(env):
     """
     Test REJSON.DEBUG MEMORY command
