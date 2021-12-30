@@ -18,14 +18,11 @@ endif
 export SAN
 endif # SAN
 
-ifneq ($(filter coverage show-cov upload-cov,$(MAKECMDGOALS)),)
-COV=1
+ROOT=.
+ifeq ($(wildcard $(ROOT)/deps/readies/*),)
+$(info $(shell git submodule update --init --recursive &> /dev/null))
 endif
 
-ROOT=.
-ifeq ($(wildcard $(ROOT)/deps/readies),)
-$(shell git submodule update --init --recursive)
-endif
 MK.pyver:=3
 include $(ROOT)/deps/readies/mk/main
 
@@ -114,42 +111,6 @@ endif
 ifeq ($(COV),1)
 NIGHTLY=1
 RUST_FLAGS += -Zinstrument-coverage
-export LLVM_PROFILE_FILE=$(BINROOT)/cov/cov-%p-%m.profraw
-
-COV_DIR=$(BINROOT)/cov
-COV_PROFDATA=$(COV_DIR)/cov.profdata
-COV_INFO=$(COV_DIR)/cov.info
-
-COV_EXCLUDE.llvm += \
-    "$$HOME/.cargo/*"
-
-define COVERAGE_RESET.llvm
-$(SHOW)set -e ;\
-echo "Starting coverage analysys." ;\
-rm -rf $(COV_DIR) ;\
-mkdir -p $(COV_DIR)
-endef
-
-define COVERAGE_COLLECT.llvm
-$(SHOW)set -e ;\
-echo "Collecting coverage data ..." ;\
-llvm-profdata merge --sparse `ls $(COV_DIR)/*.profraw` -o $(COV_PROFDATA) &> /dev/null ;\
-llvm-cov export --format=lcov --instr-profile $(COV_PROFDATA) $(TARGET) > $(COV_INFO).all ;\
-lcov -o $(COV_INFO) -r $(COV_INFO).all $(COV_EXCLUDE.llvm) &> /dev/null
-endef
-
-define COVERAGE_REPORT.llvm
-$(SHOW)set -e ;\
-lcov -l $(COV_INFO) ;\
-genhtml --legend --ignore-errors source -o $(COV_DIR) $(COV_INFO) > /dev/null 2>&1 ;\
-echo "Coverage info at $$(realpath $(COV_DIR))/index.html"
-endef
-
-define COVERAGE_COLLECT_REPORT.llvm
-$(COVERAGE_COLLECT.llvm)
-$(COVERAGE_REPORT.llvm)
-endef
-
 endif # COV
 
 ifeq ($(PROFILE),1)
@@ -261,7 +222,7 @@ pack:
 #----------------------------------------------------------------------------------------------
 
 COV_EXCLUDE_DIRS += deps tests
-COV_EXCLUDE+=$(foreach D,$(COV_EXCLUDE_DIRS),'$(realpath $(ROOT))/$(D)/*')
+COV_EXCLUDE += $(foreach D,$(COV_EXCLUDE_DIRS),'$(realpath $(ROOT))/$(D)/*')
 
 coverage:
 	$(SHOW)$(MAKE) build COV=1
@@ -269,13 +230,7 @@ coverage:
 	-$(SHOW)$(MAKE) test COV=1
 	$(SHOW)$(COVERAGE_COLLECT_REPORT.llvm)
 
-show-cov:
-	$(SHOW)lcov -l $(COV_INFO)
-
-upload-cov:
-	$(SHOW)bash <(curl -s https://raw.githubusercontent.com/codecov/codecov-bash/master/codecov) -f $(COV_INFO)
-
-.PHONY: coverage show-cov upload-cov
+.PHONY: coverage
 
 #----------------------------------------------------------------------------------------------
 
