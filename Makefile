@@ -53,6 +53,10 @@ make pytest        # run flow tests using RLTest
 
 make pack          # build package (RAMP file)
 
+make coverage      # perform coverage analysis
+make show-cov      # show coverage analysis results (implies COV=1)
+mkae upload-cov    # upload coverage analysis results to codecov.io (implies COV=1)
+
 make docker
 make docker_push
 
@@ -221,8 +225,8 @@ pack:
 
 #----------------------------------------------------------------------------------------------
 
-COV_EXCLUDE_DIRS += deps tests
-COV_EXCLUDE += $(foreach D,$(COV_EXCLUDE_DIRS),'$(realpath $(ROOT))/$(D)/*')
+COV_EXCLUDE_DIRS += bin deps tests
+COV_EXCLUDE.llvm += $(foreach D,$(COV_EXCLUDE_DIRS),'$(realpath $(ROOT))/$(D)/*')
 
 coverage:
 	$(SHOW)$(MAKE) build COV=1
