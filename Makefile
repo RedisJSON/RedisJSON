@@ -55,7 +55,7 @@ make pack          # build package (RAMP file)
 
 make coverage      # perform coverage analysis
 make show-cov      # show coverage analysis results (implies COV=1)
-mkae upload-cov    # upload coverage analysis results to codecov.io (implies COV=1)
+make upload-cov    # upload coverage analysis results to codecov.io (implies COV=1)
 
 make docker
 make docker_push
