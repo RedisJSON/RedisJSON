@@ -10,6 +10,7 @@ use jsonpath_lib::select::Selector;
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use std::cmp::Ordering;
+use std::str::FromStr;
 
 use crate::redisjson::SetOptions;
 
@@ -775,12 +776,10 @@ fn prepare_paths_for_deletion(paths: &mut Vec<Vec<String>>) {
                             (Err(_), Ok(_)) => Done(Ordering::Less),    //String before Numeric
                             (Ok(i1), Ok(i2)) => {
                                 // Numeric compare - higher indices before lower ones
-                                if i1 < i2 {
-                                    Done(Ordering::Greater)
-                                } else if i2 < i1 {
-                                    Done(Ordering::Less)
-                                } else {
-                                    Continue(Ordering::Equal)
+                                match i2.cmp(&i1) {
+                                    Ordering::Greater => Done(Ordering::Greater),
+                                    Ordering::Less => Done(Ordering::Less),
+                                    Ordering::Equal => Continue(Ordering::Equal),
                                 }
                             }
                         }
