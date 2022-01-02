@@ -414,25 +414,6 @@ macro_rules! redis_json_module_create {(
             }
         }
 
-        fn json_cache_info(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_cache_info(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_cache_info, ctx, args)
-
-            }
-        }
-
-        fn json_cache_init(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_cache_init(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_cache_init, ctx, args)
-            }
-        }
-
         redis_json_module_export_shared_api! {
             get_manage:$get_manager_expr,
             pre_command_function: $pre_command_function_expr,
@@ -504,8 +485,6 @@ macro_rules! redis_json_module_create {(
                 ["json.debug", json_debug, "readonly", 2,2,1],
                 ["json.forget", json_del, "write", 1,1,1],
                 ["json.resp", json_resp, "readonly", 1,1,1],
-                ["json._cacheinfo", json_cache_info, "readonly", 1,1,1],
-                ["json._cacheinit", json_cache_init, "write", 1,1,1],
             ],
         }
     }
