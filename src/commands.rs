@@ -967,9 +967,11 @@ where
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
-    let paths = find_all_paths(path, root, |v| match v.get_type() {
-        SelectValueType::Double | SelectValueType::Long => true,
-        _ => false,
+    let paths = find_all_paths(path, root, |v| {
+        matches!(
+            v.get_type(),
+            SelectValueType::Double | SelectValueType::Long
+        )
     })?;
 
     let mut res = vec![];
@@ -1774,7 +1776,7 @@ where
         }
         res.into()
     };
-    Ok(res.into())
+    Ok(res)
 }
 
 fn json_obj_keys_legacy<M>(redis_key: &mut M::ReadHolder, path: &str) -> RedisResult

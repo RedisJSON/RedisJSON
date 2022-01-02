@@ -96,7 +96,7 @@ pub(crate) fn err_json<V: SelectValue>(value: &V, expected_value: &'static str) 
     ))
 }
 
-pub(crate) fn err_msg_json_expected<'a>(expected_value: &'static str, found: &str) -> String {
+pub(crate) fn err_msg_json_expected(expected_value: &'static str, found: &str) -> String {
     format!(
         "WRONGTYPE wrong type of path value - expected {} but found {}",
         expected_value, found
