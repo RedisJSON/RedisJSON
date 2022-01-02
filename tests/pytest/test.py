@@ -927,8 +927,10 @@ def testMultiPathResults(env):
 
 def testIssue_597(env):
     env.expect("JSON.SET", "test", ".", "[0]").ok()
-    env.expect("JSON.SET", "test", ".[0]", "[0]", "NX").noError()
+    env.assertEqual(env.execute_command("JSON.SET", "test", ".[0]", "[0]", "NX"), None)
     env.expect("JSON.SET", "test", ".[1]", "[0]", "NX").raiseError()
+    # make sure value was not changed
+    env.expect("JSON.GET", "test", ".").equal('[0]')
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property
