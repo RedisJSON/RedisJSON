@@ -866,6 +866,7 @@ def testRespCommand(env):
 
 def testSetGetComparePassJSONCaseFiles(env):
     """Test setting, getting, saving and loading passable JSON test case files"""
+    env.skipOnSlave() # work around to avoid fail on "Background save already in progress"
     r = env
 
     for jsonfile in os.listdir(JSON_PATH):

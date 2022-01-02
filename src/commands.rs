@@ -1962,19 +1962,3 @@ pub fn command_json_resp<M: Manager>(
         None => Ok(RedisValue::Null),
     }
 }
-
-pub fn command_json_cache_info<M: Manager>(
-    _manager: M,
-    _ctx: &Context,
-    _args: Vec<RedisString>,
-) -> RedisResult {
-    Err(RedisError::Str("Command was not implemented"))
-}
-
-pub fn command_json_cache_init<M: Manager>(
-    _manager: M,
-    _ctx: &Context,
-    _args: Vec<RedisString>,
-) -> RedisResult {
-    Err(RedisError::Str("Command was not implemented"))
-}
