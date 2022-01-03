@@ -33,7 +33,7 @@ class RedisJSONSetup(paella.Setup):
     def debian_compat(self):
         self.run("%s/bin/enable-utf8" % READIES)
         self.run("%s/bin/getgcc" % READIES)
-        self.install("python3-dev")
+        # self.install("python3-dev")
 
     def redhat_compat(self):
         self.run("%s/bin/enable-utf8" % READIES)
