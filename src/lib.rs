@@ -30,11 +30,13 @@ pub mod redisjson;
 
 pub const GIT_SHA: Option<&'static str> = std::option_env!("GIT_SHA");
 pub const GIT_BRANCH: Option<&'static str> = std::option_env!("GIT_BRANCH");
+pub const MODULE_NAME: &'static str = "ReJSON";
+pub const MODULE_TYPE_NAME: &'static str = "ReJSON-RL";
 
 pub const REDIS_JSON_TYPE_VERSION: i32 = 3;
 
 pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
-    "ReJSON-RL",
+    MODULE_TYPE_NAME,
     REDIS_JSON_TYPE_VERSION,
     RedisModuleTypeMethods {
         version: redis_module::TYPE_METHOD_VERSION,
@@ -456,7 +458,7 @@ macro_rules! redis_json_module_create {(
         }
 
         redis_module! {
-            name: "ReJSON",
+            name: crate::MODULE_NAME,
             version: $version,
             data_types: [$($data_type,)*],
             init: json_init_config,

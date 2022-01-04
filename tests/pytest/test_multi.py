@@ -742,6 +742,9 @@ def testClearCommand(env):
     r.assertEqual(res, 3)
     res = r.execute_command('JSON.GET', 'doc1', '$')
     r.assertEqual(json.loads(res), [{"nested1": {"a": {}}, "a": [], "nested2": {"a": "claro"}, "nested3": {"a": {}}}])
+    # Not clearing already cleared values
+    res = r.execute_command('JSON.CLEAR', 'doc1', '$..a')
+    r.assertEqual(res, 0)
 
     # Test single
     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"nested1": {"a": {"foo": 10, "bar": 20}}, "a":["foo"], "nested2": {"a": "claro"}, "nested3": {"a": {"baz":50}}}'))
@@ -749,6 +752,9 @@ def testClearCommand(env):
     r.assertEqual(res, 1)
     res = r.execute_command('JSON.GET', 'doc1', '$')
     r.assertEqual(json.loads(res), [{"nested1": {"a": {}}, "a": ["foo"], "nested2": {"a": "claro"}, "nested3": {"a": {"baz": 50}}}])
+    # Not clearing already cleared values
+    res = r.execute_command('JSON.CLEAR', 'doc1', '$.nested1.a')
+    r.assertEqual(res, 0)
 
     # Test missing path (defaults to root)
     res = r.execute_command('JSON.CLEAR', 'doc1')
