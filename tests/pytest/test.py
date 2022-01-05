@@ -475,7 +475,7 @@ def testClear(env):
     r.expect('JSON.CLEAR', 'test', '$.arr[2].n').equal(1)
     r.expect('JSON.CLEAR', 'test', '$.arr[3].n2.n').equal(1)
 
-    # Fail clear on inappropriate path (not obj or arr)
+    # No clear on inappropriate path (not obj or arr or numeric)
     r.expect('JSON.CLEAR', 'test', '$.arr[1]').equal(0)
 
     # Make sure specific obj content was cleared
@@ -515,6 +515,35 @@ def testClear(env):
 
     # Key doesn't exist 
     r.expect('JSON.CLEAR', 'not_test_key', '$').raiseError()
+
+def testClearScalar(env):
+    """Test JSON.CLEAR command for scalars"""
+
+    r = env
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$', json.dumps(docs['basic'])))
+    # Clear numeric values
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.int'), 1)
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '$.int'), '[0]')
+
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.num'), 1)
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '$.num'), '[0]')
+
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$..a'), 1)
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '$..a'), '[0]')
+
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$', json.dumps(docs['scalars'])))
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.*'), 2)
+    res = r.execute_command('JSON.GET', 'test', '$.*')
+    r.assertEqual(json.loads(res), ['string value', None, True,0, 0])
+    
+    # Do not clear already cleared values
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.*'), 0)
+
+    # Do not clear other scalars
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.none'), 0)
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.bool'), 0)
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.string'), 0)    
+
 
 def testArrayCRUD(env):
     """Test JSON Array CRUDness"""
