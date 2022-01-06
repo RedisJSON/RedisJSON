@@ -89,11 +89,11 @@ when stored using MessagePack.
 
 | File                                   | Filesize  | RedisJSON | MessagePack |
 | -------------------------------------- | --------- | ------ | ----------- |
-| /test/files/pass-100.json              | 380       | 1079   | 140         |
-| /test/files/pass-jsonsl-1.json         | 1441      | 3666   | 753         |
-| /test/files/pass-json-parser-0000.json | 3468      | 7209   | 2393        |
-| /test/files/pass-jsonsl-yahoo2.json    | 18446     | 37469  | 16869       |
-| /test/files/pass-jsonsl-yelp.json      | 39491     | 75341  | 35469       |
+| /tests/files/pass-100.json              | 380       | 1079   | 140         |
+| /tests/files/pass-jsonsl-1.json         | 1441      | 3666   | 753         |
+| /tests/files/pass-json-parser-0000.json | 3468      | 7209   | 2393        |
+| /tests/files/pass-jsonsl-yahoo2.json    | 18446     | 37469  | 16869       |
+| /tests/files/pass-jsonsl-yelp.json      | 39491     | 75341  | 35469       |
 
 > Note: In the current version, deleting values from containers **does not** free the container's
 allocated memory.

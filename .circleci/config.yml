@@ -40,7 +40,7 @@ commands:
             apt-get -q install -y git openssh-client curl ca-certificates make tar gzip
             bash <(curl -fsSL https://raw.githubusercontent.com/docker/docker-install/master/install.sh)
       - setup_remote_docker:
-          version: 20.10.2
+          version: 20.10.7
           docker_layer_caching: true
 
   checkout-all:
@@ -153,7 +153,7 @@ commands:
           name: Run all tests
           command: |
             bash -l -c "python3 -m RLTest --version"
-            bash -l -c "make pytest"
+            bash -l -c "make test"
           timeout: 30m
           no_output_timeout: 30m
       - save_cache:
@@ -312,6 +312,42 @@ jobs:
       - test-steps
       - persist-artifacts
 
+  coverage:
+    docker:
+      - image: redisfab/rmbuilder:6.2.5-x64-bullseye
+    steps:
+      - early-returns
+      - checkout-all
+      - install-prerequisites
+      - run:
+          name: Build & Test
+          shell: /bin/bash -l -eo pipefail
+          command: |
+            make coverage SHOW=1
+            make upload-cov SHOW=1
+          no_output_timeout: 30m
+      - save-tests-logs
+
+  sanitize:
+    docker:
+      - image: redisfab/clang:13-x64-bullseye
+    parameters:
+      san-type:
+        type: string
+    steps:
+      - early-returns
+      - checkout-all
+      - setup-automation
+      - run:
+          name: System setup
+          command: ./sbin/system-setup.py
+      - run:
+          name: Build & test
+          shell: /bin/bash -l -eo pipefail
+          command: make SAN=<<parameters.san-type>> build test SHOW=1 VERBOSE=1
+          no_output_timeout: 30m
+      - save-tests-logs
+
   deploy-artifacts:
     parameters:
       location:
@@ -395,6 +431,7 @@ on-integ-branch: &on-integ-branch
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
+        - /^perf.*$/
     tags:
       ignore: /.*/
 
@@ -405,6 +442,7 @@ not-on-integ-branch: &not-on-integ-branch
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
+        - /^perf.*$/
     tags:
       ignore: /.*/
 
@@ -422,6 +460,7 @@ on-integ-and-version-tags: &on-integ-and-version-tags
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
+        - /^perf.*$/
     tags:
       only: /^v[0-9].*/
 
@@ -436,8 +475,7 @@ workflows:
           <<: *not-on-integ-branch
       - build-linux-debian:
           name: build-with-redis-<<matrix.redis_version>>
-          #@@<<: *on-integ-branch
-          <<: *on-any-branch
+          <<: *on-integ-branch
           matrix:
             parameters:
               redis_version: ["6.0", "6.2"]
@@ -455,6 +493,15 @@ workflows:
               platform: [bionic]
       - build-macos:
           <<: *on-integ-and-version-tags          
+      - coverage:
+          context: common
+          <<: *on-any-branch
+      - sanitize:
+          name: sanitize-<< matrix.san-type >>
+          matrix:
+            parameters:
+              san-type: [address] # [address, memory]
+          <<: *on-any-branch
       - deploy-artifacts:
           name: deploy_snapshot
           location: snapshots
