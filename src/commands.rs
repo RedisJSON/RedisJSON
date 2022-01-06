@@ -1883,8 +1883,11 @@ pub fn command_json_clear<M: Manager>(
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_paths(path, root, |v| {
-        v.get_type() == SelectValueType::Array || v.get_type() == SelectValueType::Object
+    let paths = find_paths(path, root, |v| match v.get_type() {
+        SelectValueType::Array | SelectValueType::Object => v.len().unwrap() > 0,
+        SelectValueType::Long => v.get_long() != 0,
+        SelectValueType::Double => v.get_double() != 0.0,
+        _ => false,
     })?;
     let mut cleared = 0;
     if !paths.is_empty() {

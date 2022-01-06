@@ -444,6 +444,10 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 cleared += 1;
                 Ok(Some(v))
             }
+            ValueType::Number => {
+                cleared += 1;
+                Ok(Some(IValue::from(0)))
+            }
             _ => Ok(Some(v)),
         })?;
         Ok(cleared)

@@ -506,6 +506,10 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
                 cleared += 1;
                 Ok(Some(Value::from(arr)))
             }
+            Value::Number(mut _num) => {
+                cleared += 1;
+                Ok(Some(Value::from(0)))
+            }
             _ => Ok(Some(v)),
         })?;
         Ok(cleared)
