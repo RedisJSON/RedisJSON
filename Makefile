@@ -19,9 +19,10 @@ export SAN
 endif # SAN
 
 ROOT=.
-ifeq ($(wildcard $(ROOT)/deps/readies),)
-$(shell git submodule update --init --recursive)
+ifeq ($(wildcard $(ROOT)/deps/readies/*),)
+$(info $(shell git submodule update --init --recursive &> /dev/null))
 endif
+
 MK.pyver:=3
 include $(ROOT)/deps/readies/mk/main
 
@@ -52,6 +53,10 @@ make pytest        # run flow tests using RLTest
 
 make pack          # build package (RAMP file)
 
+make coverage      # perform coverage analysis
+make show-cov      # show coverage analysis results (implies COV=1)
+make upload-cov    # upload coverage analysis results to codecov.io (implies COV=1)
+
 make docker
 make docker_push
 
@@ -73,6 +78,8 @@ endef
 
 #----------------------------------------------------------------------------------------------
 
+SRCDIR=src
+
 MK_CUSTOM_CLEAN=1
 BINDIR=$(BINROOT)
 
@@ -93,8 +100,7 @@ ifeq ($(DEBUG),1)
 ifeq ($(SAN),)
 TARGET_DIR=$(BINDIR)/target/debug
 else
-TARGET_DIR=$(BINDIR)/target/$(RUST_TARGET)/debug
-CARGO_TOOLCHAIN = +nightly
+NIGHTLY=1
 CARGO_FLAGS += -Zbuild-std
 RUST_FLAGS += -Zsanitizer=$(SAN)
 ifeq ($(SAN),memory)
@@ -106,8 +112,18 @@ CARGO_FLAGS += --release
 TARGET_DIR=$(BINDIR)/target/release
 endif
 
+ifeq ($(COV),1)
+NIGHTLY=1
+RUST_FLAGS += -Zinstrument-coverage
+endif # COV
+
 ifeq ($(PROFILE),1)
 RUST_FLAGS += -g -C force-frame-pointers=yes
+endif
+
+ifeq ($(NIGHTLY),1)
+TARGET_DIR=$(BINDIR)/target/$(RUST_TARGET)/debug
+CARGO_TOOLCHAIN = +nightly
 endif
 
 export CARGO_TARGET_DIR=$(BINDIR)/target
@@ -141,7 +157,7 @@ RUST_SOEXT.freebsd=so
 RUST_SOEXT.macos=dylib
 
 build:
-ifeq ($(SAN),)
+ifneq ($(NIGHTLY),1)
 	$(SHOW)set -e ;\
 	export RUSTFLAGS="$(RUST_FLAGS)" ;\
 	cargo build --all --all-targets $(CARGO_FLAGS)
@@ -206,6 +222,19 @@ pack:
 	$(SHOW)MODULE=$(abspath $(TARGET)) ./sbin/pack.sh
 
 .PHONY: pack
+
+#----------------------------------------------------------------------------------------------
+
+COV_EXCLUDE_DIRS += bin deps tests
+COV_EXCLUDE.llvm += $(foreach D,$(COV_EXCLUDE_DIRS),'$(realpath $(ROOT))/$(D)/*')
+
+coverage:
+	$(SHOW)$(MAKE) build COV=1
+	$(SHOW)$(COVERAGE_RESET.llvm)
+	-$(SHOW)$(MAKE) test COV=1
+	$(SHOW)$(COVERAGE_COLLECT_REPORT.llvm)
+
+.PHONY: coverage
 
 #----------------------------------------------------------------------------------------------
 

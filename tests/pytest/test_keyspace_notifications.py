@@ -101,6 +101,10 @@ def test_keyspace_arr(env):
         assert_msg(env, pubsub.get_message(timeout=1), 'pmessage', 'json.clear')
         assert_msg(env, pubsub.get_message(timeout=1), 'pmessage', 'test_key_arr')
 
+        env.assertEqual(1, r.execute_command('JSON.CLEAR', 'test_key_arr', '$.bar'))  # Not an array
+        assert_msg(env, pubsub.get_message(timeout=1), 'pmessage', 'json.clear')
+        assert_msg(env, pubsub.get_message(timeout=1), 'pmessage', 'test_key_arr')
+
         env.assertEqual([None], r.execute_command('JSON.ARRPOP', 'test_key_arr', '$.foo'))  # Empty array
         env.assertEqual(None, pubsub.get_message(timeout=1))
         env.assertEqual([None], r.execute_command('JSON.ARRPOP', 'test_key_arr', '$'))  # Not an array
@@ -114,9 +118,7 @@ def test_keyspace_arr(env):
         env.assertEqual([None], r.execute_command('JSON.ARRAPPEND', 'test_key_arr', '$.bar', '"barian"'))   # Not an array
         env.assertEqual(None, pubsub.get_message(timeout=1))
         env.assertEqual([None], r.execute_command('JSON.ARRPOP', 'test_key_arr', '$.bar'))  # Not an array
-        env.assertEqual(None, pubsub.get_message(timeout=1))
-        env.assertEqual(0, r.execute_command('JSON.CLEAR', 'test_key_arr', '$.bar'))  # Not an array
-        env.assertEqual(None, pubsub.get_message(timeout=1))
+        env.assertEqual(None, pubsub.get_message(timeout=1))        
 
 
 def test_keyspace_del(env):

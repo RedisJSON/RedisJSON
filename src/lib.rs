@@ -30,11 +30,13 @@ pub mod redisjson;
 
 pub const GIT_SHA: Option<&'static str> = std::option_env!("GIT_SHA");
 pub const GIT_BRANCH: Option<&'static str> = std::option_env!("GIT_BRANCH");
+pub const MODULE_NAME: &'static str = "ReJSON";
+pub const MODULE_TYPE_NAME: &'static str = "ReJSON-RL";
 
 pub const REDIS_JSON_TYPE_VERSION: i32 = 3;
 
 pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
-    "ReJSON-RL",
+    MODULE_TYPE_NAME,
     REDIS_JSON_TYPE_VERSION,
     RedisModuleTypeMethods {
         version: redis_module::TYPE_METHOD_VERSION,
@@ -414,25 +416,6 @@ macro_rules! redis_json_module_create {(
             }
         }
 
-        fn json_cache_info(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_cache_info(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_cache_info, ctx, args)
-
-            }
-        }
-
-        fn json_cache_init(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_cache_init(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_cache_init, ctx, args)
-            }
-        }
-
         redis_json_module_export_shared_api! {
             get_manage:$get_manager_expr,
             pre_command_function: $pre_command_function_expr,
@@ -475,7 +458,7 @@ macro_rules! redis_json_module_create {(
         }
 
         redis_module! {
-            name: "ReJSON",
+            name: crate::MODULE_NAME,
             version: $version,
             data_types: [$($data_type,)*],
             init: json_init_config,
@@ -504,8 +487,6 @@ macro_rules! redis_json_module_create {(
                 ["json.debug", json_debug, "readonly", 2,2,1],
                 ["json.forget", json_del, "write", 1,1,1],
                 ["json.resp", json_resp, "readonly", 1,1,1],
-                ["json._cacheinfo", json_cache_info, "readonly", 1,1,1],
-                ["json._cacheinit", json_cache_init, "write", 1,1,1],
             ],
         }
     }
