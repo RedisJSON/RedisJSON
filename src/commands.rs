@@ -10,6 +10,7 @@ use jsonpath_lib::select::Selector;
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use std::cmp::Ordering;
+use std::str::FromStr;
 
 use crate::redisjson::SetOptions;
 
@@ -282,10 +283,18 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     .collect())
             }
         } else if let StaticPathElement::ArrayIndex(_) = last {
-            // if we reach here with array path we must be out of range
-            // otherwise the path would be valid to be set and we would not
-            // have reached here!!
-            Err("ERR array index out of range".into())
+            // if we reach here with array path we are either out of range
+            // or no-oping an NX where the value is already present
+            let mut selector = Selector::default();
+            let res = selector
+                .str_path(path)?
+                .value(self.val)
+                .select_with_paths(|_| true)?;
+            if !res.is_empty() {
+                Ok(Vec::new())
+            } else {
+                Err("ERR array index out of range".into())
+            }
         } else {
             Err("ERR path not an object or array".into())
         }
@@ -775,12 +784,10 @@ fn prepare_paths_for_deletion(paths: &mut Vec<Vec<String>>) {
                             (Err(_), Ok(_)) => Done(Ordering::Less),    //String before Numeric
                             (Ok(i1), Ok(i2)) => {
                                 // Numeric compare - higher indices before lower ones
-                                if i1 < i2 {
-                                    Done(Ordering::Greater)
-                                } else if i2 < i1 {
-                                    Done(Ordering::Less)
-                                } else {
-                                    Continue(Ordering::Equal)
+                                match i2.cmp(&i1) {
+                                    Ordering::Greater => Done(Ordering::Greater),
+                                    Ordering::Less => Done(Ordering::Less),
+                                    Ordering::Equal => Continue(Ordering::Equal),
                                 }
                             }
                         }
@@ -967,9 +974,11 @@ where
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
-    let paths = find_all_paths(path, root, |v| match v.get_type() {
-        SelectValueType::Double | SelectValueType::Long => true,
-        _ => false,
+    let paths = find_all_paths(path, root, |v| {
+        matches!(
+            v.get_type(),
+            SelectValueType::Double | SelectValueType::Long
+        )
     })?;
 
     let mut res = vec![];
@@ -1774,7 +1783,7 @@ where
         }
         res.into()
     };
-    Ok(res.into())
+    Ok(res)
 }
 
 fn json_obj_keys_legacy<M>(redis_key: &mut M::ReadHolder, path: &str) -> RedisResult

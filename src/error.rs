@@ -62,7 +62,7 @@ impl From<serde_json::Error> for Error {
 impl From<JsonPathError> for Error {
     fn from(e: JsonPathError) -> Self {
         Error {
-            msg: format!("JSON Path error: {:?}", e).replace("\n", "\\n"),
+            msg: format!("JSON Path error: {:?}", e).replace('\n', "\\n"),
         }
     }
 }
@@ -98,7 +98,7 @@ mod tests {
 
     #[test]
     fn test_from_parse_int_error() {
-        let err: Error = i32::from_str_radix("a12", 10).unwrap_err().into();
+        let err: Error = "a12".parse::<i32>().unwrap_err().into();
         assert_eq!(err.msg, "invalid digit found in string");
     }
 
@@ -118,8 +118,7 @@ mod tests {
         let err: Error = utf8_err.into();
         assert_eq!(err.msg, "invalid utf-8 sequence of 1 bytes from index 0");
 
-        let parse_int_error: redis_module::error::Error =
-            i32::from_str_radix("a12", 10).unwrap_err().into();
+        let parse_int_error: redis_module::error::Error = "a12".parse::<i32>().unwrap_err().into();
         let err: Error = parse_int_error.into();
         assert_eq!(err.msg, "invalid digit found in string");
     }

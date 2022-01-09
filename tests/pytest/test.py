@@ -955,6 +955,13 @@ def testMultiPathResults(env):
     # make sure legacy json path returns single result
     env.expect("JSON.GET", "k", '.*[0,2]').equal('1')
 
+def testIssue_597(env):
+    env.expect("JSON.SET", "test", ".", "[0]").ok()
+    env.assertEqual(env.execute_command("JSON.SET", "test", ".[0]", "[0]", "NX"), None)
+    env.expect("JSON.SET", "test", ".[1]", "[0]", "NX").raiseError()
+    # make sure value was not changed
+    env.expect("JSON.GET", "test", ".").equal('[0]')
+
 # class CacheTestCase(BaseReJSONTest):
 #     @property
 #     def module_args(env):
