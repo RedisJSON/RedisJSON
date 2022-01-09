@@ -2,6 +2,7 @@ extern crate redis_module;
 
 use redis_module::native_types::RedisType;
 use redis_module::raw::RedisModuleTypeMethods;
+use redis_module::InfoContext;
 
 #[cfg(not(feature = "as-library"))]
 use redis_module::Status;
@@ -98,7 +99,6 @@ macro_rules! run_on_manager {
         }
     };
 }
-
 #[macro_export]
 macro_rules! redis_json_module_create {(
         data_types: [
@@ -108,6 +108,7 @@ macro_rules! redis_json_module_create {(
         get_manage: $get_manager_expr:expr,
         version: $version:expr,
         init: $init_func:expr,
+        info: $info_func:ident,
     ) => {
 
         use redis_module::{redis_command, redis_module, RedisString};
@@ -463,6 +464,7 @@ macro_rules! redis_json_module_create {(
             data_types: [$($data_type,)*],
             init: json_init_config,
             init: intialize,
+            info: $info_func,
             commands: [
                 ["json.del", json_del, "write", 1,1,1],
                 ["json.get", json_get, "readonly", 1,1,1],
@@ -501,6 +503,9 @@ fn dummy_init(_ctx: &Context, _args: &Vec<RedisString>) -> Status {
 }
 
 #[cfg(not(feature = "as-library"))]
+fn dummy_info(_ctx: &InfoContext, _for_crash_report: bool) {}
+
+#[cfg(not(feature = "as-library"))]
 redis_json_module_create! {
     data_types: [REDIS_JSON_TYPE],
     pre_command_function: pre_command,
@@ -512,4 +517,5 @@ redis_json_module_create! {
     },
     version: 99_99_99,
     init: dummy_init,
+    info: dummy_info,
 }
