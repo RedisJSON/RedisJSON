@@ -142,12 +142,10 @@ impl<'a> IValueKeyHolderWrite<'a> {
                     if let Some(n) = n.as_number() {
                         if !n.has_decimal_point() {
                             Ok(n.to_i64().unwrap().into())
+                        } else if let Some(f) = n.to_f64() {
+                            Ok(serde_json::Number::from_f64(f).unwrap())
                         } else {
-                            if let Some(f) = n.to_f64() {
-                                Ok(serde_json::Number::from_f64(f).unwrap())
-                            } else {
-                                Err(RedisError::Str("return value is not a number"))
-                            }
+                            Err(RedisError::Str("return value is not a number"))
                         }
                     } else {
                         Err(RedisError::Str("return value is not a number"))
@@ -362,7 +360,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             curr.reserve(args.len());
             for a in args {
                 curr.insert(index, a.clone());
-                index = index + 1;
+                index += 1;
             }
             res = Some(curr.len());
             Ok(Some(new_value))
@@ -445,6 +443,10 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 arr.clear();
                 cleared += 1;
                 Ok(Some(v))
+            }
+            ValueType::Number => {
+                cleared += 1;
+                Ok(Some(IValue::from(0)))
             }
             _ => Ok(Some(v)),
         })?;
