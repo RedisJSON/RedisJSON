@@ -1372,9 +1372,9 @@ enum FoundIndex {
 impl From<FoundIndex> for RedisValue {
     fn from(e: FoundIndex) -> Self {
         match e {
-            FoundIndex::NotFound => RedisValue::Integer(-1),
-            FoundIndex::NotArray => RedisValue::Null,
-            FoundIndex::Index(i) => RedisValue::Integer(i),
+            FoundIndex::NotFound => Self::Integer(-1),
+            FoundIndex::NotArray => Self::Null,
+            FoundIndex::Index(i) => Self::Integer(i),
         }
     }
 }
