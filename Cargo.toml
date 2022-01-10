@@ -1,8 +1,14 @@
 [package]
 name = "redisjson"
 version = "99.99.99"
-authors = ["Gavrie Philipson <gavrie@redislabs.com>"]
+authors = ["Gavrie Philipson <gavrie@redis.com>"]
 edition = "2021"
+description = "JSON data type for Redis"
+repository = "https://github.com/RedisJSON/RedisJSON"
+readme = "README.md" 
+license = "Redis Source Available License (RSAL)"
+keywords = ["redis", "json", "plugin"]
+categories = ["database-implementations"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
