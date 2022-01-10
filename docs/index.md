@@ -50,90 +50,90 @@ Before using RedisJSON, you should familiarize yourself with its commands and sy
 This example will use [`redis-cli`](http://redis.io/topics/rediscli) as the Redis client. The first RedisJSON command to try out is [`JSON.SET`](commands.md#jsonset), which sets a Redis key with a JSON value. All JSON values can be used, for example a string:
 
 ```
-127.0.0.1:6379> JSON.SET foo . '"bar"'
+127.0.0.1:6379> JSON.SET foo $ '"bar"'
 OK
-127.0.0.1:6379> JSON.GET foo
-"\"bar\""
-127.0.0.1:6379> JSON.TYPE foo .
-string
+127.0.0.1:6379> JSON.GET foo $
+"[\"bar\"]"
+127.0.0.1:6379> JSON.TYPE foo $
+1) string
 ```
 
 [`JSON.GET`](commands.md#jsonget) and [`JSON.TYPE`](commands.md#jsontype) do literally that regardless of the value's type, but you should really check out `JSON.GET` prettifying powers. Note how the commands are given the period character, i.e. `.`. This is the [path](path.md) to the value in the RedisJSON data type (in this case it just means the root). A couple more string operations:
 
 ```
-127.0.0.1:6379> JSON.STRLEN foo .
-3
-127.0.0.1:6379> JSON.STRAPPEND foo . '"baz"'
-6
-127.0.0.1:6379> JSON.GET foo
-"\"barbaz\""
+127.0.0.1:6379> JSON.STRLEN foo $
+1) (integer) 3
+127.0.0.1:6379> JSON.STRAPPEND foo $ '"baz"'
+1) (integer) 6
+127.0.0.1:6379> JSON.GET foo $
+"[\"barbaz\"]"
 
 ``` 
 
 [`JSON.STRLEN`](commands.md#jsonstrlen) tells you the length of the string, and you can append another string to it with [`JSON.STRAPPEND`](commands.md#jsonstrappend). Numbers can be [incremented](commands.md#jsonnumincrby) and [multiplied](commands.md#jsonnummultby):
 
 ```
-127.0.0.1:6379> JSON.SET num . 0
+127.0.0.1:6379> JSON.SET num $ 0
 OK
-127.0.0.1:6379> JSON.NUMINCRBY num . 1
-"1"
-127.0.0.1:6379> JSON.NUMINCRBY num . 1.5
-"2.5"
-127.0.0.1:6379> JSON.NUMINCRBY num . -0.75
-"1.75"
-127.0.0.1:6379> JSON.NUMMULTBY num . 24
-"42"
+127.0.0.1:6379> JSON.NUMINCRBY num $ 1
+"[1]"
+127.0.0.1:6379> JSON.NUMINCRBY num $ 1.5
+"[2.5]"
+127.0.0.1:6379> JSON.NUMINCRBY num $ -0.75
+"[1.75]"
+127.0.0.1:6379> JSON.NUMMULTBY num $ 24
+"[42]"
 ```
 
 Of course, a more interesting example would involve an array or maybe an object:
 
 ```
-127.0.0.1:6379> JSON.SET amoreinterestingexample . '[ true, { "answer": 42 }, null ]'
+127.0.0.1:6379> JSON.SET amoreinterestingexample $ '[ true, { "answer": 42 }, null ]'
 OK
-127.0.0.1:6379> JSON.GET amoreinterestingexample
-"[true,{\"answer\":42},null]"
-127.0.0.1:6379> JSON.GET amoreinterestingexample [1].answer
-"42"
-127.0.0.1:6379> JSON.DEL amoreinterestingexample [-1]
-1
-127.0.0.1:6379> JSON.GET amoreinterestingexample
-"[true,{\"answer\":42}]"
+127.0.0.1:6379> JSON.GET amoreinterestingexample $
+"[[true,{\"answer\":42},null]]"
+127.0.0.1:6379> JSON.GET amoreinterestingexample $[1].answer
+"[42]"
+127.0.0.1:6379> JSON.DEL amoreinterestingexample $[-1]
+(integer) 1
+127.0.0.1:6379> JSON.GET amoreinterestingexample $
+"[[true,{\"answer\":42}]]"
 ```
 
 The handy [`JSON.DEL`](commands.md#jsondel) command deletes anything you tell it to. Arrays can be manipulated with a dedicated subset of RedisJSON commands:
 
 ```
-127.0.0.1:6379> JSON.SET arr . []
+127.0.0.1:6379> JSON.SET arr $ []
 OK
-127.0.0.1:6379> JSON.ARRAPPEND arr . 0
-(integer) 1
-127.0.0.1:6379> JSON.GET arr
-"[0]"
-127.0.0.1:6379> JSON.ARRINSERT arr . 0 -2 -1
-(integer) 3
-127.0.0.1:6379> JSON.GET arr
-"[-2,-1,0]"
-127.0.0.1:6379> JSON.ARRTRIM arr . 1 1
-1
-127.0.0.1:6379> JSON.GET arr
-"[-1]"
-127.0.0.1:6379> JSON.ARRPOP arr
-"-1"
-127.0.0.1:6379> JSON.ARRPOP arr
-(nil)
+127.0.0.1:6379> JSON.ARRAPPEND arr $ 0
+1) (integer) 1
+127.0.0.1:6379> JSON.GET arr $
+"[[0]]"
+127.0.0.1:6379> JSON.ARRINSERT arr $ 0 -2 -1
+1) (integer) 3
+127.0.0.1:6379> JSON.GET arr $
+"[[-2,-1,0]]"
+127.0.0.1:6379> JSON.ARRTRIM arr $ 1 1
+1) (integer) 1
+127.0.0.1:6379> JSON.GET arr $
+"[[-1]]"
+127.0.0.1:6379> JSON.ARRPOP arr $
+1) "-1"
+127.0.0.1:6379> JSON.ARRPOP arr $
+1) (nil)
 ```
 
 And objects have their own commands too:
 
 ```
-127.0.0.1:6379> JSON.SET obj . '{"name":"Leonard Cohen","lastSeen":1478476800,"loggedOut": true}'
+127.0.0.1:6379> JSON.SET obj $ '{"name":"Leonard Cohen","lastSeen":1478476800,"loggedOut": true}'
 OK
-127.0.0.1:6379> JSON.OBJLEN obj .
-(integer) 3
-127.0.0.1:6379> JSON.OBJKEYS obj .
-1) "name"
-2) "lastSeen"
-3) "loggedOut"
+127.0.0.1:6379> JSON.OBJLEN obj $
+1) (integer) 3
+127.0.0.1:6379> JSON.OBJKEYS obj $
+1) 1) "name"
+   2) "lastSeen"
+   3) "loggedOut"
 ```
 
 ### With any other client
@@ -153,8 +153,8 @@ data = {
 }
 
 r = redis.StrictRedis()
-r.execute_command('JSON.SET', 'doc', '.', json.dumps(data))
-reply = json.loads(r.execute_command('JSON.GET', 'doc'))
+r.json().set('doc', '$', json.dumps(data))
+reply = json.loads(r.json().get('doc', '$'))
 ```
 
 ## Download and running binaries
