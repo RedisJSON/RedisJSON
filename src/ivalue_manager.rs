@@ -255,8 +255,8 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                     if !o.contains_key(key) {
                         updated = true;
                         o.insert(key.to_string(), v.take());
-                    } 
-                } 
+                    }
+                }
                 Ok(Some(val))
             })?;
         }
