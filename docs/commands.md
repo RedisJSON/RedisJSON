@@ -185,6 +185,27 @@ OK
 (integer) 2
 ```
 
+### JSON.CLEAR
+
+> **Available since 2.0.0.**  
+> **Time complexity:**  O(N), where N is the number of cleared values
+
+#### Syntax
+
+```
+JSON.CLEAR <key> [path]
+```
+
+#### Description
+
+Clear a container value (Array/Object).
+
+`path` defaults to root if not provided. Non-existing keys and paths are ignored.
+
+#### Return value
+
+[Integer][2], specifically the number of containers cleared.
+
 ### JSON.NUMINCRBY
 
 > **Available since 1.0.0.**  
@@ -245,6 +266,25 @@ OK
 127.0.0.1:6379> JSON.NUMMULTBY doc $..a 2
 "[null,4,10,null]"
 ```
+
+### JSON.TOGGLE
+
+> **Available since 2.0.0.**  
+> **Time complexity:**  O(1).
+
+#### Syntax
+
+```
+JSON.TOGGLE <key> <path>
+```
+
+#### Description
+
+Toggle a boolean value stored at `path`.
+
+#### Return value
+
+[Array][4] of [Integer][2], specifically the new value (0-false or 1-true), or [null][6] element for JSON values matching the path which are not boolean.
 
 ### JSON.STRAPPEND
 
@@ -523,8 +563,8 @@ JSON.ARRTRIM <key> <path> <start> <stop>
 
 Trim an array so that it contains only the specified inclusive range of elements.
 
-This command is extremely forgiving and using it with out of range indexes will not produce an error. If `start` is larger than the array's size or `start` > `stop`, the result will be an empty array. If `start` is < 0 then it will be treated as 0. If `stop` is larger than the end of the array, it will be treated like the last element in it.
 This command is extremely forgiving and using it with out of range indexes will not produce an error. If `start` is larger than the array's size or `start` > `stop`, the return value will be 0 and the resulting array will be empty. If `start` is < 0 then it is interpreted from the end. If `stop` is larger than the end of the array, it will be treated like the last element in it.
+
 #### Return value
 
 [Array][4] of [Integer][2], specifically, for each path, the array's new size, or [null][6] element if the matching JSON value is not an array.
