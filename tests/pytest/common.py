@@ -37,7 +37,7 @@ def no_san(f):
     @wraps(f)
     def wrapper(env, *args, **kwargs):
         if SANITIZER != '':
-            fname = f.func_name
+            fname = f.__name__
             env.debugPrint("skipping {} due to memory sanitizer".format(fname), force=True)
             env.skip()
             return
