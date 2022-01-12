@@ -61,6 +61,8 @@ setup_redis_server() {
 
 			export ASAN_OPTIONS=detect_odr_violation=0
 			# :detect_leaks=0
+			# for RLTest
+			export SANITIZER="$SAN"
 
 		elif [[ $SAN == mem || $SAN == memory ]]; then
 			REDIS_SERVER=${REDIS_SERVER:-redis-server-msan-6.2}
