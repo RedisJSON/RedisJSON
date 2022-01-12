@@ -475,7 +475,7 @@ def testClear(env):
     r.expect('JSON.CLEAR', 'test', '$.arr[2].n').equal(1)
     r.expect('JSON.CLEAR', 'test', '$.arr[3].n2.n').equal(1)
 
-    # Fail clear on inappropriate path (not obj or arr)
+    # No clear on inappropriate path (not obj or arr or numeric)
     r.expect('JSON.CLEAR', 'test', '$.arr[1]').equal(0)
 
     # Make sure specific obj content was cleared
@@ -515,6 +515,35 @@ def testClear(env):
 
     # Key doesn't exist 
     r.expect('JSON.CLEAR', 'not_test_key', '$').raiseError()
+
+def testClearScalar(env):
+    """Test JSON.CLEAR command for scalars"""
+
+    r = env
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$', json.dumps(docs['basic'])))
+    # Clear numeric values
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.int'), 1)
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '$.int'), '[0]')
+
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.num'), 1)
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '$.num'), '[0]')
+
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$..a'), 1)
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '$..a'), '[0]')
+
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$', json.dumps(docs['scalars'])))
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.*'), 2)
+    res = r.execute_command('JSON.GET', 'test', '$.*')
+    r.assertEqual(json.loads(res), ['string value', None, True,0, 0])
+    
+    # Do not clear already cleared values
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.*'), 0)
+
+    # Do not clear other scalars
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.none'), 0)
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.bool'), 0)
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.string'), 0)    
+
 
 def testArrayCRUD(env):
     """Test JSON Array CRUDness"""
@@ -872,6 +901,7 @@ def testRespCommand(env):
 
 def testSetGetComparePassJSONCaseFiles(env):
     """Test setting, getting, saving and loading passable JSON test case files"""
+    env.skipOnSlave() # work around to avoid fail on "Background save already in progress"
     r = env
 
     for jsonfile in os.listdir(JSON_PATH):
@@ -930,6 +960,13 @@ def testMultiPathResults(env):
 
     # make sure legacy json path returns single result
     env.expect("JSON.GET", "k", '.*[0,2]').equal('1')
+
+def testIssue_597(env):
+    env.expect("JSON.SET", "test", ".", "[0]").ok()
+    env.assertEqual(env.execute_command("JSON.SET", "test", ".[0]", "[0]", "NX"), None)
+    env.expect("JSON.SET", "test", ".[1]", "[0]", "NX").raiseError()
+    # make sure value was not changed
+    env.expect("JSON.GET", "test", ".").equal('[0]')
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property
