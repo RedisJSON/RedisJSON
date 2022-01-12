@@ -16,6 +16,7 @@ use serde::Serialize;
 use std::fmt;
 use std::fmt::Display;
 use std::marker::PhantomData;
+use std::str::FromStr;
 
 /// Returns normalized start index
 pub fn normalize_arr_start_index(start: i64, len: i64) -> i64 {
@@ -52,8 +53,10 @@ pub enum Format {
     JSON,
     BSON,
 }
-impl Format {
-    pub fn from_str(s: &str) -> Result<Format, Error> {
+impl FromStr for Format {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "JSON" => Ok(Format::JSON),
             "BSON" => Ok(Format::BSON),
