@@ -790,7 +790,7 @@ def testToggleCommand(env):
     # Test missing key
     r.expect('JSON.TOGGLE', 'non_existing_doc', '$..a').raiseError()
 
-@no_san
+@no_msan
 def testMemoryUsage(env):
     """
     Test MEMORY USAGE key
