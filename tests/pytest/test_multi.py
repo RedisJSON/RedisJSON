@@ -811,7 +811,7 @@ def testMemoryUsage(env):
     res = r.execute_command('MEMORY', 'USAGE', 'doc2')
     r.assertEqual(res, 323)
 
-@no_san
+@no_msan
 def testDebugCommand(env):
     """
     Test REJSON.DEBUG MEMORY command
