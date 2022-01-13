@@ -58,8 +58,8 @@ impl FromStr for Format {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "JSON" => Ok(Format::JSON),
-            "BSON" => Ok(Format::BSON),
+            "JSON" => Ok(Self::JSON),
+            "BSON" => Ok(Self::BSON),
             _ => Err("ERR wrong format".into()),
         }
     }

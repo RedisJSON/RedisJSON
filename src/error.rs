@@ -9,24 +9,24 @@ pub struct Error {
 
 impl From<String> for Error {
     fn from(e: String) -> Self {
-        Error { msg: e }
+        Self { msg: e }
     }
 }
 
 impl From<redis_module::error::GenericError> for Error {
-    fn from(err: redis_module::error::GenericError) -> Error {
+    fn from(err: redis_module::error::GenericError) -> Self {
         err.to_string().into()
     }
 }
 
 impl From<std::string::FromUtf8Error> for Error {
-    fn from(err: std::string::FromUtf8Error) -> Error {
+    fn from(err: std::string::FromUtf8Error) -> Self {
         err.to_string().into()
     }
 }
 
 impl From<ParseIntError> for Error {
-    fn from(err: ParseIntError) -> Error {
+    fn from(err: ParseIntError) -> Self {
         err.to_string().into()
     }
 }
@@ -49,19 +49,19 @@ impl From<RedisError> for Error {
 
 impl From<&str> for Error {
     fn from(e: &str) -> Self {
-        Error { msg: e.to_string() }
+        Self { msg: e.to_string() }
     }
 }
 
 impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
-        Error { msg: e.to_string() }
+        Self { msg: e.to_string() }
     }
 }
 
 impl From<JsonPathError> for Error {
     fn from(e: JsonPathError) -> Self {
-        Error {
+        Self {
             msg: format!("JSON Path error: {:?}", e).replace('\n', "\\n"),
         }
     }
@@ -69,7 +69,7 @@ impl From<JsonPathError> for Error {
 
 impl From<Error> for redis_module::RedisError {
     fn from(e: Error) -> Self {
-        redis_module::RedisError::String(e.msg)
+        Self::String(e.msg)
     }
 }
 
