@@ -49,7 +49,7 @@ pub fn create_rmstring(
     str: *mut *mut rawmod::RedisModuleString,
 ) -> c_int {
     if let Ok(s) = CString::new(from_str) {
-        let p = s.as_bytes_with_nul().as_ptr() as *const c_char;
+        let p = s.as_bytes_with_nul().as_ptr().cast::<i8>();
         let len = s.as_bytes().len();
         unsafe { *str = rawmod::RedisModule_CreateString.unwrap()(ctx, p, len) };
         return Status::Ok as c_int;
@@ -72,10 +72,10 @@ pub fn json_api_open_key_internal<M: Manager>(
 }
 
 pub fn json_api_get_at<M: Manager>(_: M, json: *const c_void, index: size_t) -> *const c_void {
-    let json = unsafe { &*(json as *const M::V) };
+    let json = unsafe { &*(json.cast::<<M as Manager>::V>()) };
     match json.get_type() {
         SelectValueType::Array => match json.get_index(index) {
-            Some(v) => v as *const M::V as *const c_void,
+            Some(v) => (v as *const M::V).cast::<c_void>(),
             _ => null(),
         },
         _ => null(),
@@ -84,7 +84,7 @@ pub fn json_api_get_at<M: Manager>(_: M, json: *const c_void, index: size_t) -> 
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn json_api_get_len<M: Manager>(_: M, json: *const c_void, count: *mut libc::size_t) -> c_int {
-    let json = unsafe { &*(json as *const M::V) };
+    let json = unsafe { &*(json.cast::<M::V>()) };
     let len = match json.get_type() {
         SelectValueType::String => Some(json.get_str().len()),
         SelectValueType::Array => Some(json.len().unwrap()),
@@ -101,7 +101,7 @@ pub fn json_api_get_len<M: Manager>(_: M, json: *const c_void, count: *mut libc:
 }
 
 pub fn json_api_get_type<M: Manager>(_: M, json: *const c_void) -> c_int {
-    json_api_get_type_internal(unsafe { &*(json as *const M::V) }) as c_int
+    json_api_get_type_internal(unsafe { &*(json.cast::<M::V>()) }) as c_int
 }
 
 pub fn json_api_get_string<M: Manager>(
@@ -110,7 +110,7 @@ pub fn json_api_get_string<M: Manager>(
     str: *mut *const c_char,
     len: *mut size_t,
 ) -> c_int {
-    let json = unsafe { &*(json as *const M::V) };
+    let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
         SelectValueType::String => {
             let s = json.as_str();
@@ -127,14 +127,14 @@ pub fn json_api_get_json<M: Manager>(
     ctx: *mut rawmod::RedisModuleCtx,
     str: *mut *mut rawmod::RedisModuleString,
 ) -> c_int {
-    let json = unsafe { &*(json as *const M::V) };
+    let json = unsafe { &*(json.cast::<M::V>()) };
     let res = KeyValue::<M::V>::serialize_object(json, None, None, None);
     create_rmstring(ctx, &res, str)
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn json_api_get_int<M: Manager>(_: M, json: *const c_void, val: *mut c_longlong) -> c_int {
-    let json = unsafe { &*(json as *const M::V) };
+    let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
         SelectValueType::Long => {
             unsafe { *val = json.get_long() };
@@ -146,7 +146,7 @@ pub fn json_api_get_int<M: Manager>(_: M, json: *const c_void, val: *mut c_longl
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn json_api_get_double<M: Manager>(_: M, json: *const c_void, val: *mut c_double) -> c_int {
-    let json = unsafe { &*(json as *const M::V) };
+    let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
         SelectValueType::Double => {
             unsafe { *val = json.get_double() };
@@ -158,7 +158,7 @@ pub fn json_api_get_double<M: Manager>(_: M, json: *const c_void, val: *mut c_do
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn json_api_get_boolean<M: Manager>(_: M, json: *const c_void, val: *mut c_int) -> c_int {
-    let json = unsafe { &*(json as *const M::V) };
+    let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
         SelectValueType::Bool => {
             unsafe { *val = json.get_bool() as c_int };
@@ -174,7 +174,7 @@ pub fn json_api_get_boolean<M: Manager>(_: M, json: *const c_void, val: *mut c_i
 pub fn set_string(from_str: &str, str: *mut *const c_char, len: *mut size_t) -> c_int {
     if !str.is_null() {
         unsafe {
-            *str = from_str.as_ptr() as *const c_char;
+            *str = from_str.as_ptr().cast::<c_char>();
             *len = from_str.len();
         }
         return Status::Ok as c_int;
@@ -195,30 +195,30 @@ fn json_api_get_type_internal<V: SelectValue>(v: &V) -> JSONType {
 }
 
 pub fn json_api_next<M: Manager>(_: M, iter: *mut c_void) -> *const c_void {
-    let iter = unsafe { &mut *(iter as *mut ResultsIterator<M::V>) };
+    let iter = unsafe { &mut *(iter.cast::<ResultsIterator<M::V>>()) };
     if iter.pos >= iter.results.len() {
         null_mut()
     } else {
-        let res = iter.results[iter.pos] as *const M::V as *const c_void;
+        let res = (iter.results[iter.pos] as *const M::V).cast::<c_void>();
         iter.pos += 1;
         res
     }
 }
 
 pub fn json_api_len<M: Manager>(_: M, iter: *const c_void) -> size_t {
-    let iter = unsafe { &*(iter as *mut ResultsIterator<M::V>) };
+    let iter = unsafe { &*(iter.cast::<ResultsIterator<M::V>>()) };
     iter.results.len() as size_t
 }
 
 pub fn json_api_free_iter<M: Manager>(_: M, iter: *mut c_void) {
     unsafe {
-        Box::from_raw(iter as *mut ResultsIterator<M::V>);
+        Box::from_raw(iter.cast::<ResultsIterator<M::V>>());
     }
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -> *const c_void {
-    let v = unsafe { &*(val as *const M::V) };
+    let v = unsafe { &*(val.cast::<M::V>()) };
     let mut selector = Selector::new();
     selector.value(v);
     let path = unsafe { CStr::from_ptr(path).to_str().unwrap() };
@@ -226,7 +226,7 @@ pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -
         return null();
     }
     match selector.select() {
-        Ok(s) => Box::into_raw(Box::new(ResultsIterator { results: s, pos: 0 })) as *mut c_void,
+        Ok(s) => Box::into_raw(Box::new(ResultsIterator { results: s, pos: 0 })).cast::<c_void>(),
         Err(_) => null(),
     }
 }
