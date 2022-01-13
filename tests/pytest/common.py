@@ -33,10 +33,10 @@ def skip(f, on_cluster=False):
         return f(env, *args, **kwargs)
     return wrapper
 
-def no_msan(f):
+def no_san(f):
     @wraps(f)
     def wrapper(env, *args, **kwargs):
-        if SANITIZER == 'memory':
+        if SANITIZER != '':
             fname = f.__name__
             env.debugPrint("skipping {} due to memory sanitizer".format(fname), force=True)
             env.skip()
