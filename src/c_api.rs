@@ -49,7 +49,7 @@ pub fn create_rmstring(
     str: *mut *mut rawmod::RedisModuleString,
 ) -> c_int {
     if let Ok(s) = CString::new(from_str) {
-        let p = s.as_bytes_with_nul().as_ptr().cast::<i8>();
+        let p = s.as_bytes_with_nul().as_ptr().cast::<c_char>();
         let len = s.as_bytes().len();
         unsafe { *str = rawmod::RedisModule_CreateString.unwrap()(ctx, p, len) };
         return Status::Ok as c_int;
@@ -72,7 +72,7 @@ pub fn json_api_open_key_internal<M: Manager>(
 }
 
 pub fn json_api_get_at<M: Manager>(_: M, json: *const c_void, index: size_t) -> *const c_void {
-    let json = unsafe { &*(json.cast::<<M as Manager>::V>()) };
+    let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
         SelectValueType::Array => match json.get_index(index) {
             Some(v) => (v as *const M::V).cast::<c_void>(),
