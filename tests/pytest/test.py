@@ -21,6 +21,8 @@ JSON_PATH = os.path.join(TESTS_ROOT, 'files')
 
 # ----------------------------------------------------------------------------------------------
 
+IS_SERDE_JSON = os.getenv('SERDE_JSON', 0)
+
 # TODO: these are currently not supported so ignore them
 json_ignore = [
     'pass-json-parser-0002.json',   # UTF-8 to Unicode
@@ -645,22 +647,30 @@ def testArrInsertCommand(env):
     """Test JSON.ARRINSERT command"""
     r = env
 
-    r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{ "arr": [] }'))
-    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 0, '1'), 1)
-    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', -1, '2'), 2)
-    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', -2, '3'), 3)
-    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 3, '4'), 4)
-    r.assertEqual(r.execute_command('JSON.GET', 'test', '.arr'), "[3,2,1,4]")
+    for (initial_value, jpath) in [('{ "arr": [] }', '.arr'), ('[]', '.')]:
+        r.assertOk(r.execute_command('JSON.SET', 'test', '.', initial_value))
+        r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', jpath, 0, '1'), 1)
+        r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', jpath, -1, '2'), 2)
+        r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', jpath, -2, '3'), 3)
+        r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', jpath, 3, '4'), 4)
+        r.assertEqual(r.execute_command('JSON.GET', 'test', jpath), "[3,2,1,4]")
 
-    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 1, '5'), 5)
-    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', -2, '6'), 6)    
-    r.assertEqual(r.execute_command('JSON.GET', 'test', '.arr'), "[3,5,2,6,1,4]")
-    
-    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', -3, '7', '{"A":"Z"}', '9'), 9)
-    r.assertEqual(r.execute_command('JSON.GET', 'test', '.arr'), '[3,5,2,7,{"A":"Z"},9,6,1,4]')     
+        r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', jpath, 1, '5'), 5)
+        r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', jpath, -2, '6'), 6)    
+        r.assertEqual(r.execute_command('JSON.GET', 'test', jpath), "[3,5,2,6,1,4]")
+        
+        r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', jpath, -3, '7', '{"A":"Z"}', '9'), 9)
+        r.assertEqual(r.execute_command('JSON.GET', 'test', jpath), '[3,5,2,7,{"A":"Z"},9,6,1,4]')
 
-    r.expect('JSON.ARRINSERT', 'test', '.arr', -10, '10').raiseError()
-    r.expect('JSON.ARRINSERT', 'test', '.arr', 10, '10').raiseError()
+        r.expect('JSON.ARRINSERT', 'test', jpath, -10, '10').raiseError()
+        if not IS_SERDE_JSON:
+            # Value should remain
+            r.assertEqual(r.execute_command('JSON.GET', 'test', jpath), '[3,5,2,7,{"A":"Z"},9,6,1,4]')
+        r.expect('JSON.ARRINSERT', 'test', jpath, 10, '10').raiseError()
+        if not IS_SERDE_JSON:
+            # Value should remain
+            r.assertEqual(r.execute_command('JSON.GET', 'test', jpath), '[3,5,2,7,{"A":"Z"},9,6,1,4]')
+
 
 def testArrIndexMixCommand(env):
     """Test JSON.ARRINDEX command with mixed values"""
@@ -836,12 +846,33 @@ def testNumIncrCommand(env):
     r.assertEqual(1, res['foo'])
     r.assertEqual(84, res['bar'])
 
-    # test overflow
+def testNumCommandOverflow(env):
+    """Test JSON.NUMINCRBY and JSON.NUMMULTBY commands overflow """
+    r = env
+    if IS_SERDE_JSON:
+            env.skip()
+            
+    # test overflow on root
     r.assertOk(r.execute_command('JSON.SET', 'big_num', '.', '1.6350000000001313e+308'))
     r.expect('JSON.NUMINCRBY', 'big_num', '.', '1.6350000000001313e+308').raiseError()
     r.expect('JSON.NUMMULTBY', 'big_num', '.', '2').raiseError()
     # (value remains)
     r.assertEqual(r.execute_command('JSON.GET', 'big_num', '.'), '1.6350000000001313e308')
+    
+    # test overflow on nested object value
+    r.assertOk(r.execute_command('JSON.SET', 'nested_obj_big_num', '$', '{"l1":{"l2_a":1.6350000000001313e+308,"l2_b":2}}'))
+    r.expect('JSON.NUMINCRBY', 'nested_obj_big_num', '$.l1.l2_a', '1.6350000000001313e+308').raiseError()
+    r.expect('JSON.NUMMULTBY', 'nested_obj_big_num', '$.l1.l2_a', '2').raiseError()
+    # (value remains)
+    r.assertEqual(r.execute_command('JSON.GET', 'nested_obj_big_num', '$'), '[{"l1":{"l2_a":1.6350000000001313e308,"l2_b":2}}]')
+
+    # test overflow on nested arr value
+    r.assertOk(r.execute_command('JSON.SET', 'nested_arr_big_num', '$', '{"l1":{"l2":[0,1.6350000000001313e+308]}}'))
+    r.expect('JSON.NUMINCRBY', 'nested_arr_big_num', '$.l1.l2[1]', '1.6350000000001313e+308').raiseError()
+    r.expect('JSON.NUMMULTBY', 'nested_arr_big_num', '$.l1.l2[1]', '2').raiseError()
+    # (value remains)
+    r.assertEqual(r.execute_command('JSON.GET', 'nested_arr_big_num', '$'), '[{"l1":{"l2":[0,1.6350000000001313e308]}}]')
+
 
 def testStrCommands(env):
     """Test JSON.STRAPPEND and JSON.STRLEN commands"""
