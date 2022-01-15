@@ -147,11 +147,8 @@ impl Formatter for RedisJsonFormatter<'_> {
         W: io::Write,
     {
         writer.write_all(b":")?;
-        if let Some(s) = self.space {
-            writer.write_all(s.as_bytes())
-        } else {
-            Ok(())
-        }
+        self.space
+            .map_or(Ok(()), |s| writer.write_all(s.as_bytes()))
     }
 
     fn end_object_value<W: ?Sized>(&mut self, _writer: &mut W) -> io::Result<()>
