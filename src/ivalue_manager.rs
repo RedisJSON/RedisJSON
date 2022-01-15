@@ -235,10 +235,10 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         } else if let Some(f) = n.to_f64() {
                             Ok(serde_json::Number::from_f64(f).unwrap())
                         } else {
-                            Err(RedisError::Str("return value is not a number"))
+                            Err(RedisError::Str("result is not a number"))
                         }
                     } else {
-                        Err(RedisError::Str("return value is not a number"))
+                        Err(RedisError::Str("result is not a number"))
                     }
                 }
             }
