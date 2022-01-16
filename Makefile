@@ -123,6 +123,7 @@ endif
 
 ifeq ($(NIGHTLY),1)
 TARGET_DIR=$(BINDIR)/target/$(RUST_TARGET)/debug
+rustup install nightly-2022-01-09
 CARGO_TOOLCHAIN = +nightly-2022-01-09
 endif
 
