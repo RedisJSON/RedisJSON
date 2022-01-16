@@ -30,7 +30,7 @@ pub struct IValueKeyHolderWrite<'a> {
 }
 
 fn update<F: FnMut(IValue) -> Result<Option<IValue>, Error>>(
-    path: &Vec<String>,
+    path: &[String],
     root: &mut IValue,
     mut func: F,
 ) -> Result<(), Error> {
@@ -337,7 +337,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     fn arr_insert(
         &mut self,
         paths: Vec<String>,
-        args: &Vec<IValue>,
+        args: &[IValue],
         index: i64,
     ) -> Result<usize, RedisError> {
         let mut res = None;
