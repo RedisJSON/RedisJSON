@@ -123,7 +123,12 @@ endif
 
 ifeq ($(NIGHTLY),1)
 TARGET_DIR=$(BINDIR)/target/$(RUST_TARGET)/debug
-CARGO_TOOLCHAIN = +nightly-2022-01-09
+
+ifeq ($(RUST_GOOD_NIGHTLY),)
+CARGO_TOOLCHAIN = +nightly
+else
+CARGO_TOOLCHAIN = +$(RUST_NIGHTLY)
+endif
 endif
 
 export CARGO_TARGET_DIR=$(BINDIR)/target
@@ -165,7 +170,6 @@ else
 	$(SHOW)set -e ;\
 	export RUSTFLAGS="$(RUST_FLAGS)" ;\
 	export RUSTDOCFLAGS="$(RUST_DOCFLAGS)" ;\
-	rustup install nightly-2022-01-09 ;\
 	cargo ${CARGO_TOOLCHAIN} build --target $(RUST_TARGET) $(CARGO_FLAGS)
 endif
 	$(SHOW)cp $(TARGET_DIR)/librejson.$(RUST_SOEXT.$(OS)) $(TARGET)
