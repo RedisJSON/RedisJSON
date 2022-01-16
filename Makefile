@@ -166,7 +166,7 @@ else
 	export RUSTFLAGS="$(RUST_FLAGS)" ;\
 	export RUSTDOCFLAGS="$(RUST_DOCFLAGS)" ;\
 	rustup install nightly-2022-01-09 ;\
-	cargo $(CARGO_TOOLCHAIN) build --target $(RUST_TARGET) $(CARGO_FLAGS)
+	cargo +nightly-2022-01-09 build --target $(RUST_TARGET) $(CARGO_FLAGS)
 endif
 	$(SHOW)cp $(TARGET_DIR)/librejson.$(RUST_SOEXT.$(OS)) $(TARGET)
 ifneq ($(DEBUG),1)
