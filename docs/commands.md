@@ -44,9 +44,9 @@ JSON.SET <key> <path> <json>
 
 Sets the JSON value at `path` in `key`.
 
-For new Redis keys, the `path` must be the root. For existing keys, replaces the current value with the `json` value if the entire `path` exists.
+For new Redis keys the `path` must be the root. For existing keys, when the entire `path` exists, the value that it contains is replaced with the `json` value. For existing keys, when the `path` exists, except for the last element, a new child is added with the `json` value. 
 
-Adds a key (with its respective value) to a JSON Object (in a RedisJSON data type key) only if it is the last child in the `path`. The optional subcommands modify this behavior for both new RedisJSON data type keys as well as the JSON Object keys in them:
+A key (with its respective value) is added to a JSON Object (in a Redis RedisJSON data type key) if and only if it is the last child in the `path`, or it is the parent of a new child being added in the `path`. The optional subcommands modify this behavior for both new Redis RedisJSON data type keys as well as the JSON Object keys in them:
 
 *   `NX` - only set the key if it does not already exist
 *   `XX` - only set the key if it already exists
@@ -55,6 +55,28 @@ Adds a key (with its respective value) to a JSON Object (in a RedisJSON data typ
 
 [Simple String][1] - `OK` if executed correctly, or [Null Bulk][3] if the specified `NX` or `XX`
 conditions were not met.
+
+
+#### Examples:
+Replacing an existing value
+```sql
+127.0.0.1:6379> JSON.SET doc $ '{"a":2}'
+OK
+127.0.0.1:6379> JSON.SET doc $.a '3'
+OK
+127.0.0.1:6379> JSON.GET doc $
+"[{\"a\":3}]"
+```
+
+Adding a new value
+```sql
+127.0.0.1:6379> JSON.SET doc $ '{"a":2}'
+OK
+127.0.0.1:6379> JSON.SET doc $.b '8'
+OK
+127.0.0.1:6379> JSON.GET doc $
+"[{\"a\":2,\"b\":8}]"
+```
 
 ### JSON.GET
 
