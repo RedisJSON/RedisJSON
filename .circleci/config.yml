@@ -481,7 +481,8 @@ workflows:
               redis_version: ["6.0", "6.2"]
       - platforms-build:
           context: common
-          <<: *on-integ-and-version-tags
+          #@@<<: *on-integ-and-version-tags
+          <<: *on-any-branch
           matrix:
             parameters:
               platform: [focal, bionic, xenial, centos8, centos7, bullseye]
@@ -492,7 +493,8 @@ workflows:
             parameters:
               platform: [bionic]
       - build-macos:
-          <<: *on-integ-and-version-tags          
+          #@@<<: *on-integ-and-version-tags          
+          <<: *on-any-branch
       - coverage:
           context: common
           <<: *on-any-branch
