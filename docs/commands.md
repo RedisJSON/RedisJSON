@@ -46,7 +46,7 @@ Sets the JSON value at `path` in `key`.
 
 For new Redis keys the `path` must be the root. For existing keys, when the entire `path` exists, the value that it contains is replaced with the `json` value. For existing keys, when the `path` exists, except for the last element, a new child is added with the `json` value. 
 
-A key (with its respective value) is added to a JSON Object (in a Redis RedisJSON data type key) if and only if it is the last child in the `path`, or it is the parent of a new child being added in the `path`. The optional subcommands modify this behavior for both new Redis RedisJSON data type keys as well as the JSON Object keys in them:
+Adds a key (with its respective value) to a JSON Object (in a Redis RedisJSON data type key) only if it is the last child in the `path`, or it is the parent of a new child being added in the `path`. The optional subcommands modify this behavior for both new RedisJSON data type keys as well as the JSON Object keys in them:
 
 *   `NX` - only set the key if it does not already exist
 *   `XX` - only set the key if it already exists
