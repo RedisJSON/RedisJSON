@@ -70,7 +70,8 @@ pub enum ManagerType {
     IValue,
 }
 
-pub static mut MANAGER: ManagerType = ManagerType::IValue;
+//pub static mut MANAGER: ManagerType = ManagerType::IValue;
+pub static mut MANAGER: ManagerType = ManagerType::SerdeValue;
 
 pub fn get_manager_type() -> ManagerType {
     unsafe { MANAGER }
