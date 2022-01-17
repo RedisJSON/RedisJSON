@@ -29,7 +29,15 @@ pub struct IValueKeyHolderWrite<'a> {
     val: Option<&'a mut RedisJSON<IValue>>,
 }
 
-fn update<F: FnMut(&mut IValue) -> Result<Option<IValue>, Error>>(
+///
+/// Replaces a value at a given `path`, starting from `root`
+///
+/// The new value is the value returned from `func`, which is called on the current value.
+///
+/// If the returned value from `func` is [`None`], the current value is removed.
+/// If the returned value from `func` is [`Err`], the current value remains (although it could be modified by `func`)
+///
+fn replace<F: FnMut(&mut IValue) -> Result<Option<IValue>, Error>>(
     path: &Vec<String>,
     root: &mut IValue,
     mut func: F,
@@ -84,7 +92,7 @@ fn update<F: FnMut(&mut IValue) -> Result<Option<IValue>, Error>>(
                     }
                     arr.get_mut(x)
                 } else {
-                    None
+                    panic!("Array index should have been parsed successfully before reaching here")
                 }
             }
             _ => None,
@@ -100,7 +108,14 @@ fn update<F: FnMut(&mut IValue) -> Result<Option<IValue>, Error>>(
     Ok(())
 }
 
-fn update_in_closure<F: FnMut(&mut IValue) -> Result<Option<()>, Error>>(
+///
+/// Updates a value at a given `path`, starting from `root`
+///
+/// The value is modified by `func`, which is called on the current value.
+/// If the returned value from `func` is [`None`], the current value is removed.
+/// If the returned value from `func` is [`Err`], the current value remains (although it could be modified by `func`)
+///
+fn update<F: FnMut(&mut IValue) -> Result<Option<()>, Error>>(
     path: &Vec<String>,
     root: &mut IValue,
     mut func: F,
@@ -149,7 +164,7 @@ fn update_in_closure<F: FnMut(&mut IValue) -> Result<Option<()>, Error>>(
                     }
                     arr.get_mut(x)
                 } else {
-                    None
+                    panic!("Array index should have been parsed successfully before reaching here")
                 }
             }
             _ => None,
@@ -185,7 +200,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
                 }
             }
         } else {
-            update_in_closure(&paths, self.get_value().unwrap().unwrap(), op_fun)?;
+            update(&paths, self.get_value().unwrap().unwrap(), op_fun)?;
         }
 
         Ok(())
@@ -313,7 +328,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             self.set_root(Some(v))?;
             updated = true;
         } else {
-            update(&path, self.get_value().unwrap().unwrap(), |_v| {
+            replace(&path, self.get_value().unwrap().unwrap(), |_v| {
                 updated = true;
                 Ok(Some(v.take()))
             })?;
@@ -338,7 +353,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 }
             }
         } else {
-            update_in_closure(&path, self.get_value().unwrap().unwrap(), |val| {
+            update(&path, self.get_value().unwrap().unwrap(), |val| {
                 if val.is_object() {
                     let o = val.as_object_mut().unwrap();
                     if !o.contains_key(key) {
@@ -354,7 +369,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
 
     fn delete_path(&mut self, path: Vec<String>) -> Result<bool, RedisError> {
         let mut deleted = false;
-        update_in_closure(&path, self.get_value().unwrap().unwrap(), |_v| {
+        update(&path, self.get_value().unwrap().unwrap(), |_v| {
             deleted = true; // might delete more than a single value
             Ok(None)
         })?;
@@ -377,6 +392,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         let mut res = None;
         self.do_op(path, |v| {
             if let DestructuredMut::Bool(mut bool_mut) = v.destructure_mut() {
+                //Using DestructuredMut in order to modify a `Bool` variant
                 let val = bool_mut.get() ^ true;
                 bool_mut.set(val);
                 res = Some(val);
