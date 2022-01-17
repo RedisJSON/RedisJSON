@@ -82,7 +82,7 @@ impl<'a> Path<'a> {
             if path == "." {
                 cloned.replace_range(..1, "$");
             } else if path.starts_with('.') {
-                cloned.insert(0, '$')
+                cloned.insert(0, '$');
             } else {
                 cloned.insert_str(0, "$.");
             }
@@ -99,11 +99,9 @@ impl<'a> Path<'a> {
     }
 
     pub fn get_path(&'a self) -> &'a str {
-        if let Some(s) = &self.fixed_path {
-            s.as_str()
-        } else {
-            self.original_path
-        }
+        self.fixed_path
+            .as_ref()
+            .map_or(self.original_path, |s| s.as_str())
     }
 
     pub fn get_original(&self) -> &'a str {
@@ -137,7 +135,7 @@ pub mod type_methods {
                     };
                     let v = m.from_str(&json_string, Format::JSON);
                     match v {
-                        Ok(res) => Box::into_raw(Box::new(res)) as *mut c_void,
+                        Ok(res) => Box::into_raw(Box::new(res)).cast::<libc::c_void>(),
                         Err(_) => null_mut(),
                     }
                 }
@@ -147,7 +145,7 @@ pub mod type_methods {
                     };
                     let v = m.from_str(&json_string, Format::JSON);
                     match v {
-                        Ok(res) => Box::into_raw(Box::new(res)) as *mut c_void,
+                        Ok(res) => Box::into_raw(Box::new(res)).cast::<libc::c_void>(),
                         Err(_) => null_mut(),
                     }
                 }
@@ -196,12 +194,12 @@ pub mod type_methods {
         }
         match get_manager_type() {
             ManagerType::SerdeValue => {
-                let v = value as *mut RedisJSON<serde_json::Value>;
+                let v = value.cast::<RedisJSON<serde_json::Value>>();
                 // Take ownership of the data from Redis (causing it to be dropped when we return)
                 Box::from_raw(v);
             }
             ManagerType::IValue => {
-                let v = value as *mut RedisJSON<ijson::IValue>;
+                let v = value.cast::<RedisJSON<ijson::IValue>>();
                 // Take ownership of the data from Redis (causing it to be dropped when we return)
                 Box::from_raw(v);
             }
@@ -213,12 +211,12 @@ pub mod type_methods {
         let mut out = serde_json::Serializer::new(Vec::new());
         let json = match get_manager_type() {
             ManagerType::SerdeValue => {
-                let v = unsafe { &*(value as *mut RedisJSON<serde_json::Value>) };
+                let v = unsafe { &*value.cast::<RedisJSON<serde_json::Value>>() };
                 v.data.serialize(&mut out).unwrap();
                 String::from_utf8(out.into_inner()).unwrap()
             }
             ManagerType::IValue => {
-                let v = unsafe { &*(value as *mut RedisJSON<ijson::IValue>) };
+                let v = unsafe { &*value.cast::<RedisJSON<ijson::IValue>>() };
                 v.data.serialize(&mut out).unwrap();
                 String::from_utf8(out.into_inner()).unwrap()
             }
