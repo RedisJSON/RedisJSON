@@ -1,7 +1,7 @@
 #!/bin/bash
 
-[[ $IGNERR == 1 ]] || set -e
 # [[ $VERBOSE == 1 ]] && set -x
+# [[ $IGNERR == 1 ]] || set -e
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 export ROOT=$(cd $HERE/../.. && pwd)
@@ -15,9 +15,9 @@ cd $HERE
 help() {
 	cat <<-END
 		Run Python tests
-	
+
 		[ARGVARS...] tests.sh [--help|help] [<module-so-path>]
-		
+
 		Argument variables:
 		MODULE=path      Path to redisai.so
 		TEST=test        Run specific test (e.g. test.py:test_name)
@@ -31,11 +31,13 @@ help() {
 		
 		VALGRIND|VG=1    Run with Valgrind
 		SAN=type         Use LLVM sanitizer (type=address|memory|leak|thread) 
+		MEMINFO=1        Show memory information
 
 		VERBOSE=1        Print commands
 		IGNERR=1         Do not abort on error
 		NOP=1            Dry run
-		LOG=0|1          Write to log
+		LOG=1            Write to log
+		QUIET=1          Be less verbose
 
 	END
 }
@@ -52,7 +54,7 @@ install_git_lfs() {
 
 setup_redis_server() {
 	if [[ -n $SAN ]]; then
-		if [[ $SAN == addr || $SAN == address ]]; then
+		if [[ $SAN == address ]]; then
 			REDIS_SERVER=${REDIS_SERVER:-redis-server-asan-6.2}
 			if ! command -v $REDIS_SERVER > /dev/null; then
 				echo Building Redis for clang-asan ...
@@ -62,7 +64,7 @@ setup_redis_server() {
 			export ASAN_OPTIONS=detect_odr_violation=0
 			# :detect_leaks=0
 
-		elif [[ $SAN == mem || $SAN == memory ]]; then
+		elif [[ $SAN == memory ]]; then
 			REDIS_SERVER=${REDIS_SERVER:-redis-server-msan-6.2}
 			if ! command -v $REDIS_SERVER > /dev/null; then
 				echo Building Redis for clang-msan ...
@@ -90,6 +92,8 @@ setup_redis_server() {
 #----------------------------------------------------------------------------------------------
 
 valgrind_config() {
+	export VALGRIND=1 # for RLTest
+
 	export VG_OPTIONS="
 		-q \
 		--leak-check=full \
@@ -123,7 +127,7 @@ run_tests() {
 	local title="$1"
 	shift
 	if [[ -n $title ]]; then
-		$READIES/bin/sep -0
+		$READIES/bin/sep
 		printf "Testing $title:\n\n"
 	fi
 
@@ -200,7 +204,7 @@ run_tests() {
 
 #----------------------------------------------------------------------------------------------
 
-[[ $1 == --help || $1 == help ]] && { help; exit 0; }
+[[ $1 == --help || $1 == help || $HELP == 1 ]] && { help; exit 0; }
 
 GDB=${GDB:-0}
 
@@ -229,9 +233,9 @@ MODULE=${MODULE:-$1}
 
 [[ $VALGRIND == 1 ]] && valgrind_config
 
-if [[ ! -z $TEST ]]; then
+if [[ -n $TEST ]]; then
 	RLTEST_ARGS+=" --test $TEST"
-	if [[ $LOG != 1 ]]; then
+	if [[ $LOG != 1 && $QUIET != 1 ]]; then
 		RLTEST_ARGS+=" -s"
 		export BB=${BB:-1}
 	fi
@@ -242,6 +246,11 @@ fi
 [[ $GDB == 1 ]] && RLTEST_ARGS+=" -i --verbose"
 
 export OS=$($READIES/bin/platform --os)
+
+if [[ -n $SAN ]]; then
+	# for RLTest
+	export SANITIZER="$SAN"
+fi
 
 #----------------------------------------------------------------------------------------------
 

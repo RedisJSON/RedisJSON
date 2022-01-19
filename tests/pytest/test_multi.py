@@ -1,15 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import sys
-import os
-import redis
-import json
-from RLTest import Env
-from includes import *
-
-from RLTest import Defaults
-
-Defaults.decode_responses = True
+from common import *
 
 # ----------------------------------------------------------------------------------------------
 

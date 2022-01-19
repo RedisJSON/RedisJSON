@@ -50,6 +50,7 @@ make pytest        # run flow tests using RLTest
   CLUSTER=1          # run general tests on a OSS Redis Cluster topology
   VALGRIND|VG=1      # run specified tests with Valgrind
   VERBOSE=1          # display more RLTest-related information
+  MEMINFO=1          # show memory information
 
 make pack          # build package (RAMP file)
 
