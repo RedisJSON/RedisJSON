@@ -14,7 +14,7 @@ use crate::Format;
 use crate::REDIS_JSON_TYPE;
 
 use crate::error::Error;
-use bson::decode_document;
+use bson::Document;
 use std::io::Cursor;
 
 use crate::array_index::ArrayIndex;
@@ -578,7 +578,7 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
     fn from_string(&self, val: &RedisString, format: Format) -> Result<Value, Error> {
         match format {
             Format::JSON => self.from_str(val.try_as_str()?),
-            Format::BSON => decode_document(&mut Cursor::new(val.as_slice()))
+            Format::BSON => Document::from_reader(&mut Cursor::new(val.as_slice()))
                 .map(|docs| {
                     let v = if !docs.is_empty() {
                         docs.iter()
