@@ -1,21 +1,28 @@
 
 ifneq ($(SAN),)
-override DEBUG:=1
 ifeq ($(SAN),mem)
-else ifeq ($(SAN),memory)
+override SAN=memory
 else ifeq ($(SAN),addr)
+override SAN=address
+endif
+
+override DEBUG:=1
+ifeq ($(SAN),memory)
 else ifeq ($(SAN),address)
 else ifeq ($(SAN),leak)
 else ifeq ($(SAN),thread)
 else
 $(error SAN=mem|addr|leak|thread)
 endif
-endif
+
+export SAN
+endif # SAN
 
 ROOT=.
-ifeq ($(wildcard $(ROOT)/deps/readies/mk),)
-$(error Submodules not present. Please run 'git submodule update --init --recursive')
+ifeq ($(wildcard $(ROOT)/deps/readies/*),)
+$(info $(shell git submodule update --init --recursive &> /dev/null))
 endif
+
 MK.pyver:=3
 include $(ROOT)/deps/readies/mk/main
 
@@ -33,16 +40,22 @@ make clean         # remove binary files
 
 make all           # build all libraries and packages
 
-make pytest        # run tests
-  TEST=name        # run test matching 'name'
-  TEST_ARGS="..."  # RLTest arguments
-  GEN=0|1          # run general tests on a standalone Redis topology
-  AOF=0|1          # run AOF persistency tests on a standalone Redis topology
-  SLAVES=0|1       # run replication tests on standalone Redis topology
-  CLUSTER=0|1      # run general tests on a OSS Redis Cluster topology
-  VALGRIND|VG=1    # run specified tests with Valgrind
+make pytest        # run flow tests using RLTest
+  TEST=file:name     # run test matching `name` from `file`
+  TEST_ARGS="..."    # RLTest arguments
+  QUICK=1            # run only general tests
+  GEN=1              # run general tests on a standalone Redis topology
+  AOF=1              # run AOF persistency tests on a standalone Redis topology
+  SLAVES=1           # run replication tests on standalone Redis topology
+  CLUSTER=1          # run general tests on a OSS Redis Cluster topology
+  VALGRIND|VG=1      # run specified tests with Valgrind
+  VERBOSE=1          # display more RLTest-related information
 
 make pack          # build package (RAMP file)
+
+make coverage      # perform coverage analysis
+make show-cov      # show coverage analysis results (implies COV=1)
+make upload-cov    # upload coverage analysis results to codecov.io (implies COV=1)
 
 make docker
 make docker_push
@@ -55,6 +68,8 @@ make platform      # build for specific Linux distribution
   ARTIFACTS=1        # copy artifacts from docker image
   PUBLISH=1          # publish (i.e. docker push) after build
 
+make sanbox        # create container for CLang Sanitizer tests
+
 make builddocs
 make localdocs
 make deploydocs
@@ -62,6 +77,8 @@ make deploydocs
 endef
 
 #----------------------------------------------------------------------------------------------
+
+SRCDIR=src
 
 MK_CUSTOM_CLEAN=1
 BINDIR=$(BINROOT)
@@ -76,22 +93,42 @@ MODULE_NAME=rejson.so
 RUST_TARGET:=$(shell eval $$(rustc --print cfg | grep =); echo $$target_arch-$$target_vendor-$$target_os-$$target_env)
 CARGO_TOOLCHAIN=
 CARGO_FLAGS=
+RUST_FLAGS=
+RUST_DOCFLAGS=
 
 ifeq ($(DEBUG),1)
 ifeq ($(SAN),)
 TARGET_DIR=$(BINDIR)/target/debug
 else
-TARGET_DIR=$(BINDIR)/target/$(RUST_TARGET)/debug
-CARGO_TOOLCHAIN = +nightly
+NIGHTLY=1
 CARGO_FLAGS += -Zbuild-std
+RUST_FLAGS += -Zsanitizer=$(SAN)
+ifeq ($(SAN),memory)
+RUST_FLAGS += -Zsanitizer-memory-track-origins
+endif
 endif
 else
 CARGO_FLAGS += --release
 TARGET_DIR=$(BINDIR)/target/release
 endif
 
+ifeq ($(COV),1)
+NIGHTLY=1
+RUST_FLAGS += -Zinstrument-coverage
+endif # COV
+
 ifeq ($(PROFILE),1)
-RUSTFLAGS += " -g -C force-frame-pointers=yes"
+RUST_FLAGS += -g -C force-frame-pointers=yes
+endif
+
+ifeq ($(NIGHTLY),1)
+TARGET_DIR=$(BINDIR)/target/$(RUST_TARGET)/debug
+
+ifeq ($(RUST_GOOD_NIGHTLY),)
+CARGO_TOOLCHAIN = +nightly
+else
+CARGO_TOOLCHAIN = +$(RUST_GOOD_NIGHTLY)
+endif
 endif
 
 export CARGO_TARGET_DIR=$(BINDIR)/target
@@ -125,15 +162,15 @@ RUST_SOEXT.freebsd=so
 RUST_SOEXT.macos=dylib
 
 build:
-ifeq ($(SAN),)
+ifneq ($(NIGHTLY),1)
 	$(SHOW)set -e ;\
-	export RUSTFLAGS=$(RUSTFLAGS) ;\
+	export RUSTFLAGS="$(RUST_FLAGS)" ;\
 	cargo build --all --all-targets $(CARGO_FLAGS)
 else
 	$(SHOW)set -e ;\
-	export RUSTFLAGS=-Zsanitizer=$(SAN) ;\
-	export RUSTDOCFLAGS=-Zsanitizer=$(SAN) ;\
-	cargo $(CARGO_TOOLCHAIN) build --target $(RUST_TARGET) $(CARGO_FLAGS)
+	export RUSTFLAGS="$(RUST_FLAGS)" ;\
+	export RUSTDOCFLAGS="$(RUST_DOCFLAGS)" ;\
+	cargo ${CARGO_TOOLCHAIN} build --target $(RUST_TARGET) $(CARGO_FLAGS)
 endif
 	$(SHOW)cp $(TARGET_DIR)/librejson.$(RUST_SOEXT.$(OS)) $(TARGET)
 ifneq ($(DEBUG),1)
@@ -146,17 +183,17 @@ clean:
 ifneq ($(ALL),1)
 	$(SHOW)cargo clean
 else
-	$(SHOW)rm -rf target
+	$(SHOW)rm -rf $(BINDIR)
 endif
 
 .PHONY: build clean
 
 #----------------------------------------------------------------------------------------------
 
-test: pytest
+test: cargo_test pytest
 
 pytest:
-	$(SHOW)MODULE=$(abspath $(TARGET)) ./tests/pytest/tests.sh
+	$(SHOW)MODULE=$(abspath $(TARGET)) $(realpath ./tests/pytest/tests.sh)
 
 cargo_test:
 	$(SHOW)cargo $(CARGO_TOOLCHAIN) test --features test --all
@@ -193,6 +230,19 @@ pack:
 
 #----------------------------------------------------------------------------------------------
 
+COV_EXCLUDE_DIRS += bin deps tests
+COV_EXCLUDE.llvm += $(foreach D,$(COV_EXCLUDE_DIRS),'$(realpath $(ROOT))/$(D)/*')
+
+coverage:
+	$(SHOW)$(MAKE) build COV=1
+	$(SHOW)$(COVERAGE_RESET.llvm)
+	-$(SHOW)$(MAKE) test COV=1
+	$(SHOW)$(COVERAGE_COLLECT_REPORT.llvm)
+
+.PHONY: coverage
+
+#----------------------------------------------------------------------------------------------
+
 docker:
 	$(SHOW)make -C build/platforms build
 
@@ -208,6 +258,15 @@ platform:
 ifeq ($(PUBLISH),1)
 	$(SHOW)make -C build/platforms publish
 endif
+
+ifneq ($(wildcard /w/*),)
+SANBOX_ARGS += -v /w:/w
+endif
+
+sanbox:
+	@docker run -it -v $(PWD):/rejson -w /rejson --cap-add=SYS_PTRACE --security-opt seccomp=unconfined $(SANBOX_ARGS) redisfab/clang:13-x64-bullseye bash
+
+.PHONY: sanbox
 
 #----------------------------------------------------------------------------------------------
 

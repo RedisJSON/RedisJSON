@@ -25,14 +25,14 @@ enum NodeType {
 impl From<u64> for NodeType {
     fn from(n: u64) -> Self {
         match n {
-            0x1u64 => NodeType::Null,
-            0x2u64 => NodeType::String,
-            0x4u64 => NodeType::Number,
-            0x8u64 => NodeType::Integer,
-            0x10u64 => NodeType::Boolean,
-            0x20u64 => NodeType::Dict,
-            0x40u64 => NodeType::Array,
-            0x80u64 => NodeType::KeyVal,
+            0x1u64 => Self::Null,
+            0x2u64 => Self::String,
+            0x4u64 => Self::Number,
+            0x8u64 => Self::Integer,
+            0x10u64 => Self::Boolean,
+            0x20u64 => Self::Dict,
+            0x40u64 => Self::Array,
+            0x80u64 => Self::KeyVal,
             _ => panic!("Can't load old RedisJSON RDB1"),
         }
     }

@@ -97,7 +97,7 @@ pub(crate) fn err_json<V: SelectValue>(value: &V, expected_value: &'static str) 
     ))
 }
 
-pub(crate) fn err_msg_json_expected<'a>(expected_value: &'static str, found: &str) -> String {
+pub(crate) fn err_msg_json_expected(expected_value: &'static str, found: &str) -> String {
     format!(
         "WRONGTYPE wrong type of path value - expected {} but found {}",
         expected_value, found
@@ -187,8 +187,16 @@ impl<'a> KeyHolderWrite<'a> {
         if paths.is_empty() {
             // updating the root require special treatment
             let root = self.get_value().unwrap().unwrap();
-            let res = (op_fun)(root.take())?;
-            self.set_root(res)?;
+            let prev_val = root.take();
+            let rollback_val = prev_val.clone();
+            let res = (op_fun)(prev_val);
+            match res {
+                Ok(res) => self.set_root(res)?,
+                Err(err) => {
+                    self.set_root(Some(rollback_val))?;
+                    return Err(RedisError::String(err.msg));
+                }
+            }
         } else {
             update(&paths, self.get_value().unwrap().unwrap(), op_fun)?;
         }
@@ -212,14 +220,18 @@ impl<'a> KeyHolderWrite<'a> {
             let mut res = None;
             self.do_op(path, |v| {
                 let num_res = match (v.as_i64(), in_value.as_i64()) {
-                    (Some(num1), Some(num2)) => ((op1_fun)(num1, num2)).into(),
+                    (Some(num1), Some(num2)) => Ok(((op1_fun)(num1, num2)).into()),
                     _ => {
                         let num1 = v.as_f64().unwrap();
                         let num2 = in_value.as_f64().unwrap();
-                        Number::from_f64((op2_fun)(num1, num2)).unwrap()
+                        if let Some(num) = Number::from_f64((op2_fun)(num1, num2)) {
+                            Ok(num)
+                        } else {
+                            Err(RedisError::Str("result is not a number"))
+                        }
                     }
                 };
-                res = Some(Value::Number(num_res));
+                res = Some(Value::Number(num_res?));
                 Ok(res.clone())
             })?;
             match res {
@@ -506,6 +518,10 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
                 arr.clear();
                 cleared += 1;
                 Ok(Some(Value::from(arr)))
+            }
+            Value::Number(mut _num) => {
+                cleared += 1;
+                Ok(Some(Value::from(0)))
             }
             _ => Ok(Some(v)),
         })?;
