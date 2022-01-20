@@ -36,7 +36,7 @@ pub struct IValueKeyHolderWrite<'a> {
 /// If the returned value from `func` is [`None`], the current value is removed.
 /// If the returned value from `func` is [`Err`], the current value remains (although it could be modified by `func`)
 ///
-fn update<F: FnMut(IValue) -> Result<Option<IValue>, Error>>(
+fn replace<F: FnMut(IValue) -> Result<Option<IValue>, Error>>(
     path: &[String],
     root: &mut IValue,
     mut func: F,
