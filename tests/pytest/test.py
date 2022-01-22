@@ -135,30 +135,6 @@ def testSetRootWithJSONValuesShouldSucceed(env):
         s = json.loads(r.execute_command('JSON.GET', 'test'))
         r.assertEqual(v, s)
 
-def testSetAddNewImmediateChild(env):
-    
-    r = env    
-    r.assertOk(r.execute_command('JSON.SET', 'test', '$', json.dumps(docs)))
-    # Make sure children are initially missing
-    r.assertEqual(r.execute_command('JSON.GET', 'test', '$.basic.dict.new_child_1'), '[]')
-    r.assertEqual(r.execute_command('JSON.GET', 'test', '$.basic.dict.new_child_2'), '[]')
-    r.assertEqual(r.execute_command('JSON.GET', 'test', '$.basic.dict.new_child_3'), '[]')
-    # Add a new child (immediately/directly under an existing element)
-    r.assertOk(r.execute_command('JSON.SET', 'test', '$.basic.dict.new_child_1', '"new_child_1_val"'))
-    # Make sure child was added
-    r.assertEqual(r.execute_command('JSON.GET', 'test', '$.basic.dict.new_child_1'), '["new_child_1_val"]')
-
-    # Add a new child as none-existing (immediately/directly under an existing element)
-    r.assertOk(r.execute_command('JSON.SET', 'test', '$.basic.dict.new_child_2', '"new_child_2_val"', 'NX'))
-    # Make sure child was added
-    r.assertEqual(r.execute_command('JSON.GET', 'test', '$.basic.dict.new_child_2'), '["new_child_2_val"]')
-
-    # Do not add a new child as already-existing (immediately/directly under an existing element)
-    r.assertIsNone(r.execute_command('JSON.SET', 'test', '$.basic.dict.new_child_3', '"new_child_2_val"', 'XX'))
-
-    # Do not add a new none-direct/none-immediate child
-    r.assertIsNone(r.execute_command('JSON.SET', 'test', '$.basic.dict.new_child_3.new_grandchild_1', '"new_grandchild_3_val"'))
-
 def testSetReplaceRootShouldSucceed(env):
     """Test replacing the root of an existing key with a valid object succeeds"""
     r = env
