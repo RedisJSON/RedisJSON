@@ -558,17 +558,15 @@ def testClearScalar(env):
     r.assertEqual(r.execute_command('JSON.GET', 'test', '$..a'), '[0]')
 
     r.assertOk(r.execute_command('JSON.SET', 'test', '$', json.dumps(docs['scalars'])))
-    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.*'), 2)
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.*'), 4)
     res = r.execute_command('JSON.GET', 'test', '$.*')
-    r.assertEqual(json.loads(res), ['string value', None, True,0, 0])
+    r.assertEqual(json.loads(res), ['', None, False, 0, 0])
     
     # Do not clear already cleared values
     r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.*'), 0)
 
-    # Do not clear other scalars
-    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.none'), 0)
-    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.bool'), 0)
-    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.string'), 0)    
+    # Do not clear null scalar
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.NoneType'), 0)
 
 
 def testArrayCRUD(env):
