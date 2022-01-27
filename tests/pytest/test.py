@@ -480,7 +480,7 @@ def testClear(env):
     """Test JSON.CLEAR command"""
 
     r = env
-    multi_content = r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}'
+    multi_content = r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}},null]}'
     r.expect('JSON.SET', 'test', '.', multi_content).ok()
 
     # Test get multi results (using .. recursive descent)
@@ -501,8 +501,8 @@ def testClear(env):
     r.expect('JSON.CLEAR', 'test', '$.arr[2].n').equal(1)
     r.expect('JSON.CLEAR', 'test', '$.arr[3].n2.n').equal(1)
 
-    # No clear on inappropriate path (not obj or arr or numeric)
-    r.expect('JSON.CLEAR', 'test', '$.arr[1]').equal(0)
+    # No clear on inappropriate path (not null)
+    r.expect('JSON.CLEAR', 'test', '$.arr[4]').equal(0)
 
     # Make sure specific obj content was cleared
     r.expect('JSON.GET', 'test', '$.arr[2].n').equal('[{}]')
@@ -517,8 +517,8 @@ def testClear(env):
     # Clear dynamic path
     r.expect('JSON.SET', 'test', '.', r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}') \
         .ok()
-    r.expect('JSON.CLEAR', 'test', '$.arr.*').equal(3)
-    r.expect('JSON.GET', 'test', '$').equal('[{"n":42,"s":"42","arr":[{},"s",{},{}]}]')
+    r.expect('JSON.CLEAR', 'test', '$.arr.*').equal(4)
+    r.expect('JSON.GET', 'test', '$').equal('[{"n":42,"s":"42","arr":[{},"",{},{}]}]')
 
     # Clear root
     r.expect('JSON.SET', 'test', '.', r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}') \
