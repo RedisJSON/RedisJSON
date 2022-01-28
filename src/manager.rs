@@ -522,6 +522,15 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
                 cleared += 1;
                 Ok(Some(Value::from(0)))
             }
+            Value::String(mut _str) => {
+                cleared += 1;
+                Ok(Some(Value::from("")))
+            }
+
+            Value::Bool(mut _bool) => {
+                cleared += 1;
+                Ok(Some(Value::from(false)))
+            }
             _ => Ok(Some(v)),
         })?;
         Ok(cleared)

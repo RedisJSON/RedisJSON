@@ -1895,6 +1895,8 @@ pub fn command_json_clear<M: Manager>(
         SelectValueType::Array | SelectValueType::Object => v.len().unwrap() > 0,
         SelectValueType::Long => v.get_long() != 0,
         SelectValueType::Double => v.get_double() != 0.0,
+        SelectValueType::String => v.get_str().len() > 0,
+        SelectValueType::Bool => v.get_bool(),
         _ => false,
     })?;
     let mut cleared = 0;
