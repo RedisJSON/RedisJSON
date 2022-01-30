@@ -422,7 +422,7 @@ macro_rules! redis_json_module_create {(
             pre_command_function: $pre_command_function_expr,
         }
 
-        fn intialize(ctx: &Context, args: &Vec<RedisString>) -> Status {
+        fn initialize(ctx: &Context, args: &Vec<RedisString>) -> Status {
             ctx.log_notice(&format!("version: {} git sha: {} branch: {}",
                 $version,
                 match GIT_SHA { Some(val) => val, _ => "unknown"},
@@ -431,7 +431,15 @@ macro_rules! redis_json_module_create {(
             export_shared_api(ctx);
             ctx.set_module_options(ModuleOptions::HANDLE_IO_ERRORS);
             ctx.log_notice("Enabled diskless replication");
-            $init_func(ctx, args)
+            unsafe{
+                if let Some(get_version) = rawmod::RedisModule_GetServerVersion {
+                    if 0x060200 <= get_version() {
+                        return $init_func(ctx, args);
+                    }
+                }
+            }
+            ctx.log_warning("RedisJson is only supported from redis-server version 6.2.0");
+            return Status::Err;
         }
 
         fn json_init_config(ctx: &Context, args: &Vec<RedisString>) -> Status{
@@ -463,7 +471,7 @@ macro_rules! redis_json_module_create {(
             version: $version,
             data_types: [$($data_type,)*],
             init: json_init_config,
-            init: intialize,
+            init: initialize,
             info: $info_func,
             commands: [
                 ["json.del", json_del, "write", 1,1,1],
