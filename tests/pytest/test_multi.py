@@ -741,9 +741,9 @@ def testClearCommand(env):
     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"nested1": {"a": {"foo": 10, "bar": 20}}, "a":["foo"], "nested2": {"a": "claro"}, "nested3": {"a": {"baz":50}}}'))
     # Test multi
     res = r.execute_command('JSON.CLEAR', 'doc1', '$..a')
-    r.assertEqual(res, 3)
+    r.assertEqual(res, 4)
     res = r.execute_command('JSON.GET', 'doc1', '$')
-    r.assertEqual(json.loads(res), [{"nested1": {"a": {}}, "a": [], "nested2": {"a": "claro"}, "nested3": {"a": {}}}])
+    r.assertEqual(json.loads(res), [{"nested1": {"a": {}}, "a": [], "nested2": {"a": ""}, "nested3": {"a": {}}}])
     # Not clearing already cleared values
     res = r.execute_command('JSON.CLEAR', 'doc1', '$..a')
     r.assertEqual(res, 0)
@@ -1007,7 +1007,8 @@ def testErrorMessage(env):
         'string':   'str',
         'integer':  42,
         'number':   1.2,
-        'boolean':  False
+        'boolean':  False,
+        'null': None
     }
     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', json.dumps(types_data)))
     res = r.execute_command('JSON.GET', 'doc1', '$')
@@ -1271,12 +1272,12 @@ def testErrorMessage(env):
     """ Legacy 1.0.8: not relevant (only since 2.0) """
 
     # CLEAR
-    r.assertEqual(r.execute_command('JSON.CLEAR', 'doc1', '$.string'), 0)
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'doc1', '$.null'), 0)
     r.assertEqual(r.execute_command('JSON.CLEAR', 'doc1', '$.nowhere'), 0)
     r.expect('JSON.CLEAR', 'doc_none', '$.string').raiseError().contains("doesn't exist")
     r.expect('JSON.CLEAR', 'hash_key', '$.string').raiseError().contains("wrong Redis type")
 
-    r.assertEqual(r.execute_command('JSON.CLEAR', 'doc1', '.string'), 0)
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'doc1', '.null'), 0)
     r.assertEqual(r.execute_command('JSON.CLEAR', 'doc1', '.nowhere'), 0)
     r.expect('JSON.CLEAR', 'doc_none', '.string').raiseError().contains("doesn't exist")
     """ Legacy 1.0.8: not relevant (only since 2.0) """
