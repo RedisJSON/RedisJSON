@@ -431,15 +431,16 @@ macro_rules! redis_json_module_create {(
             export_shared_api(ctx);
             ctx.set_module_options(ModuleOptions::HANDLE_IO_ERRORS);
             ctx.log_notice("Enabled diskless replication");
-            unsafe{
-                if let Some(get_version) = rawmod::RedisModule_GetServerVersion {
-                    if 0x060200 <= get_version() {
-                        return $init_func(ctx, args);
-                    }
-                }
+
+            let valid_version = unsafe{
+                rawmod::RedisModule_GetServerVersion.map_or(false, |get_version|0x060200 <= get_version())
+            };
+            if valid_version {
+                $init_func(ctx, args)
+            } else {
+                ctx.log_warning("RedisJson is only supported from redis-server version 6.2.0");
+                Status::Err
             }
-            ctx.log_warning("RedisJson is only supported from redis-server version 6.2.0");
-            return Status::Err;
         }
 
         fn json_init_config(ctx: &Context, args: &Vec<RedisString>) -> Status{
