@@ -135,6 +135,30 @@ def testSetRootWithJSONValuesShouldSucceed(env):
         s = json.loads(r.execute_command('JSON.GET', 'test'))
         r.assertEqual(v, s)
 
+def testSetAddNewImmediateChild(env):
+    
+    r = env    
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$', json.dumps(docs)))
+    # Make sure children are initially missing
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '$.basic.dict.new_child_1'), '[]')
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '$.basic.dict.new_child_2'), '[]')
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '$.basic.dict.new_child_3'), '[]')
+    # Add a new child (immediately/directly under an existing element)
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$.basic.dict.new_child_1', '"new_child_1_val"'))
+    # Make sure child was added
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '$.basic.dict.new_child_1'), '["new_child_1_val"]')
+
+    # Add a new child as none-existing (immediately/directly under an existing element)
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$.basic.dict.new_child_2', '"new_child_2_val"', 'NX'))
+    # Make sure child was added
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '$.basic.dict.new_child_2'), '["new_child_2_val"]')
+
+    # Do not add a new child as already-existing (immediately/directly under an existing element)
+    r.assertIsNone(r.execute_command('JSON.SET', 'test', '$.basic.dict.new_child_3', '"new_child_2_val"', 'XX'))
+
+    # Do not add a new none-direct/none-immediate child
+    r.assertIsNone(r.execute_command('JSON.SET', 'test', '$.basic.dict.new_child_3.new_grandchild_1', '"new_grandchild_3_val"'))
+
 def testSetReplaceRootShouldSucceed(env):
     """Test replacing the root of an existing key with a valid object succeeds"""
     r = env
@@ -456,7 +480,7 @@ def testClear(env):
     """Test JSON.CLEAR command"""
 
     r = env
-    multi_content = r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}'
+    multi_content = r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}},null]}'
     r.expect('JSON.SET', 'test', '.', multi_content).ok()
 
     # Test get multi results (using .. recursive descent)
@@ -477,8 +501,8 @@ def testClear(env):
     r.expect('JSON.CLEAR', 'test', '$.arr[2].n').equal(1)
     r.expect('JSON.CLEAR', 'test', '$.arr[3].n2.n').equal(1)
 
-    # No clear on inappropriate path (not obj or arr or numeric)
-    r.expect('JSON.CLEAR', 'test', '$.arr[1]').equal(0)
+    # No clear on inappropriate path (not null)
+    r.expect('JSON.CLEAR', 'test', '$.arr[4]').equal(0)
 
     # Make sure specific obj content was cleared
     r.expect('JSON.GET', 'test', '$.arr[2].n').equal('[{}]')
@@ -493,8 +517,8 @@ def testClear(env):
     # Clear dynamic path
     r.expect('JSON.SET', 'test', '.', r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}') \
         .ok()
-    r.expect('JSON.CLEAR', 'test', '$.arr.*').equal(3)
-    r.expect('JSON.GET', 'test', '$').equal('[{"n":42,"s":"42","arr":[{},"s",{},{}]}]')
+    r.expect('JSON.CLEAR', 'test', '$.arr.*').equal(4)
+    r.expect('JSON.GET', 'test', '$').equal('[{"n":42,"s":"42","arr":[{},"",{},{}]}]')
 
     # Clear root
     r.expect('JSON.SET', 'test', '.', r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}') \
@@ -534,17 +558,15 @@ def testClearScalar(env):
     r.assertEqual(r.execute_command('JSON.GET', 'test', '$..a'), '[0]')
 
     r.assertOk(r.execute_command('JSON.SET', 'test', '$', json.dumps(docs['scalars'])))
-    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.*'), 2)
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.*'), 4)
     res = r.execute_command('JSON.GET', 'test', '$.*')
-    r.assertEqual(json.loads(res), ['string value', None, True,0, 0])
+    r.assertEqual(json.loads(res), ['', None, False, 0, 0])
     
     # Do not clear already cleared values
     r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.*'), 0)
 
-    # Do not clear other scalars
-    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.none'), 0)
-    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.bool'), 0)
-    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.string'), 0)    
+    # Do not clear null scalar
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.NoneType'), 0)
 
 
 def testArrayCRUD(env):
