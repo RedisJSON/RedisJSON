@@ -3,10 +3,7 @@
 ARG REDIS_VER=6.2.5
 ARG REDISEARCH_BRANCH=master
 
-# OSNICK=focal|bionic|xenial|bullseye|centos8|centos7
 ARG OSNICK=bullseye
-
-# OS=debian:bullseye-slim|ubuntu:bionic|centos:7
 ARG OS=debian:bullseye-slim
 
 # ARCH=x64|arm64v8|arm32v7
