@@ -22,7 +22,7 @@ class RedisJSONSetup(paella.Setup):
         self.pip_install("wheel")
         self.pip_install("setuptools --upgrade")
 
-        self.install("git rsync tar")
+        self.install("git rsync")
 
         if not self.has_command("clang"):
             self.run("%s/bin/getclang --modern" % READIES)
@@ -35,6 +35,8 @@ class RedisJSONSetup(paella.Setup):
         self.run("%s/bin/getgcc" % READIES)
 
     def redhat_compat(self):
+        if self.osnick == 'ol8':
+            self.install("tar")
         self.run("%s/bin/enable-utf8" % READIES)
         self.install("redhat-lsb-core")
         self.run("%s/bin/getgcc --modern" % READIES)
