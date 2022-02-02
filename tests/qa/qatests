@@ -28,7 +28,10 @@ RS_PLATFORMS = {
     'cenos7': {
         'platform': 'Linux-rhel7',
         'env': 'rhel7.7-amd64-aws' },
-    'cenos8': {
+    'centos8': {
+        'platform': 'Linux-rhel8',
+        'env': 'rhel8.3-amd64-aws' }
+    'ol8': {
         'platform': 'Linux-rhel8',
         'env': 'rhel8.3-amd64-aws' }
 }
