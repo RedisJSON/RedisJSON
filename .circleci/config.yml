@@ -70,6 +70,7 @@ commands:
       - setup-automation
       - run:
           name: System setup
+          shell: /bin/bash -l -eo pipefail
           command: |
             python3 -m pip list -v
             ./sbin/system-setup.py
@@ -80,8 +81,9 @@ commands:
             rustup --version
       - run:
           name: Install Redis
+          shell: /bin/bash -l -eo pipefail
           command: |
-            bash -l -c "./deps/readies/bin/getredis -v \"<<parameters.redis_version>>\" --force <<parameters.getredis_params>>"
+            ./deps/readies/bin/getredis -v '<<parameters.redis_version>>' --force <<parameters.getredis_params>>
             redis-server --version
 
   save-tests-logs:
@@ -100,6 +102,11 @@ commands:
   persist-artifacts:
     steps:
       - early-return-for-forked-pull-requests
+      - run:
+          name: List artifacts
+          command: |
+            cd bin/artifacts
+            du -ah --apparent-size *
       - persist_to_workspace:
           root: bin/
           paths:
@@ -134,13 +141,16 @@ commands:
             - v3-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
       - run:
           name: Check formatting
-          command: bash -l -c "make lint"
+          shell: /bin/bash -l -eo pipefail
+          command: make lint
       - run:
           name: Build debug
-          command: bash -l -c "make build DEBUG=1 <<parameters.build_params>>"
+          shell: /bin/bash -l -eo pipefail
+          command: make build DEBUG=1 <<parameters.build_params>>
       - run:
           name: Build release
-          command: bash -l -c "make build pack <<parameters.build_params>>"
+          shell: /bin/bash -l -eo pipefail
+          command: make build pack <<parameters.build_params>>
       - save_cache:
           key: v3-dependencies-{{ arch }}-{{ checksum "Cargo.lock" }}
           paths:
@@ -150,10 +160,11 @@ commands:
   test-steps:
     steps:
       - run:
-          name: Run all tests
+          name: Run tests
+          shell: /bin/bash -l -eo pipefail
           command: |
-            bash -l -c "python3 -m RLTest --version"
-            bash -l -c "make test"
+            python3 -m RLTest --version
+            make test
           timeout: 30m
           no_output_timeout: 30m
       - save_cache:
@@ -481,7 +492,8 @@ workflows:
               redis_version: ["6.0", "6.2"]
       - platforms-build:
           context: common
-          <<: *on-integ-and-version-tags
+          #@@<<: *on-integ-and-version-tags
+          <<: *on-any-branch
           matrix:
             parameters:
               platform: [focal, bionic, xenial, ol8, centos7, bullseye]

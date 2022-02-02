@@ -52,6 +52,16 @@ make pytest        # run flow tests using RLTest
   VERBOSE=1          # display more RLTest-related information
 
 make pack          # build package (RAMP file)
+make upload-artifacts   # copy snapshot packages to S3
+  OSNICK=nick             # copy snapshots for specific OSNICK
+make upload-release     # copy release packages to S3
+
+common options for upload operations:
+  STAGING=1             # copy to staging lab area (for validation)
+  FORCE=1               # allow operation outside CI environment
+  VERBOSE=1             # show more details
+  NOP=1                 # do not copy, just print commands
+
 
 make coverage      # perform coverage analysis
 make show-cov      # show coverage analysis results (implies COV=1)
@@ -60,7 +70,7 @@ make upload-cov    # upload coverage analysis results to codecov.io (implies COV
 make docker
 make docker_push
 
-make platform      # build for specific Linux distribution
+make docker        # build for specific Linux distribution
   OSNICK=nick        # Linux distribution to build for
   REDIS_VER=ver      # use Redis version `ver`
   TEST=1             # test aftar build
@@ -226,7 +236,13 @@ bench benchmark: $(TARGET)
 pack:
 	$(SHOW)MODULE=$(abspath $(TARGET)) ./sbin/pack.sh
 
-.PHONY: pack
+upload-release:
+	$(SHOW)RELEASE=1 ./sbin/upload-artifacts
+
+upload-artifacts:
+	$(SHOW)SNAPSHOT=1 ./sbin/upload-artifacts
+
+.PHONY: pack upload-artifacts upload-release
 
 #----------------------------------------------------------------------------------------------
 
@@ -253,10 +269,10 @@ docker_push:
 
 #----------------------------------------------------------------------------------------------
 
-platform:
-	$(SHOW)make -C build/platforms build
+docker:
+	$(SHOW)$(MAKE) -C build/docker
 ifeq ($(PUBLISH),1)
-	$(SHOW)make -C build/platforms publish
+	$(SHOW)make -C build/docker publish
 endif
 
 ifneq ($(wildcard /w/*),)
