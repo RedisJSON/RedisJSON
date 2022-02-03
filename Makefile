@@ -18,9 +18,11 @@ endif
 export SAN
 endif # SAN
 
+#----------------------------------------------------------------------------------------------
+
 ROOT=.
 ifeq ($(wildcard $(ROOT)/deps/readies/*),)
-$(info $(shell git submodule update --init --recursive &> /dev/null))
+___:=$(shell git submodule update --init --recursive &> /dev/null)
 endif
 
 MK.pyver:=3
