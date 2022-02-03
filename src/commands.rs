@@ -861,19 +861,20 @@ pub fn command_json_mget<M: Manager>(
             .iter()
             .map(|key| {
                 manager
-                    .open_key_read(ctx, key)?
-                    .get_value()
-                    .map_or(Ok(RedisValue::Null), |value| {
-                        value
-                            .map(|doc| {
-                                if !is_legacy {
-                                    to_string(doc)
-                                } else {
-                                    to_string_legacy(doc)
-                                }
-                            })
-                            .transpose()
-                            .map_or(Ok(RedisValue::Null), |v| Ok(v.into()))
+                    .open_key_read(ctx, key)
+                    .map_or(Ok(RedisValue::Null), |json_key| {
+                        json_key.get_value().map_or(Ok(RedisValue::Null), |value| {
+                            value
+                                .map(|doc| {
+                                    if !is_legacy {
+                                        to_string(doc)
+                                    } else {
+                                        to_string_legacy(doc)
+                                    }
+                                })
+                                .transpose()
+                                .map_or(Ok(RedisValue::Null), |v| Ok(v.into()))
+                        })
                     })
             })
             .collect();
