@@ -123,7 +123,7 @@ pub struct RedisJSON<T> {
 
 pub mod type_methods {
     use super::*;
-    use std::ptr::null_mut;
+    use std::{ffi::CString, ptr::null_mut};
 
     pub extern "C" fn rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
         let json_string = value_rdb_load_json(rdb, encver);
@@ -221,7 +221,8 @@ pub mod type_methods {
                 String::from_utf8(out.into_inner()).unwrap()
             }
         };
-        raw::save_string(rdb, &json);
+        let cjson = CString::new(json).unwrap();
+        raw::save_string(rdb, cjson.to_str().unwrap());
     }
 
     #[allow(non_snake_case, unused)]
