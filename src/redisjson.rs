@@ -222,7 +222,7 @@ pub mod type_methods {
             }
         };
         let cjson = CString::new(json).unwrap();
-        raw::save_string(rdb, &cjson.to_str().unwrap());
+        raw::save_string(rdb, cjson.to_str().unwrap());
     }
 
     #[allow(non_snake_case, unused)]
