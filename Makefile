@@ -64,13 +64,9 @@ common options for upload operations:
   VERBOSE=1             # show more details
   NOP=1                 # do not copy, just print commands
 
-
 make coverage      # perform coverage analysis
 make show-cov      # show coverage analysis results (implies COV=1)
 make upload-cov    # upload coverage analysis results to codecov.io (implies COV=1)
-
-make docker
-make docker_push
 
 make docker        # build for specific Linux distribution
   OSNICK=nick        # Linux distribution to build for
