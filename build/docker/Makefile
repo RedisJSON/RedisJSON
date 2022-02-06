@@ -16,6 +16,6 @@ PREVIEW_BRANCH=2.0
 ART_DIR=$(ROOT)/bin/artifacts
 
 REDISEARCH_VERSION=master
-DOCKER_VARS += REJSON_VERSION
+DOCKER_VARS += REDISEARCH_VERSION
 
 include $(MK)/module.docker.rules
