@@ -21,3 +21,4 @@ capabilities:
     - hash_policy
     - clustering
     - intershard_tls
+    - intershard_tls_pass
