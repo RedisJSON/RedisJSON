@@ -242,6 +242,20 @@ def testSetWithPathErrors(env):
     r.expect('JSON.SET', 'x', '$[0]', 1).raiseError()
     # r.assertEqual(str(e.exception), 'Err: path not an object')
 
+def testGetWithPathErrors(env):
+    r = env
+
+    r.expect('JSON.SET', 'x', '.', '{}').ok()
+
+    # None-existing paths are reported with an error message
+    # If paths contain illegal characters, the error message must not contain them
+
+    # Path (and error message) with embedded nulls in path
+    r.expect('JSON.GET', 'x', 'gar\x00\x00bage').raiseError().contains("does not exist")
+
+    # Path (and error message) with end of line delimiters
+    r.expect('JSON.GET', 'x', 'not\x0d\x0aallowed by protocol').raiseError().contains("does not exist")
+
 def testGetNonExistantPathsFromBasicDocumentShouldFail(env):
     """Test failure of getting non-existing values"""
 
