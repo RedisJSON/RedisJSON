@@ -211,7 +211,7 @@ OK
 ### JSON.CLEAR
 
 > **Available since 2.0.0.**  
-> **Time complexity:**  O(N), where N is the number of cleared values
+> **Time complexity:**  O(N) when path is evaluated to a single value where N is the size of the values, O(N) when path is evaluated to multiple values, where N is the size of the key
 
 #### Syntax
 
@@ -221,13 +221,15 @@ JSON.CLEAR <key> [path]
 
 #### Description
 
-Clear a container value (Array/Object).
+Clears container values (Arrays/Objects), sets numeric values to `0`, sets string value to emptys, and sets boolean values to `false`.
+
+Already cleared values are ignored: empty containers, zero numbers, empty strings, `false`, and `null`.
 
 `path` defaults to root if not provided. Non-existing keys and paths are ignored.
 
 #### Return value
 
-[Integer][2], specifically the number of containers cleared.
+[Integer][2], specifically the number of values cleared.
 
 ### JSON.NUMINCRBY
 
