@@ -250,11 +250,12 @@ def testGetWithPathErrors(env):
     # None-existing paths are reported with an error message
     # If paths contain illegal characters, the error message must not contain them
 
+    input("zzz")
     # Path (and error message) with embedded nulls in path
-    r.expect('JSON.GET', 'x', 'gar\x00\x00bage', 1).raiseError().contains("does not exist")
+    r.expect('JSON.GET', 'x', 'gar\x00\x00bage').raiseError().contains("does not exist")
 
     # Path (and error message) with end of line delimiters
-    r.expect('JSON.GET', 'x', 'not\x0d\x0aallowed by protocol', 1).raiseError().contains("does not exist")
+    r.expect('JSON.GET', 'x', 'not\x0d\x0aallowed by protocol').raiseError().contains("does not exist")
 
 def testGetNonExistantPathsFromBasicDocumentShouldFail(env):
     """Test failure of getting non-existing values"""
