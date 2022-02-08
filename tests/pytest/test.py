@@ -250,7 +250,6 @@ def testGetWithPathErrors(env):
     # None-existing paths are reported with an error message
     # If paths contain illegal characters, the error message must not contain them
 
-    input("zzz")
     # Path (and error message) with embedded nulls in path
     r.expect('JSON.GET', 'x', 'gar\x00\x00bage').raiseError().contains("does not exist")
 
