@@ -542,6 +542,6 @@ workflows:
           name: build-with-redis-<<matrix.redis_version>>
           matrix:
             parameters:
-              redis_version: ["6.0", "6.2"]
+              redis_version: ["6.0", "6.2", "7.0"]
       - performance-automation:
           context: common
