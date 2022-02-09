@@ -521,7 +521,7 @@ workflows:
           <<: *on-integ-and-version-tags
           matrix:
             parameters:
-              redis_version: ["6.0", "6.2", "7.0"]
+              redis_version: ["6.0", "6.2", "7.0-rc1"]
       - build-platforms:
           <<: *on-integ-and-version-tags
           context: common
@@ -586,6 +586,6 @@ workflows:
           name: build-with-redis-<<matrix.redis_version>>
           matrix:
             parameters:
-              redis_version: ["6.0", "6.2", "7.0"]
+              redis_version: ["6.0", "6.2", "7.0-rc1"]
       - benchmarks:
           context: common
