@@ -239,6 +239,7 @@ Some languages have client libraries that provide support for RedisJSON's comman
 | [redis-om-python][redis-om-python-url]  | Python | BSD-3-Clause | [Redis][redis-om-python-author] | [![redis-om-python-stars]][redis-om-python-url] | [PyPi][redis-om-python-package] |
 | [go-rejson][go-rejson-url] | Go | MIT | [Nitish Malhotra @nitishm][go-rejson-author] | [![go-rejson-stars]][go-rejson-url] | |
 | [rejonson][rejonson-url] | Go | Apache-2.0 | [Daniel Krom @KromDaniel][rejonson-author] | [![rejonson-stars]][rejonson-url] | |
+| [rueidis][rueidis-url] | Go | Apache-2.0 | [Rueian @rueian][rueidis-author] | [![rueidis-stars]][rueidis-url] | |
 | [NReJSON][NReJSON-url]  | .NET | MIT/Apache-2.0 | [Tommy Hanks @tombatron][NReJSON-author] | [![NReJSON-stars]][NReJSON-url] | [nuget][NReJSON-package] |
 | [redis-om-dotnet][redis-om-dotnet-url]  | .NET | BSD-3-Clause | [Redis][redis-om-dotnet-author] | [![redis-om-dotnet-stars]][redis-om-dotnet-url] | [nuget][redis-om-dotnet-package] |
 | [phpredis-json][phpredis-json-url]  | PHP | MIT | [Rafa Campoy @averias][phpredis-json-author] | [![phpredis-json-stars]][phpredis-json-url] | [composer][phpredis-json-package] |
@@ -284,6 +285,10 @@ Some languages have client libraries that provide support for RedisJSON's comman
 [go-rejson-url]: https://github.com/nitishm/go-rejson/
 [go-rejson-package]: https://www.npmjs.com/package/iorejson
 [go-rejson-stars]: https://img.shields.io/github/stars/nitishm/go-rejson.svg?style=social&amp;label=Star&amp;maxAge=2592000
+
+[rueidis-url]: https://github.com/rueian/rueidis
+[rueidis-author]: https://github.com/rueian
+[rueidis-stars]: https://img.shields.io/github/stars/rueian/rueidis.svg?style=social&amp;label=Star&amp;maxAge=2592000
 
 [rejonson-author]: https://github.com/KromDaniel
 [rejonson-url]: https://github.com/KromDaniel/rejonson
