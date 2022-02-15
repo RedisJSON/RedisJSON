@@ -24,11 +24,10 @@ class RedisJSONSetup(paella.Setup):
 
         if self.osnick == 'ol8':
             self.install("tar")
-        if not self.has_command("clang"):
-            if self.coverage:
-                self.run("%s/bin/getclang -v 12" % READIES)
-            else:
-                self.run("%s/bin/getclang --modern" % READIES)
+        if self.coverage:
+            self.run("%s/bin/getclang -v 12" % READIES)
+        else:
+            self.run("%s/bin/getclang --modern" % READIES)
         if not self.has_command("rustc"):
             self.run("%s/bin/getrust" % READIES)
         self.run("%s/bin/getcmake --usr" % READIES)
