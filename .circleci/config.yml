@@ -66,6 +66,9 @@ commands:
       getredis_params:
         type: string
         default: ""
+      setup_params:
+        type: string
+        default: ""
     steps:
       - setup-automation
       - run:
@@ -73,7 +76,7 @@ commands:
           shell: /bin/bash -l -eo pipefail
           command: |
             python3 -m pip list -v
-            ./sbin/system-setup.py
+            ./sbin/system-setup.py <<parameters.setup_params>>
             python3 -m pip list -v
             source $HOME/.cargo/env
             rustc --version
@@ -363,7 +366,8 @@ jobs:
     steps:
       - early-returns
       - checkout-all
-      - install-prerequisites
+      - install-prerequisites:
+          setup_params: "--coverage"
       - run:
           name: Build & Test
           shell: /bin/bash -l -eo pipefail
