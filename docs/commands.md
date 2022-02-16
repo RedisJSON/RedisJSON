@@ -78,6 +78,17 @@ OK
 "[{\"a\":2,\"b\":8}]"
 ```
 
+Updating multi paths
+```
+127.0.0.1:6379> JSON.SET doc $ '{"f1": {"a":1}, "f2":{"a":2}}'
+OK
+127.0.0.1:6379> JSON.SET doc $..a 3
+OK
+127.0.0.1:6379> json.get doc
+"{\"f1\":{\"a\":3},\"f2\":{\"a\":3}}"
+```
+
+
 ### JSON.GET
 
 > **Available since 1.0.0.**  
