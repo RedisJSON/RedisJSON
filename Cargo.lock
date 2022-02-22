@@ -542,9 +542,9 @@ dependencies = [
 
 [[package]]
 name = "redis-module"
-version = "0.26.0"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f3981a50b81f4363dddeae5cebcac185fc2022dddaa47e71c99515b738273b8"
+checksum = "2cb881243f9ca167fce1b38876c8d2bc84d7c657bdfe5240634ad700cbc53813"
 dependencies = [
  "backtrace",
  "bindgen",
@@ -553,6 +553,7 @@ dependencies = [
  "enum-primitive-derive",
  "libc",
  "num-traits 0.2.14",
+ "regex",
  "strum_macros",
 ]
 
