@@ -542,8 +542,9 @@ dependencies = [
 
 [[package]]
 name = "redis-module"
-version = "99.99.99"
-source = "git+https://github.com/RedisLabsModules/redismodule-rs.git?branch=master#6dd45448f062eb5cee86e5f0efefa7878b3dc89c"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2cb881243f9ca167fce1b38876c8d2bc84d7c657bdfe5240634ad700cbc53813"
 dependencies = [
  "backtrace",
  "bindgen",
@@ -552,6 +553,7 @@ dependencies = [
  "enum-primitive-derive",
  "libc",
  "num-traits 0.2.14",
+ "regex",
  "strum_macros",
 ]
 
