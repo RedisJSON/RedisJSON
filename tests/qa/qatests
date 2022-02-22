@@ -158,8 +158,7 @@ class Test:
 @click.option('--nop', is_flag=True, default=False, help='Dry run')
 @click.option('--verbose', '-v', is_flag=True, default=False, help='Be verbose')
 @click.option('--verbosity', type=int, default=0, help='Verbosity level')
-def main(token, test, modver, snapshot, rsver, osnick, common, quick, nop, verbose, verbosity, *args, **kwargs):
-    BB()
+def main(token, test, modver, snapshot, rsver, osnick, quick, nop, verbose, verbosity, *args, **kwargs):
     global NOP, VERBOSE
     VERBOSE = 1 if verbose else verbosity
     NOP = nop
