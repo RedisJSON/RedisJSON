@@ -21,6 +21,8 @@ JSON_PATH = os.path.join(TESTS_ROOT, 'files')
 
 # ----------------------------------------------------------------------------------------------
 
+IS_SERDE_JSON = os.getenv('SERDE_JSON', 0)
+
 # TODO: these are currently not supported so ignore them
 json_ignore = [
     'pass-json-parser-0002.json',   # UTF-8 to Unicode
@@ -133,6 +135,30 @@ def testSetRootWithJSONValuesShouldSucceed(env):
         s = json.loads(r.execute_command('JSON.GET', 'test'))
         r.assertEqual(v, s)
 
+def testSetAddNewImmediateChild(env):
+    
+    r = env    
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$', json.dumps(docs)))
+    # Make sure children are initially missing
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '$.basic.dict.new_child_1'), '[]')
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '$.basic.dict.new_child_2'), '[]')
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '$.basic.dict.new_child_3'), '[]')
+    # Add a new child (immediately/directly under an existing element)
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$.basic.dict.new_child_1', '"new_child_1_val"'))
+    # Make sure child was added
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '$.basic.dict.new_child_1'), '["new_child_1_val"]')
+
+    # Add a new child as none-existing (immediately/directly under an existing element)
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$.basic.dict.new_child_2', '"new_child_2_val"', 'NX'))
+    # Make sure child was added
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '$.basic.dict.new_child_2'), '["new_child_2_val"]')
+
+    # Do not add a new child as already-existing (immediately/directly under an existing element)
+    r.assertIsNone(r.execute_command('JSON.SET', 'test', '$.basic.dict.new_child_3', '"new_child_2_val"', 'XX'))
+
+    # Do not add a new none-direct/none-immediate child
+    r.assertIsNone(r.execute_command('JSON.SET', 'test', '$.basic.dict.new_child_3.new_grandchild_1', '"new_grandchild_3_val"'))
+
 def testSetReplaceRootShouldSucceed(env):
     """Test replacing the root of an existing key with a valid object succeeds"""
     r = env
@@ -216,6 +242,20 @@ def testSetWithPathErrors(env):
     r.expect('JSON.SET', 'x', '$[0]', 1).raiseError()
     # r.assertEqual(str(e.exception), 'Err: path not an object')
 
+def testGetWithPathErrors(env):
+    r = env
+
+    r.expect('JSON.SET', 'x', '.', '{}').ok()
+
+    # None-existing paths are reported with an error message
+    # If paths contain illegal characters, the error message must not contain them
+
+    # Path (and error message) with embedded nulls in path
+    r.expect('JSON.GET', 'x', 'gar\x00\x00bage').raiseError().contains("does not exist")
+
+    # Path (and error message) with end of line delimiters
+    r.expect('JSON.GET', 'x', 'not\x0d\x0aallowed by protocol').raiseError().contains("does not exist")
+
 def testGetNonExistantPathsFromBasicDocumentShouldFail(env):
     """Test failure of getting non-existing values"""
 
@@ -271,6 +311,8 @@ def testGetFormatting(env):
 
 def testBackwardRDB(env):
     env.skipOnCluster() 
+    if env.useAof:
+        env.skip()
     dbFileName = env.cmd('config', 'get', 'dbfilename')[1]
     dbDir = env.cmd('config', 'get', 'dir')[1]
     rdbFilePath = os.path.join(dbDir, dbFileName)
@@ -284,7 +326,8 @@ def testBackwardRDB(env):
     env.start()
 
     r = env
-    data = json.loads(r.execute_command('JSON.GET', 'complex'))
+    res = r.execute_command('JSON.GET', 'complex')
+    data = json.loads(res)
     r.assertEqual(data, {"a":{"b":[{"c":{"d":[1,'2'],"e":None}},True],"a":'a'},"b":1,"c":True,"d":None})
 
 def testSetBSON(env):
@@ -451,7 +494,7 @@ def testClear(env):
     """Test JSON.CLEAR command"""
 
     r = env
-    multi_content = r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}'
+    multi_content = r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}},null]}'
     r.expect('JSON.SET', 'test', '.', multi_content).ok()
 
     # Test get multi results (using .. recursive descent)
@@ -472,8 +515,8 @@ def testClear(env):
     r.expect('JSON.CLEAR', 'test', '$.arr[2].n').equal(1)
     r.expect('JSON.CLEAR', 'test', '$.arr[3].n2.n').equal(1)
 
-    # Fail clear on inappropriate path (not obj or arr)
-    r.expect('JSON.CLEAR', 'test', '$.arr[1]').equal(0)
+    # No clear on inappropriate path (not null)
+    r.expect('JSON.CLEAR', 'test', '$.arr[4]').equal(0)
 
     # Make sure specific obj content was cleared
     r.expect('JSON.GET', 'test', '$.arr[2].n').equal('[{}]')
@@ -488,8 +531,8 @@ def testClear(env):
     # Clear dynamic path
     r.expect('JSON.SET', 'test', '.', r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}') \
         .ok()
-    r.expect('JSON.CLEAR', 'test', '$.arr.*').equal(3)
-    r.expect('JSON.GET', 'test', '$').equal('[{"n":42,"s":"42","arr":[{},"s",{},{}]}]')
+    r.expect('JSON.CLEAR', 'test', '$.arr.*').equal(4)
+    r.expect('JSON.GET', 'test', '$').equal('[{"n":42,"s":"42","arr":[{},"",{},{}]}]')
 
     # Clear root
     r.expect('JSON.SET', 'test', '.', r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}') \
@@ -512,6 +555,33 @@ def testClear(env):
 
     # Key doesn't exist 
     r.expect('JSON.CLEAR', 'not_test_key', '$').raiseError()
+
+def testClearScalar(env):
+    """Test JSON.CLEAR command for scalars"""
+
+    r = env
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$', json.dumps(docs['basic'])))
+    # Clear numeric values
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.int'), 1)
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '$.int'), '[0]')
+
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.num'), 1)
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '$.num'), '[0]')
+
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$..a'), 1)
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '$..a'), '[0]')
+
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$', json.dumps(docs['scalars'])))
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.*'), 4)
+    res = r.execute_command('JSON.GET', 'test', '$.*')
+    r.assertEqual(json.loads(res), ['', None, False, 0, 0])
+    
+    # Do not clear already cleared values
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.*'), 0)
+
+    # Do not clear null scalar
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.NoneType'), 0)
+
 
 def testArrayCRUD(env):
     """Test JSON Array CRUDness"""
@@ -613,22 +683,30 @@ def testArrInsertCommand(env):
     """Test JSON.ARRINSERT command"""
     r = env
 
-    r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{ "arr": [] }'))
-    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 0, '1'), 1)
-    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', -1, '2'), 2)
-    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', -2, '3'), 3)
-    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 3, '4'), 4)
-    r.assertEqual(r.execute_command('JSON.GET', 'test', '.arr'), "[3,2,1,4]")
+    for (initial_value, jpath) in [('{ "arr": [] }', '.arr'), ('[]', '.')]:
+        r.assertOk(r.execute_command('JSON.SET', 'test', '.', initial_value))
+        r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', jpath, 0, '1'), 1)
+        r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', jpath, -1, '2'), 2)
+        r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', jpath, -2, '3'), 3)
+        r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', jpath, 3, '4'), 4)
+        r.assertEqual(r.execute_command('JSON.GET', 'test', jpath), "[3,2,1,4]")
 
-    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', 1, '5'), 5)
-    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', -2, '6'), 6)    
-    r.assertEqual(r.execute_command('JSON.GET', 'test', '.arr'), "[3,5,2,6,1,4]")
-    
-    r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', '.arr', -3, '7', '{"A":"Z"}', '9'), 9)
-    r.assertEqual(r.execute_command('JSON.GET', 'test', '.arr'), '[3,5,2,7,{"A":"Z"},9,6,1,4]')     
+        r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', jpath, 1, '5'), 5)
+        r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', jpath, -2, '6'), 6)    
+        r.assertEqual(r.execute_command('JSON.GET', 'test', jpath), "[3,5,2,6,1,4]")
+        
+        r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', jpath, -3, '7', '{"A":"Z"}', '9'), 9)
+        r.assertEqual(r.execute_command('JSON.GET', 'test', jpath), '[3,5,2,7,{"A":"Z"},9,6,1,4]')
 
-    r.expect('JSON.ARRINSERT', 'test', '.arr', -10, '10').raiseError()
-    r.expect('JSON.ARRINSERT', 'test', '.arr', 10, '10').raiseError()
+        r.expect('JSON.ARRINSERT', 'test', jpath, -10, '10').raiseError()
+        if not IS_SERDE_JSON:
+            # Value should remain
+            r.assertEqual(r.execute_command('JSON.GET', 'test', jpath), '[3,5,2,7,{"A":"Z"},9,6,1,4]')
+        r.expect('JSON.ARRINSERT', 'test', jpath, 10, '10').raiseError()
+        if not IS_SERDE_JSON:
+            # Value should remain
+            r.assertEqual(r.execute_command('JSON.GET', 'test', jpath), '[3,5,2,7,{"A":"Z"},9,6,1,4]')
+
 
 def testArrIndexMixCommand(env):
     """Test JSON.ARRINDEX command with mixed values"""
@@ -804,6 +882,33 @@ def testNumIncrCommand(env):
     r.assertEqual(1, res['foo'])
     r.assertEqual(84, res['bar'])
 
+def testNumCommandOverflow(env):
+    """Test JSON.NUMINCRBY and JSON.NUMMULTBY commands overflow """
+    r = env
+    if IS_SERDE_JSON:
+            env.skip()
+            
+    # test overflow on root
+    r.assertOk(r.execute_command('JSON.SET', 'big_num', '.', '1.6350000000001313e+308'))
+    r.expect('JSON.NUMINCRBY', 'big_num', '.', '1.6350000000001313e+308').raiseError()
+    r.expect('JSON.NUMMULTBY', 'big_num', '.', '2').raiseError()
+    # (value remains)
+    r.assertEqual(r.execute_command('JSON.GET', 'big_num', '.'), '1.6350000000001313e308')
+    
+    # test overflow on nested object value
+    r.assertOk(r.execute_command('JSON.SET', 'nested_obj_big_num', '$', '{"l1":{"l2_a":1.6350000000001313e+308,"l2_b":2}}'))
+    r.expect('JSON.NUMINCRBY', 'nested_obj_big_num', '$.l1.l2_a', '1.6350000000001313e+308').raiseError()
+    r.expect('JSON.NUMMULTBY', 'nested_obj_big_num', '$.l1.l2_a', '2').raiseError()
+    # (value remains)
+    r.assertEqual(r.execute_command('JSON.GET', 'nested_obj_big_num', '$'), '[{"l1":{"l2_a":1.6350000000001313e308,"l2_b":2}}]')
+
+    # test overflow on nested arr value
+    r.assertOk(r.execute_command('JSON.SET', 'nested_arr_big_num', '$', '{"l1":{"l2":[0,1.6350000000001313e+308]}}'))
+    r.expect('JSON.NUMINCRBY', 'nested_arr_big_num', '$.l1.l2[1]', '1.6350000000001313e+308').raiseError()
+    r.expect('JSON.NUMMULTBY', 'nested_arr_big_num', '$.l1.l2[1]', '2').raiseError()
+    # (value remains)
+    r.assertEqual(r.execute_command('JSON.GET', 'nested_arr_big_num', '$'), '[{"l1":{"l2":[0,1.6350000000001313e308]}}]')
+
 
 def testStrCommands(env):
     """Test JSON.STRAPPEND and JSON.STRLEN commands"""
@@ -863,6 +968,7 @@ def testRespCommand(env):
 
 def testSetGetComparePassJSONCaseFiles(env):
     """Test setting, getting, saving and loading passable JSON test case files"""
+    env.skipOnSlave() # work around to avoid fail on "Background save already in progress"
     r = env
 
     for jsonfile in os.listdir(JSON_PATH):
@@ -921,6 +1027,13 @@ def testMultiPathResults(env):
 
     # make sure legacy json path returns single result
     env.expect("JSON.GET", "k", '.*[0,2]').equal('1')
+
+def testIssue_597(env):
+    env.expect("JSON.SET", "test", ".", "[0]").ok()
+    env.assertEqual(env.execute_command("JSON.SET", "test", ".[0]", "[0]", "NX"), None)
+    env.expect("JSON.SET", "test", ".[1]", "[0]", "NX").raiseError()
+    # make sure value was not changed
+    env.expect("JSON.GET", "test", ".").equal('[0]')
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property

@@ -16,6 +16,7 @@ use serde::Serialize;
 use std::fmt;
 use std::fmt::Display;
 use std::marker::PhantomData;
+use std::str::FromStr;
 
 /// Returns normalized start index
 pub fn normalize_arr_start_index(start: i64, len: i64) -> i64 {
@@ -52,11 +53,13 @@ pub enum Format {
     JSON,
     BSON,
 }
-impl Format {
-    pub fn from_str(s: &str) -> Result<Format, Error> {
+impl FromStr for Format {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "JSON" => Ok(Format::JSON),
-            "BSON" => Ok(Format::BSON),
+            "JSON" => Ok(Self::JSON),
+            "BSON" => Ok(Self::BSON),
             _ => Err("ERR wrong format".into()),
         }
     }
@@ -79,7 +82,7 @@ impl<'a> Path<'a> {
             if path == "." {
                 cloned.replace_range(..1, "$");
             } else if path.starts_with('.') {
-                cloned.insert(0, '$')
+                cloned.insert(0, '$');
             } else {
                 cloned.insert_str(0, "$.");
             }
@@ -96,11 +99,9 @@ impl<'a> Path<'a> {
     }
 
     pub fn get_path(&'a self) -> &'a str {
-        if let Some(s) = &self.fixed_path {
-            s.as_str()
-        } else {
-            self.original_path
-        }
+        self.fixed_path
+            .as_ref()
+            .map_or(self.original_path, |s| s.as_str())
     }
 
     pub fn get_original(&self) -> &'a str {
@@ -122,7 +123,7 @@ pub struct RedisJSON<T> {
 
 pub mod type_methods {
     use super::*;
-    use std::ptr::null_mut;
+    use std::{ffi::CString, ptr::null_mut};
 
     pub extern "C" fn rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
         let json_string = value_rdb_load_json(rdb, encver);
@@ -134,7 +135,7 @@ pub mod type_methods {
                     };
                     let v = m.from_str(&json_string, Format::JSON);
                     match v {
-                        Ok(res) => Box::into_raw(Box::new(res)) as *mut c_void,
+                        Ok(res) => Box::into_raw(Box::new(res)).cast::<libc::c_void>(),
                         Err(_) => null_mut(),
                     }
                 }
@@ -144,7 +145,7 @@ pub mod type_methods {
                     };
                     let v = m.from_str(&json_string, Format::JSON);
                     match v {
-                        Ok(res) => Box::into_raw(Box::new(res)) as *mut c_void,
+                        Ok(res) => Box::into_raw(Box::new(res)).cast::<libc::c_void>(),
                         Err(_) => null_mut(),
                     }
                 }
@@ -193,12 +194,12 @@ pub mod type_methods {
         }
         match get_manager_type() {
             ManagerType::SerdeValue => {
-                let v = value as *mut RedisJSON<serde_json::Value>;
+                let v = value.cast::<RedisJSON<serde_json::Value>>();
                 // Take ownership of the data from Redis (causing it to be dropped when we return)
                 Box::from_raw(v);
             }
             ManagerType::IValue => {
-                let v = value as *mut RedisJSON<ijson::IValue>;
+                let v = value.cast::<RedisJSON<ijson::IValue>>();
                 // Take ownership of the data from Redis (causing it to be dropped when we return)
                 Box::from_raw(v);
             }
@@ -210,16 +211,37 @@ pub mod type_methods {
         let mut out = serde_json::Serializer::new(Vec::new());
         let json = match get_manager_type() {
             ManagerType::SerdeValue => {
-                let v = unsafe { &*(value as *mut RedisJSON<serde_json::Value>) };
+                let v = unsafe { &*value.cast::<RedisJSON<serde_json::Value>>() };
                 v.data.serialize(&mut out).unwrap();
                 String::from_utf8(out.into_inner()).unwrap()
             }
             ManagerType::IValue => {
-                let v = unsafe { &*(value as *mut RedisJSON<ijson::IValue>) };
+                let v = unsafe { &*value.cast::<RedisJSON<ijson::IValue>>() };
                 v.data.serialize(&mut out).unwrap();
                 String::from_utf8(out.into_inner()).unwrap()
             }
         };
-        raw::save_string(rdb, &json);
+        let cjson = CString::new(json).unwrap();
+        raw::save_string(rdb, cjson.to_str().unwrap());
+    }
+
+    #[allow(non_snake_case, unused)]
+    pub unsafe extern "C" fn mem_usage(value: *const c_void) -> usize {
+        match get_manager_type() {
+            ManagerType::SerdeValue => {
+                let json = unsafe { &*(value as *mut RedisJSON<serde_json::Value>) };
+                let manager = RedisJsonKeyManager {
+                    phantom: PhantomData,
+                };
+                manager.get_memory(&json.data).unwrap_or(0)
+            }
+            ManagerType::IValue => {
+                let json = unsafe { &*(value as *mut RedisJSON<ijson::IValue>) };
+                let manager = RedisIValueJsonKeyManager {
+                    phantom: PhantomData,
+                };
+                manager.get_memory(&json.data).unwrap_or(0)
+            }
+        }
     }
 }
