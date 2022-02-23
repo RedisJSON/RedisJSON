@@ -76,9 +76,8 @@ commands:
           name: System setup
           shell: /bin/bash -l -eo pipefail
           command: |
-            python3 -m pip list -v
             ./sbin/system-setup.py <<parameters.system_setup_params>>
-            python3 -m pip list -v
+            python3 -m pip list
             source $HOME/.cargo/env
             rustc --version
             cargo --version

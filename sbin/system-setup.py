@@ -15,7 +15,6 @@ import paella
 class RedisJSONSetup(paella.Setup):
     def __init__(self, args):
         paella.Setup.__init__(self, args.nop)
-        self.coverage = args.coverage
 
     def common_first(self):
         self.install_downloaders()
@@ -24,10 +23,7 @@ class RedisJSONSetup(paella.Setup):
 
         if self.osnick == 'ol8':
             self.install("tar")
-        if self.coverage:
-            self.run("%s/bin/getclang -v 12" % READIES)
-        else:
-            self.run("%s/bin/getclang --modern" % READIES)
+        self.run("%s/bin/getclang --modern" % READIES)
         if not self.has_command("rustc"):
             self.run("%s/bin/getrust" % READIES)
         self.run("%s/bin/getcmake --usr" % READIES)
@@ -58,7 +54,6 @@ class RedisJSONSetup(paella.Setup):
 
 parser = argparse.ArgumentParser(description='Set up system for build.')
 parser.add_argument('-n', '--nop', action="store_true", help='no operation')
-parser.add_argument('--coverage', action="store_true", help='setup for coverage analisys (older CLang version)')
 args = parser.parse_args()
 
 RedisJSONSetup(args).setup()
