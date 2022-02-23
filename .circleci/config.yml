@@ -57,6 +57,7 @@ commands:
           command: |
             git submodule update --init deps/readies
             ./deps/readies/bin/getpy3
+            python3 -m pip install awscli
 
   install-prerequisites:
     parameters:
@@ -66,15 +67,17 @@ commands:
       getredis_params:
         type: string
         default: ""
+      system_setup_params:
+        type: string
+        default: ""
     steps:
       - setup-automation
       - run:
           name: System setup
           shell: /bin/bash -l -eo pipefail
           command: |
-            python3 -m pip list -v
-            ./sbin/system-setup.py
-            python3 -m pip list -v
+            ./sbin/system-setup.py <<parameters.system_setup_params>>
+            python3 -m pip list
             source $HOME/.cargo/env
             rustc --version
             cargo --version
@@ -359,7 +362,7 @@ jobs:
 
   coverage:
     docker:
-      - image: redisfab/rmbuilder:6.2.5-x64-bullseye
+      - image: redisfab/rmbuilder:6.2.5-x64-bionic
     steps:
       - early-returns
       - checkout-all
@@ -431,6 +434,8 @@ jobs:
     docker:
       - image: redisfab/rmbuilder:6.2.5-x64-bullseye
     steps:
+      - early-returns
+      - early-return-for-forked-pull-requests
       - checkout
       - setup-automation
       - run:
