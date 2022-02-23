@@ -367,8 +367,7 @@ jobs:
     steps:
       - early-returns
       - checkout-all
-      - install-prerequisites:
-          system_setup_params: "--coverage"
+      - install-prerequisites
       - run:
           name: Build & Test
           shell: /bin/bash -l -eo pipefail
