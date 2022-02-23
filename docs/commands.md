@@ -320,7 +320,7 @@ Toggle a boolean value stored at `path`.
 
 #### Return value
 
-[Integer][2], specifically the new value (0-false or 1-true), or [null][6] element for JSON values matching the path which are not boolean.
+[Array][4] of [Integer][2], specifically the new value (0-false or 1-true), or [null][6] element for JSON values matching the path which are not boolean.
 
 ### JSON.STRAPPEND
 
