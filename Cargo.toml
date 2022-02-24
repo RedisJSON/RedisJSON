@@ -3,7 +3,7 @@ cargo-features = ["edition2021"]
 [package]
 name = "redisjson"
 version = "99.99.99"
-authors = ["Gavrie Philipson <gavrie@redis.com>"]
+authors = ["Guy Korland <guy.korland@redis.com>", "Meir Shpilraien <meir@redis.com>", "Omer Shadmi <omer.shadmi@redis.com>"]
 edition = "2021"
 description = "JSON data type for Redis"
 repository = "https://github.com/RedisJSON/RedisJSON"
