@@ -73,6 +73,39 @@ FT.SEARCH userIdx '@name:(John)'
    2) "{\"user\":{\"name\":\"John Smith\",\"tag\":\"foo,bar\",\"hp\":1000,\"dmg\":150}}"
 ```
 
+## Indexing JSON arrays with tags
+
+It is possible to index scalar string and boolean values in JSON arrays by using the wildcard operator in the JSON Path. For example if you were indexing blog posts you might have a field called `tags` which is an array of tags that apply to the blog post.
+
+```JSON
+{
+   "title":"Using RedisJson is Easy and Fun",
+   "tags":["redis","json","redisjson"]
+}
+```
+
+You can apply an index to the `tags` field by specifying the JSON Path `$.tags.*` in your schema creation:
+
+```bash
+FT.CREATE blog-idx ON JSON PREFIX 1 Blog: SCHEMA $.tags.* AS tags TAG
+```
+
+You would then set a blog post as you would any other JSON document:
+
+```bash
+JSON.SET Blog:1 . '{"title":"Using RedisJson is Easy and Fun", "tags":["redis","json","redisjson"]}'
+```
+
+And finally you can search using the typical tag searching syntax:
+
+```bash
+127.0.0.1:6379> FT.SEARCH blog-idx "@tags:{redis}"
+1) (integer) 1
+2) "Blog:1"
+3) 1) "$"
+   2) "{\"title\":\"Using RedisJson is Easy and Fun\",\"tags\":[\"redis\",\"json\",\"redisjson\"]}"
+```
+
 ## Field projection
 
 `FT.SEARCH` returns the whole document by default.
@@ -147,10 +180,18 @@ FT.AGGREGATE userIdx '*' LOAD 6 $.user.hp AS hp $.user.dmg AS dmg APPLY '@hp-@dm
 
 ## Current indexing limitations
 
-### It is not possible to index JSON objects or JSON arrays.
+### JSON arrays can only be indexed in TAG identifiers.
+
+It is only possible to index an array of strings or booleans in a TAG identifier.
+Other types (numeric, geo, null) are not supported.
+
+### It is not possible to index JSON objects.
 
 To be indexed, a JSONPath expression must return a single scalar value (string or number).
-If the JSONPath expression returns an object or an array, it will be ignored.
+
+If the JSONPath expression returns an object, it will be ignored.
+
+However it is possible to index the strings in separated attributes.
 
 Given the following document:
 

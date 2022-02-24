@@ -10,6 +10,7 @@
     "test_names_modules": [
         "{{RS_MODULE}}"
     ],
+    "global_spot_instances": "ondemand",
     "cycle_environments_setup": [
       {
         "teardown": true,

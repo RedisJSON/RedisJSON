@@ -1,8 +1,16 @@
+cargo-features = ["edition2021"]
+
 [package]
 name = "redisjson"
-version = "2.0.6"
-authors = ["Gavrie Philipson <gavrie@redislabs.com>"]
+version = "2.0.7"
+authors = ["Gavrie Philipson <gavrie@redis.com>"]
 edition = "2021"
+description = "JSON data type for Redis"
+repository = "https://github.com/RedisJSON/RedisJSON"
+readme = "README.md" 
+license = "Redis Source Available License (RSAL)"
+keywords = ["redis", "json", "plugin"]
+categories = ["database-implementations"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -16,7 +24,7 @@ serde_json = "1.0"
 serde = "1.0"
 libc = "0.2"
 jsonpath_lib = { git = "https://github.com/RedisJSON/jsonpath.git", branch = "generic_json_path" }
-redis-module = { version="0.25", features = ["experimental-api"]}
+redis-module = { version="1.0", features = ["experimental-api"]}
 itertools = "0.10.1"
 [features]
 # Workaround to allow cfg(feature = "test") in redismodue-rs dependencies:
