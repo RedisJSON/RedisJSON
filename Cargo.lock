@@ -325,7 +325,7 @@ checksum = "1aab8fc367588b89dcee83ab0fd66b72b50b72fa1904d7095045ace2b0c81c35"
 [[package]]
 name = "jsonpath_lib"
 version = "0.2.6"
-source = "git+https://github.com/RedisJSON/jsonpath.git?branch=generic_json_path#198043336123efdb71172af9f5aef18ef5ec2d6b"
+source = "git+https://github.com/RedisJSON/jsonpath.git?branch=generic_json_path#f768d20a5f3e73b990266d1cf8724f0dd9842182"
 dependencies = [
  "array_tool",
  "ijson",
