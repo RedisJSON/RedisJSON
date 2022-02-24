@@ -1035,6 +1035,18 @@ def testIssue_597(env):
     # make sure value was not changed
     env.expect("JSON.GET", "test", ".").equal('[0]')
 
+def testCrashInParserMOD2099(env):
+
+    r = env
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$', '{"a":{"x":{"i":10}}, "b":{"x":{"i":20, "j":5}}}'))
+    
+    res = r.execute_command('JSON.GET', 'test', '$..x[?(@.i>10)]')
+    r.assertEqual(res, '[{"i":20,"j":5}]')
+    
+    res = r.execute_command('JSON.GET', 'test', '$..x[?($.i>10)]')
+    r.assertEqual(res, '[]')
+    
+
 # class CacheTestCase(BaseReJSONTest):
 #     @property
 #     def module_args(env):
