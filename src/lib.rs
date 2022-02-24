@@ -515,7 +515,7 @@ redis_json_module_create! {
             _ => None,
         }
     },
-    version: 99_99_99,
+    version: 02_00_07,
     init: dummy_init,
     info: dummy_info,
 }
