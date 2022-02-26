@@ -133,7 +133,7 @@ fn update<F: FnMut(&mut IValue) -> Result<Option<()>, Error>>(
                         let mut v = e.get_mut();
                         match (func)(&mut v) {
                             Ok(res) => {
-                                if let None = res {
+                                if res.is_none() {
                                     e.remove();
                                 }
                             }
@@ -152,7 +152,7 @@ fn update<F: FnMut(&mut IValue) -> Result<Option<()>, Error>>(
                             let mut v = &mut arr.as_mut_slice()[x];
                             match (func)(&mut v) {
                                 Ok(res) => {
-                                    if let None = res {
+                                    if res.is_none() {
                                         arr.remove(x);
                                     }
                                 }

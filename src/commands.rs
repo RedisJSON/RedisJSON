@@ -861,17 +861,21 @@ pub fn command_json_mget<M: Manager>(
             .iter()
             .map(|key| {
                 manager
-                    .open_key_read(ctx, key)?
-                    .get_value()?
-                    .map(|doc| {
-                        if !is_legacy {
-                            to_string(doc)
-                        } else {
-                            to_string_legacy(doc)
-                        }
+                    .open_key_read(ctx, key)
+                    .map_or(Ok(RedisValue::Null), |json_key| {
+                        json_key.get_value().map_or(Ok(RedisValue::Null), |value| {
+                            value
+                                .map(|doc| {
+                                    if !is_legacy {
+                                        to_string(doc)
+                                    } else {
+                                        to_string_legacy(doc)
+                                    }
+                                })
+                                .transpose()
+                                .map_or(Ok(RedisValue::Null), |v| Ok(v.into()))
+                        })
                     })
-                    .transpose()
-                    .map_or_else(|_| Ok(RedisValue::Null), |v| Ok(v.into()))
             })
             .collect();
 
@@ -1895,7 +1899,7 @@ pub fn command_json_clear<M: Manager>(
         SelectValueType::Array | SelectValueType::Object => v.len().unwrap() > 0,
         SelectValueType::Long => v.get_long() != 0,
         SelectValueType::Double => v.get_double() != 0.0,
-        SelectValueType::String => v.get_str().len() > 0,
+        SelectValueType::String => !v.get_str().is_empty(),
         SelectValueType::Bool => v.get_bool(),
         _ => false,
     })?;
