@@ -69,6 +69,7 @@ Some languages have client libraries that provide support for RedisJSON's comman
 
 | Project | Language | License | Author | Stars | Package |
 | ------- | -------- | ------- | ------ | ----- | --- |
+| [node-redis][node-redis-url] | Node.js | MIT | [Redis][node-redis-author] | [![node-redis-stars]][node-redis-url] | [npm][node-redis-package] |
 | [iorejson][iorejson-url] | Node.js | MIT | [Evan Huang @evanhuang8][iorejson-author] | [![iorejson-stars]][iorejson-url] | [npm][iorejson-package] |
 | [node_redis-rejson][node_redis-rejson-url] | Node.js | MIT | [Kyle Davis @stockholmux][node_redis-rejson-author] | [![node_redis-rejson-stars]][node_redis-rejson-url] | [npm][node_redis-rejson-package]  |
 | [redis-modules-sdk][redis-modules-sdk-url] | Node.js | BSD-3-Clause | [Dani Tseitlin @danitseitlin][redis-modules-sdk-author] | [![redis-modules-sdk-stars]][redis-modules-sdk-url] | [npm][redis-modules-sdk-package] |
@@ -87,6 +88,10 @@ Some languages have client libraries that provide support for RedisJSON's comman
 | [redislabs-rejson][redislabs-rejson-url]  | PHP | MIT | [Mehmet Korkmaz @mkorkmaz][redislabs-rejson-author] | [![redislabs-rejson-stars]][redislabs-rejson-url] | [composer][redislabs-rejson-package] |
 | [rejson-rb][rejson-rb-url]  | Ruby | MIT | [Pavan Vachhani @vachhanihpavan][rejson-rb-author] | [![rejson-rb-stars]][rejson-rb-url] | [rubygems][rejson-rb-package]|
 
+[node-redis-author]: https://redis.com
+[node-redis-url]: https://github.com/redis/node-redis
+[node-redis-package]: https://www.npmjs.com/package/redis
+[node-redis-stars]: https://img.shields.io/github/stars/redis/node-redis.svg?style=social&amp;label=Star&amp;maxAge=2592000
 [iorejson-author]: https://github.com/evanhuang8
 [iorejson-url]: https://github.com/evanhuang8/iorejson
 [iorejson-package]: https://www.npmjs.com/package/iorejson

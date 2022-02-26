@@ -48,8 +48,6 @@ SYM=${SYM:-1}
 mkdir -p $ARTDIR $ARTDIR/snapshots
 ARTDIR=$(cd $ARTDIR && pwd)
 
-. $READIES/bin/enable-utf8
-
 export ARCH=$($READIES/bin/platform --arch)
 export OS=$($READIES/bin/platform --os)
 export OSNICK=$($READIES/bin/platform --osnick)
@@ -64,6 +62,7 @@ export OSNICK=$($READIES/bin/platform --osnick)
 [[ $OSNICK == focal ]]   && OSNICK=ubuntu20.04
 [[ $OSNICK == centos7 ]] && OSNICK=rhel7
 [[ $OSNICK == centos8 ]] && OSNICK=rhel8
+[[ $OSNICK == ol8 ]] && OSNICK=rhel8
 
 export PRODUCT=rejson
 export PRODUCT_LIB=$PRODUCT.so

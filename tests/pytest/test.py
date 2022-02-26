@@ -242,6 +242,20 @@ def testSetWithPathErrors(env):
     r.expect('JSON.SET', 'x', '$[0]', 1).raiseError()
     # r.assertEqual(str(e.exception), 'Err: path not an object')
 
+def testGetWithPathErrors(env):
+    r = env
+
+    r.expect('JSON.SET', 'x', '.', '{}').ok()
+
+    # None-existing paths are reported with an error message
+    # If paths contain illegal characters, the error message must not contain them
+
+    # Path (and error message) with embedded nulls in path
+    r.expect('JSON.GET', 'x', 'gar\x00\x00bage').raiseError().contains("does not exist")
+
+    # Path (and error message) with end of line delimiters
+    r.expect('JSON.GET', 'x', 'not\x0d\x0aallowed by protocol').raiseError().contains("does not exist")
+
 def testGetNonExistantPathsFromBasicDocumentShouldFail(env):
     """Test failure of getting non-existing values"""
 
@@ -1020,6 +1034,18 @@ def testIssue_597(env):
     env.expect("JSON.SET", "test", ".[1]", "[0]", "NX").raiseError()
     # make sure value was not changed
     env.expect("JSON.GET", "test", ".").equal('[0]')
+
+def testCrashInParserMOD2099(env):
+
+    r = env
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$', '{"a":{"x":{"i":10}}, "b":{"x":{"i":20, "j":5}}}'))
+    
+    res = r.execute_command('JSON.GET', 'test', '$..x[?(@.i>10)]')
+    r.assertEqual(res, '[{"i":20,"j":5}]')
+    
+    res = r.execute_command('JSON.GET', 'test', '$..x[?($.i>10)]')
+    r.assertEqual(res, '[]')
+    
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property
