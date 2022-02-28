@@ -1,6 +1,8 @@
-<img src="images/logo.svg" alt="logo" width="200"/>
+---
+title: RedisJSON - a JSON data type for Redis
+linkTitle: RedisJSON
+---
 
-# RedisJSON - a JSON data type for Redis
 [![Forum](https://img.shields.io/badge/Forum-RedisJSON-blue)](https://forum.redis.com/c/modules/redisjson)
 [![Discord](https://img.shields.io/discord/697882427875393627?style=flat-square)](https://discord.gg/QUkjSsk)
 
