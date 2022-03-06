@@ -1,3 +1,13 @@
+
+---
+title: "JSON.ARRLEN command"
+linkTitle: "JSON.ARRLEN"
+type: docs
+weight: 1
+description: >
+    "detailed description"
+---
+
 Reports the length of the JSON Array at `path` in `key`.
 
 `path` defaults to root if not provided. Returns null if the `key` or `path` do not exist.

@@ -1,3 +1,12 @@
+---
+title: "JSON.MGET command"
+linkTitle: "JSON.MGET"
+type: docs
+weight: 1
+description: >
+    "detailed description"
+---
+
 Returns the values at `path` from multiple `key` arguments. Returns null for nonexistent keys and nonexistent paths.
 
 @return

@@ -1,3 +1,12 @@
+---
+title: "JSON.SET command"
+linkTitle: "JSON.SET"
+type: docs
+weight: 1
+description: >
+    "detailed description"
+---
+
 Sets the JSON value at `path` in `key`.
 
 For new Redis keys the `path` must be the root. For existing keys, when the entire `path` exists, the value that it contains is replaced with the `json` value. For existing keys, when the `path` exists, except for the last element, a new child is added with the `json` value. 

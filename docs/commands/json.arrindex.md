@@ -1,3 +1,12 @@
+---
+title: "JSON.ARRINDEX command"
+linkTitle: "JSON.ARRINDEX"
+type: docs
+weight: 1
+description: >
+    "detailed description"
+---
+
 Searches for the first occurrence of a scalar JSON value in an array.
 
 The optional inclusive `start` (default 0) and exclusive `stop` (default 0, meaning that the last element is included) specify a slice of the array to search.

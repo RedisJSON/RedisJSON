@@ -1,3 +1,12 @@
+---
+title: "JSON.RESP command"
+linkTitle: "JSON.RESP"
+type: docs
+weight: 1
+description: >
+    "detailed description"
+---
+
 Returns the JSON in `key` in [Redis Serialization Protocol (RESP)][5] form.
 
 `path` defaults to root if not provided. This command uses the following mapping from JSON to RESP:

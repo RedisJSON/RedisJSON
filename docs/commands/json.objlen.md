@@ -1,3 +1,12 @@
+---
+title: "JSON.OBJLEN command"
+linkTitle: "JSON.OBJLEN"
+type: docs
+weight: 1
+description: >
+    "detailed description"
+---
+
 Reports the number of keys in the JSON Object at `path` in `key`.
 
 `path` defaults to root if not provided. Returns null if the `key` or `path` do not exist.

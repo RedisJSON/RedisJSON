@@ -1,3 +1,12 @@
+---
+title: "JSON.ARRPOP command"
+linkTitle: "JSON.ARRPOP"
+type: docs
+weight: 1
+description: >
+    "detailed description"
+---
+
 Removes and returns an element from the index in the array.
 
 `path` defaults to root if not provided. `index` is the position in the array to start popping from (defaults to -1, meaning the last element). Out-of-range indexes round to their respective array ends. Popping an empty array returns null.

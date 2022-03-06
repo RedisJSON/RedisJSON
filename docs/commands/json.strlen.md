@@ -1,3 +1,12 @@
+---
+title: "JSON.STRLEN command"
+linkTitle: "JSON.STRLEN"
+type: docs
+weight: 1
+description: >
+    "detailed description"
+---
+
 Reports the length of the JSON String at `path` in `key`.
 
 `path` defaults to root if not provided. Returns null if the `key` or `path` do not exist.

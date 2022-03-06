@@ -1,3 +1,12 @@
+---
+title: "JSON.ARRAPPEND command"
+linkTitle: "JSON.ARRAPPEND"
+type: docs
+weight: 1
+description: >
+    "detailed description"
+---
+
 Append the `json` values into the array at `path` after the last element in it.
 
 @return

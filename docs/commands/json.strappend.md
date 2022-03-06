@@ -1,3 +1,12 @@
+---
+title: "JSON.STRAPPEND command"
+linkTitle: "JSON.STRAPPEND"
+type: docs
+weight: 1
+description: >
+    "detailed description"
+---
+
 Appends the `json-string` values to the string at `path`.
 
 `path` defaults to root if not provided.

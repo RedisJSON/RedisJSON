@@ -1,3 +1,12 @@
+---
+title: "JSON.GET command"
+linkTitle: "JSON.GET"
+type: docs
+weight: 1
+description: >
+    "detailed description"
+---
+
 Returns the value at `path` in JSON serialized form.
 
 This command accepts multiple `path` arguments. If no path is given, it defaults to the value's root.
