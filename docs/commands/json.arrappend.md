@@ -4,7 +4,7 @@ Append the `json` values into the array at `path` after the last element in it.
 
 @array-reply of @integer-reply - for each path, the array's new size, or @null-reply if the matching JSON value is not an array.
 
-#### Example
+@examples
 
 ```
 redis> JSON.SET doc $ '{"a":[1], "nested": {"a": [1,2]}, "nested2": {"a": 42}}'

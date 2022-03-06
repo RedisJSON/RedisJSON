@@ -6,7 +6,7 @@ Reports the type of JSON value at `path`.
 
 @array-reply of @string-reply - for each path, the value's type.
 
-#### Examples
+@examples
 
 ```
 redis> JSON.SET doc $ '{"a":2, "nested": {"a": true}, "foo": "bar"}'

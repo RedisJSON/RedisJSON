@@ -4,7 +4,7 @@ Multiplies the number value stored at `path` by `number`.
 
 @bulk-string-reply - the stringified new values for each path, or @null-reply element if the matching JSON value is not a number.
 
-#### Example
+@examples
 
 ```
 redis> JSON.SET doc . '{"a":"b","b":[{"a":2}, {"a":5}, {"a":"c"}]}'
