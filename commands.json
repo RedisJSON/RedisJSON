@@ -309,7 +309,7 @@
       {
         "name": "path",
         "type": "string",
-        "optioanl": true
+        "optional": true
       }
     ],
     "since": "1.0.0",
