@@ -532,7 +532,7 @@ workflows:
           context: common
           matrix:
             parameters:
-              platform: [focal, bionic, xenial, ol8, centos7, bullseye]
+              platform: [focal, bionic, xenial, rocky8, centos7, bullseye]
       - build-arm-platforms:
           <<: *on-integ-and-version-tags
           context: common
