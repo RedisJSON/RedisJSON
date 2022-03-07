@@ -258,16 +258,6 @@ coverage:
 #----------------------------------------------------------------------------------------------
 
 docker:
-	$(SHOW)make -C build/platforms build
-
-docker_push:
-	$(SHOW)make -C build/platforms publish
-
-.PHONY: docker docker_push
-
-#----------------------------------------------------------------------------------------------
-
-docker:
 	$(SHOW)$(MAKE) -C build/docker
 ifeq ($(PUBLISH),1)
 	$(SHOW)make -C build/docker publish
