@@ -1,4 +1,11 @@
-# RedisJSON RAM Usage
+---
+title: "RedisJSON RAM Usage"
+linkTitle: "RedisJSON RAM Usage"
+type: docs
+weight: 1
+description: >
+    "Debugging memory consumption"
+---
 
 Every key in Redis takes memory and requires at least the amount of RAM to store the key name, as
 well as some per-key overhead that Redis uses. On top of that, the value in the key also requires

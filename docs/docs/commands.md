@@ -1,5 +1,11 @@
-# RedisJSON commands
-
+---
+title: "RedisJSON commands"
+linkTitle: "RedisJSON commands"
+type: docs
+weight: 1
+description: >
+    "Details relevant to all commands"
+---
 ## Overview
 
 ### Supported JSON

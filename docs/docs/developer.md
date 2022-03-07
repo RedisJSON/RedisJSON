@@ -1,4 +1,11 @@
-# Developer notes
+---
+title: "Developer notes"
+linkTitle: "Developer notes"
+type: docs
+weight: 1
+description: >
+    "Notes on debugging, testing and documentation"
+---
 
 ## Debugging
 
