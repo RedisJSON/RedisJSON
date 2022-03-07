@@ -1,12 +1,3 @@
----
-title: "JSON.NUMINCRBY command"
-linkTitle: "JSON.NUMINCRBY"
-type: docs
-weight: 1
-description: >
-    "detailed description"
----
-
 Increments the number value stored at `path` by `number`.
 
 @return

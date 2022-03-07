@@ -1,12 +1,3 @@
----
-title: "JSON.TYPE command"
-linkTitle: "JSON.TYPE"
-type: docs
-weight: 1
-description: >
-    "detailed description"
----
-
 Reports the type of JSON value at `path`.
 
 `path` defaults to root if not provided. Returns null if the `key` or `path` do not exist.

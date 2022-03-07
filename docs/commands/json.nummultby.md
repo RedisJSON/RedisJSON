@@ -1,12 +1,3 @@
----
-title: "JSON.NUMMULTBY command"
-linkTitle: "JSON.NUMMULTBY"
-type: docs
-weight: 1
-description: >
-    "detailed description"
----
-
 Multiplies the number value stored at `path` by `number`.
 
 @return

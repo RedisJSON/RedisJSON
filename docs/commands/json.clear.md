@@ -1,12 +1,3 @@
----
-title: "JSON.CLEAR command"
-linkTitle: "JSON.CLEAR"
-type: docs
-weight: 1
-description: >
-    "detailed description"
----
-
 Clears container values (Arrays/Objects), sets numeric values to `0`, sets string value to emptys, and sets boolean values to `false`.
 
 Already cleared values are ignored: empty containers, zero numbers, empty strings, `false`, and `null`.

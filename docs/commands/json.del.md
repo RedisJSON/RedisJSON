@@ -1,12 +1,3 @@
----
-title: "JSON.DEL command"
-linkTitle: "JSON.DEL"
-type: docs
-weight: 1
-description: >
-    "detailed description"
----
-
 Deletes a value.
 
 `path` defaults to root if not provided. Ignores nonexistent keys and paths. Deleting an object's root is equivalent to deleting the key from Redis.

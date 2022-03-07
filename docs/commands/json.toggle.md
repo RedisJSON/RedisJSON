@@ -1,12 +1,3 @@
----
-title: "JSON.TOGGLE command"
-linkTitle: "JSON.TOGGLE"
-type: docs
-weight: 1
-description: >
-    "detailed description"
----
-
 Toggle a boolean value stored at `path`.
 
 return

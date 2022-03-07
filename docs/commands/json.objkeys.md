@@ -1,12 +1,3 @@
----
-title: "JSON.OBJKEYS command"
-linkTitle: "JSON.OBJKEYS"
-type: docs
-weight: 1
-description: >
-    "detailed description"
----
-
 Returns the keys in the object that's referenced by `path`.
 
 `path` defaults to root if not provided. Returns null if the object is empty or either `key` or `path` do not exist.

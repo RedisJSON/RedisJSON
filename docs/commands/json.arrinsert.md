@@ -1,12 +1,3 @@
----
-title: "JSON.ARRINSERT command"
-linkTitle: "JSON.ARRINSERT"
-type: docs
-weight: 1
-description: >
-    "detailed description"
----
-
 Inserts the `json` values into the array at `path` before the `index` (shifts to the right).
 
 The index must be in the array's range. Inserting at `index` 0 prepends to the array. Negative index values start from the end of the array.

@@ -1,12 +1,3 @@
----
-title: "JSON.ARRTRIM command"
-linkTitle: "JSON.ARRTRIM"
-type: docs
-weight: 1
-description: >
-    "detailed description"
----
-
 Trims an array so that it contains only the specified inclusive range of elements.
 
 This command is extremely forgiving and using it with out-of-range indexes will not produce an error. There are a few differences between how RedisJSON v2.0 and legacy versions handle out-of-range indexes.
