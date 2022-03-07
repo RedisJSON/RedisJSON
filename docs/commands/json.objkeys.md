@@ -4,7 +4,7 @@ Returns the keys in the object that's referenced by `path`.
 
 @return
 
-@array-reply of @array-reply - for each path, an array of the key names in the object as @bulk-string-reply, or @null-reply if the matching JSON value is not an object. 
+@array-reply of @array-reply - for each path, an array of the key names in the object as @bulk-string-reply, or @nil-reply if the matching JSON value is not an object. 
 
 @examples
 

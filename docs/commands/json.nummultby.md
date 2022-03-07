@@ -2,7 +2,7 @@ Multiplies the number value stored at `path` by `number`.
 
 @return
 
-@bulk-string-reply - the stringified new values for each path, or @null-reply element if the matching JSON value is not a number.
+@bulk-string-reply - the stringified new values for each path, or @nil-reply element if the matching JSON value is not a number.
 
 @examples
 

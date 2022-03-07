@@ -4,7 +4,7 @@ Removes and returns an element from the index in the array.
 
 @return
 
-@array-reply of @bulk-string-reply - for each path, the popped JSON value, or @null-reply if the matching JSON value is not an array.
+@array-reply of @bulk-string-reply - for each path, the popped JSON value, or @nil-reply if the matching JSON value is not an array.
 
 @examples
 

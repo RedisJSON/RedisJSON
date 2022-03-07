@@ -4,7 +4,7 @@ Reports the length of the JSON String at `path` in `key`.
 
 @return
 
-@array-reply of @integer-reply - for each path, the string's length, or @null-reply if the matching JSON value is not a string.
+@array-reply of @integer-reply - for each path, the string's length, or @nil-reply if the matching JSON value is not a string.
 
 
 @examples

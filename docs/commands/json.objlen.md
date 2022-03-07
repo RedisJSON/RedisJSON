@@ -4,7 +4,7 @@ Reports the number of keys in the JSON Object at `path` in `key`.
 
 @return
 
-@array-reply of @integer-reply - for each path, the number of keys in the object, or @null-reply if the matching JSON value is not an object.
+@array-reply of @integer-reply - for each path, the number of keys in the object, or @nil-reply if the matching JSON value is not an object.
 
 @examples
 

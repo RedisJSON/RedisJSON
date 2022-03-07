@@ -2,7 +2,7 @@ Increments the number value stored at `path` by `number`.
 
 @return
 
-@bulk-string-reply: the stringified new value for each path, or @null-reply if the matching JSON value is not a number.
+@bulk-string-reply: the stringified new value for each path, or @nil-reply if the matching JSON value is not a number.
 
 @examples
 

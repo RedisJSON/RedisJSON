@@ -4,7 +4,7 @@ Appends the `json-string` values to the string at `path`.
 
 @return
 
-@array-reply of @integer-reply - for each path, the string's new length, or @null-reply if the matching JSON value is not an array.
+@array-reply of @integer-reply - for each path, the string's new length, or @nil-reply if the matching JSON value is not an array.
 
 @examples
 
