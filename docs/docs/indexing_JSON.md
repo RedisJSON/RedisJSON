@@ -1,4 +1,11 @@
-# Indexing JSON documents
+---
+title: "Indexing JSON documents"
+linkTitle: "Indexing JSON documents"
+type: docs
+weight: 1
+description: >
+    "Indexing and searching JSON documents"
+---
 
 In addition to storing JSON documents, you can also index them using the RediSearch module. This enables full-text search capabilities and document retrieval based on their content. To use this feature, you must install two modules: RedisJSON and RediSearch.
 
