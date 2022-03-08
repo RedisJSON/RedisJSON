@@ -2,7 +2,7 @@ Toggle a boolean value stored at `path`.
 
 return
 
-@integer-reply: specifically the new value (0-false or 1-true), or @nil-reply element for JSON values matching the path which are not boolean.
+@array-reply of @integer-reply - for each path, the new value (0-false or 1-true), or @nil-reply element for JSON values matching the path which are not boolean.
 
 @examples
 
