@@ -14,7 +14,7 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "module"
   },
   "JSON.GET": {
     "summary": "Gets the value at one or more paths in JSON serialized form",
@@ -50,7 +50,7 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "module"
   },
   "JSON.TOGGLE": {
     "summary": "Toggles a boolean value",
@@ -67,7 +67,7 @@
       }
     ],
     "since": "2.0.0",
-    "group": "json"
+    "group": "module"
   },
   "JSON.CLEAR": {
     "summary": "Clears all values from an array or an object, sets numeric values to `0`, sets string values to empty, and sets boolean values to `false`",
@@ -84,7 +84,7 @@
       }
     ],
     "since": "2.0.0",
-    "group": "json"
+    "group": "module"
   },
   "JSON.SET": {
     "summary": "Sets or updates the JSON value at a path",
@@ -119,7 +119,7 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "module"
   },
   "JSON.MGET": {
     "summary": "Returns the values at a path from one or more keys",
@@ -136,7 +136,7 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "module"
   },
   "JSON.NUMINCRBY": {
     "summary": "Increments the numeric value at path by a value",
@@ -156,7 +156,7 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "module"
   },
   "JSON.NUMMULTBY": {
     "summary": "Multiplies the numeric value at path by a value",
@@ -176,7 +176,7 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "module"
   },
   "JSON.STRAPPEND": {
     "summary": "Appends a string to a JSON string value at path",
@@ -197,7 +197,7 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "module"
   },
   "JSON.STRLEN": {
     "summary": "Returns the length of the JSON String at path in key",
@@ -214,7 +214,7 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "module"
   },
   "JSON.ARRAPPEND": {
     "summary": "Append one or more json values into the array at path after the last element in it.",
@@ -236,7 +236,7 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "module"
   },
   "JSON.ARRINDEX": {
     "summary": "Returns the index of the first occurrence of a JSON scalar value in the array at path",
@@ -271,7 +271,7 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "module"
   },
   "JSON.ARRINSERT": {
     "summary": "Inserts the JSON scalar(s) value at the specified index in the array at path",
@@ -296,7 +296,7 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "module"
   },
   "JSON.ARRLEN": {
     "summary": "Returns the length of the array at path",
@@ -313,7 +313,7 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "module"
   },
   "JSON.ARRPOP": {
     "summary": "Removes and returns the element at the specified index in the array at path",
@@ -340,7 +340,7 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "module"
   },
   "JSON.ARRTRIM": {
     "summary": "Trims the array at path to contain only the specified inclusive range of indices from start to stop",
@@ -364,7 +364,7 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "module"
   },
   "JSON.OBJKEYS": {
     "summary": "Returns the JSON keys of the object at path",
@@ -381,7 +381,7 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "module"
   },
   "JSON.OBJLEN": {
     "summary": "Returns the number of keys of the object at path",
@@ -398,7 +398,7 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "module"
   },
   "JSON.TYPE": {
     "summary": "Returns the type of the JSON value at path",
@@ -415,7 +415,7 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "module"
   },
   "JSON.RESP": {
     "summary": "Returns the JSON value at path in Redis Serialization Protocol (RESP)",
@@ -432,20 +432,24 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "module"
   },
   "JSON.DEBUG": {
-    "summary": "Reports information",
+    "summary": "Debugging container command",
+    "complexity": "N/A",
+    "since": "1.0.0",
+    "group": "module"
+  },
+  "JSON.DEBUG HELP": {
+    "summary": "Shows helpful information",
+    "complexity": "N/A",
+    "since": "1.0.0",
+    "group": "module"
+  },
+  "JSON.DEBUG MEMORY": {
+    "summary": "Reports the size in bytes of a key",
     "complexity": "O(N) when path is evaluated to a single value, where N is the size of the value, O(N) when path is evaluated to multiple values, where N is the size of the key",
     "arguments": [
-      {
-        "name": "subcommand",
-        "type": "oneof",
-        "arguments": [
-              "MEMORY",
-              "HELP"
-          ]        
-      },
       {
         "type": "block",
         "optional": true,
@@ -463,6 +467,6 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "module"
   }
 }
