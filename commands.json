@@ -16,6 +16,23 @@
     "since": "1.0.0",
     "group": "module"
   },
+  "JSON.FORGET": {
+    "summary": "Deletes a value",
+    "complexity": "O(N) when path is evaluated to a single value where N is the size of the deleted value, O(N) when path is evaluated to multiple values, where N is the size of the key",
+    "arguments": [
+      {
+        "name": "key",
+        "type": "key"
+      },
+      {
+        "name": "path",
+        "type": "string",
+        "optional": true
+      }
+    ],
+    "since": "1.0.0",
+    "group": "module"
+  },
   "JSON.GET": {
     "summary": "Gets the value at one or more paths in JSON serialized form",
     "complexity": "O(N) when path is evaluated to a single value where N is the size of the value, O(N) when path is evaluated to multiple values, where N is the size of the key",
