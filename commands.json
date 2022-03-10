@@ -45,19 +45,19 @@
       },
       {
         "name": "indent",
-        "command": "INDENT",
+        "token": "INDENT",
         "type": "string",
         "optional": true
       },
       {
         "name": "newline",
-        "command": "NEWLINE",
+        "token": "NEWLINE",
         "type": "string",
         "optional": true
       },
       {
         "name": "space",
-        "command": "SPACE",
+        "token": "SPACE",
         "type": "string",
         "optional": true
       },
@@ -129,12 +129,14 @@
         "type": "oneof",
         "arguments": [
           {
-            "name": "NX",
-            "type": "pure-token"
+            "name": "nx",
+            "type": "pure-token",
+            "token": "NX"            
           },
           {
-            "name": "XX",
-            "type": "pure-token"
+            "name": "xx",
+            "type": "pure-token",
+            "token": "XX"
           }
         ],
         "optional": true

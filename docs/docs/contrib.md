@@ -2,9 +2,9 @@
 title: "Contributor agreement"
 linkTitle: "Contributor agreement"
 type: docs
-weight: 1
+weight: 7
 description: >
-    "The contributor agreement"
+    The contributor agreement
 ---
 # Contributor agreement
 

@@ -2,9 +2,9 @@
 title: "RedisJSON RAM Usage"
 linkTitle: "RedisJSON RAM Usage"
 type: docs
-weight: 1
+weight: 5
 description: >
-    "Debugging memory consumption"
+    Debugging memory consumption
 ---
 
 Every key in Redis takes memory and requires at least the amount of RAM to store the key name, as
@@ -14,7 +14,7 @@ RAM.
 RedisJSON stores JSON values as binary data after deserializing them. This representation is often more
 expensive, size-wize, than the serialized form. The RedisJSON data type uses at least 24 bytes (on
 64-bit architectures) for every value, as can be seen by sampling an empty string with the
-[`JSON.DEBUG MEMORY`](commands.md#jsondebug) command:
+[`JSON.DEBUG MEMORY`](/redisjson/commands#jsondebug) command:
 
 ```
 127.0.0.1:6379> JSON.SET emptystring . '""'

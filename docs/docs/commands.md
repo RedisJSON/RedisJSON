@@ -1,10 +1,10 @@
 ---
-title: "RedisJSON commands"
-linkTitle: "RedisJSON commands"
+title: "Commands"
+linkTitle: "Commands"
 type: docs
 weight: 1
 description: >
-    "Details relevant to all commands"
+    Details relevant to all commands
 ---
 ## Overview
 
@@ -25,9 +25,9 @@ header shows the syntax for the command, where:
 *   Additional optional arguments are indicated by three period characters, for example `...`
 *   The pipe character, `|`, means an exclusive or
 
-Commands usually require a key's name as their first argument. The [path](path.md) is generally assumed to be the root if not specified.
+Commands usually require a key's name as their first argument. The [path](/redisjson/path) is generally assumed to be the root if not specified.
 
-The time complexity of the command does not include that of the [path](path.md#time-complexity-of-path-evaluation). The size - usually denoted _N_ - of a value is:
+The time complexity of the command does not include that of the [path](/redisjson/path#time-complexity-of-path-evaluation). The size - usually denoted _N_ - of a value is:
 
 *   1 for scalar values
 *   The sum of sizes of items in a container

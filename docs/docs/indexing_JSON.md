@@ -1,10 +1,10 @@
 ---
-title: "Indexing JSON documents"
-linkTitle: "Indexing JSON documents"
+title: "Search/Indexing JSON documents"
+linkTitle: "Search/Indexing"
 type: docs
-weight: 1
+weight: 2
 description: >
-    "Indexing and searching JSON documents"
+    Searching and indexing JSON documents
 ---
 
 In addition to storing JSON documents, you can also index them using the RediSearch module. This enables full-text search capabilities and document retrieval based on their content. To use this feature, you must install two modules: RedisJSON and RediSearch.
@@ -67,7 +67,7 @@ Any subsequent query that matches the indexed content will return the document.
 
 ## Searching
 
-To search for documents, use the [FT.SEARCH](Commands.md#FT.SEARCH) commands.
+To search for documents, use the [FT.SEARCH](/redisjson/commands#FT.SEARCH) commands.
 You can search any attribute mentioned in the schema.
 
 Following our example, find the user called `John`:
@@ -169,7 +169,7 @@ FT.SEARCH userIdx '@name:(John)' RETURN 1 name HIGHLIGHT FIELDS 1 name TAGS '<b>
 
 ## Aggregation with JSON Path expression
 
-[Aggregation](Aggregations.md) is a powerful feature. You can use it to generate statistics or build facet queries.
+[Aggregation](/redisearch/aggregations) is a powerful feature. You can use it to generate statistics or build facet queries.
 The LOAD parameter accepts JSON Path expressions. Any value (even not indexed) can be used in the pipeline.
 
 This example loads two numeric values from the JSON document applying a simple operation.

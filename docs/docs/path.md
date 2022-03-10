@@ -1,10 +1,10 @@
 ---
-title: "RedisJSON Path"
-linkTitle: "RedisJSON Path"
+title: "Path"
+linkTitle: "Path"
 type: docs
-weight: 1
+weight: 3
 description: >
-    "Details on RedisJSON JSONPath"
+    RedisJSON JSONPath
 ---
 
 Since no standard for path syntax exists, RedisJSON implements its own. RedisJSON's syntax is based on common best practices and intentionally resembles [JSONPath](http://goessner.net/articles/JsonPath/).

@@ -2,9 +2,9 @@
 title: "Performance"
 linkTitle: "Performance"
 type: docs
-weight: 1
+weight: 4
 description: >
-    "Performance benchmarks"
+    Performance benchmarks
 ---
 
 To get an early sense of what RedisJSON is capable of, you can test it with `redis-benchmark` just like

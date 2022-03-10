@@ -144,7 +144,7 @@ Unless your [Redis client](http://redis.io/clients) already supports Redis modul
 
 #### Python example
 
-This code snippet shows how to use RedisJSON with raw Redis commands from Python with [redis-py](https://github.com/andymccurdy/redis-py):
+This code snippet shows how to use RedisJSON with raw Redis commands from Python with [redis-py](https://github.com/redis/redis-py):
 
 ```Python
 import redis
