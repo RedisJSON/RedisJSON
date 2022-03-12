@@ -59,7 +59,7 @@ Last but not least, some adding and multiplying:
 
 ### Baseline
 
-To establish a baseline, we'll use the Redis [`PING`](https://redis.io/commands/ping) command.
+To establish a baseline, we'll use the Redis [`PING`](/commands/ping) command.
 First, lets see what `redis-benchmark` reports:
 
 ```

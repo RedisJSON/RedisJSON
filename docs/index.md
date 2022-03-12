@@ -42,14 +42,14 @@ docker run -p 6379:6379 --name redis-redisjson redislabs/rejson:latest
 
 ## Using RedisJSON
 
-Before using RedisJSON, you should familiarize yourself with its commands and syntax as detailed in the [commands reference](commands.md) document. However, to quickly get started just review this section and get:
+Before using RedisJSON, you should familiarize yourself with its commands and syntax as detailed in the [commands reference](/commands) document. However, to quickly get started just review this section and get:
 
 1.  A Redis server running the module (see [building](#building-the-module-library) and [loading](#loading-the-module-to-Redis) for instructions)
 1.  Any [Redis](http://redis.io/clients) or [RedisJSON client](#client-libraries)
 
 ### With `redis-cli`
 
-This example will use [`redis-cli`](http://redis.io/topics/rediscli) as the Redis client. The first RedisJSON command to try out is [`JSON.SET`](commands.md#jsonset), which sets a Redis key with a JSON value. All JSON values can be used, for example a string:
+This example will use [`redis-cli`](http://redis.io/topics/rediscli) as the Redis client. The first RedisJSON command to try out is [`JSON.SET`](/commands/json.set), which sets a Redis key with a JSON value. All JSON values can be used, for example a string:
 
 ```
 127.0.0.1:6379> JSON.SET foo $ '"bar"'
@@ -60,7 +60,7 @@ OK
 1) string
 ```
 
-[`JSON.GET`](commands.md#jsonget) and [`JSON.TYPE`](commands.md#jsontype) do literally that regardless of the value's type, but you should really check out `JSON.GET` prettifying powers. Note how the commands are given the period character, i.e. `.`. This is the [path](path.md) to the value in the RedisJSON data type (in this case it just means the root). A couple more string operations:
+[`JSON.GET`](/commands/json.get) and [`JSON.TYPE`](/commands/json.type) do literally that regardless of the value's type, but you should really check out `JSON.GET` prettifying powers. Note how the commands are given the period character, i.e. `.`. This is the [path](/redisjson/path) to the value in the RedisJSON data type (in this case it just means the root). A couple more string operations:
 
 ```
 127.0.0.1:6379> JSON.STRLEN foo $
@@ -72,7 +72,7 @@ OK
 
 ``` 
 
-[`JSON.STRLEN`](commands.md#jsonstrlen) tells you the length of the string, and you can append another string to it with [`JSON.STRAPPEND`](commands.md#jsonstrappend). Numbers can be [incremented](commands.md#jsonnumincrby) and [multiplied](commands.md#jsonnummultby):
+[`JSON.STRLEN`](/commands/json.strlen) tells you the length of the string, and you can append another string to it with [`JSON.STRAPPEND`](/commands/json.strappend). Numbers can be [incremented](/commands/json.numincrby) and [multiplied](/commands/json.nummultby):
 
 ```
 127.0.0.1:6379> JSON.SET num $ 0
@@ -102,7 +102,7 @@ OK
 "[[true,{\"answer\":42}]]"
 ```
 
-The handy [`JSON.DEL`](commands.md#jsondel) command deletes anything you tell it to. Arrays can be manipulated with a dedicated subset of RedisJSON commands:
+The handy [`JSON.DEL`](/commands/json.del) command deletes anything you tell it to. Arrays can be manipulated with a dedicated subset of RedisJSON commands:
 
 ```
 127.0.0.1:6379> JSON.SET arr $ []
@@ -210,7 +210,7 @@ Alternatively, you can have Redis load the module using the following command li
 ~/$ redis-server --loadmodule ./target/release/librejson.so
 ```
 
-Lastly, you can also use the [`MODULE LOAD`](http://redis.io/commands/module-load) command. Note, however, that `MODULE LOAD` is a **dangerous command** and may be blocked/deprecated in the future due to security considerations.
+Lastly, you can also use the [`MODULE LOAD`](/commands/module-load) command. Note, however, that `MODULE LOAD` is a **dangerous command** and may be blocked/deprecated in the future due to security considerations.
 
 Once the module has been loaded successfully, the Redis log should have lines similar to:
 
