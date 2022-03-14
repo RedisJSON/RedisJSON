@@ -11,7 +11,7 @@ other stores it in MessagePack format.
 ## JSON storage
 
 This variant stores the data in JSON format. It uses (when required) the built-in
-[`cjson` library](https://redis.io/commands/eval#cjson) for decoding/encoding from/to JSON to/from
+[`cjson` library](/docs/manual/programmability/lua-api/#cjson-library) for decoding/encoding from/to JSON to/from
 Lua's native table data type. It is made of the following scripts:
 
 *   [`json-set-root.lua`](json-set-root.lua) sets the root to a JSON value. Because this variant
