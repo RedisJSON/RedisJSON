@@ -27,9 +27,9 @@ We test a JSON value that, while purely synthetic, is interesting. The test subj
 who weighs in at 380 bytes and is nested. We first test SETting it, then GETting it using several
 different paths:
 
-<img src="images/bench_pass_100.png" alt="ReJSONBenchmark pass-100.json" style="max-width: 100%;height: auto;"/>
+![ReJSONBenchmark pass-100.json](images/bench_pass_100.png)
 
-<img src="images/bench_pass_100_p.png" alt="ReJSONBenchmark pass-100.json percentiles" style="max-width: 100%;height: auto;"/>
+![ReJSONBenchmark pass-100.json percentiles](images/bench_pass_100_p.png)
 
 ### A bigger array
 
