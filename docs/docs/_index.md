@@ -4,6 +4,8 @@ linkTitle: RedisJSON
 type: docs
 ---
 
+<img src="images/logo.svg" alt="logo" width="200"/>
+
 [![Forum](https://img.shields.io/badge/Forum-RedisJSON-blue)](https://forum.redis.com/c/modules/redisjson)
 [![Discord](https://img.shields.io/discord/697882427875393627?style=flat-square)](https://discord.gg/QUkjSsk)
 
