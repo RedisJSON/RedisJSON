@@ -52,7 +52,7 @@ Before using RedisJSON, you should familiarize yourself with its commands and sy
 
 ### With `redis-cli`
 
-This example will use [`redis-cli`](http://redis.io/topics/rediscli) as the Redis client. The first RedisJSON command to try out is [`JSON.SET`](/commands/json.set), which sets a Redis key with a JSON value. All JSON values can be used, for example a string:
+This example will use [`redis-cli`](http://redis.io/topics/rediscli) as the Redis client. The first RedisJSON command to try out is `JSON.SET`, which sets a Redis key with a JSON value. All JSON values can be used, for example a string:
 
 ```
 127.0.0.1:6379> JSON.SET foo $ '"bar"'
@@ -63,7 +63,7 @@ OK
 1) string
 ```
 
-[`JSON.GET`](/commands/json.get) and [`JSON.TYPE`](/commands/json.type) do literally that regardless of the value's type, but you should really check out `JSON.GET` prettifying powers. Note how the commands are given the period character, i.e. `.`. This is the [path](/redisjson/path) to the value in the RedisJSON data type (in this case it just means the root). A couple more string operations:
+`JSON.GET` and `JSON.TYPE` do literally that regardless of the value's type, but you should really check out `JSON.GET` prettifying powers. Note how the commands are given the period character, i.e. `.`. This is the [path](/redisjson/path) to the value in the RedisJSON data type (in this case it just means the root). A couple more string operations:
 
 ```
 127.0.0.1:6379> JSON.STRLEN foo $
@@ -75,7 +75,7 @@ OK
 
 ``` 
 
-[`JSON.STRLEN`](/commands/json.strlen) tells you the length of the string, and you can append another string to it with [`JSON.STRAPPEND`](/commands/json.strappend). Numbers can be [incremented](/commands/json.numincrby) and [multiplied](/commands/json.nummultby):
+`JSON.STRLEN` tells you the length of the string, and you can append another string to it with `JSON.STRAPPEND`. Numbers can be [incremented](/commands/json.numincrby) and [multiplied](/commands/json.nummultby):
 
 ```
 127.0.0.1:6379> JSON.SET num $ 0
@@ -105,7 +105,7 @@ OK
 "[[true,{\"answer\":42}]]"
 ```
 
-The handy [`JSON.DEL`](/commands/json.del) command deletes anything you tell it to. Arrays can be manipulated with a dedicated subset of RedisJSON commands:
+The handy `JSON.DEL` command deletes anything you tell it to. Arrays can be manipulated with a dedicated subset of RedisJSON commands:
 
 ```
 127.0.0.1:6379> JSON.SET arr $ []

@@ -67,7 +67,7 @@ Any subsequent query that matches the indexed content will return the document.
 
 ## Searching
 
-To search for documents, use the [FT.SEARCH](/commands/ft.search) command.
+To search for documents, use the `FT.SEARCH` command.
 You can search any attribute mentioned in the schema.
 
 Following our example, find the user called `John`:
