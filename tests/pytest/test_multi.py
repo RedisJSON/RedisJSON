@@ -1330,8 +1330,9 @@ def testErrorMessage(env):
     json.resp doc1zzz .b
     (nil)
     """
+
 def testFilterDup_issue667(env):
-    """Test JSON.ARRINDEX command"""
+    """Test issue #667 """
     r = env
      
     r.assertOk(r.execute_command('JSON.SET',
