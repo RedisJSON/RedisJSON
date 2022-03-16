@@ -7,11 +7,6 @@ remote:
 dbconfig:
   - dataset: "https://s3.amazonaws.com/benchmarks.redislabs/redisjson/performance.docs/performance.doc_674.rdb"
 clientconfig:
-  - tool: redis-benchmark
-  - min-tool-version: "6.2.0"
-  - parameters:
-    - clients: 16
-    - requests: 5000000
-    - threads: 2
-    - pipeline: 1
-    - command: "JSON.GET test '$..[?(@.uid==1198)].MD5ModelUID'"
+  benchmark_type: "read-only"
+  tool: memtier_benchmark
+  arguments: "--test-time 180 -c 1 -t 1 --hide-histogram --command 'JSON.GET test \"$..[?(@.uid==1198)].MD5ModelUID\"'"

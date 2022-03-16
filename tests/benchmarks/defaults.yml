@@ -13,3 +13,5 @@ exporter:
       - "$.Tests.Overall.p99_latency_ms"
       - "$.Tests.Overall.max_latency_ms"
       - "$.Tests.Overall.min_latency_ms"
+      - '$."ALL STATS".*."Ops/sec"'
+      - '$."ALL STATS".*."Latency"'
