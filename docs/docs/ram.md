@@ -1,6 +1,6 @@
 ---
 title: "RedisJSON RAM Usage"
-linkTitle: "RedisJSON RAM Usage"
+linkTitle: "Memory Usage"
 type: docs
 weight: 6
 description: >
