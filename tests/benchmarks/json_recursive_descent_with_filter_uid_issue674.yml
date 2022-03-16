@@ -1,6 +1,6 @@
 version: 0.2
 name: "json_recursive_descent_with_filter_uid_issue674"
-description: "JSON.GET test '$..[?(@.uid==1198)].MD5ModelUID || {issue674.json size: 618 KB} https://oss.redislabs.com/redisjson/performance/"
+description: "JSON.GET test '$..[?(@.uid==1198)].MD5ModelUID' || {issue674.json size: 618 KB} https://oss.redislabs.com/redisjson/performance/"
 remote:
  - type: oss-standalone
  - setup: redisearch-m5d
@@ -14,4 +14,4 @@ clientconfig:
     - requests: 5000000
     - threads: 2
     - pipeline: 1
-    - command: "JSON.GET test '$..[?(@.uid==1198)].MD5ModelUID"
+    - command: "JSON.GET test '$..[?(@.uid==1198)].MD5ModelUID'"
