@@ -1330,6 +1330,19 @@ def testErrorMessage(env):
     json.resp doc1zzz .b
     (nil)
     """
+def testFilterDup_issue667(env):
+    """Test JSON.ARRINDEX command"""
+    r = env
+     
+    r.assertOk(r.execute_command('JSON.SET',
+                                 'test',
+                                 '$',
+                                 '[{"name":{"first":"Markss","middle":"S","last":"Pronto"},"rank":1},{"name":{"first":"A","middle":"A","last":"Pronto"},"rank":8},{"name":{"first":"A","middle":"A","last":"Pronto"},"rank":90}]'))
 
+    # Should not get duplicated results
+    res = r.execute_command('JSON.GET',
+                            'test',
+                            '$.[?(@.name.first=="A")]')
+    r.assertEqual(res, '[{"name":{"first":"A","middle":"A","last":"Pronto"},"rank":8},{"name":{"first":"A","middle":"A","last":"Pronto"},"rank":90}]')
 
 
