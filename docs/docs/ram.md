@@ -2,7 +2,7 @@
 title: "RedisJSON RAM Usage"
 linkTitle: "RedisJSON RAM Usage"
 type: docs
-weight: 5
+weight: 6
 description: >
     Debugging memory consumption
 ---
