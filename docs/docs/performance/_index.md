@@ -1,7 +1,6 @@
 ---
 title: "Performance"
 linkTitle: "Performance"
-type: docs
 weight: 5
 description: >
     Performance benchmarks

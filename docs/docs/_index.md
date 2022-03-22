@@ -1,7 +1,6 @@
 ---
 title: RedisJSON - a JSON data type for Redis
 linkTitle: RedisJSON
-type: docs
 ---
 
 <img src="images/logo.svg" alt="logo" width="200"/>

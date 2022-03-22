@@ -1,7 +1,6 @@
 ---
 title: "Path"
 linkTitle: "Path"
-type: docs
 weight: 3
 description: >
     RedisJSON JSONPath
