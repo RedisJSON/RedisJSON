@@ -1,58 +1,30 @@
 ---
-title: RedisJSON - a JSON data type for Redis
-linkTitle: RedisJSON
+title: RedisJSON
+description: JSON support for Redis
+linkTitle: JSON
 type: docs
 ---
 
-<img src="images/logo.svg" alt="logo" width="200"/>
-
-[![Forum](https://img.shields.io/badge/Forum-RedisJSON-blue)](https://forum.redis.com/c/modules/redisjson)
 [![Discord](https://img.shields.io/discord/697882427875393627?style=flat-square)](https://discord.gg/QUkjSsk)
 
-RedisJSON is a [Redis](https://redis.io/) module that implements [ECMA-404 The JSON Data Interchange Standard](http://json.org/) as a native data type. It allows storing, updating and fetching JSON values from Redis keys (documents).
+RedisJSON is a [Redis](https://redis.io/) module that provides JSON support in Redis. RedisJSON lets your store, update, and retrieve JSON values in Redis just as you would with any other Redis data type. RedisJSON also works seamlessly with RediSearch to let you index and query your JSON documents.
 
-Primary features:
+## Primary features
 
-* Full support of the JSON standard
-* [JSONPath](http://goessner.net/articles/JsonPath/)-like syntax for selecting elements inside documents
-* Documents are stored as binary data in a tree structure, allowing fast access to sub-elements
+* Full support for the JSON standard
+* A [JSONPath](http://goessner.net/articles/JsonPath/)-like syntax for selecting elements inside documents
+* Documents stored as binary data in a tree structure, allowing fast access to sub-elements
 * Typed atomic operations for all JSON values types
-
-RedisJSON is developed with <3 at [Redis](https://redis.com). The source code is available
-at: [https://github.com/RedisJSON/RedisJSON](https://github.com/RedisJSON/RedisJSON)
-
-## Quickstart
-
-1.  [Create a free database in Redis Cloud](#redis-cloud)
-1.  [Launch RedisJSON with Docker](#launch-redisjson-with-docker)
-1.  [Use it from **any** Redis client](#using-redisjson), e.g.:
-
-![RedisJSON with `redis-cli`](images/demo.gif)
-
-Alternatively, you can also build and load the module yourself. [Build and Load the RedisJSON module library](#building-and-loading-the-module)
-
-## Redis Cloud
-
-RedisJSON is available on all Redis Cloud managed services, including a completely free tier up to 30MB!
-
-[Get started here](https://redis.com/redis-enterprise-cloud/pricing/)
-
-## Launch RedisJSON with Docker
-Run the following on Windows, MacOS or Linux with Docker.
-```
-docker run -p 6379:6379 --name redis-redisjson redislabs/rejson:latest
-```
 
 ## Using RedisJSON
 
-Before using RedisJSON, you should familiarize yourself with its commands and syntax as detailed in the [commands reference](/redisjson/commands) document. However, to quickly get started just review this section and get:
-
-1.  A Redis server running the module (see [building](#building-on-ubuntu-2004) and [loading](#loading-the-module-to-redis) for instructions)
-1.  Any [Redis](http://redis.io/clients) or [RedisJSON client](#client-libraries)
+To learn how to use RedisJSON, it's best to start with the Redis CLI. The following examples assume that you're connected to a Redis server with RedisJSON enabled.
 
 ### With `redis-cli`
 
-This example will use [`redis-cli`](http://redis.io/topics/rediscli) as the Redis client. The first RedisJSON command to try out is `JSON.SET`, which sets a Redis key with a JSON value. All JSON values can be used, for example a string:
+To following along, start [`redis-cli`](http://redis.io/topics/rediscli).
+
+The first RedisJSON command to try is `JSON.SET`, which sets a Redis key with a JSON value. All JSON values can be used, for example a string:
 
 ```
 127.0.0.1:6379> JSON.SET foo $ '"bar"'
@@ -141,10 +113,6 @@ OK
    3) "loggedOut"
 ```
 
-### With any other client
-
-Unless your [Redis client](http://redis.io/clients) already supports Redis modules (unlikely) or RedisJSON specifically (even more unlikely), you should be okay using its ability to send raw Redis commands. Depending on your client of choice, the exact method for doing that may vary.
-
 #### Python example
 
 This code snippet shows how to use RedisJSON with raw Redis commands from Python with [redis-py](https://github.com/redis/redis-py):
@@ -160,22 +128,6 @@ data = {
 r = redis.StrictRedis()
 r.json().set('doc', '$', json.dumps(data))
 reply = json.loads(r.json().get('doc', '$'))
-```
-
-## Download and running binaries
-
-First download the pre-compiled version from [Redis download center](https://redis.com/download-center/modules/).
-
-Next, run Redis with RedisJSON:
-
-```
-$ redis-server --loadmodule /path/to/module/rejson.so
-```
-
-## Building and Loading the Module
-
-```
-cargo build --release
 ```
 
 ### Building on Ubuntu 20.04
