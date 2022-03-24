@@ -15,7 +15,7 @@ The term _JSON Value_ refers to any of the valid values. A _Container_ is either
 
 ### RedisJSON API
 
-Details on module's [commands](/commands/?group=redisjson) can be filtered for a specific module or command, e.g., [`JSON`](/commands/?group=redisjson&name=json.arr).
+Details on module's [commands](/commands/?group=json) can be filtered for a specific module or command, e.g., [`JSON`](/commands/?group=json&name=json.arr).
 The details also include the syntax for the commands, where:
 
 *   Command and subcommand names are in uppercase, for example `JSON.SET` or `INDENT`
