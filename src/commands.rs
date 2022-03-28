@@ -5,12 +5,19 @@ use crate::manager::{err_msg_json_expected, err_msg_json_path_doesnt_exist_with_
 use crate::manager::{AddUpdateInfo, Manager, ReadHolder, SetUpdateInfo, UpdateInfo, WriteHolder};
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 use crate::redisjson::{normalize_arr_indices, Format, Path};
-use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
-use jsonpath_lib::select::Selector;
+use jsonpath_calculator::select_value::{SelectValue, SelectValueType};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use std::cmp::Ordering;
 use std::str::FromStr;
+
+use jsonpath_calculator;
+use jsonpath_calculator::{
+    compile,
+    create,
+    create_with_generator,
+    json_path::UserPathTracker,
+};
 
 use crate::redisjson::SetOptions;
 
@@ -147,11 +154,16 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     }
 
     fn get_values<'b>(&'a self, path: &'b str) -> Result<Vec<&'a V>, Error> {
-        let mut selector = Selector::new();
-        selector.str_path(path)?;
-        selector.value(self.val);
-        let results = selector.select()?;
+        let query = compile(path)?;
+        let calculator = create(&query);
+        
+        let results = calculator.calc(self.val);
         Ok(results)
+        // let mut selector = Selector::new();
+        // selector.str_path(path)?;
+        // selector.value(self.val);
+        // let results = selector.select()?;
+        // Ok(results)
     }
 
     pub fn serialize_object<O: Serialize>(
@@ -181,15 +193,23 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         // memory efficient and we're using it anyway. See https://github.com/serde-rs/json/issues/635.
         let mut missing_path = None;
         let temp_doc = paths.drain(..).fold(HashMap::new(), |mut acc, path: Path| {
-            let mut selector = Selector::new();
-            selector.value(self.val);
-            if selector.str_path(path.get_path()).is_err() {
+            
+            // let mut selector = Selector::new();
+            // selector.value(self.val);
+            let query = compile(path.get_path());
+            if query.is_err() {
                 return acc;
             }
-            let value = match selector.select() {
-                Ok(s) if is_legacy && !s.is_empty() => Some(Values::Single(s[0])),
-                Ok(s) if !is_legacy => Some(Values::Multi(s)),
-                _ => None,
+            let query = query.unwrap();
+            let calculator = create(&query);
+            
+            let s = calculator.calc(self.val);
+            let value = if is_legacy && !s.is_empty() {
+                Some(Values::Single(s[0]))
+            } else if !is_legacy{
+                Some(Values::Multi(s))
+            } else {
+                None
             };
 
             if value.is_none() && missing_path.is_none() {
@@ -266,12 +286,16 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     .map(|e| e.to_string())
                     .collect::<Vec<_>>()
                     .join("");
-                let mut selector = Selector::default();
-                if let Err(e) = selector.str_path(&p) {
-                    return Err(e.into());
-                }
-                selector.value(self.val);
-                let mut res = selector.select_with_paths(|_| true)?;
+                let query = compile(&p)?;
+                let path_calculator = create_with_generator(&query);
+                let mut res = path_calculator.calc_paths(self.val);
+
+                // let mut selector = Selector::default();
+                // if let Err(e) = selector.str_path(&p) {
+                //     return Err(e.into());
+                // }
+                // selector.value(self.val);
+                // let mut res = selector.select_with_paths(|_| true)?;
                 Ok(res
                     .drain(..)
                     .map(|v| {
@@ -285,11 +309,15 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         } else if let StaticPathElement::ArrayIndex(_) = last {
             // if we reach here with array path we are either out of range
             // or no-oping an NX where the value is already present
-            let mut selector = Selector::default();
-            let res = selector
-                .str_path(path)?
-                .value(self.val)
-                .select_with_paths(|_| true)?;
+            // let mut selector = Selector::default();
+            // let res = selector
+            //     .str_path(path)?
+            //     .value(self.val)
+            //     .select_with_paths(|_| true)?;
+
+            let query = compile(&path)?;
+            let path_calculator = create_with_generator(&query);
+            let res = path_calculator.calc_paths(self.val);
             if !res.is_empty() {
                 Ok(Vec::new())
             } else {
@@ -306,11 +334,14 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         option: &SetOptions,
     ) -> Result<Vec<UpdateInfo>, Error> {
         if SetOptions::NotExists != *option {
-            let mut selector = Selector::default();
-            let mut res = selector
-                .str_path(path)?
-                .value(self.val)
-                .select_with_paths(|_| true)?;
+            // let mut selector = Selector::default();
+            // let mut res = selector
+            //     .str_path(path)?
+            //     .value(self.val)
+            //     .select_with_paths(|_| true)?;
+            let query = compile(&path)?;
+            let path_calculator = create_with_generator(&query);
+            let mut res = path_calculator.calc_paths(self.val);
             if !res.is_empty() {
                 return Ok(res
                     .drain(..)
@@ -667,12 +698,23 @@ pub fn command_json_set<M: Manager>(
 fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
     path: &str,
     doc: &T,
-    f: F,
+    mut f: F,
 ) -> Result<Vec<Vec<String>>, RedisError> {
-    Ok(Selector::default()
-        .str_path(path)?
-        .value(doc)
-        .select_with_paths(f)?)
+    let query = match compile(path){
+        Ok(q) => q,
+        Err(e) => return Err(RedisError::String(e.to_string())),
+    };
+    let path_calculator = create_with_generator(&query);
+    let mut res = path_calculator.calc_with_paths(doc);
+    Ok(res.drain(..).filter(|e| {
+        f(e.res)
+    }).map(|e| {
+        e.path_tracker.unwrap().to_string_path()
+    }).collect())
+    // Ok(Selector::default()
+    //     .str_path(path)?
+    //     .value(doc)
+    //     .select_with_paths(f)?)
 }
 
 /// Returns tuples of Value and its concrete path which match the given `path`
@@ -680,10 +722,19 @@ fn get_all_values_and_paths<'a, T: SelectValue>(
     path: &str,
     doc: &'a T,
 ) -> Result<Vec<(&'a T, Vec<String>)>, RedisError> {
-    Ok(Selector::default()
-        .str_path(path)?
-        .value(doc)
-        .select_values_with_paths()?)
+    let query = match compile(path){
+        Ok(q) => q,
+        Err(e) => return Err(RedisError::String(e.to_string())),
+    };
+    let path_calculator = create_with_generator(&query);
+    let mut res = path_calculator.calc_with_paths(doc);
+    Ok(res.drain(..).map(|e| {
+        (e.res, e.path_tracker.unwrap().to_string_path())
+    }).collect())
+    // Ok(Selector::default()
+    //     .str_path(path)?
+    //     .value(doc)
+    //     .select_values_with_paths()?)
 }
 
 /// Returns a Vec of paths with `None` for Values that do not match the filter

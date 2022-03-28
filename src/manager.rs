@@ -1,4 +1,4 @@
-use jsonpath_lib::select::select_value::SelectValue;
+use jsonpath_calculator::select_value::SelectValue;
 use serde_json::map::Entry;
 use serde_json::{Number, Value};
 

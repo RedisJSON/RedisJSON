@@ -8,8 +8,8 @@ use std::{
 };
 
 use crate::commands::KeyValue;
-use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
-use jsonpath_lib::select::Selector;
+use jsonpath_calculator::select_value::{SelectValue, SelectValueType};
+use jsonpath_calculator::{compile, create};
 use redis_module::raw as rawmod;
 use redis_module::{Context, RedisString, Status};
 
@@ -219,16 +219,14 @@ pub fn json_api_free_iter<M: Manager>(_: M, iter: *mut c_void) {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -> *const c_void {
     let v = unsafe { &*(val.cast::<M::V>()) };
-    let mut selector = Selector::new();
-    selector.value(v);
     let path = unsafe { CStr::from_ptr(path).to_str().unwrap() };
-    if selector.str_path(path).is_err() {
-        return null();
-    }
-    match selector.select() {
-        Ok(s) => Box::into_raw(Box::new(ResultsIterator { results: s, pos: 0 })).cast::<c_void>(),
-        Err(_) => null(),
-    }
+    let query = match compile(path) {
+        Ok(q) => q,
+        Err(_) => return null(),
+    };
+    let path_calculator = create(&query);
+    let res = path_calculator.calc(v);
+    Box::into_raw(Box::new(ResultsIterator { results: res, pos: 0 })).cast::<c_void>()
 }
 
 pub fn json_api_is_json<M: Manager>(m: M, key: *mut rawmod::RedisModuleKey) -> c_int {
