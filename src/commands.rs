@@ -12,12 +12,7 @@ use std::cmp::Ordering;
 use std::str::FromStr;
 
 use jsonpath_calculator;
-use jsonpath_calculator::{
-    compile,
-    create,
-    create_with_generator,
-    json_path::UserPathTracker,
-};
+use jsonpath_calculator::{compile, create, create_with_generator, json_path::UserPathTracker};
 
 use crate::redisjson::SetOptions;
 
@@ -156,7 +151,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     fn get_values<'b>(&'a self, path: &'b str) -> Result<Vec<&'a V>, Error> {
         let query = compile(path)?;
         let calculator = create(&query);
-        
+
         let results = calculator.calc(self.val);
         Ok(results)
         // let mut selector = Selector::new();
@@ -193,7 +188,6 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         // memory efficient and we're using it anyway. See https://github.com/serde-rs/json/issues/635.
         let mut missing_path = None;
         let temp_doc = paths.drain(..).fold(HashMap::new(), |mut acc, path: Path| {
-            
             // let mut selector = Selector::new();
             // selector.value(self.val);
             let query = compile(path.get_path());
@@ -202,11 +196,11 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             }
             let query = query.unwrap();
             let calculator = create(&query);
-            
+
             let s = calculator.calc(self.val);
             let value = if is_legacy && !s.is_empty() {
                 Some(Values::Single(s[0]))
-            } else if !is_legacy{
+            } else if !is_legacy {
                 Some(Values::Multi(s))
             } else {
                 None
@@ -700,17 +694,17 @@ fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
     doc: &T,
     mut f: F,
 ) -> Result<Vec<Vec<String>>, RedisError> {
-    let query = match compile(path){
+    let query = match compile(path) {
         Ok(q) => q,
         Err(e) => return Err(RedisError::String(e.to_string())),
     };
     let path_calculator = create_with_generator(&query);
     let mut res = path_calculator.calc_with_paths(doc);
-    Ok(res.drain(..).filter(|e| {
-        f(e.res)
-    }).map(|e| {
-        e.path_tracker.unwrap().to_string_path()
-    }).collect())
+    Ok(res
+        .drain(..)
+        .filter(|e| f(e.res))
+        .map(|e| e.path_tracker.unwrap().to_string_path())
+        .collect())
     // Ok(Selector::default()
     //     .str_path(path)?
     //     .value(doc)
@@ -722,15 +716,16 @@ fn get_all_values_and_paths<'a, T: SelectValue>(
     path: &str,
     doc: &'a T,
 ) -> Result<Vec<(&'a T, Vec<String>)>, RedisError> {
-    let query = match compile(path){
+    let query = match compile(path) {
         Ok(q) => q,
         Err(e) => return Err(RedisError::String(e.to_string())),
     };
     let path_calculator = create_with_generator(&query);
     let mut res = path_calculator.calc_with_paths(doc);
-    Ok(res.drain(..).map(|e| {
-        (e.res, e.path_tracker.unwrap().to_string_path())
-    }).collect())
+    Ok(res
+        .drain(..)
+        .map(|e| (e.res, e.path_tracker.unwrap().to_string_path()))
+        .collect())
     // Ok(Selector::default()
     //     .str_path(path)?
     //     .value(doc)

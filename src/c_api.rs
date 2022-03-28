@@ -226,7 +226,11 @@ pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -
     };
     let path_calculator = create(&query);
     let res = path_calculator.calc(v);
-    Box::into_raw(Box::new(ResultsIterator { results: res, pos: 0 })).cast::<c_void>()
+    Box::into_raw(Box::new(ResultsIterator {
+        results: res,
+        pos: 0,
+    }))
+    .cast::<c_void>()
 }
 
 pub fn json_api_is_json<M: Manager>(m: M, key: *mut rawmod::RedisModuleKey) -> c_int {
