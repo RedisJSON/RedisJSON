@@ -3,18 +3,6 @@
 version = 3
 
 [[package]]
-name = "JsonPathCalculator"
-version = "0.1.0"
-source = "git+https://github.com/RedisJSON/JsonPathCalculator.git?branch=master#8aff440446339a4e7fdd63002d9e8f020e821df0"
-dependencies = [
- "ijson",
- "pest",
- "pest_derive",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "addr2line"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -101,7 +89,7 @@ dependencies = [
  "log",
  "peeking_take_while",
  "proc-macro2",
- "quote 1.0.15",
+ "quote 1.0.17",
  "regex",
  "rustc-hash",
  "shlex",
@@ -386,6 +374,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1aab8fc367588b89dcee83ab0fd66b72b50b72fa1904d7095045ace2b0c81c35"
 
 [[package]]
+name = "jsonpath_calculator"
+version = "0.1.0"
+source = "git+https://github.com/RedisJSON/JsonPathCalculator.git?branch=master#f4da1a0f2d8f033f55a8c59c29c80be4b0136073"
+dependencies = [
+ "ijson",
+ "pest",
+ "pest_derive",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "jsonpath_lib"
 version = "0.2.6"
 source = "git+https://github.com/RedisJSON/jsonpath.git?branch=generic_json_path#6da271ec44ff56db0d2e7009efc707935ee8c0f8"
@@ -411,9 +411,9 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "libc"
-version = "0.2.120"
+version = "0.2.121"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad5c14e80759d0939d013e6ca49930e59fc53dd8e5009132f76240c179380c09"
+checksum = "efaa7b300f3b5fe8eb6bf21ce3895e1751d9665086af2d64b42f19701015ff4f"
 
 [[package]]
 name = "libloading"
@@ -433,9 +433,9 @@ checksum = "7fb9b38af92608140b86b693604b9ffcc5824240a484d1ecd4795bacb2fe88f3"
 
 [[package]]
 name = "log"
-version = "0.4.14"
+version = "0.4.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51b9bbe6c47d51fc3e1a9b945965946b4c44142ab8792c50835a980d362c2710"
+checksum = "6389c490849ff5bc16be905ae24bc913a9c8892e19b2341dbc175e14c341c2b8"
 dependencies = [
  "cfg-if",
 ]
@@ -571,8 +571,8 @@ dependencies = [
  "pest",
  "pest_meta",
  "proc-macro2",
- "quote 1.0.15",
- "syn 1.0.88",
+ "quote 1.0.17",
+ "syn 1.0.90",
 ]
 
 [[package]]
@@ -609,9 +609,9 @@ checksum = "7a6e920b65c65f10b2ae65c831a81a073a89edd28c7cce89475bff467ab4167a"
 
 [[package]]
 name = "quote"
-version = "1.0.15"
+version = "1.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "864d3e96a899863136fc6e99f3d7cae289dafe43bf2c5ac19b70df7210c0a145"
+checksum = "632d02bff7f874a36f33ea8bb416cd484b90cc66c1194b1a1110d067a7013f58"
 dependencies = [
  "proc-macro2",
 ]
@@ -678,10 +678,10 @@ dependencies = [
 name = "redisjson"
 version = "99.99.99"
 dependencies = [
- "JsonPathCalculator",
  "bson",
  "ijson",
  "itertools",
+ "jsonpath_calculator",
  "jsonpath_lib",
  "libc",
  "log",
@@ -747,8 +747,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08597e7152fcd306f41838ed3e37be9eaeed2b61c42e2117266a554fab4662f9"
 dependencies = [
  "proc-macro2",
- "quote 1.0.15",
- "syn 1.0.88",
+ "quote 1.0.17",
+ "syn 1.0.90",
 ]
 
 [[package]]
@@ -795,9 +795,9 @@ checksum = "5bb0dc7ee9c15cea6199cde9a127fa16a4c5819af85395457ad72d68edc85a38"
 dependencies = [
  "heck",
  "proc-macro2",
- "quote 1.0.15",
+ "quote 1.0.17",
  "rustversion",
- "syn 1.0.88",
+ "syn 1.0.90",
 ]
 
 [[package]]
@@ -813,12 +813,12 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "1.0.88"
+version = "1.0.90"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebd69e719f31e88618baa1eaa6ee2de5c9a1c004f1e9ecdb58e8352a13f20a01"
+checksum = "704df27628939572cd88d33f171cd6f896f4eaca85252c6e0a72d8d8287ee86f"
 dependencies = [
  "proc-macro2",
- "quote 1.0.15",
+ "quote 1.0.17",
  "unicode-xid 0.2.2",
 ]
 
@@ -916,9 +916,9 @@ checksum = "1a143597ca7c7793eff794def352d41792a93c481eb1042423ff7ff72ba2c31f"
 
 [[package]]
 name = "which"
-version = "4.2.4"
+version = "4.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a5a7e487e921cf220206864a94a89b6c6905bfc19f1057fa26a4cb360e5c1d2"
+checksum = "5c4fb54e6113b6a8772ee41c3404fb0301ac79604489467e0a9ce1f3e97c24ae"
 dependencies = [
  "either",
  "lazy_static",
