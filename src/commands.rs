@@ -12,7 +12,10 @@ use std::cmp::Ordering;
 use std::str::FromStr;
 
 use jsonpath_calculator;
-use jsonpath_calculator::{compile, create, create_with_generator, json_path::UserPathTracker};
+use jsonpath_calculator::{
+    compile, create, create_with_generator, json_path::DummyTrackerGenerator,
+    json_path::PathCalculator, json_path::UserPathTracker,
+};
 
 use crate::redisjson::SetOptions;
 
@@ -150,9 +153,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
 
     fn get_values<'b>(&'a self, path: &'b str) -> Result<Vec<&'a V>, Error> {
         let query = compile(path)?;
-        let calculator = create(&query);
-
-        let results = calculator.calc(self.val);
+        let results = PathCalculator::<DummyTrackerGenerator>::calc_once(query, self.val);
         Ok(results)
         // let mut selector = Selector::new();
         // selector.str_path(path)?;
