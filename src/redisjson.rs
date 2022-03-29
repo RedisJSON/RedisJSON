@@ -227,6 +227,7 @@ pub mod type_methods {
         raw::save_string(rdb, cjson.to_str().unwrap());
     }
 
+    /// # Safety
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn mem_usage(value: *const c_void) -> usize {
         match get_manager_type() {

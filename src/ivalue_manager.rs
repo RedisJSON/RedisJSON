@@ -36,7 +36,7 @@ pub struct IValueKeyHolderWrite<'a> {
 /// If the returned value from `func` is [`None`], the current value is removed.
 /// If the returned value from `func` is [`Err`], the current value remains (although it could be modified by `func`)
 ///
-fn replace<F: FnMut(IValue) -> Result<Option<IValue>, Error>>(
+fn replace<F: FnMut(&mut IValue) -> Result<Option<IValue>, Error>>(
     path: &[String],
     root: &mut IValue,
     mut func: F,
@@ -53,8 +53,8 @@ fn replace<F: FnMut(IValue) -> Result<Option<IValue>, Error>>(
                 let obj = target_once.as_object_mut().unwrap();
                 if is_last {
                     if let Entry::Occupied(mut e) = obj.entry(token) {
-                        let mut v = e.get_mut();
-                        match (func)(&mut v) {
+                        let v = e.get_mut();
+                        match (func)(v) {
                             Ok(res) => {
                                 if let Some(res) = res {
                                     *v = res;
@@ -75,8 +75,8 @@ fn replace<F: FnMut(IValue) -> Result<Option<IValue>, Error>>(
                 if let Ok(x) = token.parse::<usize>() {
                     if is_last {
                         if x < arr.len() {
-                            let mut v = &mut arr.as_mut_slice()[x];
-                            match (func)(&mut v) {
+                            let v = &mut arr.as_mut_slice()[x];
+                            match (func)(v) {
                                 Ok(res) => {
                                     if let Some(res) = res {
                                         *v = res;
@@ -115,7 +115,7 @@ fn replace<F: FnMut(IValue) -> Result<Option<IValue>, Error>>(
 /// If the returned value from `func` is [`Err`], the current value remains (although it could be modified by `func`)
 ///
 fn update<F: FnMut(&mut IValue) -> Result<Option<()>, Error>>(
-    path: &Vec<String>,
+    path: &[String],
     root: &mut IValue,
     mut func: F,
 ) -> Result<(), Error> {
@@ -130,8 +130,8 @@ fn update<F: FnMut(&mut IValue) -> Result<Option<()>, Error>>(
                 let obj = target_once.as_object_mut().unwrap();
                 if is_last {
                     if let Entry::Occupied(mut e) = obj.entry(token) {
-                        let mut v = e.get_mut();
-                        match (func)(&mut v) {
+                        let v = e.get_mut();
+                        match (func)(v) {
                             Ok(res) => {
                                 if res.is_none() {
                                     e.remove();
@@ -149,8 +149,8 @@ fn update<F: FnMut(&mut IValue) -> Result<Option<()>, Error>>(
                 if let Ok(x) = token.parse::<usize>() {
                     if is_last {
                         if x < arr.len() {
-                            let mut v = &mut arr.as_mut_slice()[x];
-                            match (func)(&mut v) {
+                            let v = &mut arr.as_mut_slice()[x];
+                            match (func)(v) {
                                 Ok(res) => {
                                     if res.is_none() {
                                         arr.remove(x);
@@ -186,8 +186,8 @@ impl<'a> IValueKeyHolderWrite<'a> {
     {
         if paths.is_empty() {
             // updating the root require special treatment
-            let mut root = self.get_value().unwrap().unwrap();
-            let res = (op_fun)(&mut root);
+            let root = self.get_value().unwrap().unwrap();
+            let res = (op_fun)(root);
             match res {
                 Ok(res) => {
                     if res.is_none() {
