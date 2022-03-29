@@ -376,7 +376,7 @@ checksum = "1aab8fc367588b89dcee83ab0fd66b72b50b72fa1904d7095045ace2b0c81c35"
 [[package]]
 name = "jsonpath_calculator"
 version = "0.1.0"
-source = "git+https://github.com/RedisJSON/JsonPathCalculator.git?branch=master#f4da1a0f2d8f033f55a8c59c29c80be4b0136073"
+source = "git+https://github.com/RedisJSON/JsonPathCalculator.git?branch=master#128c5652e69d08a8d3ca9bbe70762d23e2f28e0a"
 dependencies = [
  "ijson",
  "pest",

@@ -13,8 +13,7 @@ use std::str::FromStr;
 
 use jsonpath_calculator;
 use jsonpath_calculator::{
-    compile, create, create_with_generator, json_path::DummyTrackerGenerator,
-    json_path::PathCalculator, json_path::UserPathTracker,
+    calc_once, calc_once_paths, calc_once_with_paths, compile, json_path::UserPathTracker,
 };
 
 use crate::redisjson::SetOptions;
@@ -153,7 +152,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
 
     fn get_values<'b>(&'a self, path: &'b str) -> Result<Vec<&'a V>, Error> {
         let query = compile(path)?;
-        let results = PathCalculator::<DummyTrackerGenerator>::calc_once(query, self.val);
+        let results = calc_once(query, self.val);
         Ok(results)
         // let mut selector = Selector::new();
         // selector.str_path(path)?;
@@ -196,9 +195,8 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 return acc;
             }
             let query = query.unwrap();
-            let calculator = create(&query);
+            let s = calc_once(query, self.val);
 
-            let s = calculator.calc(self.val);
             let value = if is_legacy && !s.is_empty() {
                 Some(Values::Single(s[0]))
             } else if !is_legacy {
@@ -282,8 +280,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     .collect::<Vec<_>>()
                     .join("");
                 let query = compile(&p)?;
-                let path_calculator = create_with_generator(&query);
-                let mut res = path_calculator.calc_paths(self.val);
+                let mut res = calc_once_paths(query, self.val);
 
                 // let mut selector = Selector::default();
                 // if let Err(e) = selector.str_path(&p) {
@@ -311,8 +308,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             //     .select_with_paths(|_| true)?;
 
             let query = compile(&path)?;
-            let path_calculator = create_with_generator(&query);
-            let res = path_calculator.calc_paths(self.val);
+            let res = calc_once_paths(query, self.val);
             if !res.is_empty() {
                 Ok(Vec::new())
             } else {
@@ -335,8 +331,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             //     .value(self.val)
             //     .select_with_paths(|_| true)?;
             let query = compile(&path)?;
-            let path_calculator = create_with_generator(&query);
-            let mut res = path_calculator.calc_paths(self.val);
+            let mut res = calc_once_paths(query, self.val);
             if !res.is_empty() {
                 return Ok(res
                     .drain(..)
@@ -699,8 +694,7 @@ fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
         Ok(q) => q,
         Err(e) => return Err(RedisError::String(e.to_string())),
     };
-    let path_calculator = create_with_generator(&query);
-    let mut res = path_calculator.calc_with_paths(doc);
+    let mut res = calc_once_with_paths(query, doc);
     Ok(res
         .drain(..)
         .filter(|e| f(e.res))
@@ -721,8 +715,7 @@ fn get_all_values_and_paths<'a, T: SelectValue>(
         Ok(q) => q,
         Err(e) => return Err(RedisError::String(e.to_string())),
     };
-    let path_calculator = create_with_generator(&query);
-    let mut res = path_calculator.calc_with_paths(doc);
+    let mut res = calc_once_with_paths(query, doc);
     Ok(res
         .drain(..)
         .map(|e| (e.res, e.path_tracker.unwrap().to_string_path()))
