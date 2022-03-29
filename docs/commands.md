@@ -78,6 +78,17 @@ OK
 "[{\"a\":2,\"b\":8}]"
 ```
 
+Updating multi paths
+```
+127.0.0.1:6379> JSON.SET doc $ '{"f1": {"a":1}, "f2":{"a":2}}'
+OK
+127.0.0.1:6379> JSON.SET doc $..a 3
+OK
+127.0.0.1:6379> json.get doc
+"{\"f1\":{\"a\":3},\"f2\":{\"a\":3}}"
+```
+
+
 ### JSON.GET
 
 > **Available since 1.0.0.**  
@@ -225,7 +236,7 @@ Clears container values (Arrays/Objects), sets numeric values to `0`, sets strin
 
 Already cleared values are ignored: empty containers, zero numbers, empty strings, `false`, and `null`.
 
-`path` defaults to root if not provided. Non-existing keys and paths are ignored.
+`path` defaults to root if not provided. Non-existing paths are ignored.
 
 #### Return value
 
@@ -309,7 +320,7 @@ Toggle a boolean value stored at `path`.
 
 #### Return value
 
-[Integer][2], specifically the new value (0-false or 1-true), or [null][6] element for JSON values matching the path which are not boolean.
+[Array][4] of [Integer][2], specifically the new value (0-false or 1-true), or [null][6] element for JSON values matching the path which are not boolean.
 
 ### JSON.STRAPPEND
 
