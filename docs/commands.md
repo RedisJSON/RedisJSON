@@ -236,7 +236,7 @@ Clears container values (Arrays/Objects), sets numeric values to `0`, sets strin
 
 Already cleared values are ignored: empty containers, zero numbers, empty strings, `false`, and `null`.
 
-`path` defaults to root if not provided. Non-existing keys and paths are ignored.
+`path` defaults to root if not provided. Non-existing paths are ignored.
 
 #### Return value
 

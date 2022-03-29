@@ -260,6 +260,18 @@ commands:
       module_path:
         type: string
         default: bin/linux-x64-release/rejson.so
+      profile_env:
+        type: string
+        default: "0"
+      benchmark_glob:
+        type: string
+        default: "*.yml"
+      triggering_env:
+        type: string
+        default: "circleci"
+      allowed_envs:
+        type: string
+        default: "oss-standalone"
     steps:
       - run:
           name: Prepare automation
@@ -278,7 +290,9 @@ commands:
             export AWS_SECRET_ACCESS_KEY=$PERFORMANCE_EC2_SECRET_KEY
             export AWS_DEFAULT_REGION=$PERFORMANCE_EC2_REGION
             export EC2_PRIVATE_PEM=$PERFORMANCE_EC2_PRIVATE_PEM
-
+            export PROFILE=<< parameters.profile_env >>
+            export BENCHMARK_GLOB=<< parameters.benchmark_glob >>
+            export PERF_CALLGRAPH_MODE="dwarf"
             redisbench-admin run-remote \
               --required-module ReJSON \
               --module_path "$ROOT/<< parameters.module_path >>" \
@@ -288,8 +302,10 @@ commands:
               --github_sha $CIRCLE_SHA1 \
               --github_branch $CIRCLE_BRANCH \
               --upload_results_s3 \
-              --triggering_env circleci \
-              --push_results_redistimeseries
+              --fail_fast \
+              --triggering_env << parameters.triggering_env >> \
+              --push_results_redistimeseries \
+              --allowed-envs << parameters.allowed_envs >>
 
 #----------------------------------------------------------------------------------------------------------------------------------
 
@@ -442,12 +458,21 @@ jobs:
           name: Run QA Tests
           command: MODULE_VERSION=$CIRCLE_BRANCH VERBOSE=1 TEST=nightly QUICK=1 ./tests/qa/run
 
-  benchmarks:
+  benchmark-json-oss-standalone:
     docker:
       - image: redisfab/rmbuilder:6.2.5-x64-bionic
     steps:
       - build-steps
       - benchmark-steps
+  benchmark-json-oss-standalone-profiler:
+    docker:
+      - image: redisfab/rmbuilder:6.2.5-x64-bionic
+    steps:
+      - build-steps
+      - benchmark-steps:
+          profile_env: "1"
+          triggering_env: "circleci.profilers" # results generated with profilers attached are not mixed with the ones without it 
+  
 
 #----------------------------------------------------------------------------------------------------------------------------------
 
@@ -532,7 +557,7 @@ workflows:
           context: common
           matrix:
             parameters:
-              platform: [focal, bionic, xenial, ol8, centos7, bullseye]
+              platform: [focal, bionic, xenial, rocky8, centos7, bullseye]
       - build-arm-platforms:
           <<: *on-integ-and-version-tags
           context: common
@@ -550,9 +575,6 @@ workflows:
           matrix:
             parameters:
               san-type: [address] # [address, memory]
-      - benchmarks:
-          context: common
-          <<: *on-integ-and-version-tags
       - upload-artifacts:
           name: upload-artifacts-to-staging-lab
           staging-lab: "1"
@@ -575,6 +597,13 @@ workflows:
           <<: *on-version-tags
           requires:
             - upload-release-artifacts
+      - benchmark-json-oss-standalone:
+          <<: *on-integ-and-version-tags
+          context: common
+      - benchmark-json-oss-standalone-profiler:
+          <<: *on-integ-and-version-tags
+          context: common
+
 
   nightly:
     triggers:
@@ -592,5 +621,7 @@ workflows:
           matrix:
             parameters:
               redis_version: ["6.0", "6.2"]
-      - benchmarks:
+      - benchmark-json-oss-standalone:
+          context: common
+      - benchmark-json-oss-standalone-profiler:
           context: common

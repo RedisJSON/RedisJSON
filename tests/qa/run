@@ -87,13 +87,18 @@ run_test() {
 }
 
 rc=0
-if [[ $QUICK == 1 ]]; then
-	RS_VERSIONS=$(cat $HERE/RS_VERSIONS | head -1)
-else
-	RS_VERSIONS=$(cat $HERE/RS_VERSIONS)
-fi
-for RS_VERSION in $RS_VERSIONS; do
+if [[ -n $RS_VERSION ]]; then
 	run_test $RS_VERSION
-	[[ $? != 0 && $rc == 0 ]] && rc=$?
-done
+	rc=$?
+else
+	if [[ $QUICK == 1 ]]; then
+		RS_VERSIONS=$(cat $HERE/RS_VERSIONS | head -1)
+	else
+		RS_VERSIONS=$(cat $HERE/RS_VERSIONS)
+	fi
+	for RS_VERSION in $RS_VERSIONS; do
+		run_test $RS_VERSION
+		[[ $? != 0 && $rc == 0 ]] && rc=$?
+	done
+fi
 exit $rc
