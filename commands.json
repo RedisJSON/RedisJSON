@@ -275,6 +275,7 @@
         "type": "string"
       },
       {
+        "name": "range",
         "type": "block",
         "optional": true,
         "arguments": [
@@ -344,6 +345,7 @@
         "type": "key"
       },
       {
+        "name": "path",
         "type": "block",
         "optional": true,
         "arguments": [
@@ -471,6 +473,7 @@
     "complexity": "O(N) when path is evaluated to a single value, where N is the size of the value, O(N) when path is evaluated to multiple values, where N is the size of the key",
     "arguments": [
       {
+        "name": "key_path",
         "type": "block",
         "optional": true,
         "arguments": [
