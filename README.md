@@ -18,7 +18,7 @@ RedisJSON is a [Redis](https://redis.io/) module that implements [ECMA-404 The J
 * [JSONPath](https://goessner.net/articles/JsonPath/) syntax for selecting elements inside documents
 * Documents are stored as binary data in a tree structure, allowing fast access to sub-elements
 * Typed atomic operations for all JSON values types
-* Secondary index support based on [RediSearch](https://redisearch.io)
+* Secondary index support when combined with [RediSearch](https://redisearch.io)
 
 ## Quick start
 
