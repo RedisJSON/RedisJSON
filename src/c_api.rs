@@ -8,8 +8,8 @@ use std::{
 };
 
 use crate::commands::KeyValue;
-use jsonpath_calculator::select_value::{SelectValue, SelectValueType};
-use jsonpath_calculator::{compile, create};
+use jsonpath_rs::select_value::{SelectValue, SelectValueType};
+use jsonpath_rs::{compile, create};
 use redis_module::raw as rawmod;
 use redis_module::{Context, RedisString, Status};
 

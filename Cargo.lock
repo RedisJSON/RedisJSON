@@ -350,9 +350,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "1.8.0"
+version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "282a6247722caba404c065016bbfa522806e51714c34f5dfc3e4a3a46fcb4223"
+checksum = "0f647032dfaa1f8b6dc29bd3edb7bbef4861b8b8007ebb118d6db284fd59f6ee"
 dependencies = [
  "autocfg",
  "hashbrown",
@@ -374,18 +374,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1aab8fc367588b89dcee83ab0fd66b72b50b72fa1904d7095045ace2b0c81c35"
 
 [[package]]
-name = "jsonpath_calculator"
-version = "0.1.0"
-source = "git+https://github.com/RedisJSON/JsonPathCalculator.git?branch=master#128c5652e69d08a8d3ca9bbe70762d23e2f28e0a"
-dependencies = [
- "ijson",
- "pest",
- "pest_derive",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "jsonpath_lib"
 version = "0.2.6"
 source = "git+https://github.com/RedisJSON/jsonpath.git?branch=generic_json_path#6da271ec44ff56db0d2e7009efc707935ee8c0f8"
@@ -393,6 +381,18 @@ dependencies = [
  "array_tool",
  "ijson",
  "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "jsonpath_rs"
+version = "0.1.0"
+source = "git+https://github.com/RedisJSON/jsonpath_rs.git?branch=master#e5afce25f256d1cb09688f0979d1c173b3fcb0bd"
+dependencies = [
+ "ijson",
+ "pest",
+ "pest_derive",
  "serde",
  "serde_json",
 ]
@@ -572,7 +572,7 @@ dependencies = [
  "pest_meta",
  "proc-macro2",
  "quote 1.0.17",
- "syn 1.0.90",
+ "syn 1.0.91",
 ]
 
 [[package]]
@@ -594,9 +594,9 @@ checksum = "eb9f9e6e233e5c4a35559a617bf40a4ec447db2e84c20b55a6f83167b7e57872"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.36"
+version = "1.0.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7342d5883fbccae1cc37a2353b09c87c9b0f3afd73f5fb9bba687a1f733b029"
+checksum = "ec757218438d5fda206afc041538b2f6d889286160d649a86a24d37e1235afd1"
 dependencies = [
  "unicode-xid 0.2.2",
 ]
@@ -681,8 +681,8 @@ dependencies = [
  "bson",
  "ijson",
  "itertools",
- "jsonpath_calculator",
  "jsonpath_lib",
+ "jsonpath_rs",
  "libc",
  "log",
  "redis-module",
@@ -748,7 +748,7 @@ checksum = "08597e7152fcd306f41838ed3e37be9eaeed2b61c42e2117266a554fab4662f9"
 dependencies = [
  "proc-macro2",
  "quote 1.0.17",
- "syn 1.0.90",
+ "syn 1.0.91",
 ]
 
 [[package]]
@@ -797,7 +797,7 @@ dependencies = [
  "proc-macro2",
  "quote 1.0.17",
  "rustversion",
- "syn 1.0.90",
+ "syn 1.0.91",
 ]
 
 [[package]]
@@ -813,9 +813,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "1.0.90"
+version = "1.0.91"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "704df27628939572cd88d33f171cd6f896f4eaca85252c6e0a72d8d8287ee86f"
+checksum = "b683b2b825c8eef438b77c36a06dc262294da3d5a5813fac20da149241dcd44d"
 dependencies = [
  "proc-macro2",
  "quote 1.0.17",
