@@ -125,9 +125,9 @@ data = {
     'foo': 'bar'
 }
 
-r = redis.StrictRedis()
+r = redis.Redis()
 r.json().set('doc', '$', json.dumps(data))
-reply = json.loads(r.json().get('doc', '$'))
+reply = json.loads(r.json().get('doc', '$')[0])
 ```
 
 ### Building on Ubuntu 20.04
