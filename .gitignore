@@ -8,6 +8,7 @@
 
 # Python
 *.pyc
+venv
 
 # Redis
 # *.rdb

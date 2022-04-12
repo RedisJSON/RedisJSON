@@ -24,13 +24,13 @@ use crate::manager::{Manager, ReadHolder};
 
 #[repr(C)]
 pub enum JSONType {
-    String = 0,
-    Int = 1,
-    Double = 2,
-    Bool = 3,
-    Object = 4,
-    Array = 5,
-    Null = 6,
+    String = 0x01,
+    Int = 0x02,
+    Double = 0x04,
+    Bool = 0x08,
+    Object = 0x10,
+    Array = 0x20,
+    Null = 0x40,
 }
 
 struct ResultsIterator<'a, V: SelectValue> {
