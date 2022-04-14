@@ -186,6 +186,7 @@ pub mod type_methods {
         })
     }
 
+    /// # Safety
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn free(value: *mut c_void) {
         if value.is_null() {
@@ -206,6 +207,7 @@ pub mod type_methods {
         };
     }
 
+    /// # Safety
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
         let mut out = serde_json::Serializer::new(Vec::new());
@@ -225,6 +227,7 @@ pub mod type_methods {
         raw::save_string(rdb, cjson.to_str().unwrap());
     }
 
+    /// # Safety
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn mem_usage(value: *const c_void) -> usize {
         match get_manager_type() {
