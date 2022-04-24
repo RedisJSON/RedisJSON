@@ -2,7 +2,12 @@ name: Trigger website deploy
 on:
   push:
     branches:
-      - master-newdocs
+       - master
+      - '[0-9]+.[0-9]+'
+    paths:
+      - 'mkdocs.yml'
+      - 'docs/**'
+      - 'commands.json'
 
 jobs:
   trigger:
