@@ -1,4 +1,5 @@
-redis>=3.0.0
-redis-py-cluster>=2.1.0
-rltest==0.4.2
-six>=1.10.0
+redis >= 3.0.0
+redis-py-cluster >= 2.1.0
+RLTest ~= 0.4.2
+ramp-packer ~= 2.2.1
+six >= 1.10.0

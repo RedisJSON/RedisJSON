@@ -521,16 +521,16 @@ macro_rules! redis_json_module_export_shared_api {
         static REDISJSON_GETAPI: &str = concat!("RedisJSON_V1", "\0");
 
         pub fn export_shared_api(ctx: &Context) {
-            ctx.log_notice("Exported RedisJSON_V1 API");
             unsafe {
+                ctx.log_notice("Exported RedisJSON_V1 API");
                 LLAPI_CTX = Some(rawmod::RedisModule_GetThreadSafeContext.unwrap()(
                     std::ptr::null_mut(),
-                ))
+                ));
+                ctx.export_shared_api(
+                    &JSONAPI as *const RedisJSONAPI_V1 as *const c_void,
+                    REDISJSON_GETAPI.as_ptr() as *const c_char,
+                );
             };
-            ctx.export_shared_api(
-                &JSONAPI as *const RedisJSONAPI_V1 as *const c_void,
-                REDISJSON_GETAPI.as_ptr() as *const c_char,
-            );
         }
 
         static JSONAPI: RedisJSONAPI_V1 = RedisJSONAPI_V1 {

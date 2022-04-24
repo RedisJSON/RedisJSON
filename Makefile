@@ -178,7 +178,7 @@ else
 	$(SHOW)set -e ;\
 	export RUSTFLAGS="$(RUST_FLAGS)" ;\
 	export RUSTDOCFLAGS="$(RUST_DOCFLAGS)" ;\
-	cargo ${CARGO_TOOLCHAIN} build --target $(RUST_TARGET) $(CARGO_FLAGS)
+	cargo $(CARGO_TOOLCHAIN) build --target $(RUST_TARGET) $(CARGO_FLAGS)
 endif
 	$(SHOW)cp $(TARGET_DIR)/librejson.$(RUST_SOEXT.$(OS)) $(TARGET)
 ifneq ($(DEBUG),1)
@@ -254,16 +254,6 @@ coverage:
 	$(SHOW)$(COVERAGE_COLLECT_REPORT.llvm)
 
 .PHONY: coverage
-
-#----------------------------------------------------------------------------------------------
-
-docker:
-	$(SHOW)make -C build/platforms build
-
-docker_push:
-	$(SHOW)make -C build/platforms publish
-
-.PHONY: docker docker_push
 
 #----------------------------------------------------------------------------------------------
 

@@ -762,7 +762,7 @@ where
 
 /// Sort the paths so higher indices precede lower indices on the same array,
 /// And if one path is a sub-path of the other, then paths with shallower hierarchy (closer to the top-level) precedes paths with deeper hierarchy
-fn prepare_paths_for_deletion(paths: &mut Vec<Vec<String>>) {
+fn prepare_paths_for_deletion(paths: &mut [Vec<String>]) {
     paths.sort_by(|v1, v2| {
         v1.iter()
             .zip_longest(v2.iter())
@@ -1899,7 +1899,7 @@ pub fn command_json_clear<M: Manager>(
         SelectValueType::Array | SelectValueType::Object => v.len().unwrap() > 0,
         SelectValueType::Long => v.get_long() != 0,
         SelectValueType::Double => v.get_double() != 0.0,
-        SelectValueType::String => v.get_str().len() > 0,
+        SelectValueType::String => !v.get_str().is_empty(),
         SelectValueType::Bool => v.get_bool(),
         _ => false,
     })?;

@@ -55,7 +55,7 @@ pub trait WriteHolder<O: Clone, V: SelectValue> {
     fn arr_insert(
         &mut self,
         path: Vec<String>,
-        args: &Vec<O>,
+        args: &[O],
         index: i64,
     ) -> Result<usize, RedisError>;
     fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<String>, RedisError>;
@@ -84,6 +84,7 @@ pub trait Manager {
         ctx: &Context,
         key: RedisString,
     ) -> Result<Self::WriteHolder, RedisError>;
+    #[allow(clippy::wrong_self_convention)]
     fn from_str(&self, val: &str, format: Format) -> Result<Self::O, Error>;
     fn get_memory(&self, v: &Self::V) -> Result<usize, RedisError>;
     fn is_json(&self, key: *mut RedisModuleKey) -> Result<bool, RedisError>;
@@ -122,7 +123,7 @@ pub struct KeyHolderWrite<'a> {
 }
 
 fn update<F: FnMut(Value) -> Result<Option<Value>, Error>>(
-    path: &Vec<String>,
+    path: &[String],
     root: &mut Value,
     mut func: F,
 ) -> Result<(), Error> {
@@ -423,7 +424,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
     fn arr_insert(
         &mut self,
         paths: Vec<String>,
-        args: &Vec<Value>,
+        args: &[Value],
         index: i64,
     ) -> Result<usize, RedisError> {
         let mut res = None;
@@ -437,7 +438,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
             let index = index as usize;
             let mut new_value = v.take();
             let curr = new_value.as_array_mut().unwrap();
-            curr.splice(index..index, args.clone());
+            curr.splice(index..index, args.to_owned());
             res = Some(curr.len());
             Ok(Some(new_value))
         })?;
