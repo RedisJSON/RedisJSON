@@ -224,11 +224,8 @@ impl<'a> KeyHolderWrite<'a> {
                     _ => {
                         let num1 = v.as_f64().unwrap();
                         let num2 = in_value.as_f64().unwrap();
-                        if let Some(num) = Number::from_f64((op2_fun)(num1, num2)) {
-                            Ok(num)
-                        } else {
-                            Err(RedisError::Str("result is not a number"))
-                        }
+                        Number::from_f64((op2_fun)(num1, num2))
+                            .map_or(Err(RedisError::Str("result is not a number")), Ok)
                     }
                 };
                 res = Some(Value::Number(num_res?));
@@ -590,7 +587,7 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
                     } else {
                         docs.iter()
                             .next()
-                            .map_or_else(|| Value::Null, |(_, b)| b.clone().into())                        
+                            .map_or_else(|| Value::Null, |(_, b)| b.clone().into())
                     };
                     Ok(v)
                 })

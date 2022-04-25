@@ -94,11 +94,11 @@ impl<'a> Path<'a> {
         }
     }
 
-    pub fn is_legacy(&self) -> bool {
+    pub const fn is_legacy(&self) -> bool {
         self.fixed_path.is_some()
     }
 
-    pub fn get_path(&'a self) -> &'a str {
+    pub fn get_path(&self) -> &str {
         self.fixed_path
             .as_ref()
             .map_or(self.original_path, String::as_str)
