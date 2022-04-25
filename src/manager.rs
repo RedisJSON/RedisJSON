@@ -180,7 +180,7 @@ fn update<F: FnMut(Value) -> Result<Option<Value>, Error>>(
 }
 
 impl<'a> KeyHolderWrite<'a> {
-    fn do_op<F>(&mut self, paths: Vec<String>, mut op_fun: F) -> Result<(), RedisError>
+    fn do_op<F>(&mut self, paths: &[String], mut op_fun: F) -> Result<(), RedisError>
     where
         F: FnMut(Value) -> Result<Option<Value>, Error>,
     {
@@ -198,7 +198,7 @@ impl<'a> KeyHolderWrite<'a> {
                 }
             }
         } else {
-            update(&paths, self.get_value().unwrap().unwrap(), op_fun)?;
+            update(paths, self.get_value().unwrap().unwrap(), op_fun)?;
         }
 
         Ok(())
@@ -283,11 +283,11 @@ impl<'a> KeyHolderWrite<'a> {
 
 impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
     fn apply_changes(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError> {
-        if ctx.notify_keyspace_event(NotifyEvent::MODULE, command, &self.key_name) != Status::Ok {
-            Err(RedisError::Str("failed notify key space event"))
-        } else {
+        if ctx.notify_keyspace_event(NotifyEvent::MODULE, command, &self.key_name) == Status::Ok {
             ctx.replicate_verbatim();
             Ok(())
+        } else {
+            Err(RedisError::Str("failed notify key space event"))
         }
     }
 
@@ -370,7 +370,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
     }
 
     fn pow_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError> {
-        self.do_num_op(path, num, |i1, i2| i1.pow(i2 as u32), |f1, f2| f1.powf(f2))
+        self.do_num_op(path, num, |i1, i2| i1.pow(i2 as u32), f64::powf)
     }
 
     fn bool_toggle(&mut self, path: Vec<String>) -> Result<bool, RedisError> {
@@ -585,12 +585,12 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
             Format::JSON => Ok(serde_json::from_str(val)?),
             Format::BSON => decode_document(&mut Cursor::new(val.as_bytes()))
                 .map(|docs| {
-                    let v = if !docs.is_empty() {
+                    let v = if docs.is_empty() {
+                        Value::Null
+                    } else {
                         docs.iter()
                             .next()
-                            .map_or_else(|| Value::Null, |(_, b)| b.clone().into())
-                    } else {
-                        Value::Null
+                            .map_or_else(|| Value::Null, |(_, b)| b.clone().into())                        
                     };
                     Ok(v)
                 })

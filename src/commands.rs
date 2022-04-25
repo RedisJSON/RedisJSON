@@ -271,9 +271,9 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     return Err(e.into());
                 }
                 selector.value(self.val);
-                let mut res = selector.select_with_paths(|_| true)?;
+                let res = selector.select_with_paths(|_| true)?;
                 Ok(res
-                    .drain(..)
+                    .into_iter()
                     .map(|v| {
                         UpdateInfo::AUI(AddUpdateInfo {
                             path: v,
@@ -307,13 +307,13 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     ) -> Result<Vec<UpdateInfo>, Error> {
         if SetOptions::NotExists != *option {
             let mut selector = Selector::default();
-            let mut res = selector
+            let res = selector
                 .str_path(path)?
                 .value(self.val)
                 .select_with_paths(|_| true)?;
             if !res.is_empty() {
                 return Ok(res
-                    .drain(..)
+                    .into_iter()
                     .map(|v| UpdateInfo::SUI(SetUpdateInfo { path: v }))
                     .collect());
             }
@@ -687,15 +687,12 @@ fn get_all_values_and_paths<'a, T: SelectValue>(
 }
 
 /// Returns a Vec of paths with `None` for Values that do not match the filter
-fn filter_paths<T, F>(
-    mut values_and_paths: Vec<(&T, Vec<String>)>,
-    f: F,
-) -> Vec<Option<Vec<String>>>
+fn filter_paths<T, F>(values_and_paths: Vec<(&T, Vec<String>)>, f: F) -> Vec<Option<Vec<String>>>
 where
     F: Fn(&T) -> bool,
 {
     values_and_paths
-        .drain(..)
+        .into_iter()
         .map(|(v, p)| match f(v) {
             true => Some(p),
             _ => None,
@@ -704,12 +701,12 @@ where
 }
 
 /// Returns a Vec of Values with `None` for Values that do not match the filter
-fn filter_values<T, F>(mut values_and_paths: Vec<(&T, Vec<String>)>, f: F) -> Vec<Option<&T>>
+fn filter_values<T, F>(values_and_paths: Vec<(&T, Vec<String>)>, f: F) -> Vec<Option<&T>>
 where
     F: Fn(&T) -> bool,
 {
     values_and_paths
-        .drain(..)
+        .into_iter()
         .map(|(v, _)| match f(v) {
             true => Some(v),
             _ => None,

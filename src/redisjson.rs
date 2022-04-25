@@ -101,7 +101,7 @@ impl<'a> Path<'a> {
     pub fn get_path(&'a self) -> &'a str {
         self.fixed_path
             .as_ref()
-            .map_or(self.original_path, |s| s.as_str())
+            .map_or(self.original_path, String::as_str)
     }
 
     pub fn get_original(&self) -> &'a str {

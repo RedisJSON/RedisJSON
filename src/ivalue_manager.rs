@@ -616,7 +616,9 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
             Format::JSON => Ok(serde_json::from_str(val)?),
             Format::BSON => decode_document(&mut Cursor::new(val.as_bytes()))
                 .map(|docs| {
-                    let v = if !docs.is_empty() {
+                    let v = if docs.is_empty() {
+                        IValue::NULL
+                    } else {
                         docs.iter().next().map_or_else(
                             || IValue::NULL,
                             |(_, b)| {
@@ -630,8 +632,6 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                                 .unwrap()
                             },
                         )
-                    } else {
-                        IValue::NULL
                     };
                     Ok(v)
                 })

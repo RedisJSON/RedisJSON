@@ -527,8 +527,8 @@ macro_rules! redis_json_module_export_shared_api {
                     std::ptr::null_mut(),
                 ));
                 ctx.export_shared_api(
-                    &JSONAPI as *const RedisJSONAPI_V1 as *const c_void,
-                    REDISJSON_GETAPI.as_ptr() as *const c_char,
+                    (&JSONAPI as *const RedisJSONAPI_V1).cast::<c_void>(),
+                    REDISJSON_GETAPI.as_ptr().cast::<i8>(),
                 );
             };
         }
