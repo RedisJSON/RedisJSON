@@ -218,7 +218,7 @@ impl<'a> KeyHolderWrite<'a> {
         let in_value = &serde_json::from_str(num)?;
         if let Value::Number(in_value) = in_value {
             let mut res = None;
-            self.do_op(path, |v| {
+            self.do_op(&path, |v| {
                 let num_res = match (v.as_i64(), in_value.as_i64()) {
                     (Some(num1), Some(num2)) => Ok(((op1_fun)(num1, num2)).into()),
                     _ => {
@@ -375,7 +375,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
 
     fn bool_toggle(&mut self, path: Vec<String>) -> Result<bool, RedisError> {
         let mut res = None;
-        self.do_op(path, |v| {
+        self.do_op(&path, |v| {
             let val = v.as_bool().unwrap() ^ true;
             res = Some(val);
             Ok(Some(Value::Bool(val)))
@@ -390,7 +390,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
         let json = serde_json::from_str(&val)?;
         if let Value::String(s) = json {
             let mut res = None;
-            self.do_op(path, |v| {
+            self.do_op(&path, |v| {
                 let new_str = [v.as_str().unwrap(), s.as_str()].concat();
                 res = Some(new_str.len());
                 Ok(Some(Value::String(new_str)))
@@ -409,7 +409,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
 
     fn arr_append(&mut self, path: Vec<String>, mut args: Vec<Value>) -> Result<usize, RedisError> {
         let mut res = None;
-        self.do_op(path, |mut v| {
+        self.do_op(&path, |mut v| {
             let arr = v.as_array_mut().unwrap();
             arr.append(&mut args);
             res = Some(arr.len());
@@ -428,7 +428,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
         index: i64,
     ) -> Result<usize, RedisError> {
         let mut res = None;
-        self.do_op(paths, |mut v| {
+        self.do_op(&paths, |mut v| {
             // Verify legal index in bounds
             let len = v.len().unwrap() as i64;
             let index = if index < 0 { len + index } else { index };
@@ -450,7 +450,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
 
     fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<String>, RedisError> {
         let mut res = None;
-        self.do_op(path, |mut v| {
+        self.do_op(&path, |mut v| {
             if let Some(array) = v.as_array() {
                 if array.is_empty() {
                     return Ok(Some(v));
@@ -475,7 +475,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
 
     fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> Result<usize, RedisError> {
         let mut res = None;
-        self.do_op(path, |mut v| {
+        self.do_op(&path, |mut v| {
             if let Some(array) = v.as_array() {
                 let len = array.len() as i64;
                 let stop = stop.normalize(len);
@@ -508,7 +508,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
 
     fn clear(&mut self, path: Vec<String>) -> Result<usize, RedisError> {
         let mut cleared = 0;
-        self.do_op(path, |v| match v {
+        self.do_op(&path, |v| match v {
             Value::Object(mut obj) => {
                 obj.clear();
                 cleared += 1;

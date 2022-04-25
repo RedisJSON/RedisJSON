@@ -180,7 +180,7 @@ fn update<F: FnMut(&mut IValue) -> Result<Option<()>, Error>>(
 }
 
 impl<'a> IValueKeyHolderWrite<'a> {
-    fn do_op<F>(&mut self, paths: Vec<String>, mut op_fun: F) -> Result<(), RedisError>
+    fn do_op<F>(&mut self, paths: &[String], mut op_fun: F) -> Result<(), RedisError>
     where
         F: FnMut(&mut IValue) -> Result<Option<()>, Error>,
     {
@@ -199,7 +199,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
                 }
             }
         } else {
-            update(&paths, self.get_value().unwrap().unwrap(), op_fun)?;
+            update(paths, self.get_value().unwrap().unwrap(), op_fun)?;
         }
 
         Ok(())
@@ -219,7 +219,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
         let in_value = &serde_json::from_str(num)?;
         if let serde_json::Value::Number(in_value) = in_value {
             let mut res = None;
-            self.do_op(path, |v| {
+            self.do_op(&path, |v| {
                 let num_res = match (
                     v.as_number().unwrap().has_decimal_point(),
                     in_value.as_i64(),
@@ -389,7 +389,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
 
     fn bool_toggle(&mut self, path: Vec<String>) -> Result<bool, RedisError> {
         let mut res = None;
-        self.do_op(path, |v| {
+        self.do_op(&path, |v| {
             if let DestructuredMut::Bool(mut bool_mut) = v.destructure_mut() {
                 //Using DestructuredMut in order to modify a `Bool` variant
                 let val = bool_mut.get() ^ true;
@@ -408,7 +408,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         let json = serde_json::from_str(&val)?;
         if let serde_json::Value::String(s) = json {
             let mut res = None;
-            self.do_op(path, |v| {
+            self.do_op(&path, |v| {
                 let v_str = v.as_string_mut().unwrap();
                 let new_str = [v_str.as_str(), s.as_str()].concat();
                 res = Some(new_str.len());
@@ -429,7 +429,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
 
     fn arr_append(&mut self, path: Vec<String>, args: Vec<IValue>) -> Result<usize, RedisError> {
         let mut res = None;
-        self.do_op(path, |v| {
+        self.do_op(&path, |v| {
             let arr = v.as_array_mut().unwrap();
             for a in args.iter() {
                 arr.push(a.clone());
@@ -450,7 +450,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         index: i64,
     ) -> Result<usize, RedisError> {
         let mut res = None;
-        self.do_op(paths, |v: &mut IValue| {
+        self.do_op(&paths, |v: &mut IValue| {
             // Verify legal index in bounds
             let len = v.len().unwrap() as i64;
             let index = if index < 0 { len + index } else { index };
@@ -475,7 +475,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
 
     fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<String>, RedisError> {
         let mut res = None;
-        self.do_op(path, |v| {
+        self.do_op(&path, |v| {
             if let Some(array) = v.as_array_mut() {
                 if array.is_empty() {
                     return Ok(Some(()));
@@ -497,7 +497,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
 
     fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> Result<usize, RedisError> {
         let mut res = None;
-        self.do_op(path, |v| {
+        self.do_op(&path, |v| {
             if let Some(array) = v.as_array_mut() {
                 let len = array.len() as i64;
                 let stop = stop.normalize(len);
@@ -528,7 +528,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
 
     fn clear(&mut self, path: Vec<String>) -> Result<usize, RedisError> {
         let mut cleared = 0;
-        self.do_op(path, |v| match v.type_() {
+        self.do_op(&path, |v| match v.type_() {
             ValueType::Object => {
                 let obj = v.as_object_mut().unwrap();
                 obj.clear();
