@@ -87,8 +87,7 @@ pub fn json_api_get_len<M: Manager>(_: M, json: *const c_void, count: *mut libc:
     let json = unsafe { &*(json.cast::<M::V>()) };
     let len = match json.get_type() {
         SelectValueType::String => Some(json.get_str().len()),
-        SelectValueType::Array => Some(json.len().unwrap()),
-        SelectValueType::Object => Some(json.len().unwrap()),
+        SelectValueType::Array | SelectValueType::Object => Some(json.len().unwrap()),
         _ => None,
     };
     match len {

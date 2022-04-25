@@ -384,7 +384,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn pow_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError> {
-        self.do_num_op(path, num, |i1, i2| i1.pow(i2 as u32), |f1, f2| f1.powf(f2))
+        self.do_num_op(path, num, |i1, i2| i1.pow(i2 as u32), f64::powf)
     }
 
     fn bool_toggle(&mut self, path: Vec<String>) -> Result<bool, RedisError> {
@@ -431,7 +431,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         let mut res = None;
         self.do_op(&path, |v| {
             let arr = v.as_array_mut().unwrap();
-            for a in args.iter() {
+            for a in &args {
                 arr.push(a.clone());
             }
             res = Some(arr.len());
@@ -614,8 +614,9 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     fn from_str(&self, val: &str, format: Format) -> Result<Self::O, Error> {
         match format {
             Format::JSON => Ok(serde_json::from_str(val)?),
-            Format::BSON => decode_document(&mut Cursor::new(val.as_bytes()))
-                .map(|docs| {
+            Format::BSON => decode_document(&mut Cursor::new(val.as_bytes())).map_or_else(
+                |e| Err(e.to_string().into()),
+                |docs| {
                     let v = if docs.is_empty() {
                         IValue::NULL
                     } else {
@@ -634,8 +635,8 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                         )
                     };
                     Ok(v)
-                })
-                .unwrap_or_else(|e| Err(e.to_string().into())),
+                },
+            ),
         }
     }
 

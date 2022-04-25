@@ -206,7 +206,7 @@ impl<'a> KeyHolderWrite<'a> {
 
     fn do_num_op<F1, F2>(
         &mut self,
-        path: Vec<String>,
+        path: &[String],
         num: &str,
         mut op1_fun: F1,
         mut op2_fun: F2,
@@ -218,14 +218,14 @@ impl<'a> KeyHolderWrite<'a> {
         let in_value = &serde_json::from_str(num)?;
         if let Value::Number(in_value) = in_value {
             let mut res = None;
-            self.do_op(&path, |v| {
+            self.do_op(path, |v| {
                 let num_res = match (v.as_i64(), in_value.as_i64()) {
                     (Some(num1), Some(num2)) => Ok(((op1_fun)(num1, num2)).into()),
                     _ => {
                         let num1 = v.as_f64().unwrap();
                         let num2 = in_value.as_f64().unwrap();
                         Number::from_f64((op2_fun)(num1, num2))
-                            .map_or(Err(RedisError::Str("result is not a number")), Ok)
+                            .ok_or(RedisError::Str("result is not a number"))
                     }
                 };
                 res = Some(Value::Number(num_res?));
@@ -359,15 +359,15 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
     }
 
     fn incr_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError> {
-        self.do_num_op(path, num, |i1, i2| i1 + i2, |f1, f2| f1 + f2)
+        self.do_num_op(&path, num, |i1, i2| i1 + i2, |f1, f2| f1 + f2)
     }
 
     fn mult_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError> {
-        self.do_num_op(path, num, |i1, i2| i1 * i2, |f1, f2| f1 * f2)
+        self.do_num_op(&path, num, |i1, i2| i1 * i2, |f1, f2| f1 * f2)
     }
 
     fn pow_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError> {
-        self.do_num_op(path, num, |i1, i2| i1.pow(i2 as u32), f64::powf)
+        self.do_num_op(&path, num, |i1, i2| i1.pow(i2 as u32), f64::powf)
     }
 
     fn bool_toggle(&mut self, path: Vec<String>) -> Result<bool, RedisError> {

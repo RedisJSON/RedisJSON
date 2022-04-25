@@ -263,9 +263,8 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 let p = parsed_static_path
                     .static_path_elements
                     .iter()
-                    .map(|e| e.to_string())
-                    .collect::<Vec<_>>()
-                    .join("");
+                    .map(ToString::to_string)
+                    .collect::<String>();
                 let mut selector = Selector::default();
                 if let Err(e) = selector.str_path(&p) {
                     return Err(e.into());
@@ -290,10 +289,10 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 .str_path(path)?
                 .value(self.val)
                 .select_with_paths(|_| true)?;
-            if !res.is_empty() {
-                Ok(Vec::new())
-            } else {
+            if res.is_empty() {
                 Err("ERR array index out of range".into())
+            } else {
+                Ok(Vec::new())
             }
         } else {
             Err("ERR path not an object or array".into())
@@ -318,10 +317,10 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     .collect());
             }
         }
-        if SetOptions::AlreadyExists != *option {
-            self.find_add_paths(path)
-        } else {
+        if SetOptions::AlreadyExists == *option {
             Ok(Vec::new()) // empty vector means no updates
+        } else {
+            self.find_add_paths(path)
         }
     }
 
@@ -553,7 +552,7 @@ pub fn command_json_get<M: Manager>(
             // Silently ignore. Compatibility with ReJSON v1.0 which has this option. See #168 TODO add support
             arg if arg.eq_ignore_ascii_case(CMD_ARG_NOESCAPE) => continue,
             arg if arg.eq_ignore_ascii_case(CMD_ARG_FORMAT) => {
-                format = Format::from_str(args.next_str()?)?
+                format = Format::from_str(args.next_str()?)?;
             }
             _ => paths.push(Path::new(arg)),
         };
@@ -1234,10 +1233,10 @@ pub fn command_json_str_len<M: Manager>(
 
     let key = manager.open_key_read(ctx, &key)?;
 
-    if !path.is_legacy() {
-        json_str_len::<M>(&key, path.get_path())
-    } else {
+    if path.is_legacy() {
         json_str_len_legacy::<M>(&key, path.get_path())
+    } else {
+        json_str_len::<M>(&key, path.get_path())
     }
 }
 
@@ -1293,10 +1292,10 @@ pub fn command_json_arr_append<M: Manager>(
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
 
-    if !path.is_legacy() {
-        json_arr_append::<M>(&mut redis_key, ctx, path.get_path(), args)
-    } else {
+    if path.is_legacy() {
         json_arr_append_legacy::<M>(&mut redis_key, ctx, &path, args)
+    } else {
+        json_arr_append::<M>(&mut redis_key, ctx, path.get_path(), args)
     }
 }
 
@@ -1396,8 +1395,8 @@ pub fn command_json_arr_index<M: Manager>(
     let key = args.next_arg()?;
     let path = Path::new(args.next_str()?);
     let json_scalar = args.next_str()?;
-    let start: i64 = args.next().map(|v| v.parse_integer()).unwrap_or(Ok(0))?;
-    let end: i64 = args.next().map(|v| v.parse_integer()).unwrap_or(Ok(0))?;
+    let start: i64 = args.next().map_or(Ok(0), |v| v.parse_integer())?;
+    let end: i64 = args.next().map_or(Ok(0), |v| v.parse_integer())?;
 
     args.done()?; // TODO: Add to other functions as well to terminate args list
 
@@ -1452,10 +1451,10 @@ pub fn command_json_arr_insert<M: Manager>(
         },
     )?;
     let mut redis_key = manager.open_key_write(ctx, key)?;
-    if !path.is_legacy() {
-        json_arr_insert::<M>(&mut redis_key, ctx, path.get_path(), index, args)
-    } else {
+    if path.is_legacy() {
         json_arr_insert_legacy::<M>(&mut redis_key, ctx, path.get_path(), index, args)
+    } else {
+        json_arr_insert::<M>(&mut redis_key, ctx, path.get_path(), index, args)
     }
 }
 
@@ -1508,17 +1507,17 @@ where
         .ok_or_else(RedisError::nonexistent_key)?;
 
     let paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
-    if !paths.is_empty() {
+    if paths.is_empty() {
+        Err(RedisError::String(
+            err_msg_json_path_doesnt_exist_with_param_or(path, "not an array"),
+        ))
+    } else {
         let mut res = None;
         for p in paths {
             res = Some(redis_key.arr_insert(p, &args, index)?);
         }
         redis_key.apply_changes(ctx, "json.arrinsert")?;
         Ok(res.unwrap().into())
-    } else {
-        Err(RedisError::String(
-            err_msg_json_path_doesnt_exist_with_param_or(path, "not an array"),
-        ))
     }
 }
 
@@ -1554,9 +1553,7 @@ pub fn command_json_arr_len<M: Manager>(
         let cur_val: RedisValue = match v {
             Some(v) => (v.len().unwrap() as i64).into(),
             _ => {
-                if !is_legacy {
-                    RedisValue::Null
-                } else {
+                if is_legacy {
                     return Err(RedisError::String(
                         err_msg_json_path_doesnt_exist_with_param_or(
                             path.get_original(),
@@ -1564,13 +1561,13 @@ pub fn command_json_arr_len<M: Manager>(
                         ),
                     ));
                 }
+                RedisValue::Null
             }
         };
-        if !is_legacy {
-            res.push(cur_val);
-        } else {
+        if is_legacy {
             return Ok(cur_val);
         }
+        res.push(cur_val);
     }
     Ok(res.into())
 }
