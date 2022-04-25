@@ -152,10 +152,6 @@ pub fn json_api_get_double<M: Manager>(_: M, json: *const c_void, val: *mut c_do
             unsafe { *val = json.get_double() };
             Status::Ok as c_int
         }
-        SelectValueType::Long => {
-            unsafe { *val = json.get_long() as f64 };
-            Status::Ok as c_int
-        }
         _ => Status::Err as c_int,
     }
 }
