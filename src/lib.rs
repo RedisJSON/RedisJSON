@@ -72,6 +72,7 @@ pub enum ManagerType {
 
 pub static mut MANAGER: ManagerType = ManagerType::IValue;
 
+#[must_use]
 pub fn get_manager_type() -> ManagerType {
     unsafe { MANAGER }
 }
@@ -459,7 +460,7 @@ macro_rules! redis_json_module_create {(
         }
 
         redis_module! {
-            name: crate::MODULE_NAME,
+            name: $crate::MODULE_NAME,
             version: $version,
             data_types: [$($data_type,)*],
             init: json_init_config,
