@@ -279,7 +279,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     .map(ToString::to_string)
                     .collect::<String>();
                 let query = compile(&p)?;
-                let mut res = calc_once_paths(query, self.val);
+                let res = calc_once_paths(query, self.val);
 
                 Ok(res
                     .into_iter()
@@ -295,7 +295,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             // if we reach here with array path we are either out of range
             // or no-oping an NX where the value is already present
 
-            let query = compile(&path)?;
+            let query = compile(path)?;
             let res = calc_once_paths(query, self.val);
 
             if res.is_empty() {
@@ -314,9 +314,8 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         option: &SetOptions,
     ) -> Result<Vec<UpdateInfo>, Error> {
         if SetOptions::NotExists != *option {
-
-            let query = compile(&path)?;
-            let mut res = calc_once_paths(query, self.val);
+            let query = compile(path)?;
+            let res = calc_once_paths(query, self.val);
 
             if !res.is_empty() {
                 return Ok(res
