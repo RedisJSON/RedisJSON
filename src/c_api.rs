@@ -531,7 +531,7 @@ macro_rules! redis_json_module_export_shared_api {
                 ));
                 ctx.export_shared_api(
                     (&JSONAPI as *const RedisJSONAPI_V1).cast::<c_void>(),
-                    REDISJSON_GETAPI.as_ptr().cast::<i8>(),
+                    REDISJSON_GETAPI.as_ptr().cast::<c_char>(),
                 );
             };
         }
