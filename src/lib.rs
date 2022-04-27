@@ -459,7 +459,7 @@ macro_rules! redis_json_module_create {(
         }
 
         redis_module! {
-            name: crate::MODULE_NAME,
+            name: $crate::MODULE_NAME,
             version: $version,
             data_types: [$($data_type,)*],
             init: json_init_config,
