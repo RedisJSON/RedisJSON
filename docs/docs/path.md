@@ -1,4 +1,10 @@
-# RedisJSON Path
+---
+title: "Path"
+linkTitle: "Path"
+weight: 3
+description: >
+    RedisJSON JSONPath
+---
 
 Since no standard for path syntax exists, RedisJSON implements its own. RedisJSON's syntax is based on common best practices and intentionally resembles [JSONPath](http://goessner.net/articles/JsonPath/).
 
@@ -12,7 +18,7 @@ RedisJSON 2.0 introduces [JSONPath](http://goessner.net/articles/JsonPath/) supp
 
 A JSONPath query can resolve to several locations in the JSON documents. In this case, the JSON commands apply the operation to every possible location. This is a major improvement over the legacy query, which only operates on the first path.
 
-Notice that the structure of the command response often differs when using JSONPath. See the [Commands](/redisjson/commands) page for more details.
+Notice that the structure of the command response often differs when using JSONPath. See the [Commands](/commands) page for more details.
 
 The new syntax supports bracket notation, which allows the use of special characters like colon ":" or whitespace in key names.
 
