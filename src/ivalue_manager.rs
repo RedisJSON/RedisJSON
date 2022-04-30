@@ -620,22 +620,10 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
             Format::JSON => self.from_str(val.try_as_str()?),
             Format::BSON => Document::from_reader(&mut Cursor::new(val.as_slice())).map_or_else(
                 |e| Err(e.to_string().into()),
-                |docs| {
-                    let v = if docs.is_empty() {
-                        IValue::NULL
-                    } else {
-                        docs.iter().next().map_or_else(
-                            || IValue::NULL,
-                            |(_, b)| {
-                                let v: serde_json::Value = b.clone().into();
-                                let mut out = serde_json::Serializer::new(Vec::new());
-                                v.serialize(&mut out).unwrap();
-                                self.from_str(&String::from_utf8(out.into_inner()).unwrap())
-                                    .unwrap()
-                            },
-                        )
-                    };
-                    Ok(v)
+                |doc| {
+                    let mut out = serde_json::Serializer::new(Vec::new());
+                    doc.serialize(&mut out).unwrap();
+                    Ok(serde_json::from_slice(out.into_inner().as_slice())?)
                 },
             ),
         }

@@ -3,3 +3,4 @@ redis-py-cluster >= 2.1.0
 RLTest ~= 0.4.2
 ramp-packer ~= 2.2.1
 six >= 1.10.0
+bson ~= 0.5.8

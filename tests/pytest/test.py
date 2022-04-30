@@ -6,6 +6,7 @@ import redis
 import json
 from RLTest import Env
 from includes import *
+import bson
 
 from RLTest import Defaults
 
@@ -332,9 +333,9 @@ def testBackwardRDB(env):
 
 def testSetBSON(env):
     r = env
-    bson = open(os.path.join(JSON_PATH , 'bson_bytes_1.bson'), 'rb').read()
-    r.assertOk(r.execute_command('JSON.SET', 'test', '$', bson, 'FORMAT', 'BSON'))
-    r.expect('JSON.GET', 'test', '$').equal( r'["b"]')
+    data = bson.dumps({"A":[1,"fds",3,True, {"gg":"tt"}]})
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$', data, 'FORMAT', 'BSON'))
+    r.expect('JSON.GET', 'test', '$').equal( r'[{"A":[1,"fds",3,True, {"gg":"tt"}]}]')
 
 def testMgetCommand(env):
     """Test REJSON.MGET command"""
