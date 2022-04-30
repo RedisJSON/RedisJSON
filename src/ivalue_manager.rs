@@ -617,8 +617,8 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
 
     fn from_string(&self, val: &RedisString, format: Format) -> Result<Self::O, Error> {
         match format {
-            Format::JSON => Ok(serde_json::from_str(val)?),
-            Format::BSON => decode_document(&mut Cursor::new(val.as_bytes())).map_or_else(
+            Format::JSON => self.from_str(val.try_as_str()?),
+            Format::BSON => Document::from_reader(&mut Cursor::new(val.as_slice())).map_or_else(
                 |e| Err(e.to_string().into()),
                 |docs| {
                     let v = if docs.is_empty() {
