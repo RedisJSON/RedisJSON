@@ -1,4 +1,5 @@
 use jsonpath_lib::select::select_value::SelectValue;
+use serde::Serialize;
 use serde_json::map::Entry;
 use serde_json::{Number, Value};
 
@@ -584,18 +585,14 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
     fn from_string(&self, val: &RedisString, format: Format) -> Result<Value, Error> {
         match format {
             Format::JSON => self.from_str(val.try_as_str()?),
-            Format::BSON => Document::from_reader(&mut Cursor::new(val.as_slice()))
-                .map(|docs| {
-                    let v = if docs.is_empty() {
-                        Value::Null
-                    } else {
-                        docs.iter()
-                            .next()
-                            .map_or_else(|| Value::Null, |(_, b)| b.clone().into())
-                    };
-                    Ok(v)
-                })
-                .unwrap_or_else(|e| Err(e.to_string().into())),
+            Format::BSON => Document::from_reader(&mut Cursor::new(val.as_slice())).map_or_else(
+                |e| Err(e.to_string().into()),
+                |doc| {
+                    let mut out = serde_json::Serializer::new(Vec::new());
+                    doc.serialize(&mut out)?;
+                    Ok(serde_json::from_slice(out.into_inner().as_slice())?)
+                },
+            ),
         }
     }
 

@@ -622,7 +622,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                 |e| Err(e.to_string().into()),
                 |doc| {
                     let mut out = serde_json::Serializer::new(Vec::new());
-                    doc.serialize(&mut out).unwrap();
+                    doc.serialize(&mut out)?;
                     Ok(serde_json::from_slice(out.into_inner().as_slice())?)
                 },
             ),
