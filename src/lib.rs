@@ -212,6 +212,7 @@ macro_rules! redis_json_module_create {(
                 ["json.debug", json_command!(json_debug), "readonly", 2,2,1],
                 ["json.forget", json_command!(json_del), "write", 1,1,1],
                 ["json.resp", json_command!(json_resp), "readonly", 1,1,1],
+                ["json.schemaset", json_command!(json_schema_set), "write deny-oom", 1,1,1],
             ],
         }
     }

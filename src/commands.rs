@@ -7,14 +7,14 @@ use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 use crate::redisjson::{normalize_arr_indices, Format, Path};
 use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
 use jsonpath_lib::select::Selector;
+use jsonschema::JSONSchema;
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use std::cmp::Ordering;
 use std::str::FromStr;
-
 use crate::redisjson::SetOptions;
 
-use serde_json::{Number, Value};
+use serde_json::{Number, Value, from_str};
 
 use itertools::FoldWhile::{Continue, Done};
 use itertools::{EitherOrBoth, Itertools};
@@ -1997,4 +1997,32 @@ pub fn json_resp<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
         Some(doc) => KeyValue::new(doc).resp_serialize(path),
         None => Ok(RedisValue::Null),
     }
+}
+
+///
+/// JSON.SCHEMASET <key> <schema> [PREFIX <prefix>]
+///
+pub fn json_schema_set<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+
+    let key = args.next_str()?;
+    let schema : Value = from_str(args.next_str()?)?;
+    let compiled = JSONSchema::compile(&schema)?;
+
+    let mut prefix = None;
+    match args.next_str()?.to_uppercase().as_str() {
+        "PREFIX" => {
+            prefix = Some(manager.from_str(args.next_str()?, Format::JSON)?);
+        },
+        _ => return Err(RedisError::WrongArity),
+    }
+        
+    // let result = compiled.validate(&instance);
+    
+    
+    REDIS_OK
 }
