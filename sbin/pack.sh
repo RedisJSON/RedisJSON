@@ -1,20 +1,26 @@
 #!/bin/bash
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+# [[ $V == 1 || $VERBOSE == 1 ]] && set -x
+
+PROGNAME="${BASH_SOURCE[0]}"
+HERE="$(cd "$(dirname "$PROGNAME")" &>/dev/null && pwd)"
 ROOT=$(cd $HERE/.. && pwd)
 export READIES=$ROOT/deps/readies
 . $READIES/shibumi/defs
-
-cd $ROOT
+SBIN=$ROOT/sbin
 
 export PYTHONWARNINGS=ignore
 
+cd $ROOT
+
 #----------------------------------------------------------------------------------------------
 
-if [[ $1 == --help || $1 == help ]]; then
+if [[ $1 == --help || $1 == help || $HELP == 1 ]]; then
 	cat <<-END
+		Generate RedisJSON distribution packages.
+
 		[ARGVARS...] pack.sh [--help|help]
-		
+
 		Argument variables:
 		MODULE=path       Path of module .so
 
@@ -22,9 +28,10 @@ if [[ $1 == --help || $1 == help ]]; then
 		DEPS=0|1          Build dependencies file
 		SYM=0|1           Build debug symbols file
 
-		VARIANT=name      Build variant (default: empty)
 		BRANCH=name       Branch name for snapshot packages
-		GITSHA=1          Append Git SHA to shapshot package names
+		VERSION=ver         Version for release packages
+		WITH_GITSHA=1     Append Git SHA to shapshot package names
+		VARIANT=name      Build variant (default: empty)
 
 		ARTDIR=dir        Directory in which packages are created (default: bin/artifacts)
 
@@ -37,9 +44,6 @@ fi
 
 #----------------------------------------------------------------------------------------------
 
-[[ $IGNERR == 1 ]] || set -e
-[[ $V == 1 || $VERBOSE == 1 ]] && set -x
-
 RAMP=${RAMP:-1}
 DEPS=${DEPS:-1}
 SYM=${SYM:-1}
@@ -48,22 +52,21 @@ SYM=${SYM:-1}
 mkdir -p $ARTDIR $ARTDIR/snapshots
 ARTDIR=$(cd $ARTDIR && pwd)
 
-. $READIES/bin/enable-utf8
-
-export ARCH=$($READIES/bin/platform --arch)
-export OS=$($READIES/bin/platform --os)
-export OSNICK=$($READIES/bin/platform --osnick)
-
 # RLEC naming conventions
+
+ARCH=$($READIES/bin/platform --arch)
 [[ $ARCH == x64 ]] && ARCH=x86_64
+OS=$($READIES/bin/platform --os)
 [[ $OS == linux ]] && OS=Linux
 
+OSNICK=$($READIES/bin/platform --osnick)
 [[ $OSNICK == trusty ]]  && OSNICK=ubuntu14.04
 [[ $OSNICK == xenial ]]  && OSNICK=ubuntu16.04
 [[ $OSNICK == bionic ]]  && OSNICK=ubuntu18.04
 [[ $OSNICK == focal ]]   && OSNICK=ubuntu20.04
 [[ $OSNICK == centos7 ]] && OSNICK=rhel7
 [[ $OSNICK == centos8 ]] && OSNICK=rhel8
+[[ $OSNICK == rocky8 ]]  && OSNICK=rhel8
 
 export PRODUCT=rejson
 export PRODUCT_LIB=$PRODUCT.so
@@ -171,17 +174,25 @@ prepare_symbols_dep() {
 
 #----------------------------------------------------------------------------------------------
 
-export NUMVER=$(NUMERIC=1 $ROOT/sbin/getver)
-export SEMVER=$($ROOT/sbin/getver)
+NUMVER=$(NUMERIC=1 $SBIN/getver)
+SEMVER=$($SBIN/getver)
 
 if [[ ! -z $VARIANT ]]; then
 	VARIANT=-${VARIANT}
 fi
 
-[[ -z $BRANCH ]] && BRANCH=${CIRCLE_BRANCH:-`git rev-parse --abbrev-ref HEAD`}
+#----------------------------------------------------------------------------------------------
+
+if [[ -z $BRANCH ]]; then
+	BRANCH=$(git rev-parse --abbrev-ref HEAD)
+	# this happens of detached HEAD
+	if [[ $BRANCH == HEAD ]]; then
+		BRANCH="$SEMVER"
+	fi
+fi
 BRANCH=${BRANCH//[^A-Za-z0-9._-]/_}
-if [[ $GITSHA == 1 ]]; then
-	GIT_COMMIT=$(git describe --always --abbrev=7 --dirty="+" 2>/dev/null || git rev-parse --short HEAD)
+if [[ $WITH_GITSHA == 1 ]]; then
+	GIT_COMMIT=$(git rev-parse --short HEAD)
 	BRANCH="${BRANCH}-${GIT_COMMIT}"
 fi
 export BRANCH
@@ -199,7 +210,7 @@ fi
 
 if [[ $RAMP == 1 ]]; then
 	if ! command -v redis-server > /dev/null; then
-		eprint "$0: Cannot find redis-server. Aborting."
+		eprint "$PROGNAME: Cannot find redis-server. Aborting."
 		exit 1
 	fi
 

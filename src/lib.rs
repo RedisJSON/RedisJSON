@@ -72,6 +72,7 @@ pub enum ManagerType {
 
 pub static mut MANAGER: ManagerType = ManagerType::IValue;
 
+#[must_use]
 pub fn get_manager_type() -> ManagerType {
     unsafe { MANAGER }
 }
@@ -422,7 +423,7 @@ macro_rules! redis_json_module_create {(
             pre_command_function: $pre_command_function_expr,
         }
 
-        fn intialize(ctx: &Context, args: &Vec<RedisString>) -> Status {
+        fn intialize(ctx: &Context, args: &[RedisString]) -> Status {
             ctx.log_notice(&format!("version: {} git sha: {} branch: {}",
                 $version,
                 match GIT_SHA { Some(val) => val, _ => "unknown"},
@@ -434,7 +435,7 @@ macro_rules! redis_json_module_create {(
             $init_func(ctx, args)
         }
 
-        fn json_init_config(ctx: &Context, args: &Vec<RedisString>) -> Status{
+        fn json_init_config(ctx: &Context, args: &[RedisString]) -> Status{
             if args.len() % 2 != 0 {
                 ctx.log(LogLevel::Warning, "RedisJson arguments must be key:value pairs");
                 return Status::Err;
@@ -459,7 +460,7 @@ macro_rules! redis_json_module_create {(
         }
 
         redis_module! {
-            name: crate::MODULE_NAME,
+            name: $crate::MODULE_NAME,
             version: $version,
             data_types: [$($data_type,)*],
             init: json_init_config,
@@ -495,10 +496,10 @@ macro_rules! redis_json_module_create {(
 }
 
 #[cfg(not(feature = "as-library"))]
-const fn pre_command(_ctx: &Context, _args: &Vec<RedisString>) {}
+const fn pre_command(_ctx: &Context, _args: &[RedisString]) {}
 
 #[cfg(not(feature = "as-library"))]
-const fn dummy_init(_ctx: &Context, _args: &Vec<RedisString>) -> Status {
+const fn dummy_init(_ctx: &Context, _args: &[RedisString]) -> Status {
     Status::Ok
 }
 
