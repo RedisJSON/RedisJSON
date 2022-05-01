@@ -551,7 +551,7 @@ workflows:
           <<: *on-integ-and-version-tags
           matrix:
             parameters:
-              redis_version: ["6.0", "6.2"]
+              redis_version: ["6.0", "6.2", "7.0"]
       - build-platforms:
           <<: *on-integ-and-version-tags
           context: common
@@ -620,7 +620,7 @@ workflows:
           name: build-with-redis-<<matrix.redis_version>>
           matrix:
             parameters:
-              redis_version: ["6.0", "6.2"]
+              redis_version: ["6.0", "6.2", "7.0"]
       - benchmark-json-oss-standalone:
           context: common
       - benchmark-json-oss-standalone-profiler:
