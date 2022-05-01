@@ -1,4 +1,10 @@
-# Performance
+---
+title: "Performance"
+linkTitle: "Performance"
+weight: 5
+description: >
+    Performance benchmarks
+---
 
 To get an early sense of what RedisJSON is capable of, you can test it with `redis-benchmark` just like
 any other Redis command. However, in order to have more control over the tests, we'll use a 
@@ -29,6 +35,7 @@ different paths:
 Moving on to bigger values, we use the 1.4 kB array in
 [/tests/files/pass-jsonsl-1.json](https://github.com/RedisLabsModules/redisjson/blob/master/tests/files/pass-jsonsl-1.json):
 
+
 ![ReJSONBenchmark pass-jsonsl-1.json](images/bench_pass_jsonsl_1.png)
 
 ![ReJSONBenchmark pass-jsonsl-1.json percentiles](images/bench_pass_jsonsl_1_p.png)
@@ -52,7 +59,7 @@ Last but not least, some adding and multiplying:
 
 ### Baseline
 
-To establish a baseline, we'll use the Redis [`PING`](https://redis.io/commands/ping) command.
+To establish a baseline, we'll use the Redis `PING` command.
 First, lets see what `redis-benchmark` reports:
 
 ```
