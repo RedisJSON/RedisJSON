@@ -33,9 +33,3 @@ environment variable, e.g.:
 $ # use an existing local Redis instance for testing the module
 $ REDIS_PORT=6379 make test
 ```
-
-## Documentation
-
-1. Prerequisites: `pip install mkdocs mkdocs-material`
-1. To build and serve locally: `make localdocs`
-1. To deploy to the website: `make deploydocs`
