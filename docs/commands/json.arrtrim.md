@@ -14,7 +14,9 @@ Behavior as of RedisJSON v2.0:
 
 @examples
 
-```
+```sql
+redis> JSON.SET doc $ '{"a":[], "nested": {"a": [1,4]}}'
+OK
 redis> JSON.ARRTRIM doc $..a 1 1
 1) (integer) 0
 2) (integer) 1
@@ -28,4 +30,6 @@ OK
 redis> JSON.ARRTRIM doc $..a 1 1
 1) (integer) 1
 2) (nil)
+redis> JSON.GET doc $
+"[{\"a\":[2],\"nested\":{\"a\":false}}]"
 ```
