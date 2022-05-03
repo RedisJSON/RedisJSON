@@ -75,18 +75,25 @@ pub trait Manager {
     type O: Clone;
     type WriteHolder: WriteHolder<Self::O, Self::V>;
     type ReadHolder: ReadHolder<Self::V>;
+
     fn open_key_read(
         &self,
         ctx: &Context,
         key: &RedisString,
     ) -> Result<Self::ReadHolder, RedisError>;
+
     fn open_key_write(
         &self,
         ctx: &Context,
         key: RedisString,
     ) -> Result<Self::WriteHolder, RedisError>;
+
+    #[allow(clippy::wrong_self_convention)]
     fn from_str(&self, val: &str) -> Result<Self::O, Error>;
+
+    #[allow(clippy::wrong_self_convention)]
     fn from_string(&self, val: &RedisString, format: Format) -> Result<Self::O, Error>;
+
     fn get_memory(&self, v: &Self::V) -> Result<usize, RedisError>;
     fn is_json(&self, key: *mut RedisModuleKey) -> Result<bool, RedisError>;
 }

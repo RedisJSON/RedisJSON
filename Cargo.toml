@@ -26,6 +26,7 @@ libc = "0.2"
 jsonpath_lib = { git = "https://github.com/RedisJSON/jsonpath.git", branch = "generic_json_path" }
 redis-module = { version="1.0", features = ["experimental-api"]}
 itertools = "0.10.1"
+
 [features]
 # Workaround to allow cfg(feature = "test") in redismodue-rs dependencies:
 # https://github.com/RedisLabsModules/redismodule-rs/pull/68

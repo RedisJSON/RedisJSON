@@ -151,7 +151,6 @@ macro_rules! redis_json_module_create {(
             match m {
                 Some(mngr) => commands::command_json_get(mngr, ctx, args),
                 None => run_on_manager!(commands::command_json_get, ctx, args)
-
             }
         }
 

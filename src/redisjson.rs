@@ -55,6 +55,13 @@ pub enum Format {
     JSON,
     BSON,
 }
+
+impl Default for Format {
+    fn default() -> Self {
+        Format::JSON
+    }
+}
+
 impl FromStr for Format {
     type Err = Error;
 
@@ -62,7 +69,7 @@ impl FromStr for Format {
         match s {
             "JSON" => Ok(Self::JSON),
             "BSON" => Ok(Self::BSON),
-            _ => Err("ERR wrong format".into()),
+            _ => Err(format!("ERR wrong format {}", s).into()),
         }
     }
 }
