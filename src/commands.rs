@@ -534,11 +534,15 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     }
 }
 
-pub fn command_json_get<M: Manager>(
-    manager: M,
-    ctx: &Context,
-    args: Vec<RedisString>,
-) -> RedisResult {
+///
+/// JSON.GET <key>
+///         [INDENT indentation-string]
+///         [NEWLINE line-break-string]
+///         [SPACE space-string]
+///         [path ...]
+///
+/// TODO add support for multi path
+pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
 
@@ -579,11 +583,10 @@ pub fn command_json_get<M: Manager>(
     Ok(value)
 }
 
-pub fn command_json_set<M: Manager>(
-    manager: M,
-    ctx: &Context,
-    args: Vec<RedisString>,
-) -> RedisResult {
+///
+/// JSON.SET <key> <path> <json> [NX | XX | FORMAT <format>]
+///
+pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;
@@ -820,11 +823,10 @@ fn prepare_paths_for_deletion(paths: &mut [Vec<String>]) {
     });
 }
 
-pub fn command_json_del<M: Manager>(
-    manager: M,
-    ctx: &Context,
-    args: Vec<RedisString>,
-) -> RedisResult {
+///
+/// JSON.DEL <key> [path]
+///
+pub fn json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;
@@ -860,11 +862,10 @@ pub fn command_json_del<M: Manager>(
     Ok((deleted as i64).into())
 }
 
-pub fn command_json_mget<M: Manager>(
-    manager: M,
-    ctx: &Context,
-    args: Vec<RedisString>,
-) -> RedisResult {
+///
+/// JSON.MGET <key> [key ...] <path>
+///
+pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     if args.len() < 3 {
         return Err(RedisError::WrongArity);
     }
@@ -905,25 +906,24 @@ pub fn command_json_mget<M: Manager>(
     })
 }
 
-pub fn command_json_type<M: Manager>(
-    manager: M,
-    ctx: &Context,
-    args: Vec<RedisString>,
-) -> RedisResult {
+///
+/// JSON.TYPE <key> [path]
+///
+pub fn json_type<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
     let path = Path::new(args.next_str().unwrap_or(JSON_ROOT_PATH_LEGACY));
 
     let key = manager.open_key_read(ctx, &key)?;
 
-    if !path.is_legacy() {
-        json_type::<M>(&key, path.get_path())
-    } else {
+    if path.is_legacy() {
         json_type_legacy::<M>(&key, path.get_path())
+    } else {
+        json_type_impl::<M>(&key, path.get_path())
     }
 }
 
-fn json_type<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
+fn json_type_impl<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
 where
     M: Manager,
 {
@@ -961,7 +961,7 @@ enum NumOp {
     Pow,
 }
 
-fn command_json_num_op<M>(
+fn json_num_op<M>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -979,14 +979,14 @@ where
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
 
-    if !path.is_legacy() {
-        json_num_op::<M>(&mut redis_key, ctx, path.get_path(), number, op, cmd)
-    } else {
+    if path.is_legacy() {
         json_num_op_legacy::<M>(&mut redis_key, ctx, path.get_path(), number, op, cmd)
+    } else {
+        json_num_op_impl::<M>(&mut redis_key, ctx, path.get_path(), number, op, cmd)
     }
 }
 
-fn json_num_op<M>(
+fn json_num_op_impl<M>(
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &str,
@@ -1065,31 +1065,43 @@ where
     }
 }
 
-pub fn command_json_num_incrby<M: Manager>(
+///
+/// JSON.NUMINCRBY <key> <path> <number>
+///
+pub fn json_num_incrby<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
 ) -> RedisResult {
-    command_json_num_op(manager, ctx, args, "json.numincrby", NumOp::Incr)
+    json_num_op(manager, ctx, args, "json.numincrby", NumOp::Incr)
 }
 
-pub fn command_json_num_multby<M: Manager>(
+///
+/// JSON.NUMMULTBY <key> <path> <number>
+///
+pub fn json_num_multby<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
 ) -> RedisResult {
-    command_json_num_op(manager, ctx, args, "json.nummultby", NumOp::Mult)
+    json_num_op(manager, ctx, args, "json.nummultby", NumOp::Mult)
 }
 
-pub fn command_json_num_powby<M: Manager>(
+///
+/// JSON.NUMPOWBY <key> <path> <number>
+///
+pub fn json_num_powby<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
 ) -> RedisResult {
-    command_json_num_op(manager, ctx, args, "json.numpowby", NumOp::Pow)
+    json_num_op(manager, ctx, args, "json.numpowby", NumOp::Pow)
 }
 
-pub fn command_json_bool_toggle<M: Manager>(
+//
+/// JSON.TOGGLE <key> <path>
+///
+pub fn json_bool_toggle<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -1099,14 +1111,18 @@ pub fn command_json_bool_toggle<M: Manager>(
     let path = Path::new(args.next_str()?);
     let mut redis_key = manager.open_key_write(ctx, key)?;
 
-    if !path.is_legacy() {
-        json_bool_toggle::<M>(&mut redis_key, ctx, path.get_path())
-    } else {
+    if path.is_legacy() {
         json_bool_toggle_legacy::<M>(&mut redis_key, ctx, path.get_path())
+    } else {
+        json_bool_toggle_impl::<M>(&mut redis_key, ctx, path.get_path())
     }
 }
 
-fn json_bool_toggle<M>(redis_key: &mut M::WriteHolder, ctx: &Context, path: &str) -> RedisResult
+fn json_bool_toggle_impl<M>(
+    redis_key: &mut M::WriteHolder,
+    ctx: &Context,
+    path: &str,
+) -> RedisResult
 where
     M: Manager,
 {
@@ -1157,7 +1173,10 @@ where
     }
 }
 
-pub fn command_json_str_append<M: Manager>(
+///
+/// JSON.STRAPPEND <key> [path] <json-string>
+///
+pub fn json_str_append<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -1181,14 +1200,14 @@ pub fn command_json_str_append<M: Manager>(
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
 
-    if !path.is_legacy() {
-        json_str_append::<M>(&mut redis_key, ctx, path.get_path(), json)
-    } else {
+    if path.is_legacy() {
         json_str_append_legacy::<M>(&mut redis_key, ctx, path.get_path(), json)
+    } else {
+        json_str_append_impl::<M>(&mut redis_key, ctx, path.get_path(), json)
     }
 }
 
-fn json_str_append<M>(
+fn json_str_append_impl<M>(
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &str,
@@ -1248,11 +1267,10 @@ where
     }
 }
 
-pub fn command_json_str_len<M: Manager>(
-    manager: M,
-    ctx: &Context,
-    args: Vec<RedisString>,
-) -> RedisResult {
+///
+/// JSON.STRLEN <key> [path]
+///
+pub fn json_str_len<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
     let path = Path::new(args.next_str().unwrap_or(JSON_ROOT_PATH_LEGACY));
@@ -1262,11 +1280,11 @@ pub fn command_json_str_len<M: Manager>(
     if path.is_legacy() {
         json_str_len_legacy::<M>(&key, path.get_path())
     } else {
-        json_str_len::<M>(&key, path.get_path())
+        json_str_len_impl::<M>(&key, path.get_path())
     }
 }
 
-fn json_str_len<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
+fn json_str_len_impl<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
 where
     M: Manager,
 {
@@ -1294,7 +1312,10 @@ where
     }
 }
 
-pub fn command_json_arr_append<M: Manager>(
+///
+/// JSON.ARRAPPEND <key> <path> <json> [json ...]
+///
+pub fn json_arr_append<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -1321,7 +1342,7 @@ pub fn command_json_arr_append<M: Manager>(
     if path.is_legacy() {
         json_arr_append_legacy::<M>(&mut redis_key, ctx, &path, args)
     } else {
-        json_arr_append::<M>(&mut redis_key, ctx, path.get_path(), args)
+        json_arr_append_impl::<M>(&mut redis_key, ctx, path.get_path(), args)
     }
 }
 
@@ -1358,7 +1379,7 @@ where
     }
 }
 
-fn json_arr_append<M>(
+fn json_arr_append_impl<M>(
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &str,
@@ -1411,7 +1432,12 @@ pub enum ObjectLen {
     NotObject,
 }
 
-pub fn command_json_arr_index<M: Manager>(
+///
+/// JSON.ARRINDEX <key> <path> <json-scalar> [start [stop]]
+///
+/// scalar - number, string, Boolean (true or false), or null
+///
+pub fn json_arr_index<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -1455,7 +1481,10 @@ pub fn command_json_arr_index<M: Manager>(
     Ok(res)
 }
 
-pub fn command_json_arr_insert<M: Manager>(
+///
+/// JSON.ARRINSERT <key> <path> <index> <json> [json ...]
+///
+pub fn json_arr_insert<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -1480,11 +1509,11 @@ pub fn command_json_arr_insert<M: Manager>(
     if path.is_legacy() {
         json_arr_insert_legacy::<M>(&mut redis_key, ctx, path.get_path(), index, args)
     } else {
-        json_arr_insert::<M>(&mut redis_key, ctx, path.get_path(), index, args)
+        json_arr_insert_impl::<M>(&mut redis_key, ctx, path.get_path(), index, args)
     }
 }
 
-fn json_arr_insert<M>(
+fn json_arr_insert_impl<M>(
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &str,
@@ -1547,11 +1576,10 @@ where
     }
 }
 
-pub fn command_json_arr_len<M: Manager>(
-    manager: M,
-    ctx: &Context,
-    args: Vec<RedisString>,
-) -> RedisResult {
+///
+/// JSON.ARRLEN <key> [path]
+///
+pub fn json_arr_len<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
     let path = Path::new(args.next_str().unwrap_or(JSON_ROOT_PATH_LEGACY));
@@ -1598,11 +1626,10 @@ pub fn command_json_arr_len<M: Manager>(
     Ok(res.into())
 }
 
-pub fn command_json_arr_pop<M: Manager>(
-    manager: M,
-    ctx: &Context,
-    args: Vec<RedisString>,
-) -> RedisResult {
+///
+/// JSON.ARRPOP <key> [path [index]]
+///
+pub fn json_arr_pop<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;
@@ -1617,14 +1644,14 @@ pub fn command_json_arr_pop<M: Manager>(
     };
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
-    if !path.is_legacy() {
-        json_arr_pop::<M>(&mut redis_key, ctx, path.get_path(), index)
-    } else {
+    if path.is_legacy() {
         json_arr_pop_legacy::<M>(&mut redis_key, ctx, path.get_path(), index)
+    } else {
+        json_arr_pop_impl::<M>(&mut redis_key, ctx, path.get_path(), index)
     }
 }
 
-fn json_arr_pop<M>(
+fn json_arr_pop_impl<M>(
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &str,
@@ -1691,11 +1718,10 @@ where
     }
 }
 
-pub fn command_json_arr_trim<M: Manager>(
-    manager: M,
-    ctx: &Context,
-    args: Vec<RedisString>,
-) -> RedisResult {
+///
+/// JSON.ARRTRIM <key> <path> <start> <stop>
+///
+pub fn json_arr_trim<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;
@@ -1705,13 +1731,13 @@ pub fn command_json_arr_trim<M: Manager>(
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
 
-    if !path.is_legacy() {
-        json_arr_trim::<M>(&mut redis_key, ctx, path.get_path(), start, stop)
-    } else {
+    if path.is_legacy() {
         json_arr_trim_legacy::<M>(&mut redis_key, ctx, path.get_path(), start, stop)
+    } else {
+        json_arr_trim_impl::<M>(&mut redis_key, ctx, path.get_path(), start, stop)
     }
 }
-fn json_arr_trim<M>(
+fn json_arr_trim_impl<M>(
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &str,
@@ -1772,24 +1798,23 @@ where
     }
 }
 
-pub fn command_json_obj_keys<M: Manager>(
-    manager: M,
-    ctx: &Context,
-    args: Vec<RedisString>,
-) -> RedisResult {
+///
+/// JSON.OBJKEYS <key> [path]
+///
+pub fn json_obj_keys<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
     let path = Path::new(args.next_str().unwrap_or(JSON_ROOT_PATH_LEGACY));
 
     let mut key = manager.open_key_read(ctx, &key)?;
-    if !path.is_legacy() {
-        json_obj_keys::<M>(&mut key, path.get_path())
-    } else {
+    if path.is_legacy() {
         json_obj_keys_legacy::<M>(&mut key, path.get_path())
+    } else {
+        json_obj_keys_impl::<M>(&mut key, path.get_path())
     }
 }
 
-fn json_obj_keys<M>(redis_key: &mut M::ReadHolder, path: &str) -> RedisResult
+fn json_obj_keys_impl<M>(redis_key: &mut M::ReadHolder, path: &str) -> RedisResult
 where
     M: Manager,
 {
@@ -1832,24 +1857,23 @@ where
     Ok(value)
 }
 
-pub fn command_json_obj_len<M: Manager>(
-    manager: M,
-    ctx: &Context,
-    args: Vec<RedisString>,
-) -> RedisResult {
+///
+/// JSON.OBJLEN <key> [path]
+///
+pub fn json_obj_len<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
     let path = Path::new(args.next_str().unwrap_or(JSON_ROOT_PATH_LEGACY));
 
     let key = manager.open_key_read(ctx, &key)?;
-    if !path.is_legacy() {
-        json_obj_len::<M>(&key, path.get_path())
-    } else {
+    if path.is_legacy() {
         json_obj_len_legacy::<M>(&key, path.get_path())
+    } else {
+        json_obj_len_impl::<M>(&key, path.get_path())
     }
 }
 
-fn json_obj_len<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
+fn json_obj_len_impl<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
 where
     M: Manager,
 {
@@ -1885,11 +1909,10 @@ where
     }
 }
 
-pub fn command_json_clear<M: Manager>(
-    manager: M,
-    ctx: &Context,
-    args: Vec<RedisString>,
-) -> RedisResult {
+///
+/// JSON.CLEAR <key> [path ...]
+///
+pub fn json_clear<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
     let paths = args.try_fold::<_, _, Result<Vec<Path>, RedisError>>(
@@ -1935,11 +1958,14 @@ pub fn command_json_clear<M: Manager>(
     Ok(cleared.into())
 }
 
-pub fn command_json_debug<M: Manager>(
-    manager: M,
-    ctx: &Context,
-    args: Vec<RedisString>,
-) -> RedisResult {
+///
+/// JSON.DEBUG <subcommand & arguments>
+///
+/// subcommands:
+/// MEMORY <key> [path]
+/// HELP
+///
+pub fn json_debug<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     match args.next_str()?.to_uppercase().as_str() {
         "MEMORY" => {
@@ -1980,11 +2006,10 @@ pub fn command_json_debug<M: Manager>(
     }
 }
 
-pub fn command_json_resp<M: Manager>(
-    manager: M,
-    ctx: &Context,
-    args: Vec<RedisString>,
-) -> RedisResult {
+///
+/// JSON.RESP <key> [path]
+///
+pub fn json_resp<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;

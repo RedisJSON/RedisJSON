@@ -1,5 +1,6 @@
 extern crate redis_module;
 
+use commands::*;
 use redis_module::native_types::RedisType;
 use redis_module::raw::RedisModuleTypeMethods;
 use redis_module::InfoContext;
@@ -100,6 +101,7 @@ macro_rules! run_on_manager {
         }
     };
 }
+
 #[macro_export]
 macro_rules! redis_json_module_create {(
         data_types: [
@@ -124,298 +126,18 @@ macro_rules! redis_json_module_create {(
         use libc::size_t;
         use std::collections::HashMap;
 
-        ///
-        /// JSON.DEL <key> [path]
-        ///
-        fn json_del(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_del(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_del, ctx, args),
 
-            }
-        }
-
-        ///
-        /// JSON.GET <key>
-        ///         [INDENT indentation-string]
-        ///         [NEWLINE line-break-string]
-        ///         [SPACE space-string]
-        ///         [path ...]
-        ///
-        /// TODO add support for multi path
-        fn json_get(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_get(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_get, ctx, args)
-
-            }
-        }
-
-        ///
-        /// JSON.SET <key> <path> <json> [NX | XX | FORMAT <format>]
-        ///
-        fn json_set(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_set(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_set, ctx, args)
-            }
-        }
-
-        ///
-        /// JSON.MGET <key> [key ...] <path>
-        ///
-        fn json_mget(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_mget(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_mget, ctx, args)
-
-            }
-        }
-
-        ///
-        /// JSON.STRLEN <key> [path]
-        ///
-        fn json_str_len(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_str_len(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_str_len, ctx, args)
-
-            }
-        }
-
-        ///
-        /// JSON.TYPE <key> [path]
-        ///
-        fn json_type(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_type(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_type, ctx, args)
-
-            }
-        }
-
-        ///
-        /// JSON.NUMINCRBY <key> <path> <number>
-        ///
-        fn json_num_incrby(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_num_incrby(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_num_incrby, ctx, args)
-
-            }
-        }
-
-        ///
-        /// JSON.NUMMULTBY <key> <path> <number>
-        ///
-        fn json_num_multby(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_num_multby(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_num_multby, ctx, args)
-
-            }
-        }
-
-        ///
-        /// JSON.NUMPOWBY <key> <path> <number>
-        ///
-        fn json_num_powby(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_num_powby(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_num_powby, ctx, args)
-
-            }
-        }
-
-        //
-        /// JSON.TOGGLE <key> <path>
-        fn json_bool_toggle(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_bool_toggle(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_bool_toggle, ctx, args)
-
-            }
-        }
-
-        ///
-        /// JSON.STRAPPEND <key> [path] <json-string>
-        ///
-        fn json_str_append(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_str_append(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_str_append, ctx, args)
-
-            }
-        }
-
-        ///
-        /// JSON.ARRAPPEND <key> <path> <json> [json ...]
-        ///
-        fn json_arr_append(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_arr_append(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_arr_append, ctx, args)
-
-            }
-        }
-
-        ///
-        /// JSON.ARRINDEX <key> <path> <json-scalar> [start [stop]]
-        ///
-        /// scalar - number, string, Boolean (true or false), or null
-        ///
-        fn json_arr_index(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_arr_index(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_arr_index, ctx, args)
-
-            }
-        }
-
-        ///
-        /// JSON.ARRINSERT <key> <path> <index> <json> [json ...]
-        ///
-        fn json_arr_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_arr_insert(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_arr_insert, ctx, args)
-            }
-        }
-
-        ///
-        /// JSON.ARRLEN <key> [path]
-        ///
-        fn json_arr_len(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_arr_len(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_arr_len, ctx, args)
-
-            }
-        }
-
-        ///
-        /// JSON.ARRPOP <key> [path [index]]
-        ///
-        fn json_arr_pop(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_arr_pop(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_arr_pop, ctx, args)
-
-            }
-        }
-
-        ///
-        /// JSON.ARRTRIM <key> <path> <start> <stop>
-        ///
-        fn json_arr_trim(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_arr_trim(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_arr_trim, ctx, args)
-
-            }
-        }
-
-        ///
-        /// JSON.OBJKEYS <key> [path]
-        ///
-        fn json_obj_keys(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_obj_keys(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_obj_keys, ctx, args)
-
-            }
-        }
-
-        ///
-        /// JSON.OBJLEN <key> [path]
-        ///
-        fn json_obj_len(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_obj_len(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_obj_len, ctx, args)
-
-            }
-        }
-
-        ///
-        /// JSON.CLEAR <key> [path ...]
-        ///
-        fn json_clear(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_clear(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_clear, ctx, args)
-
-            }
-        }
-
-        ///
-        /// JSON.DEBUG <subcommand & arguments>
-        ///
-        /// subcommands:
-        /// MEMORY <key> [path]
-        /// HELP
-        ///
-        fn json_debug(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_debug(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_debug, ctx, args)
-
-            }
-        }
-
-        ///
-        /// JSON.RESP <key> [path]
-        ///
-        fn json_resp(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-            $pre_command_function_expr(ctx, &args);
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => commands::command_json_resp(mngr, ctx, args),
-                None => run_on_manager!(commands::command_json_resp, ctx, args)
-
-            }
+        macro_rules! json_command {
+            ($cmd:ident) => {
+                |ctx: &Context, args: Vec<RedisString>| -> RedisResult {
+                    $pre_command_function_expr(ctx, &args);
+                    let m = $get_manager_expr;
+                    match m {
+                        Some(mngr) => $cmd(mngr, ctx, args),
+                        None => run_on_manager!($cmd, ctx, args),
+                    }
+                }
+            };
         }
 
         redis_json_module_export_shared_api! {
@@ -423,7 +145,7 @@ macro_rules! redis_json_module_create {(
             pre_command_function: $pre_command_function_expr,
         }
 
-        fn intialize(ctx: &Context, args: &[RedisString]) -> Status {
+        fn initialize(ctx: &Context, args: &[RedisString]) -> Status {
             ctx.log_notice(&format!("version: {} git sha: {} branch: {}",
                 $version,
                 match GIT_SHA { Some(val) => val, _ => "unknown"},
@@ -464,32 +186,32 @@ macro_rules! redis_json_module_create {(
             version: $version,
             data_types: [$($data_type,)*],
             init: json_init_config,
-            init: intialize,
+            init: initialize,
             info: $info_func,
             commands: [
-                ["json.del", json_del, "write", 1,1,1],
-                ["json.get", json_get, "readonly", 1,1,1],
-                ["json.mget", json_mget, "readonly", 1,1,1],
-                ["json.set", json_set, "write deny-oom", 1,1,1],
-                ["json.type", json_type, "readonly", 1,1,1],
-                ["json.numincrby", json_num_incrby, "write", 1,1,1],
-                ["json.toggle", json_bool_toggle, "write deny-oom", 1,1,1],
-                ["json.nummultby", json_num_multby, "write", 1,1,1],
-                ["json.numpowby", json_num_powby, "write", 1,1,1],
-                ["json.strappend", json_str_append, "write deny-oom", 1,1,1],
-                ["json.strlen", json_str_len, "readonly", 1,1,1],
-                ["json.arrappend", json_arr_append, "write deny-oom", 1,1,1],
-                ["json.arrindex", json_arr_index, "readonly", 1,1,1],
-                ["json.arrinsert", json_arr_insert, "write deny-oom", 1,1,1],
-                ["json.arrlen", json_arr_len, "readonly", 1,1,1],
-                ["json.arrpop", json_arr_pop, "write", 1,1,1],
-                ["json.arrtrim", json_arr_trim, "write", 1,1,1],
-                ["json.objkeys", json_obj_keys, "readonly", 1,1,1],
-                ["json.objlen", json_obj_len, "readonly", 1,1,1],
-                ["json.clear", json_clear, "write", 1,1,1],
-                ["json.debug", json_debug, "readonly", 2,2,1],
-                ["json.forget", json_del, "write", 1,1,1],
-                ["json.resp", json_resp, "readonly", 1,1,1],
+                ["json.del", json_command!(json_del), "write", 1,1,1],
+                ["json.get", json_command!(json_get), "readonly", 1,1,1],
+                ["json.mget", json_command!(json_mget), "readonly", 1,1,1],
+                ["json.set", json_command!(json_set), "write deny-oom", 1,1,1],
+                ["json.type", json_command!(json_type), "readonly", 1,1,1],
+                ["json.numincrby", json_command!(json_num_incrby), "write", 1,1,1],
+                ["json.toggle", json_command!(json_bool_toggle), "write deny-oom", 1,1,1],
+                ["json.nummultby", json_command!(json_num_multby), "write", 1,1,1],
+                ["json.numpowby", json_command!(json_num_powby), "write", 1,1,1],
+                ["json.strappend", json_command!(json_str_append), "write deny-oom", 1,1,1],
+                ["json.strlen", json_command!(json_str_len), "readonly", 1,1,1],
+                ["json.arrappend", json_command!(json_arr_append), "write deny-oom", 1,1,1],
+                ["json.arrindex", json_command!(json_arr_index), "readonly", 1,1,1],
+                ["json.arrinsert", json_command!(json_arr_insert), "write deny-oom", 1,1,1],
+                ["json.arrlen", json_command!(json_arr_len), "readonly", 1,1,1],
+                ["json.arrpop", json_command!(json_arr_pop), "write", 1,1,1],
+                ["json.arrtrim", json_command!(json_arr_trim), "write", 1,1,1],
+                ["json.objkeys", json_command!(json_obj_keys), "readonly", 1,1,1],
+                ["json.objlen", json_command!(json_obj_len), "readonly", 1,1,1],
+                ["json.clear", json_command!(json_clear), "write", 1,1,1],
+                ["json.debug", json_command!(json_debug), "readonly", 2,2,1],
+                ["json.forget", json_command!(json_del), "write", 1,1,1],
+                ["json.resp", json_command!(json_resp), "readonly", 1,1,1],
             ],
         }
     }

@@ -471,8 +471,8 @@ jobs:
       - build-steps
       - benchmark-steps:
           profile_env: "1"
-          triggering_env: "circleci.profilers" # results generated with profilers attached are not mixed with the ones without it 
-  
+          triggering_env: "circleci.profilers" # results generated with profilers attached are not mixed with the ones without it
+
 
 #----------------------------------------------------------------------------------------------------------------------------------
 
@@ -557,7 +557,7 @@ workflows:
           context: common
           matrix:
             parameters:
-              platform: [focal, bionic, xenial, rocky8, centos7, bullseye]
+              platform: [focal, bionic, xenial, rocky8, centos7, bullseye, jammy]
       - build-arm-platforms:
           <<: *on-integ-and-version-tags
           context: common
