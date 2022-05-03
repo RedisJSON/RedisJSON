@@ -12,7 +12,8 @@ use std::str::FromStr;
 
 use jsonpath_rs;
 use jsonpath_rs::{
-    calc_once, calc_once_paths, calc_once_with_paths, compile, json_path::UserPathTracker, json_path::JsonPathToken
+    calc_once, calc_once_paths, calc_once_with_paths, compile, json_path::JsonPathToken,
+    json_path::UserPathTracker,
 };
 
 use crate::redisjson::SetOptions;
@@ -265,7 +266,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         // let mut parsed_static_path = StaticPathParser::check(path)?;
 
         // if parsed_static_path.valid != VisitStatus::Valid {
-            
+
         // }
         // if parsed_static_path.static_path_elements.len() < 2 {
         //     return Err("Err: path must end with object key to set".into());
@@ -273,8 +274,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
 
         match token_type {
             JsonPathToken::String => {
-                if query.size() == 1
-                {
+                if query.size() == 1 {
                     // Adding to the root
                     Ok(vec![UpdateInfo::AUI(AddUpdateInfo {
                         path: Vec::new(),
