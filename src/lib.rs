@@ -27,7 +27,6 @@ pub mod error;
 mod formatter;
 pub mod ivalue_manager;
 pub mod manager;
-mod nodevisitor;
 pub mod redisjson;
 
 pub const GIT_SHA: Option<&str> = std::option_env!("GIT_SHA");

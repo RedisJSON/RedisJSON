@@ -1000,7 +1000,8 @@ def testIssue_74(env):
 
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{}'))
     # This shouldn't crash Redis
-    r.expect('JSON.SET', 'test', '$a', '12').raiseError()
+    r.expect('JSON.SET', 'test', '$a', '12').equal("OK")
+    r.expect('JSON.GET', 'test', '$a').equal('[12]')
 
 def testDoubleParse(env):
     r = env

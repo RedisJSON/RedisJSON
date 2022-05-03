@@ -36,12 +36,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "array_tool"
-version = "1.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f8cb5d814eb646a863c4f24978cff2880c4be96ad8cde2c0f0678732902e271"
-
-[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -374,21 +368,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1aab8fc367588b89dcee83ab0fd66b72b50b72fa1904d7095045ace2b0c81c35"
 
 [[package]]
-name = "jsonpath_lib"
-version = "0.2.6"
-source = "git+https://github.com/RedisJSON/jsonpath.git?branch=generic_json_path#6da271ec44ff56db0d2e7009efc707935ee8c0f8"
-dependencies = [
- "array_tool",
- "ijson",
- "log",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "jsonpath_rs"
 version = "0.1.0"
-source = "git+https://github.com/RedisJSON/jsonpath_rs.git?branch=master#e5afce25f256d1cb09688f0979d1c173b3fcb0bd"
+source = "git+https://github.com/RedisJSON/jsonpath_rs.git?branch=new_jsonpath_functionalities#2d194b40c50e4cfd7965974a9860240599d7b1bd"
 dependencies = [
  "ijson",
  "pest",
@@ -681,7 +663,6 @@ dependencies = [
  "bson",
  "ijson",
  "itertools",
- "jsonpath_lib",
  "jsonpath_rs",
  "libc",
  "log",

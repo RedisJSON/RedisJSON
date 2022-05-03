@@ -3,7 +3,6 @@ use crate::formatter::RedisJsonFormatter;
 use crate::manager::err_msg_json_path_doesnt_exist_with_param;
 use crate::manager::{err_msg_json_expected, err_msg_json_path_doesnt_exist_with_param_or};
 use crate::manager::{AddUpdateInfo, Manager, ReadHolder, SetUpdateInfo, UpdateInfo, WriteHolder};
-use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 use crate::redisjson::{normalize_arr_indices, Format, Path};
 use jsonpath_rs::select_value::{SelectValue, SelectValueType};
 use redis_module::{Context, RedisValue};
@@ -13,7 +12,7 @@ use std::str::FromStr;
 
 use jsonpath_rs;
 use jsonpath_rs::{
-    calc_once, calc_once_paths, calc_once_with_paths, compile, json_path::UserPathTracker,
+    calc_once, calc_once_paths, calc_once_with_paths, compile, json_path::UserPathTracker, json_path::JsonPathToken
 };
 
 use crate::redisjson::SetOptions;
@@ -252,59 +251,63 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     }
 
     fn find_add_paths(&mut self, path: &str) -> Result<Vec<UpdateInfo>, Error> {
-        let mut parsed_static_path = StaticPathParser::check(path)?;
-
-        if parsed_static_path.valid != VisitStatus::Valid {
+        let mut query = compile(&path)?;
+        if !query.is_static() {
             return Err("Err: wrong static path".into());
         }
-        if parsed_static_path.static_path_elements.len() < 2 {
+
+        if query.size() < 1 {
             return Err("Err: path must end with object key to set".into());
         }
 
-        let last = parsed_static_path.static_path_elements.pop().unwrap();
+        let (last, token_type) = query.pop_last().unwrap();
 
-        if let StaticPathElement::ObjectKey(key) = last {
-            if let StaticPathElement::Root = parsed_static_path.static_path_elements.last().unwrap()
-            {
-                // Adding to the root
-                Ok(vec![UpdateInfo::AUI(AddUpdateInfo {
-                    path: Vec::new(),
-                    key,
-                })])
-            } else {
-                // Adding somewhere in existing object, use jsonpath_lib::replace_with
-                let p = parsed_static_path
-                    .static_path_elements
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<String>();
-                let query = compile(&p)?;
+        // let mut parsed_static_path = StaticPathParser::check(path)?;
+
+        // if parsed_static_path.valid != VisitStatus::Valid {
+            
+        // }
+        // if parsed_static_path.static_path_elements.len() < 2 {
+        //     return Err("Err: path must end with object key to set".into());
+        // }
+
+        match token_type {
+            JsonPathToken::String => {
+                if query.size() == 1
+                {
+                    // Adding to the root
+                    Ok(vec![UpdateInfo::AUI(AddUpdateInfo {
+                        path: Vec::new(),
+                        key: last,
+                    })])
+                } else {
+                    // Adding somewhere in existing object, use jsonpath_lib::replace_with
+                    let res = calc_once_paths(query, self.val);
+
+                    Ok(res
+                        .into_iter()
+                        .map(|v| {
+                            UpdateInfo::AUI(AddUpdateInfo {
+                                path: v,
+                                key: last.to_string(),
+                            })
+                        })
+                        .collect())
+                }
+            }
+            JsonPathToken::Number => {
+                // if we reach here with array path we are either out of range
+                // or no-oping an NX where the value is already present
+
+                let query = compile(path)?;
                 let res = calc_once_paths(query, self.val);
 
-                Ok(res
-                    .into_iter()
-                    .map(|v| {
-                        UpdateInfo::AUI(AddUpdateInfo {
-                            path: v,
-                            key: key.to_string(),
-                        })
-                    })
-                    .collect())
+                if res.is_empty() {
+                    Err("ERR array index out of range".into())
+                } else {
+                    Ok(Vec::new())
+                }
             }
-        } else if let StaticPathElement::ArrayIndex(_) = last {
-            // if we reach here with array path we are either out of range
-            // or no-oping an NX where the value is already present
-
-            let query = compile(path)?;
-            let res = calc_once_paths(query, self.val);
-
-            if res.is_empty() {
-                Err("ERR array index out of range".into())
-            } else {
-                Ok(Vec::new())
-            }
-        } else {
-            Err("ERR path not an object or array".into())
         }
     }
 
