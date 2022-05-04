@@ -39,7 +39,7 @@ impl<O: Serialize> Serialize for BSONWrapper<O> {
         S: Serializer,
     {
         let mut s = serializer.serialize_struct("Result", 1)?;
-        s.serialize_field("values", &self.values)?;
+        s.serialize_field("result", &self.values)?;
         s.end()
     }
 }
