@@ -58,7 +58,7 @@ pub enum Format {
 
 impl Default for Format {
     fn default() -> Self {
-        Format::JSON
+        Self::JSON
     }
 }
 

@@ -10,7 +10,6 @@ use redis_module::key::{verify_type, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::rediserror::RedisError;
 use redis_module::{Context, NotifyEvent, RedisString};
-use serde::Serialize;
 use serde_json::Number;
 use std::marker::PhantomData;
 use std::mem::size_of;
@@ -18,9 +17,6 @@ use std::mem::size_of;
 use crate::redisjson::RedisJSON;
 
 use crate::array_index::ArrayIndex;
-
-use bson::Document;
-use std::io::Cursor;
 
 pub struct IValueKeyHolderWrite<'a> {
     key: RedisKeyWritable,
@@ -618,14 +614,9 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     fn from_string(&self, val: &RedisString, format: Format) -> Result<Self::O, Error> {
         match format {
             Format::JSON => self.from_str(val.try_as_str()?),
-            Format::BSON => Document::from_reader(&mut Cursor::new(val.as_slice())).map_or_else(
-                |e| Err(e.to_string().into()),
-                |doc| {
-                    let mut out = serde_json::Serializer::new(Vec::new());
-                    doc.serialize(&mut out)?;
-                    Ok(serde_json::from_slice(out.into_inner().as_slice())?)
-                },
-            ),
+            Format::BSON => {
+                bson::from_slice(val.as_slice()).map_or_else(|e| Err(e.into()), Result::Ok)
+            }
         }
     }
 

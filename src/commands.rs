@@ -9,6 +9,7 @@ use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
 use jsonpath_lib::select::Selector;
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
+use serde::ser::{Serialize, SerializeStruct, Serializer};
 use std::cmp::Ordering;
 use std::str::FromStr;
 
@@ -18,7 +19,6 @@ use serde_json::{Number, Value};
 
 use itertools::FoldWhile::{Continue, Done};
 use itertools::{EitherOrBoth, Itertools};
-use serde::{Serialize, Serializer};
 use std::collections::HashMap;
 
 const JSON_ROOT_PATH: &str = "$";
@@ -28,6 +28,21 @@ const CMD_ARG_INDENT: &str = "INDENT";
 const CMD_ARG_NEWLINE: &str = "NEWLINE";
 const CMD_ARG_SPACE: &str = "SPACE";
 const CMD_ARG_FORMAT: &str = "FORMAT";
+
+#[derive(Default)]
+struct BSONWrapper<O: Serialize> {
+    values: O,
+}
+impl<O: Serialize> Serialize for BSONWrapper<O> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut s = serializer.serialize_struct("Result", 1)?;
+        s.serialize_field("values", &self.values)?;
+        s.end()
+    }
+}
 
 // Compile time evaluation of the max len() of all elements of the array
 const fn max_strlen(arr: &[&str]) -> usize {
@@ -163,16 +178,16 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         Ok(results)
     }
 
-    pub fn serialize_object<O: Serialize>(o: &O, options: ResultOptions) -> Vec<u8> {
+    pub fn serialize_object<O: Serialize>(object: &O, options: ResultOptions) -> Vec<u8> {
         match options.format {
             Format::JSON => {
                 let formatter =
                     RedisJsonFormatter::new(options.indent, options.space, options.newline);
                 let mut out = serde_json::Serializer::with_formatter(Vec::new(), formatter);
-                o.serialize(&mut out).unwrap();
+                object.serialize(&mut out).unwrap();
                 out.into_inner()
             }
-            Format::BSON => vec![],
+            Format::BSON => bson::to_vec(&BSONWrapper { values: object }).unwrap(),
         }
     }
 

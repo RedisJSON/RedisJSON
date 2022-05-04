@@ -45,7 +45,7 @@ pub static mut LLAPI_CTX: Option<*mut rawmod::RedisModuleCtx> = None;
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 fn create_rmstring(
     ctx: *mut rawmod::RedisModuleCtx,
-    value: Vec<u8>,    
+    value: Vec<u8>,
     rmstr: *mut *mut rawmod::RedisModuleString,
 ) -> Status {
     if let Ok(s) = CString::new(value) {

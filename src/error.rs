@@ -59,6 +59,12 @@ impl From<serde_json::Error> for Error {
     }
 }
 
+impl From<bson::de::Error> for Error {
+    fn from(e: bson::de::Error) -> Self {
+        Self { msg: e.to_string() }
+    }
+}
+
 impl From<JsonPathError> for Error {
     fn from(e: JsonPathError) -> Self {
         Self {
