@@ -337,8 +337,8 @@ def testSetBSON(env):
     r.assertOk(r.execute_command('JSON.SET', 'test', '$', data, 'FORMAT', 'BSON'))
     r.expect('JSON.GET', 'test', '$').equal( r'[{"A":[1,"fds",3,true,{"gg":"tt"}]}]')
 
-    result = bson.dumps({'values':[{"A":[1,"fds",3,True, {"gg":"tt"}]}]})
-    r.expect('JSON.GET', 'test', '$', 'FORMAT', 'BSON').equal( result)
+    result = bson.loads(r.execute_command('JSON.GET', 'test', '$', 'FORMAT', 'BSON'))
+    r.assertEqual(result,{'values':[{"A":[1,"fds",3,True, {"gg":"tt"}]}]})
 
 def testMgetCommand(env):
     """Test REJSON.MGET command"""
