@@ -471,8 +471,8 @@ jobs:
       - build-steps
       - benchmark-steps:
           profile_env: "1"
-          triggering_env: "circleci.profilers" # results generated with profilers attached are not mixed with the ones without it 
-  
+          triggering_env: "circleci.profilers" # results generated with profilers attached are not mixed with the ones without it
+
 
 #----------------------------------------------------------------------------------------------------------------------------------
 
