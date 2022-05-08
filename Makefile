@@ -271,16 +271,3 @@ sanbox:
 	@docker run -it -v $(PWD):/rejson -w /rejson --cap-add=SYS_PTRACE --security-opt seccomp=unconfined $(SANBOX_ARGS) redisfab/clang:13-x64-bullseye bash
 
 .PHONY: sanbox
-
-#----------------------------------------------------------------------------------------------
-
-builddocs:
-	$(SHOW)mkdocs build
-
-localdocs: builddocs
-	$(SHOW)mkdocs serve
-
-deploydocs: builddocs
-	$(SHOW)mkdocs gh-deploy
-
-.PHONY: builddocs localdocs deploydocs
