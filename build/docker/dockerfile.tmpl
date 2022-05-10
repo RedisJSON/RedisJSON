@@ -41,7 +41,9 @@ RUN set -e ;\
 # RUN cp /build/bin/linux-{{OSNICK}}-{{ARCH}}/RediSearch/redisearch.so /build/bin/
 
 #----------------------------------------------------------------------------------------------
+{% if NO_SEARCH != "1" %}
 FROM redisfab/redisearch:{{REDISEARCH_VERSION}}-{{ARCH}}-{{OSNICK}} AS search
+{% endif %}
 FROM redisfab/redis:{{REDIS_VERSION}}-{{ARCH}}-{{OSNICK}}
 
 WORKDIR /data
@@ -49,8 +51,10 @@ WORKDIR /data
 RUN mkdir -p "{{MODULES_DIR}}"
 
 COPY --from=builder /build/bin/linux-{{ARCH}}-release/rejson.so* "{{MODULES_DIR}}/"
+{% if NO_SEARCH != "1" %}
 RUN true
 COPY --from=search  {{MODULES_DIR}}/redisearch.so* "{{MODULES_DIR}}/"
+{% endif %}
 # COPY --from=builder /build/bin/redisearch.so {{MODULES_DIR}}/redisearch.so
 RUN true
 
@@ -62,4 +66,8 @@ COPY --from=builder /build/bin/artifacts/ /var/opt/redislabs/artifacts/
 
 RUN chown -R redis:redis {{MODULES_DIR}}
 
+{% if NO_SEARCH != "1" %}
 CMD ["redis-server", "--loadmodule", "{{MODULES_DIR}}/rejson.so", "--loadmodule", "{{MODULES_DIR}}/redisearch.so"]
+{% else %}
+CMD ["redis-server", "--loadmodule", "{{MODULES_DIR}}/rejson.so"]
+{% endif %}
