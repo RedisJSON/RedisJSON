@@ -20,6 +20,7 @@ impl Display for StaticPathElement {
     }
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, PartialEq)]
 pub enum VisitStatus {
     NotValid,
@@ -80,7 +81,7 @@ impl<'a> NodeVisitor<'a> for StaticPathParser<'a> {
                 (Some(ParseToken::In), ParseToken::Key(key))
                 | (Some(ParseToken::Key(key)), ParseToken::ArrayEof) => {
                     self.static_path_elements
-                        .push(StaticPathElement::ObjectKey(key.to_string()));
+                        .push(StaticPathElement::ObjectKey((*key).to_string()));
                     VisitStatus::Valid
                 }
 

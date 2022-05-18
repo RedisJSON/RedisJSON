@@ -19,6 +19,7 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 
 /// Returns normalized start index
+#[must_use]
 pub fn normalize_arr_start_index(start: i64, len: i64) -> i64 {
     if start < 0 {
         0.max(len + start)
@@ -29,6 +30,7 @@ pub fn normalize_arr_start_index(start: i64, len: i64) -> i64 {
 }
 
 /// Return normalized `(start, end)` indices as a tuple
+#[must_use]
 pub fn normalize_arr_indices(start: i64, end: i64, len: i64) -> (i64, i64) {
     // Normalize start
     let start = normalize_arr_start_index(start, len);
@@ -66,7 +68,7 @@ impl FromStr for Format {
 }
 
 ///
-/// Backwards compatibility convertor for RedisJSON 1.x clients
+/// Backwards compatibility convertor for `RedisJSON` 1.x clients
 ///
 pub struct Path<'a> {
     original_path: &'a str,
@@ -74,6 +76,7 @@ pub struct Path<'a> {
 }
 
 impl<'a> Path<'a> {
+    #[must_use]
     pub fn new(path: &'a str) -> Path {
         let fixed_path = if path.starts_with('$') {
             None
@@ -94,16 +97,18 @@ impl<'a> Path<'a> {
         }
     }
 
-    pub fn is_legacy(&self) -> bool {
+    #[must_use]
+    pub const fn is_legacy(&self) -> bool {
         self.fixed_path.is_some()
     }
 
-    pub fn get_path(&'a self) -> &'a str {
+    pub fn get_path(&self) -> &str {
         self.fixed_path
             .as_ref()
-            .map_or(self.original_path, |s| s.as_str())
+            .map_or(self.original_path, String::as_str)
     }
 
+    #[must_use]
     pub fn get_original(&self) -> &'a str {
         self.original_path
     }
@@ -186,6 +191,7 @@ pub mod type_methods {
         })
     }
 
+    /// # Safety
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn free(value: *mut c_void) {
         if value.is_null() {
@@ -206,6 +212,7 @@ pub mod type_methods {
         };
     }
 
+    /// # Safety
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
         let mut out = serde_json::Serializer::new(Vec::new());
@@ -225,6 +232,7 @@ pub mod type_methods {
         raw::save_string(rdb, cjson.to_str().unwrap());
     }
 
+    /// # Safety
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn mem_usage(value: *const c_void) -> usize {
         match get_manager_type() {

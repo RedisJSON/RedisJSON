@@ -37,7 +37,7 @@ pub struct IValueKeyHolderWrite<'a> {
 /// If the returned value from `func` is [`Err`], the current value remains (although it could be modified by `func`)
 ///
 fn replace<F: FnMut(&mut IValue) -> Result<Option<IValue>, Error>>(
-    path: &Vec<String>,
+    path: &[String],
     root: &mut IValue,
     mut func: F,
 ) -> Result<(), Error> {
@@ -53,8 +53,8 @@ fn replace<F: FnMut(&mut IValue) -> Result<Option<IValue>, Error>>(
                 let obj = target_once.as_object_mut().unwrap();
                 if is_last {
                     if let Entry::Occupied(mut e) = obj.entry(token) {
-                        let mut v = e.get_mut();
-                        match (func)(&mut v) {
+                        let v = e.get_mut();
+                        match (func)(v) {
                             Ok(res) => {
                                 if let Some(res) = res {
                                     *v = res;
@@ -75,8 +75,8 @@ fn replace<F: FnMut(&mut IValue) -> Result<Option<IValue>, Error>>(
                 if let Ok(x) = token.parse::<usize>() {
                     if is_last {
                         if x < arr.len() {
-                            let mut v = &mut arr.as_mut_slice()[x];
-                            match (func)(&mut v) {
+                            let v = &mut arr.as_mut_slice()[x];
+                            match (func)(v) {
                                 Ok(res) => {
                                     if let Some(res) = res {
                                         *v = res;
@@ -115,7 +115,7 @@ fn replace<F: FnMut(&mut IValue) -> Result<Option<IValue>, Error>>(
 /// If the returned value from `func` is [`Err`], the current value remains (although it could be modified by `func`)
 ///
 fn update<F: FnMut(&mut IValue) -> Result<Option<()>, Error>>(
-    path: &Vec<String>,
+    path: &[String],
     root: &mut IValue,
     mut func: F,
 ) -> Result<(), Error> {
@@ -130,8 +130,8 @@ fn update<F: FnMut(&mut IValue) -> Result<Option<()>, Error>>(
                 let obj = target_once.as_object_mut().unwrap();
                 if is_last {
                     if let Entry::Occupied(mut e) = obj.entry(token) {
-                        let mut v = e.get_mut();
-                        match (func)(&mut v) {
+                        let v = e.get_mut();
+                        match (func)(v) {
                             Ok(res) => {
                                 if res.is_none() {
                                     e.remove();
@@ -149,8 +149,8 @@ fn update<F: FnMut(&mut IValue) -> Result<Option<()>, Error>>(
                 if let Ok(x) = token.parse::<usize>() {
                     if is_last {
                         if x < arr.len() {
-                            let mut v = &mut arr.as_mut_slice()[x];
-                            match (func)(&mut v) {
+                            let v = &mut arr.as_mut_slice()[x];
+                            match (func)(v) {
                                 Ok(res) => {
                                     if res.is_none() {
                                         arr.remove(x);
@@ -180,14 +180,14 @@ fn update<F: FnMut(&mut IValue) -> Result<Option<()>, Error>>(
 }
 
 impl<'a> IValueKeyHolderWrite<'a> {
-    fn do_op<F>(&mut self, paths: Vec<String>, mut op_fun: F) -> Result<(), RedisError>
+    fn do_op<F>(&mut self, paths: &[String], mut op_fun: F) -> Result<(), RedisError>
     where
         F: FnMut(&mut IValue) -> Result<Option<()>, Error>,
     {
         if paths.is_empty() {
             // updating the root require special treatment
-            let mut root = self.get_value().unwrap().unwrap();
-            let res = (op_fun)(&mut root);
+            let root = self.get_value().unwrap().unwrap();
+            let res = (op_fun)(root);
             match res {
                 Ok(res) => {
                     if res.is_none() {
@@ -199,7 +199,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
                 }
             }
         } else {
-            update(&paths, self.get_value().unwrap().unwrap(), op_fun)?;
+            update(paths, self.get_value().unwrap().unwrap(), op_fun)?;
         }
 
         Ok(())
@@ -219,7 +219,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
         let in_value = &serde_json::from_str(num)?;
         if let serde_json::Value::Number(in_value) = in_value {
             let mut res = None;
-            self.do_op(path, |v| {
+            self.do_op(&path, |v| {
                 let num_res = match (
                     v.as_number().unwrap().has_decimal_point(),
                     in_value.as_i64(),
@@ -384,12 +384,12 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn pow_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError> {
-        self.do_num_op(path, num, |i1, i2| i1.pow(i2 as u32), |f1, f2| f1.powf(f2))
+        self.do_num_op(path, num, |i1, i2| i1.pow(i2 as u32), f64::powf)
     }
 
     fn bool_toggle(&mut self, path: Vec<String>) -> Result<bool, RedisError> {
         let mut res = None;
-        self.do_op(path, |v| {
+        self.do_op(&path, |v| {
             if let DestructuredMut::Bool(mut bool_mut) = v.destructure_mut() {
                 //Using DestructuredMut in order to modify a `Bool` variant
                 let val = bool_mut.get() ^ true;
@@ -408,7 +408,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         let json = serde_json::from_str(&val)?;
         if let serde_json::Value::String(s) = json {
             let mut res = None;
-            self.do_op(path, |v| {
+            self.do_op(&path, |v| {
                 let v_str = v.as_string_mut().unwrap();
                 let new_str = [v_str.as_str(), s.as_str()].concat();
                 res = Some(new_str.len());
@@ -429,9 +429,9 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
 
     fn arr_append(&mut self, path: Vec<String>, args: Vec<IValue>) -> Result<usize, RedisError> {
         let mut res = None;
-        self.do_op(path, |v| {
+        self.do_op(&path, |v| {
             let arr = v.as_array_mut().unwrap();
-            for a in args.iter() {
+            for a in &args {
                 arr.push(a.clone());
             }
             res = Some(arr.len());
@@ -446,11 +446,11 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     fn arr_insert(
         &mut self,
         paths: Vec<String>,
-        args: &Vec<IValue>,
+        args: &[IValue],
         index: i64,
     ) -> Result<usize, RedisError> {
         let mut res = None;
-        self.do_op(paths, |v: &mut IValue| {
+        self.do_op(&paths, |v: &mut IValue| {
             // Verify legal index in bounds
             let len = v.len().unwrap() as i64;
             let index = if index < 0 { len + index } else { index };
@@ -475,7 +475,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
 
     fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<String>, RedisError> {
         let mut res = None;
-        self.do_op(path, |v| {
+        self.do_op(&path, |v| {
             if let Some(array) = v.as_array_mut() {
                 if array.is_empty() {
                     return Ok(Some(()));
@@ -497,7 +497,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
 
     fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> Result<usize, RedisError> {
         let mut res = None;
-        self.do_op(path, |v| {
+        self.do_op(&path, |v| {
             if let Some(array) = v.as_array_mut() {
                 let len = array.len() as i64;
                 let stop = stop.normalize(len);
@@ -528,7 +528,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
 
     fn clear(&mut self, path: Vec<String>) -> Result<usize, RedisError> {
         let mut cleared = 0;
-        self.do_op(path, |v| match v.type_() {
+        self.do_op(&path, |v| match v.type_() {
             ValueType::Object => {
                 let obj = v.as_object_mut().unwrap();
                 obj.clear();
@@ -546,19 +546,6 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 cleared += 1;
                 Ok(Some(()))
             }
-
-            ValueType::String => {
-                *v = IValue::try_from("").unwrap();
-                cleared += 1;
-                Ok(Some(()))
-            }
-
-            ValueType::Bool => {
-                *v = IValue::from(false);
-                cleared += 1;
-                Ok(Some(()))
-            }
-
             _ => Ok(Some(())),
         })?;
         Ok(cleared)
@@ -614,9 +601,12 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     fn from_str(&self, val: &str, format: Format) -> Result<Self::O, Error> {
         match format {
             Format::JSON => Ok(serde_json::from_str(val)?),
-            Format::BSON => decode_document(&mut Cursor::new(val.as_bytes()))
-                .map(|docs| {
-                    let v = if !docs.is_empty() {
+            Format::BSON => decode_document(&mut Cursor::new(val.as_bytes())).map_or_else(
+                |e| Err(e.to_string().into()),
+                |docs| {
+                    let v = if docs.is_empty() {
+                        IValue::NULL
+                    } else {
                         docs.iter().next().map_or_else(
                             || IValue::NULL,
                             |(_, b)| {
@@ -630,12 +620,10 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                                 .unwrap()
                             },
                         )
-                    } else {
-                        IValue::NULL
                     };
                     Ok(v)
-                })
-                .unwrap_or_else(|e| Err(e.to_string().into())),
+                },
+            ),
         }
     }
 

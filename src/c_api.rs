@@ -87,8 +87,7 @@ pub fn json_api_get_len<M: Manager>(_: M, json: *const c_void, count: *mut libc:
     let json = unsafe { &*(json.cast::<M::V>()) };
     let len = match json.get_type() {
         SelectValueType::String => Some(json.get_str().len()),
-        SelectValueType::Array => Some(json.len().unwrap()),
-        SelectValueType::Object => Some(json.len().unwrap()),
+        SelectValueType::Array | SelectValueType::Object => Some(json.len().unwrap()),
         _ => None,
     };
     match len {
@@ -531,10 +530,10 @@ macro_rules! redis_json_module_export_shared_api {
                     std::ptr::null_mut(),
                 ));
                 ctx.export_shared_api(
-                    &JSONAPI as *const RedisJSONAPI_V1 as *const c_void,
-                    REDISJSON_GETAPI.as_ptr() as *const c_char,
+                    (&JSONAPI as *const RedisJSONAPI_V1).cast::<c_void>(),
+                    REDISJSON_GETAPI.as_ptr().cast::<c_char>(),
                 );
-            }
+            };
         }
 
         static JSONAPI: RedisJSONAPI_V1 = RedisJSONAPI_V1 {
