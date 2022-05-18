@@ -301,7 +301,7 @@ commands:
               --upload_results_s3 \
               --fail_fast \
               --triggering_env << parameters.triggering_env >> \
-              --push_results_redistimeseries \
+              --push_results_redisjson \
               --allowed-envs << parameters.allowed_envs >>
 
 #----------------------------------------------------------------------------------------------------------------------------------

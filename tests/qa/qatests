@@ -147,7 +147,7 @@ class Test:
 
         global NOP, VERBOSE
         var_args = ' '.join(map(lambda v: f"-e {v}", self.xtx_vars))
-        
+
         try:
             if VERBOSE > 1:
                 print(f'{READIES}/bin/xtx {var_args} {self.test_fname}')
@@ -216,7 +216,7 @@ def main(token, test, modver, snapshot, rlecver, osnick, quick, nop, verbose, ve
                 rlecver = list(filter(lambda v: '100.0.0' in v, rs_versions))[0]
             except:
                 raise click.ClickException("Cannot find master version (100.0.0) in RS_VERSIONS")
-        Test(token, test_fname, modver, snapshot, lecver, osnick).run()
+        Test(token, test_fname, modver, snapshot, rlecver, osnick).run()
     else:
         rs_versions = paella.flines(os.path.join(HERE, 'RS_VERSIONS'))
         if quick:
