@@ -1,4 +1,10 @@
-# Developer notes
+---
+title: "Developer notes"
+linkTitle: "Developer notes"
+weight: 7
+description: >
+    Notes on debugging, testing and documentation
+---
 
 ## Debugging
 
@@ -8,7 +14,7 @@ debugging information.
 ## Testing
 
 Python is required for RedisJSON's module test. Install it with `apt-get install python`. You'll also
-need to have [redis-py](https://github.com/andymccurdy/redis-py) installed. The easiest way to get
+need to have [redis-py](https://github.com/redis/redis-py) installed. The easiest way to get
 it is using pip and running `pip install redis`.
 
 The module's test can be run against an "embedded" disposable Redis instance, or against an instance
@@ -27,9 +33,3 @@ environment variable, e.g.:
 $ # use an existing local Redis instance for testing the module
 $ REDIS_PORT=6379 make test
 ```
-
-## Documentation
-
-1. Prerequisites: `pip install mkdocs mkdocs-material`
-1. To build and serve locally: `make localdocs`
-1. To deploy to the website: `make deploydocs`
