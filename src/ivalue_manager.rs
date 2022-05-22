@@ -546,19 +546,6 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 cleared += 1;
                 Ok(Some(()))
             }
-
-            ValueType::String => {
-                *v = IValue::try_from("").unwrap();
-                cleared += 1;
-                Ok(Some(()))
-            }
-
-            ValueType::Bool => {
-                *v = IValue::from(false);
-                cleared += 1;
-                Ok(Some(()))
-            }
-
             _ => Ok(Some(())),
         })?;
         Ok(cleared)
