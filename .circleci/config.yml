@@ -543,7 +543,7 @@ workflows:
           context: common
           matrix:
             parameters:
-              platform: [bionic, focal]
+              platform: [bionic] # focal
       - build-macos:
           <<: *on-integ-and-version-tags
           context: common
