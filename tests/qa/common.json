@@ -6,14 +6,14 @@
     "email_recipients": "s5i1u4h5a8c8w2d7@redislabs.slack.com",
     "sut_environments": [],
     "tools_environment": {},
-    "modules_version": "{{MODULE_VERSION}}",
+    "modules_version": "{{MODULE_SEMANTIC_VERSION}}",
     "test_names_modules": [
       "{{MODULE_TEST_NAME}}"
     ],
     "global_spot_instances": "ondemand",
     "module_download_url": true,
     "module_download_urls": {
-      "{{MODULE_DOWNLOAD_NAME}}": "http://redismodules.s3.amazonaws.com/{{MODULE_DIR}}/{{MODULE_FILE_PREFIX}}.$OS.{{MODULE_VERSION}}.zip"
+      "{{MODULE_DOWNLOAD_NAME}}": "{{MODULE_URL}}"
     },
     "cycle_environments_setup": [
 	  {{RLEC_ENVS}}
