@@ -17,6 +17,6 @@ ART_DIR=$(ROOT)/bin/artifacts
 
 REDISEARCH_VERSION=master
 DOCKER_VARS += REDISEARCH_VERSION NO_SEARCH
-NO_SEARCH=1
+NO_SEARCH=
 
 include $(MK)/module.docker.rules
