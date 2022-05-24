@@ -13,7 +13,7 @@
     "global_spot_instances": "ondemand",
     "module_download_url": true,
     "module_download_urls": {
-      "{{MODULE_DOWNLOAD_NAME}}": "http://redismodules.s3.amazonaws.com/{{MODULE_DIR}}/{{MODULE_FILE_PREFIX}}.Linux-$OS.{{MODULE_VERSION}}.zip"
+      "{{MODULE_DOWNLOAD_NAME}}": "http://redismodules.s3.amazonaws.com/{{MODULE_DIR}}/{{MODULE_FILE_PREFIX}}.$OS.{{MODULE_VERSION}}.zip"
     },
     "cycle_environments_setup": [
 	  {{RLEC_ENVS}}

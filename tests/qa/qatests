@@ -24,21 +24,26 @@ OPERETO3_URL = "opereto.qa.redislabs.com"
 
 RLEC_PLATFORMS = {
     'xenial': { 
-        'os':  'Linux-ubuntu16.04',
-        'env': 'xenial-amd64-aws' },
+        'os':  'Linux-ubuntu16.04-x86_64',
+        'env': 'xenial-amd64-aws',
+        'crdt-os': 'XENIAL' },
     'bionic': {
-        'os': 'Linux-ubuntu18.04',
-        'env': 'bionic-amd64-aws' },
+        'os': 'Linux-ubuntu18.04-x86_64',
+        'env': 'bionic-amd64-aws',
+        'crdt-os': 'BIONIC' },
     'centos7': {
-        'os': 'Linux-rhel7',
-        'env': 'rhel7.7-x86_64-aws' },
+        'os': 'Linux-rhel7-x86_64',
+        'env': 'rhel7.7-x86_64-aws',
+        'crdt-os': 'RHEL7.9' },
     'centos8': {
-        'os': 'Linux-rhel8',
+        'os': 'Linux-rhel8-x86_64',
         'env': 'rhel8.5-x86_64-aws',
+        'crdt-os': 'RHEL8.4',
         'run': False },
     'rocky8': {
-        'os': 'Linux-rhel8',
-        'env': 'rhel8.5-x86_64-aws' }
+        'os': 'Linux-rhel8-x86_64',
+        'env': 'rhel8.5-x86_64-aws',
+        'crdt-os': 'RHEL8.4' }
 }
 
 RLEC_VER_ENVS = {
@@ -97,9 +102,9 @@ class Test:
         self.module_name = 'ReJSON'
 
         ENV['MODULE_VERSION'] = modver
-        ENV['MODULE_DIR'] = 'rejson'
-        ENV['MODULE_FILE_PREFIX'] = 'rejson'
-        ENV['MODULE_DOWNLOAD_NAME'] = 'rejson'
+        ENV['MODULE_DIR'] = 'rejson-hdt'
+        ENV['MODULE_FILE_PREFIX'] = 'rejson-hdt'
+        ENV['MODULE_DOWNLOAD_NAME'] = 'rejson-hdt'
         ENV['MODULE_TEST_NAME'] = 'ReJSON'
 
         if snapshot:
@@ -110,7 +115,8 @@ class Test:
         
         self.xtx_vars = ['MODULE_VERSION', 'MODULE_DIR', 'MODULE_FILE_PREFIX',
                          'MODULE_TEST_NAME', 'MODULE_DOWNLOAD_NAME',
-                         'RLEC_VERSION', 'RLEC_ENVS', 'RLEC_ARCH']
+                         'RLEC_VERSION', 'RLEC_ENVS', 'RLEC_OS', 'RLEC_ARCH',
+                         'QA_CRDT_LICENSE', 'RLEC_CRDT_OS']
 
     def run(self):
         if VERBOSE:
@@ -127,6 +133,7 @@ class Test:
                     continue
             if self.osnick is None or osnick == self.osnick:
                 found_osnick = True
+                ENV['RLEC_OS'] = RLEC_PLATFORMS[osnick]['os']
                 rlec_env = RLEC_PLATFORMS[osnick]['env']
                 env_spec = """
                     {{
@@ -135,6 +142,7 @@ class Test:
                       "concurrency": 1
                     }}
                     """.format(rlec_env=rlec_env)
+                
                 rlec_envs +=  (",\n" if rlec_envs != "" else "") + env_spec
         if not found_osnick:
             ret = f"error: osnick {self.osnick}: not found"
@@ -185,11 +193,11 @@ class Test:
 
 @click.command(help='Invoke QA Automation tests', cls=Command1)
 @click.option('--token', default=None, help='QA automation (Opereto) token (also: QA_AUTOMATION_TOKEN env var)')
-@click.option('--test', '-t', default='common', help='Name of .json parameters file')
+@click.option('--test', '-t', default=None, help='Name of .json parameters file')
 @click.option('--modver', '-m', default='master', help='Module version to test. Default: master')
 @click.option('--snapshot', '-s', is_flag=True, default=False, help='Test a snapshoy module version')
 @click.option('--rlecver', '-r', default=None, help='Test for a RLEC version`')
-@click.option('--osnick', default=None, help='Test for OSNICK`')
+@click.option('-o', '--osnick', default=None, help='Test for OSNICK`')
 @click.option('-q' ,'--quick', is_flag=True, default=False, help='Only test one RS version')
 @click.option('--nop', is_flag=True, default=False, help='Dry run')
 @click.option('--verbose', '-v', is_flag=True, default=False, help='Be verbose')
@@ -203,6 +211,9 @@ def main(token, test, modver, snapshot, rlecver, osnick, quick, nop, verbose, ve
         token = os.getenv('QA_AUTOMATION_TOKEN')
     if token is None and not nop:
         raise click.ClickException('QA automation token is missing.')
+
+    if test is None:
+        test = 'common'
     test_fname = os.path.join(HERE, f'{test}.json')
     if not os.path.exists(test_fname):
         raise click.ClickException(f"Invalid test name: {test}")
