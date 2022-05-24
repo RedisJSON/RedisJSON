@@ -25,25 +25,20 @@ OPERETO3_URL = "opereto.qa.redislabs.com"
 RLEC_PLATFORMS = {
     'xenial': { 
         'os':  'Linux-ubuntu16.04-x86_64',
-        'env': 'xenial-amd64-aws',
-        'crdt-os': 'XENIAL' },
+        'env': 'xenial-amd64-aws' },
     'bionic': {
         'os': 'Linux-ubuntu18.04-x86_64',
-        'env': 'bionic-amd64-aws',
-        'crdt-os': 'BIONIC' },
+        'env': 'bionic-amd64-aws' },
     'centos7': {
         'os': 'Linux-rhel7-x86_64',
-        'env': 'rhel7.7-x86_64-aws',
-        'crdt-os': 'RHEL7.9' },
+        'env': 'rhel7.7-x86_64-aws' },
     'centos8': {
         'os': 'Linux-rhel8-x86_64',
         'env': 'rhel8.5-x86_64-aws',
-        'crdt-os': 'RHEL8.4',
         'run': False },
     'rocky8': {
         'os': 'Linux-rhel8-x86_64',
-        'env': 'rhel8.5-x86_64-aws',
-        'crdt-os': 'RHEL8.4' }
+        'env': 'rhel8.5-x86_64-aws' }
 }
 
 RLEC_VER_ENVS = {
@@ -102,9 +97,9 @@ class Test:
         self.module_name = 'ReJSON'
 
         ENV['MODULE_VERSION'] = modver
-        ENV['MODULE_DIR'] = 'rejson-hdt'
-        ENV['MODULE_FILE_PREFIX'] = 'rejson-hdt'
-        ENV['MODULE_DOWNLOAD_NAME'] = 'rejson-hdt'
+        ENV['MODULE_DIR'] = 'rejson'
+        ENV['MODULE_FILE_PREFIX'] = 'rejson'
+        ENV['MODULE_DOWNLOAD_NAME'] = 'rejson'
         ENV['MODULE_TEST_NAME'] = 'ReJSON'
 
         if snapshot:
@@ -115,8 +110,7 @@ class Test:
         
         self.xtx_vars = ['MODULE_VERSION', 'MODULE_DIR', 'MODULE_FILE_PREFIX',
                          'MODULE_TEST_NAME', 'MODULE_DOWNLOAD_NAME',
-                         'RLEC_VERSION', 'RLEC_ENVS', 'RLEC_OS', 'RLEC_ARCH',
-                         'QA_CRDT_LICENSE', 'RLEC_CRDT_OS']
+                         'RLEC_VERSION', 'RLEC_ENVS', 'RLEC_ARCH']
 
     def run(self):
         if VERBOSE:
@@ -133,7 +127,6 @@ class Test:
                     continue
             if self.osnick is None or osnick == self.osnick:
                 found_osnick = True
-                ENV['RLEC_OS'] = RLEC_PLATFORMS[osnick]['os']
                 rlec_env = RLEC_PLATFORMS[osnick]['env']
                 env_spec = """
                     {{
@@ -142,7 +135,6 @@ class Test:
                       "concurrency": 1
                     }}
                     """.format(rlec_env=rlec_env)
-                
                 rlec_envs +=  (",\n" if rlec_envs != "" else "") + env_spec
         if not found_osnick:
             ret = f"error: osnick {self.osnick}: not found"
