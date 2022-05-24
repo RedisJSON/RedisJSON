@@ -8,6 +8,7 @@ import re
 import json
 import requests
 import urllib3
+from zipfile import ZipFile
 
 HERE = os.path.dirname(__file__)
 ROOT = os.path.abspath(os.path.join(HERE, "../.."))
@@ -96,21 +97,39 @@ class Test:
         self.osnick = osnick
         self.module_name = 'ReJSON'
 
-        ENV['MODULE_VERSION'] = modver
-        ENV['MODULE_DIR'] = 'rejson'
-        ENV['MODULE_FILE_PREFIX'] = 'rejson'
-        ENV['MODULE_DOWNLOAD_NAME'] = 'rejson'
-        ENV['MODULE_TEST_NAME'] = 'ReJSON'
+        mod_dir = 'rejson'
+        mod_prefix = ('snapshots/' if snapshot else '') + 'rejson'
 
-        if snapshot:
-            ENV['MODULE_FILE_PREFIX'] = "snapshots/" + ENV['MODULE_FILE_PREFIX']
+        mod_url = f"http://redismodules.s3.amazonaws.com/{mod_dir}/{mod_prefix}.$OS.{modver}.zip"
+        
+        if modver == 'master':
+            mod_sem_ver = '99.99.99'
+        else:
+            mod_sem_ver = modver
+            try:
+                bionic_os = RLEC_PLATFORMS['bionic']['os']
+                mod_url_bionic = f"http://redismodules.s3.amazonaws.com/{mod_dir}/{mod_prefix}.{bionic_os}.{modver}.zip"
+                mod_zip = paella.wget(mod_url_bionic, tempdir=True)
+                with ZipFile(mod_zip) as zip:
+                    with zip.open('module.json') as jf:
+                        j = json.loads(jf.read())
+                        mod_sem_ver = j["semantic_version"]
+                paella.rm_rf(mod_zip)
+            except:
+                pass
+
+        ENV['MODULE_VERSION'] = modver
+        ENV['MODULE_SEMANTIC_VERSION'] = mod_sem_ver
+        ENV['MODULE_DOWNLOAD_NAME'] = 'ReJSON'
+        ENV['MODULE_URL'] = mod_url
+        ENV['MODULE_TEST_NAME'] = 'ReJSON'
 
         ENV['RLEC_VERSION'] = rlecver
         ENV['RLEC_ARCH'] = 'x86_64'
         
-        self.xtx_vars = ['MODULE_VERSION', 'MODULE_DIR', 'MODULE_FILE_PREFIX',
-                         'MODULE_TEST_NAME', 'MODULE_DOWNLOAD_NAME',
-                         'RLEC_VERSION', 'RLEC_ENVS', 'RLEC_ARCH']
+        self.xtx_vars = ['MODULE_VERSION', 'MODULE_SEMANTIC_VERSION', 'MODULE_TEST_NAME',
+                         'MODULE_DOWNLOAD_NAME', 'MODULE_URL',
+                         'RLEC_VERSION', 'RLEC_ENVS']
 
     def run(self):
         if VERBOSE:
