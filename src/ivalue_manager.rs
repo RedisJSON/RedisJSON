@@ -286,7 +286,8 @@ impl<'a> IValueKeyHolderWrite<'a> {
     fn serialize(results: &IValue, format: Format) -> Result<String, Error> {
         let res = match format {
             Format::JSON => serde_json::to_string(results)?,
-            Format::BSON => return Err("ERR Soon to come...".into()), //results.into() as Bson,
+            Format::BSON => return Err("ERR BSON soon to come...".into()), //results.into() as Bson,
+            Format::XML => return Err("ERR XML soon to come...".into()),   //results.into() as Bson,
         };
         Ok(res)
     }
@@ -617,6 +618,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
             Format::BSON => {
                 bson::from_slice(val.as_slice()).map_or_else(|e| Err(e.into()), Result::Ok)
             }
+            Format::XML => quick_xml::de::from_slice(val.as_slice()).map_err(|err| err.into()),
         }
     }
 

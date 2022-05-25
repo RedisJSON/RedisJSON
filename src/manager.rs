@@ -16,6 +16,7 @@ use crate::REDIS_JSON_TYPE;
 
 use crate::error::Error;
 use bson::Document;
+use quick_xml;
 use std::io::Cursor;
 
 use crate::array_index::ArrayIndex;
@@ -280,7 +281,8 @@ impl<'a> KeyHolderWrite<'a> {
     fn serialize(results: &Value, format: Format) -> Result<String, Error> {
         let res = match format {
             Format::JSON => serde_json::to_string(results)?,
-            Format::BSON => return Err("ERR Soon to come...".into()), //results.into() as Bson,
+            Format::BSON => return Err("ERR BSON soon to come...".into()),
+            Format::XML => return Err("ERR XML soon to come...".into()),
         };
         Ok(res)
     }
@@ -600,6 +602,7 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
                     Ok(serde_json::from_slice(out.into_inner().as_slice())?)
                 },
             ),
+            Format::XML => quick_xml::de::from_slice(val.as_slice()).map_err(|err| err.into()),
         }
     }
 

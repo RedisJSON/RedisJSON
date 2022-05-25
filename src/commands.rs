@@ -7,6 +7,7 @@ use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 use crate::redisjson::{normalize_arr_indices, Format, Path};
 use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
 use jsonpath_lib::select::Selector;
+use quick_xml;
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
@@ -188,6 +189,11 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 out.into_inner()
             }
             Format::BSON => bson::to_vec(&BSONWrapper { values: object }).unwrap(),
+            Format::XML => {
+                let mut writer = Vec::new();
+                quick_xml::se::to_writer(&mut writer, object).unwrap();
+                writer
+            }
         }
     }
 
@@ -334,7 +340,8 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     pub fn serialize(results: &V, format: Format) -> Result<String, Error> {
         match format {
             Format::JSON => Ok(serde_json::to_string(results)?),
-            Format::BSON => Err("ERR Soon to come...".into()), //results.into() as Bson,
+            Format::BSON => Err("ERR BSON soon to come...".into()),
+            Format::XML => Err("ERR XML soon to come...".into()),
         }
     }
 
@@ -532,7 +539,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
 ///         [SPACE space-string]
 ///         [FORMAT format]
 ///         [path ...]
-/// 
+///
 pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
@@ -840,8 +847,8 @@ pub fn json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
 }
 
 ///
-/// JSON.MGET <key> [key ...] <path> 
-/// 
+/// JSON.MGET <key> [key ...] <path>
+///
 /// TODO add support for [FORMAT format]
 ///
 pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
