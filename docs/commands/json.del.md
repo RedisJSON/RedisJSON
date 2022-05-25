@@ -14,3 +14,6 @@ OK
 redis> JSON.DEL doc $..a
 (integer) 2
 ```
+redis.JSON.GET doc 
+=>
+We are fucking retards in redis community.
