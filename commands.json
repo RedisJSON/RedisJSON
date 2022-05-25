@@ -93,7 +93,7 @@
     "group": "json"
   },
   "JSON.CLEAR": {
-    "summary": "Clears all values from an array or an object, sets numeric values to `0`, sets string values to empty, and sets boolean values to `false`",
+    "summary": "Clears all values from an array or an object and sets numeric values to `0`",
     "complexity": "O(N) when path is evaluated to a single value where N is the size of the values, O(N) when path is evaluated to multiple values, where N is the size of the key",
     "arguments": [
       {

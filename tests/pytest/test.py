@@ -551,8 +551,8 @@ def testClear(env):
     # Clear dynamic path
     r.expect('JSON.SET', 'test', '.', r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}') \
         .ok()
-    r.expect('JSON.CLEAR', 'test', '$.arr.*').equal(4)
-    r.expect('JSON.GET', 'test', '$').equal('[{"n":42,"s":"42","arr":[{},"",{},{}]}]')
+    r.expect('JSON.CLEAR', 'test', '$.arr.*').equal(3)
+    r.expect('JSON.GET', 'test', '$').equal('[{"n":42,"s":"42","arr":[{},"s",{},{}]}]')
 
     # Clear root
     r.expect('JSON.SET', 'test', '.', r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}') \
@@ -592,9 +592,9 @@ def testClearScalar(env):
     r.assertEqual(r.execute_command('JSON.GET', 'test', '$..a'), '[0]')
 
     r.assertOk(r.execute_command('JSON.SET', 'test', '$', json.dumps(docs['scalars'])))
-    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.*'), 4)
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.*'), 2)
     res = r.execute_command('JSON.GET', 'test', '$.*')
-    r.assertEqual(json.loads(res), ['', None, False, 0, 0])
+    r.assertEqual(json.loads(res), ['string value', None, True, 0, 0])
     
     # Do not clear already cleared values
     r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.*'), 0)
