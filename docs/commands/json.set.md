@@ -6,6 +6,9 @@ Adds a key (with its respective value) to a JSON Object (in a RedisJSON data typ
 
 *   `NX` - only set the key if it does not already exist
 *   `XX` - only set the key if it already exists
+*   `FORMAT` define the input format the current supported formats JSON/BSON (Default JSON)
+
+
 
 @return
 

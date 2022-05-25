@@ -530,9 +530,9 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
 ///         [INDENT indentation-string]
 ///         [NEWLINE line-break-string]
 ///         [SPACE space-string]
+///         [FORMAT format]
 ///         [path ...]
-///
-/// TODO add support for multi path
+/// 
 pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
@@ -580,7 +580,7 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
 }
 
 ///
-/// JSON.SET <key> <path> <json> [NX | XX | FORMAT <format>]
+/// JSON.SET <key> <path> <json> [NX | XX] [FORMAT format]
 ///
 pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
@@ -840,7 +840,9 @@ pub fn json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
 }
 
 ///
-/// JSON.MGET <key> [key ...] <path>
+/// JSON.MGET <key> [key ...] <path> 
+/// 
+/// TODO add support for [FORMAT format]
 ///
 pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     if args.len() < 3 {

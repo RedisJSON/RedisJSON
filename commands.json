@@ -60,6 +60,12 @@
         "optional": true
       },
       {
+        "name": "format",
+        "token": "FORMAT",
+        "type": "string",
+        "optional": true
+      },
+      {
         "name": "paths",
         "type": "string",
         "optional": true,
@@ -134,6 +140,12 @@
             "token": "XX"
           }
         ],
+        "optional": true
+      },
+      {
+        "name": "format",
+        "token": "FORMAT",
+        "type": "string",
         "optional": true
       }
     ],
