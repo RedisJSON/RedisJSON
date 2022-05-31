@@ -1047,6 +1047,13 @@ def testCrashInParserMOD2099(env):
     r.assertEqual(res, '[]')
     
 
+def testInfoModules(env):
+
+    r = env
+    res = r.execute_command('INFO', 'MODULES')
+    r.assertFalse(res['module'] is None)    
+
+
 # class CacheTestCase(BaseReJSONTest):
 #     @property
 #     def module_args(env):
