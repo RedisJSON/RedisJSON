@@ -1047,11 +1047,11 @@ def testCrashInParserMOD2099(env):
     r.assertEqual(res, '[]')
     
 
-def testInfoModules(env):
+def testInfoEverything(env):
 
     r = env
-    res = r.execute_command('INFO', 'MODULES')
-    r.assertFalse(res['module'] is None)    
+    res = r.execute_command('INFO', 'EVERYTHING')
+    r.assertFalse(res['module'] is None)
 
 
 # class CacheTestCase(BaseReJSONTest):
