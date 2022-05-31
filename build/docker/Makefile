@@ -5,7 +5,7 @@ include $(ROOT)/deps/readies/mk/main
 
 REPO=rejson
 
-REDIS_VERSION=6.2.6
+REDIS_VERSION=6.2.7
 
 OSNICK.official=bullseye
 
@@ -16,6 +16,7 @@ PREVIEW_BRANCH=2.0
 ART_DIR=$(ROOT)/bin/artifacts
 
 REDISEARCH_VERSION=master
-DOCKER_VARS += REDISEARCH_VERSION
+DOCKER_VARS += REDISEARCH_VERSION NO_SEARCH
+NO_SEARCH=
 
 include $(MK)/module.docker.rules
