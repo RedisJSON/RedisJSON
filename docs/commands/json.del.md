@@ -13,7 +13,6 @@ redis> JSON.SET doc $ '{"a": 1, "nested": {"a": 2, "b": 3}}'
 OK
 redis> JSON.DEL doc $..a
 (integer) 2
+redis> JSON.GET doc $
+"[{\"nested\":{\"b\":3}}]"
 ```
-redis.JSON.GET doc 
-=>
-We are fucking retards in redis community.
