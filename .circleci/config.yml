@@ -572,8 +572,8 @@ workflows:
           <<: *on-integ-branch
           context: common
           requires:
-            build-platforms
-            build-arm-platforms
+            - build-platforms
+            - build-arm-platforms
       - upload-artifacts:
           name: upload-artifacts-to-staging-lab
           <<: *on-integ-branch
