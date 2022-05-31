@@ -208,7 +208,7 @@ commands:
           command: |
             docker login -u redisfab -p $DOCKER_REDISFAB_PWD
             cd build/docker
-            make publish OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH OFFICIAL=1 SHOW=1
+            make publish OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH SHOW=1
       - persist-artifacts
 
   vm-build-platforms-steps:
@@ -228,7 +228,7 @@ commands:
           command: |
             ROOT=$PWD
             cd build/docker
-            make build OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH TEST=1 OFFICIAL=1 SHOW=1
+            make build OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH TEST=1 SHOW=1
             cd $ROOT
             mkdir -p tests/pytest/logs
             tar -C tests/pytest/logs -xzf bin/artifacts/pytest-logs*.tgz
@@ -246,7 +246,7 @@ commands:
           command: |
             docker login -u redisfab -p $DOCKER_REDISFAB_PWD
             cd build/docker
-            make publish OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH OFFICIAL=1 SHOW=1
+            make publish OSNICK=<<parameters.platform>> VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH SHOW=1
       - persist-artifacts
 
   benchmark-steps:
@@ -407,6 +407,19 @@ jobs:
           no_output_timeout: 30m
       - save-tests-logs
 
+  multiarch-docker:
+    docker:
+      - image: ubuntu:focal
+    steps:
+      - early-returns
+      - setup-executor
+      - checkout-all
+      - setup-automation
+      - run:
+          name: Publish multiarch docker
+          command: |
+            make -C build/docker publish_multiarch_docker VERSION=$CIRCLE_TAG BRANCH=$CIRCLE_BRANCH
+
   upload-artifacts:
     parameters:
       staging-lab:
@@ -555,6 +568,12 @@ workflows:
           matrix:
             parameters:
               san-type: [address] # [address, memory]
+      - multiarch-docker:
+          <<: *on-integ-branch
+          context: common
+          requires:
+            build-platforms
+            build-arm-platforms
       - upload-artifacts:
           name: upload-artifacts-to-staging-lab
           <<: *on-integ-branch
