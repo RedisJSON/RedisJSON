@@ -13,7 +13,7 @@ RedisJSON is a [Redis](https://redis.io/) module that provides JSON support in R
 ## Primary features
 
 * Full support for the JSON standard
-* A [JSONPath](http://goessner.net/articles/JsonPath/)-like syntax for selecting elements inside documents
+* [JSONPath](http://goessner.net/articles/JsonPath/) syntax for selecting elements inside documents
 * Documents stored as binary data in a tree structure, allowing fast access to sub-elements
 * Typed atomic operations for all JSON values types
 
