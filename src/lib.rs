@@ -84,29 +84,25 @@ macro_rules! run_on_manager {
     pre_command: $pre_command_expr:expr,
     get_mngr: $get_mngr_expr:expr,
     run: $run_expr:expr,
-    ) => {
-        {
-            $pre_command_expr();
-            let m = $get_mngr_expr;
-            match m {
-                Some(mngr) => $run_expr(mngr),
-                None => {
-                    match $crate::get_manager_type() {
-                        $crate::ManagerType::IValue => $run_expr(
-                            $crate::ivalue_manager::RedisIValueJsonKeyManager {
-                                phantom: PhantomData,
-                            }
-                        ),
-                        $crate::ManagerType::SerdeValue => $run_expr(
-                            $crate::manager::RedisJsonKeyManager {
-                                phantom: PhantomData,
-                            }
-                        ),
-                    }
+    ) => {{
+        $pre_command_expr();
+        let m = $get_mngr_expr;
+        match m {
+            Some(mngr) => $run_expr(mngr),
+            None => match $crate::get_manager_type() {
+                $crate::ManagerType::IValue => {
+                    $run_expr($crate::ivalue_manager::RedisIValueJsonKeyManager {
+                        phantom: PhantomData,
+                    })
                 }
-            }
+                $crate::ManagerType::SerdeValue => {
+                    $run_expr($crate::manager::RedisJsonKeyManager {
+                        phantom: PhantomData,
+                    })
+                }
+            },
         }
-    };
+    }};
 }
 
 #[macro_export]
