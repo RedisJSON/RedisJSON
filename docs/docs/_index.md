@@ -36,7 +36,7 @@ OK
 1) string
 ```
 
-`JSON.GET` and `JSON.TYPE` do literally that regardless of the value's type, but you should really check out `JSON.GET` prettifying powers. Note how the commands are given the period character, i.e. `.`. This is the [path](/redisjson/path) to the value in the RedisJSON data type (in this case it just means the root). A couple more string operations:
+`JSON.GET` and `JSON.TYPE` do literally that regardless of the value's type, but you should really check out `JSON.GET` prettifying powers. Note how the commands are given the dollar sign character, i.e. `$`. This is the [path](/redisjson/path) to the value in the RedisJSON data type (in this case it just means the root). A couple more string operations:
 
 ```
 127.0.0.1:6379> JSON.STRLEN foo $
