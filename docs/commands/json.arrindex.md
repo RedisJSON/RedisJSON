@@ -4,11 +4,11 @@ The optional inclusive `start` (default 0) and exclusive `stop` (default 0, mean
 Negative values are interpreted as starting from the end.
 
 
-Note: out-of-range indexes round to the array's start and end. An inverse index range (such as the range from 1 to 0) will return unfound.
+Note: out-of-range indexes round to the array's start and end. An inverse index range (such as the range from 1 to 0) will return not found.
 
 @return
 
-@array-reply of @integer-reply - the first position in the array of each JSON value that matches the path, -1 if unfound in the array, or @nil-reply if the matching JSON value is not an array.
+@array-reply of @integer-reply - the first position in the array of each JSON value that matches the path, -1 if not found in the array, or @nil-reply if the matching JSON value is not an array.
 
 @examples
 
