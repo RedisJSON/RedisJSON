@@ -240,7 +240,7 @@ redis_json_module_create! {
             _ => None,
         }
     },
-    version: 02_00_09,
+    version: 02_00_12,
     init: dummy_init,
     info: dummy_info,
 }
