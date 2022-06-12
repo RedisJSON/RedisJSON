@@ -760,15 +760,15 @@ where
 }
 
 /// Sort the paths so higher indices precede lower indices on the same array,
-/// And if one path is a sub-path of the other, then paths with shallower hierarchy (closer to the top-level) precedes paths with deeper hierarchy
+/// And longer paths precede shorter paths
 fn prepare_paths_for_deletion(paths: &mut [Vec<String>]) {
     paths.sort_by(|v1, v2| {
         v1.iter()
             .zip_longest(v2.iter())
             .fold_while(Ordering::Equal, |_acc, v| {
                 match v {
-                    EitherOrBoth::Left(_) => Done(Ordering::Greater), // Shorter paths before longer paths
-                    EitherOrBoth::Right(_) => Done(Ordering::Less), // Shorter paths before longer paths
+                    EitherOrBoth::Left(_) => Done(Ordering::Less), // Shorter paths after longer paths
+                    EitherOrBoth::Right(_) => Done(Ordering::Greater), // Shorter paths after longer paths
                     EitherOrBoth::Both(p1, p2) => {
                         let i1 = p1.parse::<usize>();
                         let i2 = p2.parse::<usize>();
