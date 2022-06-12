@@ -1051,7 +1051,7 @@ def testInfoEverything(env):
 
     r = env
     res = r.execute_command('INFO', 'EVERYTHING')
-    r.assertFalse(res['module'] is None)
+    r.assertFalse(res['modules'] is None)
 
 
 # class CacheTestCase(BaseReJSONTest):
