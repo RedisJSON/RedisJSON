@@ -102,6 +102,14 @@ def testDelCommand_issue529(env):
     res = r.execute_command('JSON.ARRLEN', 'doc1', '$.*[*]')
     r.assertEqual(res, [3, 3, 3])
 
+def testDelCommand_issue754(env):
+    r = env
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '[[1],[1,2,3]]'))
+    res = r.execute_command('JSON.DEL', 'doc1', '$..[0]')
+    r.assertEqual(res, 3)
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [[[2,3]]])
+
 
 def testForgetCommand(env):
     """Test REJSON.FORGET command"""
