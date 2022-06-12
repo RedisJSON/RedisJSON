@@ -376,7 +376,7 @@ jobs:
 
   coverage:
     docker:
-      - image: redisfab/rmbuilder:6.2.7-x64-bionic
+      - image: redisfab/rmbuilder:6.2.7-x64-focal
     steps:
       - early-returns
       - checkout-all
