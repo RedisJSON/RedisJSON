@@ -20,7 +20,6 @@ While it is possible and simple to use the raw Redis commands API, in most cases
 | [node_redis-rejson][node_redis-rejson-url] | Node.js | MIT | [Kyle Davis @stockholmux][node_redis-rejson-author] | [![node_redis-rejson-stars]][node_redis-rejson-url] | [npm][node_redis-rejson-package]  |
 | [redis-modules-sdk][redis-modules-sdk-url] | Node.js | BSD-3-Clause | [Dani Tseitlin @danitseitlin][redis-modules-sdk-author] | [![redis-modules-sdk-stars]][redis-modules-sdk-url] | [npm][redis-modules-sdk-package] |
 | [Jedis][Jedis-url] | Java | MIT | [Redis][JRedisJSON-author] | [![Jedis-stars]][Jedis-url] | [maven][Jedis-package] |
-| [JRedisJSON][JRedisJSON-url] | Java | BSD-2-Clause | [Redis][JRedisJSON-author] | [![JRedisJSON-stars]][JRedisJSON-url] | [maven][JRedisJSON-package] |
 | [redis-modules-java][redis-modules-java-url] | Java | Apache-2.0 | [Liming Deng @dengliming][redis-modules-java-author] | [![redis-modules-java-stars]][redis-modules-java-url] | [maven][redis-modules-java-package] |
 | [redis-py][redis-py-url]  | Python | MIT | [Redis][redis-py-author] | [![redis-py-stars]][redis-py-url] | [pypi][redis-py-package] |
 | [redis-om-spring][redis-om-spring-url]  | Java | BSD-3-Clause | [Redis][redis-om-spring-author] | [![redis-om-spring-stars]][redis-om-spring-url] | |
