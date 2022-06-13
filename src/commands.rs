@@ -761,7 +761,7 @@ where
 
 /// Sort the paths so higher indices precede lower indices on the same array,
 /// And longer paths precede shorter paths
-fn prepare_paths_for_deletion(paths: &mut [Vec<String>]) {
+fn prepare_paths_for_deletion(paths: &mut Vec<Vec<String>>) {
     paths.sort_by(|v1, v2| {
         v1.iter()
             .zip_longest(v2.iter())
@@ -794,6 +794,23 @@ fn prepare_paths_for_deletion(paths: &mut [Vec<String>]) {
                 }
             })
             .into_inner()
+    });
+    // Remove paths which are nested by others (on each sub-tree only top most ancestors is deleted)
+    let mut string_paths = Vec::new();
+    paths.iter().for_each(|v| {
+        string_paths.push(v.join(","));
+    });
+    string_paths.sort();
+
+    paths.retain(|v| {
+        let path = v.join(",");
+        let found = string_paths.binary_search(&path).unwrap();
+        for i in 0..found {
+            if path.starts_with(string_paths[i].as_str()) {
+                return false;
+            }
+        }
+        true
     });
 }
 
