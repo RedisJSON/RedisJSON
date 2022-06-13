@@ -796,7 +796,8 @@ fn prepare_paths_for_deletion(paths: &mut Vec<Vec<String>>) {
             })
             .into_inner()
     });
-    // Remove paths which are nested by others (on each sub-tree only top most ancestors is deleted)
+    // Remove paths which are nested by others (on each sub-tree only top most ancestor should be deleted)
+    // (TODO: Add a mode in which the jsonpath selector will already skip nested paths)
     let mut string_paths = Vec::new();
     paths.iter().for_each(|v| {
         string_paths.push(v.join(","));
