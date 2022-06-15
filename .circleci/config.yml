@@ -448,14 +448,14 @@ jobs:
 
   benchmark-json-oss-standalone:
     docker:
-      - image: redisfab/rmbuilder:6.2.7-x64-bionic
+      - image: redisfab/rmbuilder:6.2.7-x64-focal
     steps:
       - build-steps
       - benchmark-steps
 
   benchmark-json-oss-standalone-profiler:
     docker:
-      - image: redisfab/rmbuilder:6.2.7-x64-bionic
+      - image: redisfab/rmbuilder:6.2.7-x64-focal
     steps:
       - build-steps
       - benchmark-steps:
