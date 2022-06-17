@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from functools import reduce
 import sys
 import os
 import redis
@@ -1052,6 +1053,62 @@ def testInfoEverything(env):
     r = env
     res = r.execute_command('INFO', 'EVERYTHING')
     r.assertFalse(res['modules'] is None)
+
+def testCopyCommand(env):
+    """Test COPY command and make sure behavior of json keys is similar to hash keys"""
+    r = env
+    
+    values = {"foo": "bar", "fu": "wunderbar"}
+    
+    ### Copy json to a new key (from json1 to json2)
+    r.assertOk(r.execute_command('JSON.SET', 'json1', '$', json.dumps(values)))
+    r.assertTrue(r.execute_command('COPY', 'json1', 'json2'))
+    # Check new values
+    res = r.execute_command('JSON.GET', 'json1', '$')
+    r.assertEqual(json.loads(res), [values])
+    res = r.execute_command('JSON.GET', 'json2', '$')
+    r.assertEqual(json.loads(res), [values])
+
+    ### Copy hash to a new key (from hash1 to hash2)
+    hash_values = list(reduce(lambda acc, v: acc + v, values.items()))
+    r.assertEqual(r.execute_command('HSET', 'hash1', *hash_values), int(len(hash_values) / 2))
+    r.assertTrue(r.execute_command('COPY', 'hash1', 'hash2'))
+    # Check new values
+    r.assertEqual(r.execute_command('HGETALL', 'hash1'), values)
+    r.assertEqual(r.execute_command('HGETALL', 'hash2'), values)
+    
+    new_values = {"ganz": "neue"}
+    
+    ### Copy hash to an existing key
+    hash_values = list(reduce(lambda acc, v: acc + v, new_values.items()))    
+    r.assertEqual(r.execute_command('HSET', 'hash3', *hash_values), int(len(hash_values) / 2))
+    # Do not overwrite without REPLACE (from hash to hash)
+    r.assertFalse(r.execute_command('COPY', 'hash3', 'hash2'))
+    # Do not overwrite without REPLACE (from hash to json)
+    r.assertFalse(r.execute_command('COPY', 'hash3', 'json2'))    
+    # Overwrite with REPLACE (from hash to hash)
+    r.assertTrue(r.execute_command('COPY', 'hash3', 'hash2', 'REPLACE'))
+    # Overwrite with REPLACE (from hash to json)
+    r.assertTrue(r.execute_command('COPY', 'hash3', 'json2', 'REPLACE'))
+    # Check new values
+    r.assertEqual(r.execute_command('HGETALL', 'hash2'), new_values)
+    r.assertEqual(r.execute_command('HGETALL', 'json2'), new_values)
+
+    ### Copy json to an existing key
+    r.assertOk(r.execute_command('JSON.SET', 'json3', '$', json.dumps(new_values)))
+    # Do not overwrite without REPLACE (from json to json)
+    r.assertFalse(r.execute_command('COPY', 'json3', 'json2'))
+    # Do not overwrite without REPLACE (from json to hash)
+    r.assertFalse(r.execute_command('COPY', 'json3', 'hash2'))
+    # Overwrite with REPLACE (from json to json)
+    r.assertTrue(r.execute_command('COPY', 'json3', 'json2', 'REPLACE'))
+    # Overwrite with REPLACE (from json to hash)
+    r.assertTrue(r.execute_command('COPY', 'json3', 'hash2', 'REPLACE'))
+    # Check new values
+    res = r.execute_command('JSON.GET', 'json2', '$')
+    r.assertEqual(json.loads(res), [new_values])
+    res = r.execute_command('JSON.GET', 'hash2', '$')
+    r.assertEqual(json.loads(res), [new_values])
 
 
 # class CacheTestCase(BaseReJSONTest):
