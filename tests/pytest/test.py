@@ -1056,6 +1056,8 @@ def testInfoEverything(env):
 
 def testCopyCommand(env):
     """Test COPY command and make sure behavior of json keys is similar to hash keys"""
+
+    env.skipOnCluster() 
     r = env
     
     values = {"foo": "bar", "fu": "wunderbar"}
