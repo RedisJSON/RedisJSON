@@ -1,7 +1,10 @@
+use bitflags::bitflags;
 use jsonpath_lib::parser::{NodeVisitor, ParseToken};
 use jsonpath_lib::Parser;
+
 use std::fmt::Display;
 use std::fmt::Formatter;
+use std::os::raw::c_int;
 
 pub enum StaticPathElement {
     ArrayIndex(f64),
@@ -28,6 +31,14 @@ pub enum VisitStatus {
     Valid,
 }
 
+bitflags! {
+    pub struct PathInfoFlags: c_int {
+        const INVALID = 1 as c_int;
+        const STATIC = 2 as c_int;
+        const DEFINED_ORDER = 4 as c_int;
+    }
+}
+
 pub struct StaticPathParser<'a> {
     pub valid: VisitStatus,
     last_token: Option<ParseToken<'a>>,
@@ -47,6 +58,19 @@ impl<'a> StaticPathParser<'a> {
         };
         visitor.visit(&node);
         Ok(visitor)
+    }
+
+    pub fn get_path_info(path: &'a str) -> PathInfoFlags {
+        Self::check(path).map_or_else(
+            |_| PathInfoFlags::INVALID,
+            |parser| {
+                if parser.valid == VisitStatus::Valid {
+                    PathInfoFlags::STATIC | PathInfoFlags::DEFINED_ORDER
+                } else {
+                    PathInfoFlags::INVALID
+                }
+            },
+        )
     }
 }
 

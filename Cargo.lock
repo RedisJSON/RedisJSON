@@ -557,6 +557,7 @@ dependencies = [
 name = "redisjson"
 version = "99.99.99"
 dependencies = [
+ "bitflags",
  "bson",
  "ijson",
  "itertools",
