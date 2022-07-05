@@ -120,15 +120,18 @@ This code snippet shows how to use RedisJSON with raw Redis commands from Python
 
 ```Python
 import redis
-import json
 
 data = {
-    'foo': 'bar'
+    'foo': {
+        'bar' : 'baz'
+    }
 }
 
 r = redis.Redis()
-r.json().set('doc', '$', json.dumps(data))
-reply = json.loads(r.json().get('doc', '$')[0])
+r.json().set('doc', '$', data)
+doc = r.json().get('doc', '$')
+foo = r.json().get('doc', 'foo')
+bar = r.json().get('doc', 'foo.bar')
 ```
 
 ### Building on Ubuntu 20.04
