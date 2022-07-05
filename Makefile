@@ -145,8 +145,7 @@ TARGET=$(BINDIR)/$(MODULE_NAME)
 #----------------------------------------------------------------------------------------------
 
 setup:
-	$(SHOW)./deps/readies/bin/getpy3
-	$(SHOW)./sbin/system-setup.py
+	$(SHOW)./sbin/setup
 
 .PHONY: setup
 
