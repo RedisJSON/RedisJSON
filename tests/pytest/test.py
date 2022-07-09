@@ -7,6 +7,8 @@ import redis
 import json
 from RLTest import Env
 from includes import *
+import random
+import string
 
 from RLTest import Defaults
 
@@ -1111,6 +1113,36 @@ def testCopyCommand(env):
     r.assertEqual(json.loads(res), [new_values])
     res = r.execute_command('JSON.GET', 'hash2', '$')
     r.assertEqual(json.loads(res), [new_values])
+
+
+def testLargeKey(env):
+    """ Test a key with more than 512MB data """
+
+    r = env
+    
+    # Try 512 MB
+    k1 = 256 * 1024 * 1024
+    val1 = ''.join(random.choices(string.ascii_letters + string.digits, k=k1))
+    val1 = '"%s"' % val1
+    r.assertOk(r.execute_command('JSON.SET', 'large_key', '$', '{"primo": %s}' % val1))    
+    r.assertEqual(r.execute_command('JSON.STRLEN', 'large_key', '$.primo'), [k1])
+
+    r.assertOk(r.execute_command('JSON.SET', 'large_key', '$.secondo', val1))
+    r.assertEqual(r.execute_command('JSON.STRLEN', 'large_key', '$.secondo'), [k1])
+    r.assertGreater(r.execute_command('JSON.DEBUG', 'MEMORY', 'large_key', '$')[0], 2 * k1)
+
+    # Try 513 MB
+    k2 = 1024 * 1024
+    val2 = ''.join(random.choices(string.ascii_letters + string.digits, k=k2))
+    val2 = '"%s"' % val2
+    r.assertOk(r.execute_command('JSON.SET', 'large_key', '$.dolce', val2))
+    r.assertEqual(r.execute_command('JSON.STRLEN', 'large_key', '$.dolce'), [k2])
+    r.assertGreater(r.execute_command('JSON.DEBUG', 'MEMORY', 'large_key', '$')[0], 2 * k1 + k2)
+
+    # Try 768 MB
+    r.assertOk(r.execute_command('JSON.SET', 'large_key', '$.dolce', val1))
+    r.assertEqual(r.execute_command('JSON.STRLEN', 'large_key', '$.dolce'), [k1])
+    r.assertGreater(r.execute_command('JSON.DEBUG', 'MEMORY', 'large_key', '$')[0], 3 * k1)
 
 
 # class CacheTestCase(BaseReJSONTest):
