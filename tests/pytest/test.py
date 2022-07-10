@@ -9,6 +9,7 @@ from RLTest import Env
 from includes import *
 import random
 import string
+from redis.client import NEVER_DECODE
 
 from RLTest import Defaults
 
@@ -1117,11 +1118,12 @@ def testCopyCommand(env):
 
 def testLargeKey(env):
     """ Test a key with more than 512MB data """
-
+    
     r = env
     
     # Try 512 MB
-    k1 = 256 * 1024 * 1024
+    #k1 = 256 * 1024 * 1024
+    k1 = 255 * 1024 * 1024
     val1 = ''.join(random.choices(string.ascii_letters + string.digits, k=k1))
     val1 = '"%s"' % val1
     r.assertOk(r.execute_command('JSON.SET', 'large_key', '$', '{"primo": %s}' % val1))    
@@ -1139,11 +1141,22 @@ def testLargeKey(env):
     r.assertEqual(r.execute_command('JSON.STRLEN', 'large_key', '$.dolce'), [k2])
     r.assertGreater(r.execute_command('JSON.DEBUG', 'MEMORY', 'large_key', '$')[0], 2 * k1 + k2)
 
-    # Try 768 MB
-    r.assertOk(r.execute_command('JSON.SET', 'large_key', '$.dolce', val1))
-    r.assertEqual(r.execute_command('JSON.STRLEN', 'large_key', '$.dolce'), [k1])
-    r.assertGreater(r.execute_command('JSON.DEBUG', 'MEMORY', 'large_key', '$')[0], 3 * k1)
-
+    # # Try 768 MB
+    # k2 = k1
+    # r.assertOk(r.execute_command('JSON.SET', 'large_key', '$.dolce', val1))
+    # r.assertEqual(r.execute_command('JSON.STRLEN', 'large_key', '$.dolce'), [k1])
+    # r.assertGreater(r.execute_command('JSON.DEBUG', 'MEMORY', 'large_key', '$')[0], 2 * k1 + k2)
+    
+    # Dump and Restore
+    env.debugPrint("DUMP large_key", force=True)
+    serialized_value = r.execute_command('DUMP', 'large_key', **{NEVER_DECODE: True})
+    env.debugPrint("RESTORE large_key", force=True)
+    r.expect('RESTORE', 'key_largo', 0, serialized_value).ok()
+    r.assertEqual(r.execute_command('JSON.STRLEN', 'key_largo', '$.primo'), [k1])
+    r.assertEqual(r.execute_command('JSON.STRLEN', 'key_largo', '$.secondo'), [k1])
+    r.assertEqual(r.execute_command('JSON.STRLEN', 'key_largo', '$.dolce'), [k2])
+    r.assertGreater(r.execute_command('JSON.DEBUG', 'MEMORY', 'key_largo', '$')[0], 2 * k1 + k2)
+    
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property
