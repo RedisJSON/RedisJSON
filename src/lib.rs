@@ -17,8 +17,8 @@ use crate::c_api::{
     json_api_get_string, json_api_get_type, json_api_is_json, json_api_len, json_api_next,
     json_api_open_key_internal, LLAPI_CTX,
 };
-use crate::nodevisitor::JSONPathHandle;
 use crate::nodevisitor::PathInfoFlags;
+use crate::nodevisitor::StaticPathParser;
 use crate::redisjson::Format;
 
 mod array_index;

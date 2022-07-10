@@ -406,9 +406,8 @@ macro_rules! redis_json_module_export_shared_api {
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
         pub extern "C" fn JSONAPI_pathParse(path: *const c_char, ctx: *mut rawmod::RedisModuleCtx, err_msg: *mut *mut rawmod::RedisModuleString) -> *const c_void {
             let path = unsafe { CStr::from_ptr(path).to_str().unwrap() };
-            let mut handle = JSONPathHandle::new(path);
-            match handle.parse() {
-                Ok(parser) => Box::into_raw(Box::new(parser)).cast::<c_void>(),
+            match StaticPathParser::get_path_info(path) {
+                Ok(flags) => Box::into_raw(Box::new(flags)).cast::<c_void>(),
                 Err(err_str) => {
                     crate::c_api::create_rmstring(ctx, &err_str, err_msg);
                     std::ptr::null()
@@ -418,20 +417,18 @@ macro_rules! redis_json_module_export_shared_api {
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_pathFree(json_path: *mut c_void) {
-            unsafe { Box::from_raw(json_path.cast::<JSONPathHandle>()) };
+            unsafe { Box::from_raw(json_path.cast::<PathInfoFlags>()) };
         }
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_pathIsStatic(json_path: *const c_void) -> c_int {
-            let handle = unsafe { &*(json_path.cast::<JSONPathHandle>()) };
-            let flags = handle.get_path_info_flags();
+            let flags = unsafe { &*(json_path.cast::<PathInfoFlags>()) };
             flags.intersects(PathInfoFlags::STATIC) as c_int
         }
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_pathHasDefinedOrder(json_path: *const c_void) -> c_int {
-            let handle = unsafe { &*(json_path.cast::<JSONPathHandle>()) };
-            let flags = handle.get_path_info_flags();
+            let flags = unsafe { &*(json_path.cast::<PathInfoFlags>()) };
             flags.intersects(PathInfoFlags::DEFINED_ORDER) as c_int
         }
 

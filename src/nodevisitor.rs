@@ -1,5 +1,5 @@
 use bitflags::bitflags;
-use jsonpath_lib::parser::{Node, NodeVisitor, ParseToken};
+use jsonpath_lib::parser::{NodeVisitor, ParseToken};
 use jsonpath_lib::Parser;
 
 use std::fmt::Display;
@@ -32,10 +32,15 @@ pub enum VisitStatus {
 }
 
 bitflags! {
-    #[allow(clippy::unnecessary_cast)]
     pub struct PathInfoFlags: c_int {
+        // cast to `c_int` is not unnecessary since `c_int` might not always be `i32`
+        //  (some esoteric systems define it as an `i16`, for example)
+        //  (see https://doc.rust-lang.org/std/os/raw/type.c_int.html)
+        #[allow(clippy::unnecessary_cast)]
         const INVALID = 1 as c_int;
+        #[allow(clippy::unnecessary_cast)]
         const STATIC = 2 as c_int;
+        #[allow(clippy::unnecessary_cast)]
         const DEFINED_ORDER = 4 as c_int;
     }
 }
@@ -44,40 +49,6 @@ pub struct StaticPathParser<'a> {
     pub valid: VisitStatus,
     last_token: Option<ParseToken<'a>>,
     pub static_path_elements: Vec<StaticPathElement>,
-}
-
-pub struct JSONPathHandle<'a> {
-    path: String,
-    pub parser: Option<StaticPathParser<'a>>,
-    node: Option<Node<'a>>,
-}
-impl<'a> JSONPathHandle<'a> {
-    pub fn new(path: &'a str) -> Self {
-        Self {
-            path: String::from(path),
-            parser: None,
-            node: None,
-        }
-    }
-
-    pub fn parse(&'a mut self) -> Result<&'a Self, String> {
-        let node = Parser::compile(self.path.as_str())?;
-        let mut parser = StaticPathParser {
-            valid: VisitStatus::PartialValid,
-            last_token: None,
-            static_path_elements: vec![],
-        };
-        parser.visit(&node);
-        self.node = Some(node);
-        self.parser = Some(parser);
-        Ok(self)
-    }
-
-    pub fn get_path_info_flags(&self) -> PathInfoFlags {
-        self.parser
-            .as_ref()
-            .map_or_else(|| PathInfoFlags::INVALID, |p| p.get_path_info_flags())
-    }
 }
 
 impl<'a> StaticPathParser<'a> {
@@ -95,11 +66,11 @@ impl<'a> StaticPathParser<'a> {
         Ok(visitor)
     }
 
-    pub fn get_path_info_flags(&self) -> PathInfoFlags {
-        if self.valid == VisitStatus::Valid {
-            PathInfoFlags::STATIC | PathInfoFlags::DEFINED_ORDER
-        } else {
-            PathInfoFlags::INVALID
+    pub fn get_path_info(path: &'a str) -> Result<PathInfoFlags, String> {
+        let parser = Self::check(path)?;
+        match parser.valid {
+            VisitStatus::Valid => Ok(PathInfoFlags::STATIC | PathInfoFlags::DEFINED_ORDER),
+            _ => Ok(PathInfoFlags::INVALID),
         }
     }
 }
