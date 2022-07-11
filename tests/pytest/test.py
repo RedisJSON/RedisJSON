@@ -1119,6 +1119,10 @@ def testCopyCommand(env):
 def testLargeKey(env):
     """ Test a key with more than 512MB data """
     
+    if env.env == 'existing-env':
+        env.skip()
+    env.skipOnCluster()
+
     r = env
     
     # Increase the config proto-max-bulk-len
@@ -1160,6 +1164,9 @@ def testLargeKey(env):
     r.assertEqual(r.execute_command('JSON.STRLEN', 'key_largo', '$.secondo'), [k1])
     r.assertEqual(r.execute_command('JSON.STRLEN', 'key_largo', '$.dolce'), [k2])
     r.assertGreater(r.execute_command('JSON.DEBUG', 'MEMORY', 'key_largo', '$')[0], 2 * k1 + k2)
+
+    # Restore default
+    res = r.execute_command('CONFIG', 'SET', 'proto-max-bulk-len', '512mb')
     
 
 # class CacheTestCase(BaseReJSONTest):
