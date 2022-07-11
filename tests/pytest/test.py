@@ -1121,9 +1121,13 @@ def testLargeKey(env):
     
     r = env
     
+    # Increase the config proto-max-bulk-len
+    # to allow a key value larger than 512mb to be processed successfully
+    res = r.execute_command('CONFIG', 'SET', 'proto-max-bulk-len', '769mb')
+
     # Try 512 MB
-    #k1 = 256 * 1024 * 1024
-    k1 = 255 * 1024 * 1024
+    k1 = 256 * 1024 * 1024
+    #k1 = 1 * 1024 * 1024
     val1 = ''.join(random.choices(string.ascii_letters + string.digits, k=k1))
     val1 = '"%s"' % val1
     r.assertOk(r.execute_command('JSON.SET', 'large_key', '$', '{"primo": %s}' % val1))    
@@ -1141,11 +1145,11 @@ def testLargeKey(env):
     r.assertEqual(r.execute_command('JSON.STRLEN', 'large_key', '$.dolce'), [k2])
     r.assertGreater(r.execute_command('JSON.DEBUG', 'MEMORY', 'large_key', '$')[0], 2 * k1 + k2)
 
-    # # Try 768 MB
-    # k2 = k1
-    # r.assertOk(r.execute_command('JSON.SET', 'large_key', '$.dolce', val1))
-    # r.assertEqual(r.execute_command('JSON.STRLEN', 'large_key', '$.dolce'), [k1])
-    # r.assertGreater(r.execute_command('JSON.DEBUG', 'MEMORY', 'large_key', '$')[0], 2 * k1 + k2)
+    # Try 768 MB
+    k2 = k1
+    r.assertOk(r.execute_command('JSON.SET', 'large_key', '$.dolce', val1))
+    r.assertEqual(r.execute_command('JSON.STRLEN', 'large_key', '$.dolce'), [k1])
+    r.assertGreater(r.execute_command('JSON.DEBUG', 'MEMORY', 'large_key', '$')[0], 2 * k1 + k2)
     
     # Dump and Restore
     env.debugPrint("DUMP large_key", force=True)
