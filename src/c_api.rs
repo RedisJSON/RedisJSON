@@ -441,19 +441,20 @@ macro_rules! redis_json_module_export_shared_api {
                     std::ptr::null_mut(),
                 ));
                 ctx.export_shared_api(
-                    (&JSONAPI_V1 as *const RedisJSONAPI_V1).cast::<c_void>(),
+                    (&JSONAPI_CURRENT as *const RedisJSONAPI_CURRENT).cast::<c_void>(),
                     REDISJSON_GETAPI_V1.as_ptr().cast::<c_char>(),
                 );
                 ctx.log_notice("Exported RedisJSON_V1 API");
                 ctx.export_shared_api(
-                    (&JSONAPI_V2 as *const RedisJSONAPI_V2).cast::<c_void>(),
+                    (&JSONAPI_CURRENT as *const RedisJSONAPI_CURRENT).cast::<c_void>(),
                     REDISJSON_GETAPI_V2.as_ptr().cast::<c_char>(),
                 );
                 ctx.log_notice("Exported RedisJSON_V2 API");
             };
         }
 
-        static JSONAPI_V1 : RedisJSONAPI_V1 = RedisJSONAPI_V1 {
+        static JSONAPI_CURRENT : RedisJSONAPI_CURRENT = RedisJSONAPI_CURRENT {
+            // V1 entries
             openKey: JSONAPI_openKey,
             openKeyFromStr: JSONAPI_openKeyFromStr,
             get: JSONAPI_get,
@@ -469,9 +470,7 @@ macro_rules! redis_json_module_export_shared_api {
             getString: JSONAPI_getString,
             getJSON: JSONAPI_getJSON,
             isJSON: JSONAPI_isJSON,
-        };
-
-        static JSONAPI_V2: RedisJSONAPI_V2 = RedisJSONAPI_V2 {
+            // V2 entries
             pathParse: JSONAPI_pathParse,
             pathFree: JSONAPI_pathFree,
             pathIsStatic: JSONAPI_pathIsStatic,
@@ -481,7 +480,8 @@ macro_rules! redis_json_module_export_shared_api {
         #[repr(C)]
         #[derive(Copy, Clone)]
         #[allow(non_snake_case)]
-        pub struct RedisJSONAPI_V1 {
+        pub struct RedisJSONAPI_CURRENT {
+            // V1 entries
             pub openKey: extern "C" fn(
                 ctx: *mut rawmod::RedisModuleCtx,
                 key_str: *mut rawmod::RedisModuleString,
@@ -509,12 +509,7 @@ macro_rules! redis_json_module_export_shared_api {
                 str: *mut *mut rawmod::RedisModuleString,
             ) -> c_int,
             pub isJSON: extern "C" fn(key: *mut rawmod::RedisModuleKey) -> c_int,
-        }
-
-        #[repr(C)]
-        #[derive(Copy, Clone)]
-        #[allow(non_snake_case)]
-        pub struct RedisJSONAPI_V2 {
+            // V2 entries
             pub pathParse: extern "C" fn(path: *const c_char, ctx: *mut rawmod::RedisModuleCtx, err_msg: *mut *mut rawmod::RedisModuleString) -> *const c_void,
             pub pathFree: extern "C" fn(json_path: *mut c_void),
             pub pathIsStatic: extern "C" fn(json_path: *const c_void) -> c_int,
