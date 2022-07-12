@@ -27,7 +27,12 @@ typedef const void* RedisJSON;
 typedef const void* JSONResultsIterator;
 typedef const void* JSONPath;
 
-typedef struct RedisJSONAPI_V1 {
+typedef struct RedisJSONAPI {
+
+  ////////////////
+  // V1 entries //
+  ////////////////
+
   /* RedisJSON functions */
   RedisJSON (*openKey)(RedisModuleCtx *ctx, RedisModuleString *key_name);
   RedisJSON (*openKeyFromStr)(RedisModuleCtx *ctx, const char *path);
@@ -70,9 +75,10 @@ typedef struct RedisJSONAPI_V1 {
   // Return 1 if type of key is JSON
   int (*isJSON)(RedisModuleKey *redis_key);
 
-} RedisJSONAPI_V1;
+  ////////////////
+  // V2 entries //
+  ////////////////
 
-typedef struct RedisJSONAPI_V2 {
   // Return a parsed JSONPath
   // Return NULL if failed to parse, and the error message in `err_msg`
   // The caller gains ownership of `err_msg`
@@ -85,7 +91,7 @@ typedef struct RedisJSONAPI_V2 {
   int (*pathIsStatic)(JSONPath);
   int (*pathHasDefinedOrder)(JSONPath);
 
-} RedisJSONAPI_V2;
+} RedisJSONAPI;
 
 #ifdef __cplusplus
 }
