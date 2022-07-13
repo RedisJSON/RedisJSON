@@ -37,11 +37,11 @@ bitflags! {
         //  (some esoteric systems define it as an `i16`, for example)
         //  (see https://doc.rust-lang.org/std/os/raw/type.c_int.html)
         #[allow(clippy::unnecessary_cast)]
-        const INVALID = 1 as c_int;
+        const NONE = 0 as c_int;
         #[allow(clippy::unnecessary_cast)]
-        const STATIC = 2 as c_int;
+        const STATIC = 1 as c_int;
         #[allow(clippy::unnecessary_cast)]
-        const DEFINED_ORDER = 4 as c_int;
+        const DEFINED_ORDER = 2 as c_int;
     }
 }
 
@@ -70,7 +70,7 @@ impl<'a> StaticPathParser<'a> {
         let parser = Self::check(path)?;
         match parser.valid {
             VisitStatus::Valid => Ok(PathInfoFlags::STATIC | PathInfoFlags::DEFINED_ORDER),
-            _ => Ok(PathInfoFlags::INVALID),
+            _ => Ok(PathInfoFlags::NONE),
         }
     }
 }
