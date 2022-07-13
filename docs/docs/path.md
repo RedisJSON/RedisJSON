@@ -2,43 +2,228 @@
 title: "Path"
 linkTitle: "Path"
 weight: 3
-description: >
-    RedisJSON JSONPath
+description: Access specific elements within a JSON document
 ---
 
-Since no standard for path syntax exists, RedisJSON implements its own. RedisJSON's syntax is based on common best practices and intentionally resembles [JSONPath](http://goessner.net/articles/JsonPath/).
+Paths help you access specific elements within a JSON document. Since no standard for JSON path syntax exists, RedisJSON implements its own. RedisJSON's syntax is based on common best practices and intentionally resembles [JSONPath](http://goessner.net/articles/JsonPath/).
 
-RedisJSON currently supports two query syntaxes: JSONPath syntax and a legacy path syntax from the first version of RedisJSON.
+RedisJSON supports two query syntaxes: [JSONPath syntax](#jsonpath-syntax) and the [legacy path syntax](#legacy-path-syntax) from the first version of RedisJSON.
 
-RedisJSON decides which syntax to use depending on the first character of the path query. If the query starts with the character `$`, it uses JSONPath syntax. Otherwise, it defaults to legacy path syntax.
+RedisJSON knows which syntax to use depending on the first character of the path query. If the query starts with the character `$`, it uses JSONPath syntax. Otherwise, it defaults to the legacy path syntax.
 
-## JSONPath support (RedisJSON v2)
+## JSONPath support
 
-RedisJSON 2.0 introduces [JSONPath](http://goessner.net/articles/JsonPath/) support. It follows the syntax described by Goessner in his article.
+RedisJSON v2.0 introduces [JSONPath](http://goessner.net/articles/JsonPath/) support. It follows the syntax described by Goessner in his article.
 
-A JSONPath query can resolve to several locations in the JSON documents. In this case, the JSON commands apply the operation to every possible location. This is a major improvement over the legacy query, which only operates on the first path.
+A JSONPath query can resolve to several locations in a JSON document. In this case, the JSON commands apply the operation to every possible location. This is a major improvement over [legacy path](#legacy-path-syntax) queries, which only operate on the first path.
 
 Notice that the structure of the command response often differs when using JSONPath. See the [Commands](/commands) page for more details.
 
 The new syntax supports bracket notation, which allows the use of special characters like colon ":" or whitespace in key names.
 
-## Legacy Path syntax (RedisJSON v1)
+If you want to include double quotes in your query, enclose the JSONPath within single quotes. For example:
 
-The first version of RedisJSON had the following implementation. It is still supported in RedisJSON v2.
+```sh
+JSON.GET store '$.inventory["headphones"]'
+```
+
+### JSONPath syntax
+
+The following JSONPath syntax table was adapted from Goessner's [path syntax comparison](https://goessner.net/articles/JsonPath/index.html#e2).
+
+| Syntax&nbsp;element | Description |
+|----------------|-------------|
+| $ | The root (outermost JSON element), starts the path. |
+| . or [] | Selects a child element. |
+| .. | Recursively descends through the JSON document. |
+| * | Wildcard, returns all elements. |
+| [] | Subscript operator, accesses an array element. |
+| [,] | Union, selects multiple elements. |
+| [start\:end\:step] | Array slice where start, end, and step are indexes. |
+| ?() | Filters a JSON object or array. Supports comparison operators <nobr>(==, !=, <, <=, >, >=)</nobr> and logical operators <nobr>(&&, \|\|)</nobr>. |
+| () | Script expression. |
+| @ | The current element, used in filter or script expressions. |
+
+### JSONPath examples
+
+The following JSONPath examples use this JSON document, which stores details about items in a store's inventory:
+
+```json
+{
+   "inventory": {
+      "headphones": [
+         {
+            "id": 12345,
+            "name": "Noise-cancelling Bluetooth headphones",
+            "description": "Wireless Bluetooth headphones with noise-cancelling technology",
+            "wireless": true,
+            "connection": "Bluetooth",
+            "price": 99.98,
+            "stock": 25,
+            "free-shipping": false,
+            "colors": ["black", "silver"]
+         },
+         {
+            "id": 12346,
+            "name": "Wireless earbuds",
+            "description": "Wireless Bluetooth in-ear headphones",
+            "wireless": true,
+            "connection": "Bluetooth",
+            "price": 64.99,
+            "stock": 17,
+            "free-shipping": false,
+            "colors": ["black", "white"]
+         },
+         {
+            "id": 12347,
+            "name": "Mic headset",
+            "description": "Headset with built-in microphone",
+            "wireless": false,
+            "connection": "USB",
+            "price": 35.01,
+            "stock": 28,
+            "free-shipping": false
+         }
+      ],
+      "keyboards": [
+         {
+            "id": 22345,
+            "name": "Wireless keyboard",
+            "description": "Wireless Bluetooth keyboard",
+            "wireless": true,
+            "connection": "Bluetooth",
+            "price": 44.99,
+            "stock": 23,
+            "free-shipping": false,
+            "colors": ["black", "silver"]
+         },
+         {
+            "id": 22346,
+            "name": "USB-C keyboard",
+            "description": "Wired USB-C keyboard",
+            "wireless": false,
+            "connection": "USB-C",
+            "price": 29.99,
+            "stock": 30,
+            "free-shipping": false
+         }
+      ]
+   }
+}
+```
+
+First, create the JSON document in your database:
+
+```sh
+JSON.SET store $ '{"inventory":{"headphones":[{"id":12345,"name":"Noise-cancelling Bluetooth headphones","description":"Wireless Bluetooth headphones with noise-cancelling technology","wireless":true,"connection":"Bluetooth","price":99.98,"stock":25,"free-shipping":false,"colors":["black","silver"]},{"id":12346,"name":"Wireless earbuds","description":"Wireless Bluetooth in-ear headphones","wireless":true,"connection":"Bluetooth","price":64.99,"stock":17,"free-shipping":false,"colors":["black","white"]},{"id":12347,"name":"Mic headset","description":"Headset with built-in microphone","wireless":false,"connection":"USB","price":35.01,"stock":28,"free-shipping":false}],"keyboards":[{"id":22345,"name":"Wireless keyboard","description":"Wireless Bluetooth keyboard","wireless":true,"connection":"Bluetooth","price":44.99,"stock":23,"free-shipping":false,"colors":["black","silver"]},{"id":22346,"name":"USB-C keyboard","description":"Wired USB-C keyboard","wireless":false,"connection":"USB-C","price":29.99,"stock":30,"free-shipping":false}]}}'
+```
+
+#### Access JSON examples
+
+The following examples use the [`JSON.GET`](/commands/json.get) command to retrieve data from various paths in the JSON document.
+
+You can use the wildcard operator `*` to return a list of all items in the inventory:
+
+```sh
+127.0.0.1:6379> JSON.GET store $.inventory.*
+"[[{\"id\":12345,\"name\":\"Noise-cancelling Bluetooth headphones\",\"description\":\"Wireless Bluetooth headphones with noise-cancelling technology\",\"wireless\":true,\"connection\":\"Bluetooth\",\"price\":99.98,\"stock\":25,\"free-shipping\":false,\"colors\":[\"black\",\"silver\"]},{\"id\":12346,\"name\":\"Wireless earbuds\",\"description\":\"Wireless Bluetooth in-ear headphones\",\"wireless\":true,\"connection\":\"Bluetooth\",\"price\":64.99,\"stock\":17,\"free-shipping\":false,\"colors\":[\"black\",\"white\"]},{\"id\":12347,\"name\":\"Mic headset\",\"description\":\"Headset with built-in microphone\",\"wireless\":false,\"connection\":\"USB\",\"price\":35.01,\"stock\":28,\"free-shipping\":false}],[{\"id\":22345,\"name\":\"Wireless keyboard\",\"description\":\"Wireless Bluetooth keyboard\",\"wireless\":true,\"connection\":\"Bluetooth\",\"price\":44.99,\"stock\":23,\"free-shipping\":false,\"colors\":[\"black\",\"silver\"]},{\"id\":22346,\"name\":\"USB-C keyboard\",\"description\":\"Wired USB-C keyboard\",\"wireless\":false,\"connection\":\"USB-C\",\"price\":29.99,\"stock\":30,\"free-shipping\":false}]]"
+```
+
+For some queries, multiple paths can produce the same results. For example, the following paths return the names of all headphones:
+
+```sh
+127.0.0.1:6379> JSON.GET store $.inventory.headphones[*].name
+"[\"Noise-cancelling Bluetooth headphones\",\"Wireless earbuds\",\"Mic headset\"]"
+127.0.0.1:6379> JSON.GET store '$.inventory["headphones"][*].name'
+"[\"Noise-cancelling Bluetooth headphones\",\"Wireless earbuds\",\"Mic headset\"]"
+127.0.0.1:6379> JSON.GET store $..headphones[*].name
+"[\"Noise-cancelling Bluetooth headphones\",\"Wireless earbuds\",\"Mic headset\"]"
+```
+
+The recursive descent operator `..` can retrieve a field from multiple sections of a JSON document. The following example returns the names of all inventory items:
+
+```sh
+127.0.0.1:6379> JSON.GET store $..name
+"[\"Noise-cancelling Bluetooth headphones\",\"Wireless earbuds\",\"Mic headset\",\"Wireless keyboard\",\"USB-C keyboard\"]"
+```
+
+You can use an array slice to select a range of elements from an array. This example returns the names of the first two headphones:
+
+```sh
+127.0.0.1:6379> JSON.GET store $..headphones[0:2].name
+"[\"Noise-cancelling Bluetooth headphones\",\"Wireless earbuds\"]"
+```
+
+Filter expressions `?()` let you select JSON elements based on certain conditions. You can use comparison operators (==, !=, <, <=, >, >=) and logical operators (&&, \|\|) within these expressions.
+
+For example, this filter only returns wireless headphones with a price less than 70:
+
+```sh
+127.0.0.1:6379> JSON.GET store $..headphones[?(@.price<70&&@.wireless==true)]
+"[{\"id\":12346,\"name\":\"Wireless earbuds\",\"description\":\"Wireless Bluetooth in-ear headphones\",\"wireless\":true,\"connection\":\"Bluetooth\",\"price\":64.99,\"stock\":17,\"free-shipping\":false,\"colors\":[\"black\",\"white\"]}]"
+```
+
+This example filters the inventory for the names of items that support Bluetooth connections:
+
+```sh
+127.0.0.1:6379> JSON.GET store '$.inventory.*[?(@.connection=="Bluetooth")].name'
+"[\"Noise-cancelling Bluetooth headphones\",\"Wireless earbuds\",\"Wireless keyboard\"]"
+```
+
+#### Update JSON examples
+
+You can also use JSONPath queries when you want to update specific sections of a JSON document.
+
+For example, you can pass a JSONPath to the [`JSON.SET`](/commands/json.set) command to update a specific field. This example changes the price of the first item in the headphones list:
+
+```sh
+127.0.0.1:6379> JSON.GET store $..headphones[0].price
+"[99.98]"
+127.0.0.1:6379> JSON.SET store $..headphones[0].price 78.99
+"OK"
+127.0.0.1:6379> JSON.GET store $..headphones[0].price
+"[78.99]"
+```
+
+You can use filter expressions to update only JSON elements that match certain conditions. The following example changes `free-shipping` to `true` for any items with a price greater than 49:
+
+```sh
+127.0.0.1:6379> JSON.SET store $.inventory.*[?(@.price>49)].free-shipping true
+"OK"
+127.0.0.1:6379> JSON.GET store $.inventory.*[?(@.free-shipping==true)].name
+"[\"Noise-cancelling Bluetooth headphones\",\"Wireless earbuds\"]"
+```
+
+JSONPath queries also work with other JSON commands that accept a path as an argument. For example, you can add a new color option for a set of headphones with [`JSON.ARRAPPEND`](/commands/json.arrappend):
+
+```sh
+127.0.0.1:6379> JSON.GET store $..headphones[0].colors
+"[[\"black\",\"silver\"]]"
+127.0.0.1:6379> JSON.ARRAPPEND store $..headphones[0].colors '"pink"'
+1) "3"
+127.0.0.1:6379> JSON.GET store $..headphones[0].colors
+"[[\"black\",\"silver\",\"pink\"]]"
+```
+
+## Legacy path syntax
+
+RedisJSON v1 had the following path implementation. RedisJSON v2 still supports this legacy path in addition to JSONPath.
 
 Paths always begin at the root of a RedisJSON value. The root is denoted by a period character (`.`). For paths that reference the root's children, it is optional to prefix the path with the root.
 
-RedisJSON supports both dot notation and bracket notation for object key access. The following paths all refer to _bar_, which is a child of _foo_ under the root:
+RedisJSON supports both dot notation and bracket notation for object key access. The following paths refer to _headphones_, which is a child of _inventory_ under the root:
 
-*   `.foo.bar`
-*   `foo["bar"]`
-*   `['foo']["bar"]`
+*   `.inventory.headphones`
+*   `inventory["headphones"]`
+*   `['inventory']["headphones"]`
 
 To access an array element, enclose its index within a pair of square brackets. The index is 0-based, with 0 being the first element of the array, 1 being the next element, and so on. You can use negative offsets to access elements starting from the end of the array. For example, -1 is the last element in the array, -2 is the second to last element, and so on.
 
 ## JSON key names and path compatibility
 
-By definition, a JSON key can be any valid JSON string. Paths, on the other hand, are traditionally based on JavaScript's (and Java's) variable naming conventions. Therefore, while it is possible to have RedisJSON store objects containing arbitrary key names, you can only access these keys via a path if they conform to these naming syntax rules:
+By definition, a JSON key can be any valid JSON string. Paths, on the other hand, are traditionally based on JavaScript's (and Java's) variable naming conventions.
+
+Although RedisJSON can store objects that contain arbitrary key names, you can only use a path to access these keys if they conform to these naming syntax rules:
 
 1.  Names must begin with a letter, a dollar sign (`$`), or an underscore (`_`) character
 2.  Names can contain letters, digits, dollar signs, and underscores
@@ -54,4 +239,4 @@ The time complexity of searching (navigating to) an element in the path is calcu
 
 This means that the overall time complexity of searching a path is _O(N*M)_, where N is the depth and M is the number of parent object keys.
 
-<sup>&#8224;</sup> while this is acceptable for objects where N is small, access can be optimized for larger objects. This optimization is planned for a future version.
+<sup>&#8224;</sup> While this is acceptable for objects where N is small, access can be optimized for larger objects.
