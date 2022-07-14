@@ -423,7 +423,7 @@ macro_rules! redis_json_module_export_shared_api {
         #[no_mangle]
         pub extern "C" fn JSONAPI_pathIsStatic(json_path: *const c_void) -> c_int {
             let flags = unsafe { &*(json_path.cast::<PathInfoFlags>()) };
-            flags.intersects(PathInfoFlags::STATIC) as c_int
+            flags.intersects(PathInfoFlags::SINGLE) as c_int
         }
 
         #[no_mangle]

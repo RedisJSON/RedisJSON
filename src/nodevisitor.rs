@@ -39,7 +39,7 @@ bitflags! {
         #[allow(clippy::unnecessary_cast)]
         const NONE = 0 as c_int;
         #[allow(clippy::unnecessary_cast)]
-        const STATIC = 1 as c_int;
+        const SINGLE = 1 as c_int;
         #[allow(clippy::unnecessary_cast)]
         const DEFINED_ORDER = 2 as c_int;
     }
@@ -69,7 +69,9 @@ impl<'a> StaticPathParser<'a> {
     pub fn get_path_info(path: &'a str) -> Result<PathInfoFlags, String> {
         let parser = Self::check(path)?;
         match parser.valid {
-            VisitStatus::Valid => Ok(PathInfoFlags::STATIC | PathInfoFlags::DEFINED_ORDER),
+            // Currently we do not detect some SINGLE, such as, $.a[1:2]
+            // Currently we do not detect some DEFINED_ORDER which are not SINGLE, such as, $.a[1:3] or $.a.b[3,1,2,0].c
+            VisitStatus::Valid => Ok(PathInfoFlags::SINGLE | PathInfoFlags::DEFINED_ORDER),
             _ => Ok(PathInfoFlags::NONE),
         }
     }
