@@ -22,24 +22,25 @@ enum NodeType {
     // N_BINARY = 0x200
 }
 
-impl From<u64> for NodeType {
-    fn from(n: u64) -> Self {
+impl TryFrom<u64> for NodeType {
+    type Error = &'static str;
+    fn try_from(n: u64) -> Result<Self, Self::Error> {
         match n {
-            0x1u64 => Self::Null,
-            0x2u64 => Self::String,
-            0x4u64 => Self::Number,
-            0x8u64 => Self::Integer,
-            0x10u64 => Self::Boolean,
-            0x20u64 => Self::Dict,
-            0x40u64 => Self::Array,
-            0x80u64 => Self::KeyVal,
-            _ => panic!("Can't load old RedisJSON RDB1"),
+            0x1u64 => Ok(Self::Null),
+            0x2u64 => Ok(Self::String),
+            0x4u64 => Ok(Self::Number),
+            0x8u64 => Ok(Self::Integer),
+            0x10u64 => Ok(Self::Boolean),
+            0x20u64 => Ok(Self::Dict),
+            0x40u64 => Ok(Self::Array),
+            0x80u64 => Ok(Self::KeyVal),
+            _ => Err("Can't parse node type"),
         }
     }
 }
 
 pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> Result<Value, Error> {
-    let node_type = raw::load_unsigned(rdb)?.into();
+    let node_type = raw::load_unsigned(rdb)?.try_into()?;
     match node_type {
         NodeType::Null => Ok(Value::Null),
         NodeType::Boolean => {
@@ -64,7 +65,7 @@ pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> Result<Value, Error> {
             let len = raw::load_unsigned(rdb)?;
             let mut m = Map::with_capacity(len as usize);
             for _ in 0..len {
-                let t: NodeType = raw::load_unsigned(rdb)?.into();
+                let t: NodeType = raw::load_unsigned(rdb)?.try_into()?;
                 if t != NodeType::KeyVal {
                     return Err(Error::from("Can't load old RedisJSON RDB"));
                 }

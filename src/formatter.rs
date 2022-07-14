@@ -38,7 +38,7 @@ pub struct RedisJsonFormatter<'a> {
 }
 
 impl<'a> RedisJsonFormatter<'a> {
-    pub fn new(indent: Option<&'a str>, space: Option<&'a str>, newline: Option<&'a str>) -> Self {
+    pub const fn new(indent: Option<&'a str>, space: Option<&'a str>, newline: Option<&'a str>) -> Self {
         RedisJsonFormatter {
             current_indent: 0,
             has_value: false,
