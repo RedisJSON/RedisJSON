@@ -807,8 +807,8 @@ fn prepare_paths_for_deletion(paths: &mut Vec<Vec<String>>) {
     paths.retain(|v| {
         let path = v.join(",");
         let found = string_paths.binary_search(&path).unwrap();
-        for i in 0..found {
-            if path.starts_with(string_paths[i].as_str()) {
+        for p in string_paths.iter().take(found) {
+            if path.starts_with(p.as_str()) {
                 return false;
             }
         }
