@@ -421,7 +421,7 @@ macro_rules! redis_json_module_export_shared_api {
         }
 
         #[no_mangle]
-        pub extern "C" fn JSONAPI_pathIsStatic(json_path: *const c_void) -> c_int {
+        pub extern "C" fn JSONAPI_pathIsSingle(json_path: *const c_void) -> c_int {
             let flags = unsafe { &*(json_path.cast::<PathInfoFlags>()) };
             flags.intersects(PathInfoFlags::SINGLE) as c_int
         }
@@ -473,7 +473,7 @@ macro_rules! redis_json_module_export_shared_api {
             // V2 entries
             pathParse: JSONAPI_pathParse,
             pathFree: JSONAPI_pathFree,
-            pathIsStatic: JSONAPI_pathIsStatic,
+            pathIsSingle: JSONAPI_pathIsSingle,
             pathHasDefinedOrder: JSONAPI_pathHasDefinedOrder,
         };
 
@@ -512,7 +512,7 @@ macro_rules! redis_json_module_export_shared_api {
             // V2 entries
             pub pathParse: extern "C" fn(path: *const c_char, ctx: *mut rawmod::RedisModuleCtx, err_msg: *mut *mut rawmod::RedisModuleString) -> *const c_void,
             pub pathFree: extern "C" fn(json_path: *mut c_void),
-            pub pathIsStatic: extern "C" fn(json_path: *const c_void) -> c_int,
+            pub pathIsSingle: extern "C" fn(json_path: *const c_void) -> c_int,
             pub pathHasDefinedOrder: extern "C" fn(json_path: *const c_void) -> c_int,
         }
     };

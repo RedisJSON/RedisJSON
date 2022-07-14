@@ -764,6 +764,7 @@ where
 /// And if a path is a sub-path of the other, then only paths with shallower hierarchy (closer to the top-level) remain
 fn prepare_paths_for_deletion(paths: &mut Vec<Vec<String>>) {
     if paths.len() < 2 {
+        // No need to reorder when there are less than 2 paths
         return;
     }
     paths.sort_by(|v1, v2| {

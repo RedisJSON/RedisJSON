@@ -17,12 +17,6 @@ typedef enum JSONType {
   JSONType__EOF
 } JSONType;
 
-typedef enum PathInfoFlags {
-  PathInfoFlag_Invalid = 0x01,
-  PathInfoFlag_Static = 0x02,
-  PathInfoFlag_DefinedOrder = 0x04,
-} PathInfoFlags;
-
 typedef const void* RedisJSON;
 typedef const void* JSONResultsIterator;
 typedef const void* JSONPath;
@@ -88,7 +82,7 @@ typedef struct RedisJSONAPI {
   void (*pathFree)(JSONPath);
   
   // Query a parsed JSONPath
-  int (*pathIsStatic)(JSONPath);
+  int (*pathIsSingle)(JSONPath);
   int (*pathHasDefinedOrder)(JSONPath);
 
 } RedisJSONAPI;
