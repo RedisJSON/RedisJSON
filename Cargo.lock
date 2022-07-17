@@ -554,7 +554,7 @@ dependencies = [
 
 [[package]]
 name = "redisjson"
-version = "2.0.9"
+version = "2.0.12"
 dependencies = [
  "bson",
  "ijson",
