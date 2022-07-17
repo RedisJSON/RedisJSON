@@ -59,7 +59,7 @@ pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
 
         free_effort: None,
         unlink: None,
-        copy: None,
+        copy: Some(redisjson::type_methods::copy),
         defrag: None,
     },
 );
@@ -81,25 +81,28 @@ pub fn get_manager_type() -> ManagerType {
 #[macro_export]
 macro_rules! run_on_manager {
     (
-    $run:expr, $ctx:ident, $args: ident
-    ) => {
-        match $crate::get_manager_type() {
-            $crate::ManagerType::IValue => $run(
-                $crate::ivalue_manager::RedisIValueJsonKeyManager {
-                    phantom: PhantomData,
-                },
-                $ctx,
-                $args,
-            ),
-            $crate::ManagerType::SerdeValue => $run(
-                $crate::manager::RedisJsonKeyManager {
-                    phantom: PhantomData,
-                },
-                $ctx,
-                $args,
-            ),
+    pre_command: $pre_command_expr:expr,
+    get_mngr: $get_mngr_expr:expr,
+    run: $run_expr:expr,
+    ) => {{
+        $pre_command_expr();
+        let m = $get_mngr_expr;
+        match m {
+            Some(mngr) => $run_expr(mngr),
+            None => match $crate::get_manager_type() {
+                $crate::ManagerType::IValue => {
+                    $run_expr($crate::ivalue_manager::RedisIValueJsonKeyManager {
+                        phantom: PhantomData,
+                    })
+                }
+                $crate::ManagerType::SerdeValue => {
+                    $run_expr($crate::manager::RedisJsonKeyManager {
+                        phantom: PhantomData,
+                    })
+                }
+            },
         }
-    };
+    }};
 }
 
 #[macro_export]
@@ -130,12 +133,11 @@ macro_rules! redis_json_module_create {(
         macro_rules! json_command {
             ($cmd:ident) => {
                 |ctx: &Context, args: Vec<RedisString>| -> RedisResult {
-                    $pre_command_function_expr(ctx, &args);
-                    let m = $get_manager_expr;
-                    match m {
-                        Some(mngr) => $cmd(mngr, ctx, args),
-                        None => run_on_manager!($cmd, ctx, args),
-                    }
+                    run_on_manager!(
+                        pre_command: ||$pre_command_function_expr(ctx, &args),
+                        get_mngr: $get_manager_expr,
+                        run: |mngr|$cmd(mngr, ctx, args),
+                    )
                 }
             };
         }
@@ -238,7 +240,7 @@ redis_json_module_create! {
             _ => None,
         }
     },
-    version: 02_00_09,
+    version: 02_00_12,
     init: dummy_init,
     info: dummy_info,
 }
