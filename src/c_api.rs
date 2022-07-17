@@ -256,20 +256,11 @@ macro_rules! redis_json_module_export_shared_api {
             ctx: *mut rawmod::RedisModuleCtx,
             key_str: *mut rawmod::RedisModuleString,
         ) -> *mut c_void {
-            $pre_command_function_expr(&get_llapi_ctx(), &Vec::new());
-
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => json_api_open_key_internal(mngr, ctx, RedisString::new(ctx, key_str))
-                    as *mut c_void,
-                None => json_api_open_key_internal(
-                    manager::RedisJsonKeyManager {
-                        phantom: PhantomData,
-                    },
-                    ctx,
-                    RedisString::new(ctx, key_str),
-                ) as *mut c_void,
-            }
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_open_key_internal(mngr, ctx, RedisString::new(ctx, key_str))as *mut c_void},
+            )
         }
 
         #[no_mangle]
@@ -278,187 +269,102 @@ macro_rules! redis_json_module_export_shared_api {
             ctx: *mut rawmod::RedisModuleCtx,
             path: *const c_char,
         ) -> *mut c_void {
-            $pre_command_function_expr(&get_llapi_ctx(), &Vec::new());
-
             let key = unsafe { CStr::from_ptr(path).to_str().unwrap() };
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => json_api_open_key_internal(mngr, ctx, RedisString::create(ctx, key))
-                    as *mut c_void,
-                None => json_api_open_key_internal(
-                    manager::RedisJsonKeyManager {
-                        phantom: PhantomData,
-                    },
-                    ctx,
-                    RedisString::create(ctx, key),
-                ) as *mut c_void,
-            }
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_open_key_internal(mngr, ctx, RedisString::create(ctx, key)) as *mut c_void},
+            )
         }
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_get(key: *const c_void, path: *const c_char) -> *const c_void {
-            $pre_command_function_expr(&get_llapi_ctx(), &Vec::new());
-
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => json_api_get(mngr, key, path),
-                None => json_api_get(
-                    manager::RedisJsonKeyManager {
-                        phantom: PhantomData,
-                    },
-                    key,
-                    path,
-                ),
-            }
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_get(mngr, key, path)},
+            )
         }
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_next(iter: *mut c_void) -> *const c_void {
-            $pre_command_function_expr(&get_llapi_ctx(), &Vec::new());
-
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => json_api_next(mngr, iter),
-                None => json_api_next(
-                    manager::RedisJsonKeyManager {
-                        phantom: PhantomData,
-                    },
-                    iter,
-                ),
-            }
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_next(mngr, iter)},
+            )
         }
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_len(iter: *const c_void) -> size_t {
-            $pre_command_function_expr(&get_llapi_ctx(), &Vec::new());
-
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => json_api_len(mngr, iter),
-                None => json_api_len(
-                    manager::RedisJsonKeyManager {
-                        phantom: PhantomData,
-                    },
-                    iter,
-                ),
-            }
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_len(mngr, iter)},
+            )
         }
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_freeIter(iter: *mut c_void) {
-            $pre_command_function_expr(&get_llapi_ctx(), &Vec::new());
-
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => json_api_free_iter(mngr, iter),
-                None => json_api_free_iter(
-                    manager::RedisJsonKeyManager {
-                        phantom: PhantomData,
-                    },
-                    iter,
-                ),
-            }
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_free_iter(mngr, iter)},
+            )
         }
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_getAt(json: *const c_void, index: size_t) -> *const c_void {
-            $pre_command_function_expr(&get_llapi_ctx(), &Vec::new());
-
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => json_api_get_at(mngr, json, index),
-                None => json_api_get_at(
-                    manager::RedisJsonKeyManager {
-                        phantom: PhantomData,
-                    },
-                    json,
-                    index,
-                ),
-            }
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_get_at(mngr, json, index)},
+            )
         }
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_getLen(json: *const c_void, count: *mut size_t) -> c_int {
-            $pre_command_function_expr(&get_llapi_ctx(), &Vec::new());
-
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => json_api_get_len(mngr, json, count),
-                None => json_api_get_len(
-                    manager::RedisJsonKeyManager {
-                        phantom: PhantomData,
-                    },
-                    json,
-                    count,
-                ),
-            }
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_get_len(mngr, json, count)},
+            )
         }
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_getType(json: *const c_void) -> c_int {
-            $pre_command_function_expr(&get_llapi_ctx(), &Vec::new());
-
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => json_api_get_type(mngr, json),
-                None => json_api_get_type(
-                    manager::RedisJsonKeyManager {
-                        phantom: PhantomData,
-                    },
-                    json,
-                ),
-            }
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_get_type(mngr, json)},
+            )
         }
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_getInt(json: *const c_void, val: *mut c_longlong) -> c_int {
-            $pre_command_function_expr(&get_llapi_ctx(), &Vec::new());
-
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => json_api_get_int(mngr, json, val),
-                None => json_api_get_int(
-                    manager::RedisJsonKeyManager {
-                        phantom: PhantomData,
-                    },
-                    json,
-                    val,
-                ),
-            }
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_get_int(mngr, json, val)},
+            )
         }
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_getDouble(json: *const c_void, val: *mut c_double) -> c_int {
-            $pre_command_function_expr(&get_llapi_ctx(), &Vec::new());
-
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => json_api_get_double(mngr, json, val),
-                None => json_api_get_double(
-                    manager::RedisJsonKeyManager {
-                        phantom: PhantomData,
-                    },
-                    json,
-                    val,
-                ),
-            }
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_get_double(mngr, json, val)},
+            )
         }
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_getBoolean(json: *const c_void, val: *mut c_int) -> c_int {
-            $pre_command_function_expr(&get_llapi_ctx(), &Vec::new());
-
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => json_api_get_boolean(mngr, json, val),
-                None => json_api_get_boolean(
-                    manager::RedisJsonKeyManager {
-                        phantom: PhantomData,
-                    },
-                    json,
-                    val,
-                ),
-            }
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_get_boolean(mngr, json, val)},
+            )
         }
 
         #[no_mangle]
@@ -467,20 +373,11 @@ macro_rules! redis_json_module_export_shared_api {
             str: *mut *const c_char,
             len: *mut size_t,
         ) -> c_int {
-            $pre_command_function_expr(&get_llapi_ctx(), &Vec::new());
-
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => json_api_get_string(mngr, json, str, len),
-                None => json_api_get_string(
-                    manager::RedisJsonKeyManager {
-                        phantom: PhantomData,
-                    },
-                    json,
-                    str,
-                    len,
-                ),
-            }
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_get_string(mngr, json, str, len)},
+            )
         }
 
         #[no_mangle]
@@ -489,36 +386,20 @@ macro_rules! redis_json_module_export_shared_api {
             ctx: *mut rawmod::RedisModuleCtx,
             str: *mut *mut rawmod::RedisModuleString,
         ) -> c_int {
-            $pre_command_function_expr(&get_llapi_ctx(), &Vec::new());
-
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => json_api_get_json(mngr, json, ctx, str),
-                None => json_api_get_json(
-                    manager::RedisJsonKeyManager {
-                        phantom: PhantomData,
-                    },
-                    json,
-                    ctx,
-                    str,
-                ),
-            }
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_get_json(mngr, json, ctx, str)},
+            )
         }
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_isJSON(key: *mut rawmod::RedisModuleKey) -> c_int {
-            $pre_command_function_expr(&get_llapi_ctx(), &Vec::new());
-
-            let m = $get_manager_expr;
-            match m {
-                Some(mngr) => json_api_is_json(mngr, key),
-                None => json_api_is_json(
-                    manager::RedisJsonKeyManager {
-                        phantom: PhantomData,
-                    },
-                    key,
-                ),
-            }
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_is_json(mngr, key)},
+            )
         }
 
         static REDISJSON_GETAPI: &str = concat!("RedisJSON_V1", "\0");

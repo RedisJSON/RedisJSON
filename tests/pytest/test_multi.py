@@ -102,6 +102,21 @@ def testDelCommand_issue529(env):
     res = r.execute_command('JSON.ARRLEN', 'doc1', '$.*[*]')
     r.assertEqual(res, [3, 3, 3])
 
+def testDelCommand_issue754(env):
+    r = env
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '[[1],[1,2,3]]'))
+    res = r.execute_command('JSON.DEL', 'doc1', '$..[0]')
+    # The array `[1]` is deleted and its nested element `1` is not counted as deleted
+    r.assertEqual(res, 2)
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [[[2,3]]])
+
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":[[1],[1,2,3,[4,5,[{"a":6},7,8]]], [10,{"11":11}], ["12","13"]], "b":[[1,2],{"a":[3,4,5]}]}'))
+    res = r.execute_command('JSON.DEL', 'doc1', '$..[0]')
+    r.assertEqual(res, 8)
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [{"a":[[2,3,[5,[7,8]]],[{"11":11}],["13"]],"b":[{"a":[4,5]}]}])
+
 
 def testForgetCommand(env):
     """Test REJSON.FORGET command"""
