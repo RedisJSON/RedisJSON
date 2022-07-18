@@ -19,6 +19,8 @@
 # packaging
 # build/
 
+/logs/
+
 # Mac
 .DS_Store
 
