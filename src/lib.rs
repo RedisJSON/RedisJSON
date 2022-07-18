@@ -17,6 +17,8 @@ use crate::c_api::{
     json_api_get_string, json_api_get_type, json_api_is_json, json_api_len, json_api_next,
     json_api_open_key_internal, LLAPI_CTX,
 };
+use crate::nodevisitor::PathInfoFlags;
+use crate::nodevisitor::StaticPathParser;
 use crate::redisjson::Format;
 
 mod array_index;
@@ -122,6 +124,7 @@ macro_rules! redis_json_module_create {(
         use std::os::raw::{c_double, c_int, c_longlong};
         use redis_module::{raw as rawmod, LogLevel};
         use rawmod::ModuleOptions;
+
         use std::{
             ffi::CStr,
             os::raw::{c_char, c_void},
