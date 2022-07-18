@@ -760,15 +760,20 @@ where
 }
 
 /// Sort the paths so higher indices precede lower indices on the same array,
-/// And if one path is a sub-path of the other, then paths with shallower hierarchy (closer to the top-level) precedes paths with deeper hierarchy
-fn prepare_paths_for_deletion(paths: &mut [Vec<String>]) {
+/// And longer paths precede shorter paths
+/// And if a path is a sub-path of the other, then only paths with shallower hierarchy (closer to the top-level) remain
+fn prepare_paths_for_deletion(paths: &mut Vec<Vec<String>>) {
+    if paths.len() < 2 {
+        // No need to reorder when there are less than 2 paths
+        return;
+    }
     paths.sort_by(|v1, v2| {
         v1.iter()
             .zip_longest(v2.iter())
             .fold_while(Ordering::Equal, |_acc, v| {
                 match v {
-                    EitherOrBoth::Left(_) => Done(Ordering::Greater), // Shorter paths before longer paths
-                    EitherOrBoth::Right(_) => Done(Ordering::Less), // Shorter paths before longer paths
+                    EitherOrBoth::Left(_) => Done(Ordering::Less), // Shorter paths after longer paths
+                    EitherOrBoth::Right(_) => Done(Ordering::Greater), // Shorter paths after longer paths
                     EitherOrBoth::Both(p1, p2) => {
                         let i1 = p1.parse::<usize>();
                         let i2 = p2.parse::<usize>();
@@ -794,6 +799,24 @@ fn prepare_paths_for_deletion(paths: &mut [Vec<String>]) {
                 }
             })
             .into_inner()
+    });
+    // Remove paths which are nested by others (on each sub-tree only top most ancestor should be deleted)
+    // (TODO: Add a mode in which the jsonpath selector will already skip nested paths)
+    let mut string_paths = Vec::new();
+    paths.iter().for_each(|v| {
+        string_paths.push(v.join(","));
+    });
+    string_paths.sort();
+
+    paths.retain(|v| {
+        let path = v.join(",");
+        let found = string_paths.binary_search(&path).unwrap();
+        for p in string_paths.iter().take(found) {
+            if path.starts_with(p.as_str()) {
+                return false;
+            }
+        }
+        true
     });
 }
 

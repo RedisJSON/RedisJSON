@@ -89,14 +89,14 @@ s3_upload_file() {
 	local s3_dir="$2"
 	[[ $s3_dir != */ ]] && s3_dir="${s3_dir}/"
 	
-	$OP python3 -m awscli s3 cp $file $s3_dir --acl public-read --no-progress
+	$OP aws s3 cp $file $s3_dir --acl public-read --no-progress
 }
 
 s3_ls() {
 	local s3_dir="$1"
 	[[ $s3_dir != */ ]] && s3_dir="${s3_dir}/"
 	
-	$OP python3 -m awscli s3 ls $s3_dir
+	$OP aws s3 ls $s3_dir
 }
 
 s3_upload() {
@@ -119,5 +119,11 @@ s3_upload() {
 }
 
 #----------------------------------------------------------------------------------------------
+
+if [[ $NOP != 1 ]]; then
+	if ! is_command aws; then
+		$READIES/bin/getaws
+	fi
+fi
 
 s3_upload rejson rejson
