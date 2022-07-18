@@ -130,8 +130,8 @@ data = {
 r = redis.Redis()
 r.json().set('doc', '$', data)
 doc = r.json().get('doc', '$')
-foo = r.json().get('doc', 'foo')
-bar = r.json().get('doc', 'foo.bar')
+foo = r.json().get('doc', '$.foo')
+bar = r.json().get('doc', '$..bar')
 ```
 
 ### Building on Ubuntu 20.04
