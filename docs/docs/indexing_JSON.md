@@ -79,37 +79,50 @@ FT.SEARCH userIdx '@name:(John)'
    2) "{\"user\":{\"name\":\"John Smith\",\"tag\":\"foo,bar\",\"hp\":1000,\"dmg\":150}}"
 ```
 
-## Indexing JSON arrays with tags
+## Indexing JSON arrays
 
-It is possible to index scalar string and boolean values in JSON arrays by using the wildcard operator in the JSON Path. For example if you were indexing blog posts you might have a field called `tags` which is an array of tags that apply to the blog post.
+Any JSON path that resolves to an array of strings or booleans is indexable as a TAG field.
+This means that we can index any JSON array of strings or booleans, as well as any objects
+we can derive a JSON path from to resolve to an array of strings or booleans.
 
-```JSON
+Take the following example, which has an array of string (`phone_numbers`), and an array of objects `addresses`:
+
+```json
 {
-   "title":"Using RedisJson is Easy and Fun",
-   "tags":["redis","json","redisjson"]
+   "name":"Bob Fry",
+   "phone_numbers":
+   [
+      "555-555-5555",
+      "123-456-7890"
+   ],
+   "addresses":
+   [
+      {
+         "street_address":"123 Main Street",
+         "city":"Orlando",
+         "state":"Florida",
+         "postal_code":"32789"
+      },
+      {
+         "street_address":"234 Drury Lane",
+         "city":"Atlanta",
+         "state":"Georgia",
+         "postal_code":"30301"
+      }
+   ]
 }
 ```
 
-You can apply an index to the `tags` field by specifying the JSON Path `$.tags.*` in your schema creation:
+You can index any JSON path that will resolve to an array. For example, `$.phone_numbers.*` resolves to the array `['555-555-5555', 123-456-7890]` so it can be indexed. Also, the string fields WITHIN the objects of the `addresses` field can also be indexed. For example, the JSON path `$.addresses[*].city` resolves to an array of strings `[Orlando, Atlanta]`. Consequentially, you can create a corresponding index to index both of these fields:
 
-```bash
-FT.CREATE blog-idx ON JSON PREFIX 1 Blog: SCHEMA $.tags.* AS tags TAG
+```
+FT.CREATE idx ON JSON SCHEMA $.phone_numbers.* AS numbers TAG $.addresses[*].city AS cities TAG
 ```
 
-You would then set a blog post as you would any other JSON document:
+You can then query those documents with the typical `TAG` syntax e.g.
 
-```bash
-JSON.SET Blog:1 . '{"title":"Using RedisJson is Easy and Fun", "tags":["redis","json","redisjson"]}'
 ```
-
-And finally you can search using the typical tag searching syntax:
-
-```bash
-127.0.0.1:6379> FT.SEARCH blog-idx "@tags:{redis}"
-1) (integer) 1
-2) "Blog:1"
-3) 1) "$"
-   2) "{\"title\":\"Using RedisJson is Easy and Fun\",\"tags\":[\"redis\",\"json\",\"redisjson\"]}"
+FT.SEARCH idx "@cities:{Orlando}"
 ```
 
 ## Field projection
@@ -186,54 +199,71 @@ FT.AGGREGATE userIdx '*' LOAD 6 $.user.hp AS hp $.user.dmg AS dmg APPLY '@hp-@dm
 
 ## Current indexing limitations
 
-### JSON arrays can only be indexed in TAG identifiers.
+### Multiple-values cannot be indexed for non-TAG fields
 
-It is only possible to index an array of strings or booleans in a TAG identifier.
-Other types (numeric, geo, null) are not supported.
+JSON paths that resolve to multiple values are only supported for TAG fields, `TEXT`, `NUMERIC`,
+and `GEO` are not supported. The JSON paths for these non-TAG fields must resolve to a single scalar value.
+If they resolve to anything but a single scalar value, the index will fail.
 
-### It is not possible to index JSON objects.
+### It is not possible to index whole JSON objects.
 
-To be indexed, a JSONPath expression must return a single scalar value (string or number).
+To be indexed, a JSONPath expression must return a single scalar value (e.g. a string or number),
+with the exception of `TAG` fields, which can index arrays of scalar strings and booleans.
 
 If the JSONPath expression returns an object, it will be ignored.
 
-However it is possible to index the strings in separated attributes.
+However it is possible to index the scalars within JSON objects and arrays.
 
 Given the following document:
 
 ```JSON
 {
   "name": "Headquarters",
-  "address": [
-    "Suite 250",
-    "Mountain View"
-  ],
-  "cp": "CA 94040"
+  "address": {
+    "unit": "Suite 250",
+    "city":"Mountain View",
+    "state":"CA",
+    "postal_code":"94040"
+   },
+   "phone_numbers":[
+      "555-555-5555",
+      "123-456-7890"
+   ]
 }
 ```
 
-Before you can index the array under the `address` key, you have to create two fields:
+The path `$.address` returns the whole object for address, so this cannot be indexed. However, you can index the components of `address` with a JSON path resolving to the scalars within it e.g. `$.address.unit`. Additionally if you wanted to create a rule where you'd consider the first element of the `phone_numbers` array the primary phone number, you could use the path $.phone_numbers[0] to resolve to that item:
 
-```sql
-FT.CREATE orgIdx ON JSON SCHEMA $.address[0] AS a1 TEXT $.address[1] AS a2 TEXT
+```SQL
+FT.CREATE orgIdx ON JSON SCHEMA $.address.unit AS unit TEXT $.phone_numbers[0] AS primary_phone TAG
 OK
 ```
 
 You can now index the document:
 
-```sql
-JSON.SET org:1 $ '{"name": "Headquarters","address": ["Suite 250","Mountain View"],"cp": "CA 94040"}'
+```SQL
+JSON.SET org:1 $ '{"name": "Headquarters","address": {"unit": "Suite 250", "city":"Mountain View", "state":"CA", "postal_code":"94040"}, "phone_numbers":["555-555-5555","123-456-7890"]}'
 OK
 ```
 
 You can now search in the address:
 
-```sql
+```SQL
 FT.SEARCH orgIdx "suite 250"
 1) (integer) 1
 2) "org:1"
 3) 1) "$"
-   2) "{\"name\":\"Headquarters\",\"address\":[\"Suite 250\",\"Mountain View\"],\"cp\":\"CA 94040\"}"
+   2) "{\"name\":\"Headquarters\",\"address\":{\"unit\":\"Suite 250\",\"city\":\"Mountain View\",\"state\":\"CA\",\"postal_code\":\"94040\"},\"phone_numbers\":[\"555-555-5555\",\"123-456-7890\"]}"
+```
+
+Or for the `primary_phone`:
+
+```SQL
+FT.SEARCH orgIdx "@primary_phone:{555\\-555\\-5555}"
+1) (integer) 1
+2) "org:1"
+3) 1) "$"
+   2) "{\"name\":\"Headquarters\",\"address\":{\"unit\":\"Suite 250\",\"city\":\"Mountain View\",\"state\":\"CA\",\"postal_code\":\"94040\"},\"phone_numbers\":[\"555-555-5555\",\"123-456-7890\"]}"
 ```
 
 ### Index JSON strings and numbers as TEXT and NUMERIC
