@@ -1124,6 +1124,8 @@ def testLargeKey(env):
         env.skip()
     env.skipOnCluster()
 
+    is_serde_json = True if env.moduleArgs is not None and ['JSON_BACKEND SERDE_JSON'] in env.moduleArgs else False
+        
     r = env
     
     # Increase the config proto-max-bulk-len
@@ -1140,7 +1142,8 @@ def testLargeKey(env):
 
     r.assertOk(r.execute_command('JSON.SET', 'large_key', '$.secondo', val1))
     r.assertEqual(r.execute_command('JSON.STRLEN', 'large_key', '$.secondo'), [k1])
-    r.assertGreater(r.execute_command('JSON.DEBUG', 'MEMORY', 'large_key', '$')[0], 2 * k1)
+    if not is_serde_json:
+        r.assertGreater(r.execute_command('JSON.DEBUG', 'MEMORY', 'large_key', '$')[0], 2 * k1)
 
     # Try 513 MB
     k2 = 1024 * 1024
@@ -1148,13 +1151,15 @@ def testLargeKey(env):
     val2 = '"%s"' % val2
     r.assertOk(r.execute_command('JSON.SET', 'large_key', '$.dolce', val2))
     r.assertEqual(r.execute_command('JSON.STRLEN', 'large_key', '$.dolce'), [k2])
-    r.assertGreater(r.execute_command('JSON.DEBUG', 'MEMORY', 'large_key', '$')[0], 2 * k1 + k2)
+    if not is_serde_json:
+        r.assertGreater(r.execute_command('JSON.DEBUG', 'MEMORY', 'large_key', '$')[0], 2 * k1 + k2)
 
     # Try 768 MB
     k2 = k1
     r.assertOk(r.execute_command('JSON.SET', 'large_key', '$.dolce', val1))
     r.assertEqual(r.execute_command('JSON.STRLEN', 'large_key', '$.dolce'), [k1])
-    r.assertGreater(r.execute_command('JSON.DEBUG', 'MEMORY', 'large_key', '$')[0], 2 * k1 + k2)
+    if not is_serde_json:
+        r.assertGreater(r.execute_command('JSON.DEBUG', 'MEMORY', 'large_key', '$')[0], 2 * k1 + k2)
     
     # Dump and Restore
     env.debugPrint("DUMP large_key", force=True)
@@ -1164,7 +1169,9 @@ def testLargeKey(env):
     r.assertEqual(r.execute_command('JSON.STRLEN', 'key_largo', '$.primo'), [k1])
     r.assertEqual(r.execute_command('JSON.STRLEN', 'key_largo', '$.secondo'), [k1])
     r.assertEqual(r.execute_command('JSON.STRLEN', 'key_largo', '$.dolce'), [k2])
-    r.assertGreater(r.execute_command('JSON.DEBUG', 'MEMORY', 'key_largo', '$')[0], 2 * k1 + k2)
+    
+    if not is_serde_json:
+        r.assertGreater(r.execute_command('JSON.DEBUG', 'MEMORY', 'key_largo', '$')[0], 2 * k1 + k2)
 
     # Restore default
     res = r.execute_command('CONFIG', 'SET', 'proto-max-bulk-len', '512mb')
