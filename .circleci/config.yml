@@ -547,8 +547,7 @@ workflows:
             parameters:
               platform: [bionic, focal]
       - build-macos:
-          #@@ <<: *on-integ-and-version-tags
-          <<: *on-any-branch
+          <<: *on-integ-and-version-tags
           context: common
       - coverage:
           <<: *on-any-branch
