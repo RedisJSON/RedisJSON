@@ -1,5 +1,3 @@
-extern crate redis_module;
-
 use commands::*;
 use redis_module::native_types::RedisType;
 use redis_module::raw::RedisModuleTypeMethods;
