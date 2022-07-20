@@ -4,7 +4,8 @@
 // User-provided JSON is converted to a tree. This tree is stored transparently in Redis.
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
-use redis_module::raw::{self};
+use redis_module::raw;
+
 use std::os::raw::{c_int, c_void};
 
 use crate::backward;
@@ -241,6 +242,27 @@ pub mod type_methods {
         };
         let cjson = CString::new(json).unwrap();
         raw::save_string(rdb, cjson.to_str().unwrap());
+    }
+
+    /// # Safety
+    #[allow(non_snake_case, unused)]
+    pub unsafe extern "C" fn copy(
+        fromkey: *mut raw::RedisModuleString,
+        tokey: *mut raw::RedisModuleString,
+        value: *const c_void,
+    ) -> *mut c_void {
+        match get_manager_type() {
+            ManagerType::SerdeValue => {
+                let v = unsafe { &*value.cast::<RedisJSON<serde_json::Value>>() };
+                let value = v.data.clone();
+                Box::into_raw(Box::new(value)).cast::<c_void>()
+            }
+            ManagerType::IValue => {
+                let v = unsafe { &*value.cast::<RedisJSON<ijson::IValue>>() };
+                let value = v.data.clone();
+                Box::into_raw(Box::new(value)).cast::<c_void>()
+            }
+        }
     }
 
     /// # Safety

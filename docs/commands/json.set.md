@@ -46,6 +46,6 @@ redis> JSON.SET doc $ '{"f1": {"a":1}, "f2":{"a":2}}'
 OK
 redis> JSON.SET doc $..a 3
 OK
-redis> json.get doc
+redis> JSON.GET doc
 "{\"f1\":{\"a\":3},\"f2\":{\"a\":3}}"
 ```

@@ -779,6 +779,10 @@ where
 /// And longer paths precede shorter paths
 /// And if a path is a sub-path of the other, then only paths with shallower hierarchy (closer to the top-level) remain
 fn prepare_paths_for_deletion(paths: &mut Vec<Vec<String>>) {
+    if paths.len() < 2 {
+        // No need to reorder when there are less than 2 paths
+        return;
+    }
     paths.sort_by(|v1, v2| {
         v1.iter()
             .zip_longest(v2.iter())
@@ -823,8 +827,8 @@ fn prepare_paths_for_deletion(paths: &mut Vec<Vec<String>>) {
     paths.retain(|v| {
         let path = v.join(",");
         let found = string_paths.binary_search(&path).unwrap();
-        for i in 0..found {
-            if path.starts_with(string_paths[i].as_str()) {
+        for p in string_paths.iter().take(found) {
+            if path.starts_with(p.as_str()) {
                 return false;
             }
         }
