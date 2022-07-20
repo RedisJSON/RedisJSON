@@ -8,6 +8,7 @@ use crate::redisjson::{normalize_arr_indices, Format, Path};
 use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
 use jsonpath_lib::select::Selector;
 use quick_xml;
+use json5;
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
@@ -193,7 +194,12 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 let mut writer = Vec::new();
                 quick_xml::se::to_writer(&mut writer, object).unwrap();
                 writer
+            },
+            Format::JSON5 => {
+                // TODO improve performance avoid to_string 
+                json5::to_string(object).unwrap().into()
             }
+
         }
     }
 
@@ -342,6 +348,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             Format::JSON => Ok(serde_json::to_string(results)?),
             Format::BSON => Err("ERR BSON soon to come...".into()),
             Format::XML => Err("ERR XML soon to come...".into()),
+            Format::JSON5 => Err("ERR JSON5 soon to come...".into()),
         }
     }
 
