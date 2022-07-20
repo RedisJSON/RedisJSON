@@ -43,7 +43,7 @@ struct ResultsIterator<'a, V: SelectValue> {
 pub static mut LLAPI_CTX: Option<*mut rawmod::RedisModuleCtx> = None;
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-fn create_rmstring(
+pub fn create_rmstring(
     ctx: *mut rawmod::RedisModuleCtx,
     value: Vec<u8>,
     rmstr: *mut *mut rawmod::RedisModuleString,
@@ -409,7 +409,7 @@ macro_rules! redis_json_module_export_shared_api {
             match StaticPathParser::get_path_info(path) {
                 Ok(flags) => Box::into_raw(Box::new(flags)).cast::<c_void>(),
                 Err(err_str) => {
-                    crate::c_api::create_rmstring(ctx, &err_str, err_msg);
+                    crate::c_api::create_rmstring(ctx, err_str.as_bytes().to_vec(), err_msg);
                     std::ptr::null()
                 }
             }
