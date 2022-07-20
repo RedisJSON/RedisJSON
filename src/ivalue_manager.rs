@@ -288,7 +288,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
             Format::JSON => serde_json::to_string(results)?,
             Format::BSON => return Err("ERR BSON soon to come...".into()), //results.into() as Bson,
             Format::XML => return Err("ERR XML soon to come...".into()),   //results.into() as XML,
-            Format::JSON5 => return Err("ERR JSON5 soon to come...".into()),   //results.into() as JSON5,
+            Format::JSON5 => return Err("ERR JSON5 soon to come...".into()), //results.into() as JSON5,
         };
         Ok(res)
     }
