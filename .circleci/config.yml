@@ -358,7 +358,7 @@ jobs:
 
   build-macos:
     macos:
-      xcode: 13.4.1
+      xcode: 12.4.0
     resource_class: macos.x86.medium.gen2
     parameters:
       upload:
@@ -533,7 +533,8 @@ workflows:
     jobs:
       - build-linux-debian:
           name: build
-          <<: *not-on-integ-branch
+          #@@<<: *not-on-integ-branch
+          <<: *never
       - build-platforms:
           <<: *on-integ-and-version-tags
           context: common
@@ -547,13 +548,16 @@ workflows:
             parameters:
               platform: [bionic, focal]
       - build-macos:
-          <<: *on-integ-and-version-tags
+          #@@<<: *on-integ-and-version-tags
+          <<: *on-any-branch
           context: common
       - coverage:
-          <<: *on-any-branch
+          #@@<<: *on-any-branch
+          <<: *never
       - sanitize:
           name: sanitize-<< matrix.san-type >>
-          <<: *on-any-branch
+          #@@<<: *on-any-branch
+          <<: *never
           matrix:
             parameters:
               san-type: [address] # [address, memory]
