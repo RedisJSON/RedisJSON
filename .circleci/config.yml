@@ -533,8 +533,7 @@ workflows:
     jobs:
       - build-linux-debian:
           name: build
-          #@@<<: *not-on-integ-branch
-          <<: *never
+          <<: *not-on-integ-branch
       - build-platforms:
           <<: *on-integ-and-version-tags
           context: common
@@ -548,16 +547,13 @@ workflows:
             parameters:
               platform: [bionic, focal]
       - build-macos:
-          #@@<<: *on-integ-and-version-tags
-          <<: *on-any-branch
+          <<: *on-integ-and-version-tags
           context: common
       - coverage:
-          #@@<<: *on-any-branch
-          <<: *never
+          <<: *on-any-branch
       - sanitize:
           name: sanitize-<< matrix.san-type >>
-          #@@<<: *on-any-branch
-          <<: *never
+          <<: *on-any-branch
           matrix:
             parameters:
               san-type: [address] # [address, memory]
@@ -611,3 +607,4 @@ workflows:
           context: common
       - benchmark-json-oss-standalone-profiler:
           context: common
+
