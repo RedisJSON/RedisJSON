@@ -1,8 +1,10 @@
 extern crate redis_module;
 
+#[cfg(not(feature = "as-library"))]
 use commands::*;
 use redis_module::native_types::RedisType;
 use redis_module::raw::RedisModuleTypeMethods;
+#[cfg(not(feature = "as-library"))]
 use redis_module::InfoContext;
 
 #[cfg(not(feature = "as-library"))]
@@ -17,8 +19,6 @@ use crate::c_api::{
     json_api_get_string, json_api_get_type, json_api_is_json, json_api_len, json_api_next,
     json_api_open_key_internal, LLAPI_CTX,
 };
-use crate::nodevisitor::PathInfoFlags;
-use crate::nodevisitor::StaticPathParser;
 use crate::redisjson::Format;
 
 mod array_index;
@@ -29,7 +29,7 @@ pub mod error;
 mod formatter;
 pub mod ivalue_manager;
 pub mod manager;
-mod nodevisitor;
+pub mod nodevisitor;
 pub mod redisjson;
 
 pub const GIT_SHA: Option<&str> = std::option_env!("GIT_SHA");
@@ -132,7 +132,6 @@ macro_rules! redis_json_module_create {(
         use libc::size_t;
         use std::collections::HashMap;
 
-
         macro_rules! json_command {
             ($cmd:ident) => {
                 |ctx: &Context, args: Vec<RedisString>| -> RedisResult {
@@ -232,6 +231,11 @@ const fn dummy_init(_ctx: &Context, _args: &[RedisString]) -> Status {
 
 #[cfg(not(feature = "as-library"))]
 const fn dummy_info(_ctx: &InfoContext, _for_crash_report: bool) {}
+
+#[cfg(not(feature = "as-library"))]
+use crate::c_api::create_rmstring;
+#[cfg(not(feature = "as-library"))]
+use crate::nodevisitor::{PathInfoFlags, StaticPathParser};
 
 #[cfg(not(feature = "as-library"))]
 redis_json_module_create! {
