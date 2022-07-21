@@ -131,10 +131,6 @@ macro_rules! redis_json_module_create {(
         };
         use libc::size_t;
         use std::collections::HashMap;
-        use rejson::c_api::create_rmstring;
-        use rejson::nodevisitor::{StaticPathParser,PathInfoFlags};
-
-
 
         macro_rules! json_command {
             ($cmd:ident) => {
@@ -237,7 +233,9 @@ const fn dummy_init(_ctx: &Context, _args: &[RedisString]) -> Status {
 const fn dummy_info(_ctx: &InfoContext, _for_crash_report: bool) {}
 
 #[cfg(not(feature = "as-library"))]
-use crate as rejson;
+use crate::c_api::create_rmstring;
+#[cfg(not(feature = "as-library"))]
+use crate::nodevisitor::{PathInfoFlags, StaticPathParser};
 
 #[cfg(not(feature = "as-library"))]
 redis_json_module_create! {
