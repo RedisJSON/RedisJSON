@@ -1115,24 +1115,23 @@ def testCopyCommand(env):
     r.assertEqual(json.loads(res), [new_values])
 
 
-def nest_object(depth, name_len, leaf_key, leaf_val):
-    root = {}
-    obj = root
+def nest_object(depth, max_name_len, leaf_key, leaf_val):
+    """ Generate a JSON string such as {"a":{"b":{"c":{"leaf":42}}}} """
+    res = ""
+    for i in range(1, depth - 1):
+        name = ''.join([chr(random.randint(ord('a'), ord('z'))) for _ in range(0, random.randint(1, max_name_len))])
+        res = res + '{{"{}":'.format(name)
+    res = res + '{{"{}":{}'.format(leaf_key, leaf_val)
     for i in range(1, depth):
-        name = ''.join([chr(random.randint(ord('a'), ord('z'))) for _ in range(0, random.randint(1, name_len))])
-        child = {}
-        obj[name] = child
-        obj = child
-    
-    obj[leaf_key] = leaf_val
-    return root
+        res = res + '}'
+    return res
 
 def testNesting(env):
     """ Test JSONPath Object nesting depth """
     r = env
 
-    depth = 100
-    doc = json.dumps(nest_object(depth, 5, "__leaf", 42), ensure_ascii=False, check_circular=False)
+    depth = 128
+    doc = nest_object(depth, 5, "__leaf", 42)
     r.assertOk(r.execute_command('JSON.SET', 'test', '$', doc))
     res = r.execute_command('JSON.GET', 'test', '$..__leaf')
     r.assertEqual(res, '[42]')
