@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from functools import reduce
+import random
 import sys
 import os
 import redis
@@ -1112,6 +1113,30 @@ def testCopyCommand(env):
     r.assertEqual(json.loads(res), [new_values])
     res = r.execute_command('JSON.GET', 'hash2', '$')
     r.assertEqual(json.loads(res), [new_values])
+
+
+def nest_object(depth, name_len, leaf_key, leaf_val):
+    root = {}
+    obj = root
+    for i in range(1, depth):
+        name = ''.join([chr(random.randint(ord('a'), ord('z'))) for _ in range(0, random.randint(1, name_len))])
+        child = {}
+        obj[name] = child
+        obj = child
+    
+    obj[leaf_key] = leaf_val
+    return root
+
+def testNesting(env):
+    """ Test JSONPath Object nesting depth """
+    r = env
+
+    depth = 100
+    doc = json.dumps(nest_object(depth, 5, "__leaf", 42), ensure_ascii=False, check_circular=False)
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$', doc))
+    res = r.execute_command('JSON.GET', 'test', '$..__leaf')
+    r.assertEqual(res, '[42]')
+
 
 
 # class CacheTestCase(BaseReJSONTest):
