@@ -1136,6 +1136,10 @@ def testNesting(env):
     res = r.execute_command('JSON.GET', 'test', '$..__leaf')
     r.assertEqual(res, '[42]')
 
+    depth = 129
+    doc = nest_object(depth, 5, "__leaf", 42)
+    r.expect('JSON.SET', 'test', '$', doc).raiseError().contains("recursion limit exceeded")
+
 
 
 # class CacheTestCase(BaseReJSONTest):
