@@ -1130,12 +1130,25 @@ def testNesting(env):
     """ Test JSONPath Object nesting depth """
     r = env
 
+    # Max nesting level for a single JSON value
     depth = 128
     doc = nest_object(depth, 5, "__leaf", 42)
     r.assertOk(r.execute_command('JSON.SET', 'test', '$', doc))
     res = r.execute_command('JSON.GET', 'test', '$..__leaf')
     r.assertEqual(res, '[42]')
 
+    # No overall max nesting level (can exceeded the single value max nesting level)
+    doc = nest_object(depth, 5, "__deep_leaf", 420)
+    r.execute_command('JSON.SET', 'test', '$..__leaf', doc)
+    res = r.execute_command('JSON.GET', 'test', '$..__deep_leaf')
+    r.assertEqual(res, '[420]')
+
+    doc = nest_object(depth, 5, "__helms_deep_leaf", 42000)
+    r.execute_command('JSON.SET', 'test', '$..__deep_leaf', doc)
+    res = r.execute_command('JSON.GET', 'test', '$..__helms_deep_leaf')
+    r.assertEqual(res, '[42000]')
+
+    # Max nesting level for a single JSON value cannot be exceeded
     depth = 129
     doc = nest_object(depth, 5, "__leaf", 42)
     r.expect('JSON.SET', 'test', '$', doc).raiseError().contains("recursion limit exceeded")
