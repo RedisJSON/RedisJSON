@@ -173,6 +173,11 @@ Lastly, you can also use the [`MODULE LOAD`](/commands/module-load) command. Not
 
 Once the module has been loaded successfully, the Redis log should have lines similar to:
 
+
+### Limitation
+
+The max nesting level of a JSON value is 128, meaning an object or an array can have a depth of up to 128.
+
 ```
 ...
 
