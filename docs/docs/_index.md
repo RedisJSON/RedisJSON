@@ -8,47 +8,48 @@ type: docs
 [![Discord](https://img.shields.io/discord/697882427875393627?style=flat-square)](https://discord.gg/QUkjSsk)
 [![Github](https://img.shields.io/static/v1?label=&message=repository&color=5961FF&logo=github)](https://github.com/RedisJSON/RedisJSON/)
 
-RedisJSON is a [Redis](https://redis.io/) module that provides JSON support in Redis. RedisJSON lets your store, update, and retrieve JSON values in Redis just as you would with any other Redis data type. RedisJSON also works seamlessly with [RediSearch](https://redis.io/docs/stack/search/) to let you index and query your JSON documents.
+The RedisJSON module provides JSON support for Redis. RedisJSON lets you store, update, and retrieve JSON values in a Redis database, similar to any other Redis data type. RedisJSON also works seamlessly with [RediSearch](https://redis.io/docs/stack/search/) to let you [index and query JSON documents](/docs/stack/search/indexing_json).
 
 ## Primary features
 
 * Full support for the JSON standard
-* A [JSONPath](http://goessner.net/articles/JsonPath/) syntax for selecting/updating elements inside documents
+* A [JSONPath](http://goessner.net/articles/JsonPath/) syntax for selecting/updating elements inside documents (see [JSONPath syntax](/docs/stack/json/path#jsonpath-syntax))
 * Documents stored as binary data in a tree structure, allowing fast access to sub-elements
-* Typed atomic operations for all JSON values types
+* Typed atomic operations for all JSON value types
 
-## Using RedisJSON
+## Use RedisJSON
 
 To learn how to use RedisJSON, it's best to start with the Redis CLI. The following examples assume that you're connected to a Redis server with RedisJSON enabled.
 
-### With `redis-cli`
+### `redis-cli` examples
 
-To following along, start [`redis-cli`](http://redis.io/topics/rediscli).
+First, start [`redis-cli`](http://redis.io/topics/rediscli) in interactive mode.
 
-The first RedisJSON command to try is `JSON.SET`, which sets a Redis key with a JSON value. All JSON values can be used, for example a string:
+The first RedisJSON command to try is `JSON.SET`, which sets a Redis key with a JSON value. `JSON.SET` accepts all JSON value types. This example creates a JSON string:
 
+```sh
+127.0.0.1:6379> JSON.SET animal $ '"dog"'
+"OK"
+127.0.0.1:6379> JSON.GET animal $
+"[\"dog\"]"
+127.0.0.1:6379> JSON.TYPE animal $
+1) "string"
 ```
-127.0.0.1:6379> JSON.SET foo $ '"bar"'
-OK
-127.0.0.1:6379> JSON.GET foo $
-"[\"bar\"]"
-127.0.0.1:6379> JSON.TYPE foo $
-1) string
-```
 
-`JSON.GET` and `JSON.TYPE` do literally that regardless of the value's type, but you should really check out `JSON.GET` prettifying powers. Note how the commands are given the dollar sign character, i.e. `$`. This is the [path](/redisjson/path) to the value in the RedisJSON data type (in this case it just means the root). A couple more string operations:
+Note how the commands include the dollar sign character `$`. This is the [path](/docs/stack/json/path) to the value in the JSON document (in this case it just means the root).
 
-```
-127.0.0.1:6379> JSON.STRLEN foo $
-1) (integer) 3
-127.0.0.1:6379> JSON.STRAPPEND foo $ '"baz"'
-1) (integer) 6
-127.0.0.1:6379> JSON.GET foo $
-"[\"barbaz\"]"
+Here are a few more string operations. `JSON.STRLEN` tells you the length of the string, and you can append another string to it with `JSON.STRAPPEND`.
 
+```sh
+127.0.0.1:6379> JSON.STRLEN animal $
+1) "3"
+127.0.0.1:6379> JSON.STRAPPEND animal $ '" (Canis familiaris)"'
+1) "22"
+127.0.0.1:6379> JSON.GET animal $
+"[\"dog (Canis familiaris)\"]"
 ``` 
 
-`JSON.STRLEN` tells you the length of the string, and you can append another string to it with `JSON.STRAPPEND`. Numbers can be [incremented](/commands/json.numincrby) and [multiplied](/commands/json.nummultby):
+Numbers can be [incremented](/commands/json.numincrby) and [multiplied](/commands/json.nummultby):
 
 ```
 127.0.0.1:6379> JSON.SET num $ 0
@@ -63,22 +64,24 @@ OK
 "[42]"
 ```
 
-Of course, a more interesting example would involve an array or maybe an object:
+Here's a more interesting example that includes JSON arrays and objects:
 
 ```
-127.0.0.1:6379> JSON.SET amoreinterestingexample $ '[ true, { "answer": 42 }, null ]'
+127.0.0.1:6379> JSON.SET example $ '[ true, { "answer": 42 }, null ]'
 OK
-127.0.0.1:6379> JSON.GET amoreinterestingexample $
+127.0.0.1:6379> JSON.GET example $
 "[[true,{\"answer\":42},null]]"
-127.0.0.1:6379> JSON.GET amoreinterestingexample $[1].answer
+127.0.0.1:6379> JSON.GET example $[1].answer
 "[42]"
-127.0.0.1:6379> JSON.DEL amoreinterestingexample $[-1]
+127.0.0.1:6379> JSON.DEL example $[-1]
 (integer) 1
-127.0.0.1:6379> JSON.GET amoreinterestingexample $
+127.0.0.1:6379> JSON.GET example $
 "[[true,{\"answer\":42}]]"
 ```
 
-The handy `JSON.DEL` command deletes anything you tell it to. Arrays can be manipulated with a dedicated subset of RedisJSON commands:
+The `JSON.DEL` command deletes any JSON value you specify with the `path` parameter.
+
+You can manipulate arrays with a dedicated subset of RedisJSON commands:
 
 ```
 127.0.0.1:6379> JSON.SET arr $ []
@@ -101,7 +104,7 @@ OK
 1) (nil)
 ```
 
-And objects have their own commands too:
+JSON objects also have their own commands:
 
 ```
 127.0.0.1:6379> JSON.SET obj $ '{"name":"Leonard Cohen","lastSeen":1478476800,"loggedOut": true}'
@@ -114,7 +117,21 @@ OK
    3) "loggedOut"
 ```
 
-#### Python example
+If you run `redis-cli` in raw output mode, you can format the JSON returned by `JSON.GET` to make JSON objects more readable:
+
+```sh
+$ redis-cli --raw
+127.0.0.1:6379> JSON.GET obj INDENT "\t" NEWLINE "\n" SPACE " " $
+[
+	{
+		"name": "Leonard Cohen",
+		"lastSeen": 1478476800,
+		"loggedOut": true
+	}
+]
+```
+
+### Python example
 
 This code snippet shows how to use RedisJSON with raw Redis commands from Python with [redis-py](https://github.com/redis/redis-py):
 
@@ -122,32 +139,40 @@ This code snippet shows how to use RedisJSON with raw Redis commands from Python
 import redis
 
 data = {
-    'foo': {
-        'bar' : 'baz'
+    'dog': {
+        'scientific-name' : 'Canis familiaris'
     }
 }
 
 r = redis.Redis()
 r.json().set('doc', '$', data)
 doc = r.json().get('doc', '$')
-foo = r.json().get('doc', '$.foo')
-bar = r.json().get('doc', '$..bar')
+dog = r.json().get('doc', '$.dog')
+scientific_name = r.json().get('doc', '$..scientific-name')
 ```
 
-### Building on Ubuntu 20.04
+### Build on Ubuntu 20.04
 
-The following packages are required to successfully build on Ubuntu 20.04:
+The following packages are required to successfully build RedisJSON on Ubuntu 20.04:
 
 ```
-sudo apt install build-essential llvm cmake libclang1 libclang-dev cargo
+$ sudo apt install build-essential llvm cmake libclang1 libclang-dev cargo
 ```
-Then, run `make` or `cargo build --release` in the repository directory
+Then, run `make` or `cargo build --release` in the repository directory.
 
-### Loading the module to Redis
+### Load the module to Redis
 
 Requirements:
 
-* [Redis v6.0 or above](http://redis.io/download)
+* [Redis v6.0 or later](http://redis.io/download)
+
+To load the RedisJSON module, use one of the following methods:
+
+* [Configuration file](#configuration-file)
+* [Command-line option](#command-line-option)
+* [MODULE LOAD command](#module-load-command)
+
+#### Configuration file
 
 We recommend you have Redis load the module during startup by adding the following to your `redis.conf` file:
 
@@ -155,23 +180,27 @@ We recommend you have Redis load the module during startup by adding the followi
 loadmodule /path/to/module/target/release/librejson.so
 ```
 
-On Mac OS, if this module has been built as a dynamic library use:
+On Mac OS, if this module was built as a dynamic library, run:
 
 ```
 loadmodule /path/to/module/target/release/librejson.dylib
 ```
 
-In the above lines replace `/path/to/module/` with the actual path to the module's library.
+In the preceding lines, replace `/path/to/module/` with the actual path to the module's library.
 
-Alternatively, you can have Redis load the module using the following command line argument syntax:
+#### Command-line option
+
+Alternatively, you can have Redis load the module using the following command-line argument syntax:
 
 ```bash
-~/$ redis-server --loadmodule ./target/release/librejson.so
+$ redis-server --loadmodule ./target/release/librejson.so
 ```
 
-Lastly, you can also use the [`MODULE LOAD`](/commands/module-load) command. Note, however, that `MODULE LOAD` is a **dangerous command** and may be blocked/deprecated in the future due to security considerations.
+#### `MODULE LOAD` command
 
-Once the module has been loaded successfully, the Redis log should have lines similar to:
+You can also use the `MODULE LOAD` command to load RedisJSON. Note that `MODULE LOAD` is a **dangerous command** and may be blocked/deprecated in the future due to security considerations.
+
+After the module has been loaded successfully, the Redis log should have lines similar to:
 
 ```
 ...
