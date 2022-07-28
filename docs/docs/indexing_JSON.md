@@ -81,11 +81,11 @@ FT.SEARCH userIdx '@name:(John)'
 
 ## Indexing JSON arrays
 
-Any JSON path that resolves to an array of strings or booleans is indexable as a TAG field.
-This means that we can index any JSON array of strings or booleans, as well as any objects
-we can derive a JSON path from to resolve to an array of strings or booleans.
+Any JSON path that resolves to an array of strings is indexable as a TAG field.
+This means that we can index any JSON array of strings, as well as any objects
+we can derive a JSON path from, to resolve to an array of strings.
 
-Take the following example, which has an array of string (`phone_numbers`), and an array of objects `addresses`:
+Take the following example, which has an array of strings (`phone_numbers`), and an array of objects `addresses`:
 
 ```json
 {
@@ -201,7 +201,7 @@ FT.AGGREGATE userIdx '*' LOAD 6 $.user.hp AS hp $.user.dmg AS dmg APPLY '@hp-@dm
 
 ### Multiple-values cannot be indexed for non-TAG fields
 
-JSON paths that resolve to multiple values are only supported for TAG fields, `TEXT`, `NUMERIC`,
+JSON paths that resolve to multiple values are only supported for TAG fields, and currently`TEXT`, `NUMERIC`,
 and `GEO` are not supported. The JSON paths for these non-TAG fields must resolve to a single scalar value.
 If they resolve to anything but a single scalar value, the index will fail.
 
