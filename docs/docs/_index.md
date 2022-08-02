@@ -147,14 +147,8 @@ To build RedisJSON from the source code:
 
 1. Install dependencies:
 
-    On macOS:
     ```sh
     $ make setup
-    ```
-
-    On Linux:
-    ```sh
-    $ sudo make setup
     ```
 
 1. Build:
