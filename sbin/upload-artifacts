@@ -126,4 +126,4 @@ if [[ $NOP != 1 ]]; then
 	fi
 fi
 
-s3_upload rejson rejson
+s3_upload rejson-oss rejson-oss
