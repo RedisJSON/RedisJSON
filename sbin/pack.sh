@@ -68,7 +68,7 @@ OSNICK=$($READIES/bin/platform --osnick)
 [[ $OSNICK == centos8 ]] && OSNICK=rhel8
 [[ $OSNICK == rocky8 ]]  && OSNICK=rhel8
 
-export PRODUCT=rejson
+export PRODUCT=rejson-oss
 export PRODUCT_LIB=$PRODUCT.so
 export DEPNAMES=""
 
