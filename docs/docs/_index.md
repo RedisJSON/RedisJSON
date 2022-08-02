@@ -134,22 +134,51 @@ foo = r.json().get('doc', '$.foo')
 bar = r.json().get('doc', '$..bar')
 ```
 
-### Building on Ubuntu 20.04
+### Build from source
 
-The following packages are required to successfully build on Ubuntu 20.04:
+To build RedisJSON from the source code:
 
-```
-sudo apt install build-essential llvm cmake libclang1 libclang-dev cargo
-```
-Then, run `make` or `cargo build --release` in the repository directory
+1. Clone the [RediSearch repository](https://github.com/RedisJSON/RedisJSON) (make sure you include the `--recursive` option to properly clone submodules):
+
+    ```sh
+    $ git clone --recursive https://github.com/RedisJSON/RedisJSON.git
+    $ cd RedisJSON
+    ```
+
+1. Install dependencies:
+
+    On macOS:
+    ```sh
+    $ make setup
+    ```
+
+    On Linux:
+    ```sh
+    $ sudo make setup
+    ```
+
+1. Build:
+    ```sh
+    $ make build
+    ```
 
 ### Loading the module to Redis
 
 Requirements:
 
-* [Redis v6.0 or above](http://redis.io/download)
+As a rule of thumb, you're better off running the latest Redis version.
 
-We recommend you have Redis load the module during startup by adding the following to your `redis.conf` file:
+If your OS has a [Redis 6.x package or above](http://redis.io/download), you can install it using the OS package manager.
+
+Otherwise, you can invoke ./deps/readies/bin/getredis.
+
+Run Redis with RedisJSON:
+
+```sh
+$ redis-server --loadmodule /path/to/module/target/release/librejson.so
+```
+
+Or you can have Redis load the module during startup by adding the following to your `redis.conf` file:
 
 ```
 loadmodule /path/to/module/target/release/librejson.so
@@ -163,10 +192,12 @@ loadmodule /path/to/module/target/release/librejson.dylib
 
 In the above lines replace `/path/to/module/` with the actual path to the module's library.
 
-Alternatively, you can have Redis load the module using the following command line argument syntax:
+Alternatively, you can download and run RedisJSON from a precompiled binary:
 
-```bash
-~/$ redis-server --loadmodule ./target/release/librejson.so
+Download a precompiled version of RedisJSON from the [Redis download center](https://redis.com/download-center/modules/).
+
+```sh
+$ redis-server --loadmodule /path/to/library/librejson.so
 ```
 
 Lastly, you can also use the [`MODULE LOAD`](/commands/module-load) command. Note, however, that `MODULE LOAD` is a **dangerous command** and may be blocked/deprecated in the future due to security considerations.
@@ -175,9 +206,7 @@ Once the module has been loaded successfully, the Redis log should have lines si
 
 ```
 ...
-
 1877:M 23 Dec 02:02:59.725 # <RedisJSON> JSON data type for Redis - v1.0.0 [encver 0]
 1877:M 23 Dec 02:02:59.725 * Module 'RedisJSON' loaded from <redacted>/src/rejson.so
 ...
 ```
-
