@@ -128,7 +128,7 @@ pack_deps() {
 
 	local platform="$OS-$OSNICK-$ARCH"
 	local verspec=${SEMVER}${VARIANT}
-	local stem=${PACKAGE_NAME}-${dep}.${platform}
+	local stem=${PACKAGE_NAME}.${dep}.${platform}
 
 	local depdir=$(cat $ARTDIR/$dep.dir)
 
