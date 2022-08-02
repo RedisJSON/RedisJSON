@@ -86,6 +86,8 @@ make clean         # remove binary files
 
 make all           # build all libraries and packages
 
+make test          # run both cargo and python tests
+make cargo_test    # run inbuilt rust unit tests
 make pytest        # run flow tests using RLTest
   TEST=file:name     # run test matching `name` from `file`
   TEST_ARGS="..."    # RLTest arguments
@@ -140,7 +142,7 @@ need to have [redis-py](https://github.com/redis/redis-py) installed. The easies
 it is using pip and running `pip install redis`.
 
 There are several sets of unit tests:
-* Rust tests, integrated in the source code, run by ```cargo test --features test --all```.
+* Rust tests, integrated in the source code, run by ```make cargo_test```.
 * Python tests (enabled by RLTest), located in ```tests/pytests```, run by ```make pytest```.
 
 One can run all tests by invoking ```make test```.
