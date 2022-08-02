@@ -53,7 +53,7 @@ Alternatively, invoke the following:
 
 ```
 ./deps/readies/bin/getpy3
-./system-setup.py
+./setup.py
 ```
 Note that ```system-setup.py``` **will install various packages on your system** using the native package manager and pip. It will invoke `sudo` on its own, prompting for permission.
 
