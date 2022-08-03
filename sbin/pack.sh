@@ -169,6 +169,7 @@ pack_deps() {
 #----------------------------------------------------------------------------------------------
 
 prepare_symbols_dep() {
+	if [[ ! -f $PRODUCT_LIB.debug ]]; then return 0; fi
 	echo "Preparing debug symbols dependencies ..."
 	echo $(cd "$(dirname $MODULE)" && pwd) > $ARTDIR/debug.dir
 	echo $PRODUCT_LIB.debug > $ARTDIR/debug.files

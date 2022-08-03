@@ -197,6 +197,18 @@ endif
 
 #----------------------------------------------------------------------------------------------
 
+run:
+	$(SHOW)if ! command -v redis-server &> /dev/null; then \
+		>&2 echo "redis-server not found." ;\
+		>&2 echo "Install it with ./deps/readies/bin/getredis" ;\
+	else \
+		redis-server --loadmodule $(TARGET) ;\
+	fi
+
+.PHONY: run
+
+#----------------------------------------------------------------------------------------------
+
 test: cargo_test pytest
 
 pytest:
