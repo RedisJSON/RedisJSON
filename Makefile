@@ -42,6 +42,8 @@ make clean         # remove binary files
 
 make all           # build all libraries and packages
 
+make run           # run redis-server with RedisJSON module
+
 make pytest        # run flow tests using RLTest
   TEST=file:name     # run test matching `name` from `file`
   TEST_ARGS="..."    # RLTest arguments
