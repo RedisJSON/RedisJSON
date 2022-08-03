@@ -62,7 +62,7 @@ If you prefer to avoid that, you can:
 * Review `system-setup.py` and install packages manually,
 * Use `system-setup.py --nop` to display installation commands without executing them,
 * Use an isolated environment like explained above,
-* Use a Python virtual environment, as Python installations are known to be sensitive when not used in isolation: `python2 -m virtualenv venv; . ./venv/bin/activate`
+* Use a Python virtual environment, as Python installations are known to be sensitive when not used in isolation: `python -m virtualenv venv; . ./venv/bin/activate`
 
 ## Installing Redis
 As a rule of thumb, you're better off running the latest Redis version.
@@ -137,10 +137,6 @@ Notes:
 Use ```make clean``` to remove built artifacts. ```make clean ALL=1``` will remove the entire bin subdirectory.
 
 ## Running tests
-Python is required for RedisJSON's module test. Install it with `apt-get install python`. You'll also
-need to have [redis-py](https://github.com/redis/redis-py) installed. The easiest way to get
-it is using pip and running `pip install redis`.
-
 There are several sets of unit tests:
 * Rust tests, integrated in the source code, run by ```make cargo_test```.
 * Python tests (enabled by RLTest), located in ```tests/pytests```, run by ```make pytest```.
