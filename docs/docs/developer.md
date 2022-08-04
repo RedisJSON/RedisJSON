@@ -8,7 +8,7 @@ description: >
 
 ## Debugging
 
-Compile after settting the environment variable `DEBUG`, e.g. `export DEBUG=1`, to include the
+Compile after setting the environment variable `DEBUG`, e.g. `export DEBUG=1`, to include the
 debugging information.
 
 ## Testing

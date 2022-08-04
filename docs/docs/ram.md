@@ -47,7 +47,7 @@ OK
 
 The actual size of a container is the sum of sizes of all items in it on top of its own
 overhead. To avoid expensive memory reallocations, containers' capacity is scaled by multiples of 2
-until a treshold size is reached, from which they grow by fixed chunks.
+until a threshold size is reached, from which they grow by fixed chunks.
 
 A container with a single scalar is made up of 32 and 24 bytes, respectively:
 ```

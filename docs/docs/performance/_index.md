@@ -7,7 +7,7 @@ description: >
 ---
 
 To get an early sense of what RedisJSON is capable of, you can test it with `redis-benchmark` just like
-any other Redis command. However, in order to have more control over the tests, we'll use a 
+any other Redis command. However, in order to have more control over the tests, we'll use 
 a tool written in Go called _ReJSONBenchmark_ that we expect to release in the near future.
 
 The following figures were obtained from an AWS EC2 c4.8xlarge instance that ran both the Redis
