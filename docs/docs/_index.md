@@ -13,7 +13,7 @@ The RedisJSON module provides JSON support for Redis. RedisJSON lets you store, 
 ## Primary features
 
 * Full support for the JSON standard
-* A [JSONPath](http://goessner.net/articles/JsonPath/) syntax for selecting/updating elements inside documents (see [JSONPath syntax](/docs/stack/json/path#jsonpath-syntax))
+* A [JSONPath](http://goessner.net/articles/JsonPath/) syntax for selecting/updating elements inside documents (see [JSONPath syntax](/redisjson/path#jsonpath-syntax))
 * Documents stored as binary data in a tree structure, allowing fast access to sub-elements
 * Typed atomic operations for all JSON value types
 
@@ -36,7 +36,7 @@ The first RedisJSON command to try is `JSON.SET`, which sets a Redis key with a 
 1) "string"
 ```
 
-Note how the commands include the dollar sign character `$`. This is the [path](/docs/stack/json/path) to the value in the JSON document (in this case it just means the root).
+Note how the commands include the dollar sign character `$`. This is the [path](/redisjson/path) to the value in the JSON document (in this case it just means the root).
 
 Here are a few more string operations. `JSON.STRLEN` tells you the length of the string, and you can append another string to it with `JSON.STRAPPEND`.
 
@@ -170,7 +170,7 @@ To load the RedisJSON module, use one of the following methods:
 
 * [Configuration file](#configuration-file)
 * [Command-line option](#command-line-option)
-* [MODULE LOAD command](#module-load-command)
+* [MODULE LOAD command](/commands/module-load/)
 
 #### Configuration file
 
