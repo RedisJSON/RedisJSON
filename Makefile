@@ -42,6 +42,8 @@ make clean         # remove binary files
 
 make all           # build all libraries and packages
 
+make run           # run redis-server with RedisJSON module
+
 make pytest        # run flow tests using RLTest
   TEST=file:name     # run test matching `name` from `file`
   TEST_ARGS="..."    # RLTest arguments
@@ -194,6 +196,18 @@ else
 endif
 
 .PHONY: build clean
+
+#----------------------------------------------------------------------------------------------
+
+run:
+	$(SHOW)if ! command -v redis-server &> /dev/null; then \
+		>&2 echo "redis-server not found." ;\
+		>&2 echo "Install it with ./deps/readies/bin/getredis" ;\
+	else \
+		redis-server --loadmodule $(TARGET) ;\
+	fi
+
+.PHONY: run
 
 #----------------------------------------------------------------------------------------------
 
