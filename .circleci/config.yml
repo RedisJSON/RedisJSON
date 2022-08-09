@@ -360,7 +360,7 @@ jobs:
 
   build-macos:
     macos:
-      xcode: 12.4.0
+      xcode: 11.7.0
     resource_class: macos.x86.medium.gen2
     parameters:
       upload:
@@ -589,7 +589,7 @@ workflows:
       - benchmark-json-oss-standalone-profiler:
           <<: *on-integ-and-version-tags
           context: common
-      - build-linux-debian: #@@ remove after testing
+      - build-linux-debian-1: #@@ remove after testing
           name: build-with-redis-<<matrix.redis_version>>
           matrix:
             parameters:
