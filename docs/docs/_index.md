@@ -167,7 +167,7 @@ If your OS has a [Redis 6.x package or later](http://redis.io/download), you can
 Otherwise, you can invoke 
 
 ```sh
-$ ./deps/readies/bin/getredis.
+$ ./deps/readies/bin/getredis
 ```
 
 Run Redis with RedisJSON:
