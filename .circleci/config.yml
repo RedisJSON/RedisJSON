@@ -57,7 +57,9 @@ commands:
           command: |
             git submodule update --init deps/readies
             ./deps/readies/bin/getpy3
+            ./deps/readies/bin/getaws
             python3 --version
+            python3 -m pip list
 
   install-prerequisites:
     parameters:
