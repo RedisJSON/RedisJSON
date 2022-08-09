@@ -40,7 +40,7 @@ commands:
             apt-get -q install -y git openssh-client curl ca-certificates make tar gzip
             bash <(curl -fsSL https://raw.githubusercontent.com/docker/docker-install/master/install.sh)
       - setup_remote_docker:
-          version: 20.10.7
+          version: 20.10.14
           docker_layer_caching: true
 
   checkout-all:
@@ -57,7 +57,9 @@ commands:
           command: |
             git submodule update --init deps/readies
             ./deps/readies/bin/getpy3
+            ./deps/readies/bin/getaws
             python3 --version
+            python3 -m pip list
 
   install-prerequisites:
     parameters:
@@ -358,7 +360,7 @@ jobs:
 
   build-macos:
     macos:
-      xcode: 12.5.1
+      xcode: 11.7.0
     resource_class: macos.x86.medium.gen2
     parameters:
       upload:
