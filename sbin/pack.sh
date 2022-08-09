@@ -7,6 +7,7 @@ HERE="$(cd "$(dirname "$PROGNAME")" &>/dev/null && pwd)"
 ROOT=$(cd $HERE/.. && pwd)
 export READIES=$ROOT/deps/readies
 . $READIES/shibumi/defs
+
 SBIN=$ROOT/sbin
 
 export PYTHONWARNINGS=ignore
@@ -29,12 +30,12 @@ if [[ $1 == --help || $1 == help || $HELP == 1 ]]; then
 		SYM=0|1           Build debug symbols file
 
 		BRANCH=name       Branch name for snapshot packages
-		VERSION=ver         Version for release packages
 		WITH_GITSHA=1     Append Git SHA to shapshot package names
 		VARIANT=name      Build variant (default: empty)
 
 		ARTDIR=dir        Directory in which packages are created (default: bin/artifacts)
 
+		JUST_PRINT=1      Only print package names, do not generate
 		VERBOSE=1         Print commands
 		IGNERR=1          Do not abort on error
 
@@ -56,6 +57,7 @@ ARTDIR=$(cd $ARTDIR && pwd)
 
 ARCH=$($READIES/bin/platform --arch)
 [[ $ARCH == x64 ]] && ARCH=x86_64
+
 OS=$($READIES/bin/platform --os)
 [[ $OS == linux ]] && OS=Linux
 
@@ -68,11 +70,11 @@ OSNICK=$($READIES/bin/platform --osnick)
 [[ $OSNICK == centos8 ]] && OSNICK=rhel8
 [[ $OSNICK == rocky8 ]]  && OSNICK=rhel8
 
-export PRODUCT=rejson
-export PRODUCT_LIB=$PRODUCT.so
+export PRODUCT=rejson-oss
+export PRODUCT_LIB=rejson.so
 export DEPNAMES=""
 
-export PACKAGE_NAME=${PACKAGE_NAME:-${PRODUCT}}
+export PACKAGE_NAME=rejson-oss
 
 RAMP_CMD="python3 -m RAMP.ramp"
 
@@ -105,7 +107,8 @@ pack_ramp() {
 		-e NUMVER -e SEMVER \
 		$ROOT/$rampfile > /tmp/ramp.yml
 	rm -f /tmp/ramp.fname $packfile
-	$RAMP_CMD pack -m /tmp/ramp.yml --packname-file /tmp/ramp.fname --verbose --debug -o $packfile $product_so >/tmp/ramp.err 2>&1 || true
+	$RAMP_CMD pack -m /tmp/ramp.yml --packname-file /tmp/ramp.fname --verbose --debug \
+		-o $packfile $product_so >/tmp/ramp.err 2>&1 || true
 	if [[ ! -e $packfile ]]; then
 		eprint "Error generating RAMP file:"
 		>&2 cat /tmp/ramp.err
@@ -118,6 +121,8 @@ pack_ramp() {
 		ln -sf ../$fq_package $snap_package
 	fi
 
+	local packname=`cat /tmp/ramp.fname`
+	echo "Created $packname"
 	cd $ROOT
 }
 
@@ -127,8 +132,8 @@ pack_deps() {
 	local dep="$1"
 
 	local platform="$OS-$OSNICK-$ARCH"
+	local stem=${PACKAGE_NAME}.${dep}.${platform}
 	local verspec=${SEMVER}${VARIANT}
-	local stem=${PACKAGE_NAME}-${dep}.${platform}
 
 	local depdir=$(cat $ARTDIR/$dep.dir)
 
@@ -139,12 +144,12 @@ pack_deps() {
 	{ cd $depdir ;\
 	  cat $ARTDIR/$dep.files | \
 	  xargs tar -c --sort=name --owner=root:0 --group=root:0 --mtime='UTC 1970-01-01' \
-		--transform "s,^,$dep_prefix_dir," 2>> /tmp/pack.err | \
+		--transform "s,^,$dep_prefix_dir," 2> /tmp/pack.err | \
 	  gzip -n - > $tar_path ; E=$?; } || true
 	rm -f $ARTDIR/$dep.prefix $ARTDIR/$dep.files $ARTDIR/$dep.dir
 
 	cd $ROOT
-	if [[ $E != 0 ]]; then
+	if [[ $E != 0 || -s /tmp/pack.err ]]; then
 		eprint "Error creating $tar_path:"
 		cat /tmp/pack.err >&2
 		exit 1
@@ -164,9 +169,10 @@ pack_deps() {
 #----------------------------------------------------------------------------------------------
 
 prepare_symbols_dep() {
+	if [[ ! -f $PRODUCT_LIB.debug ]]; then return 0; fi
 	echo "Preparing debug symbols dependencies ..."
 	echo $(cd "$(dirname $MODULE)" && pwd) > $ARTDIR/debug.dir
-	echo $PRODUCT.so.debug > $ARTDIR/debug.files
+	echo $PRODUCT_LIB.debug > $ARTDIR/debug.files
 	echo "" > $ARTDIR/debug.prefix
 	pack_deps debug
 	echo "Done."
@@ -196,6 +202,22 @@ if [[ $WITH_GITSHA == 1 ]]; then
 	BRANCH="${BRANCH}-${GIT_COMMIT}"
 fi
 export BRANCH
+
+#----------------------------------------------------------------------------------------------
+
+if [[ $JUST_PRINT == 1 ]]; then
+	if [[ $RAMP == 1 ]]; then
+		echo "${PACKAGE_NAME}.${OS}-${OSNICK}-${ARCH}.${SEMVER}${VARIANT}.zip"
+	fi
+	if [[ $DEPS == 1 ]]; then
+		for dep in $DEPNAMES; do
+			echo "${PACKAGE_NAME}.${dep}.${OS}-${OSNICK}-${ARCH}.${SEMVER}${VARIANT}.tgz"
+		done
+	fi
+	exit 0
+fi
+
+#----------------------------------------------------------------------------------------------
 
 if [[ $DEPS == 1 ]]; then
 	echo "Building dependencies ..."

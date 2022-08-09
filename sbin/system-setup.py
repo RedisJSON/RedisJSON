@@ -35,19 +35,24 @@ class RedisJSONSetup(paella.Setup):
         self.install("redhat-lsb-core")
         self.run("%s/bin/getgcc --modern" % READIES)
 
+        if not self.platform.is_arm():
+            self.install_linux_gnu_tar()
+
     def fedora(self):
         self.run("%s/bin/getgcc" % READIES)
 
     def macos(self):
         self.install_gnu_utils()
         self.install("binutils")
-        self.run("%s/bin/getgcc" % READIES)
+        # self.run("%s/bin/getgcc" % READIES)
+        self.run("%s/bin/getclang --modern" % READIES)
 
     def common_last(self):
-        self.run("{PYTHON} {READIES}/bin/getrmpytools".format(PYTHON=self.python, READIES=READIES))
+        self.run("{PYTHON} {READIES}/bin/getrmpytools --reinstall --modern".format(PYTHON=self.python, READIES=READIES))
         self.pip_install("-r %s/tests/pytest/requirements.txt" % ROOT)
         self.pip_install("toml")
-        self.pip_install("pudb awscli")
+        self.run("%s/bin/getaws" % READIES)
+        self.run("NO_PY2=1 %s/bin/getpudb" % READIES)
         self.pip_install("gevent")
 
 #----------------------------------------------------------------------------------------------
