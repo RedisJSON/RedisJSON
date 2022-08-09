@@ -23,7 +23,7 @@ You can use a virtual machine as an isolated development environment. To set one
 To set up a virtual machine with Docker:
 
 ```
-search=$(docker run -d -it -v $PWD:/build debian:bullseye bash)
+rejson=$(docker run -d -it -v $PWD:/build debian:bullseye bash)
 docker exec -it $search bash
 ```
 Then run ```cd /build``` from within the container.
@@ -32,10 +32,10 @@ In this mode, all installations remain in the scope of the Docker container.
 After you exit the container, you can either restart it with the previous ```docker exec``` command or save the state of the container to an image and resume it at a later time:
 
 ```
-docker commit $search redisjson1
-docker stop $search
-search=$(docker run -d -it -v $PWD:/build redisjson1 bash)
-docker exec -it $search bash
+docker commit $rejson redisjson1
+docker stop $rejson
+rejson=$(docker run -d -it -v $PWD:/build redisjson1 bash)
+docker exec -it $rejson bash
 ```
 
 You can replace `debian:bullseye` with your OS of choice. If you use the same OS as your host machine, you can run the RedisJSON binary on your host after it is built.
@@ -44,20 +44,13 @@ You can replace `debian:bullseye` with your OS of choice. If you use the same OS
 
 To build and test RedisJSON one needs to install several packages, depending on the underlying OS. Currently, we support the Ubuntu/Debian, CentOS, Fedora, and macOS.
 
-First, enter `RedisJSON` directory.
+Enter `RedisJSON` directory and run:
 
-If you have ```gnu make``` installed, you can execute,
+```sh
+$ ./sbin/setup
+```
 
-```
-make setup
-```
-Alternatively, invoke the following:
-
-```
-./deps/readies/bin/getpy3
-./sbin/setup.py
-```
-Note that ```system-setup.py``` **will install various packages on your system** using the native package manager and pip. It will invoke `sudo` on its own, prompting for permission.
+**This will install various packages on your system** using the native package manager and pip. It will invoke `sudo` on its own, prompting for permission.
 
 If you prefer to avoid that, you can:
 
