@@ -164,7 +164,11 @@ Generally, it is best to run the latest Redis version.
 
 If your OS has a [Redis 6.x package or later](http://redis.io/download), you can install it using the OS package manager.
 
-Otherwise, you can invoke ./deps/readies/bin/getredis.
+Otherwise, you can invoke 
+
+```sh
+$ ./deps/readies/bin/getredis.
+```
 
 Run Redis with RedisJSON:
 
