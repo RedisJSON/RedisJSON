@@ -11,23 +11,25 @@ description: >
 Developing RedisJSON involves setting up the development environment (which can be either Linux-based or macOS-based), building RedisJSON, running tests and benchmarks, and debugging both the RedisJSON module and its tests.
 
 ## Cloning the git repository
-By invoking the following command, RedisJSON module and its submodules are cloned:
+To clone the RedisJSON module and its submodules, run:
 ```sh
 git clone --recursive https://github.com/RedisJSON/RedisJSON.git
 ```
 ## Working in an isolated environment
-There are several reasons to develop in an isolated environment, like keeping your workstation clean, and developing for a different Linux distribution.
-The most general option for an isolated environment is a virtual machine (it's very easy to set one up using [Vagrant](https://www.vagrantup.com)).
-Docker is even a more agile, as it offers an almost instant solution:
+There are several reasons to use an isolated environment for development, like keeping your workstation clean and developing for a different Linux distribution.
+
+You can use a virtual machine as an isolated development environment. To set one up, you can use [Vagrant](https://www.vagrantup.com) or Docker.
+
+To set up a virtual machine with Docker:
 
 ```
 search=$(docker run -d -it -v $PWD:/build debian:bullseye bash)
 docker exec -it $search bash
 ```
-Then, from within the container, ```cd /build``` and go on as usual.
+Then run ```cd /build``` from within the container.
 
 In this mode, all installations remain in the scope of the Docker container.
-Upon exiting the container, you can either re-invoke it with the above ```docker exec``` or commit the state of the container to an image and re-invoke it on a later stage:
+After you exit the container, you can either restart it with the previous ```docker exec``` command or save the state of the container to an image and resume it at a later time:
 
 ```
 docker commit $search redisjson1
@@ -36,7 +38,7 @@ search=$(docker run -d -it -v $PWD:/build redisjson1 bash)
 docker exec -it $search bash
 ```
 
-You can replace `debian:bullseye` with your OS of choice, with the host OS being the best choice (so you can run the RedisJSON binary on your host once it is built).
+You can replace `debian:bullseye` with your OS of choice. If you use the same OS as your host machine, you can run the RedisJSON binary on your host after it is built.
 
 ## Installing prerequisites
 
@@ -65,7 +67,7 @@ If you prefer to avoid that, you can:
 * Use a Python virtual environment, as Python installations are known to be sensitive when not used in isolation: `python -m virtualenv venv; . ./venv/bin/activate`
 
 ## Installing Redis
-As a rule of thumb, you're better off running the latest Redis version.
+Generally, it is best to run the latest Redis version.
 
 If your OS has a Redis 6.x package, you can install it using the OS package manager.
 
@@ -126,13 +128,13 @@ make sanbox        # create container for CLang Sanitizer tests
 ```
 
 ## Building from source
-```make build``` will build RedisJSON.
+Run ```make build``` to build RedisJSON.
 
 Notes:
 
 * Binary files are placed under `target/release/`, according to platform and build variant.
 
-* RedisJSON uses [Cargo](https://github.com/rust-lang/cargo) as its build system. ```make build``` will invoke both Cargo and the subsequent make command that's required to complete the build.
+* RedisJSON uses [Cargo](https://github.com/rust-lang/cargo) as its build system. ```make build``` will invoke both Cargo and the subsequent `make` command that's required to complete the build.
 
 Use ```make clean``` to remove built artifacts. ```make clean ALL=1``` will remove the entire bin subdirectory.
 
@@ -141,11 +143,11 @@ There are several sets of unit tests:
 * Rust tests, integrated in the source code, run by ```make cargo_test```.
 * Python tests (enabled by RLTest), located in ```tests/pytests```, run by ```make pytest```.
 
-One can run all tests by invoking ```make test```.
-A single test can be run using the ```TEST``` parameter, e.g. ```make test TEST=regex```.
+You can run all tests with ```make test```.
+To run only specific tests, use the ```TEST``` parameter. For example, run ```make test TEST=regex```.
 
-The module's test can be run against an "embedded" disposable Redis instance, or against an instance
-you provide to it. The "embedded" mode requires having the `redis-server` executable in your `PATH`.
+You can run the module's tests against an "embedded" disposable Redis instance or against an instance
+you provide. To use the "embedded" mode, you must include the `redis-server` executable in your `PATH`.
 
 You can override the spawning of the embedded server by specifying a Redis port via the `REDIS_PORT`
 environment variable, e.g.:
@@ -156,8 +158,7 @@ $ REDIS_PORT=6379 make test
 ```
 
 ## Debugging
-Compile after settting the environment variable `DEBUG`, e.g. `export DEBUG=1`, to include the
-debugging information.
+To include debugging information, you need to set the `DEBUG` environment variable before you compile RedisJSON. For example, run `export DEBUG=1`.
 
-Breakpoints can be added to Python tests in a single-test mode, one can set a breakpoint by using the ```BB()``` function inside a test.
+You can add breakpoints to Python tests in single-test mode. To set a breakpoint, call the ```BB()``` function inside a test.
 

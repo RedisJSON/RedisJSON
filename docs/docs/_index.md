@@ -138,7 +138,7 @@ bar = r.json().get('doc', '$..bar')
 
 To build RedisJSON from the source code:
 
-1. Clone the [RediSearch repository](https://github.com/RedisJSON/RedisJSON) (make sure you include the `--recursive` option to properly clone submodules):
+1. Clone the [RedisJSON repository](https://github.com/RedisJSON/RedisJSON) (make sure you include the `--recursive` option to properly clone submodules):
 
     ```sh
     $ git clone --recursive https://github.com/RedisJSON/RedisJSON.git
@@ -160,9 +160,9 @@ To build RedisJSON from the source code:
 
 Requirements:
 
-As a rule of thumb, you're better off running the latest Redis version.
+Generally, it is best to run the latest Redis version.
 
-If your OS has a [Redis 6.x package or above](http://redis.io/download), you can install it using the OS package manager.
+If your OS has a [Redis 6.x package or later](http://redis.io/download), you can install it using the OS package manager.
 
 Otherwise, you can invoke ./deps/readies/bin/getredis.
 
@@ -188,10 +188,13 @@ In the above lines replace `/path/to/module/` with the actual path to the module
 
 Alternatively, you can download and run RedisJSON from a precompiled binary:
 
-Download a precompiled version of RedisJSON from the [Redis download center](https://redis.com/download-center/modules/).
+1. Download a precompiled version of RedisJSON from the [Redis download center](https://redis.com/download-center/modules/).
 
-```sh
-$ redis-server --loadmodule /path/to/library/librejson.so
+1. Load RedisJSON:
+
+    ```sh
+    $ redis-server --loadmodule /path/to/library/librejson.so
+    ```
 ```
 
 Lastly, you can also use the [`MODULE LOAD`](/commands/module-load) command. Note, however, that `MODULE LOAD` is a **dangerous command** and may be blocked/deprecated in the future due to security considerations.
