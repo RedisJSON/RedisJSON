@@ -71,7 +71,10 @@ Generally, it is best to run the latest Redis version.
 
 If your OS has a Redis 6.x package, you can install it using the OS package manager.
 
-Otherwise, you can invoke ```./deps/readies/bin/getredis```.
+Otherwise, you can invoke
+```sh
+$ ./deps/readies/bin/getredis
+```
 
 ## Getting help
 ```make help``` provides a quick summary of the development features:
