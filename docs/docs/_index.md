@@ -148,7 +148,7 @@ To build RedisJSON from the source code:
 1. Install dependencies:
 
     ```sh
-    $ make setup
+    $ ./sbin/setup
     ```
 
 1. Build:
@@ -173,7 +173,7 @@ $ ./deps/readies/bin/getredis
 Run Redis with RedisJSON:
 
 ```sh
-$ redis-server --loadmodule /path/to/module/target/release/librejson.so
+$ make run
 ```
 
 Or you can have Redis load the module during startup by adding the following to your `redis.conf` file:
