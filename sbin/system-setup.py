@@ -35,6 +35,9 @@ class RedisJSONSetup(paella.Setup):
         self.install("redhat-lsb-core")
         self.run("%s/bin/getgcc --modern" % READIES)
 
+        if not self.platform.is_arm():
+            self.install_linux_gnu_tar()
+
     def fedora(self):
         self.run("%s/bin/getgcc" % READIES)
 
