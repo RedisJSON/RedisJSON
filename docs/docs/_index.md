@@ -204,9 +204,11 @@ After the module has been loaded successfully, the Redis log should have lines s
 
 ```
 ...
-
-1877:M 23 Dec 02:02:59.725 # <RedisJSON> JSON data type for Redis - v1.0.0 [encver 0]
-1877:M 23 Dec 02:02:59.725 * Module 'RedisJSON' loaded from <redacted>/src/rejson.so
+9:M 11 Aug 2022 16:24:06.701 * <ReJSON> version: 20009 git sha: d8d4b19 branch: HEAD
+9:M 11 Aug 2022 16:24:06.701 * <ReJSON> Exported RedisJSON_V1 API
+9:M 11 Aug 2022 16:24:06.701 * <ReJSON> Enabled diskless replication
+9:M 11 Aug 2022 16:24:06.701 * <ReJSON> Created new data type 'ReJSON-RL'
+9:M 11 Aug 2022 16:24:06.701 * Module 'ReJSON' loaded from /opt/redis-stack/lib/rejson.so
 ...
 ```
 
