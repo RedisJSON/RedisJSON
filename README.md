@@ -23,7 +23,7 @@ RedisJSON is a [Redis](https://redis.io/) module that implements [ECMA-404 The J
 ## Quick start
 
 ```
-docker run -p 6379:6379 --name redis-redisjson redislabs/rejson:latest
+docker run -p 6379:6379 --name redis-stack redis/redis-stack:latest
 ```
 
 ## Documentation
