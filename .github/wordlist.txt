@@ -95,3 +95,4 @@ vachhanihpavan
 www
 YAML
 zstd
+redis
