@@ -5,10 +5,8 @@ use crate::manager::{err_msg_json_expected, err_msg_json_path_doesnt_exist_with_
 use crate::manager::{AddUpdateInfo, Manager, ReadHolder, SetUpdateInfo, UpdateInfo, WriteHolder};
 use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 use crate::redisjson::{normalize_arr_indices, Format, Path};
-use json5;
 use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
 use jsonpath_lib::select::Selector;
-use quick_xml;
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
@@ -190,15 +188,6 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 out.into_inner()
             }
             Format::BSON => bson::to_vec(&BSONWrapper { values: object }).unwrap(),
-            Format::XML => {
-                let mut writer = Vec::new();
-                quick_xml::se::to_writer(&mut writer, object).unwrap();
-                writer
-            }
-            Format::JSON5 => {
-                // TODO improve performance avoid to_string
-                json5::to_string(object).unwrap().into()
-            }
         }
     }
 
@@ -346,8 +335,6 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         match format {
             Format::JSON => Ok(serde_json::to_string(results)?),
             Format::BSON => Err("ERR BSON soon to come...".into()),
-            Format::XML => Err("ERR XML soon to come...".into()),
-            Format::JSON5 => Err("ERR JSON5 soon to come...".into()),
         }
     }
 

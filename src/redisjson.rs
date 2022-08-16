@@ -55,8 +55,6 @@ pub enum SetOptions {
 pub enum Format {
     JSON,
     BSON,
-    XML,
-    JSON5,
 }
 
 impl Default for Format {
@@ -72,8 +70,6 @@ impl FromStr for Format {
         match s {
             "JSON" => Ok(Self::JSON),
             "BSON" => Ok(Self::BSON),
-            "XML" => Ok(Self::XML),
-            "JSON5" => Ok(Self::JSON5),
             _ => Err(format!("ERR wrong format {}", s).into()),
         }
     }

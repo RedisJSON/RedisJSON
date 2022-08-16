@@ -347,37 +347,6 @@ def testSetBSON(env):
     expected = 'Z\x00\x00\x00\x04result\x00M\x00\x00\x00\x030\x00E\x00\x00\x00\x04A\x00=\x00\x00\x00\x120\x00\x01\x00\x00\x00\x00\x00\x00\x00\x021\x00\x04\x00\x00\x00fds\x00\x122\x00\x03\x00\x00\x00\x00\x00\x00\x00\x083\x00\x01\x034\x00\x10\x00\x00\x00\x02gg\x00\x03\x00\x00\x00tt\x00\x00\x00\x00\x00\x00'
     r.assertEqual(result, expected)
 
-def testSetJSON5(env):
-    r = env
-
-    data = '''
-    {
-        // comments
-        unquoted: 'and you can quote me on that',
-        singleQuotes: 'I can use "double quotes" here',
-        lineBreaks: "Look, Mom! \
-        No \\n's!",
-        hexadecimal: 0xdecaf,
-        leadingDecimalPoint: .8675309, andTrailing: 8675309.,
-        positiveSign: +1,
-        trailingComma: 'in objects', andIn: ['arrays',],
-        "backwardsCompatible": "with JSON",
-    }'''
-
-    r.assertOk(r.execute_command('JSON.SET', 'test', '$', data, 'FORMAT', 'JSON5'))
-    r.expect('JSON.GET', 'test', '$').equal( r'{"unquoted":"and you can quote me on that","singleQuotes":"I can use \\"double quotes\\" here","lineBreaks":"Look, Mom!         No \\n\'s!","hexadecimal":912559,"leadingDecimalPoint":0.8675309,"andTrailing":8675309,"positiveSign":1,"trailingComma":"in objects","andIn":["arrays"],"backwardsCompatible":"with JSON"}')
-    r.expect('JSON.GET', 'test', '$', 'FORMAT', 'JSON5').equal( r'{"unquoted":"and you can quote me on that","singleQuotes":"I can use \\"double quotes\\" here","lineBreaks":"Look, Mom!         No \\n\'s!","hexadecimal":912559,"leadingDecimalPoint":0.8675309,"andTrailing":8675309,"positiveSign":1,"trailingComma":"in objects","andIn":["arrays"],"backwardsCompatible":"with JSON"}')
-
-# def testSetXML(env):
-#     r = env
-#     data = bson.dumps({"A":[1,"fds",3,True, {"gg":"tt"}]})
-#     r.assertOk(r.execute_command('JSON.SET', 'test', '$', '<a><b id="3">val</b></a>', 'FORMAT', 'XML'))
-#     r.expect('JSON.GET', 'test', '$').equal( r'[{"a": {"b": { id:3}}]')
-
-#     result = r.execute_command('JSON.GET', 'test', '$', 'FORMAT', 'XML')       
-#     expected = '<a><b id="3">val</b></a>'
-#     r.assertEqual(result, expected)    
-
 def testMgetCommand(env):
     """Test REJSON.MGET command"""
     r = env

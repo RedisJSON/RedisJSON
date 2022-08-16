@@ -65,18 +65,6 @@ impl From<bson::de::Error> for Error {
     }
 }
 
-impl From<quick_xml::de::DeError> for Error {
-    fn from(e: quick_xml::de::DeError) -> Self {
-        Self { msg: e.to_string() }
-    }
-}
-
-impl From<json5::Error> for Error {
-    fn from(e: json5::Error) -> Self {
-        Self { msg: e.to_string() }
-    }
-}
-
 impl From<JsonPathError> for Error {
     fn from(e: JsonPathError) -> Self {
         Self {
