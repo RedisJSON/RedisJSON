@@ -35,6 +35,9 @@ class RedisJSONSetup(paella.Setup):
         self.install("redhat-lsb-core")
         self.run("%s/bin/getgcc --modern" % READIES)
 
+        if not self.platform.is_arm():
+            self.install_linux_gnu_tar()
+
     def fedora(self):
         self.run("%s/bin/getgcc" % READIES)
 
@@ -45,7 +48,6 @@ class RedisJSONSetup(paella.Setup):
         self.run("%s/bin/getclang --modern" % READIES)
 
     def common_last(self):
-        self.run("{PYTHON} {READIES}/bin/getrmpytools --reinstall --modern".format(PYTHON=self.python, READIES=READIES))
         self.pip_install("-r %s/tests/pytest/requirements.txt" % ROOT)
         self.pip_install("toml")
         self.run("%s/bin/getaws" % READIES)

@@ -409,7 +409,7 @@ macro_rules! redis_json_module_export_shared_api {
             match StaticPathParser::get_path_info(path) {
                 Ok(flags) => Box::into_raw(Box::new(flags)).cast::<c_void>(),
                 Err(err_str) => {
-                    crate::c_api::create_rmstring(ctx, err_str.as_bytes().to_vec(), err_msg);
+                    create_rmstring(ctx, err_str.as_bytes().to_vec(), err_msg);
                     std::ptr::null()
                 }
             }

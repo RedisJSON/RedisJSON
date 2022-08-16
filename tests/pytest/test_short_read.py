@@ -18,7 +18,7 @@ from common import TimeLimit
 Defaults.decode_responses = True
 
 CREATE_INDICES_TARGET_DIR = '/tmp/test'
-BASE_RDBS_URL = 'https://s3.amazonaws.com/redismodules/redisearch-enterprise/rdbs/'
+BASE_RDBS_URL = 'https://s3.amazonaws.com/redismodules/redisearch-oss/rdbs/'
 
 SHORT_READ_BYTES_DELTA = int(os.getenv('SHORT_READ_BYTES_DELTA', '1'))
 OS = os.getenv('OS')
@@ -430,7 +430,7 @@ def testShortReadJson(env):
 
     with tempfile.TemporaryDirectory(prefix="short-read_") as temp_dir:
         if not downloadFiles(temp_dir):
-            env.assertTrue(False, "downloadFiles failed")
+            env.assertTrue(False, message="downloadFiles failed")
 
         for f in RDBS:
             name, ext = os.path.splitext(f)
