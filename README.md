@@ -188,7 +188,7 @@ Some languages have client libraries that provide support for RedisJSON's comman
 [redis-om-dotnet-package]: https://www.nuget.org/packages/Redis.OM/
 [redis-om-dotnet-stars]: https://img.shields.io/github/stars/redis/redis-om-dotnet.svg?style=social&amp;label=Star&amp;maxAge=2592000
 
-## Acknowledgements
+## Acknowledgments
 
 RedisJSON is developed with <3 at [Redis Labs](https://redislabs.com).
 
