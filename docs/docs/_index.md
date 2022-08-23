@@ -188,7 +188,7 @@ On Mac OS, if this module has been built as a dynamic library use:
 loadmodule /path/to/module/target/release/librejson.dylib
 ```
 
-In the above lines replace `/path/to/module/` with the actual path to the module's library.
+In the above lines replace `/path/to/module/` with the actual path to the module.
 
 Alternatively, you can download and run RedisJSON from a precompiled binary:
 
@@ -196,12 +196,13 @@ Alternatively, you can download and run RedisJSON from a precompiled binary:
 
 1. Load RedisJSON:
 
-    ```sh
-    $ redis-server --loadmodule /path/to/library/librejson.so
-    ```
-```
+ ```sh
+ $ redis-server --loadmodule /path/to/module/librejson.so
+ ```
 
-Lastly, you can also use the [`MODULE LOAD`](/commands/module-load) command. Note, however, that `MODULE LOAD` is a **dangerous command** and may be blocked/deprecated in the future due to security considerations.
+In the above lines replace `/path/to/module/` with the actual path to the module's library.
+
+Lastly, you can also use the [`MODULE LOAD`](https://redis.io/commands/module-load/) command. Note, however, that `MODULE LOAD` is a **dangerous command** and may be blocked/deprecated in the future due to security considerations.
 
 Once the module has been loaded successfully, the Redis log should have lines similar to:
 
