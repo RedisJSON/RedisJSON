@@ -173,11 +173,6 @@ Lastly, you can also use the [`MODULE LOAD`](/commands/module-load) command. Not
 
 Once the module has been loaded successfully, the Redis log should have lines similar to:
 
-
-### Limitation
-
-A JSON value passed to a command can have a depth of up to 128. If you pass to a command a JSON value that contains an object or an array with a nesting level of more than 128, the command returns an error.
-
 ```
 ...
 
@@ -186,3 +181,6 @@ A JSON value passed to a command can have a depth of up to 128. If you pass to a
 ...
 ```
 
+### Limitation
+
+A JSON value passed to a command can have a depth of up to 128. If you pass to a command a JSON value that contains an object or an array with a nesting level of more than 128, the command returns an error.
