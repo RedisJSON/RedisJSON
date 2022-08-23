@@ -202,7 +202,7 @@ Alternatively, you can download and run RedisJSON from a precompiled binary:
 
 In the above lines replace `/path/to/module/` with the actual path to the module's library.
 
-Lastly, you can also use the [`MODULE LOAD`](https://redis.io/commands/module-load/) command. Note, however, that `MODULE LOAD` is a **dangerous command** and may be blocked/deprecated in the future due to security considerations.
+Lastly, you can also use the [MODULE LOAD](https://redis.io/commands/module-load/) command. Note, however, that `MODULE LOAD` is a **dangerous command** and may be blocked/deprecated in the future due to security considerations.
 
 Once the module has been loaded successfully, the Redis log should have lines similar to:
 
