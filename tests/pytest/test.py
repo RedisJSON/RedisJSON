@@ -1114,17 +1114,18 @@ def testCopyCommand(env):
     res = r.execute_command('JSON.GET', 'hash2', '$')
     r.assertEqual(json.loads(res), [new_values])
 
-
 def nest_object(depth, max_name_len, leaf_key, leaf_val):
-    """ Generate a JSON string such as {"a":{"b":{"c":{"leaf":42}}}} """
-    res = ""
+    """ Return a string of a Python object with `depth` nesting level, such as {"a":{"b":{"c":{"leaf":42}}}} """
+
+    res = {}
+    cur = res
     for i in range(1, depth - 1):
-        name = ''.join([chr(random.randint(ord('a'), ord('z'))) for _ in range(0, random.randint(1, max_name_len))])
-        res = res + '{{"{}":'.format(name)
-    res = res + '{{"{}":{}'.format(leaf_key, leaf_val)
-    for i in range(1, depth):
-        res = res + '}'
-    return res
+        name = ''.join([chr(random.randint(ord('a'), ord('z')))
+                       for _ in range(0, random.randint(1, max_name_len))])
+        cur[name] = {}
+        cur = cur[name]
+    cur[leaf_key] = leaf_val
+    return json.dumps(res)
 
 def testNesting(env):
     """ Test JSONPath Object nesting depth """
