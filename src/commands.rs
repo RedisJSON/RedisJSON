@@ -242,10 +242,10 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         let mut parsed_static_path = StaticPathParser::check(path)?;
 
         if parsed_static_path.valid != VisitStatus::Valid {
-            return Err("Err: wrong static path".into());
+            return Err("ERR wrong static path".into());
         }
         if parsed_static_path.static_path_elements.len() < 2 {
-            return Err("Err: path must end with object key to set".into());
+            return Err("ERR path must end with object key to set".into());
         }
 
         let last = parsed_static_path.static_path_elements.pop().unwrap();
@@ -600,7 +600,7 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
             arg if arg.eq_ignore_ascii_case("FORMAT") => {
                 format = Format::from_str(args.next_str()?)?;
             }
-            _ => return Err(RedisError::Str("ERR syntax error")),
+            _ => return Err("ERR syntax error".into()),
         };
     }
 
