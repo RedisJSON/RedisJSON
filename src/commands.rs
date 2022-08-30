@@ -600,7 +600,7 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
             arg if arg.eq_ignore_ascii_case("FORMAT") => {
                 format = Format::from_str(args.next_str()?)?;
             }
-            _ => return Err("ERR syntax error".into()),
+            _ => return Err(RedisError::Str("ERR syntax error")),
         };
     }
 
