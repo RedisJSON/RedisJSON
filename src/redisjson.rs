@@ -44,14 +44,14 @@ pub fn normalize_arr_indices(start: i64, end: i64, len: i64) -> (i64, i64) {
     (start, end)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum SetOptions {
     NotExists,
     AlreadyExists,
     None,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Format {
     JSON,
     BSON,

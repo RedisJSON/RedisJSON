@@ -24,7 +24,7 @@ impl Display for StaticPathElement {
 }
 
 #[allow(clippy::enum_variant_names)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum VisitStatus {
     NotValid,
     PartialValid,
