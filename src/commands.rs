@@ -629,7 +629,7 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
                                 if sui.path.len() < 128 {
                                     redis_key.set_value(sui.path, val)?
                                 } else {
-                                    return Err(RedisError::Str("recursion limit exceeded"))
+                                    return Err(RedisError::Str("recursion limit exceeded"));
                                 }
                             },
                             UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, val)?
