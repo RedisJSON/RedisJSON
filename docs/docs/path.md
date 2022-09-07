@@ -219,11 +219,11 @@ RedisJSON supports both dot notation and bracket notation for object key access.
 
 To access an array element, enclose its index within a pair of square brackets. The index is 0-based, with 0 being the first element of the array, 1 being the next element, and so on. You can use negative offsets to access elements starting from the end of the array. For example, -1 is the last element in the array, -2 is the second to last element, and so on.
 
-## JSON key names and path compatibility
+### JSON key names and path compatibility
 
 By definition, a JSON key can be any valid JSON string. Paths, on the other hand, are traditionally based on JavaScript's (and Java's) variable naming conventions.
 
-Although RedisJSON can store objects that contain arbitrary key names, you can only use a path to access these keys if they conform to these naming syntax rules:
+Although RedisJSON can store objects that contain arbitrary key names, you can only use a legacy path to access these keys if they conform to these naming syntax rules:
 
 1.  Names must begin with a letter, a dollar sign (`$`), or an underscore (`_`) character
 2.  Names can contain letters, digits, dollar signs, and underscores
