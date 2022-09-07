@@ -23,7 +23,7 @@ RedisJSON is a [Redis](https://redis.io/) module that implements [ECMA-404 The J
 ## Quick start
 
 ```
-docker run -p 6379:6379 --name redis-redisjson redislabs/rejson:latest
+docker run -p 6379:6379 --name redis-stack redis/redis-stack:latest
 ```
 
 ## Documentation
@@ -188,7 +188,7 @@ Some languages have client libraries that provide support for RedisJSON's comman
 [redis-om-dotnet-package]: https://www.nuget.org/packages/Redis.OM/
 [redis-om-dotnet-stars]: https://img.shields.io/github/stars/redis/redis-om-dotnet.svg?style=social&amp;label=Star&amp;maxAge=2592000
 
-## Acknowledgements
+## Acknowledgments
 
 RedisJSON is developed with <3 at [Redis Labs](https://redislabs.com).
 

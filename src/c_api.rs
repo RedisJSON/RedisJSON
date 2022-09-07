@@ -131,6 +131,22 @@ pub fn json_api_get_json<M: Manager>(
     create_rmstring(ctx, &res, str)
 }
 
+pub fn json_api_get_json_from_iter<M: Manager>(
+    _: M,
+    iter: *mut c_void,
+    ctx: *mut rawmod::RedisModuleCtx,
+    str: *mut *mut rawmod::RedisModuleString,
+) -> c_int {
+    let iter = unsafe { &*(iter.cast::<ResultsIterator<M::V>>()) };
+    if iter.pos >= iter.results.len() {
+        Status::Err as c_int
+    } else {
+        let res = KeyValue::<M::V>::serialize_object(&iter.results, None, None, None);
+        create_rmstring(ctx, &res, str);
+        Status::Ok as c_int
+    }
+}
+
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn json_api_get_int<M: Manager>(_: M, json: *const c_void, val: *mut c_longlong) -> c_int {
     let json = unsafe { &*(json.cast::<M::V>()) };
@@ -394,6 +410,17 @@ macro_rules! redis_json_module_export_shared_api {
         }
 
         #[no_mangle]
+        pub extern "C" fn JSONAPI_getJSONFromIter(iter: *mut c_void,
+            ctx: *mut rawmod::RedisModuleCtx,
+            str: *mut *mut rawmod::RedisModuleString,) -> c_int {
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_get_json_from_iter(mngr, iter, ctx, str)},
+            )
+        }
+
+        #[no_mangle]
         pub extern "C" fn JSONAPI_isJSON(key: *mut rawmod::RedisModuleKey) -> c_int {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
@@ -475,6 +502,7 @@ macro_rules! redis_json_module_export_shared_api {
             pathFree: JSONAPI_pathFree,
             pathIsSingle: JSONAPI_pathIsSingle,
             pathHasDefinedOrder: JSONAPI_pathHasDefinedOrder,
+            getJSONFromIter: JSONAPI_getJSONFromIter,
         };
 
         #[repr(C)]
@@ -514,6 +542,7 @@ macro_rules! redis_json_module_export_shared_api {
             pub pathFree: extern "C" fn(json_path: *mut c_void),
             pub pathIsSingle: extern "C" fn(json_path: *const c_void) -> c_int,
             pub pathHasDefinedOrder: extern "C" fn(json_path: *const c_void) -> c_int,
+            pub getJSONFromIter: extern "C" fn(iter: *mut c_void, ctx: *mut rawmod::RedisModuleCtx, str: *mut *mut rawmod::RedisModuleString,) -> c_int,
         }
     };
 }
