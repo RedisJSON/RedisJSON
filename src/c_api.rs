@@ -231,7 +231,7 @@ pub fn json_api_len<M: Manager>(_: M, iter: *const c_void) -> size_t {
 
 pub fn json_api_free_iter<M: Manager>(_: M, iter: *mut c_void) {
     unsafe {
-        Box::from_raw(iter.cast::<ResultsIterator<M::V>>());
+        drop(Box::from_raw(iter.cast::<ResultsIterator<M::V>>()));
     }
 }
 
