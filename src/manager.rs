@@ -322,6 +322,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
 
     fn dict_add(&mut self, path: Vec<String>, key: &str, mut v: Value) -> Result<bool, RedisError> {
         let mut updated = false;
+
         if path.len() > 127 {
             return Err(RedisError::Str("recursion limit exceeded"));
         } else if path.is_empty() {
