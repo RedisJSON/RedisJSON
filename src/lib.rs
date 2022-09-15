@@ -1,8 +1,10 @@
 extern crate redis_module;
 
+#[cfg(not(feature = "as-library"))]
 use commands::*;
 use redis_module::native_types::RedisType;
 use redis_module::raw::RedisModuleTypeMethods;
+#[cfg(not(feature = "as-library"))]
 use redis_module::InfoContext;
 
 #[cfg(not(feature = "as-library"))]
@@ -13,9 +15,9 @@ use redis_module::{Context, RedisResult};
 #[cfg(not(feature = "as-library"))]
 use crate::c_api::{
     get_llapi_ctx, json_api_free_iter, json_api_get, json_api_get_at, json_api_get_boolean,
-    json_api_get_double, json_api_get_int, json_api_get_json, json_api_get_len,
-    json_api_get_string, json_api_get_type, json_api_is_json, json_api_len, json_api_next,
-    json_api_open_key_internal, LLAPI_CTX,
+    json_api_get_double, json_api_get_int, json_api_get_json, json_api_get_json_from_iter,
+    json_api_get_len, json_api_get_string, json_api_get_type, json_api_is_json, json_api_len,
+    json_api_next, json_api_open_key_internal, LLAPI_CTX,
 };
 use crate::redisjson::Format;
 
@@ -58,7 +60,7 @@ pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
 
         free_effort: None,
         unlink: None,
-        copy: None,
+        copy: Some(redisjson::type_methods::copy),
         defrag: None,
     },
 );
@@ -80,25 +82,28 @@ pub fn get_manager_type() -> ManagerType {
 #[macro_export]
 macro_rules! run_on_manager {
     (
-    $run:expr, $ctx:ident, $args: ident
-    ) => {
-        match $crate::get_manager_type() {
-            $crate::ManagerType::IValue => $run(
-                $crate::ivalue_manager::RedisIValueJsonKeyManager {
-                    phantom: PhantomData,
-                },
-                $ctx,
-                $args,
-            ),
-            $crate::ManagerType::SerdeValue => $run(
-                $crate::manager::RedisJsonKeyManager {
-                    phantom: PhantomData,
-                },
-                $ctx,
-                $args,
-            ),
+    pre_command: $pre_command_expr:expr,
+    get_mngr: $get_mngr_expr:expr,
+    run: $run_expr:expr,
+    ) => {{
+        $pre_command_expr();
+        let m = $get_mngr_expr;
+        match m {
+            Some(mngr) => $run_expr(mngr),
+            None => match $crate::get_manager_type() {
+                $crate::ManagerType::IValue => {
+                    $run_expr($crate::ivalue_manager::RedisIValueJsonKeyManager {
+                        phantom: PhantomData,
+                    })
+                }
+                $crate::ManagerType::SerdeValue => {
+                    $run_expr($crate::manager::RedisJsonKeyManager {
+                        phantom: PhantomData,
+                    })
+                }
+            },
         }
-    };
+    }};
 }
 
 #[macro_export]
@@ -118,23 +123,23 @@ macro_rules! redis_json_module_create {(
         use std::os::raw::{c_double, c_int, c_longlong};
         use redis_module::{raw as rawmod, LogLevel};
         use rawmod::ModuleOptions;
+
         use std::{
             ffi::CStr,
             os::raw::{c_char, c_void},
         };
         use libc::size_t;
         use std::collections::HashMap;
-
+        use $crate::c_api::create_rmstring;
 
         macro_rules! json_command {
             ($cmd:ident) => {
                 |ctx: &Context, args: Vec<RedisString>| -> RedisResult {
-                    $pre_command_function_expr(ctx, &args);
-                    let m = $get_manager_expr;
-                    match m {
-                        Some(mngr) => $cmd(mngr, ctx, args),
-                        None => run_on_manager!($cmd, ctx, args),
-                    }
+                    run_on_manager!(
+                        pre_command: ||$pre_command_function_expr(ctx, &args),
+                        get_mngr: $get_manager_expr,
+                        run: |mngr|$cmd(mngr, ctx, args),
+                    )
                 }
             };
         }

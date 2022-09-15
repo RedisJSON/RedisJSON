@@ -79,8 +79,7 @@
       },
       {
         "name": "path",
-        "type": "string",
-        "optional": true
+        "type": "string"
       }
     ],
     "since": "2.0.0",
@@ -473,20 +472,13 @@
     "complexity": "O(N) when path is evaluated to a single value, where N is the size of the value, O(N) when path is evaluated to multiple values, where N is the size of the key",
     "arguments": [
       {
-        "name": "key_path",
-        "type": "block",
-        "optional": true,
-        "arguments": [
-          {
-            "name": "key",
-            "type": "key"
-          },
-          {
-            "name": "path",
-            "type": "string",
-            "optional": true
-          }
-        ]
+        "name": "key",
+        "type": "key"
+      },
+      {
+        "name": "path",
+        "type": "string",
+        "optional": true
       }
     ],
     "since": "1.0.0",
