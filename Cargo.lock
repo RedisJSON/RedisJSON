@@ -408,18 +408,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "jsonpath_rs"
-version = "0.1.0"
-source = "git+https://github.com/RedisJSON/jsonpath_rs.git?branch=omer_jsonpath-rs_review_2#87d1cc8cdca8dcf95eef6f3fbdca78a8f589b553"
-dependencies = [
- "ijson",
- "pest",
- "pest_derive",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -698,9 +686,10 @@ dependencies = [
  "bson",
  "ijson",
  "itertools",
- "jsonpath_rs",
  "libc",
  "log",
+ "pest",
+ "pest_derive",
  "redis-module",
  "serde",
  "serde_json",
@@ -752,20 +741,6 @@ name = "serde"
 version = "1.0.144"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0f747710de3dcd43b88c9168773254e809d8ddbdf9653b84e2554ab219f17860"
-dependencies = [
- "serde_derive",
-]
-
-[[package]]
-name = "serde_derive"
-version = "1.0.144"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94ed3a816fb1d101812f83e789f888322c34e291f894f19590dc310963e87a00"
-dependencies = [
- "proc-macro2",
- "quote 1.0.21",
- "syn 1.0.99",
-]
 
 [[package]]
 name = "serde_json"

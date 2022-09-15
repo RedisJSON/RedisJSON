@@ -1,17 +1,16 @@
 use crate::error::Error;
 use crate::formatter::RedisJsonFormatter;
+use crate::jsonpath::select_value::{SelectValue, SelectValueType};
 use crate::manager::err_msg_json_path_doesnt_exist_with_param;
 use crate::manager::{err_msg_json_expected, err_msg_json_path_doesnt_exist_with_param_or};
 use crate::manager::{AddUpdateInfo, Manager, ReadHolder, SetUpdateInfo, UpdateInfo, WriteHolder};
 use crate::redisjson::{normalize_arr_indices, Format, Path};
-use jsonpath_rs::select_value::{SelectValue, SelectValueType};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use std::cmp::Ordering;
 use std::str::FromStr;
 
-use jsonpath_rs;
-use jsonpath_rs::{
+use crate::jsonpath::{
     calc_once, calc_once_paths, calc_once_with_paths, compile, json_path::JsonPathToken,
     json_path::UserPathTracker,
 };

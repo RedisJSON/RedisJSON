@@ -1,4 +1,4 @@
-use jsonpath_rs::json_path::QueryCompilationError;
+use crate::jsonpath::json_path::QueryCompilationError;
 use redis_module::RedisError;
 use std::num::ParseIntError;
 

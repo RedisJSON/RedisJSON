@@ -1,4 +1,4 @@
-use jsonpath_rs::select_value::SelectValue;
+use crate::jsonpath::select_value::SelectValue;
 use serde_json::map::Entry;
 use serde_json::{Number, Value};
 
