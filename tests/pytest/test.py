@@ -253,7 +253,7 @@ def testGetWithPathErrors(env):
     # If paths contain illegal characters, the error message must not contain them
 
     # Path (and error message) with embedded nulls in path
-    r.expect('JSON.GET', 'x', 'gar\x00\x00bage').raiseError()
+    r.expect('JSON.GET', 'x', 'gar\x00\x00bage').raiseError().contains("expected one of the following")
 
     # Path (and error message) with end of line delimiters
     r.expect('JSON.GET', 'x', 'not\x0d\x0aallowed by protocol').raiseError()

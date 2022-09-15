@@ -154,11 +154,6 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         let query = compile(path)?;
         let results = calc_once(query, self.val);
         Ok(results)
-        // let mut selector = Selector::new();
-        // selector.str_path(path)?;
-        // selector.value(self.val);
-        // let results = selector.select()?;
-        // Ok(results)
     }
 
     pub fn serialize_object<O: Serialize>(
@@ -188,8 +183,6 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         // memory efficient and we're using it anyway. See https://github.com/serde-rs/json/issues/635.
         let mut missing_path = None;
         let temp_doc = paths.drain(..).fold(HashMap::new(), |mut acc, path: Path| {
-            // let mut selector = Selector::new();
-            // selector.value(self.val);
             let query = compile(path.get_path());
             if query.is_err() {
                 return acc;
@@ -262,15 +255,6 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         }
 
         let (last, token_type) = query.pop_last().unwrap();
-
-        // let mut parsed_static_path = StaticPathParser::check(path)?;
-
-        // if parsed_static_path.valid != VisitStatus::Valid {
-
-        // }
-        // if parsed_static_path.static_path_elements.len() < 2 {
-        //     return Err("Err: path must end with object key to set".into());
-        // }
 
         match token_type {
             JsonPathToken::String => {
@@ -691,10 +675,6 @@ fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
         .filter(|e| f(e.res))
         .map(|e| e.path_tracker.unwrap().to_string_path())
         .collect())
-    // Ok(Selector::default()
-    //     .str_path(path)?
-    //     .value(doc)
-    //     .select_with_paths(f)?)
 }
 
 /// Returns tuples of Value and its concrete path which match the given `path`
@@ -711,10 +691,6 @@ fn get_all_values_and_paths<'a, T: SelectValue>(
         .drain(..)
         .map(|e| (e.res, e.path_tracker.unwrap().to_string_path()))
         .collect())
-    // Ok(Selector::default()
-    //     .str_path(path)?
-    //     .value(doc)
-    //     .select_values_with_paths()?)
 }
 
 /// Returns a Vec of paths with `None` for Values that do not match the filter
