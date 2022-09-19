@@ -264,7 +264,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                         key: last,
                     })])
                 } else {
-                    // Adding somewhere in existing object, use jsonpath_lib::replace_with
+                    // Adding somewhere in existing object
                     let res = calc_once_paths(query, self.val);
 
                     Ok(res
