@@ -649,8 +649,7 @@ def testObjKeysCommand(env):
     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"nested1": {"a": {"foo": 10, "bar": 20}}, "a":["foo"], "nested2": {"a": {"baz":50}}}'))
     # Test multi
     res = r.execute_command('JSON.OBJKEYS', 'doc1', '$..a')
-    res = reduce(lambda x, y: x + y if type(y) == list else x+[y], res, [])
-    r.assertEqual(set(res), set(["foo", "bar", None, "baz"]))
+    r.assertEqual(res, [None, ["foo", "bar"], "baz"])
     # Test single
     res = r.execute_command('JSON.OBJKEYS', 'doc1', '$.nested1.a')
     r.assertEqual(res, [["foo", "bar"]])
