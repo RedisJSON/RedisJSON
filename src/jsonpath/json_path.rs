@@ -109,7 +109,7 @@ impl std::fmt::Display for QueryCompilationError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         write!(
             f,
-            "Error accured on possition {}, {}",
+            "Error occurred on position {}, {}",
             self.location, self.message
         )
     }
