@@ -837,7 +837,7 @@ def testLenCommands(env):
     r.expect('JSON.ARRLEN', 'test', '.arr[999]').raiseError().contains("does not exist")
 
     # test an infinite index
-    r.expect('JSON.ARRLEN', 'test', '.arr[-inf]').raiseError().contains("Error accured")
+    r.expect('JSON.ARRLEN', 'test', '.arr[-inf]').raiseError().contains("Error occurred")
     r.expect('JSON.ARRLEN', 'test', '.arr[4294967295]').raiseError().contains("does not exist")
 
 def testObjKeysCommand(env):
