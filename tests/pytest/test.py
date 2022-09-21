@@ -1155,6 +1155,23 @@ def testNesting(env):
     r.expect('JSON.SET', 'test', '$', doc).raiseError().contains("recursion limit exceeded")
 
 
+def testEscape(env):
+    # Test json escape characters
+
+    r = env
+
+    # Escaped control characters \b, \f, \n, \r, \t \/, \\
+    r.expect('JSON.SET', 'doc', '$', r'{"val": "escaped control here:\b \f \n \r \t \/ \\"}').ok()
+    r.expect('JSON.GET', 'doc', '$.val').equal(r'["escaped control here:\b \f \n \r \t / \\"]')
+
+    # Escaped quotes
+    r.expect('JSON.SET', 'doc', '$', '{"val": "escaped quote here:\\""}').ok()
+    r.expect('JSON.GET', 'doc', '$.val').equal('["escaped quote here:\\""]')
+
+    # Escaped unicode
+    r.expect('JSON.SET', 'doc', '$', '{"val": "escaped unicode here:\u2B50"}').ok()
+    r.expect('JSON.GET', 'doc', '$.val').equal('["escaped unicode here:⭐"]')
+
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property
