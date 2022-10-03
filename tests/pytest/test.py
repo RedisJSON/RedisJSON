@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from functools import reduce
+import random
 import sys
 import os
 import redis
@@ -1112,6 +1113,64 @@ def testCopyCommand(env):
     r.assertEqual(json.loads(res), [new_values])
     res = r.execute_command('JSON.GET', 'hash2', '$')
     r.assertEqual(json.loads(res), [new_values])
+
+def nest_object(depth, max_name_len, leaf_key, leaf_val):
+    """ Return a string of a Python object with `depth` nesting level, such as {"a":{"b":{"c":{"leaf":42}}}} """
+
+    res = {}
+    cur = res
+    for i in range(1, depth - 1):
+        name = ''.join([chr(random.randint(ord('a'), ord('z')))
+                       for _ in range(0, random.randint(1, max_name_len))])
+        cur[name] = {}
+        cur = cur[name]
+    cur[leaf_key] = leaf_val
+    return json.dumps(res)
+
+def testNesting(env):
+    """ Test JSONPath Object nesting depth """
+    r = env
+
+    # Max nesting level for a single JSON value
+    depth = 128
+    doc = nest_object(depth, 5, "__leaf", 42)
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$', doc))
+    res = r.execute_command('JSON.GET', 'test', '$..__leaf')
+    r.assertEqual(res, '[42]')
+
+    # No overall max nesting level (can exceeded the single value max nesting level)
+    doc = nest_object(depth, 5, "__deep_leaf", 420)
+    r.execute_command('JSON.SET', 'test', '$..__leaf', doc)
+    res = r.execute_command('JSON.GET', 'test', '$..__deep_leaf')
+    r.assertEqual(res, '[420]')
+
+    doc = nest_object(depth, 5, "__helms_deep_leaf", 42000)
+    r.execute_command('JSON.SET', 'test', '$..__deep_leaf', doc)
+    res = r.execute_command('JSON.GET', 'test', '$..__helms_deep_leaf')
+    r.assertEqual(res, '[42000]')
+
+    # Max nesting level for a single JSON value cannot be exceeded
+    depth = 129
+    doc = nest_object(depth, 5, "__leaf", 42)
+    r.expect('JSON.SET', 'test', '$', doc).raiseError().contains("recursion limit exceeded")
+
+
+def testEscape(env):
+    # Test json escape characters
+
+    r = env
+
+    # Escaped control characters \b, \f, \n, \r, \t \/, \\
+    r.expect('JSON.SET', 'doc', '$', r'{"val": "escaped control here:\b \f \n \r \t \/ \\"}').ok()
+    r.expect('JSON.GET', 'doc', '$.val').equal(r'["escaped control here:\b \f \n \r \t / \\"]')
+
+    # Escaped quotes
+    r.expect('JSON.SET', 'doc', '$', '{"val": "escaped quote here:\\""}').ok()
+    r.expect('JSON.GET', 'doc', '$.val').equal('["escaped quote here:\\""]')
+
+    # Escaped unicode
+    r.expect('JSON.SET', 'doc', '$', '{"val": "escaped unicode here:\u2B50"}').ok()
+    r.expect('JSON.GET', 'doc', '$.val').equal('["escaped unicode here:⭐"]')
 
 
 # class CacheTestCase(BaseReJSONTest):

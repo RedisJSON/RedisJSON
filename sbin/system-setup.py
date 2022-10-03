@@ -29,6 +29,7 @@ class RedisJSONSetup(paella.Setup):
         self.run("%s/bin/getcmake --usr" % READIES)
 
     def debian_compat(self):
+        self.install("python3-dev")
         self.run("%s/bin/getgcc" % READIES)
 
     def redhat_compat(self):
@@ -45,7 +46,6 @@ class RedisJSONSetup(paella.Setup):
         self.run("%s/bin/getclang --modern" % READIES)
 
     def common_last(self):
-        self.run("{PYTHON} {READIES}/bin/getrmpytools --reinstall --modern".format(PYTHON=self.python, READIES=READIES))
         self.pip_install("-r %s/tests/pytest/requirements.txt" % ROOT)
         self.pip_install("toml")
         self.run("%s/bin/getaws" % READIES)
