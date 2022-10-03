@@ -1,7 +1,10 @@
+use bitflags::bitflags;
 use jsonpath_lib::parser::{NodeVisitor, ParseToken};
 use jsonpath_lib::Parser;
+
 use std::fmt::Display;
 use std::fmt::Formatter;
+use std::os::raw::c_int;
 
 pub enum StaticPathElement {
     ArrayIndex(f64),
@@ -28,6 +31,20 @@ pub enum VisitStatus {
     Valid,
 }
 
+bitflags! {
+    pub struct PathInfoFlags: c_int {
+        // cast to `c_int` is not unnecessary since `c_int` might not always be `i32`
+        //  (some esoteric systems define it as an `i16`, for example)
+        //  (see https://doc.rust-lang.org/std/os/raw/type.c_int.html)
+        #[allow(clippy::unnecessary_cast)]
+        const NONE = 0 as c_int;
+        #[allow(clippy::unnecessary_cast)]
+        const SINGLE = 1 as c_int;
+        #[allow(clippy::unnecessary_cast)]
+        const DEFINED_ORDER = 2 as c_int;
+    }
+}
+
 pub struct StaticPathParser<'a> {
     pub valid: VisitStatus,
     last_token: Option<ParseToken<'a>>,
@@ -47,6 +64,16 @@ impl<'a> StaticPathParser<'a> {
         };
         visitor.visit(&node);
         Ok(visitor)
+    }
+
+    pub fn get_path_info(path: &'a str) -> Result<PathInfoFlags, String> {
+        let parser = Self::check(path)?;
+        match parser.valid {
+            // Currently we do not detect some SINGLE, such as, $.a[1:2]
+            // Currently we do not detect some DEFINED_ORDER which are not SINGLE, such as, $.a[1:3] or $.a.b[3,1,2,0].c
+            VisitStatus::Valid => Ok(PathInfoFlags::SINGLE | PathInfoFlags::DEFINED_ORDER),
+            _ => Ok(PathInfoFlags::NONE),
+        }
     }
 }
 
