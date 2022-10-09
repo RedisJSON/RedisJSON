@@ -1,4 +1,4 @@
-use jsonpath_lib::select::JsonPathError;
+use crate::jsonpath::json_path::QueryCompilationError;
 use redis_module::RedisError;
 use std::num::ParseIntError;
 
@@ -10,6 +10,12 @@ pub struct Error {
 impl From<String> for Error {
     fn from(e: String) -> Self {
         Self { msg: e }
+    }
+}
+
+impl From<QueryCompilationError> for Error {
+    fn from(e: QueryCompilationError) -> Self {
+        Self { msg: e.to_string() }
     }
 }
 
@@ -56,14 +62,6 @@ impl From<&str> for Error {
 impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
         Self { msg: e.to_string() }
-    }
-}
-
-impl From<JsonPathError> for Error {
-    fn from(e: JsonPathError) -> Self {
-        Self {
-            msg: format!("JSON Path error: {:?}", e).replace('\n', "\\n"),
-        }
     }
 }
 
@@ -128,12 +126,6 @@ mod tests {
         let res: Result<Value> = serde_json::from_str("{");
         let err: Error = res.unwrap_err().into();
         assert_eq!(err.msg, "EOF while parsing an object at line 1 column 1");
-    }
-
-    #[test]
-    fn test_from_jsonpath_error() {
-        let err: Error = JsonPathError::Path("JsonPathError".to_string()).into();
-        assert_eq!(err.msg, "JSON Path error: path error: \\nJsonPathError\\n");
     }
 
     #[test]
