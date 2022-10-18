@@ -50,10 +50,8 @@ class RedisJSONSetup(paella.Setup):
 
     def common_last(self):
         self.pip_install("-r %s/tests/pytest/requirements.txt" % ROOT)
-        self.pip_install("toml")
         self.run("%s/bin/getaws" % READIES)
         self.run("NO_PY2=1 %s/bin/getpudb" % READIES)
-        self.pip_install("gevent")
 
 #----------------------------------------------------------------------------------------------
 
