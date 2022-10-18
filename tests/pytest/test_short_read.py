@@ -425,8 +425,8 @@ def testShortReadJson(env):
     if env.env.endswith('existing-env') and os.environ.get('CI'):
         env.skip()
 
-    #if env.useAof or env.useSlaves:
-    #    env.skip()
+    if env.useAof or env.useSlaves:
+        env.skip()
 
     if OS == 'macos':
         env.skip()
