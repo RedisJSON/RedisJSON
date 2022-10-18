@@ -24,7 +24,16 @@ struct RJ_API {
     version: i32,
 }
 
-static mut rj_api: RJ_API;
+impl RJ_API {
+    pub fn api(&self) -> &RedisJSONAPI {
+        &*japi
+    }
+}
+
+static mut rj_api: RJ_API = RJ_API {
+    japi: 0 as *const RedisJSONAPI,
+    version: 0
+};
 
 fn get_json_apis(ctx: &Context) -> Status {
     let japi: ::std::os::raw::c_void;
@@ -58,13 +67,13 @@ fn RJ_llapi_test_open_key(ctx: &Context, args: Vec<RedisString>) -> RedisResult 
 
     assert!(ctx.call("JSON.SET", &[function_name!(), "$", "0"]).is_ok());
     let rmk = RedisKey::open(ctx, &keyname);
-    assert_eq!(unsafe { rj_api.japi->isJSON.unwrap()(rmk.key_inner) }, 1);
-    assert!(unsafe { !(rj_api.japi->openKey.unwrap()(ctx, keyname).is_null()) });
+    assert_eq!(unsafe { rj_api.api().isJSON.unwrap()(&rmk.key_inner) }, 1);
+    assert!(unsafe { !(rj_api.api().openKey.unwrap()(ctx, &keyname).is_null()) });
 
     ctx.call("SET", &[function_name!(), "0"]);
-    rmk = RedisKey::open(ctx, &keyname);
-    assert_eq!(unsafe { rj_api.japi->isJSON.unwrap()(rmk.key_inner) }, 0);
-    assert!(unsafe { rj_api.japi->openKey.unwrap()(ctx, keyname).is_null() });
+    rmk = RedisKey::open(&ctx, &keyname);
+    assert_ne!(unsafe { rj_api.api().isJSON.unwrap()(&rmk.key_inner) }, 1);
+    assert!(unsafe { rj_api.api().openKey.unwrap()(ctx, &keyname).is_null() });
 
     OK("PASS")
 }
@@ -108,17 +117,20 @@ fn RJ_llapi_test_get_type(ctx: &Context, args: Vec<RedisString>) -> RedisResult 
         return Err(RedisError::WrongArity);
     }
 
-    // RedisModule_Call(ctx, "JSON.SET", "ccc", TEST_NAME, "$", "[\"\", 0, 0.0, false, {}, [], null]");
-    // RedisJSON js = RJ_API.japi->openKeyFromStr(ctx, TEST_NAME);
-  
-    // size_t len; RJ_API.japi->getLen(js, &len); ASSERT(len == JSONType__EOF);
-    // ASSERT(RJ_API.japi->getType(RJ_API.japi->getAt(js, JSONType_String)) == JSONType_String);
-    // ASSERT(RJ_API.japi->getType(RJ_API.japi->getAt(js, JSONType_Int   )) == JSONType_Int   );
-    // ASSERT(RJ_API.japi->getType(RJ_API.japi->getAt(js, JSONType_Double)) == JSONType_Double);
-    // ASSERT(RJ_API.japi->getType(RJ_API.japi->getAt(js, JSONType_Bool  )) == JSONType_Bool  );
-    // ASSERT(RJ_API.japi->getType(RJ_API.japi->getAt(js, JSONType_Object)) == JSONType_Object);
-    // ASSERT(RJ_API.japi->getType(RJ_API.japi->getAt(js, JSONType_Array )) == JSONType_Array );
-    // ASSERT(RJ_API.japi->getType(RJ_API.japi->getAt(js, JSONType_Null  )) == JSONType_Null  );  
+    let keyname = RedisString::create(ctx, function_name!());
+
+    ctx.call("JSON.SET", &[function_name!(), "$", "[\"\", 0, 0.0, false, {}, [], null]"]);
+    let js = unsafe { rj_api.api().openKey.unwrap()(ctx, &keyname) };
+    
+    let mut len = 0u64;
+    unsafe { rj_api.api().getLen(js, &len as *mut c_ulonglong) };
+    assert_eq!(len, JSONType__EOF as u64);
+
+    for i in ..len { unsafe { 
+        let elem = rj_api.api().getAt.unwrap()(js, i as c_ulonglong);
+        let jtype = rj_api.api().getType.unwrap()(elem);
+        assert_eq!(jtype, i as c_int);
+    }}
 
     OK("PASS")
 }
@@ -129,32 +141,35 @@ fn RJ_llapi_test_get_value(ctx: &Context, args: Vec<RedisString>) -> RedisResult
         return Err(RedisError::WrongArity);
     }
 
-    // RedisModule_Call(ctx, "JSON.SET", "ccc", TEST_NAME, "$", "[\"a\", 1, 0.1, true, {\"_\":1}, [1], null]");
-    // RedisJSON js = RJ_API.japi->openKeyFromStr(ctx, TEST_NAME);
+    let keyname = RedisString::create(ctx, function_name!());
+
+    ctx.call("JSON.SET", &[function_name!(), "$", "[\"a\", 1, 0.1, true, {\"_\":1}, [1], null]"]);
+    let js = unsafe { rj_api.api().openKey.unwrap()(ctx, &keyname) };
   
-    // const char *s; size_t len;
-    // RJ_API.japi->getString(RJ_API.japi->getAt(js, JSONType_String), &s, &len);
-    // ASSERT(strncmp(s, "a", len) == 0);
+    let mut s: CString;
+    let mut len: u64;
+    unsafe { RJ_API.api().getString.unwrap()(RJ_API.api().getAt.unwrap()(js, 0), &s as *mut CString, &len as *mut c_ulonglong) };
+    assert_eq!(s.to_str(), OK("a"));
   
-    // long long ll;
-    // RJ_API.japi->getInt(RJ_API.japi->getAt(js, JSONType_Int), &ll);
-    // ASSERT(ll == 1);
+    let mut ll: i64;
+    unsafe { RJ_API.api().getInt.unwrap()(RJ_API.api().getAt.unwrap()(js, 1), &ll as *mut c_longlong) };
+    assert_eq!(ll, 1);
   
-    // double dbl;
-    // RJ_API.japi->getDouble(RJ_API.japi->getAt(js, JSONType_Double), &dbl);
-    // ASSERT(fabs(dbl - 0.1) < DBL_EPSILON);
+    let mut dbl: f64;
+    unsafe { RJ_API.api().getDouble.unwrap()(RJ_API.api().getAt.unwrap()(js, 2), &dbl as *mut c_double) };
+    assert!((dbl - 0.1).abs() < EPSILON);
+
+    let mut b: bool;
+    unsafe { RJ_API.api().getBoolean.unwrap()(RJ_API.api().getAt.unwrap()(js, 3), &b as *mut c_int) };
+    assert_eq!(b, true);
   
-    // int b;
-    // RJ_API.japi->getBoolean(RJ_API.japi->getAt(js, JSONType_Bool), &b);
-    // ASSERT(b);
+    len = 0;
+    unsafe { RJ_API.api().getLen.unwrap()(RJ_API.api().getAt.unwrap()(js, 4), &len as *mut c_ulonglong) };
+    assert_eq!(len, 1);
   
-    // len = 0;
-    // RJ_API.japi->getLen(RJ_API.japi->getAt(js, JSONType_Object), &len);
-    // ASSERT(len == 1);
-  
-    // len = 0;
-    // RJ_API.japi->getLen(RJ_API.japi->getAt(js, JSONType_Array), &len);
-    // ASSERT(len == 1);
+    len = 0;
+    unsafe { RJ_API.api().getLen.unwrap()(RJ_API.api().getAt.unwrap()(js, 5), &len as *mut c_ulonglong) };
+    assert_eq!(len, 1);
   
     OK("PASS")
 }
