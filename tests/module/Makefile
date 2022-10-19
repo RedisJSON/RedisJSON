@@ -16,10 +16,10 @@ mod: libtestmod.so
 libtestmod.so: testLLAPI.o
 	$(LINK.o) -o $@ $^ $(LDLIBS)
 
-deps: testLLAPI.c
+deps: src/testLLAPI.c
 	$(CC) $(CPPFLAGS) -MM $< -MF $@
 
-testLLAPI.o: testLLAPI.c
+testLLAPI.o: src/testLLAPI.c
 	$(COMPILE.c) -o $@ $<
 
 .PHONY: clean run
