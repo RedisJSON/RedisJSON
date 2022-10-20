@@ -123,8 +123,9 @@ TARGET_DIR=$(BINDIR)/target/release
 endif
 
 ifeq ($(COV),1)
-NIGHTLY=1
-RUST_FLAGS += -Zinstrument-coverage
+# NIGHTLY=1
+# RUST_FLAGS += -Zinstrument-coverage
+RUST_FLAGS += -C instrument_coverage
 endif # COV
 
 ifeq ($(PROFILE),1)
