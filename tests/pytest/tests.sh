@@ -3,7 +3,8 @@
 [[ $IGNERR == 1 ]] || set -e
 # [[ $VERBOSE == 1 ]] && set -x
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+PROGNAME="${BASH_SOURCE[0]}"
+HERE="$(cd "$(dirname "$PROGNAME")" &>/dev/null && pwd)"
 ROOT=$(cd $HERE/../.. && pwd)
 READIES=$ROOT/deps/readies
 . $READIES/shibumi/defs
@@ -28,6 +29,7 @@ help() {
 		SLAVES=1         Tests with --test-slaves
 		CLUSTER=1        Test with OSS cluster, one shard
 		QUICK=1          Run general tests only
+		SERDE=0          Skip serde_json tests
 		
 		VALGRIND|VG=1    Run with Valgrind
 		SAN=type         Use LLVM sanitizer (type=address|memory|leak|thread) 
@@ -122,7 +124,7 @@ setup_redis_server() {
 #----------------------------------------------------------------------------------------------
 
 valgrind_config() {
-	export VG_OPTIONS="
+	export VG_OPTIONS="\
 		-q \
 		--leak-check=full \
 		--show-reachable=no \
@@ -238,7 +240,7 @@ run_tests() {
 		rm -f $xredis_conf
 	fi
 
-	if [[ $QUICK != 1 && $FINAL != 1 ]]; then
+	if [[ $QUICK != 1 && $FINAL != 1 && $SERDE != 0 ]]; then
 		{ (SERDE_JSON=1 FINAL=1 run_tests "$title (with serde_json)"); (( E |= $? )); } || true
 	fi
 
