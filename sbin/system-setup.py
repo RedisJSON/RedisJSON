@@ -49,11 +49,14 @@ class RedisJSONSetup(paella.Setup):
         self.run("%s/bin/getclang --modern" % READIES)
 
     def common_last(self):
+        if self.dist != "arch":
+            self.install("lcov")
+        else:
+            self.install("lcov-git", aur=True)
+        self.run("{PYTHON} {READIES}/bin/getrmpytools --reinstall --modern".format(PYTHON=self.python, READIES=READIES))
         self.pip_install("-r %s/tests/pytest/requirements.txt" % ROOT)
-        self.pip_install("toml")
         self.run("%s/bin/getaws" % READIES)
         self.run("NO_PY2=1 %s/bin/getpudb" % READIES)
-        self.pip_install("gevent")
 
 #----------------------------------------------------------------------------------------------
 
