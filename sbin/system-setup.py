@@ -29,6 +29,7 @@ class RedisJSONSetup(paella.Setup):
         self.run("%s/bin/getcmake --usr" % READIES)
 
     def debian_compat(self):
+        self.install("python3-dev")
         self.run("%s/bin/getgcc" % READIES)
 
     def redhat_compat(self):
