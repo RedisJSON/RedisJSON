@@ -53,7 +53,7 @@ class RedisJSONSetup(paella.Setup):
             self.install("lcov")
         else:
             self.install("lcov-git", aur=True)
-        self.run("{PYTHON} {READIES}/bin/getrmpytools --modern --rltest-version rafi-pypi1".format(PYTHON=self.python, READIES=READIES))
+        self.run("{PYTHON} {READIES}/bin/getrmpytools --reinstall --modern --rltest-version rafi-pypi1".format(PYTHON=self.python, READIES=READIES))
         self.pip_install("-r %s/tests/pytest/requirements.txt" % ROOT)
         self.run("%s/bin/getaws" % READIES)
         self.run("NO_PY2=1 %s/bin/getpudb" % READIES)
