@@ -29,11 +29,15 @@ class RedisJSONSetup(paella.Setup):
         self.run("%s/bin/getcmake --usr" % READIES)
 
     def debian_compat(self):
+        self.install("python3-dev")
         self.run("%s/bin/getgcc" % READIES)
 
     def redhat_compat(self):
         self.install("redhat-lsb-core")
         self.run("%s/bin/getgcc --modern" % READIES)
+
+        if not self.platform.is_arm():
+            self.install_linux_gnu_tar()
 
     def fedora(self):
         self.run("%s/bin/getgcc" % READIES)
