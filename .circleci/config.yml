@@ -558,7 +558,7 @@ workflows:
           <<: *on-any-branch
           matrix:
             parameters:
-              san-type: [address] # [address, memory]
+              san-type: [address] # [memory]
       - upload-artifacts:
           name: upload-artifacts-to-staging-lab
           <<: *on-integ-branch
