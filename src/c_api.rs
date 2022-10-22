@@ -235,6 +235,11 @@ pub fn json_api_free_iter<M: Manager>(_: M, iter: *mut c_void) {
     }
 }
 
+pub fn json_api_reset_iter<M: Manager>(_: M, iter: *mut c_void) {
+    let iter = unsafe { &mut *(iter.cast::<ResultsIterator<M::V>>()) };
+    iter.pos = 0;
+}
+
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -> *const c_void {
     let v = unsafe { &*(val.cast::<M::V>()) };
@@ -461,6 +466,15 @@ macro_rules! redis_json_module_export_shared_api {
             q.is_static() as c_int
         }
 
+        #[no_mangle]
+        pub extern "C" fn JSONAPI_resetIter(iter: *mut c_void) {
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_reset_iter(mngr, iter)},
+            )
+        }
+
         static REDISJSON_GETAPI_V1: &str = concat!("RedisJSON_V1", "\0");
         static REDISJSON_GETAPI_V2: &str = concat!("RedisJSON_V2", "\0");
 
@@ -505,6 +519,7 @@ macro_rules! redis_json_module_export_shared_api {
             pathIsSingle: JSONAPI_pathIsSingle,
             pathHasDefinedOrder: JSONAPI_pathHasDefinedOrder,
             getJSONFromIter: JSONAPI_getJSONFromIter,
+            resetIter: JSONAPI_resetIter,
         };
 
         #[repr(C)]
@@ -545,6 +560,7 @@ macro_rules! redis_json_module_export_shared_api {
             pub pathIsSingle: extern "C" fn(json_path: *mut c_void) -> c_int,
             pub pathHasDefinedOrder: extern "C" fn(json_path: *mut c_void) -> c_int,
             pub getJSONFromIter: extern "C" fn(iter: *mut c_void, ctx: *mut rawmod::RedisModuleCtx, str: *mut *mut rawmod::RedisModuleString,) -> c_int,
+            pub resetIter: extern "C" fn(iter: *mut c_void),
         }
     };
 }
