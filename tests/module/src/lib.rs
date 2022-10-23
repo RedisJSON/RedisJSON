@@ -6,14 +6,20 @@ include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 extern crate redis_module;
 
 use redis_module::*;
-use std::str;
+use std::{str, slice};
 use std::f64::EPSILON;
-use std::ffi::{CStr, c_void};
+use std::ffi::{CStr, c_char, c_void};
 use cstr::cstr;
 use function_name::named;
 
 const MODULE_NAME: &str = "RJ_LLAPI";
 const MODULE_VERSION: u32 = 1;
+
+const OK: RedisResult = Ok(RedisValue::SimpleStringStatic("Ok"));
+const RedisModuleEvent_ModuleChange: RedisModuleEvent = RedisModuleEvent {
+	id: REDISMODULE_EVENT_MODULE_CHANGE,
+	dataver: 1,
+};
 
 struct RjApi {
 	japi: *const RedisJSONAPI,
@@ -56,7 +62,7 @@ fn get_json_apis(
 	}
 
 	if subscribe_to_module_change {
-		return unsafe { subscribe_to_server_event(ctx, redis_module::RedisModuleEvent_ModuleChange, Some(module_change_handler)) };
+		return subscribe_to_server_event(ctx, RedisModuleEvent_ModuleChange, Some(module_change_handler));
 	}
 
 	Status::Ok
@@ -69,7 +75,7 @@ unsafe extern "C" fn module_change_handler(
 	ei: *mut c_void
 ) {
 	let ei = &*(ei as *mut RedisModuleModuleChange);
-	if sub == REDISMODULE_SUBEVENT_MODULE_LOADED.into() &&            // If the subscribed event is a module load,
+	if sub == REDISMODULE_SUBEVENT_MODULE_LOADED as u64 &&            // If the subscribed event is a module load,
 		rj_api.japi.is_null() &&                                        // and JSON is not already loaded,
 		CStr::from_ptr(ei.module_name).to_str().unwrap() == "ReJSON" && // and the loading module is JSON:
 		get_json_apis(ctx, false) == Status::Err                        // try to load it.
@@ -101,7 +107,8 @@ fn RJ_llapi_test_open_key(ctx: &Context, args: Vec<RedisString>) -> RedisResult 
 	assert_ne!(unsafe { rj_api.api().isJSON.unwrap()(rmk.key_inner) }, 1);
 	assert!(unsafe { rj_api.api().openKey.unwrap()(ctx.ctx, keyname.inner).is_null() });
 
-	Ok(RedisValue::SimpleStringStatic("PASS"))
+	ctx.reply_simple_string(concat!(function_name!(), ": PASSED"));
+	OK
 }
 
 #[named]
@@ -149,7 +156,8 @@ fn RJ_llapi_test_iterator(ctx: &Context, args: Vec<RedisString>) -> RedisResult 
 
 	unsafe { rj_api.api().freeIter.unwrap()(ji) };
 
-	Ok(RedisValue::SimpleStringStatic("PASS"))
+	ctx.reply_simple_string(concat!(function_name!(), ": PASSED"));
+	OK
 }
 
 #[named]
@@ -173,7 +181,8 @@ fn RJ_llapi_test_get_type(ctx: &Context, args: Vec<RedisString>) -> RedisResult 
 		assert_eq!(jtype, i as u32);
 	}}
 
-	Ok(RedisValue::SimpleStringStatic("PASS"))
+	ctx.reply_simple_string(concat!(function_name!(), ": PASSED"));
+	OK
 }
 
 #[named]
@@ -187,10 +196,10 @@ fn RJ_llapi_test_get_value(ctx: &Context, args: Vec<RedisString>) -> RedisResult
 	ctx.call("JSON.SET", &[function_name!(), "$", "[\"a\", 1, 0.1, true, {\"_\":1}, [1], null]"]).unwrap();
 	let js = unsafe { rj_api.api().openKey.unwrap()(ctx.ctx, keyname.inner) };
 
-	let s = cstr!("");
+	let mut s: *const c_char = std::ptr::null::<c_char>();
 	let mut len = 0usize;
-	unsafe { rj_api.api().getString.unwrap()(rj_api.api().getAt.unwrap()(js, 0), &mut (s.as_ptr()) as *mut _, &mut len as *mut _) };
-	assert_eq!(s.to_str().unwrap(), "a");
+	unsafe { rj_api.api().getString.unwrap()(rj_api.api().getAt.unwrap()(js, 0), &mut s as *mut _, &mut len as *mut _) };
+	assert_eq!(unsafe { str::from_utf8_unchecked(slice::from_raw_parts(s as *const _, len)) }, "a");
 
 	let mut ll = 0i64;
 	unsafe { rj_api.api().getInt.unwrap()(rj_api.api().getAt.unwrap()(js, 1), &mut ll as *mut _) };
@@ -212,7 +221,30 @@ fn RJ_llapi_test_get_value(ctx: &Context, args: Vec<RedisString>) -> RedisResult
 	unsafe { rj_api.api().getLen.unwrap()(rj_api.api().getAt.unwrap()(js, 5), &mut len as *mut _) };
 	assert_eq!(len, 1);
 
-	Ok(RedisValue::SimpleStringStatic("PASS"))
+	ctx.reply_simple_string(concat!(function_name!(), ": PASSED"));
+	OK
+}
+
+fn RJ_llapi_test_all(ctx: &Context, _args: Vec<RedisString>) -> RedisResult {
+	ctx.call("FLUSHALL", &[]).unwrap();
+	const NUM_TESTS: usize = 4;
+	let tests = [
+		"RJ_LLAPI.test_open_key", 
+		"RJ_LLAPI.test_iterator",
+		"RJ_LLAPI.test_get_type",
+		"RJ_LLAPI.test_get_value"
+	];
+	let mut passed = 0usize;
+	reply_with_array(ctx.ctx, 2);
+
+	reply_with_array(ctx.ctx, NUM_TESTS as _);
+	for i in 0..NUM_TESTS {
+		let r = ctx.call(&tests[i], &[]);
+		passed += (ctx.reply(r) == Status::Ok) as usize;
+	}
+
+	assert_eq!(passed, NUM_TESTS);
+	OK
 }
 
 
@@ -257,4 +289,5 @@ my_module! {
 	RJ_llapi_test_iterator,
 	RJ_llapi_test_get_type,
 	RJ_llapi_test_get_value,
+	RJ_llapi_test_all,
 }
