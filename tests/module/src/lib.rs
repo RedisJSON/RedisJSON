@@ -118,12 +118,12 @@ fn RJ_llapi_test_iterator(ctx: &Context, args: Vec<RedisString>) -> RedisResult 
 
 	let ji = unsafe { rj_api.api().get.unwrap()(rj_api.api().openKey.unwrap()(ctx.ctx, keyname.inner), cstr!("$..*").as_ptr()) };
 	assert!(!ji.is_null());
-	unsafe { if rj_api.version >= 2 {
+	if unsafe { rj_api.version >= 2 } {
 		let mut s = RedisString::create(ctx.ctx, "");
-		rj_api.api().getJSONFromIter.unwrap()(ji, ctx.ctx, &mut s.inner as *mut _);
-		let s = CStr::from_ptr(string_ptr_len(s.inner, 0 as *mut _)).to_str().unwrap();
+		unsafe { rj_api.api().getJSONFromIter.unwrap()(ji, ctx.ctx, &mut s.inner as *mut _) };
+		let s = unsafe { CStr::from_ptr(string_ptr_len(s.inner, 0 as *mut _)).to_str().unwrap() };
 		assert_eq!(s, json);
-	}}
+	}
 
 	let len = unsafe { rj_api.api().len.unwrap()(ji) };
 	assert_eq!(len, vals.len());
@@ -135,6 +135,18 @@ fn RJ_llapi_test_iterator(ctx: &Context, args: Vec<RedisString>) -> RedisResult 
 		assert_eq!(num, vals[i]);
 	}
 	assert!(unsafe { rj_api.api().next.unwrap()(ji).is_null() });
+
+	if unsafe { rj_api.version >= 2 } {
+		unsafe { rj_api.api().resetIter.unwrap()(ji) };
+		for i in 0..len {
+			let js = unsafe { rj_api.api().next.unwrap()(ji) };
+			assert!(!js.is_null());
+			unsafe { rj_api.api().getInt.unwrap()(js, &mut num as *mut _) };
+			assert_eq!(num, vals[i]);
+		}
+		assert!(unsafe { rj_api.api().next.unwrap()(ji).is_null() });
+	}
+
 	unsafe { rj_api.api().freeIter.unwrap()(ji) };
 
 	Ok(RedisValue::SimpleStringStatic("PASS"))

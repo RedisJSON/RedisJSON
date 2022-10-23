@@ -149,6 +149,14 @@ int RJ_llapi_test_iterator(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
     RJ_API.japi->getInt(js, &num); ASSERT(num == vals[i]);
   }
   ASSERT(RJ_API.japi->next(ji) == NULL);
+  if (RJ_API.version >= 2) {
+    RJ_API.japi->resetIter(ji);
+    for (int i = 0; i < len; ++i) {
+      js = RJ_API.japi->next(ji); ASSERT(js != NULL);
+      RJ_API.japi->getInt(js, &num); ASSERT(num == vals[i]);
+    }
+    ASSERT(RJ_API.japi->next(ji) == NULL);
+  }
 
   RJ_API.japi->freeIter(ji);
   TEST_SUCCESS;
@@ -164,14 +172,9 @@ int RJ_llapi_test_get_type(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
   RedisJSON js = RJ_API.japi->openKeyFromStr(ctx, TEST_NAME);
 
   size_t len; RJ_API.japi->getLen(js, &len); ASSERT(len == JSONType__EOF);
-  ASSERT(RJ_API.japi->getType(RJ_API.japi->getAt(js, JSONType_String)) == JSONType_String);
-  ASSERT(RJ_API.japi->getType(RJ_API.japi->getAt(js, JSONType_Int   )) == JSONType_Int   );
-  ASSERT(RJ_API.japi->getType(RJ_API.japi->getAt(js, JSONType_Double)) == JSONType_Double);
-  ASSERT(RJ_API.japi->getType(RJ_API.japi->getAt(js, JSONType_Bool  )) == JSONType_Bool  );
-  ASSERT(RJ_API.japi->getType(RJ_API.japi->getAt(js, JSONType_Object)) == JSONType_Object);
-  ASSERT(RJ_API.japi->getType(RJ_API.japi->getAt(js, JSONType_Array )) == JSONType_Array );
-  ASSERT(RJ_API.japi->getType(RJ_API.japi->getAt(js, JSONType_Null  )) == JSONType_Null  );
-
+  for (int i = 0; i < len; ++i) {
+    ASSERT(RJ_API.japi->getType(RJ_API.japi->getAt(js, i)) == (JSONType) i);
+  }
   TEST_SUCCESS;
 }
 
