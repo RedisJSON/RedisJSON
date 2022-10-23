@@ -1,6 +1,6 @@
 
 CC = gcc
-CPPFLAGS = -I./include -DREDISMODULE_EXPERIMENTAL_API
+CPPFLAGS = -I./src/include -DREDISMODULE_EXPERIMENTAL_API
 CFLAGS = -Wall -g -fPIC -lc -lm -std=gnu99
 
 LDFLAGS = -fno-common -g -ggdb -shared -Bsymbolic
@@ -13,8 +13,14 @@ include deps
 all: mod
 mod: libtestmod.so
 
+ifneq ($(C),1)
+libtestmod.so: src/lib.rs
+	cargo build
+	cp target/debug/$@ $@
+else
 libtestmod.so: testLLAPI.o
 	$(LINK.o) -o $@ $^ $(LDLIBS)
+endif
 
 deps: src/testLLAPI.c
 	$(CC) $(CPPFLAGS) -MM $< -MF $@

@@ -56,7 +56,7 @@ fn get_json_apis(
 	}
 
 	if subscribe_to_module_change {
-		return unsafe { subscribe_to_server_event(ctx, RedisModuleEvent_ModuleChange, Some(module_change_handler)) };
+		return unsafe { subscribe_to_server_event(ctx, redis_module::RedisModuleEvent_ModuleChange, Some(module_change_handler)) };
 	}
 
 	Status::Ok
@@ -69,11 +69,10 @@ unsafe extern "C" fn module_change_handler(
 	ei: *mut c_void
 ) {
 	let ei = &*(ei as *mut RedisModuleModuleChange);
-	if sub == REDISMODULE_SUBEVENT_MODULE_LOADED && // If the subscribed event is a module load,
-		rj_api.japi.is_null() &&                      // and JSON is not already loaded,
-		CStr::from_ptr(ei.module_name)
-			.to_str().unwrap() == "ReJSON" &&           // and the loading module is JSON:
-		get_json_apis(ctx, false) == Status::Err      // try to load it.
+	if sub == REDISMODULE_SUBEVENT_MODULE_LOADED.into() &&            // If the subscribed event is a module load,
+		rj_api.japi.is_null() &&                                        // and JSON is not already loaded,
+		CStr::from_ptr(ei.module_name).to_str().unwrap() == "ReJSON" && // and the loading module is JSON:
+		get_json_apis(ctx, false) == Status::Err                        // try to load it.
 	{
 			// Log Error
 	}
@@ -113,8 +112,8 @@ fn RJ_llapi_test_iterator(ctx: &Context, args: Vec<RedisString>) -> RedisResult 
 
 	let keyname = RedisString::create(ctx.ctx, function_name!());
 
-	let vals =  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] ;
-	let json = "[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]";
+	let vals: [i64; 10] =  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] ;
+	let json            = "[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]";
 	ctx.call("JSON.SET", &[function_name!(), "$", json]).unwrap();
 
 	let ji = unsafe { rj_api.api().get.unwrap()(rj_api.api().openKey.unwrap()(ctx.ctx, keyname.inner), cstr!("$..*").as_ptr()) };
@@ -122,27 +121,21 @@ fn RJ_llapi_test_iterator(ctx: &Context, args: Vec<RedisString>) -> RedisResult 
 	unsafe { if rj_api.version >= 2 {
 		let mut s = RedisString::create(ctx.ctx, "");
 		rj_api.api().getJSONFromIter.unwrap()(ji, ctx.ctx, &mut s.inner as *mut _);
-		// let s = RedisModule_StringPtrLen.unwrap()(s.inner, 0 as *mut _).to_str().unwrap();
-		// assert_eq!(s, json);
+		let s = CStr::from_ptr(string_ptr_len(s.inner, 0 as *mut _)).to_str().unwrap();
+		assert_eq!(s, json);
 	}}
-	// JSONResultsIterator ji = RjApi.japi->get(RjApi.japi->openKeyFromStr(ctx, TEST_NAME), "$..*");
-	// ASSERT(ji != NULL);
-	// if (RjApi.version >= 2) {
-	//   RedisModuleString *str;
-	//   RjApi.japi->getJSONFromIter(ji, ctx, &str);
-	//   ASSERT(strcmp(RedisModule_StringPtrLen(str, NULL), json) == 0);
-	//   RedisModule_FreeString(ctx, str);
-	// }
 
-	// size_t len = RjApi.japi->len(ji); ASSERT(len == sizeof(vals)/sizeof(*vals));
-	// RedisJSON js; long long num;
-	// for (int i = 0; i < len; ++i) {
-	//   js = RjApi.japi->next(ji); ASSERT(js != NULL);
-	//   RjApi.japi->getInt(js, &num); ASSERT(num == vals[i]);
-	// }
-	// ASSERT(RjApi.japi->next(ji) == NULL);
-
-	// RjApi.japi->freeIter(ji);
+	let len = unsafe { rj_api.api().len.unwrap()(ji) };
+	assert_eq!(len, vals.len());
+	let mut num = 0i64;
+	for i in 0..len {
+		let js = unsafe { rj_api.api().next.unwrap()(ji) };
+		assert!(!js.is_null());
+		unsafe { rj_api.api().getInt.unwrap()(js, &mut num as *mut _) };
+		assert_eq!(num, vals[i]);
+	}
+	assert!(unsafe { rj_api.api().next.unwrap()(ji).is_null() });
+	unsafe { rj_api.api().freeIter.unwrap()(ji) };
 
 	Ok(RedisValue::SimpleStringStatic("PASS"))
 }
