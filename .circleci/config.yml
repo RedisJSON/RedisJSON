@@ -547,7 +547,7 @@ workflows:
           context: common
           matrix:
             parameters:
-              platform: [bionic, focal]
+              platform: [jammy, bionic, focal]
       - build-macos:
           <<: *on-integ-and-version-tags
           context: common
@@ -558,7 +558,7 @@ workflows:
           <<: *on-any-branch
           matrix:
             parameters:
-              san-type: [address] # [address, memory]
+              san-type: [address] # [memory]
       - upload-artifacts:
           name: upload-artifacts-to-staging-lab
           <<: *on-integ-branch
