@@ -88,6 +88,9 @@ typedef struct RedisJSONAPI {
   // Return JSON String representation from an iterator (without consuming the iterator)
   // The caller gains ownership of `str`
   int (*getJSONFromIter)(JSONResultsIterator iter, RedisModuleCtx *ctx, RedisModuleString **str);
+  
+  // Reset the iterator to the beginning
+  void (*resetIter)(JSONResultsIterator iter);
 
 } RedisJSONAPI;
 
