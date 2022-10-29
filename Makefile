@@ -1,23 +1,4 @@
 
-ifneq ($(SAN),)
-ifeq ($(SAN),mem)
-override SAN=memory
-else ifeq ($(SAN),addr)
-override SAN=address
-endif
-
-override DEBUG:=1
-ifeq ($(SAN),memory)
-else ifeq ($(SAN),address)
-else ifeq ($(SAN),leak)
-else ifeq ($(SAN),thread)
-else
-$(error SAN=mem|addr|leak|thread)
-endif
-
-export SAN
-endif # SAN
-
 #----------------------------------------------------------------------------------------------
 
 ROOT=.
@@ -25,7 +6,6 @@ ifeq ($(wildcard $(ROOT)/deps/readies/*),)
 ___:=$(shell git submodule update --init --recursive &> /dev/null)
 endif
 
-MK.pyver:=3
 include $(ROOT)/deps/readies/mk/main
 
 #----------------------------------------------------------------------------------------------
@@ -55,7 +35,7 @@ make pytest        # run flow tests using RLTest
   VALGRIND|VG=1      # run specified tests with Valgrind
   VERBOSE=1          # display more RLTest-related information
 
-make pack          # build package (RAMP file)
+make pack               # build package (RAMP file)
 make upload-artifacts   # copy snapshot packages to S3
   OSNICK=nick             # copy snapshots for specific OSNICK
 make upload-release     # copy release packages to S3
@@ -123,8 +103,9 @@ TARGET_DIR=$(BINDIR)/target/release
 endif
 
 ifeq ($(COV),1)
-NIGHTLY=1
-RUST_FLAGS += -Zinstrument-coverage
+# NIGHTLY=1
+# RUST_FLAGS += -Zinstrument-coverage
+RUST_FLAGS += -C instrument_coverage
 endif # COV
 
 ifeq ($(PROFILE),1)
@@ -149,7 +130,10 @@ TARGET=$(BINDIR)/$(MODULE_NAME)
 setup:
 	$(SHOW)./sbin/setup
 
-.PHONY: setup
+update:
+	$(SHOW)cargo update
+
+.PHONY: setup update
 
 #----------------------------------------------------------------------------------------------
 
@@ -275,6 +259,10 @@ docker:
 ifeq ($(PUBLISH),1)
 	$(SHOW)make -C build/docker publish
 endif
+
+.PHONY: docker
+
+#----------------------------------------------------------------------------------------------
 
 ifneq ($(wildcard /w/*),)
 SANBOX_ARGS += -v /w:/w
