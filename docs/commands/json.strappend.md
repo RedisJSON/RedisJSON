@@ -1,20 +1,54 @@
-Appends the `json-string` values to the string at `path`.
+Append the `json-string` values to the string at `path`
 
-`path` defaults to root if not provided.
+[Examples](#examples)
 
-@return
+## Required arguments
 
-@array-reply of @integer-reply - for each path, the string's new length, or @nil-reply if the matching JSON value is not a string.
+<details open><summary><code>key</code></summary> 
 
-@examples
+is key to modify.
+</details>
 
-```
-redis> JSON.SET doc $ '{"a":"foo", "nested": {"a": "hello"}, "nested2": {"a": 31}}'
+<details open><summary><code>value</code></summary> 
+
+is one or more values to append to one or more strings. 
+
+{{% alert title="About using strings with JSON commands" color="warning" %}}
+To specify a string as an array value to append, wrap the quoted string with an additional set of single quotes. Example: `'"silver"'`. For more detailed use, see [Examples](#examples).
+{{% /alert %}}
+</details>
+
+## Optional arguments
+
+<details open><summary><code>path</code></summary> 
+
+is JSONPath to specify. Default is root `$`.
+</details>
+
+## Return value 
+
+JSON.STRAPPEND returns an array of integer replies for each path, the string's new length, or `nil`, if the matching JSON value is not a string.
+For more information about replies, see [Redis serialization protocol specification](/docs/reference/protocol-spec). 
+
+## Examples
+
+{{< highlight bash >}}
+127.0.0.1:6379> JSON.SET doc $ '{"a":"foo", "nested": {"a": "hello"}, "nested2": {"a": 31}}'
 OK
-redis> JSON.STRAPPEND doc $..a '"baz"'
+127.0.0.1:6379> JSON.STRAPPEND doc $..a '"baz"'
 1) (integer) 6
 2) (integer) 8
 3) (nil)
-redis> JSON.GET doc $
+127.0.0.1:6379> JSON.GET doc $
 "[{\"a\":\"foobaz\",\"nested\":{\"a\":\"hellobaz\"},\"nested2\":{\"a\":31}}]"
-```
+{{< / highlight >}}
+
+## See also
+
+`JSON.ARRAPEND` | `JSON.ARRINSERT` 
+
+## Related topics
+
+* [RedisJSON](/docs/stack/json)
+* [Index and search JSON documents](/docs/stack/search/indexing_json)
+

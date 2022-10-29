@@ -1,25 +1,72 @@
-Reports the length of the JSON Array at `path` in `key`.
+Report the length of the JSON array at `path` in `key`
 
-`path` defaults to root if not provided. Returns null if the `key` or `path` do not exist.
+[Examples](#examples)
 
-@return
+## Required arguments
 
-@array-reply of @integer-reply - for each path, the array's length, or @nil-reply if the matching JSON value is not an array.
+<details open><summary><code>key</code></summary> 
 
-@examples
+is key to parse.
+</details>
 
-```
-redis> JSON.SET doc $ '{"a":[3], "nested": {"a": [3,4]}}'
+## Optional arguments
+
+<details open><summary><code>path</code></summary> 
+
+is JSONPath to specify. Default is root `$`, if not provided. Returns null if the `key` or `path` do not exist.
+</details>
+
+## Return
+
+JSON.ARRLEN returns by recursive descent an array of integer replies for each path, the array's length, or `nil`, if the matching JSON value is not an array.
+For more information about replies, see [Redis serialization protocol specification](/docs/reference/protocol-spec). 
+
+## Examples
+
+<details open>
+<summary><b>Get lengths of JSON arrays in a document</b></summary>
+
+Create a document for wireless earbuds.
+
+{{< highlight bash >}}
+127.0.0.1:6379> JSON.SET item:2 $ '{"name":"Wireless earbuds","description":"Wireless Bluetooth in-ear headphones","connection":{"wireless":true,"type":"Bluetooth"},"price":64.99,"stock":17,"colors":["black","white"], "max_level":[80, 100, 120]}'
 OK
-redis> JSON.ARRLEN doc $..a
-1) (integer) 1
-2) (integer) 2
-```
+{{< / highlight >}}
 
-```
-redis> JSON.SET doc $ '{"a":[1,2,3,2], "nested": {"a": false}}'
-OK
-redis> JSON.ARRLEN doc $..a
-1) (integer) 4
+Find lengths of arrays in all objects of the document.
+
+{{< highlight bash >}}
+127.0.0.1:6379> JSON.ARRLEN item:2 '$.[*]'
+1) (nil)
 2) (nil)
-```
+3) (nil)
+4) (nil)
+5) (nil)
+6) (integer) 2
+7) (integer) 3
+{{< / highlight >}}
+
+Return the length of the `max_level` array.
+
+{{< highlight bash >}}
+127.0.0.1:6379> JSON.ARRLEN item:2 '$..max_level'
+1) (integer) 3
+{{< / highlight >}}
+
+Get all the maximum level values.
+
+{{< highlight bash >}}
+127.0.0.1:6379> JSON.GET item:2 '$..max_level'
+"[[80,100,120]]"
+{{< / highlight >}}
+
+</details>
+
+## See also
+
+`JSON.ARRINDEX` | `JSON.ARRINSERT` 
+
+## Related topics
+
+* [RedisJSON](/docs/stack/json)
+* [Index and search JSON documents](/docs/stack/search/indexing_json)

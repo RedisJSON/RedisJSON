@@ -1,20 +1,74 @@
-Toggle a boolean value stored at `path`.
+Toggle a Boolean value stored at `path`
 
-return
+[Examples](#examples)
 
-@array-reply of @integer-reply - for each path, the new value (0-false or 1-true), or @nil-reply element for JSON values matching the path which are not boolean.
+## Required arguments
 
-@examples
+<details open><summary><code>key</code></summary> 
 
-```
-redis> JSON.SET doc $ '{"bool": true}'
+is key to parse.
+</details>
+
+## Optional arguments
+
+<details open><summary><code>path</code></summary> 
+
+is JSONPath to specify. Default is root `$`. 
+
+</details>
+
+## Return
+
+JSON.TOGGLE returns an array of integer replies for each path, the new value (`0` if `false` or `1` if `true`), or `nil` for JSON values matching the path that are not Boolean.
+For more information about replies, see [Redis serialization protocol specification](/docs/reference/protocol-spec).
+
+## Examples
+
+<details open>
+<summary><b>Toogle a Boolean value stored at <code>path</code></b></summary>
+
+Create a JSON document.
+
+{{< highlight bash >}}
+127.0.0.1:6379> JSON.SET doc $ '{"bool": true}'
 OK
-redis> JSON.TOGGLE doc $.bool
+{{< / highlight >}}
+
+Toggle the Boolean value.
+
+{{< highlight bash >}}
+127.0.0.1:6379> JSON.TOGGLE doc $.bool
 1) (integer) 0
-redis> JSON.GET doc $
+{{< / highlight >}}
+
+Get the updated document.
+
+{{< highlight bash >}}
+127.0.0.1:6379> JSON.GET doc $
 "[{\"bool\":false}]"
-redis> JSON.TOGGLE doc $.bool
+{{< / highlight >}}
+
+Toggle the Boolean value.
+
+{{< highlight bash >}}
+127.0.0.1:6379> JSON.TOGGLE doc $.bool
 1) (integer) 1
-redis> JSON.GET doc $
+{{< / highlight >}}
+
+Get the updated document.
+
+{{< highlight bash >}}
+127.0.0.1:6379> JSON.GET doc $
 "[{\"bool\":true}]"
-```
+{{< / highlight >}}
+</details>
+
+## See also
+
+`JSON.SET` | `JSON.GET` 
+
+## Related topics
+
+* [RedisJSON](/docs/stack/json)
+* [Index and search JSON documents](/docs/stack/search/indexing_json)
+
