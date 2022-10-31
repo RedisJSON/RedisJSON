@@ -9,7 +9,7 @@ use std::fmt::Debug;
 #[grammar = "jsonpath/grammer.pest"]
 pub struct JsonPathParser;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum JsonPathToken {
     String,
     Number,
@@ -44,17 +44,11 @@ impl<'i> Query<'i> {
                 Rule::number => Some((last.as_str().to_string(), JsonPathToken::Number)),
                 Rule::numbers_list => {
                     let first_on_list = last.into_inner().next();
-                    match first_on_list {
-                        Some(first) => Some((first.as_str().to_string(), JsonPathToken::Number)),
-                        None => None,
-                    }
+                    first_on_list.map(|first| (first.as_str().to_string(), JsonPathToken::Number))
                 }
                 Rule::string_list => {
                     let first_on_list = last.into_inner().next();
-                    match first_on_list {
-                        Some(first) => Some((first.as_str().to_string(), JsonPathToken::String)),
-                        None => None,
-                    }
+                    first_on_list.map(|first| (first.as_str().to_string(), JsonPathToken::String))
                 }
                 _ => panic!("pop last was used in a none static path"),
             },
@@ -85,9 +79,9 @@ impl<'i> Query<'i> {
         }
         let mut size = 0;
         let mut is_static = true;
-        let mut root_copy = self.root.clone();
-        while let Some(n) = root_copy.next() {
-            size = size + 1;
+        let root_copy = self.root.clone();
+        for n in root_copy {
+            size += 1;
             match n.as_rule() {
                 Rule::literal | Rule::number => continue,
                 Rule::numbers_list | Rule::string_list => {
@@ -234,14 +228,14 @@ impl UserPathTrackerGenerator for DummyTrackerGenerator {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum PTrackerElement {
     Key(String),
     Index(usize),
 }
 
 /* An actual representation of a path that the user gets as a result. */
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct PTracker {
     pub elemenets: Vec<PTrackerElement>,
 }
@@ -366,7 +360,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
                 CmpResult::Ord((*s1).cmp(s2))
             }
             (TermEvaluationResult::String(s1), TermEvaluationResult::Str(s2)) => {
-                CmpResult::Ord((&s1[..]).cmp(s2))
+                CmpResult::Ord((s1[..]).cmp(s2))
             }
             (TermEvaluationResult::String(s1), TermEvaluationResult::String(s2)) => {
                 CmpResult::Ord(s1.cmp(s2))
@@ -447,7 +441,7 @@ pub struct PathCalculator<'i, UPTG: UserPathTrackerGenerator> {
     pub tracker_generator: Option<UPTG>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct CalculationResult<'i, S: SelectValue, UPT: UserPathTracker> {
     pub res: &'i S,
     pub path_tracker: Option<UPT>,

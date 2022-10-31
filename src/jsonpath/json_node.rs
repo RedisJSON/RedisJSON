@@ -59,6 +59,14 @@ impl SelectValue for Value {
         }
     }
 
+    fn is_empty(&self) -> Option<bool> {
+        match self {
+            Value::Array(arr) => Some(arr.is_empty()),
+            Value::Object(obj) => Some(obj.is_empty()),
+            _ => None,
+        }
+    }
+
     fn get_key<'a>(&'a self, key: &str) -> Option<&'a Self> {
         match self {
             Value::Object(o) => o.get(key),
@@ -191,6 +199,10 @@ impl SelectValue for IValue {
             || self.as_object().map(ijson::IObject::len),
             |arr| Some(arr.len()),
         )
+    }
+
+    fn is_empty(&self) -> Option<bool> {
+        self.is_empty()
     }
 
     fn get_key<'a>(&'a self, key: &str) -> Option<&'a Self> {
