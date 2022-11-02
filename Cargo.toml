@@ -28,6 +28,7 @@ serde = "1.0"
 libc = "0.2"
 redis-module = { version="1.0", features = ["experimental-api"]}
 itertools = "0.10"
+regex = "1"
 [features]
 # Workaround to allow cfg(feature = "test") in redismodue-rs dependencies:
 # https://github.com/RedisLabsModules/redismodule-rs/pull/68

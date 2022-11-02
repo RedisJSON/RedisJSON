@@ -366,3 +366,20 @@ fn op_for_same_type() {
         ]),
     );
 }
+
+#[test]
+fn op_string_regexp_match() {
+    setup();
+
+    select_and_then_compare(
+        r#"$.tags[?(@ =~ "^[a-z]{4}$")]"#,
+        read_json("./json_examples/data_obj.json"),
+        json!(["aute", "elit", "esse"]),
+    );
+
+    select_and_then_compare(
+        r#"$.tags[?(@ =~ "^[ec].*")]"#,
+        read_json("./json_examples/data_obj.json"),
+        json!(["elit", "esse", "culpa"]),
+    );
+}
