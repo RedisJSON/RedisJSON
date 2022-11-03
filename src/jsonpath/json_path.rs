@@ -434,16 +434,18 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
         !self.eq(s)
     }
 
-    fn re_is_match(s: &str, regex: &str) -> bool {
+    fn re_is_match(regex: &str, s: &str) -> bool {
         Regex::new(regex).map_or_else(|_| false, |re| Regex::is_match(&re, s))
     }
 
     fn re_match(&self, s: &Self) -> bool {
         match (self, s) {
-            (TermEvaluationResult::Value(v), TermEvaluationResult::Str(s2)) => match v.get_type() {
-                SelectValueType::String => Self::re_is_match(v.as_str(), s2),
-                _ => false,
-            },
+            (TermEvaluationResult::Value(v), TermEvaluationResult::Str(regex)) => {
+                match v.get_type() {
+                    SelectValueType::String => Self::re_is_match(regex, v.as_str()),
+                    _ => false,
+                }
+            }
             (_, _) => false,
         }
     }
