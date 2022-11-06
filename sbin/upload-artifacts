@@ -117,7 +117,7 @@ s3_upload() {
 		done
 	fi
 	[[ $VERBOSE == 1 ]] && s3_ls $upload_dir
-	
+
 	return 0
 }
 
