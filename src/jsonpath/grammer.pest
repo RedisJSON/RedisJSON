@@ -49,7 +49,7 @@ filter_relation = _{and | or}
 
 inner_filter = _{single_filter | "(" ~ filter ~ ")"}
 
-filter = {inner_filter ~ (filter_relation ~ inner_filter)?}
+filter = {inner_filter ~ (filter_relation ~ inner_filter)*}
 
 all = {"*"}
 
