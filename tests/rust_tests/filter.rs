@@ -398,7 +398,7 @@ fn op_object_or_nonexisting_default() {
     setup();
 
     select_and_then_compare(
-        "$.friends[?(@.id >= 2 || @.id == 4)]",
+        "$.friends[?(@.id >= 2 || @.id == 4 || @.id == 6)]",
         read_json("./json_examples/data_obj.json"),
         json!([
             { "id" : 2, "name" : "Gray Berry" }
