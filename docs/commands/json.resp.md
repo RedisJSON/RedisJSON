@@ -20,7 +20,7 @@ is JSONPath to specify. Default is root `$`. This command uses the following map
 *   JSON number maps to the integer reply or bulk string reply, depending on type.
 *   JSON string maps to the bulk string reply.
 *   JSON array is represented as an array reply in which the first element is the simple string reply `[`, followed by the array's elements.
-*   JSON object is represented as an aarray reply in which the first element is the simple string reply `{`. Each successive entry represents a key-value pair as a two-entry array reply of the bulk string reply.
+*   JSON object is represented as an array reply in which the first element is the simple string reply `{`. Each successive entry represents a key-value pair as a two-entry array reply of the bulk string reply.
 
 For more information about replies, see [Redis serialization protocol specification](/docs/reference/protocol-spec).
 </details>
