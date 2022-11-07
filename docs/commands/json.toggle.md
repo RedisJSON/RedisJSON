@@ -6,7 +6,7 @@ Toggle a Boolean value stored at `path`
 
 <details open><summary><code>key</code></summary> 
 
-is key to parse.
+is key to modify.
 </details>
 
 ## Optional arguments
