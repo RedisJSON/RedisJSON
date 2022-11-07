@@ -45,7 +45,7 @@ Get all maximum values for the second product.
 "[[80,90,100,120]]"
 {{< / highlight >}}
 
-Pop the lowest value because it's a duplicate of the highest value in the first product's index.
+Update the `max_level` field of the product: remove an unavailable value and add a newly available value.
 
 {{< highlight bash >}}
 127.0.0.1:6379> JSON.ARRPOP key $.[1].max_level 0
