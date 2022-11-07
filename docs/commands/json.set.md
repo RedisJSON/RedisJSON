@@ -11,7 +11,7 @@ is key to modify.
 
 <details open><summary><code>value</code></summary> 
 
-is one or more values to index in one or more arrays. 
+is value to set at the specified path
 </details>
 
 ## Optional arguments
