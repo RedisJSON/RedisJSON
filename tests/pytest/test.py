@@ -1198,6 +1198,7 @@ def testFilter(env):
 
     # regex mismatch (illegal pattern)
     r.expect('JSON.GET', 'doc', '$.arr[?(@ == $.pat_bad)]').equal('[]')
+    r.expect('JSON.GET', 'doc', '$.arr[?(@ == $.pat_bad || @>4.5)]').equal('[7.0]')
     
     # plain string match
     r.expect('JSON.GET', 'doc', '$.arr[?(@ == $.pat_plain)]').equal('["^[f][o][o]$"]')
