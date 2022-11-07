@@ -418,3 +418,37 @@ fn op_string_regexp_match() {
         ]),
     );
 }
+
+#[test]
+fn op_string_regexp_field_match() {
+    setup();
+
+    select_and_then_compare(
+        r#"$.arr[?(@ =~ $.pat1)]"#, //regex
+        json!({
+            "arr": ["kaboom", "kafoosh", "four", "bar", 7.0, -9, false, null, "foolish", "ffool", "[f][o][o]"],
+            "pat1":"foo",
+            "pat2":"k.*foo"
+        }),
+        json!(["kafoosh", "foolish", "ffool"]),
+    );
+
+    select_and_then_compare(
+        r#"$.arr[?(@ =~ $.pat2)]"#, //regex
+        json!({
+            "arr": ["kaboom", "kafoosh", "four", "bar", 7.0, -9, false, null, "foolish", "ffool", "[f][o][o]"],
+            "pat1":"foo",
+            "pat2":"k.*foo"
+        }),
+        json!(["kafoosh"]),
+    );
+
+    select_and_then_compare(
+        r#"$.arr[?(@ == $.pat1)]"#, //plain string
+        json!({
+            "arr": ["kaboom", "kafoosh", "four", "bar", 7.0, -9, false, null, "foolish", "ffool", "[f][o][o]"],
+            "pat1":"[f][o][o]"
+        }),
+        json!(["[f][o][o]"]),
+    );
+}

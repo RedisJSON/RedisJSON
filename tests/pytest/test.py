@@ -1173,6 +1173,35 @@ def testEscape(env):
     r.expect('JSON.SET', 'doc', '$', '{"val": "escaped unicode here:\u2B50"}').ok()
     r.expect('JSON.GET', 'doc', '$.val').equal('["escaped unicode here:⭐"]')
 
+def testFilter(env):
+    # Test JSONPath filter
+    r = env
+
+    doc = {
+        "arr": ["kaboom", "kafoosh", "four", "bar", 7.0, "foolish", ["food", "foo", "fight"], -9, {"in" : "fooctious"}, "ffool", "^[f][o][o]$", False, None],
+        "pat_regex": ".*foo",
+        "pat_plain": "^[f][o][o]$",
+        "pat_bad": "[f.*",
+    }
+    r.expect('JSON.SET', 'doc', '$', json.dumps(doc)).ok()
+    
+    # regex match using a static regex pattern
+    r.expect('JSON.GET', 'doc', '$.arr[?(@ =~ ".*foo")]').equal('["kafoosh","foolish","ffool"]')
+    
+    # regex match using a field
+    r.expect('JSON.GET', 'doc', '$.arr[?(@ =~ $.pat_regex)]').equal('["kafoosh","foolish","ffool"]')
+    r.expect('JSON.GET', 'doc', '$.arr.*[?(@ =~ $.pat_plain)]').equal('["foo"]')
+
+    # regex match using field after being modified
+    r.expect('JSON.SET', 'doc', '$.pat_regex', '"k.*foo"').ok()
+    r.expect('JSON.GET', 'doc', '$.arr[?(@ =~ $.pat_regex)]').equal('["kafoosh"]')
+
+    # regex mismatch (illegal pattern)
+    r.expect('JSON.GET', 'doc', '$.arr[?(@ == $.pat_bad)]').equal('[]')
+    
+    # plain string match
+    r.expect('JSON.GET', 'doc', '$.arr[?(@ == $.pat_plain)]').equal('["^[f][o][o]$"]')
+    
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property

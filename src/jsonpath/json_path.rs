@@ -446,6 +446,14 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
                     _ => false,
                 }
             }
+            (TermEvaluationResult::Value(v1), TermEvaluationResult::Value(v2)) => {
+                match (v1.get_type(), v2.get_type()) {
+                    (SelectValueType::String, SelectValueType::String) => {
+                        Self::re_is_match(v2.as_str(), v1.as_str())
+                    }
+                    (_, _) => false,
+                }
+            }
             (_, _) => false,
         }
     }
