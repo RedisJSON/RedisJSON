@@ -11,7 +11,7 @@ is key to modify.
 
 <details open><summary><code>value</code></summary> 
 
-is one or more values to append to one or more arrays. 
+is one or more values to insert in one or more arrays. 
 
 {{% alert title="About using strings with JSON commands" color="warning" %}}
 To specify a string as an array value to insert, wrap the quoted string with an additional set of single quotes. Example: `'"silver"'`. For more detailed use, see [Examples](#examples).
