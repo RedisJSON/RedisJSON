@@ -18,7 +18,7 @@ is JSONPath to specify. Default is root `$`, if not provided. Returns null if th
 
 ## Return
 
-JSON.ARRLEN returns by recursive descent an array of integer replies for each path, the array's length, or `nil`, if the matching JSON value is not an array.
+`JSON.ARRLEN` returns an [array](/docs/reference/protocol-spec/#resp-arrays) of integer replies, an integer for each matching value, each is the array's length, or `nil`, if the matching value is not an array.
 For more information about replies, see [Redis serialization protocol specification](/docs/reference/protocol-spec). 
 
 ## Examples
