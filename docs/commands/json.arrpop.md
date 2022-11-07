@@ -59,7 +59,7 @@ Get the updated array.
 "[[90,100,120]]"
 {{< / highlight >}}
 
-Now insert a new lowest value in the second product.
+Now insert a new lowest value.
 
 {{< highlight bash >}}
 127.0.0.1:6379> JSON.ARRINSERT key $.[1].max_level 0 85
