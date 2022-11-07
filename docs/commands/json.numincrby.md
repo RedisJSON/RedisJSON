@@ -29,7 +29,7 @@ For more information about replies, see [Redis serialization protocol specificat
 ## Examples
 
 <details open>
-<summary><b>Add a new color to a list of product colors</b></summary>
+<summary><b>Increment number values</b></summary>
 
 Create a document.
 
