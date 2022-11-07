@@ -88,7 +88,7 @@ Get the updated list of colors.
 "[[\"black\",\"silver\",\"yellow\",\"gold\",\"blue\"]]"
 {{< / highlight >}}
 
-Find the place where color silver is located.
+Find the place where color `silver` is located.
 
 {{< highlight bash >}}
 127.0.0.1:6379> JSON.ARRINDEX item:1 $..colors '"silver"'
