@@ -11,7 +11,7 @@ is key to parse.
 
 <details open><summary><code>value</code></summary> 
 
-is one or more values to index in one or more arrays. 
+is value to find its index in one or more arrays. 
 
 {{% alert title="About using strings with JSON commands" color="warning" %}}
 To specify a string as an array value to index, wrap the quoted string with an additional set of single quotes. Example: `'"silver"'`. For more detailed use, see [Examples](#examples).
