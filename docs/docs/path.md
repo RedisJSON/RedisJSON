@@ -13,7 +13,7 @@ RedisJSON knows which syntax to use depending on the first character of the path
 
 ## JSONPath support
 
-RedisJSON v2.0 introduces [JSONPath](http://goessner.net/articles/JsonPath/) support. It follows the syntax described by Goessner in his article.
+RedisJSON v2.0 introduces [JSONPath](http://goessner.net/articles/JsonPath/) support. It follows the syntax described by Goessner in his [article](http://goessner.net/articles/JsonPath/).
 
 A JSONPath query can resolve to several locations in a JSON document. In this case, the JSON commands apply the operation to every possible location. This is a major improvement over [legacy path](#legacy-path-syntax) queries, which only operate on the first path.
 
@@ -40,7 +40,7 @@ The following JSONPath syntax table was adapted from Goessner's [path syntax com
 | [] | Subscript operator, accesses an array element. |
 | [,] | Union, selects multiple elements. |
 | [start\:end\:step] | Array slice where start, end, and step are indexes. |
-| ?() | Filters a JSON object or array. Supports comparison operators <nobr>(==, !=, <, <=, >, >=)</nobr> and logical operators <nobr>(&&, \|\|)</nobr>. |
+| ?() | Filters a JSON object or array. Supports comparison operators <nobr>(`==`, `!=`, `<`, `<=`, `>`, `>=`, `=~`)</nobr>, logical operators <nobr>(`&&`, `\|\|`)</nobr>, and parenthesis <nobr>(`(`, `)`)</nobr>. |
 | () | Script expression. |
 | @ | The current element, used in filter or script expressions. |
 
@@ -154,7 +154,7 @@ You can use an array slice to select a range of elements from an array. This exa
 "[\"Noise-cancelling Bluetooth headphones\",\"Wireless earbuds\"]"
 ```
 
-Filter expressions `?()` let you select JSON elements based on certain conditions. You can use comparison operators (==, !=, <, <=, >, >=) and logical operators (&&, \|\|) within these expressions.
+Filter expressions `?()` let you select JSON elements based on certain conditions. You can use comparison operators (`==`, `!=`, `<`, `<=`, `>`, `>=`, `=~`), logical operators (`&&`, `||`), and parenthesis (`(`, `)`) within these expressions. A filter expression can be applied on an array or on an object, iterating all the elements in the array or all the key-value pair in the object, retrieving only the ones that match the filter condition. The filter condition is using `@` to denote the current array element or the current object. Use `@.key_name` to refer to a specific value. Use `$` to denote the top-level, e.g., `$.top_level_key_name`
 
 For example, this filter only returns wireless headphones with a price less than 70:
 
@@ -168,6 +168,32 @@ This example filters the inventory for the names of items that support Bluetooth
 ```sh
 127.0.0.1:6379> JSON.GET store '$.inventory.*[?(@.connection=="Bluetooth")].name'
 "[\"Noise-cancelling Bluetooth headphones\",\"Wireless earbuds\",\"Wireless keyboard\"]"
+```
+
+The comparison operator `=~` is matching a string value of the left-hand side against a regular expression pattern on the right-hand side. The supported regular expression syntax is detailed [here](https://docs.rs/regex/latest/regex/#syntax).
+
+For example, this filters only keyboards with some sort of USB connection (notice this match is case-insensitive thanks to the prefix `(?i)` in the regular expression pattern `"(?i)usb"` ):
+
+```sh
+127.0.0.1:6379> JSON.GET store '$.inventory.keyboards[?(@.connection =~ "(?i)usb")]'
+"[{\"id\":22346,\"name\":\"USB-C keyboard\",\"description\":\"Wired USB-C keyboard\",\"wireless\":false,\"connection\":\"USB-C\",\"price\":29.99,\"stock\":30,\"free-shipping\":false}]"
+```
+The regular expression pattern can also be taken from a JSON string key on the right-hand side.
+
+For example, let's add each keybaord object with a `regex_pat` key:
+
+```sh
+127.0.0.1:6379> JSON.SET store '$.inventory.keyboards[0].regex_pat' '"(?i)bluetooth"'
+OK
+127.0.0.1:6379> JSON.SET store '$.inventory.keyboards[1].regex' '"usb"'
+OK
+```
+
+Now we can match against this `regex_pat` key instead of a hard-coded regular expression pattern, and get the keyboard with the `Bluetooth` string in its `connection` key (notice the one with `USB-C` did not match since its regular expression pattern is case-sensitive and the regular expression pattern is using lower case):
+
+```sh
+127.0.0.1:6379> JSON.GET store '$.inventory.keyboards[?(@.connection =~ @.regex_pat)]'
+"[{\"id\":22345,\"name\":\"Wireless keyboard\",\"description\":\"Wireless Bluetooth keyboard\",\"wireless\":true,\"connection\":\"Bluetooth\",\"price\":44.99,\"stock\":23,\"free-shipping\":false,\"colors\":[\"black\",\"silver\"],\"regex\":\"(?i)Bluetooth\",\"regex_pat\":\"(?i)bluetooth\"}]"
 ```
 
 #### Update JSON examples
