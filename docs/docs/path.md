@@ -154,23 +154,23 @@ You can use an array slice to select a range of elements from an array. This exa
 "[\"Noise-cancelling Bluetooth headphones\",\"Wireless earbuds\"]"
 ```
 
-Filter expressions `?()` let you select JSON elements based on certain conditions. You can use comparison operators (`==`, `!=`, `<`, `<=`, `>`, `>=`, `=~`), logical operators (`&&`, `||`), and parenthesis (`(`, `)`) within these expressions. A filter expression can be applied on an array or on an object, iterating all the **elements** in the array or all the **values** in the object, retrieving only the ones that match the filter condition. 
+Filter expressions `?()` let you select JSON elements based on certain conditions. You can use comparison operators (`==`, `!=`, `<`, `<=`, `>`, `>=`, `=~`), logical operators (`&&`, `||`), and parenthesis (`(`, `)`) within these expressions. A filter expression can be applied on an array or on an object, iterating over all the **elements** in the array or all the **values** in the object, retrieving only the ones that match the filter condition. 
 
-Paths within the filter condition are using the dot notation with either `@` to denote the current array element or the current object value, or `$` to denote the top-level element. For example, `@.key_name` to refer to a nested value and `$.top_level_key_name` to refer to a top-level value.
+Paths within the filter condition are using the dot notation with either `@` to denote the current array element or the current object value, or `$` to denote the top-level element. For example, use `@.key_name` to refer to a nested value and `$.top_level_key_name` to refer to a top-level value.
 
-The comparison operator `=~` is matching a path of a string value on the left-hand side against a regular expression pattern on the right-hand side. The supported regular expression syntax is detailed [here](https://docs.rs/regex/latest/regex/#syntax).
+The comparison operator `=~` is matching a path of a string value on the left side against a regular expression pattern on the right side.  For more information, see the [supported regular expression syntax docs](https://docs.rs/regex/latest/regex/#syntax).
 
-Non-string values do not match. A match can only occur when the left-hand side is a path of a string value and the right-hand side is either a hard-coded string, or a path of a string value. See [examples](#json-filter-examples) below.
+Non-string values do not match. A match can only occur when the left side is a path of a string value and the right side is either a hard-coded string, or a path of a string value. See [examples](#json-filter-examples) below.
 
 The regex match is partial, meaning `"foo"` regex pattern matches a string such as `"barefoots"`.
 To make it exact, use the regex pattern `"^foo$"`.
 
 Other JSONPath engines may use regex pattern between slashes, e.g., `/foo/`, and their match is exact.
-They can perform partial match using a regex pattern such as `/.*foo.*/`.
+They can perform partial matches using a regex pattern such as `/.*foo.*/`.
 
 #### JSON Filter examples
 
-In the following example, this filter only returns wireless headphones with a price less than 70:
+In the following example, the filter only returns wireless headphones with a price less than 70:
 
 ```sh
 127.0.0.1:6379> JSON.GET store $..headphones[?(@.price<70&&@.wireless==true)]
@@ -190,7 +190,7 @@ This example filters only keyboards with some sort of USB connection using regex
 127.0.0.1:6379> JSON.GET store '$.inventory.keyboards[?(@.connection =~ "(?i)usb")]'
 "[{\"id\":22346,\"name\":\"USB-C keyboard\",\"description\":\"Wired USB-C keyboard\",\"wireless\":false,\"connection\":\"USB-C\",\"price\":29.99,\"stock\":30,\"free-shipping\":false}]"
 ```
-The regular expression pattern can also be specified using a path of a string value on the right-hand side.
+The regular expression pattern can also be specified using a path of a string value on the right side.
 
 For example, let's add each keybaord object with a string value named `regex_pat`:
 
@@ -201,7 +201,7 @@ OK
 OK
 ```
 
-Now we can match against the value of `regex_pat` instead of a hard-coded regular expression pattern, and get the keyboard with the `Bluetooth` string in its `connection` key. Notice the one with `USB-C` does not match since its regular expression pattern is case-sensitive and the regular expression pattern is using lower case:
+Now we can match against the value of `regex_pat` instead of a hard-coded regular expression pattern, and get the keyboard with the `Bluetooth` string in its `connection` key. Notice the one with `USB-C` does not match since its regular expression pattern is case-sensitive and the regular expression pattern is using lowercase:
 
 ```sh
 127.0.0.1:6379> JSON.GET store '$.inventory.keyboards[?(@.connection =~ @.regex_pat)]'
