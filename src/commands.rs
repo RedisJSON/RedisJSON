@@ -81,8 +81,8 @@ pub struct KeyValue<'a, V: SelectValue> {
     val: &'a V,
 }
 
-impl<'a, V: SelectValue> KeyValue<'a, V> {
-    pub fn new(v: &'a V) -> KeyValue<'a, V> {
+impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
+    pub const fn new(v: &'a V) -> KeyValue<'a, V> {
         KeyValue { val: v }
     }
 
@@ -99,18 +99,18 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     fn resp_serialize(&'a self, path: Path) -> RedisResult {
         if path.is_legacy() {
             let v = self.get_first(path.get_path())?;
-            Ok(self.resp_serialize_inner(v))
+            Ok(Self::resp_serialize_inner(v))
         } else {
             Ok(self
                 .get_values(path.get_path())?
                 .iter()
-                .map(|v| self.resp_serialize_inner(v))
+                .map(|v| Self::resp_serialize_inner(v))
                 .collect::<Vec<RedisValue>>()
                 .into())
         }
     }
 
-    fn resp_serialize_inner(&'a self, v: &V) -> RedisValue {
+    fn resp_serialize_inner(v: &V) -> RedisValue {
         match v.get_type() {
             SelectValueType::Null => RedisValue::Null,
 
@@ -133,7 +133,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 res.push(RedisValue::SimpleStringStatic("["));
                 v.values()
                     .unwrap()
-                    .for_each(|v| res.push(self.resp_serialize_inner(v)));
+                    .for_each(|v| res.push(Self::resp_serialize_inner(v)));
                 RedisValue::Array(res)
             }
 
@@ -142,7 +142,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 res.push(RedisValue::SimpleStringStatic("{"));
                 for (k, v) in v.items().unwrap() {
                     res.push(RedisValue::BulkString(k.to_string()));
-                    res.push(self.resp_serialize_inner(v));
+                    res.push(Self::resp_serialize_inner(v));
                 }
                 RedisValue::Array(res)
             }
@@ -407,7 +407,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         }
     }
 
-    pub fn is_equal<T1: SelectValue, T2: SelectValue>(&self, a: &T1, b: &T2) -> bool {
+    pub fn is_equal<T1: SelectValue, T2: SelectValue>(a: &T1, b: &T2) -> bool {
         match (a.get_type(), b.get_type()) {
             (SelectValueType::Null, SelectValueType::Null) => true,
             (SelectValueType::Bool, SelectValueType::Bool) => a.get_bool() == b.get_bool(),
@@ -419,7 +419,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     false
                 } else {
                     for (i, e) in a.values().unwrap().into_iter().enumerate() {
-                        if !self.is_equal(e, b.get_index(i).unwrap()) {
+                        if !Self::is_equal(e, b.get_index(i).unwrap()) {
                             return false;
                         }
                     }
@@ -435,7 +435,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                         let temp2 = b.get_key(k);
                         match (temp1, temp2) {
                             (Some(a1), Some(b1)) => {
-                                if !self.is_equal(a1, b1) {
+                                if !Self::is_equal(a1, b1) {
                                     return false;
                                 }
                             }
@@ -503,7 +503,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         }
 
         for index in start..end {
-            if self.is_equal(arr.get_index(index as usize).unwrap(), v) {
+            if Self::is_equal(arr.get_index(index as usize).unwrap(), v) {
                 return FoundIndex::Index(index);
             }
         }
@@ -668,9 +668,9 @@ fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
         Ok(q) => q,
         Err(e) => return Err(RedisError::String(e.to_string())),
     };
-    let mut res = calc_once_with_paths(query, doc);
+    let res = calc_once_with_paths(query, doc);
     Ok(res
-        .drain(..)
+        .into_iter()
         .filter(|e| f(e.res))
         .map(|e| e.path_tracker.unwrap().to_string_path())
         .collect())
@@ -685,9 +685,9 @@ fn get_all_values_and_paths<'a, T: SelectValue>(
         Ok(q) => q,
         Err(e) => return Err(RedisError::String(e.to_string())),
     };
-    let mut res = calc_once_with_paths(query, doc);
+    let res = calc_once_with_paths(query, doc);
     Ok(res
-        .drain(..)
+        .into_iter()
         .map(|e| (e.res, e.path_tracker.unwrap().to_string_path()))
         .collect())
 }
@@ -756,10 +756,7 @@ where
 {
     values
         .into_iter()
-        .map(|n| match n {
-            Some(t) => t.into(),
-            _ => none_value.clone(),
-        })
+        .map(|n| n.map_or_else(|| none_value.clone(), |t| t.into()))
         .collect::<Vec<Value>>()
 }
 
@@ -947,9 +944,10 @@ where
 {
     let value = redis_key.get_value()?.map_or_else(
         || RedisValue::Null,
-        |doc| match KeyValue::new(doc).get_type(path) {
-            Ok(s) => s.into(),
-            Err(_) => RedisValue::Null,
+        |doc| {
+            KeyValue::new(doc)
+                .get_type(path)
+                .map_or(RedisValue::Null, |s| s.into())
         },
     );
 
@@ -1295,10 +1293,7 @@ where
     let values = find_all_values(path, root, |v| v.get_type() == SelectValueType::String)?;
     let mut res: Vec<RedisValue> = vec![];
     for v in values {
-        res.push(match v {
-            Some(v) => (v.get_str().len() as i64).into(),
-            _ => RedisValue::Null,
-        });
+        res.push(v.map_or(RedisValue::Null, |v| (v.get_str().len() as i64).into()));
     }
     Ok(res.into())
 }

@@ -297,7 +297,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
         self.get_json_holder()?;
 
         match &mut self.val {
-            Some(v) => Ok(Some(&mut (*v).data)),
+            Some(v) => Ok(Some(&mut v.data)),
             None => Ok(None),
         }
     }
@@ -412,10 +412,10 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
             res = Some(arr.len());
             Ok(Some(v))
         })?;
-        match res {
-            None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
-            Some(n) => Ok(n),
-        }
+        res.map_or_else(
+            || Err(RedisError::String(err_msg_json_path_doesnt_exist())),
+            Ok,
+        )
     }
 
     fn arr_insert(
@@ -439,10 +439,10 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
             res = Some(curr.len());
             Ok(Some(new_value))
         })?;
-        match res {
-            None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
-            Some(l) => Ok(l),
-        }
+        res.map_or_else(
+            || Err(RedisError::String(err_msg_json_path_doesnt_exist())),
+            Ok,
+        )
     }
 
     fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<String>, RedisError> {
@@ -458,7 +458,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
 
                 let mut new_value = v.take();
                 let curr = new_value.as_array_mut().unwrap();
-                res = Some(curr.remove(index as usize));
+                res = Some(curr.remove(index));
                 Ok(Some(new_value))
             } else {
                 Err(err_json(&v, "array"))
@@ -497,10 +497,10 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
                 Err(err_json(&v, "array"))
             }
         })?;
-        match res {
-            None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
-            Some(l) => Ok(l),
-        }
+        res.map_or_else(
+            || Err(RedisError::String(err_msg_json_path_doesnt_exist())),
+            Ok,
+        )
     }
 
     fn clear(&mut self, path: Vec<String>) -> Result<usize, RedisError> {
@@ -533,10 +533,7 @@ pub struct KeyHolderRead {
 impl ReadHolder<Value> for KeyHolderRead {
     fn get_value(&self) -> Result<Option<&Value>, RedisError> {
         let key_value = self.key.get_value::<RedisJSON<Value>>(&REDIS_JSON_TYPE)?;
-        match key_value {
-            Some(v) => Ok(Some(&v.data)),
-            None => Ok(None),
-        }
+        key_value.map_or(Ok(None), |v| Ok(Some(&v.data)))
     }
 }
 

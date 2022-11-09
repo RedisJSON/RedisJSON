@@ -325,11 +325,7 @@ fn unimplemented_in_filter() {
 
     // Should not panic
     //  unimplemented!("keys in filter");
-    select_and_then_compare(
-        "$.store[?(@.book['authors', 'title'])]",
-        json.clone(),
-        json!([]),
-    );
+    select_and_then_compare("$.store[?(@.book['authors', 'title'])]", json, json!([]));
 }
 
 #[test]

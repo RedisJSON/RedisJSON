@@ -110,7 +110,7 @@ impl<'a> Path<'a> {
     }
 
     #[must_use]
-    pub fn get_original(&self) -> &'a str {
+    pub const fn get_original(&self) -> &'a str {
         self.original_path
     }
 }
@@ -140,20 +140,18 @@ pub mod type_methods {
                         phantom: PhantomData,
                     };
                     let v = m.from_str(&json_string, Format::JSON);
-                    match v {
-                        Ok(res) => Box::into_raw(Box::new(res)).cast::<libc::c_void>(),
-                        Err(_) => null_mut(),
-                    }
+                    v.map_or(null_mut(), |res| {
+                        Box::into_raw(Box::new(res)).cast::<libc::c_void>()
+                    })
                 }
                 ManagerType::IValue => {
                     let m = RedisIValueJsonKeyManager {
                         phantom: PhantomData,
                     };
                     let v = m.from_str(&json_string, Format::JSON);
-                    match v {
-                        Ok(res) => Box::into_raw(Box::new(res)).cast::<libc::c_void>(),
-                        Err(_) => null_mut(),
-                    }
+                    v.map_or(null_mut(), |res| {
+                        Box::into_raw(Box::new(res)).cast::<libc::c_void>()
+                    })
                 }
             },
             Err(_) => null_mut(),

@@ -113,14 +113,14 @@ impl std::fmt::Display for QueryCompilationError {
 impl std::fmt::Display for Rule {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         match self {
-            Rule::literal => write!(f, "<string>"),
-            Rule::all => write!(f, "'*'"),
-            Rule::full_scan => write!(f, "'..'"),
-            Rule::numbers_list => write!(f, "'<number>[,<number>,...]'"),
-            Rule::string_list => write!(f, "'<string>[,<string>,...]'"),
-            Rule::numbers_range => write!(f, "['start:end:steps']"),
-            Rule::number => write!(f, "'<number>'"),
-            Rule::filter => write!(f, "'[?(filter_expression)]'"),
+            Self::literal => write!(f, "<string>"),
+            Self::all => write!(f, "'*'"),
+            Self::full_scan => write!(f, "'..'"),
+            Self::numbers_list => write!(f, "'<number>[,<number>,...]'"),
+            Self::string_list => write!(f, "'<string>[,<string>,...]'"),
+            Self::numbers_range => write!(f, "['start:end:steps']"),
+            Self::number => write!(f, "'<number>'"),
+            Self::filter => write!(f, "'[?(filter_expression)]'"),
             _ => write!(f, "{:?}", self),
         }
     }
@@ -479,7 +479,7 @@ struct PathCalculatorData<'i, S: SelectValue, UPT: UserPathTracker> {
 }
 
 impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
-    pub fn create(query: &'i Query<'i>) -> PathCalculator<'i, UPTG> {
+    pub const fn create(query: &'i Query<'i>) -> PathCalculator<'i, UPTG> {
         PathCalculator {
             query: Some(query),
             tracker_generator: None,
@@ -487,7 +487,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
     }
 
     #[allow(dead_code)]
-    pub fn create_with_generator(
+    pub const fn create_with_generator(
         query: &'i Query<'i>,
         tracker_generator: UPTG,
     ) -> PathCalculator<'i, UPTG> {
@@ -729,10 +729,9 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             }
             Rule::all_range => {
                 let mut curr = curr.into_inner();
-                let step = match curr.next() {
-                    Some(s) => s.as_str().parse::<usize>().unwrap(),
-                    None => 1,
-                };
+                let step = curr
+                    .next()
+                    .map_or(1, |s| s.as_str().parse::<usize>().unwrap());
                 (0, n, step)
             }
             Rule::left_range => {
@@ -740,10 +739,9 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 let start =
                     self.calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
                 let end = n;
-                let step = match curr.next() {
-                    Some(s) => s.as_str().parse::<usize>().unwrap(),
-                    None => 1,
-                };
+                let step = curr
+                    .next()
+                    .map_or(1, |s| s.as_str().parse::<usize>().unwrap());
                 (start, end, step)
             }
             Rule::full_range => {
@@ -897,9 +895,9 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         }
     }
 
-    fn populate_path_tracker<'k, 'l>(&self, pt: &PathTracker<'l, 'k>, upt: &mut UPTG::PT) {
+    fn populate_path_tracker<'k, 'l>(pt: &PathTracker<'l, 'k>, upt: &mut UPTG::PT) {
         if let Some(f) = pt.parent {
-            self.populate_path_tracker(f, upt);
+            Self::populate_path_tracker(f, upt);
         }
         match pt.element {
             PathTrackerElement::Index(i) => upt.add_index(i),
@@ -910,7 +908,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
 
     fn generate_path(&self, pt: PathTracker) -> UPTG::PT {
         let mut upt = self.tracker_generator.as_ref().unwrap().generate();
-        self.populate_path_tracker(&pt, &mut upt);
+        Self::populate_path_tracker(&pt, &mut upt);
         upt
     }
 

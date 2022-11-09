@@ -128,5 +128,5 @@ fn colon_token_in_path() {
 
     select_and_then_compare("$.prod_name", payload.clone(), json!(["coffee table"]));
 
-    select_and_then_compare("$.prod:id", payload.clone(), json!(["G637"]));
+    select_and_then_compare("$.prod:id", payload, json!(["G637"]));
 }

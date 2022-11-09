@@ -1,4 +1,4 @@
-pub(crate) trait ArrayIndex {
+pub trait ArrayIndex {
     fn normalize(self, len: i64) -> usize;
 }
 
