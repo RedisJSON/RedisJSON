@@ -764,6 +764,7 @@ dependencies = [
  "pest",
  "pest_derive",
  "redis-module",
+ "regex",
  "serde",
  "serde_json",
 ]

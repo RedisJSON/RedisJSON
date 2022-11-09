@@ -121,6 +121,7 @@ class Test:
             except:
                 pass
 
+        ENV['TEST_TITLE'] = self.title
         ENV['MODULE_VERSION'] = modver
         ENV['MODULE_SEMANTIC_VERSION'] = mod_sem_ver
         ENV['MODULE_DOWNLOAD_NAME'] = 'ReJSON'
