@@ -160,7 +160,7 @@ Paths within the filter condition are using the dot notation with either `@` to 
 
 The comparison operator `=~` is matching a path of a string value on the left-hand side against a regular expression pattern on the right-hand side. The supported regular expression syntax is detailed [here](https://docs.rs/regex/latest/regex/#syntax).
 
-Non-string values do not match. A match can only occur when the left-hand side is a path of a string value and the right-hand side is either a hard-coded string, or a path of a string value. See [examples](/#json-filter-examples) below.
+Non-string values do not match. A match can only occur when the left-hand side is a path of a string value and the right-hand side is either a hard-coded string, or a path of a string value. See [examples](#json-filter-examples) below.
 
 The regex match is partial, meaning `"foo"` regex pattern matches a string such as `"barefoots"`.
 To make it exact, use the regex pattern `"^foo$"`.
@@ -184,7 +184,7 @@ This example filters the inventory for the names of items that support Bluetooth
 "[\"Noise-cancelling Bluetooth headphones\",\"Wireless earbuds\",\"Wireless keyboard\"]"
 ```
 
-For example, this filters only keyboards with some sort of USB connection using regex match. Notice this match is case-insensitive thanks to the prefix `(?i)` in the regular expression pattern `"(?i)usb"`:
+This example filters only keyboards with some sort of USB connection using regex match. Notice this match is case-insensitive thanks to the prefix `(?i)` in the regular expression pattern `"(?i)usb"`:
 
 ```sh
 127.0.0.1:6379> JSON.GET store '$.inventory.keyboards[?(@.connection =~ "(?i)usb")]'
@@ -201,7 +201,7 @@ OK
 OK
 ```
 
-Now we can match against the value of `regex_pat` instead of a hard-coded regular expression pattern, and get the keyboard with the `Bluetooth` string in its `connection` key (notice the one with `USB-C` does not match since its regular expression pattern is case-sensitive and the regular expression pattern is using lower case):
+Now we can match against the value of `regex_pat` instead of a hard-coded regular expression pattern, and get the keyboard with the `Bluetooth` string in its `connection` key. Notice the one with `USB-C` does not match since its regular expression pattern is case-sensitive and the regular expression pattern is using lower case:
 
 ```sh
 127.0.0.1:6379> JSON.GET store '$.inventory.keyboards[?(@.connection =~ @.regex_pat)]'
