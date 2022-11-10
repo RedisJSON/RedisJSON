@@ -69,7 +69,7 @@ Get the updated array.
 "[[85,90,100,120,140,160,180,200,220,240,260,280]]"
 {{< / highlight >}}
 
-Keep only the values between the fifth and the eight element, inclusive of that last element.
+Keep only the values between the fifth and the ninth element, inclusive of that last element.
 
 {{< highlight bash >}}
 127.0.0.1:6379> JSON.ARRTRIM key $.[1].max_level 4 8
