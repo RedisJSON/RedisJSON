@@ -58,7 +58,7 @@ OK
 Add new sound level values to the second product.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.ARRAPPEND key $.[1].max_level 200 300 400 500 600 700 800 1000
+127.0.0.1:6379> JSON.ARRAPPEND key $.[1].max_level 140 160 180 200 220 240 260 280
 1) (integer) 12
 {{< / highlight >}}
 
@@ -66,7 +66,7 @@ Get the updated array.
 
 {{< highlight bash >}}
 127.0.0.1:6379> JSON.GET key $.[1].max_level
-"[[85,90,100,120,200,300,400,500,600,700,800,1000]]"
+"[[85,90,100,120,140,160,180,200,220,240,260,280]]"
 {{< / highlight >}}
 
 Keep only the values between the fifth and the eight element, inclusive of that last element.
@@ -80,7 +80,7 @@ Get the updated array.
 
 {{< highlight bash >}}
 127.0.0.1:6379> JSON.GET key $.[1].max_level
-"[[200,300,400,500,600]]"
+"[[140,160,180,200,220]]"
 {{< / highlight >}}
 </details>
 
