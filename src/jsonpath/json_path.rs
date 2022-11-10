@@ -3,6 +3,7 @@ use pest::Parser;
 use std::cmp::Ordering;
 
 use crate::jsonpath::select_value::{SelectValue, SelectValueType};
+use regex::Regex;
 use std::fmt::Debug;
 
 #[derive(Parser)]
@@ -433,8 +434,32 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
         !self.eq(s)
     }
 
-    fn re(&self, _s: &Self) -> bool {
-        false
+    fn re_is_match(regex: &str, s: &str) -> bool {
+        Regex::new(regex).map_or_else(|_| false, |re| Regex::is_match(&re, s))
+    }
+
+    fn re_match(&self, s: &Self) -> bool {
+        match (self, s) {
+            (TermEvaluationResult::Value(v), TermEvaluationResult::Str(regex)) => {
+                match v.get_type() {
+                    SelectValueType::String => Self::re_is_match(regex, v.as_str()),
+                    _ => false,
+                }
+            }
+            (TermEvaluationResult::Value(v1), TermEvaluationResult::Value(v2)) => {
+                match (v1.get_type(), v2.get_type()) {
+                    (SelectValueType::String, SelectValueType::String) => {
+                        Self::re_is_match(v2.as_str(), v1.as_str())
+                    }
+                    (_, _) => false,
+                }
+            }
+            (_, _) => false,
+        }
+    }
+
+    fn re(&self, s: &Self) -> bool {
+        self.re_match(s)
     }
 }
 
