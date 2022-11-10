@@ -24,7 +24,7 @@ To set up a virtual machine with Docker:
 
 ```
 rejson=$(docker run -d -it -v $PWD:/build debian:bullseye bash)
-docker exec -it $search bash
+docker exec -it $rejson bash
 ```
 Then run ```cd /build``` from within the container.
 
