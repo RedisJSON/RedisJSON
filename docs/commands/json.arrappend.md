@@ -42,7 +42,7 @@ Create a document for noise-cancelling headphones in black and silver colors.
 OK
 {{< / highlight >}}
 
-Add color `"blue"` to the end of the `colors` array. `JSON.ARRAPEND` returns the array's new size.
+Add color `blue` to the end of the `colors` array. `JSON.ARRAPEND` returns the array's new size.
 
 {{< highlight bash >}}
 127.0.0.1:6379> JSON.ARRAPPEND item:1 $.colors '"blue"'
