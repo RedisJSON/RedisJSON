@@ -141,8 +141,8 @@ pub fn json_api_get_json_from_iter<M: Manager>(
     if iter.pos >= iter.results.len() {
         Status::Err as c_int
     } else {
-        let res = KeyValue::<M::V>::serialize_object(&iter.results, None, None, None);
-        create_rmstring(ctx, &res, str);
+        let res = KeyValue::<M::V>::serialize_object(&iter.results, ResultOptions::default());
+        create_rmstring(ctx, res, str);
         Status::Ok as c_int
     }
 }
@@ -443,7 +443,7 @@ macro_rules! redis_json_module_export_shared_api {
             match jsonpath::compile(path) {
                 Ok(q) => Box::into_raw(Box::new(q)).cast::<c_void>(),
                 Err(e) => {
-                    create_rmstring(ctx, &format!("{}", e), err_msg);
+                    create_rmstring(ctx, format!("{}", e).into_bytes(), err_msg);
                     std::ptr::null()
                 }
             }

@@ -210,9 +210,9 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             let query = query.unwrap();
             let s = calc_once(query, self.val);
 
-            let value = if is_legacy && !s.is_empty() {
+            let value = if options.is_legacy && !s.is_empty() {
                 Some(Values::Single(s[0]))
-            } else if !is_legacy {
+            } else if !options.is_legacy {
                 Some(Values::Multi(s))
             } else {
                 None
