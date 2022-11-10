@@ -4,7 +4,8 @@
 // User-provided JSON is converted to a tree. This tree is stored transparently in Redis.
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
-use redis_module::raw::{self};
+use redis_module::raw;
+
 use std::os::raw::{c_int, c_void};
 
 use crate::backward;
@@ -16,8 +17,10 @@ use serde::Serialize;
 use std::fmt;
 use std::fmt::Display;
 use std::marker::PhantomData;
+use std::str::FromStr;
 
 /// Returns normalized start index
+#[must_use]
 pub fn normalize_arr_start_index(start: i64, len: i64) -> i64 {
     if start < 0 {
         0.max(len + start)
@@ -28,6 +31,7 @@ pub fn normalize_arr_start_index(start: i64, len: i64) -> i64 {
 }
 
 /// Return normalized `(start, end)` indices as a tuple
+#[must_use]
 pub fn normalize_arr_indices(start: i64, end: i64, len: i64) -> (i64, i64) {
     // Normalize start
     let start = normalize_arr_start_index(start, len);
@@ -52,18 +56,20 @@ pub enum Format {
     JSON,
     BSON,
 }
-impl Format {
-    pub fn from_str(s: &str) -> Result<Format, Error> {
+impl FromStr for Format {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "JSON" => Ok(Format::JSON),
-            "BSON" => Ok(Format::BSON),
+            "JSON" => Ok(Self::JSON),
+            "BSON" => Ok(Self::BSON),
             _ => Err("ERR wrong format".into()),
         }
     }
 }
 
 ///
-/// Backwards compatibility convertor for RedisJSON 1.x clients
+/// Backwards compatibility convertor for `RedisJSON` 1.x clients
 ///
 pub struct Path<'a> {
     original_path: &'a str,
@@ -71,6 +77,7 @@ pub struct Path<'a> {
 }
 
 impl<'a> Path<'a> {
+    #[must_use]
     pub fn new(path: &'a str) -> Path {
         let fixed_path = if path.starts_with('$') {
             None
@@ -79,7 +86,7 @@ impl<'a> Path<'a> {
             if path == "." {
                 cloned.replace_range(..1, "$");
             } else if path.starts_with('.') {
-                cloned.insert(0, '$')
+                cloned.insert(0, '$');
             } else {
                 cloned.insert_str(0, "$.");
             }
@@ -91,18 +98,18 @@ impl<'a> Path<'a> {
         }
     }
 
-    pub fn is_legacy(&self) -> bool {
+    #[must_use]
+    pub const fn is_legacy(&self) -> bool {
         self.fixed_path.is_some()
     }
 
-    pub fn get_path(&'a self) -> &'a str {
-        if let Some(s) = &self.fixed_path {
-            s.as_str()
-        } else {
-            self.original_path
-        }
+    pub fn get_path(&self) -> &str {
+        self.fixed_path
+            .as_ref()
+            .map_or(self.original_path, String::as_str)
     }
 
+    #[must_use]
     pub fn get_original(&self) -> &'a str {
         self.original_path
     }
@@ -122,7 +129,7 @@ pub struct RedisJSON<T> {
 
 pub mod type_methods {
     use super::*;
-    use std::ptr::null_mut;
+    use std::{ffi::CString, ptr::null_mut};
 
     pub extern "C" fn rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
         let json_string = value_rdb_load_json(rdb, encver);
@@ -134,7 +141,7 @@ pub mod type_methods {
                     };
                     let v = m.from_str(&json_string, Format::JSON);
                     match v {
-                        Ok(res) => Box::into_raw(Box::new(res)) as *mut c_void,
+                        Ok(res) => Box::into_raw(Box::new(res)).cast::<libc::c_void>(),
                         Err(_) => null_mut(),
                     }
                 }
@@ -144,7 +151,7 @@ pub mod type_methods {
                     };
                     let v = m.from_str(&json_string, Format::JSON);
                     match v {
-                        Ok(res) => Box::into_raw(Box::new(res)) as *mut c_void,
+                        Ok(res) => Box::into_raw(Box::new(res)).cast::<libc::c_void>(),
                         Err(_) => null_mut(),
                     }
                 }
@@ -185,6 +192,7 @@ pub mod type_methods {
         })
     }
 
+    /// # Safety
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn free(value: *mut c_void) {
         if value.is_null() {
@@ -193,33 +201,77 @@ pub mod type_methods {
         }
         match get_manager_type() {
             ManagerType::SerdeValue => {
-                let v = value as *mut RedisJSON<serde_json::Value>;
+                let v = value.cast::<RedisJSON<serde_json::Value>>();
                 // Take ownership of the data from Redis (causing it to be dropped when we return)
                 Box::from_raw(v);
             }
             ManagerType::IValue => {
-                let v = value as *mut RedisJSON<ijson::IValue>;
+                let v = value.cast::<RedisJSON<ijson::IValue>>();
                 // Take ownership of the data from Redis (causing it to be dropped when we return)
                 Box::from_raw(v);
             }
         };
     }
 
+    /// # Safety
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
         let mut out = serde_json::Serializer::new(Vec::new());
         let json = match get_manager_type() {
             ManagerType::SerdeValue => {
-                let v = unsafe { &*(value as *mut RedisJSON<serde_json::Value>) };
+                let v = unsafe { &*value.cast::<RedisJSON<serde_json::Value>>() };
                 v.data.serialize(&mut out).unwrap();
                 String::from_utf8(out.into_inner()).unwrap()
             }
             ManagerType::IValue => {
-                let v = unsafe { &*(value as *mut RedisJSON<ijson::IValue>) };
+                let v = unsafe { &*value.cast::<RedisJSON<ijson::IValue>>() };
                 v.data.serialize(&mut out).unwrap();
                 String::from_utf8(out.into_inner()).unwrap()
             }
         };
-        raw::save_string(rdb, &json);
+        let cjson = CString::new(json).unwrap();
+        raw::save_string(rdb, cjson.to_str().unwrap());
+    }
+
+    /// # Safety
+    #[allow(non_snake_case, unused)]
+    pub unsafe extern "C" fn copy(
+        fromkey: *mut raw::RedisModuleString,
+        tokey: *mut raw::RedisModuleString,
+        value: *const c_void,
+    ) -> *mut c_void {
+        match get_manager_type() {
+            ManagerType::SerdeValue => {
+                let v = unsafe { &*value.cast::<RedisJSON<serde_json::Value>>() };
+                let value = v.data.clone();
+                Box::into_raw(Box::new(value)).cast::<c_void>()
+            }
+            ManagerType::IValue => {
+                let v = unsafe { &*value.cast::<RedisJSON<ijson::IValue>>() };
+                let value = v.data.clone();
+                Box::into_raw(Box::new(value)).cast::<c_void>()
+            }
+        }
+    }
+
+    /// # Safety
+    #[allow(non_snake_case, unused)]
+    pub unsafe extern "C" fn mem_usage(value: *const c_void) -> usize {
+        match get_manager_type() {
+            ManagerType::SerdeValue => {
+                let json = unsafe { &*(value as *mut RedisJSON<serde_json::Value>) };
+                let manager = RedisJsonKeyManager {
+                    phantom: PhantomData,
+                };
+                manager.get_memory(&json.data).unwrap_or(0)
+            }
+            ManagerType::IValue => {
+                let json = unsafe { &*(value as *mut RedisJSON<ijson::IValue>) };
+                let manager = RedisIValueJsonKeyManager {
+                    phantom: PhantomData,
+                };
+                manager.get_memory(&json.data).unwrap_or(0)
+            }
+        }
     }
 }

@@ -5,9 +5,13 @@ import os
 import redis
 import json
 from RLTest import Env
+
+from common import *
 from includes import *
 
 from RLTest import Defaults
+
+from functools import reduce
 
 Defaults.decode_responses = True
 
@@ -99,6 +103,21 @@ def testDelCommand_issue529(env):
     r.assertEqual(res, 4)
     res = r.execute_command('JSON.ARRLEN', 'doc1', '$.*[*]')
     r.assertEqual(res, [3, 3, 3])
+
+def testDelCommand_issue754(env):
+    r = env
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '[[1],[1,2,3]]'))
+    res = r.execute_command('JSON.DEL', 'doc1', '$..[0]')
+    # The array `[1]` is deleted and its nested element `1` is not counted as deleted
+    r.assertEqual(res, 2)
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [[[2,3]]])
+
+    r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":[[1],[1,2,3,[4,5,[{"a":6},7,8]]], [10,{"11":11}], ["12","13"]], "b":[[1,2],{"a":[3,4,5]}]}'))
+    res = r.execute_command('JSON.DEL', 'doc1', '$..[0]')
+    r.assertEqual(res, 8)
+    res = r.execute_command('JSON.GET', 'doc1', '$')
+    r.assertEqual(json.loads(res), [{"a":[[2,3,[5,[7,8]]],[{"11":11}],["13"]],"b":[{"a":[4,5]}]}])
 
 
 def testForgetCommand(env):
@@ -222,24 +241,26 @@ def testMGetCommand(env):
     r.assertEqual(res1, '[1,3,null]')
     r.assertEqual(res2, '[4,6,[null]]')
 
+    r.assertTrue(r.execute_command('SET', 'wrong_key_type', 'not a json key'))
+
     # Test mget with single path
     res = r.execute_command('JSON.MGET', 'doc1', '$..a')
     r.assertEqual([res1], res)
     # Test mget with multi path
-    res = r.execute_command('JSON.MGET', 'doc1', 'doc2', '$..a')
-    r.assertEqual(res, [res1, res2])
+    res = r.execute_command('JSON.MGET', 'doc1', 'wrong_key_type', 'doc2', '$..a')
+    r.assertEqual(res, [res1, None, res2])
 
-    # Test missing key/path
+    # Test missing/wrong key / missing path
     res = r.execute_command('JSON.MGET', 'doc1', 'missing_doc', '$..a')
     r.assertEqual(res, [res1, None])
-    res = r.execute_command('JSON.MGET', 'doc1', 'doc2', 'missing_doc', '$.nested1.a')
-    r.assertEqual(res, [json.dumps([json.loads(res1)[1]]), '[]', None])
+    res = r.execute_command('JSON.MGET', 'doc1', 'doc2', 'wrong_key_type', 'missing_doc', '$.nested1.a')
+    r.assertEqual(res, [json.dumps([json.loads(res1)[1]]), '[]', None, None])
     res = r.execute_command('JSON.MGET', 'missing_doc1', 'missing_doc2', '$..a')
     r.assertEqual(res, [None, None])
 
     # Test missing path
-    res = r.execute_command('JSON.MGET', 'doc1', 'missing_doc2', '$..niente')
-    r.assertEqual(res, ['[]', None])
+    res = r.execute_command('JSON.MGET', 'doc1', 'wrong_key_type', 'missing_doc2', '$..niente')
+    r.assertEqual(res, ['[]', None, None])
 
     # Test legacy (for each path only the first value is returned as a json string)
     # Test mget with single path
@@ -249,15 +270,19 @@ def testMGetCommand(env):
     res = r.execute_command('JSON.MGET', 'doc1', 'doc2', '..a')
     r.assertEqual(res, [json.dumps(json.loads(res1)[0]), json.dumps(json.loads(res2)[0])])
 
+    # Test wrong key    
+    res = r.execute_command('JSON.MGET', 'doc1', 'wrong_key_type', 'doc2', '..a')
+    r.assertEqual(res, [json.dumps(json.loads(res1)[0]), None, json.dumps(json.loads(res2)[0])])
+
     # Test missing key/path
-    res = r.execute_command('JSON.MGET', 'doc1', 'doc2', 'missing_doc', '.nested1.a')
-    r.assertEqual(res, [json.dumps(json.loads(res1)[1]), None, None])
+    res = r.execute_command('JSON.MGET', 'doc1', 'doc2', 'wrong_key_type', 'missing_doc', '.nested1.a')
+    r.assertEqual(res, [json.dumps(json.loads(res1)[1]), None, None, None])
     res = r.execute_command('JSON.MGET', 'missing_doc1', 'missing_doc2', '..a')
     r.assertEqual(res, [None, None])
 
     # Test missing path
-    res = r.execute_command('JSON.MGET', 'doc1', 'missing_doc2', '.niente')
-    r.assertEqual(res, [None, None])
+    res = r.execute_command('JSON.MGET', 'doc1', 'wrong_key_type', 'missing_doc2', '.niente')
+    r.assertEqual(res, [None, None, None])
 
 
 def testNumByCommands(env):
@@ -624,7 +649,7 @@ def testObjKeysCommand(env):
     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"nested1": {"a": {"foo": 10, "bar": 20}}, "a":["foo"], "nested2": {"a": {"baz":50}}}'))
     # Test multi
     res = r.execute_command('JSON.OBJKEYS', 'doc1', '$..a')
-    r.assertEqual(res, [["foo", "bar"], None, ["baz"]])
+    r.assertEqual(res, [None, ["foo", "bar"], ["baz"]])
     # Test single
     res = r.execute_command('JSON.OBJKEYS', 'doc1', '$.nested1.a')
     r.assertEqual(res, [["foo", "bar"]])
@@ -655,7 +680,7 @@ def testObjLenCommand(env):
     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"nested1": {"a": {"foo": 10, "bar": 20}}, "a":["foo"], "nested2": {"a": {"baz":50}}}'))
     # Test multi
     res = r.execute_command('JSON.OBJLEN', 'doc1', '$..a')
-    r.assertEqual(res, [2, None, 1])
+    r.assertEqual(set(res), set([2, None, 1]))
     # Test single
     res = r.execute_command('JSON.OBJLEN', 'doc1', '$.nested1.a')
     r.assertEqual(res, [2])
@@ -742,6 +767,9 @@ def testClearCommand(env):
     r.assertEqual(res, 3)
     res = r.execute_command('JSON.GET', 'doc1', '$')
     r.assertEqual(json.loads(res), [{"nested1": {"a": {}}, "a": [], "nested2": {"a": "claro"}, "nested3": {"a": {}}}])
+    # Not clearing already cleared values
+    res = r.execute_command('JSON.CLEAR', 'doc1', '$..a')
+    r.assertEqual(res, 0)
 
     # Test single
     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"nested1": {"a": {"foo": 10, "bar": 20}}, "a":["foo"], "nested2": {"a": "claro"}, "nested3": {"a": {"baz":50}}}'))
@@ -749,6 +777,9 @@ def testClearCommand(env):
     r.assertEqual(res, 1)
     res = r.execute_command('JSON.GET', 'doc1', '$')
     r.assertEqual(json.loads(res), [{"nested1": {"a": {}}, "a": ["foo"], "nested2": {"a": "claro"}, "nested3": {"a": {"baz": 50}}}])
+    # Not clearing already cleared values
+    res = r.execute_command('JSON.CLEAR', 'doc1', '$.nested1.a')
+    r.assertEqual(res, 0)
 
     # Test missing path (defaults to root)
     res = r.execute_command('JSON.CLEAR', 'doc1')
@@ -758,7 +789,6 @@ def testClearCommand(env):
 
     # Test missing key
     r.expect('JSON.CLEAR', 'non_existing_doc', '$..a').raiseError()
-
 
 
 def testToggleCommand(env):
@@ -783,32 +813,59 @@ def testToggleCommand(env):
     # Test missing key
     r.expect('JSON.TOGGLE', 'non_existing_doc', '$..a').raiseError()
 
+# TODO adapt test to run on Mac
+# @no_san
+# def testMemoryUsage(env):
+#     """
+#     Test MEMORY USAGE key
+#     """
+#     if env.moduleArgs is not None and ['JSON_BACKEND SERDE_JSON'] in env.moduleArgs:
+#         env.skip()
+
+#     env
+
+#     r = env
+#     jdata, jtypes = load_types_data('a')    
+#     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', json.dumps(jdata)))
+#     res = r.execute_command('MEMORY', 'USAGE', 'doc1')
+#     r.assertEqual(res, 211)
+
+#     jdata, jtypes = load_types_data('verylongfieldname')
+#     r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', json.dumps(jdata)))
+#     res = r.execute_command('MEMORY', 'USAGE', 'doc2')
+#     r.assertEqual(res, 323)
+
+@no_san
 def testDebugCommand(env):
     """
-        Test REJSON.DEBUG MEMORY command
-            """
-    env.skip() # test is currently irrelevant as the number are not correct, todo: re-enable once fixing the json.debug memory command
+    Test REJSON.DEBUG MEMORY command
+    """
+    if env.moduleArgs is not None and ['JSON_BACKEND SERDE_JSON'] in env.moduleArgs:
+        env.skip()
+
     r = env
     jdata, jtypes = load_types_data('a')
 
     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', json.dumps(jdata)))
+
     # Test multi
+    # json.get a $..a ==> "[{},[],\"str\",42,1.2,false,null]"
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1', '$..a')
-    r.assertEqual(res, [72, 24, 24, 16, 16, 1, 0])
+    r.assertEqual(res, [8, 8, 11, 8, 8, 8, 8])
+
     # Test single
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1', '$.nested2.a')
-    r.assertEqual(res, [24])
+    r.assertEqual(res, [8])
 
     # Test legacy
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1', '..a')
-    r.assertEqual(res, 72)
+    r.assertEqual(res, 8)
     # Test missing path (defaults to root)
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1')
-    r.assertEqual(res, 72)
+    r.assertEqual(res, 179)
 
     # Test missing subcommand
     r.expect('JSON.DEBUG', 'non_existing_doc', '$..a').raiseError()
-
 
 def testRespCommand(env):
     """Test REJSON.RESP command"""
@@ -973,7 +1030,8 @@ def testErrorMessage(env):
         'string':   'str',
         'integer':  42,
         'number':   1.2,
-        'boolean':  False
+        'boolean':  False,
+        'null': None
     }
     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', json.dumps(types_data)))
     res = r.execute_command('JSON.GET', 'doc1', '$')
@@ -1237,12 +1295,12 @@ def testErrorMessage(env):
     """ Legacy 1.0.8: not relevant (only since 2.0) """
 
     # CLEAR
-    r.assertEqual(r.execute_command('JSON.CLEAR', 'doc1', '$.string'), 0)
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'doc1', '$.null'), 0)
     r.assertEqual(r.execute_command('JSON.CLEAR', 'doc1', '$.nowhere'), 0)
     r.expect('JSON.CLEAR', 'doc_none', '$.string').raiseError().contains("doesn't exist")
     r.expect('JSON.CLEAR', 'hash_key', '$.string').raiseError().contains("wrong Redis type")
 
-    r.assertEqual(r.execute_command('JSON.CLEAR', 'doc1', '.string'), 0)
+    r.assertEqual(r.execute_command('JSON.CLEAR', 'doc1', '.null'), 0)
     r.assertEqual(r.execute_command('JSON.CLEAR', 'doc1', '.nowhere'), 0)
     r.expect('JSON.CLEAR', 'doc_none', '.string').raiseError().contains("doesn't exist")
     """ Legacy 1.0.8: not relevant (only since 2.0) """
@@ -1290,5 +1348,19 @@ def testErrorMessage(env):
     (nil)
     """
 
+def testFilterDup_issue667(env):
+    """Test issue #667 """
+    r = env
+     
+    r.assertOk(r.execute_command('JSON.SET',
+                                 'test',
+                                 '$',
+                                 '[{"name":{"first":"Markss","middle":"S","last":"Pronto"},"rank":1},{"name":{"first":"A","middle":"A","last":"Pronto"},"rank":8},{"name":{"first":"A","middle":"A","last":"Pronto"},"rank":90}]'))
+
+    # Should not get duplicated results
+    res = r.execute_command('JSON.GET',
+                            'test',
+                            '$.[?(@.name.first=="A")]')
+    r.assertEqual(res, '[{"name":{"first":"A","middle":"A","last":"Pronto"},"rank":8},{"name":{"first":"A","middle":"A","last":"Pronto"},"rank":90}]')
 
 

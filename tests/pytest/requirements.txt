@@ -1,4 +1,6 @@
-redis>=3.0.0
-redis-py-cluster>=2.1.0
-git+https://github.com/RedisLabsModules/RLTest.git@master
-six>=1.10.0
+redis ~= 4.3.4
+RLTest ~= 0.5.8
+ramp-packer ~= 2.3.1
+six >= 1.10.0
+psutil >= 5.8.0
+gevent ~= 22.10.1

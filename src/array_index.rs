@@ -6,12 +6,10 @@ impl ArrayIndex for i64 {
     fn normalize(self, len: i64) -> usize {
         let index = if self < 0 {
             len - len.min(-self)
+        } else if len > 0 {
+            (len - 1).min(self)
         } else {
-            if len > 0 {
-                (len - 1).min(self)
-            } else {
-                0
-            }
+            0
         };
         index as usize
     }

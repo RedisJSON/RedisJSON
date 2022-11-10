@@ -18,6 +18,8 @@
 # packaging
 # build/
 
+/logs/
+
 # Mac
 .DS_Store
 
@@ -28,3 +30,5 @@
 .cproject
 .project
 .settings/
+
+wordlist.dic

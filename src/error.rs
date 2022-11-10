@@ -1,4 +1,4 @@
-use jsonpath_lib::select::JsonPathError;
+use crate::jsonpath::json_path::QueryCompilationError;
 use redis_module::RedisError;
 use std::num::ParseIntError;
 
@@ -9,24 +9,30 @@ pub struct Error {
 
 impl From<String> for Error {
     fn from(e: String) -> Self {
-        Error { msg: e }
+        Self { msg: e }
+    }
+}
+
+impl From<QueryCompilationError> for Error {
+    fn from(e: QueryCompilationError) -> Self {
+        Self { msg: e.to_string() }
     }
 }
 
 impl From<redis_module::error::GenericError> for Error {
-    fn from(err: redis_module::error::GenericError) -> Error {
+    fn from(err: redis_module::error::GenericError) -> Self {
         err.to_string().into()
     }
 }
 
 impl From<std::string::FromUtf8Error> for Error {
-    fn from(err: std::string::FromUtf8Error) -> Error {
+    fn from(err: std::string::FromUtf8Error) -> Self {
         err.to_string().into()
     }
 }
 
 impl From<ParseIntError> for Error {
-    fn from(err: ParseIntError) -> Error {
+    fn from(err: ParseIntError) -> Self {
         err.to_string().into()
     }
 }
@@ -49,34 +55,26 @@ impl From<RedisError> for Error {
 
 impl From<&str> for Error {
     fn from(e: &str) -> Self {
-        Error { msg: e.to_string() }
+        Self { msg: e.to_string() }
     }
 }
 
 impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
-        Error { msg: e.to_string() }
-    }
-}
-
-impl From<JsonPathError> for Error {
-    fn from(e: JsonPathError) -> Self {
-        Error {
-            msg: format!("JSON Path error: {:?}", e).replace("\n", "\\n"),
-        }
+        Self { msg: e.to_string() }
     }
 }
 
 impl From<Error> for redis_module::RedisError {
     fn from(e: Error) -> Self {
-        redis_module::RedisError::String(e.msg)
+        Self::String(e.msg)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
+    use serde_json::{Result, Value};
 
     #[test]
     fn test_from_string() {
@@ -98,12 +96,18 @@ mod tests {
 
     #[test]
     fn test_from_parse_int_error() {
-        let err: Error = i32::from_str_radix("a12", 10).unwrap_err().into();
+        let err: Error = "a12".parse::<i32>().unwrap_err().into();
         assert_eq!(err.msg, "invalid digit found in string");
     }
 
     #[test]
     fn test_from_redis_error() {
+        let err: Error = RedisError::short_read().into();
+        assert_eq!(err.msg, "ERR ERR short read or OOM loading DB");
+    }
+
+    #[test]
+    fn test_from_error() {
         let err: Error = redis_module::error::Error::generic("error from Generic").into();
         assert_eq!(err.msg, "Store error: error from Generic");
 
@@ -112,27 +116,30 @@ mod tests {
         let err: Error = utf8_err.into();
         assert_eq!(err.msg, "invalid utf-8 sequence of 1 bytes from index 0");
 
-        let parse_int_error: redis_module::error::Error =
-            i32::from_str_radix("a12", 10).unwrap_err().into();
+        let parse_int_error: redis_module::error::Error = "a12".parse::<i32>().unwrap_err().into();
         let err: Error = parse_int_error.into();
         assert_eq!(err.msg, "invalid digit found in string");
     }
 
-    // #[test]
-    // fn test_from_serde_json_error() {
-    //     let err : Error = serde_json::Error "error from str".into();
-    //     assert_eq!(err.msg, "error from str");
-    // }
-
     #[test]
-    fn test_from_jsonpath_error() {
-        let err: Error = JsonPathError::Path("JsonPathError".to_string()).into();
-        assert_eq!(err.msg, "JSON Path error: path error: \\nJsonPathError\\n");
+    fn test_from_serde_json_error() {
+        let res: Result<Value> = serde_json::from_str("{");
+        let err: Error = res.unwrap_err().into();
+        assert_eq!(err.msg, "EOF while parsing an object at line 1 column 1");
     }
 
     #[test]
     fn test_from_str() {
         let err: Error = "error from str".into();
         assert_eq!(err.msg, "error from str");
+    }
+
+    #[test]
+    fn test_to_redis_error() {
+        let err: redis_module::RedisError = Error {
+            msg: "to RedisError".to_string(),
+        }
+        .into();
+        assert_eq!(err.to_string(), "to RedisError".to_string());
     }
 }

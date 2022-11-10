@@ -3,8 +3,9 @@
 [[ $IGNERR == 1 ]] || set -e
 # [[ $VERBOSE == 1 ]] && set -x
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-export ROOT=$(cd $HERE/../.. && pwd)
+PROGNAME="${BASH_SOURCE[0]}"
+HERE="$(cd "$(dirname "$PROGNAME")" &>/dev/null && pwd)"
+ROOT=$(cd $HERE/../.. && pwd)
 READIES=$ROOT/deps/readies
 . $READIES/shibumi/defs
 
@@ -14,12 +15,12 @@ cd $HERE
 
 help() {
 	cat <<-END
-		Run Python tests
+		Run Python tests using RLTest
 	
 		[ARGVARS...] tests.sh [--help|help] [<module-so-path>]
 		
 		Argument variables:
-		MODULE=path      Path to redisai.so
+		MODULE=path      Path to redisjson.so
 		TEST=test        Run specific test (e.g. test.py:test_name)
 		REDIS=addr       Use redis-server at addr
 		
@@ -28,9 +29,15 @@ help() {
 		SLAVES=1         Tests with --test-slaves
 		CLUSTER=1        Test with OSS cluster, one shard
 		QUICK=1          Run general tests only
+		SERDE=0          Skip serde_json tests
 		
 		VALGRIND|VG=1    Run with Valgrind
 		SAN=type         Use LLVM sanitizer (type=address|memory|leak|thread) 
+
+		EXT=1|run        Test on existing env (1=running; run=start redis-server)
+		EXT_HOST=addr    Address if existing env (default: 127.0.0.1)
+		EXT_PORT=n       Port of existing env
+		RLEC_PORT=n      Port of RLEC database (default: 12000)
 
 		VERBOSE=1        Print commands
 		IGNERR=1         Do not abort on error
@@ -38,6 +45,31 @@ help() {
 		LOG=0|1          Write to log
 
 	END
+}
+
+#---------------------------------------------------------------------------------------------- 
+
+setup_rltest() {
+	if [[ $RLTEST == view ]]; then
+		if [[ ! -d $ROOT/../RLTest ]]; then
+			eprint "RLTest not found in view $ROOT"
+			exit 1
+		fi
+		RLTEST=$(cd $ROOT/../RLTest; pwd)
+	fi
+
+	if [[ -n $RLTEST ]]; then
+		if [[ ! -d $RLTEST ]]; then
+			eprint "Invalid RLTest location: $RLTEST"
+			exit 1
+		fi
+
+		# Specifically search for it in the specified location
+		export PYTHONPATH="$PYTHONPATH:$RLTEST"
+		if [[ $VERBOSE == 1 ]]; then
+			echo "PYTHONPATH=$PYTHONPATH"
+		fi
+	fi
 }
 
 #----------------------------------------------------------------------------------------------
@@ -61,6 +93,8 @@ setup_redis_server() {
 
 			export ASAN_OPTIONS=detect_odr_violation=0
 			# :detect_leaks=0
+			# for RLTest
+			export SANITIZER="$SAN"
 
 		elif [[ $SAN == mem || $SAN == memory ]]; then
 			REDIS_SERVER=${REDIS_SERVER:-redis-server-msan-6.2}
@@ -90,7 +124,7 @@ setup_redis_server() {
 #----------------------------------------------------------------------------------------------
 
 valgrind_config() {
-	export VG_OPTIONS="
+	export VG_OPTIONS="\
 		-q \
 		--leak-check=full \
 		--show-reachable=no \
@@ -129,7 +163,9 @@ run_tests() {
 
 	cd $ROOT/tests/pytest
 
-	[[ $SERDE_JSON == 1 ]] && MODARGS+=" JSON_BACKEND SERDE_JSON"
+	if [[ $SERDE_JSON == 1 ]]; then 
+		MODARGS+=" JSON_BACKEND SERDE_JSON"
+	fi
 	
 	if [[ $EXISTING_ENV != 1 ]]; then
 		rltest_config=$(mktemp "${TMPDIR:-/tmp}/rltest.XXXXXXX")
@@ -138,6 +174,7 @@ run_tests() {
 			--module $MODULE
 			--module-args '$MODARGS'
 			$RLTEST_ARGS
+			$RLTEST_PARALLEL_ARG
 			$VALGRIND_ARGS
 			$SAN_ARGS
 			$COV_ARGS
@@ -145,26 +182,38 @@ run_tests() {
 			EOF
 
 	else # existing env
-		xredis_conf=$(mktemp "${TMPDIR:-/tmp}/xredis_conf.XXXXXXX")
-		cat <<-EOF > $xredis_conf
-			loadmodule $MODULE $MODARGS
-			EOF
+		if [[ $EXT == run ]]; then
+			xredis_conf=$(mktemp "${TMPDIR:-/tmp}/xredis_conf.XXXXXXX")
+			cat <<-EOF > $xredis_conf
+				loadmodule $MODULE $MODARGS
+				EOF
 
-		rltest_config=$(mktemp "${TMPDIR:-/tmp}/xredis_rltest.XXXXXXX")
-		cat <<-EOF > $rltest_config
-			--env existing-env
-			$RLTEST_ARGS
+			rltest_config=$(mktemp "${TMPDIR:-/tmp}/xredis_rltest.XXXXXXX")
+			cat <<-EOF > $rltest_config
+				--env existing-env
+				$RLTEST_ARGS
 
-			EOF
+				EOF
 
-		if [[ $VERBOSE == 1 ]]; then
-			echo "External redis-server configuration:"
-			cat $xredis_conf
+			if [[ $VERBOSE == 1 ]]; then
+				echo "External redis-server configuration:"
+				cat $xredis_conf
+			fi
+
+			$REDIS_SERVER $xredis_conf &
+			XREDIS_PID=$!
+			echo "External redis-server pid: " $XREDIS_PID
+
+		else # EXT=1
+			rltest_config=$(mktemp "${TMPDIR:-/tmp}/xredis_rltest.XXXXXXX")
+			rm -f $rltest_config
+			cat <<-EOF > $rltest_config
+				--env existing-env
+				--existing-env-addr $EXT_HOST:$EXT_PORT
+				$RLTEST_ARGS
+
+				EOF
 		fi
-
-		$REDIS_SERVER $xredis_conf &
-		XREDIS_PID=$!
-		echo "External redis-server pid: " $XREDIS_PID
 	fi
 
 	# Use configuration file in the current directory if it exists
@@ -191,7 +240,7 @@ run_tests() {
 		rm -f $xredis_conf
 	fi
 
-	if [[ $QUICK != 1 && $FINAL != 1 ]]; then
+	if [[ $QUICK != 1 && $FINAL != 1 && $SERDE != 0 ]]; then
 		{ (SERDE_JSON=1 FINAL=1 run_tests "$title (with serde_json)"); (( E |= $? )); } || true
 	fi
 
@@ -200,9 +249,22 @@ run_tests() {
 
 #----------------------------------------------------------------------------------------------
 
-[[ $1 == --help || $1 == help ]] && { help; exit 0; }
+[[ $1 == --help || $1 == help || $HELP == 1 ]] && { help; exit 0; }
+
+if [[ -n $1 && -z $MODULE ]]; then
+	MODULE="$1"
+	shift
+fi
+
+[[ -z $MODULE || ! -f $MODULE ]] && { echo "Module not found at ${MODULE}. Aborting."; exit 1; }
+
+[[ $EXT == 1 || $EXT == run ]] && EXISTING_ENV=1
+
+setup_rltest
 
 GDB=${GDB:-0}
+
+#---------------------------------------------------------------------------------------------- 
 
 OP=""
 [[ $NOP == 1 ]] && OP="echo"
@@ -224,8 +286,7 @@ else
 	CLUSTER=${CLUSTER:-1}
 fi
 
-MODULE=${MODULE:-$1}
-[[ -z $MODULE || ! -f $MODULE ]] && { echo "Module not found at ${MODULE}. Aborting."; exit 1; }
+#----------------------------------------------------------------------------------------------
 
 [[ $VALGRIND == 1 ]] && valgrind_config
 

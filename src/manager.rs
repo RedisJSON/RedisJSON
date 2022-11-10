@@ -1,4 +1,4 @@
-use jsonpath_lib::select::select_value::SelectValue;
+use crate::jsonpath::select_value::SelectValue;
 use serde_json::map::Entry;
 use serde_json::{Number, Value};
 
@@ -55,7 +55,7 @@ pub trait WriteHolder<O: Clone, V: SelectValue> {
     fn arr_insert(
         &mut self,
         path: Vec<String>,
-        args: &Vec<O>,
+        args: &[O],
         index: i64,
     ) -> Result<usize, RedisError>;
     fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<String>, RedisError>;
@@ -84,6 +84,7 @@ pub trait Manager {
         ctx: &Context,
         key: RedisString,
     ) -> Result<Self::WriteHolder, RedisError>;
+    #[allow(clippy::wrong_self_convention)]
     fn from_str(&self, val: &str, format: Format) -> Result<Self::O, Error>;
     fn get_memory(&self, v: &Self::V) -> Result<usize, RedisError>;
     fn is_json(&self, key: *mut RedisModuleKey) -> Result<bool, RedisError>;
@@ -96,7 +97,7 @@ pub(crate) fn err_json<V: SelectValue>(value: &V, expected_value: &'static str) 
     ))
 }
 
-pub(crate) fn err_msg_json_expected<'a>(expected_value: &'static str, found: &str) -> String {
+pub(crate) fn err_msg_json_expected(expected_value: &'static str, found: &str) -> String {
     format!(
         "WRONGTYPE wrong type of path value - expected {} but found {}",
         expected_value, found
@@ -122,7 +123,7 @@ pub struct KeyHolderWrite<'a> {
 }
 
 fn update<F: FnMut(Value) -> Result<Option<Value>, Error>>(
-    path: &Vec<String>,
+    path: &[String],
     root: &mut Value,
     mut func: F,
 ) -> Result<(), Error> {
@@ -179,17 +180,25 @@ fn update<F: FnMut(Value) -> Result<Option<Value>, Error>>(
 }
 
 impl<'a> KeyHolderWrite<'a> {
-    fn do_op<F>(&mut self, paths: Vec<String>, mut op_fun: F) -> Result<(), RedisError>
+    fn do_op<F>(&mut self, paths: &[String], mut op_fun: F) -> Result<(), RedisError>
     where
         F: FnMut(Value) -> Result<Option<Value>, Error>,
     {
         if paths.is_empty() {
             // updating the root require special treatment
             let root = self.get_value().unwrap().unwrap();
-            let res = (op_fun)(root.take())?;
-            self.set_root(res)?;
+            let prev_val = root.take();
+            let rollback_val = prev_val.clone();
+            let res = (op_fun)(prev_val);
+            match res {
+                Ok(res) => self.set_root(res)?,
+                Err(err) => {
+                    self.set_root(Some(rollback_val))?;
+                    return Err(RedisError::String(err.msg));
+                }
+            }
         } else {
-            update(&paths, self.get_value().unwrap().unwrap(), op_fun)?;
+            update(paths, self.get_value().unwrap().unwrap(), op_fun)?;
         }
 
         Ok(())
@@ -197,7 +206,7 @@ impl<'a> KeyHolderWrite<'a> {
 
     fn do_num_op<F1, F2>(
         &mut self,
-        path: Vec<String>,
+        path: &[String],
         num: &str,
         mut op1_fun: F1,
         mut op2_fun: F2,
@@ -211,14 +220,15 @@ impl<'a> KeyHolderWrite<'a> {
             let mut res = None;
             self.do_op(path, |v| {
                 let num_res = match (v.as_i64(), in_value.as_i64()) {
-                    (Some(num1), Some(num2)) => ((op1_fun)(num1, num2)).into(),
+                    (Some(num1), Some(num2)) => Ok(((op1_fun)(num1, num2)).into()),
                     _ => {
                         let num1 = v.as_f64().unwrap();
                         let num2 = in_value.as_f64().unwrap();
-                        Number::from_f64((op2_fun)(num1, num2)).unwrap()
+                        Number::from_f64((op2_fun)(num1, num2))
+                            .ok_or(RedisError::Str("result is not a number"))
                     }
                 };
-                res = Some(Value::Number(num_res));
+                res = Some(Value::Number(num_res?));
                 Ok(res.clone())
             })?;
             match res {
@@ -270,11 +280,11 @@ impl<'a> KeyHolderWrite<'a> {
 
 impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
     fn apply_changes(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError> {
-        if ctx.notify_keyspace_event(NotifyEvent::MODULE, command, &self.key_name) != Status::Ok {
-            Err(RedisError::Str("failed notify key space event"))
-        } else {
+        if ctx.notify_keyspace_event(NotifyEvent::MODULE, command, &self.key_name) == Status::Ok {
             ctx.replicate_verbatim();
             Ok(())
+        } else {
+            Err(RedisError::Str("failed notify key space event"))
         }
     }
 
@@ -349,20 +359,20 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
     }
 
     fn incr_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError> {
-        self.do_num_op(path, num, |i1, i2| i1 + i2, |f1, f2| f1 + f2)
+        self.do_num_op(&path, num, |i1, i2| i1 + i2, |f1, f2| f1 + f2)
     }
 
     fn mult_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError> {
-        self.do_num_op(path, num, |i1, i2| i1 * i2, |f1, f2| f1 * f2)
+        self.do_num_op(&path, num, |i1, i2| i1 * i2, |f1, f2| f1 * f2)
     }
 
     fn pow_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError> {
-        self.do_num_op(path, num, |i1, i2| i1.pow(i2 as u32), |f1, f2| f1.powf(f2))
+        self.do_num_op(&path, num, |i1, i2| i1.pow(i2 as u32), f64::powf)
     }
 
     fn bool_toggle(&mut self, path: Vec<String>) -> Result<bool, RedisError> {
         let mut res = None;
-        self.do_op(path, |v| {
+        self.do_op(&path, |v| {
             let val = v.as_bool().unwrap() ^ true;
             res = Some(val);
             Ok(Some(Value::Bool(val)))
@@ -377,7 +387,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
         let json = serde_json::from_str(&val)?;
         if let Value::String(s) = json {
             let mut res = None;
-            self.do_op(path, |v| {
+            self.do_op(&path, |v| {
                 let new_str = [v.as_str().unwrap(), s.as_str()].concat();
                 res = Some(new_str.len());
                 Ok(Some(Value::String(new_str)))
@@ -396,7 +406,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
 
     fn arr_append(&mut self, path: Vec<String>, mut args: Vec<Value>) -> Result<usize, RedisError> {
         let mut res = None;
-        self.do_op(path, |mut v| {
+        self.do_op(&path, |mut v| {
             let arr = v.as_array_mut().unwrap();
             arr.append(&mut args);
             res = Some(arr.len());
@@ -411,11 +421,11 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
     fn arr_insert(
         &mut self,
         paths: Vec<String>,
-        args: &Vec<Value>,
+        args: &[Value],
         index: i64,
     ) -> Result<usize, RedisError> {
         let mut res = None;
-        self.do_op(paths, |mut v| {
+        self.do_op(&paths, |mut v| {
             // Verify legal index in bounds
             let len = v.len().unwrap() as i64;
             let index = if index < 0 { len + index } else { index };
@@ -425,7 +435,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
             let index = index as usize;
             let mut new_value = v.take();
             let curr = new_value.as_array_mut().unwrap();
-            curr.splice(index..index, args.clone());
+            curr.splice(index..index, args.to_owned());
             res = Some(curr.len());
             Ok(Some(new_value))
         })?;
@@ -437,7 +447,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
 
     fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<String>, RedisError> {
         let mut res = None;
-        self.do_op(path, |mut v| {
+        self.do_op(&path, |mut v| {
             if let Some(array) = v.as_array() {
                 if array.is_empty() {
                     return Ok(Some(v));
@@ -462,7 +472,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
 
     fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> Result<usize, RedisError> {
         let mut res = None;
-        self.do_op(path, |mut v| {
+        self.do_op(&path, |mut v| {
             if let Some(array) = v.as_array() {
                 let len = array.len() as i64;
                 let stop = stop.normalize(len);
@@ -495,7 +505,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
 
     fn clear(&mut self, path: Vec<String>) -> Result<usize, RedisError> {
         let mut cleared = 0;
-        self.do_op(path, |v| match v {
+        self.do_op(&path, |v| match v {
             Value::Object(mut obj) => {
                 obj.clear();
                 cleared += 1;
@@ -505,6 +515,10 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
                 arr.clear();
                 cleared += 1;
                 Ok(Some(Value::from(arr)))
+            }
+            Value::Number(mut _num) => {
+                cleared += 1;
+                Ok(Some(Value::from(0)))
             }
             _ => Ok(Some(v)),
         })?;
@@ -559,12 +573,12 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
             Format::JSON => Ok(serde_json::from_str(val)?),
             Format::BSON => decode_document(&mut Cursor::new(val.as_bytes()))
                 .map(|docs| {
-                    let v = if !docs.is_empty() {
+                    let v = if docs.is_empty() {
+                        Value::Null
+                    } else {
                         docs.iter()
                             .next()
                             .map_or_else(|| Value::Null, |(_, b)| b.clone().into())
-                    } else {
-                        Value::Null
                     };
                     Ok(v)
                 })

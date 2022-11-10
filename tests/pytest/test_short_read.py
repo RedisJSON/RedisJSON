@@ -16,14 +16,19 @@ from common import TimeLimit
 
 
 Defaults.decode_responses = True
+Defaults.no_log = True
 
 CREATE_INDICES_TARGET_DIR = '/tmp/test'
-BASE_RDBS_URL = 'https://s3.amazonaws.com/redismodules/redisearch-enterprise/rdbs/'
+BASE_RDBS_URL = 'https://s3.amazonaws.com/redismodules/redisearch-oss/rdbs/'
 
 SHORT_READ_BYTES_DELTA = int(os.getenv('SHORT_READ_BYTES_DELTA', '1'))
 OS = os.getenv('OS')
 
 RDBS = ['short-reads/rejson_keys_2.0.0.rdb.zip']
+
+# LOCALHOST = 'localhost'
+LOCALHOST = '127.0.0.1'
+# LOCALHOST = '[::1]'
 
 
 def unzip(zip_path, to_dir):
@@ -357,7 +362,7 @@ class ShardMock:
 
     def StartListening(self, port, attempts=1):
         for i in range(1, attempts + 1):
-            self.stream_server = gevent.server.StreamServer(('localhost', port), self._handle_conn)
+            self.stream_server = gevent.server.StreamServer((LOCALHOST, port), self._handle_conn)
             try:
                 self.stream_server.start()
             except Exception as e:
@@ -373,7 +378,6 @@ class ShardMock:
 
 
 class Debug:
-
     def __init__(self, enabled=False):
         self.enabled = enabled
         self.clear()
@@ -421,8 +425,13 @@ def testShortReadJson(env):
     if env.env.endswith('existing-env') and os.environ.get('CI'):
         env.skip()
 
+    if env.useAof or env.useSlaves:
+        env.skip()
+
     if OS == 'macos':
         env.skip()
+
+    env.envRunner.setTerminateRetries(retries=3, seconds=2)
 
     seed = str(time.time())
     env.assertNotEqual(seed, None, message='random seed ' + seed)
@@ -430,7 +439,7 @@ def testShortReadJson(env):
 
     with tempfile.TemporaryDirectory(prefix="short-read_") as temp_dir:
         if not downloadFiles(temp_dir):
-            env.assertTrue(False, "downloadFiles failed")
+            env.assertTrue(False, message="downloadFiles failed")
 
         for f in RDBS:
             name, ext = os.path.splitext(f)
@@ -442,7 +451,6 @@ def testShortReadJson(env):
 
 
 def sendShortReads(env, rdb_file):
-
     # Add some initial content (keys) to test backup/restore/discard when short read fails
     env.assertCmdOk('replicaof', 'no', 'one')
     env.flush()
@@ -458,9 +466,12 @@ def sendShortReads(env, rdb_file):
     r = range(0, total_len + 1, SHORT_READ_BYTES_DELTA)
     if (total_len % SHORT_READ_BYTES_DELTA) != 0:
         r = r + range(total_len, total_len + 1)
-    for b in r:
-        rdb = full_rdb[0:b]
-        runShortRead(env, rdb, total_len)
+    try:
+        for b in r:
+            rdb = full_rdb[0:b]
+            runShortRead(env, rdb, total_len)
+    except:
+        pass
 
 
 @Debug(False)
@@ -475,9 +486,18 @@ def runShortRead(env, data, total_len):
         # (since it is sending commands to redis and in this test we need to follow strict hand-shaking)
         res = env.cmd('CONFIG', 'SET', 'repl-diskless-load', 'swapdb')
         env.assertTrue(res)
-        res = env.cmd('replicaof', 'localhost', shardMock.server_port)
+        res = env.cmd('replicaof', LOCALHOST, shardMock.server_port)
         env.assertTrue(res)
-        conn = shardMock.GetConnection()
+        conn = None
+        try:
+            conn = shardMock.GetConnection()
+        except:
+            # Avoid hang if connection cannot be established
+            env.assertCmdOk('replicaof', 'no', 'one')
+        if conn is None:
+            env.assertTrue(False, message="Cannot connect to server")
+            raise Exception("Cannot connect to server")
+
         # Perform hand-shake with replica
         res = conn.read_request()
         env.assertEqual(res, ['PING'])
