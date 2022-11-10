@@ -79,19 +79,17 @@ commands:
           shell: /bin/bash -l -eo pipefail
           command: |
             ./sbin/system-setup.py <<parameters.system_setup_params>>
-            python3 -m pip list
-            source $HOME/.cargo/env
-            rustc --version
-            cargo --version
-            rustup --version
-            if command -v gcc &> /dev/null; then gcc --version; fi
-            if command -v clang &> /dev/null; then clang --version; fi
       - run:
           name: Install Redis
           shell: /bin/bash -l -eo pipefail
           command: |
             ./deps/readies/bin/getredis -v '<<parameters.redis_version>>' --force <<parameters.getredis_params>>
-            redis-server --version
+      - run:
+          name: System report
+          shell: /bin/bash -l -eo pipefail
+          command: |
+            source $HOME/.cargo/env
+            make info
 
   save-tests-logs:
     steps:
@@ -473,6 +471,13 @@ on-any-branch: &on-any-branch
     tags:
       only: /.*/
 
+always: &always
+  filters:
+    branches:
+      only: /.*/
+    tags:
+      only: /.*/
+
 never: &never
   filters:
     branches:
@@ -547,7 +552,7 @@ workflows:
           context: common
           matrix:
             parameters:
-              platform: [bionic, focal]
+              platform: [jammy, bionic, focal]
       - build-macos:
           <<: *on-integ-and-version-tags
           context: common
@@ -558,7 +563,7 @@ workflows:
           <<: *on-any-branch
           matrix:
             parameters:
-              san-type: [address] # [address, memory]
+              san-type: [address] # [memory]
       - upload-artifacts:
           name: upload-artifacts-to-staging-lab
           <<: *on-integ-branch

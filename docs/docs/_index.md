@@ -8,7 +8,7 @@ type: docs
 [![Discord](https://img.shields.io/discord/697882427875393627?style=flat-square)](https://discord.gg/QUkjSsk)
 [![Github](https://img.shields.io/static/v1?label=&message=repository&color=5961FF&logo=github)](https://github.com/RedisJSON/RedisJSON/)
 
-The RedisJSON module provides JSON support for Redis. RedisJSON lets you store, update, and retrieve JSON values in a Redis database, similar to any other Redis data type. RedisJSON also works seamlessly with [RediSearch](https://redis.io/docs/stack/search/) to let you [index and query JSON documents](/redisearch/indexing_json).
+The RedisJSON module provides JSON support for Redis. RedisJSON lets you store, update, and retrieve JSON values in a Redis database, similar to any other Redis data type. RedisJSON also works seamlessly with [RediSearch](https://redis.io/docs/stack/search/) to let you [index and query JSON documents](https://redis.io/docs/stack/search/indexing_json).
 
 ## Primary features
 
@@ -151,30 +151,60 @@ dog = r.json().get('doc', '$.dog')
 scientific_name = r.json().get('doc', '$..scientific-name')
 ```
 
-### Build on Ubuntu 20.04
+### Build from source
 
-The following packages are required to successfully build RedisJSON on Ubuntu 20.04:
+To build RedisJSON from the source code:
 
-```
-$ sudo apt install build-essential llvm cmake libclang1 libclang-dev cargo
-```
-Then, run `make` or `cargo build --release` in the repository directory.
+1. Clone the [RedisJSON repository](https://github.com/RedisJSON/RedisJSON) (make sure you include the `--recursive` option to properly clone submodules):
+
+    ```sh
+    $ git clone --recursive https://github.com/RedisJSON/RedisJSON.git
+    $ cd RedisJSON
+    ```
+
+1. Install dependencies:
+
+    ```sh
+    $ ./sbin/setup
+    ```
+
+1. Build:
+    ```sh
+    $ make build
+    ```
 
 ### Load the module to Redis
 
 Requirements:
 
-* [Redis v6.0 or later](http://redis.io/download)
+Generally, it is best to run the latest Redis version.
+
+If your OS has a [Redis 6.x package or later](http://redis.io/download), you can install it using the OS package manager.
+
+Otherwise, you can invoke 
+
+```sh
+$ ./deps/readies/bin/getredis
+```
 
 To load the RedisJSON module, use one of the following methods:
 
+* [Makefile recipe](#makefile-recipe)
 * [Configuration file](#configuration-file)
 * [Command-line option](#command-line-option)
 * [MODULE LOAD command](/commands/module-load/)
 
+#### Makefile recipe
+
+Run Redis with RedisJSON:
+
+```sh
+$ make run
+```
+
 #### Configuration file
 
-We recommend you have Redis load the module during startup by adding the following to your `redis.conf` file:
+Or you can have Redis load the module during startup by adding the following to your `redis.conf` file:
 
 ```
 loadmodule /path/to/module/target/release/librejson.so
@@ -186,15 +216,21 @@ On Mac OS, if this module was built as a dynamic library, run:
 loadmodule /path/to/module/target/release/librejson.dylib
 ```
 
-In the preceding lines, replace `/path/to/module/` with the actual path to the module's library.
+In the above lines replace `/path/to/module/` with the actual path to the module.
+
+Alternatively, you can download and run RedisJSON from a precompiled binary:
+
+1. Download a precompiled version of RedisJSON from the [Redis download center](https://redis.com/download-center/modules/).
 
 #### Command-line option
 
 Alternatively, you can have Redis load the module using the following command-line argument syntax:
 
-```bash
-$ redis-server --loadmodule ./target/release/librejson.so
-```
+ ```bash
+ $ redis-server --loadmodule /path/to/module/librejson.so
+ ```
+
+In the above lines replace `/path/to/module/` with the actual path to the module's library.
 
 #### `MODULE LOAD` command
 
@@ -212,3 +248,6 @@ After the module has been loaded successfully, the Redis log should have lines s
 ...
 ```
 
+### Limitation
+
+A JSON value passed to a command can have a depth of up to 128. If you pass to a command a JSON value that contains an object or an array with a nesting level of more than 128, the command returns an error.

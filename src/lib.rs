@@ -1,3 +1,6 @@
+extern crate pest;
+#[macro_use]
+extern crate pest_derive;
 extern crate redis_module;
 
 #[cfg(not(feature = "as-library"))]
@@ -15,9 +18,9 @@ use redis_module::{Context, RedisResult};
 #[cfg(not(feature = "as-library"))]
 use crate::c_api::{
     get_llapi_ctx, json_api_free_iter, json_api_get, json_api_get_at, json_api_get_boolean,
-    json_api_get_double, json_api_get_int, json_api_get_json, json_api_get_len,
-    json_api_get_string, json_api_get_type, json_api_is_json, json_api_len, json_api_next,
-    json_api_open_key_internal, LLAPI_CTX,
+    json_api_get_double, json_api_get_int, json_api_get_json, json_api_get_json_from_iter,
+    json_api_get_len, json_api_get_string, json_api_get_type, json_api_is_json, json_api_len,
+    json_api_next, json_api_open_key_internal, json_api_reset_iter, LLAPI_CTX,
 };
 use crate::redisjson::Format;
 
@@ -28,8 +31,8 @@ pub mod commands;
 pub mod error;
 mod formatter;
 pub mod ivalue_manager;
+pub mod jsonpath;
 pub mod manager;
-pub mod nodevisitor;
 pub mod redisjson;
 
 pub const GIT_SHA: Option<&str> = std::option_env!("GIT_SHA");
@@ -132,7 +135,6 @@ macro_rules! redis_json_module_create {(
         use libc::size_t;
         use std::collections::HashMap;
         use $crate::c_api::create_rmstring;
-        use $crate::nodevisitor::{StaticPathParser,PathInfoFlags};
 
         macro_rules! json_command {
             ($cmd:ident) => {

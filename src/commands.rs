@@ -1,17 +1,20 @@
 use crate::error::Error;
 use crate::formatter::RedisJsonFormatter;
+use crate::jsonpath::select_value::{SelectValue, SelectValueType};
 use crate::manager::err_msg_json_path_doesnt_exist_with_param;
 use crate::manager::{err_msg_json_expected, err_msg_json_path_doesnt_exist_with_param_or};
 use crate::manager::{AddUpdateInfo, Manager, ReadHolder, SetUpdateInfo, UpdateInfo, WriteHolder};
-use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 use crate::redisjson::{normalize_arr_indices, Format, Path};
-use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
-use jsonpath_lib::select::Selector;
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 use std::cmp::Ordering;
 use std::str::FromStr;
+
+use crate::jsonpath::{
+    calc_once, calc_once_paths, calc_once_with_paths, compile, json_path::JsonPathToken,
+    json_path::UserPathTracker,
+};
 
 use crate::redisjson::SetOptions;
 
@@ -171,10 +174,8 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     }
 
     fn get_values<'b>(&'a self, path: &'b str) -> Result<Vec<&'a V>, Error> {
-        let mut selector = Selector::new();
-        selector.str_path(path)?;
-        selector.value(self.val);
-        let results = selector.select()?;
+        let query = compile(path)?;
+        let results = calc_once(query, self.val);
         Ok(results)
     }
 
@@ -202,15 +203,19 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         // memory efficient and we're using it anyway. See https://github.com/serde-rs/json/issues/635.
         let mut missing_path = None;
         let temp_doc = paths.drain(..).fold(HashMap::new(), |mut acc, path: Path| {
-            let mut selector = Selector::new();
-            selector.value(self.val);
-            if selector.str_path(path.get_path()).is_err() {
+            let query = compile(path.get_path());
+            if query.is_err() {
                 return acc;
             }
-            let value = match selector.select() {
-                Ok(s) if options.is_legacy && !s.is_empty() => Some(Values::Single(s[0])),
-                Ok(s) if !options.is_legacy => Some(Values::Multi(s)),
-                _ => None,
+            let query = query.unwrap();
+            let s = calc_once(query, self.val);
+
+            let value = if is_legacy && !s.is_empty() {
+                Some(Values::Single(s[0]))
+            } else if !is_legacy {
+                Some(Values::Multi(s))
+            } else {
+                None
             };
 
             if value.is_none() && missing_path.is_none() {
@@ -246,63 +251,53 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     }
 
     fn find_add_paths(&mut self, path: &str) -> Result<Vec<UpdateInfo>, Error> {
-        let mut parsed_static_path = StaticPathParser::check(path)?;
-
-        if parsed_static_path.valid != VisitStatus::Valid {
+        let mut query = compile(&path)?;
+        if !query.is_static() {
             return Err("Err: wrong static path".into());
         }
-        if parsed_static_path.static_path_elements.len() < 2 {
+
+        if query.size() < 1 {
             return Err("Err: path must end with object key to set".into());
         }
 
-        let last = parsed_static_path.static_path_elements.pop().unwrap();
+        let (last, token_type) = query.pop_last().unwrap();
 
-        if let StaticPathElement::ObjectKey(key) = last {
-            if let StaticPathElement::Root = parsed_static_path.static_path_elements.last().unwrap()
-            {
-                // Adding to the root
-                Ok(vec![UpdateInfo::AUI(AddUpdateInfo {
-                    path: Vec::new(),
-                    key,
-                })])
-            } else {
-                // Adding somewhere in existing object, use jsonpath_lib::replace_with
-                let p = parsed_static_path
-                    .static_path_elements
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<String>();
-                let mut selector = Selector::default();
-                if let Err(e) = selector.str_path(&p) {
-                    return Err(e.into());
-                }
-                selector.value(self.val);
-                let res = selector.select_with_paths(|_| true)?;
-                Ok(res
-                    .into_iter()
-                    .map(|v| {
-                        UpdateInfo::AUI(AddUpdateInfo {
-                            path: v,
-                            key: key.to_string(),
+        match token_type {
+            JsonPathToken::String => {
+                if query.size() == 1 {
+                    // Adding to the root
+                    Ok(vec![UpdateInfo::AUI(AddUpdateInfo {
+                        path: Vec::new(),
+                        key: last,
+                    })])
+                } else {
+                    // Adding somewhere in existing object
+                    let res = calc_once_paths(query, self.val);
+
+                    Ok(res
+                        .into_iter()
+                        .map(|v| {
+                            UpdateInfo::AUI(AddUpdateInfo {
+                                path: v,
+                                key: last.to_string(),
+                            })
                         })
-                    })
-                    .collect())
+                        .collect())
+                }
             }
-        } else if let StaticPathElement::ArrayIndex(_) = last {
-            // if we reach here with array path we are either out of range
-            // or no-oping an NX where the value is already present
-            let mut selector = Selector::default();
-            let res = selector
-                .str_path(path)?
-                .value(self.val)
-                .select_with_paths(|_| true)?;
-            if res.is_empty() {
-                Err("ERR array index out of range".into())
-            } else {
-                Ok(Vec::new())
+            JsonPathToken::Number => {
+                // if we reach here with array path we are either out of range
+                // or no-oping an NX where the value is already present
+
+                let query = compile(path)?;
+                let res = calc_once_paths(query, self.val);
+
+                if res.is_empty() {
+                    Err("ERR array index out of range".into())
+                } else {
+                    Ok(Vec::new())
+                }
             }
-        } else {
-            Err("ERR path not an object or array".into())
         }
     }
 
@@ -312,11 +307,9 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         option: &SetOptions,
     ) -> Result<Vec<UpdateInfo>, Error> {
         if SetOptions::NotExists != *option {
-            let mut selector = Selector::default();
-            let res = selector
-                .str_path(path)?
-                .value(self.val)
-                .select_with_paths(|_| true)?;
+            let query = compile(path)?;
+            let res = calc_once_paths(query, self.val);
+
             if !res.is_empty() {
                 return Ok(res
                     .into_iter()
@@ -672,12 +665,18 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
 fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
     path: &str,
     doc: &T,
-    f: F,
+    mut f: F,
 ) -> Result<Vec<Vec<String>>, RedisError> {
-    Ok(Selector::default()
-        .str_path(path)?
-        .value(doc)
-        .select_with_paths(f)?)
+    let query = match compile(path) {
+        Ok(q) => q,
+        Err(e) => return Err(RedisError::String(e.to_string())),
+    };
+    let mut res = calc_once_with_paths(query, doc);
+    Ok(res
+        .drain(..)
+        .filter(|e| f(e.res))
+        .map(|e| e.path_tracker.unwrap().to_string_path())
+        .collect())
 }
 
 /// Returns tuples of Value and its concrete path which match the given `path`
@@ -685,10 +684,15 @@ fn get_all_values_and_paths<'a, T: SelectValue>(
     path: &str,
     doc: &'a T,
 ) -> Result<Vec<(&'a T, Vec<String>)>, RedisError> {
-    Ok(Selector::default()
-        .str_path(path)?
-        .value(doc)
-        .select_values_with_paths()?)
+    let query = match compile(path) {
+        Ok(q) => q,
+        Err(e) => return Err(RedisError::String(e.to_string())),
+    };
+    let mut res = calc_once_with_paths(query, doc);
+    Ok(res
+        .drain(..)
+        .map(|e| (e.res, e.path_tracker.unwrap().to_string_path()))
+        .collect())
 }
 
 /// Returns a Vec of paths with `None` for Values that do not match the filter

@@ -8,8 +8,8 @@ use std::{
 };
 
 use crate::commands::{KeyValue, ResultOptions};
-use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
-use jsonpath_lib::select::Selector;
+use crate::jsonpath::select_value::{SelectValue, SelectValueType};
+use crate::jsonpath::{compile, create};
 use redis_module::raw as rawmod;
 use redis_module::{Context, RedisString, Status};
 
@@ -131,6 +131,22 @@ pub fn json_api_get_json<M: Manager>(
     create_rmstring(ctx, res, str) as c_int
 }
 
+pub fn json_api_get_json_from_iter<M: Manager>(
+    _: M,
+    iter: *mut c_void,
+    ctx: *mut rawmod::RedisModuleCtx,
+    str: *mut *mut rawmod::RedisModuleString,
+) -> c_int {
+    let iter = unsafe { &*(iter.cast::<ResultsIterator<M::V>>()) };
+    if iter.pos >= iter.results.len() {
+        Status::Err as c_int
+    } else {
+        let res = KeyValue::<M::V>::serialize_object(&iter.results, None, None, None);
+        create_rmstring(ctx, &res, str);
+        Status::Ok as c_int
+    }
+}
+
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn json_api_get_int<M: Manager>(_: M, json: *const c_void, val: *mut c_longlong) -> c_int {
     let json = unsafe { &*(json.cast::<M::V>()) };
@@ -215,23 +231,30 @@ pub fn json_api_len<M: Manager>(_: M, iter: *const c_void) -> size_t {
 
 pub fn json_api_free_iter<M: Manager>(_: M, iter: *mut c_void) {
     unsafe {
-        Box::from_raw(iter.cast::<ResultsIterator<M::V>>());
+        drop(Box::from_raw(iter.cast::<ResultsIterator<M::V>>()));
     }
+}
+
+pub fn json_api_reset_iter<M: Manager>(_: M, iter: *mut c_void) {
+    let iter = unsafe { &mut *(iter.cast::<ResultsIterator<M::V>>()) };
+    iter.pos = 0;
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -> *const c_void {
     let v = unsafe { &*(val.cast::<M::V>()) };
-    let mut selector = Selector::new();
-    selector.value(v);
     let path = unsafe { CStr::from_ptr(path).to_str().unwrap() };
-    if selector.str_path(path).is_err() {
-        return null();
-    }
-    match selector.select() {
-        Ok(s) => Box::into_raw(Box::new(ResultsIterator { results: s, pos: 0 })).cast::<c_void>(),
-        Err(_) => null(),
-    }
+    let query = match compile(path) {
+        Ok(q) => q,
+        Err(_) => return null(),
+    };
+    let path_calculator = create(&query);
+    let res = path_calculator.calc(v);
+    Box::into_raw(Box::new(ResultsIterator {
+        results: res,
+        pos: 0,
+    }))
+    .cast::<c_void>()
 }
 
 pub fn json_api_is_json<M: Manager>(m: M, key: *mut rawmod::RedisModuleKey) -> c_int {
@@ -394,6 +417,17 @@ macro_rules! redis_json_module_export_shared_api {
         }
 
         #[no_mangle]
+        pub extern "C" fn JSONAPI_getJSONFromIter(iter: *mut c_void,
+            ctx: *mut rawmod::RedisModuleCtx,
+            str: *mut *mut rawmod::RedisModuleString,) -> c_int {
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_get_json_from_iter(mngr, iter, ctx, str)},
+            )
+        }
+
+        #[no_mangle]
         pub extern "C" fn JSONAPI_isJSON(key: *mut rawmod::RedisModuleKey) -> c_int {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
@@ -406,10 +440,10 @@ macro_rules! redis_json_module_export_shared_api {
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
         pub extern "C" fn JSONAPI_pathParse(path: *const c_char, ctx: *mut rawmod::RedisModuleCtx, err_msg: *mut *mut rawmod::RedisModuleString) -> *const c_void {
             let path = unsafe { CStr::from_ptr(path).to_str().unwrap() };
-            match StaticPathParser::get_path_info(path) {
-                Ok(flags) => Box::into_raw(Box::new(flags)).cast::<c_void>(),
-                Err(err_str) => {
-                    create_rmstring(ctx, err_str.as_bytes().to_vec(), err_msg);
+            match jsonpath::compile(path) {
+                Ok(q) => Box::into_raw(Box::new(q)).cast::<c_void>(),
+                Err(e) => {
+                    create_rmstring(ctx, &format!("{}", e), err_msg);
                     std::ptr::null()
                 }
             }
@@ -417,19 +451,28 @@ macro_rules! redis_json_module_export_shared_api {
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_pathFree(json_path: *mut c_void) {
-            unsafe { Box::from_raw(json_path.cast::<PathInfoFlags>()) };
+            unsafe { Box::from_raw(json_path.cast::<jsonpath::json_path::Query>()) };
         }
 
         #[no_mangle]
-        pub extern "C" fn JSONAPI_pathIsSingle(json_path: *const c_void) -> c_int {
-            let flags = unsafe { &*(json_path.cast::<PathInfoFlags>()) };
-            flags.intersects(PathInfoFlags::SINGLE) as c_int
+        pub extern "C" fn JSONAPI_pathIsSingle(json_path: *mut c_void) -> c_int {
+            let q = unsafe { &mut *(json_path.cast::<jsonpath::json_path::Query>()) };
+            q.is_static() as c_int
         }
 
         #[no_mangle]
-        pub extern "C" fn JSONAPI_pathHasDefinedOrder(json_path: *const c_void) -> c_int {
-            let flags = unsafe { &*(json_path.cast::<PathInfoFlags>()) };
-            flags.intersects(PathInfoFlags::DEFINED_ORDER) as c_int
+        pub extern "C" fn JSONAPI_pathHasDefinedOrder(json_path: *mut c_void) -> c_int {
+            let q = unsafe { &mut *(json_path.cast::<jsonpath::json_path::Query>()) };
+            q.is_static() as c_int
+        }
+
+        #[no_mangle]
+        pub extern "C" fn JSONAPI_resetIter(iter: *mut c_void) {
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_reset_iter(mngr, iter)},
+            )
         }
 
         static REDISJSON_GETAPI_V1: &str = concat!("RedisJSON_V1", "\0");
@@ -475,6 +518,8 @@ macro_rules! redis_json_module_export_shared_api {
             pathFree: JSONAPI_pathFree,
             pathIsSingle: JSONAPI_pathIsSingle,
             pathHasDefinedOrder: JSONAPI_pathHasDefinedOrder,
+            getJSONFromIter: JSONAPI_getJSONFromIter,
+            resetIter: JSONAPI_resetIter,
         };
 
         #[repr(C)]
@@ -512,8 +557,10 @@ macro_rules! redis_json_module_export_shared_api {
             // V2 entries
             pub pathParse: extern "C" fn(path: *const c_char, ctx: *mut rawmod::RedisModuleCtx, err_msg: *mut *mut rawmod::RedisModuleString) -> *const c_void,
             pub pathFree: extern "C" fn(json_path: *mut c_void),
-            pub pathIsSingle: extern "C" fn(json_path: *const c_void) -> c_int,
-            pub pathHasDefinedOrder: extern "C" fn(json_path: *const c_void) -> c_int,
+            pub pathIsSingle: extern "C" fn(json_path: *mut c_void) -> c_int,
+            pub pathHasDefinedOrder: extern "C" fn(json_path: *mut c_void) -> c_int,
+            pub getJSONFromIter: extern "C" fn(iter: *mut c_void, ctx: *mut rawmod::RedisModuleCtx, str: *mut *mut rawmod::RedisModuleString,) -> c_int,
+            pub resetIter: extern "C" fn(iter: *mut c_void),
         }
     };
 }
