@@ -1173,6 +1173,50 @@ def testEscape(env):
     r.expect('JSON.SET', 'doc', '$', '{"val": "escaped unicode here:\u2B50"}').ok()
     r.expect('JSON.GET', 'doc', '$.val').equal('["escaped unicode here:⭐"]')
 
+def testFilter(env):
+    # Test JSONPath filter
+    r = env
+
+    doc = {
+        "arr": ["kaboom", "kafoosh", "four", "bar", 7.0, "foolish", ["food", "foo", "FoO", "fight"], -9, {"in" : "fooctious"}, "ffool", "(?i)^[f][o][o]$", False, None],
+        "pat_regex": ".*foo",
+        "pat_plain": "(?i)^[f][o][o]$",
+        "pat_bad": "[f.*",
+        "pat_not_str1": 42,
+        "pat_not_str2": None,
+        "pat_not_str3": True,
+        "pat_not_str4": {"p":".*foo"},
+        "pat_not_str5": [".*foo"],
+    }
+    r.expect('JSON.SET', 'doc', '$', json.dumps(doc)).ok()
+    
+    # regex match using a static regex pattern
+    r.expect('JSON.GET', 'doc', '$.arr[?(@ =~ ".*foo")]').equal('["kafoosh","foolish","ffool"]')
+    
+    # regex match using a field
+    r.expect('JSON.GET', 'doc', '$.arr[?(@ =~ $.pat_regex)]').equal('["kafoosh","foolish","ffool"]')
+    
+    # regex case-insensitive match using a field (notice the `.*` before the filter)
+    r.expect('JSON.GET', 'doc', '$.arr.*[?(@ =~ $.pat_plain)]').equal('["foo","FoO"]')
+
+    # regex match using field after being modified
+    r.expect('JSON.SET', 'doc', '$.pat_regex', '"k.*foo"').ok()
+    r.expect('JSON.GET', 'doc', '$.arr[?(@ =~ $.pat_regex)]').equal('["kafoosh"]')
+
+    # regex mismatch (illegal pattern)
+    r.expect('JSON.GET', 'doc', '$.arr[?(@ == $.pat_bad)]').equal('[]')
+    r.expect('JSON.GET', 'doc', '$.arr[?(@ == $.pat_bad || @>4.5)]').equal('[7.0]')
+
+    # regex mismatch (missing pattern)
+    r.expect('JSON.GET', 'doc', '$.arr[?(@ =~ $.pat_missing)]').equal('[]')
+
+    # regex mismatch (not a string pattern)
+    for i in range(1, 6):
+        r.expect('JSON.GET', 'doc', '$.arr[?(@ =~ $.pat_not_str{})]'.format(i)).equal('[]')
+
+    # plain string match
+    r.expect('JSON.GET', 'doc', '$.arr[?(@ == $.pat_plain)]').equal('["(?i)^[f][o][o]$"]')
+    
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property

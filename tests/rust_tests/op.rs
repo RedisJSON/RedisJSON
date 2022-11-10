@@ -366,3 +366,89 @@ fn op_for_same_type() {
         ]),
     );
 }
+
+#[test]
+fn op_string_regexp_match() {
+    setup();
+
+    select_and_then_compare(
+        r#"$.tags[?(@ =~ "^[a-z]{4}$")]"#,
+        read_json("./json_examples/data_obj.json"),
+        json!(["aute", "elit", "esse"]),
+    );
+
+    select_and_then_compare(
+        r#"$.tags[?(@ =~ "^[ec].*")]"#,
+        read_json("./json_examples/data_obj.json"),
+        json!(["elit", "esse", "culpa"]),
+    );
+
+    select_and_then_compare(
+        r#"$.arr[?(@ =~ "^[ec.*")]"#, //erroneous regexp
+        json!([{
+            "arr": ["eclectic", 54, "elit", "esse", "culpa"],
+        }]),
+        json!([]),
+    );
+
+    select_and_then_compare(
+        // Flat visit all JSON types
+        r#"$.arr[?(@ =~ "^[Ee]c.*")]"#,
+        json!({
+            "arr": ["eclectic", 54, "elit", 96.33, {"eclipse":"ecstatic"}, "esse", true, "culpa", "echo", ["ecu", "eching"], "Ecuador", null, "etc"],
+        }),
+        json!(["eclectic", "echo", "Ecuador"]),
+    );
+
+    select_and_then_compare(
+        // Recursive visit all JSON types
+        r#"$..[?(@ =~ "^[Ee]c.*")]"#,
+        json!({
+            "arr": ["eclectic", 54, "elit", 96.33, {"eclipse":"ecstatic"}, "esse", true, "culpa", "echo", ["ecu", "eching", "plan"], "Ecuador", null, "etc"],
+        }),
+        json!([
+            "eclectic", "echo", "Ecuador",  // "arr" filtered
+            "eclectic", // "arr" content flattened - 1st level
+            "ecstatic", // "arr" content flattened - "eclipse" filtered
+            "ecstatic", // "arr" content flattened - "eclipse" flattened
+            "echo",     // "arr" content flattened - 1st level
+            "ecu", "eching", // "arr" content flattened - anonymous array filtered
+            "ecu", "eching",  // "arr" content flattened - anonymous array flattened
+            "Ecuador"  // "arr" content flattened - 1st level
+        ]),
+    );
+}
+
+#[test]
+fn op_string_regexp_field_match() {
+    setup();
+
+    select_and_then_compare(
+        r#"$.arr[?(@ =~ $.pat1)]"#, //regex
+        json!({
+            "arr": ["kaboom", "kafoosh", "four", "bar", 7.0, -9, false, null, "foolish", "ffool", "[f][o][o]"],
+            "pat1":"foo",
+            "pat2":"k.*foo"
+        }),
+        json!(["kafoosh", "foolish", "ffool"]),
+    );
+
+    select_and_then_compare(
+        r#"$.arr[?(@ =~ $.pat2)]"#, //regex
+        json!({
+            "arr": ["kaboom", "kafoosh", "four", "bar", 7.0, -9, false, null, "foolish", "ffool", "[f][o][o]"],
+            "pat1":"foo",
+            "pat2":"k.*foo"
+        }),
+        json!(["kafoosh"]),
+    );
+
+    select_and_then_compare(
+        r#"$.arr[?(@ == $.pat1)]"#, //plain string
+        json!({
+            "arr": ["kaboom", "kafoosh", "four", "bar", 7.0, -9, false, null, "foolish", "ffool", "[f][o][o]"],
+            "pat1":"[f][o][o]"
+        }),
+        json!(["[f][o][o]"]),
+    );
+}
