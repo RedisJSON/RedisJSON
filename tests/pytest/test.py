@@ -231,6 +231,44 @@ def testGetWithBracketNotation(env):
     r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$.[1]')), [2]) # dollar notation - array
     r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$[1]')), [2]) # dollar notation - array
 
+def testSetGetWithSpecialKey(env):
+    """ Test JSON.GET/JSON.SET with special keys also with legacy syntax """
+    r = env
+
+    doc = {
+        "$": "$",
+        "a": "a",
+        "$a": "$a",
+        "$a[": "$a[",   #
+    }
+    
+    # Set doc using individual keys using legacy syntax (with implicit `$` root)
+    r.assertOk(r.execute_command('JSON.SET', 'x', '$', '{"$":"$"}'))
+    r.assertOk(r.execute_command('JSON.SET', 'x', 'a', '"a"'))
+    r.assertOk(r.execute_command('JSON.SET', 'x', '$a', '"$a"'))
+    r.assertOk(r.execute_command('JSON.SET', 'x', '$["$a["]', '"$a["'))
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$')), [doc])
+    # Set doc using individual keys using legacy syntax (with explicit `.` root)
+    r.assertOk(r.execute_command('JSON.SET', 'x', '.a', '"a"'))
+    r.assertOk(r.execute_command('JSON.SET', 'x', '.$a', '"$a"'))
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$')), [doc])
+
+    # Get key "$"
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$.$')), ["$"])         # dot notation
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$["$"]')), ["$"])      # bracket notation
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$')), [doc])           
+    # Get key "a"
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$.a')), ["a"])         # dot notation
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$["a"]')), ["a"])      # bracket notation
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', 'a')), "a")             # legacy
+    # Get key "$a"
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$.$a')), ["$a"])       # dot notation
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$["$a"]')), ["$a"])    # bracket notation
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$a')), "$a")           # legacy
+    # Get key "$a["
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$["$a["]')), ["$a["])  # bracket notation (cannot use dot notation)
+    
+
 def testSetWithPathErrors(env):
     r = env
 
