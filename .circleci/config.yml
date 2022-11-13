@@ -79,19 +79,17 @@ commands:
           shell: /bin/bash -l -eo pipefail
           command: |
             ./sbin/system-setup.py <<parameters.system_setup_params>>
-            python3 -m pip list
-            source $HOME/.cargo/env
-            rustc --version
-            cargo --version
-            rustup --version
-            if command -v gcc &> /dev/null; then gcc --version; fi
-            if command -v clang &> /dev/null; then clang --version; fi
       - run:
           name: Install Redis
           shell: /bin/bash -l -eo pipefail
           command: |
             ./deps/readies/bin/getredis -v '<<parameters.redis_version>>' --force <<parameters.getredis_params>>
-            redis-server --version
+      - run:
+          name: System report
+          shell: /bin/bash -l -eo pipefail
+          command: |
+            source $HOME/.cargo/env
+            make info
 
   save-tests-logs:
     steps:
@@ -306,7 +304,7 @@ commands:
               --fail_fast \
               --triggering_env << parameters.triggering_env >> \
               --push_results_redistimeseries \
-              --allowed-envs << parameters.allowed_envs >>
+              --allowed-envs << parameters.allowed_envs >> || true
 
 #----------------------------------------------------------------------------------------------------------------------------------
 
@@ -473,6 +471,13 @@ on-any-branch: &on-any-branch
     tags:
       only: /.*/
 
+always: &always
+  filters:
+    branches:
+      only: /.*/
+    tags:
+      only: /.*/
+
 never: &never
   filters:
     branches:
@@ -497,6 +502,15 @@ on-integ-branch: &on-integ-branch
         - /^perf.*$/
     tags:
       ignore: /.*/
+
+on-integ-branch-cron: &on-integ-branch-cron
+  filters:
+    branches:
+      only:
+        - master
+        - /^\d+\.\d+.*$/
+        - /^feature-.*$/
+        - /^perf.*$/
 
 not-on-integ-branch: &not-on-integ-branch
   filters:
@@ -593,18 +607,13 @@ workflows:
     triggers:
       - schedule:
           cron: "07 20 * * *"
-          filters:
-            branches:
-              only:
-                - master
-                - /^\d+\.\d+.*$/
-                - /^feature-.*$/
+          <<: *on-integ-branch-cron
     jobs:
       - build-linux-debian:
           name: build-with-redis-<<matrix.redis_version>>
           matrix:
             parameters:
-              redis_version: ["6.0", "7", "unstable"]
+              redis_version: ["6.0", "6.2", "7", "unstable"]
       - benchmark-json-oss-standalone:
           context: common
       - benchmark-json-oss-standalone-profiler:
