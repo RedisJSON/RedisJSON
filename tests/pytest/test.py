@@ -2,8 +2,10 @@
 
 from functools import reduce
 import random
+import string
 import sys
 import os
+import time
 import redis
 import json
 from RLTest import Env
@@ -1216,7 +1218,45 @@ def testFilter(env):
 
     # plain string match
     r.expect('JSON.GET', 'doc', '$.arr[?(@ == $.pat_plain)]').equal('["(?i)^[f][o][o]$"]')
-    
+
+def testFilterRegExPerf(env):
+    # Test JSONPath filter regex performance
+    r = env
+
+    # Setup docs with an array of strings and 4 patterns (for regex and plain string, match and miss)
+    max_name_len = 50
+    arr_size = 50
+    num_docs = 100
+    for d in range(0, num_docs):
+        arr = [''.join(random.choices(string.ascii_letters + string.digits, k=random.randint(5, max_name_len))) for _ in range(0, arr_size)]
+        r.expect('JSON.SET', 'doc:{}'.format(d+1), '$',json.dumps({"arr":arr,
+            "pat_regex": '^{}$'.format(arr[arr_size - 1]),
+            "pat_str": '{}'.format(arr[arr_size - 1]),
+            "pat_miss_regex": '^{}_$'.format(''.join(arr[arr_size - 2:])),   # 2 last entries + '_'
+            "pat_miss_str": '{}_'.format(''.join(arr[arr_size - 2:])),       # 2 last entries + '_'
+            })).ok()
+
+    # Measure match regex (with last element in array)
+    total_regex_time = 0
+    for d in range(0, num_docs):
+        res  = json.loads(r.execute_command('JSON.GET', 'doc:{}'.format(d+1), '$'))
+        startTime = time.time()
+        r.expect('JSON.GET', 'doc:{}'.format(d+1), '$.arr[?(@ =~ $.pat_regex)]').equal(json.dumps([res[0]['arr'][-1]]))
+        r.expect('JSON.GET', 'doc:{}'.format(d+1), '$.arr[?(@ =~ $.pat_miss_regex)]').equal('[]')
+        total_regex_time += time.time() - startTime
+
+    # Measure match plain string (with last element in array)
+    total_str_time = 0
+    for d in range(0, num_docs):
+        res  = json.loads(r.execute_command('JSON.GET', 'doc:{}'.format(d+1), '$'))
+        startTime = time.time()
+        r.expect('JSON.GET', 'doc:{}'.format(d+1), '$.arr[?(@ == $.pat_str)]').equal(json.dumps([res[0]['arr'][-1]]))
+        r.expect('JSON.GET', 'doc:{}'.format(d+1), '$.arr[?(@ == $.pat_miss_str)]').equal('[]')
+        total_str_time += time.time() - startTime
+
+    env.assertTrue(total_regex_time > total_str_time,
+        message = 'match regex filter {}, match string filter {}'.format(total_regex_time, total_str_time))
+
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property
