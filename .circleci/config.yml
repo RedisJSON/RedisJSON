@@ -306,7 +306,7 @@ commands:
               --fail_fast \
               --triggering_env << parameters.triggering_env >> \
               --push_results_redistimeseries \
-              --allowed-envs << parameters.allowed_envs >>
+              --allowed-envs << parameters.allowed_envs >> || true
 
 #----------------------------------------------------------------------------------------------------------------------------------
 
@@ -498,6 +498,15 @@ on-integ-branch: &on-integ-branch
     tags:
       ignore: /.*/
 
+on-integ-branch-cron: &on-integ-branch-cron
+  filters:
+    branches:
+      only:
+        - master
+        - /^\d+\.\d+.*$/
+        - /^feature-.*$/
+        - /^perf.*$/
+
 not-on-integ-branch: &not-on-integ-branch
   filters:
     branches:
@@ -593,18 +602,13 @@ workflows:
     triggers:
       - schedule:
           cron: "07 20 * * *"
-          filters:
-            branches:
-              only:
-                - master
-                - /^\d+\.\d+.*$/
-                - /^feature-.*$/
+          <<: *on-integ-branch-cron
     jobs:
       - build-linux-debian:
           name: build-with-redis-<<matrix.redis_version>>
           matrix:
             parameters:
-              redis_version: ["6.0", "7", "unstable"]
+              redis_version: ["6.0", "6.2", "7", "unstable"]
       - benchmark-json-oss-standalone:
           context: common
       - benchmark-json-oss-standalone-profiler:
