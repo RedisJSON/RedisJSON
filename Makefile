@@ -112,12 +112,7 @@ endif
 
 ifeq ($(NIGHTLY),1)
 TARGET_DIR=$(BINDIR)/target/$(RUST_TARGET)/debug
-
-ifeq ($(RUST_GOOD_NIGHTLY),)
 CARGO_TOOLCHAIN = +nightly
-else
-CARGO_TOOLCHAIN = +$(RUST_GOOD_NIGHTLY)
-endif
 endif
 
 export CARGO_TARGET_DIR=$(BINDIR)/target
