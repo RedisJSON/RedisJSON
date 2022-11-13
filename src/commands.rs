@@ -7,6 +7,7 @@ use crate::manager::{AddUpdateInfo, Manager, ReadHolder, SetUpdateInfo, UpdateIn
 use crate::redisjson::{normalize_arr_indices, Format, Path};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
+use serde::ser::{Serialize, SerializeStruct, Serializer};
 use std::cmp::Ordering;
 use std::str::FromStr;
 
@@ -21,7 +22,6 @@ use serde_json::{Number, Value};
 
 use itertools::FoldWhile::{Continue, Done};
 use itertools::{EitherOrBoth, Itertools};
-use serde::{Serialize, Serializer};
 use std::collections::HashMap;
 
 const JSON_ROOT_PATH: &str = "$";
@@ -31,6 +31,21 @@ const CMD_ARG_INDENT: &str = "INDENT";
 const CMD_ARG_NEWLINE: &str = "NEWLINE";
 const CMD_ARG_SPACE: &str = "SPACE";
 const CMD_ARG_FORMAT: &str = "FORMAT";
+
+#[derive(Default)]
+struct BSONWrapper<O: Serialize> {
+    values: O,
+}
+impl<O: Serialize> Serialize for BSONWrapper<O> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut s = serializer.serialize_struct("Result", 1)?;
+        s.serialize_field("result", &self.values)?;
+        s.end()
+    }
+}
 
 // Compile time evaluation of the max len() of all elements of the array
 const fn max_strlen(arr: &[&str]) -> usize {
@@ -79,6 +94,15 @@ impl<'a, V: SelectValue> Serialize for Values<'a, V> {
 
 pub struct KeyValue<'a, V: SelectValue> {
     val: &'a V,
+}
+
+#[derive(Default)]
+pub struct ResultOptions<'a> {
+    indent: Option<&'a str>,
+    newline: Option<&'a str>,
+    space: Option<&'a str>,
+    is_legacy: bool,
+    format: Format,
 }
 
 impl<'a, V: SelectValue> KeyValue<'a, V> {
@@ -155,26 +179,23 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         Ok(results)
     }
 
-    pub fn serialize_object<O: Serialize>(
-        o: &O,
-        indent: Option<&str>,
-        newline: Option<&str>,
-        space: Option<&str>,
-    ) -> String {
-        let formatter = RedisJsonFormatter::new(indent, space, newline);
-
-        let mut out = serde_json::Serializer::with_formatter(Vec::new(), formatter);
-        o.serialize(&mut out).unwrap();
-        String::from_utf8(out.into_inner()).unwrap()
+    pub fn serialize_object<O: Serialize>(object: &O, options: ResultOptions) -> Vec<u8> {
+        match options.format {
+            Format::JSON => {
+                let formatter =
+                    RedisJsonFormatter::new(options.indent, options.space, options.newline);
+                let mut out = serde_json::Serializer::with_formatter(Vec::new(), formatter);
+                object.serialize(&mut out).unwrap();
+                out.into_inner()
+            }
+            Format::BSON => bson::to_vec(&BSONWrapper { values: object }).unwrap(),
+        }
     }
 
-    fn to_json_multi(
+    fn to_result_multi(
         &'a self,
         paths: &mut Vec<Path>,
-        indent: Option<&str>,
-        newline: Option<&str>,
-        space: Option<&str>,
-        is_legacy: bool,
+        options: ResultOptions,
     ) -> Result<RedisValue, Error> {
         // TODO: Creating a temp doc here duplicates memory usage. This can be very memory inefficient.
         // A better way would be to create a doc of references to the original doc but no current support
@@ -189,9 +210,9 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             let query = query.unwrap();
             let s = calc_once(query, self.val);
 
-            let value = if is_legacy && !s.is_empty() {
+            let value = if options.is_legacy && !s.is_empty() {
                 Some(Values::Single(s[0]))
-            } else if !is_legacy {
+            } else if !options.is_legacy {
                 Some(Values::Multi(s))
             } else {
                 None
@@ -206,40 +227,26 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         if let Some(p) = missing_path {
             return Err(err_msg_json_path_doesnt_exist_with_param(p.as_str()).into());
         }
-        Ok(Self::serialize_object(&temp_doc, indent, newline, space).into())
+        Ok(Self::serialize_object(&temp_doc, options).into())
     }
 
-    fn to_json_single(
-        &'a self,
-        path: &str,
-        indent: Option<&str>,
-        newline: Option<&str>,
-        space: Option<&str>,
-        is_legacy: bool,
-    ) -> Result<RedisValue, Error> {
-        if is_legacy {
-            Ok(self.to_string_single(path, indent, newline, space)?.into())
+    fn to_result_single(&'a self, path: &str, options: ResultOptions) -> Result<RedisValue, Error> {
+        if options.is_legacy {
+            Ok(self.to_string_single(path, options)?)
         } else {
-            Ok(self.to_string_multi(path, indent, newline, space)?.into())
+            Ok(self.to_string_multi(path, options)?)
         }
     }
 
-    fn to_json(
+    fn to_result(
         &'a self,
         paths: &mut Vec<Path>,
-        indent: Option<&str>,
-        newline: Option<&str>,
-        space: Option<&str>,
-        format: Format,
+        options: ResultOptions,
     ) -> Result<RedisValue, Error> {
-        if format == Format::BSON {
-            return Err("ERR Soon to come...".into());
-        }
-        let is_legacy = !paths.iter().any(|p| !p.is_legacy());
         if paths.len() > 1 {
-            self.to_json_multi(paths, indent, newline, space, is_legacy)
+            self.to_result_multi(paths, options)
         } else {
-            self.to_json_single(paths[0].get_path(), indent, newline, space, is_legacy)
+            self.to_result_single(paths[0].get_path(), options)
         }
     }
 
@@ -318,11 +325,10 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     }
 
     pub fn serialize(results: &V, format: Format) -> Result<String, Error> {
-        let res = match format {
-            Format::JSON => serde_json::to_string(results)?,
-            Format::BSON => return Err("ERR Soon to come...".into()), //results.into() as Bson,
-        };
-        Ok(res)
+        match format {
+            Format::JSON => Ok(serde_json::to_string(results)?),
+            Format::BSON => Err("ERR BSON soon to come...".into()),
+        }
     }
 
     pub fn to_string(&self, path: &str, format: Format) -> Result<String, Error> {
@@ -333,23 +339,15 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     pub fn to_string_single(
         &self,
         path: &str,
-        indent: Option<&str>,
-        newline: Option<&str>,
-        space: Option<&str>,
-    ) -> Result<String, Error> {
+        options: ResultOptions,
+    ) -> Result<RedisValue, Error> {
         let result = self.get_first(path)?;
-        Ok(Self::serialize_object(&result, indent, newline, space))
+        Ok(Self::serialize_object(&result, options).into())
     }
 
-    pub fn to_string_multi(
-        &self,
-        path: &str,
-        indent: Option<&str>,
-        newline: Option<&str>,
-        space: Option<&str>,
-    ) -> Result<String, Error> {
+    pub fn to_string_multi(&self, path: &str, options: ResultOptions) -> Result<RedisValue, Error> {
         let results = self.get_values(path)?;
-        Ok(Self::serialize_object(&results, indent, newline, space))
+        Ok(Self::serialize_object(&results, options).into())
     }
 
     pub fn get_type(&self, path: &str) -> Result<String, Error> {
@@ -525,31 +523,35 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
 ///         [INDENT indentation-string]
 ///         [NEWLINE line-break-string]
 ///         [SPACE space-string]
+///         [FORMAT format]
 ///         [path ...]
 ///
-/// TODO add support for multi path
 pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
 
-    // Set Capcity to 1 assumiung the common case has one path
+    // Set Capacity to 1 assuming the common case has one path
     let mut paths: Vec<Path> = Vec::with_capacity(1);
-    let mut format = Format::JSON;
-    let mut indent = None;
-    let mut space = None;
-    let mut newline = None;
+    let mut options = ResultOptions::default();
+
     while let Ok(arg) = args.next_str() {
         match arg {
             // fast way to consider arg a path by using the max length of all possible subcommands
             // See #390 for the comparison of this function with/without this optimization
             arg if arg.len() > JSONGET_SUBCOMMANDS_MAXSTRLEN => paths.push(Path::new(arg)),
-            arg if arg.eq_ignore_ascii_case(CMD_ARG_INDENT) => indent = Some(args.next_str()?),
-            arg if arg.eq_ignore_ascii_case(CMD_ARG_NEWLINE) => newline = Some(args.next_str()?),
-            arg if arg.eq_ignore_ascii_case(CMD_ARG_SPACE) => space = Some(args.next_str()?),
+            arg if arg.eq_ignore_ascii_case(CMD_ARG_INDENT) => {
+                options.indent = Some(args.next_str()?)
+            }
+            arg if arg.eq_ignore_ascii_case(CMD_ARG_NEWLINE) => {
+                options.newline = Some(args.next_str()?)
+            }
+            arg if arg.eq_ignore_ascii_case(CMD_ARG_SPACE) => {
+                options.space = Some(args.next_str()?)
+            }
             // Silently ignore. Compatibility with ReJSON v1.0 which has this option. See #168 TODO add support
             arg if arg.eq_ignore_ascii_case(CMD_ARG_NOESCAPE) => continue,
             arg if arg.eq_ignore_ascii_case(CMD_ARG_FORMAT) => {
-                format = Format::from_str(args.next_str()?)?;
+                options.format = Format::from_str(args.next_str()?)?;
             }
             _ => paths.push(Path::new(arg)),
         };
@@ -559,10 +561,11 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
     if paths.is_empty() {
         paths.push(Path::new(JSON_ROOT_PATH_LEGACY));
     }
+    options.is_legacy = !paths.iter().any(|p| !p.is_legacy());
 
     let key = manager.open_key_read(ctx, &key)?;
     let value = match key.get_value()? {
-        Some(doc) => KeyValue::new(doc).to_json(&mut paths, indent, newline, space, format)?,
+        Some(doc) => KeyValue::new(doc).to_result(&mut paths, options)?,
         None => RedisValue::Null,
     };
 
@@ -570,14 +573,14 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
 }
 
 ///
-/// JSON.SET <key> <path> <json> [NX | XX | FORMAT <format>]
+/// JSON.SET <key> <path> <json> [NX | XX] [FORMAT format]
 ///
 pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;
     let path = Path::new(args.next_str()?);
-    let value = args.next_str()?;
+    let value = args.next_arg()?;
 
     let mut format = Format::JSON;
     let mut set_option = SetOptions::None;
@@ -600,7 +603,7 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
     let mut redis_key = manager.open_key_write(ctx, key)?;
     let current = redis_key.get_value()?;
 
-    let val = manager.from_str(value, format)?;
+    let val = manager.from_string(&value, format)?;
 
     match (current, set_option) {
         (Some(ref mut doc), ref op) => {
@@ -866,6 +869,8 @@ pub fn json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
 ///
 /// JSON.MGET <key> [key ...] <path>
 ///
+/// TODO add support for [FORMAT format]
+///
 pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     if args.len() < 3 {
         return Err(RedisError::WrongArity);
@@ -875,10 +880,12 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
         let path = Path::new(path.try_as_str()?);
         let keys = &args[1..args.len() - 1];
 
-        let to_string =
-            |doc: &M::V| KeyValue::new(doc).to_string_multi(path.get_path(), None, None, None);
-        let to_string_legacy =
-            |doc: &M::V| KeyValue::new(doc).to_string_single(path.get_path(), None, None, None);
+        let to_string = |doc: &M::V| {
+            KeyValue::new(doc).to_string_multi(path.get_path(), ResultOptions::default())
+        };
+        let to_string_legacy = |doc: &M::V| {
+            KeyValue::new(doc).to_string_single(path.get_path(), ResultOptions::default())
+        };
         let is_legacy = path.is_legacy();
 
         let results: Result<Vec<RedisValue>, RedisError> = keys
@@ -1028,7 +1035,7 @@ where
     }
 
     let res = to_json_value::<Number>(res, Value::Null);
-    Ok(KeyValue::<M::V>::serialize_object(&res, None, None, None).into())
+    Ok(KeyValue::<M::V>::serialize_object(&res, ResultOptions::default()).into())
 }
 
 fn json_num_op_legacy<M>(
@@ -1332,8 +1339,7 @@ pub fn json_arr_append<M: Manager>(
     let args = args.try_fold::<_, _, Result<_, RedisError>>(
         Vec::with_capacity(args.len()),
         |mut acc, arg| {
-            let json = arg.try_as_str()?;
-            acc.push(manager.from_str(json, Format::JSON)?);
+            acc.push(manager.from_string(&arg, Format::JSON)?);
             Ok(acc)
         },
     )?;
@@ -1501,8 +1507,7 @@ pub fn json_arr_insert<M: Manager>(
     let args = args.try_fold::<_, _, Result<_, RedisError>>(
         Vec::with_capacity(args.len()),
         |mut acc, arg| {
-            let json = arg.try_as_str()?;
-            acc.push(manager.from_str(json, Format::JSON)?);
+            acc.push(manager.from_string(&arg, Format::JSON)?);
             Ok(acc)
         },
     )?;

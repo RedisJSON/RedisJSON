@@ -65,6 +65,20 @@ impl From<serde_json::Error> for Error {
     }
 }
 
+impl From<bson::de::Error> for Error {
+    fn from(e: bson::de::Error) -> Self {
+        Self { msg: e.to_string() }
+    }
+}
+
+// impl From<JsonPathError> for Error {
+//     fn from(e: JsonPathError) -> Self {
+//         Self {
+//             msg: format!("JSON Path error: {:?}", e).replace('\n', "\\n"),
+//         }
+//     }
+// }
+
 impl From<Error> for redis_module::RedisError {
     fn from(e: Error) -> Self {
         Self::String(e.msg)

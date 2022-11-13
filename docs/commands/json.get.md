@@ -7,6 +7,7 @@ The following subcommands change the reply's format (all are empty string by def
 *   `INDENT` sets the indentation string for nested levels
 *   `NEWLINE` sets the string that's printed at the end of each line
 *   `SPACE` sets the string that's put between a key and a value
+*   `FORMAT` sets result format the current supported formats JSON/BSON (Default JSON)
 
 Produce pretty-formatted JSON with `redis-cli` by following this example:
 

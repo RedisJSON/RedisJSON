@@ -10,7 +10,6 @@ use redis_module::key::{verify_type, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::rediserror::RedisError;
 use redis_module::{Context, NotifyEvent, RedisString};
-use serde::Serialize;
 use serde_json::Number;
 use std::marker::PhantomData;
 use std::mem::size_of;
@@ -18,9 +17,6 @@ use std::mem::size_of;
 use crate::redisjson::RedisJSON;
 
 use crate::array_index::ArrayIndex;
-
-use bson::decode_document;
-use std::io::Cursor;
 
 pub struct IValueKeyHolderWrite<'a> {
     key: RedisKeyWritable,
@@ -290,7 +286,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
     fn serialize(results: &IValue, format: Format) -> Result<String, Error> {
         let res = match format {
             Format::JSON => serde_json::to_string(results)?,
-            Format::BSON => return Err("ERR Soon to come...".into()), //results.into() as Bson,
+            Format::BSON => return Err("ERR BSON soon to come...".into()), //results.into() as Bson,
         };
         Ok(res)
     }
@@ -598,32 +594,14 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         })
     }
 
-    fn from_str(&self, val: &str, format: Format) -> Result<Self::O, Error> {
+    fn from_str(&self, val: &str) -> Result<Self::O, Error> {
+        Ok(serde_json::from_str(val)?)
+    }
+
+    fn from_string(&self, val: &RedisString, format: Format) -> Result<Self::O, Error> {
         match format {
-            Format::JSON => Ok(serde_json::from_str(val)?),
-            Format::BSON => decode_document(&mut Cursor::new(val.as_bytes())).map_or_else(
-                |e| Err(e.to_string().into()),
-                |docs| {
-                    let v = if docs.is_empty() {
-                        IValue::NULL
-                    } else {
-                        docs.iter().next().map_or_else(
-                            || IValue::NULL,
-                            |(_, b)| {
-                                let v: serde_json::Value = b.clone().into();
-                                let mut out = serde_json::Serializer::new(Vec::new());
-                                v.serialize(&mut out).unwrap();
-                                self.from_str(
-                                    &String::from_utf8(out.into_inner()).unwrap(),
-                                    Format::JSON,
-                                )
-                                .unwrap()
-                            },
-                        )
-                    };
-                    Ok(v)
-                },
-            ),
+            Format::JSON => self.from_str(val.try_as_str()?),
+            Format::BSON => bson::from_slice(val.as_slice()).map_err(|err| err.into()),
         }
     }
 

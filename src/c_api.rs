@@ -7,7 +7,7 @@ use std::{
     os::raw::{c_char, c_void},
 };
 
-use crate::commands::KeyValue;
+use crate::commands::{KeyValue, ResultOptions};
 use crate::jsonpath::select_value::{SelectValue, SelectValueType};
 use crate::jsonpath::{compile, create};
 use redis_module::raw as rawmod;
@@ -45,16 +45,16 @@ pub static mut LLAPI_CTX: Option<*mut rawmod::RedisModuleCtx> = None;
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn create_rmstring(
     ctx: *mut rawmod::RedisModuleCtx,
-    from_str: &str,
-    str: *mut *mut rawmod::RedisModuleString,
-) -> c_int {
-    if let Ok(s) = CString::new(from_str) {
+    value: Vec<u8>,
+    rmstr: *mut *mut rawmod::RedisModuleString,
+) -> Status {
+    if let Ok(s) = CString::new(value) {
         let p = s.as_bytes_with_nul().as_ptr().cast::<c_char>();
         let len = s.as_bytes().len();
-        unsafe { *str = rawmod::RedisModule_CreateString.unwrap()(ctx, p, len) };
-        return Status::Ok as c_int;
+        unsafe { *rmstr = rawmod::RedisModule_CreateString.unwrap()(ctx, p, len) };
+        return Status::Ok;
     }
-    Status::Err as c_int
+    Status::Err
 }
 
 pub fn json_api_open_key_internal<M: Manager>(
@@ -127,8 +127,8 @@ pub fn json_api_get_json<M: Manager>(
     str: *mut *mut rawmod::RedisModuleString,
 ) -> c_int {
     let json = unsafe { &*(json.cast::<M::V>()) };
-    let res = KeyValue::<M::V>::serialize_object(json, None, None, None);
-    create_rmstring(ctx, &res, str)
+    let res = KeyValue::<M::V>::serialize_object(json, ResultOptions::default());
+    create_rmstring(ctx, res, str) as c_int
 }
 
 pub fn json_api_get_json_from_iter<M: Manager>(
@@ -141,8 +141,8 @@ pub fn json_api_get_json_from_iter<M: Manager>(
     if iter.pos >= iter.results.len() {
         Status::Err as c_int
     } else {
-        let res = KeyValue::<M::V>::serialize_object(&iter.results, None, None, None);
-        create_rmstring(ctx, &res, str);
+        let res = KeyValue::<M::V>::serialize_object(&iter.results, ResultOptions::default());
+        create_rmstring(ctx, res, str);
         Status::Ok as c_int
     }
 }
@@ -443,7 +443,7 @@ macro_rules! redis_json_module_export_shared_api {
             match jsonpath::compile(path) {
                 Ok(q) => Box::into_raw(Box::new(q)).cast::<c_void>(),
                 Err(e) => {
-                    create_rmstring(ctx, &format!("{}", e), err_msg);
+                    create_rmstring(ctx, format!("{}", e).into_bytes(), err_msg);
                     std::ptr::null()
                 }
             }

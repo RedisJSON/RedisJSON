@@ -56,6 +56,13 @@ pub enum Format {
     JSON,
     BSON,
 }
+
+impl Default for Format {
+    fn default() -> Self {
+        Self::JSON
+    }
+}
+
 impl FromStr for Format {
     type Err = Error;
 
@@ -63,7 +70,7 @@ impl FromStr for Format {
         match s {
             "JSON" => Ok(Self::JSON),
             "BSON" => Ok(Self::BSON),
-            _ => Err("ERR wrong format".into()),
+            _ => Err(format!("ERR wrong format {}", s).into()),
         }
     }
 }
@@ -139,7 +146,7 @@ pub mod type_methods {
                     let m = RedisJsonKeyManager {
                         phantom: PhantomData,
                     };
-                    let v = m.from_str(&json_string, Format::JSON);
+                    let v = m.from_str(&json_string);
                     match v {
                         Ok(res) => Box::into_raw(Box::new(res)).cast::<libc::c_void>(),
                         Err(_) => null_mut(),
@@ -149,7 +156,7 @@ pub mod type_methods {
                     let m = RedisIValueJsonKeyManager {
                         phantom: PhantomData,
                     };
-                    let v = m.from_str(&json_string, Format::JSON);
+                    let v = m.from_str(&json_string);
                     match v {
                         Ok(res) => Box::into_raw(Box::new(res)).cast::<libc::c_void>(),
                         Err(_) => null_mut(),

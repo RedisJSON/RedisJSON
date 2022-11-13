@@ -1,4 +1,5 @@
 use crate::jsonpath::select_value::SelectValue;
+use serde::Serialize;
 use serde_json::map::Entry;
 use serde_json::{Number, Value};
 
@@ -14,7 +15,7 @@ use crate::Format;
 use crate::REDIS_JSON_TYPE;
 
 use crate::error::Error;
-use bson::decode_document;
+use bson::Document;
 use std::io::Cursor;
 
 use crate::array_index::ArrayIndex;
@@ -74,18 +75,25 @@ pub trait Manager {
     type O: Clone;
     type WriteHolder: WriteHolder<Self::O, Self::V>;
     type ReadHolder: ReadHolder<Self::V>;
+
     fn open_key_read(
         &self,
         ctx: &Context,
         key: &RedisString,
     ) -> Result<Self::ReadHolder, RedisError>;
+
     fn open_key_write(
         &self,
         ctx: &Context,
         key: RedisString,
     ) -> Result<Self::WriteHolder, RedisError>;
+
     #[allow(clippy::wrong_self_convention)]
-    fn from_str(&self, val: &str, format: Format) -> Result<Self::O, Error>;
+    fn from_str(&self, val: &str) -> Result<Self::O, Error>;
+
+    #[allow(clippy::wrong_self_convention)]
+    fn from_string(&self, val: &RedisString, format: Format) -> Result<Self::O, Error>;
+
     fn get_memory(&self, v: &Self::V) -> Result<usize, RedisError>;
     fn is_json(&self, key: *mut RedisModuleKey) -> Result<bool, RedisError>;
 }
@@ -272,7 +280,7 @@ impl<'a> KeyHolderWrite<'a> {
     fn serialize(results: &Value, format: Format) -> Result<String, Error> {
         let res = match format {
             Format::JSON => serde_json::to_string(results)?,
-            Format::BSON => return Err("ERR Soon to come...".into()), //results.into() as Bson,
+            Format::BSON => return Err("ERR BSON soon to come...".into()),
         };
         Ok(res)
     }
@@ -568,21 +576,21 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
         })
     }
 
-    fn from_str(&self, val: &str, format: Format) -> Result<Value, Error> {
+    fn from_str(&self, val: &str) -> Result<Self::O, Error> {
+        Ok(serde_json::from_str(val)?)
+    }
+
+    fn from_string(&self, val: &RedisString, format: Format) -> Result<Value, Error> {
         match format {
-            Format::JSON => Ok(serde_json::from_str(val)?),
-            Format::BSON => decode_document(&mut Cursor::new(val.as_bytes()))
-                .map(|docs| {
-                    let v = if docs.is_empty() {
-                        Value::Null
-                    } else {
-                        docs.iter()
-                            .next()
-                            .map_or_else(|| Value::Null, |(_, b)| b.clone().into())
-                    };
-                    Ok(v)
-                })
-                .unwrap_or_else(|e| Err(e.to_string().into())),
+            Format::JSON => self.from_str(val.try_as_str()?),
+            Format::BSON => Document::from_reader(&mut Cursor::new(val.as_slice())).map_or_else(
+                |e| Err(e.to_string().into()),
+                |doc| {
+                    let mut out = serde_json::Serializer::new(Vec::new());
+                    doc.serialize(&mut out)?;
+                    Ok(serde_json::from_slice(out.into_inner().as_slice())?)
+                },
+            ),
         }
     }
 
