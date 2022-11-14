@@ -1,10 +1,5 @@
 
-#----------------------------------------------------------------------------------------------
-
 ROOT=.
-ifeq ($(wildcard $(ROOT)/deps/readies/*),)
-___:=$(shell git submodule update --init --recursive &> /dev/null)
-endif
 
 include $(ROOT)/deps/readies/mk/main
 
@@ -14,6 +9,7 @@ define HELPTEXT
 make setup         # install prerequisites
 
 make build
+  NIGHTLY=1        # use nightly toolchain
   DEBUG=1          # build debug variant
   SAN=type         # build with LLVM sanitizer (type=address|memory|leak|thread)
   VALGRIND|VG=1    # build for testing with Valgrind
@@ -85,39 +81,37 @@ RUST_FLAGS=
 RUST_DOCFLAGS=
 
 ifeq ($(DEBUG),1)
-ifeq ($(SAN),)
-TARGET_DIR=$(BINDIR)/target/debug
+	ifeq ($(SAN),)
+		TARGET_DIR=$(BINDIR)/target/debug
+	else
+		NIGHTLY=1
+		CARGO_FLAGS += -Zbuild-std
+		RUST_FLAGS += -Zsanitizer=$(SAN)
+		ifeq ($(SAN),memory)
+			RUST_FLAGS += -Zsanitizer-memory-track-origins
+		endif
+	endif
 else
-NIGHTLY=1
-CARGO_FLAGS += -Zbuild-std
-RUST_FLAGS += -Zsanitizer=$(SAN)
-ifeq ($(SAN),memory)
-RUST_FLAGS += -Zsanitizer-memory-track-origins
-endif
-endif
-else
-CARGO_FLAGS += --release
-TARGET_DIR=$(BINDIR)/target/release
+	CARGO_FLAGS += --release
+	TARGET_DIR=$(BINDIR)/target/release
 endif
 
 ifeq ($(COV),1)
-# NIGHTLY=1
-# RUST_FLAGS += -Zinstrument-coverage
 RUST_FLAGS += -C instrument_coverage
-endif # COV
+endif
 
 ifeq ($(PROFILE),1)
 RUST_FLAGS += -g -C force-frame-pointers=yes
 endif
 
 ifeq ($(NIGHTLY),1)
-TARGET_DIR=$(BINDIR)/target/$(RUST_TARGET)/debug
+	TARGET_DIR=$(BINDIR)/target/$(RUST_TARGET)/debug
 
-ifeq ($(RUST_GOOD_NIGHTLY),)
-CARGO_TOOLCHAIN = +nightly
-else
-CARGO_TOOLCHAIN = +$(RUST_GOOD_NIGHTLY)
-endif
+	ifeq ($(RUST_GOOD_NIGHTLY),)
+		CARGO_TOOLCHAIN = +nightly
+	else
+		CARGO_TOOLCHAIN = +$(RUST_GOOD_NIGHTLY)
+	endif
 endif
 
 export CARGO_TARGET_DIR=$(BINDIR)/target
