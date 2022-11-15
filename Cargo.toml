@@ -2,13 +2,13 @@ cargo-features = ["edition2021"]
 
 [package]
 name = "redisjson"
-version = "2.4.0"
+version = "2.4.1"
 authors = ["Guy Korland <guy.korland@redis.com>", "Meir Shpilraien <meir@redis.com>", "Omer Shadmi <omer.shadmi@redis.com>"]
 edition = "2021"
 description = "JSON data type for Redis"
 repository = "https://github.com/RedisJSON/RedisJSON"
 readme = "README.md" 
-license = "Redis Source Available License (RSAL)"
+license = "Redis Source Available License 2.0 (RSALv2) or the Server Side Public License v1 (SSPLv1)"
 keywords = ["redis", "json", "plugin"]
 categories = ["database-implementations"]
 
