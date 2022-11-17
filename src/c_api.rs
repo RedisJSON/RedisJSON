@@ -483,6 +483,7 @@ macro_rules! redis_json_module_export_shared_api {
 
         static REDISJSON_GETAPI_V1: &str = concat!("RedisJSON_V1", "\0");
         static REDISJSON_GETAPI_V2: &str = concat!("RedisJSON_V2", "\0");
+        static REDISJSON_GETAPI_V3: &str = concat!("RedisJSON_V3", "\0");
 
         pub fn export_shared_api(ctx: &Context) {
             unsafe {
@@ -494,11 +495,18 @@ macro_rules! redis_json_module_export_shared_api {
                     REDISJSON_GETAPI_V1.as_ptr().cast::<c_char>(),
                 );
                 ctx.log_notice("Exported RedisJSON_V1 API");
+
                 ctx.export_shared_api(
                     (&JSONAPI_CURRENT as *const RedisJSONAPI_CURRENT).cast::<c_void>(),
                     REDISJSON_GETAPI_V2.as_ptr().cast::<c_char>(),
                 );
                 ctx.log_notice("Exported RedisJSON_V2 API");
+
+                ctx.export_shared_api(
+                    (&JSONAPI_CURRENT as *const RedisJSONAPI_CURRENT).cast::<c_void>(),
+                    REDISJSON_GETAPI_V3.as_ptr().cast::<c_char>(),
+                );
+                ctx.log_notice("Exported RedisJSON_V3 API");
             };
         }
 
@@ -524,6 +532,7 @@ macro_rules! redis_json_module_export_shared_api {
             pathFree: JSONAPI_pathFree,
             pathIsSingle: JSONAPI_pathIsSingle,
             pathHasDefinedOrder: JSONAPI_pathHasDefinedOrder,
+            // V3 entries
             getJSONFromIter: JSONAPI_getJSONFromIter,
             resetIter: JSONAPI_resetIter,
         };
@@ -565,6 +574,7 @@ macro_rules! redis_json_module_export_shared_api {
             pub pathFree: extern "C" fn(json_path: *mut c_void),
             pub pathIsSingle: extern "C" fn(json_path: *mut c_void) -> c_int,
             pub pathHasDefinedOrder: extern "C" fn(json_path: *mut c_void) -> c_int,
+            // V3 entries
             pub getJSONFromIter: extern "C" fn(iter: *mut c_void, ctx: *mut rawmod::RedisModuleCtx, str: *mut *mut rawmod::RedisModuleString,) -> c_int,
             pub resetIter: extern "C" fn(iter: *mut c_void),
         }
