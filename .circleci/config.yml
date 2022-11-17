@@ -349,6 +349,7 @@ commands:
           command: |
             ROOT="$PWD"
             cd redisbench-admin
+            export PATH="/root/.local/bin:$PATH"
             source $(poetry env info --path)/bin/activate
             cd ../tests/benchmarks
             export AWS_ACCESS_KEY_ID=$PERFORMANCE_EC2_ACCESS_KEY
