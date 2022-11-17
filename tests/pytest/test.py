@@ -239,7 +239,7 @@ def testSetGetWithSpecialKey(env):
         "$": "$",
         "a": "a",
         "$a": "$a",
-        "$a[": "$a[",   #
+        "$a[": "$a["
     }
     
     # Set doc using individual keys using legacy syntax (with implicit `$` root)
@@ -1040,8 +1040,9 @@ def testIssue_74(env):
 
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{}'))
     # This shouldn't crash Redis
-    r.expect('JSON.SET', 'test', '$a', '12').equal("OK")
-    r.expect('JSON.GET', 'test', '$a').equal('[12]')
+    r.expect('JSON.SET', 'test', '$a', '12').equal("OK")    # using legacy path
+    r.expect('JSON.GET', 'test', '$a').equal('12')          # using legacy path
+    r.expect('JSON.GET', 'test', '$.$a').equal('[12]')
 
 def testDoubleParse(env):
     r = env
