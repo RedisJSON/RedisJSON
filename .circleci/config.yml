@@ -331,13 +331,8 @@ commands:
           shell: /bin/bash -l -eo pipefail
           command: |
             ./deps/readies/bin/getpy3
-            git clone git@github.com:RedisLabsModules/redisbench-admin.git --depth=1
+            git clone -b feature/callback git@github.com:RedisLabsModules/redisbench-admin.git --depth=1
             cd redisbench-admin
-            git config --global user.email "anton.tokarev@redis.com"
-            git config --global user.name "anton.tokarev"
-            git pull origin feature/callback --allow-unrelated-histories
-            git branch feature/callback
-            git checkout feature/callback
             pip install poetry
             poetry config virtualenvs.create false
             poetry install
