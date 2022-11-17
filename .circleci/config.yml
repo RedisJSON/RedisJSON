@@ -335,9 +335,9 @@ commands:
             cd redisbench-admin
             curl -sSL https://install.python-poetry.org | python3 -
             export PATH="/root/.local/bin:$PATH"
-            poetry config virtualenvs.create false
             poetry install
-            echo "IyEvdXNyL2xvY2FsL2Jpbi9weXRob24KIyAtKi0gY29kaW5nOiB1dGYtOCAtKi0KaW1wb3J0IHJlCmltcG9ydCBzeXMKZnJvbSByZWRpc2JlbmNoX2FkbWluLmNsaSBpbXBvcnQgbWFpbgoKaWYgX19uYW1lX18gPT0gIl9fbWFpbl9fIjoKICAgIHN5cy5hcmd2WzBdID0gcmUuc3ViKHIiKC1zY3JpcHRcLnB5d3xcLmV4ZSk/JCIsICIiLCBzeXMuYXJndlswXSkKICAgIHN5cy5leGl0KG1haW4oKSkK" | base64 -d > run.py
+            source $(poetry env info --path)/bin/activate
+            echo "IyEvdXNyL2Jpbi9lbnYgcHl0aG9uCiMgLSotIGNvZGluZzogdXRmLTggLSotCmltcG9ydCByZQppbXBvcnQgc3lzCmZyb20gcmVkaXNiZW5jaF9hZG1pbi5jbGkgaW1wb3J0IG1haW4KCmlmIF9fbmFtZV9fID09ICJfX21haW5fXyI6CiAgICBzeXMuYXJndlswXSA9IHJlLnN1YihyIigtc2NyaXB0XC5weXd8XC5leGUpPyQiLCAiIiwgc3lzLmFyZ3ZbMF0pCiAgICBzeXMuZXhpdChtYWluKCkpCg==" | base64 -d > run.py
             chmod +x run.py
             ln -s run.py /usr/local/bin/benchmark-admin
             VERSION=0.14.8 ./deps/readies/bin/getterraform
