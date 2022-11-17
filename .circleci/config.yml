@@ -312,7 +312,7 @@ commands:
         default: $CIRCLE_USERNAME
       module_path:
         type: string
-        default: bin/linux-x64-release/redisbloom.so
+        default: bin/linux-x64-release/rejson.so
       profile_env:
         type: string
         default: "0"
@@ -523,7 +523,7 @@ jobs:
       - build-steps
       - benchmark-steps
 
-  benchmark-bloom-oss-standalone-test:
+  benchmark-json-oss-standalone-test:
     docker:
       - image: redisfab/rmbuilder:6.2.7-x64-focal
     steps:
@@ -683,7 +683,7 @@ workflows:
       - benchmark-json-oss-standalone:
           <<: *on-integ-and-version-tags
           context: common
-      - benchmark-bloom-oss-standalone-test:
+      - benchmark-json-oss-standalone-test:
           <<: *on-test-branch
           context: common
       - benchmark-json-oss-standalone-profiler:
