@@ -360,7 +360,7 @@ commands:
             export BENCHMARK_GLOB=<< parameters.benchmark_glob >>
             export PERF_CALLGRAPH_MODE="dwarf"
             redisbench-admin run-remote \
-              --required-module bf \
+              --required-module ReJSON \
               --module_path "$ROOT/<< parameters.module_path >>" \
               --github_actor "<< parameters.github_actor >>" \
               --github_repo $CIRCLE_PROJECT_REPONAME \
@@ -368,13 +368,12 @@ commands:
               --github_sha $CIRCLE_SHA1 \
               --github_branch $CIRCLE_BRANCH \
               --upload_results_s3 \
+              --fail_fast \
               --callback \
               --callback_url https://dashi.cto.redislabs.com/callback
               --triggering_env << parameters.triggering_env >> \
-              --fail_fast \
               --push_results_redistimeseries \
-              --allowed-envs << parameters.allowed_envs >>
-
+              --allowed-envs << parameters.allowed_envs >> || true
 
 #----------------------------------------------------------------------------------------------------------------------------------
 
