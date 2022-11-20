@@ -13,7 +13,7 @@ RAM.
 RedisJSON stores JSON values as binary data after deserializing them. This representation is often more
 expensive, size-wize, than the serialized form. The RedisJSON data type uses at least 24 bytes (on
 64-bit architectures) for every value, as can be seen by sampling an empty string with the
-[`JSON.DEBUG MEMORY`](/commands/json.debug-memory/) command:
+`JSON.DEBUG MEMORY` command:
 
 ```
 127.0.0.1:6379> JSON.SET emptystring . '""'
