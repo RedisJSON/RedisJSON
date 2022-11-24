@@ -17,6 +17,7 @@ jobs:
       uses: vmactions/freebsd-vm@v0.3.0
       with:
         usesh: true
+        mem: 4096
         sync: rsync
         prepare: pkg install -y bash curl lang/rust devel/llvm-devel
         run: |
