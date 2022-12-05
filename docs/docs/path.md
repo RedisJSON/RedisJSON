@@ -157,11 +157,11 @@ You can use an array slice to select a range of elements from an array. This exa
 "[\"Noise-cancelling Bluetooth headphones\",\"Wireless earbuds\"]"
 ```
 
-Filter expressions `?()` let you select JSON elements based on certain conditions. You can use comparison operators (`==`, `!=`, `<`, `<=`, `>`, `>=`, `=~`), logical operators (`&&`, `||`), and parenthesis (`(`, `)`) within these expressions. A filter expression can be applied on an array or on an object, iterating over all the **elements** in the array or all the **values** in the object, retrieving only the ones that match the filter condition. 
+Filter expressions `?()` let you select JSON elements based on certain conditions. You can use comparison operators (`==`, `!=`, `<`, `<=`, `>`, `>=`, and starting with version v2.4.2, also `=~`), logical operators (`&&`, `||`), and parenthesis (`(`, `)`) within these expressions. A filter expression can be applied on an array or on an object, iterating over all the **elements** in the array or all the **values** in the object, retrieving only the ones that match the filter condition. 
 
 Paths within the filter condition are using the dot notation with either `@` to denote the current array element or the current object value, or `$` to denote the top-level element. For example, use `@.key_name` to refer to a nested value and `$.top_level_key_name` to refer to a top-level value.
 
-The comparison operator `=~` is matching a path of a string value on the left side against a regular expression pattern on the right side.  For more information, see the [supported regular expression syntax docs](https://docs.rs/regex/latest/regex/#syntax).
+Starting with version v2.4.2, the comparison operator `=~` can be used for matching a path of a string value on the left side against a regular expression pattern on the right side. For more information, see the [supported regular expression syntax docs](https://docs.rs/regex/latest/regex/#syntax).
 
 Non-string values do not match. A match can only occur when the left side is a path of a string value and the right side is either a hard-coded string, or a path of a string value. See [examples](#json-filter-examples) below.
 
@@ -187,7 +187,7 @@ This example filters the inventory for the names of items that support Bluetooth
 "[\"Noise-cancelling Bluetooth headphones\",\"Wireless earbuds\",\"Wireless keyboard\"]"
 ```
 
-This example filters only keyboards with some sort of USB connection using regex match. Notice this match is case-insensitive thanks to the prefix `(?i)` in the regular expression pattern `"(?i)usb"`:
+This example, starting with version v2.4.2, filters only keyboards with some sort of USB connection using regex match. Notice this match is case-insensitive thanks to the prefix `(?i)` in the regular expression pattern `"(?i)usb"`:
 
 ```sh
 127.0.0.1:6379> JSON.GET store '$.inventory.keyboards[?(@.connection =~ "(?i)usb")]'
