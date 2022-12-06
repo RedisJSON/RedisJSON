@@ -310,7 +310,10 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
 
     fn set_value(&mut self, path: Vec<String>, mut v: Value) -> Result<bool, RedisError> {
         let mut updated = false;
-        if path.is_empty() {
+
+        if path.len() > 127 {
+            return Err(RedisError::Str("recursion limit exceeded"));
+        } else if path.is_empty() {
             // update the root
             self.set_root(Some(v))?;
             updated = true;
@@ -325,7 +328,10 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
 
     fn dict_add(&mut self, path: Vec<String>, key: &str, mut v: Value) -> Result<bool, RedisError> {
         let mut updated = false;
-        if path.is_empty() {
+
+        if path.len() > 127 {
+            return Err(RedisError::Str("recursion limit exceeded"));
+        } else if path.is_empty() {
             // update the root
             let root = self.get_value().unwrap().unwrap();
             let val = if let Value::Object(mut o) = root.take() {
