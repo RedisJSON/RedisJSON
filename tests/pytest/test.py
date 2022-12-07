@@ -1257,6 +1257,53 @@ def testFilter(env):
     r.expect('JSON.GET', 'doc', '$.arr[?(@ == $.pat_plain)]').equal('["(?i)^[f][o][o]$"]')
     
 
+def testOutOfRangeValues(env):
+    # Test numeric min/max values
+    r = env
+
+    doc_int_ok = {
+        # i64
+        "max_i64": 9223372036854775807,
+        "beyond_max_i64": 9223372036854775808, # as u64
+        "min_i64": -9223372036854775808,
+        "below_min_i64": -9223372036854775809, # as f64
+        # u64
+        "max_u64": 18446744073709551615,
+        "beyond_max_u64": 18446744073709551616, # as f64
+    }
+
+    doc_float_ok = {
+        "max_f64": 1.7976931348623157e+308,
+        "beyond_max_f64": 1.7976931348623158e+308, # why OK?
+        "min_f64": -1.7976931348623157e+308,
+        "below_min_f64": -1.7976931348623158e+308, # why OK?
+    }
+
+    doc_bad_values = {
+        "beyond1_max_f64": 1.7976931348623159e+308,
+        "below1_min_f64": -1.7976931348623159e+308
+    }
+    
+    r.expect('JSON.SET', 'doc_int_ok', '$', json.dumps(doc_int_ok)).ok()
+    r.expect('JSON.SET', 'doc_float_ok', '$', json.dumps(doc_float_ok)).ok()
+    epsilon = 0
+    for k, v in iter(doc_int_ok.items()):
+        r.assertTrue(True, message='GET {}={}'.format(k, v))
+        res = r.execute_command('JSON.GET', 'doc_int_ok', '$.{}'.format(k))
+        r.assertAlmostEqual(json.loads(res)[0], v, epsilon, message=res)
+    
+    epsilon = sys.float_info.epsilon
+    for k, v in iter(doc_float_ok.items()):
+        r.assertTrue(True, message='GET {}={}'.format(k, v))
+        res = r.execute_command('JSON.GET', 'doc_float_ok', '$.{}'.format(k))
+        r.assertAlmostEqual(json.loads(res)[0], v, epsilon, message=res)
+    
+    # Do not use json.dumps with out-of-range values here (would be converted to a string representation such as 'Infinity')
+    r.expect('JSON.SET', 'doc_bad_values', '$', '{}').ok()
+    for k, v in iter(doc_bad_values.items()):
+        r.assertTrue(True, message='SET {}={}'.format(k, v))
+        r.expect('JSON.SET', 'doc_bad_values', '$.{}'.format(k), '{}'.format(v)).error()
+
 # class CacheTestCase(BaseReJSONTest):
 #     @property
 #     def module_args(env):
