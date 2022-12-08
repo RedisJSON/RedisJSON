@@ -359,7 +359,7 @@ commands:
             export PROFILE=<< parameters.profile_env >>
             export BENCHMARK_GLOB=<< parameters.benchmark_glob >>
             export PERF_CALLGRAPH_MODE="dwarf"
-            redisbench-admin run-async \
+            ../../redisbench_admin/run.py run-async \
               --required-module ReJSON \
               --module_path "$ROOT/<< parameters.module_path >>" \
               --github_actor "<< parameters.github_actor >>" \
