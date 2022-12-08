@@ -331,7 +331,7 @@ commands:
           shell: /bin/bash -l -eo pipefail
           command: |
             ./deps/readies/bin/getpy3
-            git clone -b feature/callback git@github.com:RedisLabsModules/redisbench-admin.git --depth=1
+            git clone -b feature/async-run git@github.com:RedisLabsModules/redisbench-admin.git --depth=1
             cd redisbench-admin
             curl -sSL https://install.python-poetry.org | python3 -
             export PATH="/root/.local/bin:$PATH"
@@ -359,7 +359,7 @@ commands:
             export PROFILE=<< parameters.profile_env >>
             export BENCHMARK_GLOB=<< parameters.benchmark_glob >>
             export PERF_CALLGRAPH_MODE="dwarf"
-            redisbench-admin run-remote \
+            redisbench-admin run-async \
               --required-module ReJSON \
               --module_path "$ROOT/<< parameters.module_path >>" \
               --github_actor "<< parameters.github_actor >>" \
