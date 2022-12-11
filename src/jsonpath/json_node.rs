@@ -250,7 +250,12 @@ impl SelectValue for IValue {
                 if n.has_decimal_point() {
                     panic!("not a long");
                 } else {
-                    n.to_i64().unwrap()
+                    if let Some(n) = n.to_i64() {
+                        n
+                    } else {
+                        // Workaround until adding an API `get_ulong(&self) -> u64`
+                        i64::MAX
+                    }
                 }
             }
             _ => {
