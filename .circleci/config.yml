@@ -336,7 +336,7 @@ commands:
             curl -sSL https://install.python-poetry.org | python3 -
             export PATH="/root/.local/bin:$PATH"
             poetry install -vvv
-            RUN_TEMPLATE=$(cat \<<END_RUNFILE
+            RUN_TEMPLATE=$(cat <<END_RUNFILE
             #!/usr/bin/env python
             # -*- coding: utf-8 -*-
               import re
@@ -345,10 +345,10 @@ commands:
             
             if __name__ == "__main__":
                 sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
-                  sys.exit(main())
+                sys.exit(main())
             END_RUNFILE
             )
-            echo "RUN_TEMPLATE" > run.py
+            echo "$RUN_TEMPLATE" > run.py
             chmod +x run.py
             ln -s run.py /usr/local/bin/benchmark-admin
             cd ..
