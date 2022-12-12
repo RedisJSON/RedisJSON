@@ -335,7 +335,7 @@ commands:
             cd redisbench-admin
             curl -sSL https://install.python-poetry.org | python3 -
             export PATH="/root/.local/bin:$PATH"
-            poetry install
+            poetry install -vvv
             RUN_TEMPLATE=$(cat \<<END_RUNFILE
             #!/usr/bin/env python
             # -*- coding: utf-8 -*-
