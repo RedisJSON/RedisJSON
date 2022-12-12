@@ -56,7 +56,7 @@ Produce pretty-formatted JSON with `redis-cli` by following this example:
 JSON.GET returns a bulk string representing a JSON array of string replies. 
 Each string is the JSON serialization of each JSON value that matches a path. 
 Using multiple paths, JSON.GET returns a bulk string representing a JSON object with string values. 
-Each string value is the JSON serialization of each JSON value that matches a path.
+Each string value is an array of the JSON serialization of each JSON value that matches a path.
 For more information about replies, see [Redis serialization protocol specification](/docs/reference/protocol-spec).
 
 ## Examples
