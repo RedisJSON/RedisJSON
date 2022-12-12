@@ -335,20 +335,9 @@ commands:
             cd redisbench-admin
             curl -sSL https://install.python-poetry.org | python3 -
             export PATH="/root/.local/bin:$PATH"
-            poetry install -vvv
-            RUN_TEMPLATE=$(cat \<<END_RUNFILE
-            #!/usr/bin/env python
-            # -*- coding: utf-8 -*-
-              import re
-              import sys
-              from redisbench_admin.cli import main
-            
-            if __name__ == "__main__":
-                sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
-                sys.exit(main())
-            END_RUNFILE
-            )
-            echo "$RUN_TEMPLATE" > run.py
+            poetry install
+            source $(poetry env info --path)/bin/activate
+            echo "IyEvdXNyL2Jpbi9lbnYgcHl0aG9uCiMgLSotIGNvZGluZzogdXRmLTggLSotCmltcG9ydCByZQppbXBvcnQgc3lzCmZyb20gcmVkaXNiZW5jaF9hZG1pbi5jbGkgaW1wb3J0IG1haW4KCmlmIF9fbmFtZV9fID09ICJfX21haW5fXyI6CiAgICBzeXMuYXJndlswXSA9IHJlLnN1YihyIigtc2NyaXB0XC5weXd8XC5leGUpPyQiLCAiIiwgc3lzLmFyZ3ZbMF0pCiAgICBzeXMuZXhpdChtYWluKCkpCg==" | base64 -d > run.py
             chmod +x run.py
             ln -s run.py /usr/local/bin/benchmark-admin
             cd ..
