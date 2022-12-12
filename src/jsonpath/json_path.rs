@@ -454,11 +454,13 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             }
             (TermEvaluationResult::Value(v), TermEvaluationResult::String(regex)) => {
                 let regex = &regex
-                    .replace("\\\\", "\\").replace("\\\"", "\"")
-                    .replace("\\\\", "\\").replace("\\'", "'");
+                    .replace("\\\\", "\\")
+                    .replace("\\\"", "\"")
+                    .replace("\\\\", "\\")
+                    .replace("\\'", "'");
                 match v.get_type() {
                     SelectValueType::String => Self::re_is_match(regex, v.as_str()),
-                    _ => false
+                    _ => false,
                 }
             }
             (TermEvaluationResult::Value(v1), TermEvaluationResult::Value(v2)) => {
