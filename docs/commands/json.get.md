@@ -17,8 +17,11 @@ is JSONPath to specify. Default is root `$`. JSON.GET accepts multiple `path` ar
 
 {{% alert title="Note" color="warning" %}}
 
-When using a JSONPath, the root of the matching values is a JSON string with a top-level object, with each object value being a top-level array of serialized JSON value. 
-In contrast, the legacy path returns a single value.
+When using a single JSONPath, the root of the matching values is a JSON string with a top-level **array** of serialized JSON value. 
+In contrast, a legacy path returns a single value.
+
+When using multiple JSONPath arguments, the root of the matching values is a JSON string with a top-level **object**, with each object value being a top-level array of serialized JSON value.
+In contrast, if all paths are legacy paths, each object value is a single serialized JSON value.
 If there are multiple paths that include both legacy path and JSONPath, the returned value conforms to the JSONPath version (an array of values).
 
 {{% /alert %}}
