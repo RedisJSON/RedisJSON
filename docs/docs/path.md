@@ -11,9 +11,12 @@ RedisJSON supports two query syntaxes: [JSONPath syntax](#jsonpath-syntax) and t
 
 RedisJSON knows which syntax to use depending on the first character of the path query. If the query starts with the character `$`, it uses JSONPath syntax. Otherwise, it defaults to the legacy path syntax.
 
+The returned value is a JSON string with a top-level array of JSON serialized strings. 
+And if multi-paths are used, the return value is a JSON string with a top-level object with values that are arrays of serialized JSON values.
+
 ## JSONPath support
 
-RedisJSON v2.0 introduces [JSONPath](http://goessner.net/articles/JsonPath/) support. It follows the syntax described by Goessner in his [article](http://goessner.net/articles/JsonPath/).
+RedisJSON v2.0 introduced [JSONPath](http://goessner.net/articles/JsonPath/) support. It follows the syntax described by Goessner in his [article](http://goessner.net/articles/JsonPath/).
 
 A JSONPath query can resolve to several locations in a JSON document. In this case, the JSON commands apply the operation to every possible location. This is a major improvement over [legacy path](#legacy-path-syntax) queries, which only operate on the first path.
 

@@ -17,7 +17,8 @@ is JSONPath to specify. Default is root `$`. JSON.GET accepts multiple `path` ar
 
 {{% alert title="Note" color="warning" %}}
 
-When using a JSONPath, the root of the matching values is always an array. In contrast, the legacy path returns a single value.
+When using a JSONPath, the root of the matching values is a JSON string with a top-level object, with each object value being a top-level array of serialized JSON value. 
+In contrast, the legacy path returns a single value.
 If there are multiple paths that include both legacy path and JSONPath, the returned value conforms to the JSONPath version (an array of values).
 
 {{% /alert %}}
@@ -52,7 +53,10 @@ Produce pretty-formatted JSON with `redis-cli` by following this example:
 
 ## Return
 
-JSON.GET returns an array of bulk string replies. Each string is the JSON serialization of each JSON value that matches a path.
+JSON.GET returns a bulk string representing a JSON array of string replies. 
+Each string is the JSON serialization of each JSON value that matches a path. 
+Using multiple paths, JSON.GET returns a bulk string representing a JSON object with string values. 
+Each string value is the JSON serialization of each JSON value that matches a path.
 For more information about replies, see [Redis serialization protocol specification](/docs/reference/protocol-spec).
 
 ## Examples
@@ -63,7 +67,7 @@ For more information about replies, see [Redis serialization protocol specificat
 Create a JSON document.
 
 {{< highlight bash >}}
-127.0.0.1:6379>  JSON.SET doc $ '{"a":2, "b": 3, "nested": {"a": 4, "b": null}}'
+127.0.0.1:6379> JSON.SET doc $ '{"a":2, "b": 3, "nested": {"a": 4, "b": null}}'
 OK
 {{< / highlight >}}
 
@@ -74,7 +78,7 @@ With a single JSONPath (JSON array bulk string):
 "[3,null]"
 {{< / highlight >}}
 
-Using multiple paths with at least one JSONPath (map with array of JSON values per path):
+Using multiple paths with at least one JSONPath returns a JSON string with a top-level object with an array of JSON values per path:
 
 {{< highlight bash >}}
 127.0.0.1:6379> JSON.GET doc ..a $..b
