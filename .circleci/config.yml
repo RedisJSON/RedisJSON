@@ -334,13 +334,13 @@ commands:
             git clone -b feature/async-run git@github.com:RedisLabsModules/redisbench-admin.git --depth=1
             cd redisbench-admin
             echo "install poetry"
-            curl -sSL https://install.python-poetry.org | python3 -
+            curl -sSL https://install.python-poetry.org | POETRY_VERSION=1.2.2 python3 -
             echo "export variables"
             export PATH="/root/.local/bin:$PATH"
             export LC_ALL=C.UTF-8
             export LANG=C.UTF-8
             export LANGUAGE=C.UTF-8
-            echo "poetry install"
+            echo "poetry install packages"
             poetry install
             echo "activate venv"
             source $(poetry env info --path)/bin/activate
