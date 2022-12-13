@@ -1273,32 +1273,31 @@ def testOutOfRangeValues(env):
     }
 
     doc_float_ok = {
-        "max_f64": 1.7976931348623157e+308,
-        "beyond_max_f64": 1.7976931348623158e+308, # why OK?
-        "min_f64": -1.7976931348623157e+308,
-        "below_min_f64": -1.7976931348623158e+308, # why OK?
+        "max_f64" : 1.7976931348623157e+308,
+        "max2_f64": 1.7976931348623158e+308,
+        "min_f64" : -1.7976931348623157e+308,
+        "min2_f64": -1.7976931348623158e+308,
     }
 
     doc_bad_values = {
-        "beyond1_max_f64": 1.7976931348623159e+308,
-        "below1_min_f64": -1.7976931348623159e+308
+        "beyond_max_f64": 1.7976931348623159e+308,
+        "below_min_f64": -1.7976931348623159e+308
     }
     
     r.expect('JSON.SET', 'doc_int_ok', '$', json.dumps(doc_int_ok)).ok()
     r.expect('JSON.SET', 'doc_float_ok', '$', json.dumps(doc_float_ok)).ok()
-    epsilon = 0
-    for k, v in iter(doc_int_ok.items()):
-        r.assertTrue(True, message='GET {}={}'.format(k, v))
-        res = r.execute_command('JSON.GET', 'doc_int_ok', '$.{}'.format(k))
-        r.assertAlmostEqual(json.loads(res)[0], v, epsilon, message=res)
+
+    def check_object_values(obj, name, epsilon):
+        for k, v in iter(obj.items()):
+            r.assertTrue(True, message='GET {}={}'.format(k, v))
+            res = r.execute_command('JSON.GET', name, '$.{}'.format(k))
+            r.assertAlmostEqual(json.loads(res)[0], v, epsilon, message=res)
     
-    epsilon = sys.float_info.epsilon
-    for k, v in iter(doc_float_ok.items()):
-        r.assertTrue(True, message='GET {}={}'.format(k, v))
-        res = r.execute_command('JSON.GET', 'doc_float_ok', '$.{}'.format(k))
-        r.assertAlmostEqual(json.loads(res)[0], v, epsilon, message=res)
-    
-    # Do not use json.dumps with out-of-range values here (would be converted to a string representation such as 'Infinity')
+    # Test values from JSON.GET are equal to JSON.SET
+    check_object_values(doc_int_ok, 'doc_int_ok', 0)
+    check_object_values(doc_float_ok, 'doc_float_ok', sys.float_info.epsilon)
+
+    # Not using json.dumps with out-of-range values here (would be converted to a string representation such as 'Infinity')
     r.expect('JSON.SET', 'doc_bad_values', '$', '{}').ok()
     for k, v in iter(doc_bad_values.items()):
         r.assertTrue(True, message='SET {}={}'.format(k, v))
