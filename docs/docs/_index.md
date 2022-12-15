@@ -151,6 +151,28 @@ dog = r.json().get('doc', '$.dog')
 scientific_name = r.json().get('doc', '$..scientific-name')
 ```
 
+### Run with Docker
+
+To run RedisJSON with Docker, use the `redis-stack-server` Docker image:
+
+```sh
+$ docker run -d --name redis-stack-server -p 6379:6379 redis/redis-stack-server:latest
+```
+
+For more information about running Redis Stack in a Docker container, see [Run Redis Stack on Docker](/docs/stack/get-started/install/docker/).
+
+### Download binaries
+
+To download and run RedisJSON from a precompiled binary:
+
+1. Download a precompiled version of RediSearch from the [Redis download center](https://redis.com/download-center/modules/).
+
+1. Run Redis with RedisJSON:
+
+    ```sh
+    $ redis-server --loadmodule /path/to/module/src/rejson.so
+    ```
+
 ### Build from source
 
 To build RedisJSON from the source code:
