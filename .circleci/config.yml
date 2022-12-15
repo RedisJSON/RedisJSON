@@ -381,7 +381,7 @@ commands:
               --upload_results_s3 \
               --fail_fast \
               --callback \
-              --callback_url https://dashi.cto.redislabs.com/callback
+              --callback_url https://dashi.cto.redislabs.com/callback \
               --triggering_env << parameters.triggering_env >> \
               --push_results_redistimeseries \
               --allowed-envs << parameters.allowed_envs >> || true
