@@ -11,7 +11,9 @@ use serde_json::Value;
 use rejson::jsonpath::{compile, create};
 
 #[allow(dead_code)]
-pub fn setup() {}
+pub fn setup() {
+    let _ = env_logger::try_init();
+}
 
 #[allow(dead_code)]
 pub fn read_json(path: &str) -> Value {

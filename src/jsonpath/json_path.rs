@@ -9,6 +9,7 @@ use pest::Parser;
 use std::cmp::Ordering;
 
 use crate::jsonpath::select_value::{SelectValue, SelectValueType};
+use log::trace;
 use regex::Regex;
 use std::fmt::Debug;
 
@@ -283,7 +284,7 @@ impl UserPathTrackerGenerator for PTrackerGenerator {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum PathTrackerElement<'i> {
     Index(usize),
     Key(&'i str),
@@ -296,7 +297,7 @@ enum PathTrackerElement<'i> {
  * Once we have a match we can run (in a reverse order)
  * on the path tracker and add the path to the result as
  * a PTracker object. */
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct PathTracker<'i, 'j> {
     parent: Option<&'j PathTracker<'i, 'j>>,
     element: PathTrackerElement<'i>,
@@ -330,6 +331,7 @@ const fn create_index_tracker<'i, 'j>(
 }
 
 /* Enum for filter results */
+#[derive(Debug)]
 enum TermEvaluationResult<'i, 'j, S: SelectValue> {
     Integer(i64),
     Float(f64),
@@ -858,10 +860,15 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
     ) -> bool {
         let mut curr = curr.into_inner();
         let term1 = curr.next().unwrap();
+        trace!("evaluate_single_filter term1 {:?}", &term1);
         let term1_val = self.evaluate_single_term(term1, json, calc_data);
+        trace!("evaluate_single_filter term1_val {:?}", &term1_val);
         if let Some(op) = curr.next() {
+            trace!("evaluate_single_filter op {:?}", &op);
             let term2 = curr.next().unwrap();
+            trace!("evaluate_single_filter term2 {:?}", &term2);
             let term2_val = self.evaluate_single_term(term2, json, calc_data);
+            trace!("evaluate_single_filter term2_val {:?}", &term2_val);
             match op.as_rule() {
                 Rule::gt => term1_val.gt(&term2_val),
                 Rule::ge => term1_val.ge(&term2_val),
@@ -885,24 +892,33 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
     ) -> bool {
         let mut curr = curr.into_inner();
         let first_filter = curr.next().unwrap();
+        trace!("evaluate_filter first_filter {:?}", &first_filter);
         let first_result = match first_filter.as_rule() {
             Rule::single_filter => self.evaluate_single_filter(first_filter, json, calc_data),
             Rule::filter => self.evaluate_filter(first_filter, json, calc_data),
             _ => panic!("{}", format!("{:?}", first_filter)),
         };
+        trace!("evaluate_filter first_result {:?}", &first_result);
 
         if let Some(relation) = curr.next() {
+            trace!("evaluate_filter relation {:?}", &relation);
             let relation_callback = match relation.as_rule() {
                 Rule::and => |a: bool, b: bool| a && b,
                 Rule::or => |a: bool, b: bool| a || b,
                 _ => panic!("{}", format!("{:?}", relation)),
             };
             let second_filter = curr.next().unwrap();
+            trace!("evaluate_filter second_filter {:?}", &second_filter);
             let second_result = match second_filter.as_rule() {
                 Rule::single_filter => self.evaluate_single_filter(second_filter, json, calc_data),
                 Rule::filter => self.evaluate_filter(second_filter, json, calc_data),
                 _ => panic!("{}", format!("{:?}", second_filter)),
             };
+            trace!("evaluate_filter second_result {:?}", &second_result);
+            trace!(
+                "evaluate_filter relation_callback {:?}",
+                relation_callback(first_result, second_result)
+            );
             relation_callback(first_result, second_result)
         } else {
             first_result
@@ -936,6 +952,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         let curr = pairs.next();
         match curr {
             Some(curr) => {
+                trace!("calc_internal curr {:?}", &curr.as_rule());
                 match curr.as_rule() {
                     Rule::full_scan => {
                         self.calc_internal(pairs.clone(), json, path_tracker.clone(), calc_data);
@@ -960,7 +977,13 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                              * Pesonally, I think this if should not exists. */
                             let values = json.values().unwrap();
                             if let Some(pt) = path_tracker {
+                                trace!(
+                                    "calc_internal type {:?} path_tracker {:?}",
+                                    json.get_type(),
+                                    &pt
+                                );
                                 for (i, v) in values.enumerate() {
+                                    trace!("calc_internal v {:?}", &v);
                                     if self.evaluate_filter(curr.clone(), v, calc_data) {
                                         let new_tracker = Some(create_index_tracker(i, &pt));
                                         self.calc_internal(
@@ -972,13 +995,23 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                                     }
                                 }
                             } else {
+                                trace!(
+                                    "calc_internal type {:?} path_tracker None",
+                                    json.get_type()
+                                );
                                 for v in values {
+                                    trace!("calc_internal v {:?}", &v);
                                     if self.evaluate_filter(curr.clone(), v, calc_data) {
                                         self.calc_internal(pairs.clone(), v, None, calc_data);
                                     }
                                 }
                             }
                         } else if self.evaluate_filter(curr.clone(), json, calc_data) {
+                            trace!(
+                                "calc_internal type {:?} path_tracker {:?}",
+                                json.get_type(),
+                                &path_tracker
+                            );
                             self.calc_internal(pairs, json, path_tracker, calc_data);
                         }
                     }

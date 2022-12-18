@@ -16,6 +16,9 @@ categories = ["database-implementations"]
 crate-type = ["cdylib", "rlib"]
 name = "rejson"
 
+[dev-dependencies]
+env_logger = "0.8"
+
 [dependencies]
 pest = "2.1"
 pest_derive = "2.1"
