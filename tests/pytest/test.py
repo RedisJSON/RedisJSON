@@ -1256,6 +1256,17 @@ def testFilter(env):
     # plain string match
     r.expect('JSON.GET', 'doc', '$.arr[?(@ == $.pat_plain)]').equal('["(?i)^[f][o][o]$"]')
     
+def testFilterExpression(env):
+    # Test JSONPath filter with 3 or more operands
+    r = env
+    doc = [
+        {"foo":1, "bar":2, "baz": 3, "quux": 4},
+        {"foo":2, "bar":4, "baz": 6, "quux": 9},
+        {"foo":2, "bar":3, "baz": 6, "quux": 10}
+    ]
+    r.expect('JSON.SET', 'doc', '$', json.dumps(doc)).ok()
+    r.expect('JSON.GET', 'doc', '$[?(@.foo>1 && @.quux>8 && @.bar>3 && @.baz>4)]').equal('[{"foo":2, "bar":4, "baz": 6, "quux": 9}]')
+    
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property
