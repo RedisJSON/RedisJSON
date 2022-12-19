@@ -24,7 +24,8 @@ class RedisJSONSetup(paella.Setup):
         if self.osnick == 'ol8':
             self.install("tar")
         self.run("%s/bin/getclang --modern" % READIES)
-        self.run("%s/bin/getrust" % READIES)
+        if not self.has_command("rustc"):
+            self.run("%s/bin/getrust" % READIES)
         self.run("%s/bin/getcmake --usr" % READIES)
 
     def debian_compat(self):
