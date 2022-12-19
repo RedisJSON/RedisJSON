@@ -1461,14 +1461,7 @@ pub fn json_arr_index<M: Manager>(
 
     let key = manager.open_key_read(ctx, &key)?;
 
-    let is_legacy = path.is_legacy();
     let scalar_value: Value = serde_json::from_str(json_scalar)?;
-    if !is_legacy && (scalar_value.is_array() || scalar_value.is_object()) {
-        return Err(RedisError::String(err_msg_json_expected(
-            "scalar",
-            json_scalar,
-        )));
-    }
 
     let res = key.get_value()?.map_or_else(
         || {
