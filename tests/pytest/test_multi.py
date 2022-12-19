@@ -1004,7 +1004,7 @@ def testArrIndexCommand(env):
 
     # Search none-scalar value
     res = r.execute_command('JSON.ARRINDEX', 'test_null', '$.[4][1].nested42_empty_arr.arr', '{"arr":[]}')
-    r.assertEqual(res, "[-1]")
+    r.assertEqual(res, [-1])
 
     res = r.execute_command('JSON.ARRINDEX', 'test_null', '.[4][1].nested42_empty_arr.arr', '{"arr":[]}')
     r.assertEqual(res, -1)
