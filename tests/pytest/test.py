@@ -770,7 +770,9 @@ def testArrIndexMixCommand(env):
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, 3), 5)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '[4]'), 4)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '{\"val\":4}'), 8)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '$.arr', '{\"val\":9}'), 9)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '["a", "b", 8]'), 11)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '$.arr', '[3, 4, 8]'), 10)
 
 def testArrTrimCommand(env):
     """Test JSON.ARRTRIM command"""
