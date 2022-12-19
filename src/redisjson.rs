@@ -1,3 +1,9 @@
+/*
+ * Copyright Redis Ltd. 2016 - present
+ * Licensed under your choice of the Redis Source Available License 2.0 (RSALv2) or
+ * the Server Side Public License v1 (SSPLv1).
+ */
+
 // RedisJSON Redis module.
 //
 // Translate between JSON and tree of Redis objects:
@@ -79,7 +85,9 @@ pub struct Path<'a> {
 impl<'a> Path<'a> {
     #[must_use]
     pub fn new(path: &'a str) -> Path {
-        let fixed_path = if path.starts_with('$') {
+        let fixed_path = if path.starts_with('$')
+            && (path.len() < 2 || (path.as_bytes()[1] == b'.' || path.as_bytes()[1] == b'['))
+        {
             None
         } else {
             let mut cloned = path.to_string();
