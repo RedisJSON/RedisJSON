@@ -73,6 +73,7 @@ Some languages have client libraries that provide support for RedisJSON's comman
 | [redis-om-python][redis-om-python-url]  | Python | BSD-3-Clause | [Redis][redis-om-python-author] | [![redis-om-python-stars]][redis-om-python-url] | [PyPi][redis-om-python-package] |
 | [Jedis][Jedis-url] | Java | MIT | [Redis][JRedisJSON-author] | [![Jedis-stars]][Jedis-url] | [Maven][Jedis-package] |
 | [JRedisJSON][JRedisJSON-url] | Java | BSD-2-Clause | [Redis Labs][JRedisJSON-author] | [![JRedisJSON-stars]][JRedisJSON-url] | [maven][JRedisJSON-package] | Deprecated |
+| [Redisson][Redisson-url] | Java | Apache-2.0 | [Redisson][Redisson-author] | [![Redisson-stars]][Redisson-url] | [Maven][Redisson-package] |
 | [redis-modules-java][redis-modules-java-url] | Java | Apache-2.0 | [Liming Deng @dengliming][redis-modules-java-author] | [![redis-modules-java-stars]][redis-modules-java-url] | [maven][redis-modules-java-package] |
 | [redis-om-spring][redis-om-spring-url]  | Java | BSD-3-Clause | [Redis][redis-om-spring-author] | [![redis-om-spring-stars]][redis-om-spring-url] | |
 | [node-redis][node-redis-url] | Node.js | MIT | [Redis][node-redis-author] | [![node-redis-stars]][node-redis-url] | [npm][node-redis-package] |
@@ -99,6 +100,11 @@ Some languages have client libraries that provide support for RedisJSON's comman
 [JRedisJSON-url]: https://github.com/RedisJSON/JRedisJSON
 [JRedisJSON-package]: https://search.maven.org/artifact/com.redislabs/jrejson/
 [JRedisJSON-stars]: https://img.shields.io/github/stars/RedisJSON/JRedisJSON.svg?style=social&amp;label=Star&amp;maxAge=2592000
+
+[Redisson-author]: https://github.com/redisson/
+[Redisson-url]: https://github.com/redisson/redisson
+[Redisson-package]: https://search.maven.org/artifact/org.redisson/redisson/
+[Redisson-stars]: https://img.shields.io/github/stars/redisson/redisson.svg?style=social&amp;label=Star&amp;maxAge=2592000
 
 [redis-modules-java-author]: https://github.com/dengliming/
 [redis-modules-java-url]: https://github.com/dengliming/redis-modules-java
