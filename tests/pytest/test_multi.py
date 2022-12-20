@@ -1002,10 +1002,10 @@ def testArrIndexCommand(env):
     res = r.execute_command('JSON.ARRINDEX', 'test_null', '$..arr', 'null')
     r.assertEqual(res, [3, 8, -1, None, -1])
 
-    # Fail with none-scalar value
-    r.expect('JSON.ARRINDEX', 'test_null', '$..nested42_empty_arr.arr', '{"arr":[]}').raiseError()
+    # Search none-scalar value
+    res = r.execute_command('JSON.ARRINDEX', 'test_null', '$.[4][1].nested42_empty_arr.arr', '{"arr":[]}')
+    r.assertEqual(res, [-1])
 
-    # Do not fail with none-scalar value in legacy mode
     res = r.execute_command('JSON.ARRINDEX', 'test_null', '.[4][1].nested42_empty_arr.arr', '{"arr":[]}')
     r.assertEqual(res, -1)
 

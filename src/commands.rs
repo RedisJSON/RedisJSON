@@ -458,7 +458,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     pub fn arr_index(
         &self,
         path: &str,
-        scalar_value: Value,
+        json_value: Value,
         start: i64,
         end: i64,
     ) -> Result<RedisValue, Error> {
@@ -466,7 +466,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             .get_values(path)?
             .iter()
             .map(|value| {
-                self.arr_first_index_single(value, &scalar_value, start, end)
+                self.arr_first_index_single(value, &json_value, start, end)
                     .into()
             })
             .collect::<Vec<RedisValue>>();
@@ -476,12 +476,12 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     pub fn arr_index_legacy(
         &self,
         path: &str,
-        scalar_value: Value,
+        json_value: Value,
         start: i64,
         end: i64,
     ) -> Result<RedisValue, Error> {
         let arr = self.get_first(path)?;
-        match self.arr_first_index_single(arr, &scalar_value, start, end) {
+        match self.arr_first_index_single(arr, &json_value, start, end) {
             FoundIndex::NotArray => Err(Error::from(err_msg_json_expected(
                 "array",
                 self.get_type(path).unwrap().as_str(),
@@ -1440,9 +1440,7 @@ pub enum ObjectLen {
 }
 
 ///
-/// JSON.ARRINDEX <key> <path> <json-scalar> [start [stop]]
-///
-/// scalar - number, string, Boolean (true or false), or null
+/// JSON.ARRINDEX <key> <path> <json-value> [start [stop]]
 ///
 pub fn json_arr_index<M: Manager>(
     manager: M,
@@ -1453,7 +1451,7 @@ pub fn json_arr_index<M: Manager>(
 
     let key = args.next_arg()?;
     let path = Path::new(args.next_str()?);
-    let json_scalar = args.next_str()?;
+    let value = args.next_str()?;
     let start: i64 = args.next().map_or(Ok(0), |v| v.parse_integer())?;
     let end: i64 = args.next().map_or(Ok(0), |v| v.parse_integer())?;
 
@@ -1461,14 +1459,7 @@ pub fn json_arr_index<M: Manager>(
 
     let key = manager.open_key_read(ctx, &key)?;
 
-    let is_legacy = path.is_legacy();
-    let scalar_value: Value = serde_json::from_str(json_scalar)?;
-    if !is_legacy && (scalar_value.is_array() || scalar_value.is_object()) {
-        return Err(RedisError::String(err_msg_json_expected(
-            "scalar",
-            json_scalar,
-        )));
-    }
+    let json_value: Value = serde_json::from_str(value)?;
 
     let res = key.get_value()?.map_or_else(
         || {
@@ -1478,9 +1469,9 @@ pub fn json_arr_index<M: Manager>(
         },
         |doc| {
             if path.is_legacy() {
-                KeyValue::new(doc).arr_index_legacy(path.get_path(), scalar_value, start, end)
+                KeyValue::new(doc).arr_index_legacy(path.get_path(), json_value, start, end)
             } else {
-                KeyValue::new(doc).arr_index(path.get_path(), scalar_value, start, end)
+                KeyValue::new(doc).arr_index(path.get_path(), json_value, start, end)
             }
         },
     )?;
