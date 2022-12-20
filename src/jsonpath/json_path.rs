@@ -16,7 +16,7 @@ use std::fmt::Debug;
 #[grammar = "jsonpath/grammer.pest"]
 pub struct JsonPathParser;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum JsonPathToken {
     String,
     Number,
@@ -51,17 +51,11 @@ impl<'i> Query<'i> {
                 Rule::number => Some((last.as_str().to_string(), JsonPathToken::Number)),
                 Rule::numbers_list => {
                     let first_on_list = last.into_inner().next();
-                    match first_on_list {
-                        Some(first) => Some((first.as_str().to_string(), JsonPathToken::Number)),
-                        None => None,
-                    }
+                    first_on_list.map(|first| (first.as_str().to_string(), JsonPathToken::Number))
                 }
                 Rule::string_list => {
                     let first_on_list = last.into_inner().next();
-                    match first_on_list {
-                        Some(first) => Some((first.as_str().to_string(), JsonPathToken::String)),
-                        None => None,
-                    }
+                    first_on_list.map(|first| (first.as_str().to_string(), JsonPathToken::String))
                 }
                 _ => panic!("pop last was used in a none static path"),
             },
@@ -92,9 +86,9 @@ impl<'i> Query<'i> {
         }
         let mut size = 0;
         let mut is_static = true;
-        let mut root_copy = self.root.clone();
-        while let Some(n) = root_copy.next() {
-            size = size + 1;
+        let root_copy = self.root.clone();
+        for n in root_copy {
+            size += 1;
             match n.as_rule() {
                 Rule::literal | Rule::number => continue,
                 Rule::numbers_list | Rule::string_list => {
@@ -125,14 +119,14 @@ impl std::fmt::Display for QueryCompilationError {
 impl std::fmt::Display for Rule {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         match self {
-            Rule::literal => write!(f, "<string>"),
-            Rule::all => write!(f, "'*'"),
-            Rule::full_scan => write!(f, "'..'"),
-            Rule::numbers_list => write!(f, "'<number>[,<number>,...]'"),
-            Rule::string_list => write!(f, "'<string>[,<string>,...]'"),
-            Rule::numbers_range => write!(f, "['start:end:steps']"),
-            Rule::number => write!(f, "'<number>'"),
-            Rule::filter => write!(f, "'[?(filter_expression)]'"),
+            Self::literal => write!(f, "<string>"),
+            Self::all => write!(f, "'*'"),
+            Self::full_scan => write!(f, "'..'"),
+            Self::numbers_list => write!(f, "'<number>[,<number>,...]'"),
+            Self::string_list => write!(f, "'<string>[,<string>,...]'"),
+            Self::numbers_range => write!(f, "['start:end:steps']"),
+            Self::number => write!(f, "'<number>'"),
+            Self::filter => write!(f, "'[?(filter_expression)]'"),
             _ => write!(f, "{:?}", self),
         }
     }
@@ -241,14 +235,14 @@ impl UserPathTrackerGenerator for DummyTrackerGenerator {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum PTrackerElement {
     Key(String),
     Index(usize),
 }
 
 /* An actual representation of a path that the user gets as a result. */
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct PTracker {
     pub elemenets: Vec<PTrackerElement>,
 }
@@ -373,7 +367,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
                 CmpResult::Ord((*s1).cmp(s2))
             }
             (TermEvaluationResult::String(s1), TermEvaluationResult::Str(s2)) => {
-                CmpResult::Ord((&s1[..]).cmp(s2))
+                CmpResult::Ord((s1[..]).cmp(s2))
             }
             (TermEvaluationResult::String(s1), TermEvaluationResult::String(s2)) => {
                 CmpResult::Ord(s1.cmp(s2))
@@ -478,7 +472,7 @@ pub struct PathCalculator<'i, UPTG: UserPathTrackerGenerator> {
     pub tracker_generator: Option<UPTG>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct CalculationResult<'i, S: SelectValue, UPT: UserPathTracker> {
     pub res: &'i S,
     pub path_tracker: Option<UPT>,
@@ -741,10 +735,9 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             }
             Rule::all_range => {
                 let mut curr = curr.into_inner();
-                let step = match curr.next() {
-                    Some(s) => s.as_str().parse::<usize>().unwrap(),
-                    None => 1,
-                };
+                let step = curr
+                    .next()
+                    .map_or(1, |s| s.as_str().parse::<usize>().unwrap());
                 (0, n, step)
             }
             Rule::left_range => {
@@ -752,10 +745,9 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 let start =
                     self.calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
                 let end = n;
-                let step = match curr.next() {
-                    Some(s) => s.as_str().parse::<usize>().unwrap(),
-                    None => 1,
-                };
+                let step = curr
+                    .next()
+                    .map_or(1, |s| s.as_str().parse::<usize>().unwrap());
                 (start, end, step)
             }
             Rule::full_range => {
@@ -909,9 +901,9 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         }
     }
 
-    fn populate_path_tracker<'k, 'l>(&self, pt: &PathTracker<'l, 'k>, upt: &mut UPTG::PT) {
+    fn populate_path_tracker<'k, 'l>(pt: &PathTracker<'l, 'k>, upt: &mut UPTG::PT) {
         if let Some(f) = pt.parent {
-            self.populate_path_tracker(f, upt);
+            Self::populate_path_tracker(f, upt);
         }
         match pt.element {
             PathTrackerElement::Index(i) => upt.add_index(i),
@@ -922,7 +914,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
 
     fn generate_path(&self, pt: PathTracker) -> UPTG::PT {
         let mut upt = self.tracker_generator.as_ref().unwrap().generate();
-        self.populate_path_tracker(&pt, &mut upt);
+        Self::populate_path_tracker(&pt, &mut upt);
         upt
     }
 
