@@ -485,7 +485,7 @@ struct PathCalculatorData<'i, S: SelectValue, UPT: UserPathTracker> {
 }
 
 impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
-    pub const fn create(query: &'i Query<'i>) -> PathCalculator<'i, UPTG> {
+    pub fn create(query: &'i Query<'i>) -> PathCalculator<'i, UPTG> {
         PathCalculator {
             query: Some(query),
             tracker_generator: None,
@@ -493,7 +493,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
     }
 
     #[allow(dead_code)]
-    pub const fn create_with_generator(
+    pub fn create_with_generator(
         query: &'i Query<'i>,
         tracker_generator: UPTG,
     ) -> PathCalculator<'i, UPTG> {
