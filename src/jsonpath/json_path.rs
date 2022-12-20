@@ -886,43 +886,61 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
 
     fn evaluate_filter<'j: 'i, S: SelectValue>(
         &self,
-        curr: Pair<'i, Rule>,
+        mut curr: Pairs<'i, Rule>,
         json: &'j S,
         calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
     ) -> bool {
-        let mut curr = curr.into_inner();
         let first_filter = curr.next().unwrap();
         trace!("evaluate_filter first_filter {:?}", &first_filter);
-        let first_result = match first_filter.as_rule() {
+        let mut first_result = match first_filter.as_rule() {
             Rule::single_filter => self.evaluate_single_filter(first_filter, json, calc_data),
-            Rule::filter => self.evaluate_filter(first_filter, json, calc_data),
+            Rule::filter => self.evaluate_filter(first_filter.into_inner(), json, calc_data),
             _ => panic!("{}", format!("{:?}", first_filter)),
         };
         trace!("evaluate_filter first_result {:?}", &first_result);
 
-        if let Some(relation) = curr.next() {
-            trace!("evaluate_filter relation {:?}", &relation);
-            let relation_callback = match relation.as_rule() {
-                Rule::and => |a: bool, b: bool| a && b,
-                Rule::or => |a: bool, b: bool| a || b,
-                _ => panic!("{}", format!("{:?}", relation)),
-            };
-            let second_filter = curr.next().unwrap();
-            trace!("evaluate_filter second_filter {:?}", &second_filter);
-            let second_result = match second_filter.as_rule() {
-                Rule::single_filter => self.evaluate_single_filter(second_filter, json, calc_data),
-                Rule::filter => self.evaluate_filter(second_filter, json, calc_data),
-                _ => panic!("{}", format!("{:?}", second_filter)),
-            };
-            trace!("evaluate_filter second_result {:?}", &second_result);
-            trace!(
-                "evaluate_filter relation_callback {:?}",
-                relation_callback(first_result, second_result)
-            );
-            relation_callback(first_result, second_result)
-        } else {
-            first_result
+        // Evaluate filter operands with operator (relation) precedence of AND before OR, e.g.,
+        //  A && B && C || D || E && F ===> (A && B && C) || D || (E && F)
+        //  A || B && C ===> A || (B && C)
+        // When encountering AND operator, if previous value is false then skip evaluating the rest until an OR operand is encountered or no more operands.
+        // When encountering OR operator, if previous value is true then break, if previous value is false then tail-recurse to continue evaluating the rest.
+        //
+        // When a parenthesized filter is encountered (Rule::filter), e.g., ... || ( A || B ) && C,
+        //  recurse on it and use the result as the operand.
+
+        loop {
+            if let Some(relation) = curr.next() {
+                match relation.as_rule() {
+                    Rule::and => {
+                        let second_filter = curr.next().unwrap();
+                        if !first_result {
+                            continue; // Skip eval till next OR
+                        }
+                        trace!("evaluate_filter second_filter {:?}", &second_filter);
+                        first_result = match second_filter.as_rule() {
+                            Rule::single_filter => {
+                                self.evaluate_single_filter(second_filter, json, calc_data)
+                            }
+                            Rule::filter => {
+                                self.evaluate_filter(second_filter.into_inner(), json, calc_data)
+                            }
+                            _ => panic!("{}", format!("{:?}", second_filter)),
+                        };
+                    }
+                    Rule::or => {
+                        if first_result {
+                            break; // can return True
+                        }
+                        // Tail recursion with the rest of the expression to give precedence to AND
+                        return self.evaluate_filter(curr, json, calc_data);
+                    }
+                    _ => panic!("{}", format!("{:?}", relation)),
+                }
+            } else {
+                break;
+            }
         }
+        first_result
     }
 
     fn populate_path_tracker<'k, 'l>(&self, pt: &PathTracker<'l, 'k>, upt: &mut UPTG::PT) {
@@ -984,7 +1002,8 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                                 );
                                 for (i, v) in values.enumerate() {
                                     trace!("calc_internal v {:?}", &v);
-                                    if self.evaluate_filter(curr.clone(), v, calc_data) {
+                                    if self.evaluate_filter(curr.clone().into_inner(), v, calc_data)
+                                    {
                                         let new_tracker = Some(create_index_tracker(i, &pt));
                                         self.calc_internal(
                                             pairs.clone(),
@@ -1001,12 +1020,13 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                                 );
                                 for v in values {
                                     trace!("calc_internal v {:?}", &v);
-                                    if self.evaluate_filter(curr.clone(), v, calc_data) {
+                                    if self.evaluate_filter(curr.clone().into_inner(), v, calc_data)
+                                    {
                                         self.calc_internal(pairs.clone(), v, None, calc_data);
                                     }
                                 }
                             }
-                        } else if self.evaluate_filter(curr.clone(), json, calc_data) {
+                        } else if self.evaluate_filter(curr.clone().into_inner(), json, calc_data) {
                             trace!(
                                 "calc_internal type {:?} path_tracker {:?}",
                                 json.get_type(),
