@@ -9,6 +9,7 @@ use pest::Parser;
 use std::cmp::Ordering;
 
 use crate::jsonpath::select_value::{SelectValue, SelectValueType};
+use log::trace;
 use regex::Regex;
 use std::fmt::Debug;
 
@@ -16,7 +17,7 @@ use std::fmt::Debug;
 #[grammar = "jsonpath/grammer.pest"]
 pub struct JsonPathParser;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum JsonPathToken {
     String,
     Number,
@@ -51,17 +52,11 @@ impl<'i> Query<'i> {
                 Rule::number => Some((last.as_str().to_string(), JsonPathToken::Number)),
                 Rule::numbers_list => {
                     let first_on_list = last.into_inner().next();
-                    match first_on_list {
-                        Some(first) => Some((first.as_str().to_string(), JsonPathToken::Number)),
-                        None => None,
-                    }
+                    first_on_list.map(|first| (first.as_str().to_string(), JsonPathToken::Number))
                 }
                 Rule::string_list => {
                     let first_on_list = last.into_inner().next();
-                    match first_on_list {
-                        Some(first) => Some((first.as_str().to_string(), JsonPathToken::String)),
-                        None => None,
-                    }
+                    first_on_list.map(|first| (first.as_str().to_string(), JsonPathToken::String))
                 }
                 _ => panic!("pop last was used in a none static path"),
             },
@@ -92,9 +87,9 @@ impl<'i> Query<'i> {
         }
         let mut size = 0;
         let mut is_static = true;
-        let mut root_copy = self.root.clone();
-        while let Some(n) = root_copy.next() {
-            size = size + 1;
+        let root_copy = self.root.clone();
+        for n in root_copy {
+            size += 1;
             match n.as_rule() {
                 Rule::literal | Rule::number => continue,
                 Rule::numbers_list | Rule::string_list => {
@@ -125,14 +120,14 @@ impl std::fmt::Display for QueryCompilationError {
 impl std::fmt::Display for Rule {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         match self {
-            Rule::literal => write!(f, "<string>"),
-            Rule::all => write!(f, "'*'"),
-            Rule::full_scan => write!(f, "'..'"),
-            Rule::numbers_list => write!(f, "'<number>[,<number>,...]'"),
-            Rule::string_list => write!(f, "'<string>[,<string>,...]'"),
-            Rule::numbers_range => write!(f, "['start:end:steps']"),
-            Rule::number => write!(f, "'<number>'"),
-            Rule::filter => write!(f, "'[?(filter_expression)]'"),
+            Self::literal => write!(f, "<string>"),
+            Self::all => write!(f, "'*'"),
+            Self::full_scan => write!(f, "'..'"),
+            Self::numbers_list => write!(f, "'<number>[,<number>,...]'"),
+            Self::string_list => write!(f, "'<string>[,<string>,...]'"),
+            Self::numbers_range => write!(f, "['start:end:steps']"),
+            Self::number => write!(f, "'<number>'"),
+            Self::filter => write!(f, "'[?(filter_expression)]'"),
             _ => write!(f, "{:?}", self),
         }
     }
@@ -241,14 +236,14 @@ impl UserPathTrackerGenerator for DummyTrackerGenerator {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum PTrackerElement {
     Key(String),
     Index(usize),
 }
 
 /* An actual representation of a path that the user gets as a result. */
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct PTracker {
     pub elemenets: Vec<PTrackerElement>,
 }
@@ -283,7 +278,7 @@ impl UserPathTrackerGenerator for PTrackerGenerator {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum PathTrackerElement<'i> {
     Index(usize),
     Key(&'i str),
@@ -296,7 +291,7 @@ enum PathTrackerElement<'i> {
  * Once we have a match we can run (in a reverse order)
  * on the path tracker and add the path to the result as
  * a PTracker object. */
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct PathTracker<'i, 'j> {
     parent: Option<&'j PathTracker<'i, 'j>>,
     element: PathTrackerElement<'i>,
@@ -330,6 +325,7 @@ const fn create_index_tracker<'i, 'j>(
 }
 
 /* Enum for filter results */
+#[derive(Debug)]
 enum TermEvaluationResult<'i, 'j, S: SelectValue> {
     Integer(i64),
     Float(f64),
@@ -373,7 +369,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
                 CmpResult::Ord((*s1).cmp(s2))
             }
             (TermEvaluationResult::String(s1), TermEvaluationResult::Str(s2)) => {
-                CmpResult::Ord((&s1[..]).cmp(s2))
+                CmpResult::Ord((s1[..]).cmp(s2))
             }
             (TermEvaluationResult::String(s1), TermEvaluationResult::String(s2)) => {
                 CmpResult::Ord(s1.cmp(s2))
@@ -478,7 +474,7 @@ pub struct PathCalculator<'i, UPTG: UserPathTrackerGenerator> {
     pub tracker_generator: Option<UPTG>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct CalculationResult<'i, S: SelectValue, UPT: UserPathTracker> {
     pub res: &'i S,
     pub path_tracker: Option<UPT>,
@@ -741,10 +737,9 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             }
             Rule::all_range => {
                 let mut curr = curr.into_inner();
-                let step = match curr.next() {
-                    Some(s) => s.as_str().parse::<usize>().unwrap(),
-                    None => 1,
-                };
+                let step = curr
+                    .next()
+                    .map_or(1, |s| s.as_str().parse::<usize>().unwrap());
                 (0, n, step)
             }
             Rule::left_range => {
@@ -752,10 +747,9 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 let start =
                     self.calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
                 let end = n;
-                let step = match curr.next() {
-                    Some(s) => s.as_str().parse::<usize>().unwrap(),
-                    None => 1,
-                };
+                let step = curr
+                    .next()
+                    .map_or(1, |s| s.as_str().parse::<usize>().unwrap());
                 (start, end, step)
             }
             Rule::full_range => {
@@ -858,10 +852,15 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
     ) -> bool {
         let mut curr = curr.into_inner();
         let term1 = curr.next().unwrap();
+        trace!("evaluate_single_filter term1 {:?}", &term1);
         let term1_val = self.evaluate_single_term(term1, json, calc_data);
+        trace!("evaluate_single_filter term1_val {:?}", &term1_val);
         if let Some(op) = curr.next() {
+            trace!("evaluate_single_filter op {:?}", &op);
             let term2 = curr.next().unwrap();
+            trace!("evaluate_single_filter term2 {:?}", &term2);
             let term2_val = self.evaluate_single_term(term2, json, calc_data);
+            trace!("evaluate_single_filter term2_val {:?}", &term2_val);
             match op.as_rule() {
                 Rule::gt => term1_val.gt(&term2_val),
                 Rule::ge => term1_val.ge(&term2_val),
@@ -879,39 +878,68 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
 
     fn evaluate_filter<'j: 'i, S: SelectValue>(
         &self,
-        curr: Pair<'i, Rule>,
+        mut curr: Pairs<'i, Rule>,
         json: &'j S,
         calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
     ) -> bool {
-        let mut curr = curr.into_inner();
         let first_filter = curr.next().unwrap();
-        let first_result = match first_filter.as_rule() {
+        trace!("evaluate_filter first_filter {:?}", &first_filter);
+        let mut first_result = match first_filter.as_rule() {
             Rule::single_filter => self.evaluate_single_filter(first_filter, json, calc_data),
-            Rule::filter => self.evaluate_filter(first_filter, json, calc_data),
+            Rule::filter => self.evaluate_filter(first_filter.into_inner(), json, calc_data),
             _ => panic!("{}", format!("{:?}", first_filter)),
         };
+        trace!("evaluate_filter first_result {:?}", &first_result);
 
-        if let Some(relation) = curr.next() {
-            let relation_callback = match relation.as_rule() {
-                Rule::and => |a: bool, b: bool| a && b,
-                Rule::or => |a: bool, b: bool| a || b,
-                _ => panic!("{}", format!("{:?}", relation)),
-            };
-            let second_filter = curr.next().unwrap();
-            let second_result = match second_filter.as_rule() {
-                Rule::single_filter => self.evaluate_single_filter(second_filter, json, calc_data),
-                Rule::filter => self.evaluate_filter(second_filter, json, calc_data),
-                _ => panic!("{}", format!("{:?}", second_filter)),
-            };
-            relation_callback(first_result, second_result)
-        } else {
-            first_result
+        // Evaluate filter operands with operator (relation) precedence of AND before OR, e.g.,
+        //  A && B && C || D || E && F ===> (A && B && C) || D || (E && F)
+        //  A || B && C ===> A || (B && C)
+        // When encountering AND operator, if previous value is false then skip evaluating the rest until an OR operand is encountered or no more operands.
+        // When encountering OR operator, if previous value is true then break, if previous value is false then tail-recurse to continue evaluating the rest.
+        //
+        // When a parenthesized filter is encountered (Rule::filter), e.g., ... || ( A || B ) && C,
+        //  recurse on it and use the result as the operand.
+
+        loop {
+            if let Some(relation) = curr.next() {
+                match relation.as_rule() {
+                    Rule::and => {
+                        // Consume the operand even if not needed for evaluation
+                        let second_filter = curr.next().unwrap();
+                        trace!("evaluate_filter && second_filter {:?}", &second_filter);
+                        if !first_result {
+                            continue; // Skip eval till next OR
+                        }
+                        first_result = match second_filter.as_rule() {
+                            Rule::single_filter => {
+                                self.evaluate_single_filter(second_filter, json, calc_data)
+                            }
+                            Rule::filter => {
+                                self.evaluate_filter(second_filter.into_inner(), json, calc_data)
+                            }
+                            _ => panic!("{}", format!("{:?}", second_filter)),
+                        };
+                    }
+                    Rule::or => {
+                        trace!("evaluate_filter ||");
+                        if first_result {
+                            break; // can return True
+                        }
+                        // Tail recursion with the rest of the expression to give precedence to AND
+                        return self.evaluate_filter(curr, json, calc_data);
+                    }
+                    _ => panic!("{}", format!("{:?}", relation)),
+                }
+            } else {
+                break;
+            }
         }
+        first_result
     }
 
-    fn populate_path_tracker<'k, 'l>(&self, pt: &PathTracker<'l, 'k>, upt: &mut UPTG::PT) {
+    fn populate_path_tracker<'k, 'l>(pt: &PathTracker<'l, 'k>, upt: &mut UPTG::PT) {
         if let Some(f) = pt.parent {
-            self.populate_path_tracker(f, upt);
+            Self::populate_path_tracker(f, upt);
         }
         match pt.element {
             PathTrackerElement::Index(i) => upt.add_index(i),
@@ -922,7 +950,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
 
     fn generate_path(&self, pt: PathTracker) -> UPTG::PT {
         let mut upt = self.tracker_generator.as_ref().unwrap().generate();
-        self.populate_path_tracker(&pt, &mut upt);
+        Self::populate_path_tracker(&pt, &mut upt);
         upt
     }
 
@@ -936,6 +964,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         let curr = pairs.next();
         match curr {
             Some(curr) => {
+                trace!("calc_internal curr {:?}", &curr.as_rule());
                 match curr.as_rule() {
                     Rule::full_scan => {
                         self.calc_internal(pairs.clone(), json, path_tracker.clone(), calc_data);
@@ -960,8 +989,15 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                              * Pesonally, I think this if should not exists. */
                             let values = json.values().unwrap();
                             if let Some(pt) = path_tracker {
+                                trace!(
+                                    "calc_internal type {:?} path_tracker {:?}",
+                                    json.get_type(),
+                                    &pt
+                                );
                                 for (i, v) in values.enumerate() {
-                                    if self.evaluate_filter(curr.clone(), v, calc_data) {
+                                    trace!("calc_internal v {:?}", &v);
+                                    if self.evaluate_filter(curr.clone().into_inner(), v, calc_data)
+                                    {
                                         let new_tracker = Some(create_index_tracker(i, &pt));
                                         self.calc_internal(
                                             pairs.clone(),
@@ -972,13 +1008,24 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                                     }
                                 }
                             } else {
+                                trace!(
+                                    "calc_internal type {:?} path_tracker None",
+                                    json.get_type()
+                                );
                                 for v in values {
-                                    if self.evaluate_filter(curr.clone(), v, calc_data) {
+                                    trace!("calc_internal v {:?}", &v);
+                                    if self.evaluate_filter(curr.clone().into_inner(), v, calc_data)
+                                    {
                                         self.calc_internal(pairs.clone(), v, None, calc_data);
                                     }
                                 }
                             }
-                        } else if self.evaluate_filter(curr.clone(), json, calc_data) {
+                        } else if self.evaluate_filter(curr.clone().into_inner(), json, calc_data) {
+                            trace!(
+                                "calc_internal type {:?} path_tracker {:?}",
+                                json.get_type(),
+                                &path_tracker
+                            );
                             self.calc_internal(pairs, json, path_tracker, calc_data);
                         }
                     }
