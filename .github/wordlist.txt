@@ -29,6 +29,7 @@ PyPi
 README
 RSALv
 Rafa
+Redisson
 ReJSON
 RediSearch
 RedisJSON
