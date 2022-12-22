@@ -264,10 +264,7 @@ pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -
 }
 
 pub fn json_api_is_json<M: Manager>(m: M, key: *mut rawmod::RedisModuleKey) -> c_int {
-    match m.is_json(key) {
-        Ok(res) => res as c_int,
-        Err(_) => 0,
-    }
+    m.is_json(key).map_or(0, |res| res as c_int)
 }
 
 pub fn get_llapi_ctx() -> Context {

@@ -50,14 +50,14 @@ pub fn normalize_arr_indices(start: i64, end: i64, len: i64) -> (i64, i64) {
     (start, end)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum SetOptions {
     NotExists,
     AlreadyExists,
     None,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Format {
     JSON,
     BSON,
@@ -118,7 +118,7 @@ impl<'a> Path<'a> {
     }
 
     #[must_use]
-    pub fn get_original(&self) -> &'a str {
+    pub const fn get_original(&self) -> &'a str {
         self.original_path
     }
 }
@@ -148,20 +148,18 @@ pub mod type_methods {
                         phantom: PhantomData,
                     };
                     let v = m.from_str(&json_string, Format::JSON);
-                    match v {
-                        Ok(res) => Box::into_raw(Box::new(res)).cast::<libc::c_void>(),
-                        Err(_) => null_mut(),
-                    }
+                    v.map_or(null_mut(), |res| {
+                        Box::into_raw(Box::new(res)).cast::<libc::c_void>()
+                    })
                 }
                 ManagerType::IValue => {
                     let m = RedisIValueJsonKeyManager {
                         phantom: PhantomData,
                     };
                     let v = m.from_str(&json_string, Format::JSON);
-                    match v {
-                        Ok(res) => Box::into_raw(Box::new(res)).cast::<libc::c_void>(),
-                        Err(_) => null_mut(),
-                    }
+                    v.map_or(null_mut(), |res| {
+                        Box::into_raw(Box::new(res)).cast::<libc::c_void>()
+                    })
                 }
             },
             Err(_) => null_mut(),

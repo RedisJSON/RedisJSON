@@ -321,7 +321,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         self.get_json_holder()?;
 
         match &mut self.val {
-            Some(v) => Ok(Some(&mut (*v).data)),
+            Some(v) => Ok(Some(&mut v.data)),
             None => Ok(None),
         }
     }
@@ -489,7 +489,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 // Verify legel index in bounds
                 let len = array.len() as i64;
                 let index = normalize_arr_start_index(index, len) as usize;
-                res = Some(array.remove(index as usize).unwrap());
+                res = Some(array.remove(index).unwrap());
                 Ok(Some(()))
             } else {
                 Err(err_json(v, "array"))
@@ -565,10 +565,7 @@ pub struct IValueKeyHolderRead {
 impl ReadHolder<IValue> for IValueKeyHolderRead {
     fn get_value(&self) -> Result<Option<&IValue>, RedisError> {
         let key_value = self.key.get_value::<RedisJSON<IValue>>(&REDIS_JSON_TYPE)?;
-        match key_value {
-            Some(v) => Ok(Some(&v.data)),
-            None => Ok(None),
-        }
+        key_value.map_or(Ok(None), |v| Ok(Some(&v.data)))
     }
 }
 
