@@ -912,11 +912,12 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             if let Some(relation) = curr.next() {
                 match relation.as_rule() {
                     Rule::and => {
+                        // Consume the operand even if not needed for evaluation
                         let second_filter = curr.next().unwrap();
+                        trace!("evaluate_filter && second_filter {:?}", &second_filter);
                         if !first_result {
                             continue; // Skip eval till next OR
                         }
-                        trace!("evaluate_filter second_filter {:?}", &second_filter);
                         first_result = match second_filter.as_rule() {
                             Rule::single_filter => {
                                 self.evaluate_single_filter(second_filter, json, calc_data)
@@ -928,6 +929,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                         };
                     }
                     Rule::or => {
+                        trace!("evaluate_filter ||");
                         if first_result {
                             break; // can return True
                         }

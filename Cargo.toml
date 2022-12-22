@@ -17,7 +17,8 @@ crate-type = ["cdylib", "rlib"]
 name = "rejson"
 
 [dev-dependencies]
-env_logger = "0.8"
+env_logger = "0.10.0"
+redis-module = { version="1.0", features = ["experimental-api", "test"]}
 
 [dependencies]
 pest = "2.1"

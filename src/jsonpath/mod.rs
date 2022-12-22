@@ -455,6 +455,32 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_complex_filter_precedence() {
+        setup();
+        let json = json!([{"t":true, "f":false, "one":1}, {"t":true, "f":false, "one":3}]);
+        verify_json!(path:"$[?(@.f==true || @.one==1 && @.t==false)]", json:json, results:[]);
+        verify_json!(path:"$[?(@.f==true || @.one==1 && @.t==true)].*", json:json, results:[true, false, 1]);
+        verify_json!(path:"$[?(@.t==true && @.one==1 || @.t==true)].*", json:json, results:[true, false, 1, true, false, 3]);
+
+        // With A=False, B=False, C=True
+        // "(A && B) || C"  ==> True
+        // "A && (B  || C)" ==> False
+        verify_json!(path:"$[?(@.f==true &&  @.t==false || @.one==1)].*", json:json, results:[true, false, 1]);
+        verify_json!(path:"$[?(@.f==true && (@.t==false || @.one==1))].*", json:json, results:[]);
+    }
+
+    #[test]
+    fn test_complex_filter_nesting() {
+        setup();
+        let json = json!([{"t":true, "f":false, "one":1}, {"t":true, "f":false, "one":3}]);
+        // With A=False, B=False, C=True
+        // "(A && B) || C"  ==> True
+        // "A && (B  || C)" ==> False
+        verify_json!(path:"$[?(@.f==true &&  (@.f==true || (@.t==true && (@.one>1 && @.f==true))) || ((@.one==2 || @.one==1) && @.t==true))].*", json:json, results:[true, false, 1]);
+        verify_json!(path:"$[?(@.f==true &&  ((@.f==true || (@.t==true && (@.one>1 && @.f==true))) || ((@.one==2 || @.one==1) && @.t==true)))].*", json:json, results:[]);
+    }
+
+    #[test]
     fn test_filter_with_full_scan() {
         setup();
         verify_json!(path:"$..[?(@.code==\"2\")].code", json:[{"code":"1"},{"code":"2"}], results:["2"]);

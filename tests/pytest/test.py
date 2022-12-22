@@ -1265,8 +1265,18 @@ def testFilterExpression(env):
         {"foo":2, "bar":3, "baz": 6, "quux": 10}
     ]
     r.expect('JSON.SET', 'doc', '$', json.dumps(doc)).ok()
-    r.expect('JSON.GET', 'doc', '$[?(@.foo>1 && @.quux>8 && @.bar>3 && @.baz>4)]').equal('[{"foo":2, "bar":4, "baz": 6, "quux": 9}]')
-    
+    res = r.execute_command('JSON.GET', 'doc', '$[?(@.foo>1 && @.quux>8 && @.bar>3 && @.baz>4)]')
+    r.assertEqual(json.loads(res), [doc[1]])
+
+def testFilterPrecedence(env):
+    # Test JSONPath filter precedence (&& precedes ||)
+    r = env
+    doc = [{"t": True, "f": False, "one": 1},{"t": True, "f": False, "one": 2}]
+    r.expect('JSON.SET', 'doc', '$', json.dumps(doc)).ok()
+    res = r.execute_command('JSON.GET', 'doc', '$[?(@.f==true || @.one==1 && @.t==true)]')
+    r.assertEqual(json.loads(res), [doc[0]])
+    r.expect('JSON.GET', 'doc', '$[?(@.f==true || @.one==1 && @.t==false)]').equal('[]')
+
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property
