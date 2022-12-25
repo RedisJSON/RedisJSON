@@ -2,24 +2,25 @@ literal = @{('a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | "-" | "_" | "`" | "~" | "+" 
 
 string = _{("'" ~ (string_value) ~ "'") | ("\"" ~ (string_value) ~ "\"") | ("\"" ~ (string_value_escape_1) ~ "\"") | ("'" ~ (string_value_escape_2) ~ "'")}
     string_escape = @{"\\"}
-    string_value = @{((!("\""|"\\"|"'") ~ ANY)+)*}
-    string_value_escape_1 = @{((!("\""|"\\") ~ ANY)+ | string_escape ~ ("\"" | "\\"))*}
-    string_value_escape_2 = @{((!("'"|"\\") ~ ANY)+ | string_escape ~ ("'" | "\\"))*}
+    string_value = @{((!("\""| string_escape | "'") ~ ANY)+)*}
+    string_value_escape_1 = @{((!("\"" | string_escape) ~ ANY)+ | string_escape ~ ("\"" | string_escape))*}
+    string_value_escape_2 = @{((!("'" | string_escape) ~ ANY)+ | string_escape ~ ("'" | string_escape))*}
 
 string_list = {string ~ ("," ~ string)*}
 
-pos_number = @{ASCII_NONZERO_DIGIT ~ ASCII_DIGIT* | ASCII_DIGIT}
-number = @{"-"? ~ ASCII_NONZERO_DIGIT ~ ASCII_DIGIT* | "-"? ~ ASCII_DIGIT}
+pos_number = @{ASCII_NONZERO_DIGIT ~ ASCII_DIGIT* | "0"}
+number = @{"-"? ~ pos_number}
 
 decimal = @{number ~ ("." ~ ASCII_DIGIT+)?}
 
 numbers_list = {number ~ ("," ~ number)*}
 
+step = _{":" ~ pos_number?}
 numbers_range = {(full_range | right_range | all_range | left_range)}
-    right_range = {":" ~ number ~ ((":" ~ pos_number) | ":")?}
-    all_range = {":" ~ ((":" ~ pos_number) | ":")?}
-    left_range = {number ~ ":"  ~ ((":" ~ pos_number) | ":")?}
-    full_range = {number ~ ":" ~ number  ~ ((":" ~ pos_number) | ":")?}
+    right_range = {":" ~ number ~ step?}
+    all_range = {":" ~ step?}
+    left_range = {number ~ ":"  ~ step?}
+    full_range = {number ~ ":" ~ number ~ step?}
 
 from_current = {"@" ~ root?}
 from_root    = {"$" ~ root?}
@@ -44,20 +45,22 @@ term = _{select_term | decimal | string | boolean}
 single_filter = {term ~ op ~ term | term}
 
 filter_relation = _{and | or}
-    and = {"&&"}
-    or  = {"||"}
+    and = @{"&&"}
+    or  = @{"||"}
 
 inner_filter = _{single_filter | "(" ~ filter ~ ")"}
 
 filter = {inner_filter ~ (filter_relation ~ inner_filter)*}
 
-all = {"*"}
+all = @{"*"}
 
-full_scan = {".."}
+full_scan = @{".."}
 
-bracket = _{numbers_range | numbers_list | string_list | all | "?" ~ filter}
+square_bracket = _{"[" ~ (numbers_range | numbers_list | string_list | all | "?" ~ filter) ~ "]"}
 
-element = _{"." ~ literal | full_scan ~ (literal | all | "[" ~ bracket ~ "]") | "." ~ all | ("."? ~ "[" ~ bracket ~ "]")}
+element = _{(full_scan | ".") ~ (literal | all | square_bracket) | square_bracket}
+
+function = _{literal ~ "(" ~ (literal)? ~ ("," ~ literal)* ~ ")"}
 
 first_element = _{literal | all}
 
