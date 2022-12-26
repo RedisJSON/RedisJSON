@@ -1,7 +1,7 @@
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
-include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+// include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 extern crate redis_module;
 
@@ -12,59 +12,17 @@ use std::ffi::{CStr, c_char, c_void};
 use cstr::cstr;
 use function_name::named;
 
+pub mod rejson_api;
+
 const MODULE_NAME: &str = "RJ_LLAPI";
 const MODULE_VERSION: u32 = 1;
 
 const OK: RedisResult = Ok(RedisValue::SimpleStringStatic("Ok"));
-const RedisModuleEvent_ModuleChange: RedisModuleEvent = RedisModuleEvent {
-	id: REDISMODULE_EVENT_MODULE_CHANGE,
-	dataver: 1,
-};
 
-struct RjApi {
-	japi: *const RedisJSONAPI,
-	version: i32,
-}
+static mut rj_api: RjApi = RjApi::new();
 
-impl RjApi {
-	pub unsafe fn api(&self) -> &RedisJSONAPI {
-		&*self.japi
-	}
-}
-
-static mut rj_api: RjApi = RjApi {
-	japi: std::ptr::null::<RedisJSONAPI>(),
-	version: 0
-};
-
-fn get_json_apis(
-	ctx: *mut RedisModuleCtx,
-	subscribe_to_module_change: bool
-) -> Status {
-	let mut japi: *const std::os::raw::c_void;
-
-	japi = unsafe { RedisModule_GetSharedAPI.unwrap()(ctx, cstr!("RedisJSON_V2").as_ptr()) };
-	if !japi.is_null() {
-		unsafe {
-			rj_api.japi = japi as *const RedisJSONAPI;
-			rj_api.version = 2;
-		}
-		return Status::Ok;
-	}
-	
-	japi = unsafe { RedisModule_GetSharedAPI.unwrap()(ctx, cstr!("RedisJSON_V1").as_ptr()) };
-	if !japi.is_null() {
-		unsafe {
-			rj_api.japi = japi as *const RedisJSONAPI;
-			rj_api.version = 1;
-		}
-		return Status::Ok;
-	}
-
-	if subscribe_to_module_change {
-		return subscribe_to_server_event(ctx, RedisModuleEvent_ModuleChange, Some(module_change_handler));
-	}
-
+fn init(ctx: &Context, _args: &[RedisString]) -> Status {
+	rj_api.get_json_apis(ctx, true);
 	Status::Ok
 }
 
@@ -76,17 +34,12 @@ unsafe extern "C" fn module_change_handler(
 ) {
 	let ei = &*(ei as *mut RedisModuleModuleChange);
 	if sub == REDISMODULE_SUBEVENT_MODULE_LOADED as u64 &&            // If the subscribed event is a module load,
-		rj_api.japi.is_null() &&                                        // and JSON is not already loaded,
+		!rj_api.is_loaded() &&                                          // and JSON is not already loaded,
 		CStr::from_ptr(ei.module_name).to_str().unwrap() == "ReJSON" && // and the loading module is JSON:
-		get_json_apis(ctx, false) == Status::Err                        // try to load it.
+		rj_api.get_json_apis(ctx, false) == Status::Err                 // try to load it.
 	{
-			// Log Error
+		// Log Error
 	}
-}
-
-fn init(ctx: &Context, _args: &[RedisString]) -> Status {
-	get_json_apis(ctx.ctx, true);
-	Status::Ok
 }
 
 #[named]
@@ -99,12 +52,12 @@ fn RJ_llapi_test_open_key(ctx: &Context, args: Vec<RedisString>) -> RedisResult 
 
 	assert!(ctx.call("JSON.SET", &[function_name!(), "$", "0"]).is_ok());
 	let rmk = key::RedisKey::open(ctx.ctx, &keyname);
-	assert_eq!(unsafe { rj_api.api().isJSON.unwrap()(rmk.key_inner) }, 1);
+	assert_eq!(rj_api.isJSON(rmk), 1);
 	assert!(unsafe { !(rj_api.api().openKey.unwrap()(ctx.ctx, keyname.inner).is_null()) });
 
 	ctx.call("SET", &[function_name!(), "0"]).unwrap();
 	let rmk = key::RedisKey::open(ctx.ctx, &keyname);
-	assert_ne!(unsafe { rj_api.api().isJSON.unwrap()(rmk.key_inner) }, 1);
+	assert_ne!(rj_api.isJSON(rmk), 1);
 	assert!(unsafe { rj_api.api().openKey.unwrap()(ctx.ctx, keyname.inner).is_null() });
 
 	ctx.reply_simple_string(concat!(function_name!(), ": PASSED"));
