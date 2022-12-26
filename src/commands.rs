@@ -128,7 +128,9 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 }
             }
 
-            SelectValueType::Long => RedisValue::Integer(v.get_long()),
+            SelectValueType::Long => {
+                RedisValue::Integer(v.get_long().map_or_else(|_| i64::MAX, |v| v))
+            }
 
             SelectValueType::Double => RedisValue::Float(v.get_double()),
 
@@ -417,7 +419,10 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         match (a.get_type(), b.get_type()) {
             (SelectValueType::Null, SelectValueType::Null) => true,
             (SelectValueType::Bool, SelectValueType::Bool) => a.get_bool() == b.get_bool(),
-            (SelectValueType::Long, SelectValueType::Long) => a.get_long() == b.get_long(),
+            (SelectValueType::Long, SelectValueType::Long) => match (a.get_long(), b.get_long()) {
+                (Ok(a), Ok(b)) => a == b,
+                _ => false,
+            },
             (SelectValueType::Double, SelectValueType::Double) => a.get_double() == b.get_double(),
             (SelectValueType::String, SelectValueType::String) => a.get_str() == b.get_str(),
             (SelectValueType::Array, SelectValueType::Array) => {
@@ -1933,7 +1938,7 @@ pub fn json_clear<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
 
     let paths = find_paths(path, root, |v| match v.get_type() {
         SelectValueType::Array | SelectValueType::Object => v.len().unwrap() > 0,
-        SelectValueType::Long => v.get_long() != 0,
+        SelectValueType::Long => v.get_long().map_or_else(|_| false, |v| v != 0),
         SelectValueType::Double => v.get_double() != 0.0,
         _ => false,
     })?;

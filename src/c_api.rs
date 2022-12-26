@@ -157,10 +157,13 @@ pub fn json_api_get_json_from_iter<M: Manager>(
 pub fn json_api_get_int<M: Manager>(_: M, json: *const c_void, val: *mut c_longlong) -> c_int {
     let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
-        SelectValueType::Long => {
-            unsafe { *val = json.get_long() };
-            Status::Ok as c_int
-        }
+        SelectValueType::Long => json.get_long().map_or_else(
+            |_| Status::Err as c_int,
+            |v| {
+                unsafe { *val = v };
+                Status::Ok as c_int
+            },
+        ),
         _ => Status::Err as c_int,
     }
 }
@@ -173,10 +176,13 @@ pub fn json_api_get_double<M: Manager>(_: M, json: *const c_void, val: *mut c_do
             unsafe { *val = json.get_double() };
             Status::Ok as c_int
         }
-        SelectValueType::Long => {
-            unsafe { *val = json.get_long() as f64 };
-            Status::Ok as c_int
-        }
+        SelectValueType::Long => json.get_long().map_or_else(
+            |_| Status::Err as c_int,
+            |v| {
+                unsafe { *val = v as f64 };
+                Status::Ok as c_int
+            },
+        ),
         _ => Status::Err as c_int,
     }
 }

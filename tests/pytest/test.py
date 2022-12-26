@@ -1300,6 +1300,18 @@ def testOutOfRangeValues(env):
         "max2_f64": 1.7976931348623158e+308,
         "min_f64" : -1.7976931348623157e+308,
         "min2_f64": -1.7976931348623158e+308,
+        #"max_u64": 18446744073709551615.0,
+    }
+
+    doc_float_ok_2 = {
+        # i64
+        "max_i64": 9223372036854775807.0,
+        "beyond_max_i64": 9223372036854775808.0, # as u64
+        "min_i64": -9223372036854775808.0,
+        "below_min_i64": -9223372036854775809.0, # as f64
+        # u64
+        "max_u64": 18446744073709551615.0,
+        "beyond_max_u64": 18446744073709551616.0, # as f64
     }
 
     doc_bad_values = {
@@ -1309,16 +1321,39 @@ def testOutOfRangeValues(env):
     
     r.expect('JSON.SET', 'doc_int_ok', '$', json.dumps(doc_int_ok)).ok()
     r.expect('JSON.SET', 'doc_float_ok', '$', json.dumps(doc_float_ok)).ok()
+    r.expect('JSON.SET', 'doc_float_ok_2', '$', json.dumps(doc_float_ok_2)).ok()
 
     def check_object_values(obj, name, epsilon):
+        # Test values from JSON.GET are equal to JSON.SET
+        # Check no crash (using get_long internally)
+        arr = []
         for k, v in iter(obj.items()):
             r.assertTrue(True, message='GET {}={}'.format(k, v))
             res = r.execute_command('JSON.GET', name, '$.{}'.format(k))
             r.assertAlmostEqual(json.loads(res)[0], v, epsilon, message=res)
-    
-    # Test values from JSON.GET are equal to JSON.SET
+            try:
+                # Check no crash on overflow
+                res = r.execute_command('JSON.NUMINCRBY', name, '$.{}'.format(k), '1')
+                #r.assertAlmostEqual(json.loads(res)[0], v+1, epsilon, message=res)
+                res = r.execute_command('JSON.NUMMULTBY', name, '$.{}'.format(k), '2')            
+                #r.assertAlmostEqual(json.loads(res)[0], v*2, epsilon, message=res)
+            except Exception as e:
+                pass
+            arr.append(v)
+        # Check no crash using values in a filter
+        r.expect('JSON.SET', 'arr', '$', json.dumps(arr)).ok()
+        res = r.execute_command('JSON.GET', 'arr', '$[?(@!=0)]')
+        for res_i, arr_i in zip(json.loads(res), arr):
+            r.assertAlmostEqual(res_i, arr_i, epsilon, message=res)
+        # Check no crash with other commands 
+        r.execute_command('JSON.ARRINDEX', 'arr', '$', '10')
+        r.execute_command('JSON.RESP', 'arr')
+        for k, v in iter(obj.items()):            
+            r.execute_command('JSON.CLEAR', name, '$.{}'.format(k))
+
     check_object_values(doc_int_ok, 'doc_int_ok', 0)
     check_object_values(doc_float_ok, 'doc_float_ok', sys.float_info.epsilon)
+    check_object_values(doc_float_ok_2, 'doc_float_ok_2', sys.float_info.epsilon)
 
     # Not using json.dumps with out-of-range values here (would be converted to a string representation such as 'Infinity')
     r.expect('JSON.SET', 'doc_bad_values', '$', '{}').ok()

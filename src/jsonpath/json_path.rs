@@ -378,14 +378,20 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
                 CmpResult::Ord(b1.cmp(b2))
             }
             (TermEvaluationResult::Value(v), _) => match v.get_type() {
-                SelectValueType::Long => TermEvaluationResult::Integer(v.get_long()).cmp(s),
+                SelectValueType::Long => v.get_long().map_or_else(
+                    |_| CmpResult::NotCmparable,
+                    |n| TermEvaluationResult::Integer(n).cmp(s),
+                ),
                 SelectValueType::Double => TermEvaluationResult::Float(v.get_double()).cmp(s),
                 SelectValueType::String => TermEvaluationResult::Str(v.as_str()).cmp(s),
                 SelectValueType::Bool => TermEvaluationResult::Bool(v.get_bool()).cmp(s),
                 _ => CmpResult::NotCmparable,
             },
             (_, TermEvaluationResult::Value(v)) => match v.get_type() {
-                SelectValueType::Long => self.cmp(&TermEvaluationResult::Integer(v.get_long())),
+                SelectValueType::Long => v.get_long().map_or_else(
+                    |_| CmpResult::NotCmparable,
+                    |n| self.cmp(&TermEvaluationResult::Integer(n)),
+                ),
                 SelectValueType::Double => self.cmp(&TermEvaluationResult::Float(v.get_double())),
                 SelectValueType::String => self.cmp(&TermEvaluationResult::Str(v.as_str())),
                 SelectValueType::Bool => self.cmp(&TermEvaluationResult::Bool(v.get_bool())),

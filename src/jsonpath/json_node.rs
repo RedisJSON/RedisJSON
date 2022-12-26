@@ -4,6 +4,7 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
+use crate::error::Error;
 use crate::jsonpath::select_value::{SelectValue, SelectValueType};
 use ijson::{IValue, ValueType};
 use serde_json::Value;
@@ -118,13 +119,13 @@ impl SelectValue for Value {
         }
     }
 
-    fn get_long(&self) -> i64 {
+    fn get_long(&self) -> Result<i64, Error> {
         match self {
             Self::Number(n) => {
                 if let Some(n) = n.as_i64() {
-                    n
+                    Ok(n)
                 } else {
-                    panic!("not a long");
+                    Err(Error::from("u64 is currently unsupported"))
                 }
             }
             _ => {
@@ -244,17 +245,17 @@ impl SelectValue for IValue {
         }
     }
 
-    fn get_long(&self) -> i64 {
+    fn get_long(&self) -> Result<i64, Error> {
         match self.as_number() {
             Some(n) => {
                 if n.has_decimal_point() {
                     panic!("not a long");
                 } else {
                     if let Some(n) = n.to_i64() {
-                        n
+                        Ok(n)
                     } else {
                         // Workaround until adding an API `get_ulong(&self) -> u64`
-                        i64::MAX
+                        Err(Error::from("u64 is currently unsupported"))
                     }
                 }
             }
