@@ -244,6 +244,7 @@ fn RJ_llapi_test_all(ctx: &Context, _args: Vec<RedisString>) -> RedisResult {
 	}
 
 	assert_eq!(passed, NUM_TESTS);
+	ctx.call("FLUSHALL", &[]).unwrap();
 	OK
 }
 

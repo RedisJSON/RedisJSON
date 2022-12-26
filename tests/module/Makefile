@@ -1,6 +1,6 @@
 
 CC = gcc
-CPPFLAGS = -I./src/include -DREDISMODULE_EXPERIMENTAL_API
+CPPFLAGS = -I../../src/include -DREDISMODULE_EXPERIMENTAL_API
 CFLAGS = -Wall -g -fPIC -lc -lm -std=gnu99
 
 LDFLAGS = -fno-common -g -ggdb -shared -Bsymbolic
@@ -10,8 +10,7 @@ include deps
 .DEFAULT_GOAL = mod
 
 .PHONY: all mod
-all: mod
-mod: libtestmod.so
+all mod: libtestmod.so
 
 ifneq ($(C),1)
 libtestmod.so: src/lib.rs

@@ -10,12 +10,12 @@ fn main() {
     cc::Build::new()
         .define(EXPERIMENTAL_API, None)
         .file("src/rejson_api.c")
-        .include("src/include/")
+        .include("../../src/include/")
         .compile("rejson_api");
 
     let bindings = bindgen::Builder::default()
         .clang_arg(format!("-D{}", EXPERIMENTAL_API).as_str())
-        .header("src/include/rejson_api.h")
+        .header("../../src/include/rejson_api.h")
         // .allowlist_var("(REDIS|Redis).*")
         .blocklist_type("__darwin_.*")
         .blocklist_type("RedisModule.*")

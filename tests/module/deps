@@ -1,2 +1,0 @@
-testLLAPI.o: src/testLLAPI.c src/include/rejson_api.h \
- src/include/redismodule.h
