@@ -18,6 +18,7 @@ jobs:
       with:
         usesh: true
         sync: rsync
+        copyback: false
         prepare: pkg install -y bash curl lang/rust devel/llvm-devel
         run: |
           cargo build --all --all-targets --verbose 
