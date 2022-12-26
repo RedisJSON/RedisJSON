@@ -1335,34 +1335,41 @@ def testOutOfRangeValues(env):
     def check_object_values(obj, name, epsilon, check_num_incr=True, check_num_mult=True):
         # Test values from JSON.GET are equal to JSON.SET
         # Check no crash (using get_long internally)
+        copy_obj = obj.copy()
         arr = []
         for k, v in iter(obj.items()):
             r.assertTrue(True, message='{} GET {}={}'.format(name, k, v))
             res = r.execute_command('JSON.GET', name, '$.{}'.format(k))
             r.assertAlmostEqual(json.loads(res)[0], v, epsilon, message=res)
+            
+            # Check no crash on overflow
+            values = ['9223372036854775808', '18446744073709551615', '18446744073709551616', '-9223372036854775808', '-18446744073709551615', '-18446744073709551616']
+            # Check NUMINCRBY
             try:
-                # Check no crash on overflow
                 res = r.execute_command('JSON.NUMINCRBY', name, '$.{}'.format(k), '1')
                 if check_num_incr:
                     r.assertAlmostEqual(json.loads(res)[0], v+1, epsilon, message=res)
-                r.execute_command('JSON.NUMINCRBY', name, '$.{}'.format(k), '9223372036854775808')
-                r.execute_command('JSON.NUMINCRBY', name, '$.{}'.format(k), '18446744073709551615')
-                r.execute_command('JSON.NUMINCRBY', name, '$.{}'.format(k), '18446744073709551616')
-                r.execute_command('JSON.NUMINCRBY', name, '$.{}'.format(k), '-9223372036854775808')
-                r.execute_command('JSON.NUMINCRBY', name, '$.{}'.format(k), '-18446744073709551615')
-                r.execute_command('JSON.NUMINCRBY', name, '$.{}'.format(k), '-18446744073709551616')
-                
+            except Exception as e:
+                r.assertTrue('u64 is not supported' in str(e) or 'result is not a number' in str(e))
+    
+            for val in values:
+                try:
+                    r.execute_command('JSON.NUMINCRBY', name, '$.{}'.format(k), val)
+                except Exception as e:
+                        r.assertTrue('u64 is not supported' in str(e) or 'result is not a number' in str(e))
+            # Check NUMMULTBY
+            try:
                 res = r.execute_command('JSON.NUMMULTBY', name, '$.{}'.format(k), '2')
                 if check_num_mult:
                     r.assertAlmostEqual(json.loads(res)[0], v*2, epsilon, message=res)
-                r.execute_command('JSON.NUMMULTBY', name, '$.{}'.format(k), '9223372036854775808')
-                r.execute_command('JSON.NUMMULTBY', name, '$.{}'.format(k), '18446744073709551615')
-                r.execute_command('JSON.NUMMULTBY', name, '$.{}'.format(k), '18446744073709551616')
-                r.execute_command('JSON.NUMMULTBY', name, '$.{}'.format(k), '-9223372036854775808')
-                r.execute_command('JSON.NUMMULTBY', name, '$.{}'.format(k), '-18446744073709551615')
-                r.execute_command('JSON.NUMMULTBY', name, '$.{}'.format(k), '-18446744073709551616')
             except Exception as e:
                 r.assertTrue('u64 is not supported' in str(e) or 'result is not a number' in str(e))
+            for val in values:
+                try:
+                    r.execute_command('JSON.NUMMULTBY', name, '$.{}'.format(k), val)
+                except Exception as e:
+                    r.assertTrue('u64 is not supported' in str(e) or 'result is not a number' in str(e))
+
             arr.append(v)
         # Check no crash using values in a filter
         r.expect('JSON.SET', 'arr', '$', json.dumps(arr)).ok()
@@ -1379,8 +1386,11 @@ def testOutOfRangeValues(env):
             elif type(res_i) is str:
                 # Double are returned as strings
                 r.assertAlmostEqual(float(res_i), arr_i, epsilon, message=res)
-        for k, v in iter(obj.items()):            
-            r.execute_command('JSON.CLEAR', name, '$.{}'.format(k))
+        
+        r.expect('JSON.SET', name, '$', json.dumps(copy_obj)).ok()
+        for k, v in iter(copy_obj.items()):            
+            res = r.execute_command('JSON.CLEAR', name, '$.{}'.format(k))
+            r.assertEqual(res, 1, message='{} CLEAR {}={} ({})'.format(name, k, v, res))
 
     check_object_values(doc_int_ok, 'doc_int_ok', 0)
     check_object_values(doc_int_ok_overflow_mult, 'doc_int_ok_overflow_mult', 0, True, False)

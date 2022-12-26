@@ -1938,7 +1938,10 @@ pub fn json_clear<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
 
     let paths = find_paths(path, root, |v| match v.get_type() {
         SelectValueType::Array | SelectValueType::Object => v.len().unwrap() > 0,
-        SelectValueType::Long => v.get_long().map_or_else(|_| false, |v| v != 0),
+        SelectValueType::Long => v.get_long().map_or_else(
+            |_| true, // if failed then it is not a zero and can be cleared
+            |v| v != 0,
+        ),
         SelectValueType::Double => v.get_double() != 0.0,
         _ => false,
     })?;
