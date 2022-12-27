@@ -63,6 +63,7 @@ commands:
       - run:
           name: Setup automation
           command: |
+            export HOMEBREW_NO_AUTO_UPDATE=1
             git submodule update --init deps/readies
             ./deps/readies/bin/getpy3
             ./deps/readies/bin/getaws
@@ -86,11 +87,13 @@ commands:
           name: System setup
           shell: /bin/bash -l -eo pipefail
           command: |
+            export HOMEBREW_NO_AUTO_UPDATE=1
             ./sbin/system-setup.py <<parameters.system_setup_params>>
       - run:
           name: Install Redis
           shell: /bin/bash -l -eo pipefail
           command: |
+            export HOMEBREW_NO_AUTO_UPDATE=1
             ./deps/readies/bin/getredis -v '<<parameters.redis_version>>' --force <<parameters.getredis_params>>
       - run:
           name: System report
@@ -569,7 +572,8 @@ workflows:
             parameters:
               platform: [jammy, bionic, focal]
       - build-macos:
-          <<: *on-integ-and-version-tags
+          #@@<<: *on-integ-and-version-tags
+          <<: *always
           context: common
       - coverage:
           <<: *on-any-branch
