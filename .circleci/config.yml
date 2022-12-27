@@ -87,7 +87,6 @@ commands:
           name: System setup
           shell: /bin/bash -l -eo pipefail
           command: |
-            export HOMEBREW_NO_AUTO_UPDATE=1
             ./sbin/system-setup.py <<parameters.system_setup_params>>
       - run:
           name: Install Redis
@@ -572,8 +571,7 @@ workflows:
             parameters:
               platform: [jammy, bionic, focal]
       - build-macos:
-          #@@<<: *on-integ-and-version-tags
-          <<: *always
+          <<: *on-integ-and-version-tags
           context: common
       - coverage:
           <<: *on-any-branch
