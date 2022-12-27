@@ -70,8 +70,8 @@ Some languages have client libraries that provide support for RedisJSON's comman
 | ------- | -------- | ------- | ------ | ----- | ------- | ------- |
 | [jedis][jedis-url] | Java | MIT | [Redis][redis-url] | ![Stars][jedis-stars] | [Maven][jedis-package]||
 | [redis-py][redis-py-url] | Python | MIT | [Redis][redis-url] | ![Stars][redis-py-stars] | [pypi][redis-py-package]||
-| [node-redis][node-redis-url] | Node.js | MIT | [Redis][redis-url] | ![Stars][node-redis-stars] | [pypi][node-redis-package]||
-| [nredisstack][nredisstack-url] | .NET | MIT | [Redis][redis-url] | ![Stars][nredisstack-stars] | [pypi][nredisstack-package]||
+| [node-redis][node-redis-url] | Node.js | MIT | [Redis][redis-url] | ![Stars][node-redis-stars] | [npm][node-redis-package]||
+| [nredisstack][nredisstack-url] | .NET | MIT | [Redis][redis-url] | ![Stars][nredisstack-stars] | [nuget][nredisstack-package]||
 | [redis-om-python][redis-om-python-url]  | python | BSD-3-Clause | [Redis][redis-om-python-author] | [![redis-om-python-stars]][redis-om-python-url] | [PyPi][redis-om-python-package] |
 | [Redisson][Redisson-url] | Java | Apache-2.0 | [Redisson][Redisson-author] | [![Redisson-stars]][Redisson-url] | [Maven][Redisson-package] |
 | [redis-modules-java][redis-modules-java-url] | Java | Apache-2.0 | [Liming Deng @dengliming][redis-modules-java-author] | [![redis-modules-java-stars]][redis-modules-java-url] | [maven][redis-modules-java-package] |
