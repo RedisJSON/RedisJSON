@@ -1,8 +1,8 @@
 *
 
-!**/*.rs
+!*.rs
 !Cargo.toml
-!**/*.c
-!**/*.h
+!*.c
+!*.h
 !Makefile
 !.gitignore
