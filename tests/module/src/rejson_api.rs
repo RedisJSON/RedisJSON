@@ -18,32 +18,32 @@ pub struct RjRedisJSON {
 impl RjRedisJSON {
 	pub fn openKey(ctx: &Context, keyname: &RedisString) -> Self {
 		Self {
-			internal: unsafe { rj_api().api().openKey.unwrap()(ctx.ctx, keyname.inner) }
+			internal: unsafe { rj_api().openKey.unwrap()(ctx.ctx, keyname.inner) }
 		}
 	}
   pub fn getAt(&self, index: usize) -> Self {
 		Self {
-			internal: unsafe { rj_api().api().getAt.unwrap()(self.internal, index) }
+			internal: unsafe { rj_api().getAt.unwrap()(self.internal, index) }
 		}
 	}
   pub fn getLen(&self, count: &mut usize) -> i32 {
-		unsafe { rj_api().api().getLen.unwrap()(self.internal, count as *mut _) }
+		unsafe { rj_api().getLen.unwrap()(self.internal, count as *mut _) }
 	}
   pub fn getType(&self) -> JSONType {
-		unsafe { rj_api().api().getType.unwrap()(self.internal) }
+		unsafe { rj_api().getType.unwrap()(self.internal) }
 	}
 
   pub fn getInt(&self, integer: &mut i64) -> i32 {
-		unsafe { rj_api().api().getInt.unwrap()(self.internal, integer as *mut _) }
+		unsafe { rj_api().getInt.unwrap()(self.internal, integer as *mut _) }
 	}
   pub fn getDouble(&self, dbl: &mut f64) -> i32 {
-		unsafe { rj_api().api().getDouble.unwrap()(self.internal, dbl as *mut _) }
+		unsafe { rj_api().getDouble.unwrap()(self.internal, dbl as *mut _) }
 	}
   pub fn getBoolean(&self, boolean: &mut i32) -> i32 {
-		unsafe { rj_api().api().getBoolean.unwrap()(self.internal, boolean as *mut _) }
+		unsafe { rj_api().getBoolean.unwrap()(self.internal, boolean as *mut _) }
 	}
   pub fn getString(&self, str: &mut *const c_char, len: &mut usize) -> i32 {
-		unsafe { rj_api().api().getString.unwrap()(self.internal, str as *mut _, len as *mut _) }
+		unsafe { rj_api().getString.unwrap()(self.internal, str as *mut _, len as *mut _) }
 	}
 
 	pub fn is_null(&self) -> bool {
@@ -58,19 +58,19 @@ impl RjResultsIterator {
 	pub fn get(json: &RjRedisJSON, path: &str) -> Self {
 		let cpath = CString::new(path).unwrap();
 		Self {
-			internal: unsafe { rj_api().api().get.unwrap()(json.internal, cpath.as_ptr()) }
+			internal: unsafe { rj_api().get.unwrap()(json.internal, cpath.as_ptr()) }
 		}
 	}
   pub fn next(&self) -> RjRedisJSON {
 		RjRedisJSON {
-			internal: unsafe { rj_api().api().next.unwrap()(self.internal) }
+			internal: unsafe { rj_api().next.unwrap()(self.internal) }
 		}
 	}
   pub fn len(&self) -> usize {
-		unsafe { rj_api().api().len.unwrap()(self.internal) }
+		unsafe { rj_api().len.unwrap()(self.internal) }
 	}
 	pub fn drop(self) {
-		unsafe { rj_api().api().freeIter.unwrap()(self.internal) }
+		unsafe { rj_api().freeIter.unwrap()(self.internal) }
 	}
 
 	pub fn is_null(&self) -> bool {
@@ -79,10 +79,10 @@ impl RjResultsIterator {
 
 	// V2
   pub fn getJSON(&self, ctx: &Context, str: &mut RedisString) -> i32 {
-		unsafe { rj_api().api().getJSONFromIter.unwrap()(self.internal, ctx.ctx, &mut str.inner as *mut _) }
+		unsafe { rj_api().getJSONFromIter.unwrap()(self.internal, ctx.ctx, &mut str.inner as *mut _) }
 	}
   pub fn reset(&self) {
-		unsafe { rj_api().api().resetIter.unwrap()(self.internal) };
+		unsafe { rj_api().resetIter.unwrap()(self.internal) };
 	}
 }
 
@@ -92,10 +92,6 @@ pub struct RjApi {
 }
 
 impl RjApi {
-	unsafe fn api(&self) -> &RedisJSONAPI {
-		&*self.japi
-	}
-
 	const fn new() -> Self {
 		Self {
 			japi: std::ptr::null::<RedisJSONAPI>(),
@@ -128,14 +124,14 @@ impl RjApi {
 	}
 
 	fn is_null() -> bool {
-		rj_api().japi.is_null()
+		unsafe { REDIS_JSON_API.japi }.is_null() 
 	}
 	pub fn get_version() -> i32 {
-		rj_api().version
+		unsafe { REDIS_JSON_API.version }
 	}
 
 	pub fn isJSON(key: RedisKey) -> bool {
-		unsafe { rj_api().api().isJSON.unwrap()(key.key_inner) != 0 }
+		unsafe { rj_api().isJSON.unwrap()(key.key_inner) != 0 }
 	}
 }
 
@@ -152,8 +148,8 @@ pub fn GetSharedAPI(
 
 static mut REDIS_JSON_API: RjApi = RjApi::new();
 
-pub fn rj_api() -> &'static RjApi {
-	unsafe { &REDIS_JSON_API }
+pub fn rj_api() -> &'static RedisJSONAPI {
+	unsafe { &*REDIS_JSON_API.japi }
 }
 
 extern "C" fn module_change_handler(
@@ -162,7 +158,7 @@ extern "C" fn module_change_handler(
 	sub: u64,
 	ei: *mut c_void
 ) {
-	let ei = unsafe { &*(ei as *mut RedisModuleModuleChange) };
+	let ei = unsafe { *(ei as *mut RedisModuleModuleChange) };
 	if sub == REDISMODULE_SUBEVENT_MODULE_LOADED as u64 &&                    // If the subscribed event is a module load,
 		RjApi::is_null() &&                                                     // and JSON is not already loaded,
 		unsafe { CStr::from_ptr(ei.module_name) }.to_str().unwrap() == "ReJSON" // and the loading module is JSON:
