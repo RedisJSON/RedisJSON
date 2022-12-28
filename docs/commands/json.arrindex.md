@@ -1,4 +1,4 @@
-Search for the first occurrence of a scalar JSON value in an array
+Search for the first occurrence of a JSON value in an array
 
 [Examples](#examples)
 
