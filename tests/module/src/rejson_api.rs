@@ -13,76 +13,82 @@ const RedisModuleEvent_ModuleChange: RedisModuleEvent = RedisModuleEvent {
 
 
 pub struct RjRedisJSON {
-	internal: RedisJSON,
+	inner: RedisJSON,
 }
 impl RjRedisJSON {
 	pub fn openKey(ctx: &Context, keyname: &RedisString) -> Self {
 		Self {
-			internal: unsafe { rj_api().openKey.unwrap()(ctx.ctx, keyname.inner) }
+			inner: unsafe { rj_api().openKey.unwrap()(ctx.ctx, keyname.inner) }
 		}
 	}
   pub fn getAt(&self, index: usize) -> Self {
 		Self {
-			internal: unsafe { rj_api().getAt.unwrap()(self.internal, index) }
+			inner: unsafe { rj_api().getAt.unwrap()(self.inner, index) }
 		}
 	}
   pub fn getLen(&self, count: &mut usize) -> i32 {
-		unsafe { rj_api().getLen.unwrap()(self.internal, count as *mut _) }
+		unsafe { rj_api().getLen.unwrap()(self.inner, count as *mut _) }
 	}
   pub fn getType(&self) -> JSONType {
-		unsafe { rj_api().getType.unwrap()(self.internal) }
+		unsafe { rj_api().getType.unwrap()(self.inner) }
 	}
 
   pub fn getInt(&self, integer: &mut i64) -> i32 {
-		unsafe { rj_api().getInt.unwrap()(self.internal, integer as *mut _) }
+		unsafe { rj_api().getInt.unwrap()(self.inner, integer as *mut _) }
 	}
   pub fn getDouble(&self, dbl: &mut f64) -> i32 {
-		unsafe { rj_api().getDouble.unwrap()(self.internal, dbl as *mut _) }
+		unsafe { rj_api().getDouble.unwrap()(self.inner, dbl as *mut _) }
 	}
   pub fn getBoolean(&self, boolean: &mut i32) -> i32 {
-		unsafe { rj_api().getBoolean.unwrap()(self.internal, boolean as *mut _) }
+		unsafe { rj_api().getBoolean.unwrap()(self.inner, boolean as *mut _) }
 	}
   pub fn getString(&self, str: &mut *const c_char, len: &mut usize) -> i32 {
-		unsafe { rj_api().getString.unwrap()(self.internal, str as *mut _, len as *mut _) }
+		unsafe { rj_api().getString.unwrap()(self.inner, str as *mut _, len as *mut _) }
 	}
 
 	pub fn is_null(&self) -> bool {
-		self.internal.is_null()
+		self.inner.is_null()
+	}
+
+	pub fn iter(&self, path: &str) -> RjResults {
+		let cpath = CString::new(path).unwrap();
+		RjResults {
+			inner: unsafe { rj_api().get.unwrap()(self.inner, cpath.as_ptr()) }
+		}
 	}
 }
 
-pub struct RjResultsIterator {
-	internal: JSONResultsIterator,
+pub struct RjResults {
+	inner: JSONResultsIterator,
 }
-impl RjResultsIterator {
-	pub fn get(json: &RjRedisJSON, path: &str) -> Self {
-		let cpath = CString::new(path).unwrap();
-		Self {
-			internal: unsafe { rj_api().get.unwrap()(json.internal, cpath.as_ptr()) }
-		}
+impl Iterator for RjResults {
+	type Item = RjRedisJSON;
+  fn next(&mut self) -> Option<Self::Item> {
+		let next = unsafe { rj_api().next.unwrap()(self.inner) };
+		if next.is_null() { None }
+		else { Some( Self::Item {
+			inner: next
+		})}
 	}
-  pub fn next(&self) -> RjRedisJSON {
-		RjRedisJSON {
-			internal: unsafe { rj_api().next.unwrap()(self.internal) }
-		}
-	}
+}
+impl RjResults {
   pub fn len(&self) -> usize {
-		unsafe { rj_api().len.unwrap()(self.internal) }
+		unsafe { rj_api().len.unwrap()(self.inner) }
 	}
 	pub fn drop(self) {
-		unsafe { rj_api().freeIter.unwrap()(self.internal) }
+		unsafe { rj_api().freeIter.unwrap()(self.inner) }
 	}
 
 	pub fn is_null(&self) -> bool {
-		self.internal.is_null()
+		self.inner.is_null()
 	}
 
 	// V2
   pub fn getJSON(&self, ctx: &Context, str: &mut RedisString) -> i32 {
-		unsafe { rj_api().getJSONFromIter.unwrap()(self.internal, ctx.ctx, &mut str.inner as *mut _) }
+		unsafe { rj_api().getJSONFromIter.unwrap()(self.inner, ctx.ctx, &mut str.inner as *mut _) }
 	}
   pub fn reset(&self) {
-		unsafe { rj_api().resetIter.unwrap()(self.internal) };
+		unsafe { rj_api().resetIter.unwrap()(self.inner) };
 	}
 }
 
@@ -100,10 +106,10 @@ impl RjApi {
 	}
 
 	pub fn get_json_apis(ctx: *mut RedisModuleCtx, subscribe_to_module_change: bool) {
-		unsafe { REDIS_JSON_API.get_json_apis_internal(ctx, subscribe_to_module_change) }
+		unsafe { REDIS_JSON_API.get_json_apis_inner(ctx, subscribe_to_module_change) }
 	}
 
-	unsafe fn get_json_apis_internal(&mut self, ctx: *mut RedisModuleCtx, subscribe_to_module_change: bool) {
+	unsafe fn get_json_apis_inner(&mut self, ctx: *mut RedisModuleCtx, subscribe_to_module_change: bool) {
 		if self.try_get_api(ctx, 2) { return; }
 		
 		if self.try_get_api(ctx, 1) { return; }

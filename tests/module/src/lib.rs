@@ -57,7 +57,7 @@ fn RJ_llapi_test_iterator(ctx: &Context, args: Vec<RedisString>) -> RedisResult 
 	let json            = "[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]";
 	ctx.call("JSON.SET", &[function_name!(), "$", json]).unwrap();
 
-	let ji = RjResultsIterator::get(&RjRedisJSON::openKey(ctx, &keyname), "$..*");
+	let mut ji = RjRedisJSON::openKey(ctx, &keyname).iter("$..*");
 	assert!(!ji.is_null());
 	if RjApi::get_version() >= 2 {
 		let mut s = RedisString::create(ctx.ctx, "");
@@ -71,21 +71,21 @@ fn RJ_llapi_test_iterator(ctx: &Context, args: Vec<RedisString>) -> RedisResult 
 	let mut num = 0i64;
 	for i in 0..len {
 		let js = ji.next();
-		assert!(!js.is_null());
-		js.getInt(&mut num);
+		assert!(js.is_some());
+		js.unwrap().getInt(&mut num);
 		assert_eq!(num, vals[i]);
 	}
-	assert!(ji.next().is_null());
+	assert!(ji.next().is_none());
 
 	if RjApi::get_version() >= 2 {
 		ji.reset();
 		for i in 0..len {
 			let js = ji.next();
-			assert!(!js.is_null());
-			js.getInt(&mut num);
+			assert!(js.is_some());
+			js.unwrap().getInt(&mut num);
 			assert_eq!(num, vals[i]);
 		}
-		assert!(ji.next().is_null());
+		assert!(ji.next().is_none());
 	}
 
 	ctx.reply_simple_string(concat!(function_name!(), ": PASSED"));
