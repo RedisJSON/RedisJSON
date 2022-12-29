@@ -250,7 +250,6 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     fn find_add_paths(&mut self, path: &str) -> Result<Vec<UpdateInfo>, Error> {
-
         let mut query = compile(path)?;
         if !query.is_static() {
             return Err("Err wrong static path".into());
