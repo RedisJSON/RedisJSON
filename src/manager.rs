@@ -383,10 +383,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
             res = Some(val);
             Ok(Some(Value::Bool(val)))
         })?;
-        match res {
-            None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
-            Some(n) => Ok(n),
-        }
+        res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
     }
 
     fn str_append(&mut self, path: Vec<String>, val: String) -> Result<usize, RedisError> {
@@ -398,10 +395,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
                 res = Some(new_str.len());
                 Ok(Some(Value::String(new_str)))
             })?;
-            match res {
-                None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
-                Some(l) => Ok(l),
-            }
+            res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
         } else {
             Err(RedisError::String(err_msg_json_expected(
                 "string",

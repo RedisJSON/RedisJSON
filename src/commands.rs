@@ -88,7 +88,7 @@ pub struct KeyValue<'a, V: SelectValue> {
 }
 
 impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
-    pub fn new(v: &'a V) -> KeyValue<'a, V> {
+    pub const fn new(v: &'a V) -> KeyValue<'a, V> {
         KeyValue { val: v }
     }
 

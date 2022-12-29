@@ -80,10 +80,9 @@ pub fn json_api_open_key_internal<M: Manager>(
 pub fn json_api_get_at<M: Manager>(_: M, json: *const c_void, index: size_t) -> *const c_void {
     let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
-        SelectValueType::Array => match json.get_index(index) {
-            Some(v) => (v as *const M::V).cast::<c_void>(),
-            _ => null(),
-        },
+        SelectValueType::Array => json
+            .get_index(index)
+            .map_or(null(), |v| (v as *const M::V).cast::<c_void>()),
         _ => null(),
     }
 }

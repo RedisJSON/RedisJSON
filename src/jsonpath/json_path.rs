@@ -487,7 +487,7 @@ struct PathCalculatorData<'i, S: SelectValue, UPT: UserPathTracker> {
 }
 
 impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
-    pub fn create(query: &'i Query<'i>) -> PathCalculator<'i, UPTG> {
+    pub const fn create(query: &'i Query<'i>) -> PathCalculator<'i, UPTG> {
         PathCalculator {
             query: Some(query),
             tracker_generator: None,
@@ -495,7 +495,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
     }
 
     #[allow(dead_code)]
-    pub fn create_with_generator(
+    pub const fn create_with_generator(
         query: &'i Query<'i>,
         tracker_generator: UPTG,
     ) -> PathCalculator<'i, UPTG> {
@@ -729,10 +729,9 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 let start = 0;
                 let end =
                     self.calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
-                let step = match curr.next() {
-                    Some(s) => s.as_str().parse::<usize>().unwrap(),
-                    None => 1,
-                };
+                let step = curr
+                    .next()
+                    .map_or(1, |s| s.as_str().parse::<usize>().unwrap());
                 (start, end, step)
             }
             Rule::all_range => {
@@ -758,10 +757,9 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                     self.calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
                 let end =
                     self.calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
-                let step = match curr.next() {
-                    Some(s) => s.as_str().parse::<usize>().unwrap(),
-                    None => 1,
-                };
+                let step = curr
+                    .next()
+                    .map_or(1, |s| s.as_str().parse::<usize>().unwrap());
                 (start, end, step)
             }
             _ => panic!("{}", format!("{:?}", curr)),
@@ -900,38 +898,34 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         // When a parenthesized filter is encountered (Rule::filter), e.g., ... || ( A || B ) && C,
         //  recurse on it and use the result as the operand.
 
-        loop {
-            if let Some(relation) = curr.next() {
-                match relation.as_rule() {
-                    Rule::and => {
-                        // Consume the operand even if not needed for evaluation
-                        let second_filter = curr.next().unwrap();
-                        trace!("evaluate_filter && second_filter {:?}", &second_filter);
-                        if !first_result {
-                            continue; // Skip eval till next OR
-                        }
-                        first_result = match second_filter.as_rule() {
-                            Rule::single_filter => {
-                                self.evaluate_single_filter(second_filter, json, calc_data)
-                            }
-                            Rule::filter => {
-                                self.evaluate_filter(second_filter.into_inner(), json, calc_data)
-                            }
-                            _ => panic!("{}", format!("{:?}", second_filter)),
-                        };
+        while let Some(relation) = curr.next() {
+            match relation.as_rule() {
+                Rule::and => {
+                    // Consume the operand even if not needed for evaluation
+                    let second_filter = curr.next().unwrap();
+                    trace!("evaluate_filter && second_filter {:?}", &second_filter);
+                    if !first_result {
+                        continue; // Skip eval till next OR
                     }
-                    Rule::or => {
-                        trace!("evaluate_filter ||");
-                        if first_result {
-                            break; // can return True
+                    first_result = match second_filter.as_rule() {
+                        Rule::single_filter => {
+                            self.evaluate_single_filter(second_filter, json, calc_data)
                         }
-                        // Tail recursion with the rest of the expression to give precedence to AND
-                        return self.evaluate_filter(curr, json, calc_data);
-                    }
-                    _ => panic!("{}", format!("{:?}", relation)),
+                        Rule::filter => {
+                            self.evaluate_filter(second_filter.into_inner(), json, calc_data)
+                        }
+                        _ => panic!("{}", format!("{:?}", second_filter)),
+                    };
                 }
-            } else {
-                break;
+                Rule::or => {
+                    trace!("evaluate_filter ||");
+                    if first_result {
+                        break; // can return True
+                    }
+                    // Tail recursion with the rest of the expression to give precedence to AND
+                    return self.evaluate_filter(curr, json, calc_data);
+                }
+                _ => panic!("{}", format!("{:?}", relation)),
             }
         }
         first_result

@@ -473,10 +473,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             res = Some(curr.len());
             Ok(Some(()))
         })?;
-        match res {
-            None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
-            Some(l) => Ok(l),
-        }
+        res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
     }
 
     fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<String>, RedisError> {
@@ -526,10 +523,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 Err(err_json(v, "array"))
             }
         })?;
-        match res {
-            None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
-            Some(l) => Ok(l),
-        }
+        res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
     }
 
     fn clear(&mut self, path: Vec<String>) -> Result<usize, RedisError> {
