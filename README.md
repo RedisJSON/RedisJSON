@@ -1,9 +1,8 @@
 [![GitHub issues](https://img.shields.io/github/release/RedisJSON/RedisJSON.svg)](https://github.com/RedisJSON/RedisJSON/releases/latest)
 [![CircleCI](https://circleci.com/gh/RedisJSON/RedisJSON/tree/master.svg?style=svg)](https://circleci.com/gh/RedisJSON/RedisJSON/tree/master)
 [![macos](https://github.com/RedisJSON/RedisJSON/workflows/macos/badge.svg)](https://github.com/RedisJSON/RedisJSON/actions?query=workflow%3Amacos)
-[![Dockerhub](https://img.shields.io/badge/dockerhub-redislabs%2Frejson-blue)](https://hub.docker.com/r/redislabs/rejson/tags/)
+[![Dockerhub](https://img.shields.io/docker/pulls/redis/redis-stack-server?label=redis-stack-server)](https://img.shields.io/docker/pulls/redis/redis-stack-server)
 [![Codecov](https://codecov.io/gh/RedisJSON/RedisJSON/branch/master/graph/badge.svg)](https://codecov.io/gh/RedisJSON/RedisJSON)
-[![Total alerts](https://img.shields.io/lgtm/alerts/g/RedisJSON/RedisJSON.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/RedisJSON/RedisJSON/alerts/)
 
 # RedisJSON
 [![Forum](https://img.shields.io/badge/Forum-RedisJSON-blue)](https://forum.redislabs.com/c/modules/redisjson)
@@ -69,16 +68,15 @@ Some languages have client libraries that provide support for RedisJSON's comman
 
 | Project | Language | License | Author | Stars | Package | Comment |
 | ------- | -------- | ------- | ------ | ----- | ------- | ------- |
-| [redis-py][redis-py-url]  | Python | MIT | [Redis Labs][redis-py-author] | [![redis-py-stars]][redis-py-url] | [pypi][redis-py-package] |
-| [redis-om-python][redis-om-python-url]  | Python | BSD-3-Clause | [Redis][redis-om-python-author] | [![redis-om-python-stars]][redis-om-python-url] | [PyPi][redis-om-python-package] |
-| [Jedis][Jedis-url] | Java | MIT | [Redis][JRedisJSON-author] | [![Jedis-stars]][Jedis-url] | [Maven][Jedis-package] |
-| [JRedisJSON][JRedisJSON-url] | Java | BSD-2-Clause | [Redis Labs][JRedisJSON-author] | [![JRedisJSON-stars]][JRedisJSON-url] | [maven][JRedisJSON-package] | Deprecated |
+| [jedis][jedis-url] | Java | MIT | [Redis][redis-url] | ![Stars][jedis-stars] | [Maven][jedis-package]||
+| [redis-py][redis-py-url] | Python | MIT | [Redis][redis-url] | ![Stars][redis-py-stars] | [pypi][redis-py-package]||
+| [node-redis][node-redis-url] | Node.js | MIT | [Redis][redis-url] | ![Stars][node-redis-stars] | [npm][node-redis-package]||
+| [nredisstack][nredisstack-url] | .NET | MIT | [Redis][redis-url] | ![Stars][nredisstack-stars] | [nuget][nredisstack-package]||
+| [redis-om-python][redis-om-python-url]  | python | BSD-3-Clause | [Redis][redis-om-python-author] | [![redis-om-python-stars]][redis-om-python-url] | [PyPi][redis-om-python-package] |
+| [Redisson][Redisson-url] | Java | Apache-2.0 | [Redisson][Redisson-author] | [![Redisson-stars]][Redisson-url] | [Maven][Redisson-package] |
 | [redis-modules-java][redis-modules-java-url] | Java | Apache-2.0 | [Liming Deng @dengliming][redis-modules-java-author] | [![redis-modules-java-stars]][redis-modules-java-url] | [maven][redis-modules-java-package] |
 | [redis-om-spring][redis-om-spring-url]  | Java | BSD-3-Clause | [Redis][redis-om-spring-author] | [![redis-om-spring-stars]][redis-om-spring-url] | |
-| [node-redis][node-redis-url] | Node.js | MIT | [Redis][node-redis-author] | [![node-redis-stars]][node-redis-url] | [npm][node-redis-package] |
 | [iorejson][iorejson-url] | Node.js | MIT | [Evan Huang @evanhuang8][iorejson-author] | [![iorejson-stars]][iorejson-url] | [npm][iorejson-package] |
-| [node_redis-rejson][node_redis-rejson-url] | Node.js | MIT | [Kyle Davis @stockholmux][node_redis-rejson-author] | [![node_redis-rejson-stars]][node_redis-rejson-url] | [npm][node_redis-rejson-package]  |
-| [redis-modules-sdk][redis-modules-sdk-url] | Node.js | BSD-3-Clause | [Dani Tseitlin @danitseitlin][redis-modules-sdk-author] | [![redis-modules-sdk-stars]][redis-modules-sdk-url] | [npm][redis-modules-sdk-package] |
 | [ioredis-rejson][ioredis-rejson-url] | Node.js | MIT | [Felipe Schulz @schulzf][ioredis-rejson-author] | [![ioredis-rejson-stars]][ioredis-rejson-url] | [npm][ioredis-rejson-package] |
 | [redis-om-node][redis-om-node-url]  | Node | BSD-3-Clause | [Redis][redis-om-node-author] | [![redis-om-node-stars]][redis-om-node-url] | [npm][redis-om-node-package] |
 | [go-rejson][go-rejson-url] | Go | MIT | [Nitish Malhotra @nitishm][go-rejson-author] | [![go-rejson-stars]][go-rejson-url] | |
@@ -90,7 +88,7 @@ Some languages have client libraries that provide support for RedisJSON's comman
 | [redislabs-rejson][redislabs-rejson-url]  | PHP | MIT | [Mehmet Korkmaz @mkorkmaz][redislabs-rejson-author] | [![redislabs-rejson-stars]][redislabs-rejson-url] | [composer][redislabs-rejson-package] |
 | [rejson-rb][rejson-rb-url]  | Ruby | MIT | [Pavan Vachhani @vachhanihpavan][rejson-rb-author] | [![rejson-rb-stars]][rejson-rb-url] | [rubygems][rejson-rb-package]|
 
-[Jedis-author]: https://redis.com
+[redis-url]: https://redis.com
 [Jedis-url]: https://github.com/redis/jedis
 [Jedis-package]: https://search.maven.org/artifact/redis.clients/jedis
 [Jedis-stars]: https://img.shields.io/github/stars/redis/jedis.svg?style=social&amp;label=Star&amp;maxAge=2592000
@@ -100,15 +98,23 @@ Some languages have client libraries that provide support for RedisJSON's comman
 [JRedisJSON-package]: https://search.maven.org/artifact/com.redislabs/jrejson/
 [JRedisJSON-stars]: https://img.shields.io/github/stars/RedisJSON/JRedisJSON.svg?style=social&amp;label=Star&amp;maxAge=2592000
 
+[Redisson-author]: https://github.com/redisson/
+[Redisson-url]: https://github.com/redisson/redisson
+[Redisson-package]: https://search.maven.org/artifact/org.redisson/redisson/
+[Redisson-stars]: https://img.shields.io/github/stars/redisson/redisson.svg?style=social&amp;label=Star&amp;maxAge=2592000
+
 [redis-modules-java-author]: https://github.com/dengliming/
 [redis-modules-java-url]: https://github.com/dengliming/redis-modules-java
 [redis-modules-java-package]: https://search.maven.org/artifact/io.github.dengliming.redismodule/redis-modules-java/
 [redis-modules-java-stars]: https://img.shields.io/github/stars/dengliming/redis-modules-java.svg?style=social&amp;label=Star&amp;maxAge=2592000
 
-[redis-py-author]: https://redislabs.com
 [redis-py-url]: https://github.com/redis/redis-py
 [redis-py-package]: https://pypi.python.org/pypi/redis
 [redis-py-stars]: https://img.shields.io/github/stars/redis/redis-py.svg?style=social&amp;label=Star&amp;maxAge=2592000
+
+[nredisstack-url]: https://github.com/redis/nredisstack
+[nredisstack-stars]: https://img.shields.io/github/stars/redis/nredisstack.svg?style=social&amp;label=Star&amp;maxAge=2592000
+[nredisstack-package]: https://www.nuget.org/packages/nredisstack/
 
 [node-redis-author]: https://redis.com
 [node-redis-url]: https://github.com/redis/node-redis
@@ -120,20 +126,14 @@ Some languages have client libraries that provide support for RedisJSON's comman
 [iorejson-package]: https://www.npmjs.com/package/iorejson
 [iorejson-stars]: https://img.shields.io/github/stars/evanhuang8/iorejson.svg?style=social&amp;label=Star&amp;maxAge=2592000
 
-[node_redis-rejson-author]: https://github.com/stockholmux
-[node_redis-rejson-url]: https://github.com/stockholmux/node_redis-rejson
-[node_redis-rejson-package]: https://www.npmjs.com/package/redis-rejson
-[node_redis-rejson-stars]: https://img.shields.io/github/stars/stockholmux/node_redis-rejson.svg?style=social&amp;label=Star&amp;maxAge=2592000
+[node-redis-url]: https://github.com/redis/node-redis
+[node-redis-stars]: https://img.shields.io/github/stars/redis/node-redis.svg?style=social&amp;label=Star&amp;maxAge=2592000
+[node-redis-package]: https://www.npmjs.com/package/redis
 
 [ioredis-rejson-author]: https://github.com/schulzf
 [ioredis-rejson-url]: https://github.com/schulzf/ioredis-rejson
 [ioredis-rejson-package]: https://www.npmjs.com/package/ioredis-rejson
 [ioredis-rejson-stars]: https://img.shields.io/github/stars/schulzf/ioredis-rejson.svg?style=social&amp;label=Star&amp;maxAge=2592000
-
-[redis-modules-sdk-author]: https://github.com/danitseitlin/
-[redis-modules-sdk-url]: https://github.com/danitseitlin/redis-modules-sdk
-[redis-modules-sdk-package]: https://www.npmjs.com/package/redis-modules-sdk
-[redis-modules-sdk-stars]: https://img.shields.io/github/stars/danitseitlin/redis-modules-sdk.svg?style=social&amp;label=Star&amp;maxAge=2592000
 
 [go-rejson-author]: https://github.com/nitishm
 [go-rejson-url]: https://github.com/nitishm/go-rejson/
@@ -198,4 +198,4 @@ RedisJSON is made possible only because of the existance of this amazing open so
 
 ## License
 
-Redis Source Available License Agreement - see [LICENSE](LICENSE)
+RedisJSON is licensed under the [Redis Source Available License 2.0 (RSALv2)](https://redis.com/legal/rsalv2-agreement) or the [Server Side Public License v1 (SSPLv1)](https://www.mongodb.com/licensing/server-side-public-license).

@@ -1,18 +1,42 @@
-Reports the number of keys in the JSON Object at `path` in `key`.
+Report the number of keys in the JSON object at `path` in `key`
 
-`path` defaults to root if not provided. Returns null if the `key` or `path` do not exist.
+[Examples](#examples)
 
-@return
+## Required arguments
 
-@array-reply of @integer-reply - for each path, the number of keys in the object, or @nil-reply if the matching JSON value is not an object.
+<details open><summary><code>key</code></summary> 
 
-@examples
+is key to parse. Returns `null` for nonexistent keys.
+</details>
 
-```
-redis> JSON.SET doc $ '{"a":[3], "nested": {"a": {"b":2, "c": 1}}}'
+## Optional arguments
+
+<details open><summary><code>path</code></summary> 
+
+is JSONPath to specify. Default is root `$`. Returns `null` for nonexistant path.
+
+</details>
+
+## Return
+
+JSON.OBJLEN returns an array of integer replies for each path specified as the number of keys in the object or `nil`, if the matching JSON value is not an object.
+For more information about replies, see [Redis serialization protocol specification](/docs/reference/protocol-spec).
+
+## Examples
+
+{{< highlight bash >}}
+127.0.0.1:6379> JSON.SET doc $ '{"a":[3], "nested": {"a": {"b":2, "c": 1}}}'
 OK
-redis> JSON.OBJLEN doc $..a
+127.0.0.1:6379> JSON.OBJLEN doc $..a
 1) (nil)
 2) (integer) 2
-```
+{{< / highlight >}}
 
+## See also
+
+`JSON.ARRINDEX` | `JSON.ARRINSERT` 
+
+## Related topics
+
+* [RedisJSON](/docs/stack/json)
+* [Index and search JSON documents](/docs/stack/search/indexing_json)

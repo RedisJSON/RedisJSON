@@ -9,15 +9,16 @@ on:
 jobs:
   build:
 
-    runs-on: macos-10.15
+    runs-on: macos-12
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: build
-      uses: vmactions/freebsd-vm@v0.1.6
+      uses: vmactions/freebsd-vm@v0.3.0
       with:
         usesh: true
         sync: rsync
+        copyback: false
         prepare: pkg install -y bash curl lang/rust devel/llvm-devel
         run: |
           cargo build --all --all-targets --verbose 

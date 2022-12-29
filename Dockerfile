@@ -1,6 +1,6 @@
 
 #----------------------------------------------------------------------------------------------
-FROM redisfab/redis:6.2.6-x64-bullseye AS redis
+FROM redisfab/redis:6.2.7-x64-bullseye AS redis
 FROM debian:bullseye-slim AS builder
 
 RUN if [ -f /root/.profile ]; then sed -ie 's/mesg n/tty -s \&\& mesg -n/g' /root/.profile; fi
@@ -23,7 +23,7 @@ RUN make build SHOW=1
 
 #----------------------------------------------------------------------------------------------
 FROM redisfab/redisearch:master-x64-bullseye AS search
-FROM redisfab/redis:6.2.6-x64-bullseye
+FROM redisfab/redis:6.2.7-x64-bullseye
 
 WORKDIR /data
 

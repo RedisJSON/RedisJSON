@@ -11,6 +11,8 @@ from includes import *
 
 from RLTest import Defaults
 
+from functools import reduce
+
 Defaults.decode_responses = True
 
 # ----------------------------------------------------------------------------------------------
@@ -647,7 +649,7 @@ def testObjKeysCommand(env):
     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"nested1": {"a": {"foo": 10, "bar": 20}}, "a":["foo"], "nested2": {"a": {"baz":50}}}'))
     # Test multi
     res = r.execute_command('JSON.OBJKEYS', 'doc1', '$..a')
-    r.assertEqual(res, [["foo", "bar"], None, ["baz"]])
+    r.assertEqual(res, [None, ["foo", "bar"], ["baz"]])
     # Test single
     res = r.execute_command('JSON.OBJKEYS', 'doc1', '$.nested1.a')
     r.assertEqual(res, [["foo", "bar"]])
@@ -678,7 +680,7 @@ def testObjLenCommand(env):
     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"nested1": {"a": {"foo": 10, "bar": 20}}, "a":["foo"], "nested2": {"a": {"baz":50}}}'))
     # Test multi
     res = r.execute_command('JSON.OBJLEN', 'doc1', '$..a')
-    r.assertEqual(res, [2, None, 1])
+    r.assertEqual(set(res), set([2, None, 1]))
     # Test single
     res = r.execute_command('JSON.OBJLEN', 'doc1', '$.nested1.a')
     r.assertEqual(res, [2])
@@ -1000,10 +1002,10 @@ def testArrIndexCommand(env):
     res = r.execute_command('JSON.ARRINDEX', 'test_null', '$..arr', 'null')
     r.assertEqual(res, [3, 8, -1, None, -1])
 
-    # Fail with none-scalar value
-    r.expect('JSON.ARRINDEX', 'test_null', '$..nested42_empty_arr.arr', '{"arr":[]}').raiseError()
+    # Search none-scalar value
+    res = r.execute_command('JSON.ARRINDEX', 'test_null', '$.[4][1].nested42_empty_arr.arr', '{"arr":[]}')
+    r.assertEqual(res, [-1])
 
-    # Do not fail with none-scalar value in legacy mode
     res = r.execute_command('JSON.ARRINDEX', 'test_null', '.[4][1].nested42_empty_arr.arr', '{"arr":[]}')
     r.assertEqual(res, -1)
 
