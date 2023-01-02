@@ -301,8 +301,8 @@ impl<'a> IValueKeyHolderWrite<'a> {
         Ok(())
     }
 
-    fn set_root(&mut self, v: Option<IValue>) -> Result<(), RedisError> {
-        match v {
+    fn set_root(&mut self, value: Option<IValue>) -> Result<(), RedisError> {
+        match value {
             Some(inner) => {
                 self.get_json_holder()?;
                 match &mut self.value {
@@ -362,16 +362,16 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         Ok(res)
     }
 
-    fn set_value(&mut self, path: Vec<String>, mut v: IValue) -> Result<bool, RedisError> {
+    fn set_value(&mut self, path: Vec<String>, mut value: IValue) -> Result<bool, RedisError> {
         let mut updated = false;
         if path.is_empty() {
             // update the root
-            self.set_root(Some(v))?;
+            self.set_root(Some(value))?;
             updated = true;
         } else {
             replace(&path, self.get_value().unwrap().unwrap(), |_v| {
                 updated = true;
-                Ok(Some(v.take()))
+                Ok(Some(value.take()))
             })?;
         }
         Ok(updated)
@@ -381,7 +381,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         &mut self,
         path: Vec<String>,
         key: &str,
-        mut v: IValue,
+        mut value: IValue,
     ) -> Result<bool, RedisError> {
         let mut updated = false;
         if path.is_empty() {
@@ -390,7 +390,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             if let Some(o) = root.as_object_mut() {
                 if !o.contains_key(key) {
                     updated = true;
-                    o.insert(key.to_string(), v.take());
+                    o.insert(key.to_string(), value.take());
                 }
             }
         } else {
@@ -399,7 +399,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                     let o = val.as_object_mut().unwrap();
                     if !o.contains_key(key) {
                         updated = true;
-                        o.insert(key.to_string(), v.take());
+                        o.insert(key.to_string(), value.take());
                     }
                 }
                 Ok(Some(()))
