@@ -15,7 +15,7 @@ use ijson::{DestructuredMut, INumber, IString, IValue, ValueType};
 use redis_module::key::{verify_type, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::rediserror::RedisError;
-use redis_module::{Context, NotifyEvent, RedisString};
+use redis_module::{Context, KeyType, NotifyEvent, RedisString};
 use serde::Serialize;
 use serde_json::Number;
 use std::marker::PhantomData;
@@ -28,10 +28,26 @@ use crate::array_index::ArrayIndex;
 use bson::decode_document;
 use std::io::Cursor;
 
+///
+/// Either hold reference to the IValue stored in a RedisJSON key
+/// or a value that was parsed from a String
+///
+enum IValueHolder<'a> {
+    Ref(&'a mut RedisJSON<IValue>),
+    Value(IValue),
+    None,
+}
+
+impl<'a> IValueHolder<'a> {
+    pub const fn is_none(&self) -> bool {
+        matches!(*self, Self::None)
+    }
+}
+
 pub struct IValueKeyHolderWrite<'a> {
     key: RedisKeyWritable,
     key_name: RedisString,
-    val: Option<&'a mut RedisJSON<IValue>>,
+    value: IValueHolder<'a>,
 }
 
 ///
@@ -268,8 +284,19 @@ impl<'a> IValueKeyHolderWrite<'a> {
     }
 
     fn get_json_holder(&mut self) -> Result<(), RedisError> {
-        if self.val.is_none() {
-            self.val = self.key.get_value::<RedisJSON<IValue>>(&REDIS_JSON_TYPE)?;
+        if self.value.is_none() {
+            self.value = match self.key.key_type() {
+                KeyType::Module => self
+                    .key
+                    .get_value::<RedisJSON<IValue>>(&REDIS_JSON_TYPE)?
+                    .map_or(IValueHolder::None, IValueHolder::Ref),
+
+                KeyType::String => match self.key.read()? {
+                    Some(v) => IValueHolder::Value(serde_json::from_str(&v)?),
+                    None => IValueHolder::None,
+                },
+                _ => return Err(RedisError::Str("Existing key has wrong Redis type")),
+            }
         }
         Ok(())
     }
@@ -278,15 +305,16 @@ impl<'a> IValueKeyHolderWrite<'a> {
         match v {
             Some(inner) => {
                 self.get_json_holder()?;
-                match &mut self.val {
-                    Some(v) => v.data = inner,
-                    None => self
+                match &mut self.value {
+                    IValueHolder::Ref(v) => v.data = inner,
+                    IValueHolder::Value(_) => self.value = IValueHolder::Value(inner),
+                    IValueHolder::None => self
                         .key
                         .set_value(&REDIS_JSON_TYPE, RedisJSON { data: inner })?,
                 }
             }
             None => {
-                self.val = None;
+                self.value = IValueHolder::None;
                 self.key.delete()?;
             }
         }
@@ -304,6 +332,11 @@ impl<'a> IValueKeyHolderWrite<'a> {
 
 impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     fn apply_changes(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError> {
+        if let IValueHolder::Value(v) = &self.value {
+            let json = serde_json::to_string(&v)?;
+            self.key.write(&json)?;
+        }
+
         if ctx.notify_keyspace_event(NotifyEvent::MODULE, command, &self.key_name) != Status::Ok {
             Err(RedisError::Str("failed notify key space event"))
         } else {
@@ -320,10 +353,13 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     fn get_value(&mut self) -> Result<Option<&mut IValue>, RedisError> {
         self.get_json_holder()?;
 
-        match &mut self.val {
-            Some(v) => Ok(Some(&mut v.data)),
-            None => Ok(None),
-        }
+        let res = match &mut self.value {
+            IValueHolder::Ref(v) => Some(&mut v.data),
+            IValueHolder::Value(v) => Some(v),
+            IValueHolder::None => None,
+        };
+
+        Ok(res)
     }
 
     fn set_value(&mut self, path: Vec<String>, mut v: IValue) -> Result<bool, RedisError> {
@@ -560,12 +596,19 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
 
 pub struct IValueKeyHolderRead {
     key: RedisKey,
+    value: Option<IValue>,
 }
 
 impl ReadHolder<IValue> for IValueKeyHolderRead {
     fn get_value(&self) -> Result<Option<&IValue>, RedisError> {
-        let key_value = self.key.get_value::<RedisJSON<IValue>>(&REDIS_JSON_TYPE)?;
-        key_value.map_or(Ok(None), |v| Ok(Some(&v.data)))
+        let res = match self.value.as_ref() {
+            Some(v) => Some(v),
+            None => {
+                let key_value = self.key.get_value::<RedisJSON<IValue>>(&REDIS_JSON_TYPE)?;
+                key_value.map(|v| &v.data)
+            }
+        };
+        Ok(res)
     }
 }
 
@@ -585,7 +628,17 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         key: &RedisString,
     ) -> Result<IValueKeyHolderRead, RedisError> {
         let key = ctx.open_key(key);
-        Ok(IValueKeyHolderRead { key })
+        let value = match key.key_type() {
+            KeyType::String => {
+                let value = key.read()?;
+                match value {
+                    Some(v) => Some(self.from_str(&v, Format::JSON)?),
+                    None => None,
+                }
+            }
+            _ => None,
+        };
+        Ok(IValueKeyHolderRead { key, value })
     }
 
     fn open_key_write(
@@ -597,7 +650,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         Ok(IValueKeyHolderWrite {
             key: key_ptr,
             key_name: key,
-            val: None,
+            value: IValueHolder::None,
         })
     }
 
