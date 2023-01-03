@@ -252,11 +252,11 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     fn find_add_paths(&mut self, path: &str) -> Result<Vec<UpdateInfo>, Error> {
         let mut query = compile(path)?;
         if !query.is_static() {
-            return Err("Err: wrong static path".into());
+            return Err("Err wrong static path".into());
         }
 
         if query.size() < 1 {
-            return Err("Err: path must end with object key to set".into());
+            return Err("Err path must end with object key to set".into());
         }
 
         let (last, token_type) = query.pop_last().unwrap();
