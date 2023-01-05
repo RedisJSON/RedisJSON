@@ -303,8 +303,11 @@ commands:
               --upload_results_s3 \
               --fail_fast \
               --triggering_env << parameters.triggering_env >> \
+              --redistimeseries_host $PERFORMANCE_RTS_HOST \
+              --redistimeseries_port $PERFORMANCE_RTS_PORT \
+              --redistimeseries_pass "$PERFORMANCE_RTS_AUTH" \
               --push_results_redistimeseries \
-              --allowed-envs << parameters.allowed_envs >> || true
+              --allowed-envs << parameters.allowed_envs >>
   benchmark-steps-test:
     parameters:
       github_actor:
