@@ -35,5 +35,6 @@ pub trait SelectValue: Debug + Eq + PartialEq + Default + Clone + Serialize {
     fn as_str(&self) -> &str;
     fn get_bool(&self) -> bool;
     fn get_long(&self) -> Result<i64, Error>;
+    fn get_ulong(&self) -> Result<u64, Error>;
     fn get_double(&self) -> f64;
 }

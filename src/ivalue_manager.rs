@@ -212,16 +212,18 @@ impl<'a> IValueKeyHolderWrite<'a> {
         Ok(())
     }
 
-    fn do_num_op<F1, F2>(
+    fn do_num_op<F1, F2, F3>(
         &mut self,
         path: Vec<String>,
         num: &str,
         mut op1_fun: F1,
         mut op2_fun: F2,
+        mut op3_fun: F3,
     ) -> Result<Number, RedisError>
     where
         F1: FnMut(i64, i64) -> (i64, bool),
         F2: FnMut(f64, f64) -> f64,
+        F3: FnMut(u64, u64) -> (u64, bool),
     {
         let in_value = &serde_json::from_str(num)?;
         if let serde_json::Value::Number(in_value) = in_value {
@@ -232,26 +234,47 @@ impl<'a> IValueKeyHolderWrite<'a> {
                     in_value.as_i64(),
                 ) {
                     (false, Some(num2)) => {
-                        // Both are integers
+                        // Left is integer, Right is i64
                         if let Ok(num1) = v.get_long() {
-                            // v is i64
+                            // Left is i64
                             let (num, _) = (op1_fun)(num1, num2);
                             Ok(INumber::from(num))
+                        } else if let Ok(num1) = v.get_ulong() {
+                            // Left is u64
+                            let (num, _) = op3_fun(num1, num2 as u64);
+                            Ok(INumber::from(num))
                         } else {
-                            Err(RedisError::Str("u64 is not supported"))
+                            Err(RedisError::Str("integer exceeding u64 is not supported"))
                         }
                     }
                     (false, None) => {
                         // Left is integer, Right is f64 or u64
-                        match (v.get_long(), in_value.as_f64()) {
-                            (Ok(num1), Some(num2)) => {
-                                if let Ok(num) = INumber::try_from((op2_fun)(num1 as f64, num2)) {
-                                    Ok(num)
-                                } else {
-                                    Err(RedisError::Str("result is not a number"))
-                                }
+                        if let Some(num2) = in_value.as_u64() {
+                            // Right is u64
+                            if let Ok(num1) = v.get_long() {
+                                // Left is i64
+                                let (num, _) = (op3_fun)(num1 as u64, num2);
+                                Ok(INumber::from(num))
+                            } else if let Ok(num1) = v.get_ulong() {
+                                // Left is u64
+                                let (num, _) = op3_fun(num1, num2 as u64);
+                                Ok(INumber::from(num))
+                            } else {
+                                Err(RedisError::Str("integer exceeding u64 is not supported"))
                             }
-                            _ => Err(RedisError::Str("u64 is not supported")),
+                        } else if let Some(num2) = in_value.as_f64() {
+                            // Right is f64
+                            // Try to convert left to f64
+                            let num1 = v.to_f64().ok_or_else(|| {
+                                RedisError::Str("integer cannot be converted to a double")
+                            })?;
+                            if let Ok(num) = INumber::try_from((op2_fun)(num1, num2)) {
+                                Ok(num)
+                            } else {
+                                Err(RedisError::Str("result is not a number"))
+                            }
+                        } else {
+                            Err(RedisError::Str("bad input number"))
                         }
                     }
                     _ => {
@@ -278,7 +301,13 @@ impl<'a> IValueKeyHolderWrite<'a> {
                 Some(n) => {
                     if let Some(n) = n.as_number() {
                         if !n.has_decimal_point() {
-                            Ok(n.to_i64().unwrap().into())
+                            if let Some(n) = n.to_i64() {
+                                Ok(n.into())
+                            } else if let Some(n) = n.to_u64() {
+                                Ok(n.into())
+                            } else {
+                                Err(RedisError::Str("result is not a number"))
+                            }
                         } else if let Some(f) = n.to_f64() {
                             Ok(serde_json::Number::from_f64(f).unwrap())
                         } else {
@@ -409,15 +438,33 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn incr_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError> {
-        self.do_num_op(path, num, |i1, i2| i1.overflowing_add(i2), |f1, f2| f1 + f2)
+        self.do_num_op(
+            path,
+            num,
+            |i1, i2| i1.overflowing_add(i2),
+            |f1, f2| f1 + f2,
+            |u1, u2| u1.overflowing_add(u2),
+        )
     }
 
     fn mult_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError> {
-        self.do_num_op(path, num, |i1, i2| i1.overflowing_mul(i2), |f1, f2| f1 * f2)
+        self.do_num_op(
+            path,
+            num,
+            |i1, i2| i1.overflowing_mul(i2),
+            |f1, f2| f1 * f2,
+            |u1, u2| u1.overflowing_mul(u2),
+        )
     }
 
     fn pow_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError> {
-        self.do_num_op(path, num, |i1, i2| i1.overflowing_pow(i2 as u32), f64::powf)
+        self.do_num_op(
+            path,
+            num,
+            |i1, i2| i1.overflowing_pow(i2 as u32),
+            f64::powf,
+            |u1, u2| u1.overflowing_pow(u2 as u32),
+        )
     }
 
     fn bool_toggle(&mut self, path: Vec<String>) -> Result<bool, RedisError> {

@@ -125,11 +125,26 @@ impl SelectValue for Value {
                 if let Some(n) = n.as_i64() {
                     Ok(n)
                 } else {
-                    Err(Error::from("u64 is currently unsupported"))
+                    Err(Error::from("not a long"))
                 }
             }
             _ => {
-                panic!("not a long");
+                panic!("long is not a number");
+            }
+        }
+    }
+
+    fn get_ulong(&self) -> Result<u64, Error> {
+        match self {
+            Self::Number(n) => {
+                if let Some(n) = n.as_u64() {
+                    Ok(n)
+                } else {
+                    Err(Error::from("not a ulong"))
+                }
+            }
+            _ => {
+                panic!("ulong is not a number");
             }
         }
     }
@@ -254,13 +269,31 @@ impl SelectValue for IValue {
                     if let Some(n) = n.to_i64() {
                         Ok(n)
                     } else {
-                        // Workaround until adding an API `get_ulong(&self) -> u64`
-                        Err(Error::from("u64 is currently unsupported"))
+                        Err(Error::from("not a long"))
                     }
                 }
             }
             _ => {
-                panic!("not a number");
+                panic!("long is not a number");
+            }
+        }
+    }
+
+    fn get_ulong(&self) -> Result<u64, Error> {
+        match self.as_number() {
+            Some(n) => {
+                if n.has_decimal_point() {
+                    panic!("not a long");
+                } else {
+                    if let Some(n) = n.to_u64() {
+                        Ok(n)
+                    } else {
+                        Err(Error::from("not a ulong"))
+                    }
+                }
+            }
+            _ => {
+                panic!("ulong is not a number");
             }
         }
     }

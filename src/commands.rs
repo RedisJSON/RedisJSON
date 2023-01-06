@@ -128,10 +128,18 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 }
             }
 
-            SelectValueType::Long => {
-                RedisValue::Integer(v.get_long().map_or_else(|_| i64::MAX, |v| v))
-            }
-
+            SelectValueType::Long => v.get_long().map_or_else(
+                |_| {
+                    v.get_ulong().map_or_else(
+                        |_| RedisValue::Integer(i64::MAX), // FIXME: Change to return an Err
+                        |u| 
+                            // Return as a string since RedisValue has no unsigned integer type
+                            RedisValue::SimpleString(u.to_string())
+                        ,
+                    )
+                },
+                |v| RedisValue::Integer(v),
+            ),
             SelectValueType::Double => RedisValue::Float(v.get_double()),
 
             SelectValueType::String => RedisValue::BulkString(v.get_str()),
@@ -421,6 +429,10 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             (SelectValueType::Bool, SelectValueType::Bool) => a.get_bool() == b.get_bool(),
             (SelectValueType::Long, SelectValueType::Long) => match (a.get_long(), b.get_long()) {
                 (Ok(a), Ok(b)) => a == b,
+                (Err(_), Err(_)) => match (a.get_ulong(), b.get_ulong()) {
+                    (Ok(a), Ok(b)) => a == b,
+                    _ => false,
+                },
                 _ => false,
             },
             (SelectValueType::Double, SelectValueType::Double) => a.get_double() == b.get_double(),

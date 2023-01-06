@@ -25,8 +25,8 @@ use redis_module::{Context, RedisResult};
 use crate::c_api::{
     get_llapi_ctx, json_api_free_iter, json_api_get, json_api_get_at, json_api_get_boolean,
     json_api_get_double, json_api_get_int, json_api_get_json, json_api_get_json_from_iter,
-    json_api_get_len, json_api_get_string, json_api_get_type, json_api_is_json, json_api_len,
-    json_api_next, json_api_open_key_internal, json_api_reset_iter, LLAPI_CTX,
+    json_api_get_len, json_api_get_string, json_api_get_type, json_api_get_uint, json_api_is_json,
+    json_api_len, json_api_next, json_api_open_key_internal, json_api_reset_iter, LLAPI_CTX,
 };
 use crate::redisjson::Format;
 
@@ -130,7 +130,7 @@ macro_rules! redis_json_module_create {(
 
         use redis_module::{redis_command, redis_module, RedisString};
         use std::marker::PhantomData;
-        use std::os::raw::{c_double, c_int, c_longlong};
+        use std::os::raw::{c_double, c_int, c_longlong, c_ulonglong};
         use redis_module::{raw as rawmod, LogLevel};
         use rawmod::ModuleOptions;
 
