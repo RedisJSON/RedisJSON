@@ -132,10 +132,10 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 |_| {
                     v.get_ulong().map_or_else(
                         |_| RedisValue::Integer(i64::MAX), // FIXME: Change to return an Err
-                        |u| 
+                        |u| {
                             // Return as a string since RedisValue has no unsigned integer type
                             RedisValue::SimpleString(u.to_string())
-                        ,
+                        },
                     )
                 },
                 |v| RedisValue::Integer(v),
