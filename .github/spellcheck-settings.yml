@@ -22,6 +22,9 @@ matrix:
       - pre
       - blockquote
       - img
+      - jedis
+      - nredisstack
+      - rustis
   sources:
   - '*.md'
   - 'docs/*.md'
