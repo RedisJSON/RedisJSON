@@ -29,7 +29,6 @@ use crate::array_index::ArrayIndex;
 
 use std::mem;
 
-
 ///
 /// Either hold reference to the IValue stored in a RedisJSON key
 /// or a value that was parsed from a String
