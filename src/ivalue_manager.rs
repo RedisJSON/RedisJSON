@@ -295,6 +295,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
                     Some(v) => IValueHolder::Value(serde_json::from_str(&v)?),
                     None => IValueHolder::None,
                 },
+                KeyType::Empty => IValueHolder::None,
                 _ => return Err(RedisError::Str("Existing key has wrong Redis type")),
             }
         }

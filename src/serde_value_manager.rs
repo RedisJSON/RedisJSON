@@ -29,6 +29,11 @@ use crate::array_index::ArrayIndex;
 
 use std::mem;
 
+
+///
+/// Either hold reference to the IValue stored in a RedisJSON key
+/// or a value that was parsed from a String
+///
 enum ValueHolder<'a> {
     Ref(&'a mut RedisJSON<Value>),
     Value(Value),
@@ -180,6 +185,7 @@ impl<'a> KeyHolderWrite<'a> {
                     Some(v) => ValueHolder::Value(serde_json::from_str(&v)?),
                     None => ValueHolder::None,
                 },
+                KeyType::Empty => ValueHolder::None,
                 _ => return Err(RedisError::Str("Existing key has wrong Redis type")),
             }
         }
