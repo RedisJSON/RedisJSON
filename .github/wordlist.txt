@@ -68,6 +68,7 @@ md
 mkorkmaz
 nitishm
 npm
+nredisstack
 nst
 nuget
 occurances
@@ -87,6 +88,7 @@ repo
 rubygems
 rueian
 rueidis
+rustis
 schulzf
 sdk
 seriot
