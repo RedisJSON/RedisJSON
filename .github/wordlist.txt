@@ -9,6 +9,7 @@ JRedisJSON
 JS
 JSONPath
 JSONTestSuite
+jedis
 Jedis
 KeyRef
 KeyRefs
