@@ -120,7 +120,7 @@ mod json_path_tests {
         path_calculator.calc(json)
     }
 
-    fn perform_path_search<'a>(path: &str, json: &'a Value) -> Vec<Vec<String>> {
+    fn perform_path_search(path: &str, json: &Value) -> Vec<Vec<String>> {
         let query = crate::jsonpath::compile(path).unwrap();
         let path_calculator = crate::jsonpath::create_with_generator(&query);
         path_calculator.calc_paths(json)
@@ -133,10 +133,7 @@ mod json_path_tests {
     ) => {
         let j = json!($json);
         let res = perform_search($path, &j);
-        let mut v = Vec::new();
-        $(
-            v.push(json!($result));
-        )*
+        let v = vec![$(json!($result)),*];
         assert_eq!(res, v.iter().collect::<Vec<&Value>>());
     }}
 
@@ -147,14 +144,7 @@ mod json_path_tests {
     ) => {
         let j = json!($json);
         let res = perform_path_search($path, &j);
-        let mut v = Vec::new();
-        $(
-            let mut s = Vec::new();
-            $(
-                s.push(stringify!($result));
-            )*
-            v.push(s);
-        )*
+        let v = vec![$(vec![$(stringify!($result),)*],)*];
         assert_eq!(res, v);
     }}
 
