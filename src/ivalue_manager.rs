@@ -418,10 +418,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 *v_str = IString::intern(&new_str);
                 Ok(Some(()))
             })?;
-            match res {
-                None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
-                Some(l) => Ok(l),
-            }
+            res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
         } else {
             Err(RedisError::String(err_msg_json_expected(
                 "string",

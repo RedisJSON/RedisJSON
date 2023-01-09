@@ -424,7 +424,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 if a.len().unwrap() != b.len().unwrap() {
                     false
                 } else {
-                    for (i, e) in a.values().unwrap().into_iter().enumerate() {
+                    for (i, e) in a.values().unwrap().enumerate() {
                         if !Self::is_equal(e, b.get_index(i).unwrap()) {
                             return false;
                         }
@@ -726,7 +726,7 @@ where
         .collect::<Vec<Option<&T>>>()
 }
 
-fn find_all_paths<T: SelectValue, F: FnMut(&T) -> bool>(
+fn find_all_paths<T: SelectValue, F>(
     path: &str,
     doc: &T,
     f: F,
@@ -741,7 +741,7 @@ where
     }
 }
 
-fn find_all_values<'a, T: SelectValue, F: FnMut(&T) -> bool>(
+fn find_all_values<'a, T: SelectValue, F>(
     path: &str,
     doc: &'a T,
     f: F,
@@ -1818,10 +1818,9 @@ where
         let values = find_all_values(path, root, |v| v.get_type() == SelectValueType::Object)?;
         let mut res: Vec<RedisValue> = vec![];
         for v in values {
-            res.push(match v {
-                Some(v) => v.keys().unwrap().collect::<Vec<&str>>().into(),
-                _ => RedisValue::Null,
-            });
+            res.push(v.map_or(RedisValue::Null, |v| {
+                v.keys().unwrap().collect::<Vec<&str>>().into()
+            }));
         }
         res.into()
     };
@@ -1874,9 +1873,10 @@ where
     let res = match root {
         Some(root) => find_all_values(path, root, |v| v.get_type() == SelectValueType::Object)?
             .iter()
-            .map(|v| match *v {
-                Some(v) => RedisValue::Integer(v.len().unwrap() as i64),
-                None => RedisValue::Null,
+            .map(|v| {
+                v.map_or(RedisValue::Null, |v| {
+                    RedisValue::Integer(v.len().unwrap() as i64)
+                })
             })
             .collect::<Vec<RedisValue>>()
             .into(),
@@ -2010,8 +2010,8 @@ pub fn json_resp<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
     };
 
     let key = manager.open_key_read(ctx, &key)?;
-    match key.get_value()? {
-        Some(doc) => KeyValue::new(doc).resp_serialize(path),
-        None => Ok(RedisValue::Null),
-    }
+    key.get_value()?.map_or_else(
+        || Ok(RedisValue::Null),
+        |doc| KeyValue::new(doc).resp_serialize(path),
+    )
 }
