@@ -630,23 +630,56 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         }
     }
 
+    ///
+    /// following https://github.com/Diggsey/ijson/issues/23#issuecomment-1377270111
+    ///
     fn get_memory(&self, v: &Self::V) -> Result<usize, RedisError> {
         let res = size_of::<IValue>()
             + match v.type_() {
-                ValueType::Null | ValueType::Bool | ValueType::Number => 0,
+                ValueType::Null | ValueType::Bool => 0,
+                ValueType::Number => {
+                    let num = v.as_number().unwrap();
+                    if num.has_decimal_point() {
+                        // 64bit float
+                        16
+                    } else if num > &INumber::from(-128) && num <= &INumber::from(383) {
+                        // 8bit
+                        0
+                    } else if num > &INumber::from(-8_388_608) && num <= &INumber::from(8_388_607) {
+                        // 24bit
+                        4
+                    } else {
+                        // 64bit
+                        16
+                    }
+                }
                 ValueType::String => v.as_string().unwrap().len(),
-                ValueType::Array => v
-                    .as_array()
-                    .unwrap()
-                    .into_iter()
-                    .map(|v| self.get_memory(v).unwrap())
-                    .sum(),
-                ValueType::Object => v
-                    .as_object()
-                    .unwrap()
-                    .into_iter()
-                    .map(|(s, v)| s.len() + self.get_memory(v).unwrap())
-                    .sum(),
+                ValueType::Array => {
+                    let arr = v.as_array().unwrap();
+                    let capacity = arr.capacity();
+                    if capacity == 0 {
+                        0
+                    } else {
+                        size_of::<usize>() * (capacity + 2)
+                            + arr
+                                .into_iter()
+                                .map(|v| self.get_memory(v).unwrap())
+                                .sum::<usize>()
+                    }
+                }
+                ValueType::Object => {
+                    let val = v.as_object().unwrap();
+                    let capacity = val.capacity();
+                    if capacity == 0 {
+                        0
+                    } else {
+                        size_of::<usize>() * (capacity * 3 + 2)
+                            + val
+                                .into_iter()
+                                .map(|(s, v)| s.len() + self.get_memory(v).unwrap())
+                                .sum::<usize>()
+                    }
+                }
             };
         Ok(res)
     }
