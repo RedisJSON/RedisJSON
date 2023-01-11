@@ -341,6 +341,10 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         Ok(updated)
     }
 
+    fn merge_value(&mut self, path: Vec<String>, mut v: IValue) -> Result<bool, RedisError> {
+        Err(RedisError::String("ERR Soon to come...".to_string()))
+    }
+
     fn dict_add(
         &mut self,
         path: Vec<String>,
