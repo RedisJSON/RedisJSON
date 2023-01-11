@@ -691,3 +691,35 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         }
     }
 }
+
+
+// a unit test for get_memory 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_memory() {
+        let manager = RedisIValueJsonKeyManager {
+            phantom: PhantomData,
+        };
+        let json = r#"{
+                            "a": 100.12, 
+                            "b": "foo", 
+                            "c": true, 
+                            "d": 126, 
+                            "e": -112, 
+                            "f": 7388608,
+                            "g": -6388608,
+                            "h": 9388608,
+                            "i": -9485608,
+                            "j": [],
+                            "k": {},
+                            "l": [1, "asas", {"a": 1}],
+                            "m": {"t": "f"}
+                        }"#;
+        let value = serde_json::from_str(json).unwrap();
+        let res = manager.get_memory(&value).unwrap();
+        assert_eq!(res, 903);
+    }
+}
