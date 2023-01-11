@@ -692,8 +692,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     }
 }
 
-
-// a unit test for get_memory 
+// a unit test for get_memory
 #[cfg(test)]
 mod tests {
     use super::*;
