@@ -609,9 +609,9 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
     let val = manager.from_str(value, format)?;
 
     match (current, set_option) {
-        (Some(ref mut doc), ref op) => {
+        (Some(doc), op) => {
             if path.get_path() == JSON_ROOT_PATH {
-                if *op != SetOptions::NotExists {
+                if op != SetOptions::NotExists {
                     redis_key.set_value(Vec::new(), val)?;
                     redis_key.apply_changes(ctx, "json.set")?;
                     REDIS_OK
@@ -619,7 +619,7 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
                     Ok(RedisValue::Null)
                 }
             } else {
-                let mut update_info = KeyValue::new(*doc).find_paths(path.get_path(), op)?;
+                let mut update_info = KeyValue::new(doc).find_paths(path.get_path(), &op)?;
                 if !update_info.is_empty() {
                     let mut res = false;
                     if update_info.len() == 1 {
