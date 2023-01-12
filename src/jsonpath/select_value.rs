@@ -13,6 +13,7 @@ pub enum SelectValueType {
     Null,
     Bool,
     Long,
+    ULong,
     Double,
     String,
     Array,

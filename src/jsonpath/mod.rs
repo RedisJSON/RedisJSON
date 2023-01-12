@@ -509,6 +509,18 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_filter_u64() {
+        setup();
+        let u64_1 = u64::MAX;
+        let u64_2 = (i64::MAX as u64) + 1;
+        verify_json!(path: format!("$.*[?(@=={})]", u64_1).as_str(), json: {"u64_1":u64_1, "u64_2":u64_2, "str":"str", "flt":f64::MAX, "int":i64::MAX}, results:[u64_1]);
+        verify_json!(path: format!("$.*[?(@=={})]", u64_2).as_str(), json:{"u64_1":u64_1, "u64_2":u64_2, "str":"str", "flt":f64::MAX, "int":i64::MAX}, results:[u64_2]);
+        verify_json!(path: format!("$.*[?(@=={})]", i64::MAX).as_str(), json:{"u64_1":u64_1, "u64_2":u64_2, "str":"str", "flt":f64::MAX, "int":i64::MAX}, results:[(i64::MAX)]);
+        verify_json!(path: format!("$.*[?(@=={})]", f64::MAX).as_str(), json:{"u64_1":u64_1, "u64_2":u64_2, "str":"str", "flt":f64::MAX, "int":i64::MAX}, results:[(f64::MAX)]);
+        verify_json!(path:"$.*[?(@=='str')]", json:{"u64_1":u64_1, "u64_2":u64_2, "str":"str", "flt":f64::MAX, "int":i64::MAX}, results:["str"]);
+    }
+
+    #[test]
     fn test_complex_filter_from_root() {
         setup();
         verify_json!(path:"$.bar.*[?@ == $.foo]",

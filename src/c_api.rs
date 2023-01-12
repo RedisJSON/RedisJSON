@@ -37,6 +37,7 @@ pub enum JSONType {
     Object = 4,
     Array = 5,
     Null = 6,
+    UInt = 7,
 }
 
 struct ResultsIterator<'a, V: SelectValue> {
@@ -172,7 +173,7 @@ pub fn json_api_get_int<M: Manager>(_: M, json: *const c_void, val: *mut c_longl
 pub fn json_api_get_uint<M: Manager>(_: M, json: *const c_void, val: *mut c_ulonglong) -> c_int {
     let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
-        SelectValueType::Long => json.get_ulong().map_or_else(
+        SelectValueType::ULong => json.get_ulong().map_or_else(
             |_| Status::Err as c_int,
             |u| {
                 unsafe { *val = u };
@@ -192,17 +193,16 @@ pub fn json_api_get_double<M: Manager>(_: M, json: *const c_void, val: *mut c_do
             Status::Ok as c_int
         }
         SelectValueType::Long => json.get_long().map_or_else(
-            |_| {
-                json.get_ulong().map_or_else(
-                    |_| Status::Err as c_int,
-                    |u| {
-                        unsafe { *val = u as f64 };
-                        Status::Ok as c_int
-                    },
-                )
-            },
+            |_| Status::Err as c_int,
             |v| {
                 unsafe { *val = v as f64 };
+                Status::Ok as c_int
+            },
+        ),
+        SelectValueType::ULong => json.get_ulong().map_or_else(
+            |_| Status::Err as c_int,
+            |u| {
+                unsafe { *val = u as f64 };
                 Status::Ok as c_int
             },
         ),
@@ -241,6 +241,7 @@ fn json_api_get_type_internal<V: SelectValue>(v: &V) -> JSONType {
         SelectValueType::Null => JSONType::Null,
         SelectValueType::Bool => JSONType::Bool,
         SelectValueType::Long => JSONType::Int,
+        SelectValueType::ULong => JSONType::UInt,
         SelectValueType::Double => JSONType::Double,
         SelectValueType::String => JSONType::String,
         SelectValueType::Array => JSONType::Array,

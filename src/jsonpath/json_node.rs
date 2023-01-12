@@ -18,10 +18,12 @@ impl SelectValue for Value {
             Self::Array(_) => SelectValueType::Array,
             Self::Object(_) => SelectValueType::Object,
             Self::Number(n) => {
-                if n.is_i64() || n.is_u64() {
+                if n.is_i64() {
                     SelectValueType::Long
                 } else if n.is_f64() {
                     SelectValueType::Double
+                } else if n.is_u64() {
+                    SelectValueType::ULong
                 } else {
                     panic!("bad type for Number value");
                 }
@@ -177,8 +179,10 @@ impl SelectValue for IValue {
                 let num = self.as_number().unwrap();
                 if num.has_decimal_point() {
                     SelectValueType::Double
-                } else {
+                } else if num.to_i64().is_some() {
                     SelectValueType::Long
+                } else {
+                    SelectValueType::ULong
                 }
             }
         }
