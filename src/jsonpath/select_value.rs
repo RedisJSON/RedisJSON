@@ -4,7 +4,6 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
-use crate::error::Error;
 use serde::Serialize;
 use std::fmt::Debug;
 
@@ -13,6 +12,7 @@ pub enum SelectValueType {
     Null,
     Bool,
     Long,
+    ULong,
     Double,
     String,
     Array,
@@ -34,7 +34,7 @@ pub trait SelectValue: Debug + Eq + PartialEq + Default + Clone + Serialize {
     fn get_str(&self) -> String;
     fn as_str(&self) -> &str;
     fn get_bool(&self) -> bool;
-    fn get_long(&self) -> Result<i64, Error>;
-    fn get_ulong(&self) -> Result<u64, Error>;
+    fn get_long(&self) -> i64;
+    fn get_ulong(&self) -> u64;
     fn get_double(&self) -> f64;
 }

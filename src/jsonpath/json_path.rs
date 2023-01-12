@@ -328,6 +328,7 @@ const fn create_index_tracker<'i, 'j>(
 #[derive(Debug)]
 enum TermEvaluationResult<'i, 'j, S: SelectValue> {
     Integer(i64),
+    UInteger(u64),
     Float(f64),
     Str(&'i str),
     String(String),
@@ -362,6 +363,31 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
                     CmpResult::Ord(Ordering::Equal)
                 }
             }
+
+            (TermEvaluationResult::UInteger(n1), TermEvaluationResult::UInteger(n2)) => {
+                CmpResult::Ord(n1.cmp(n2))
+            }
+            (TermEvaluationResult::Float(_), TermEvaluationResult::UInteger(n2)) => {
+                self.cmp(&TermEvaluationResult::Float(*n2 as f64))
+            }
+            (TermEvaluationResult::UInteger(n1), TermEvaluationResult::Float(_)) => {
+                TermEvaluationResult::Float(*n1 as f64).cmp(s)
+            }
+
+            (TermEvaluationResult::UInteger(n1), TermEvaluationResult::Integer(n2)) => {
+                if *n2 >= 0 {
+                    CmpResult::Ord(n1.cmp(&(*n2 as u64)))
+                } else {
+                    CmpResult::Ord(Ordering::Greater)
+                }
+            }
+            (TermEvaluationResult::Integer(n1), TermEvaluationResult::UInteger(_)) => {
+                if *n1 >= 0 {
+                    TermEvaluationResult::UInteger(*n1 as u64).cmp(s)
+                } else {
+                    CmpResult::Ord(Ordering::Less)
+                }
+            }
             (TermEvaluationResult::Str(s1), TermEvaluationResult::Str(s2)) => {
                 CmpResult::Ord(s1.cmp(s2))
             }
@@ -378,20 +404,16 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
                 CmpResult::Ord(b1.cmp(b2))
             }
             (TermEvaluationResult::Value(v), _) => match v.get_type() {
-                SelectValueType::Long => v.get_long().map_or_else(
-                    |_| CmpResult::NotCmparable,
-                    |n| TermEvaluationResult::Integer(n).cmp(s),
-                ),
+                SelectValueType::Long => TermEvaluationResult::Integer(v.get_long()).cmp(s),
+                SelectValueType::ULong => TermEvaluationResult::UInteger(v.get_ulong()).cmp(s),
                 SelectValueType::Double => TermEvaluationResult::Float(v.get_double()).cmp(s),
                 SelectValueType::String => TermEvaluationResult::Str(v.as_str()).cmp(s),
                 SelectValueType::Bool => TermEvaluationResult::Bool(v.get_bool()).cmp(s),
                 _ => CmpResult::NotCmparable,
             },
             (_, TermEvaluationResult::Value(v)) => match v.get_type() {
-                SelectValueType::Long => v.get_long().map_or_else(
-                    |_| CmpResult::NotCmparable,
-                    |n| self.cmp(&TermEvaluationResult::Integer(n)),
-                ),
+                SelectValueType::Long => self.cmp(&TermEvaluationResult::Integer(v.get_long())),
+                SelectValueType::ULong => self.cmp(&TermEvaluationResult::UInteger(v.get_ulong())),
                 SelectValueType::Double => self.cmp(&TermEvaluationResult::Float(v.get_double())),
                 SelectValueType::String => self.cmp(&TermEvaluationResult::Str(v.as_str())),
                 SelectValueType::Bool => self.cmp(&TermEvaluationResult::Bool(v.get_bool())),
@@ -801,6 +823,8 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             Rule::decimal => {
                 if let Ok(i) = term.as_str().parse::<i64>() {
                     TermEvaluationResult::Integer(i)
+                } else if let Ok(u) = term.as_str().parse::<u64>() {
+                    TermEvaluationResult::UInteger(u)
                 } else {
                     TermEvaluationResult::Float(term.as_str().parse::<f64>().unwrap())
                 }

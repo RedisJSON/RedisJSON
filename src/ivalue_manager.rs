@@ -5,7 +5,7 @@
  */
 
 use crate::error::Error;
-use crate::jsonpath::select_value::SelectValue;
+use crate::jsonpath::select_value::{SelectValue, SelectValueType};
 use crate::manager::{err_json, err_msg_json_expected, err_msg_json_path_doesnt_exist};
 use crate::manager::{Manager, ReadHolder, WriteHolder};
 use crate::redisjson::normalize_arr_start_index;
@@ -235,32 +235,36 @@ impl<'a> IValueKeyHolderWrite<'a> {
                 ) {
                     (false, Some(num2)) => {
                         // Left is integer, Right is i64
-                        if let Ok(num1) = v.get_long() {
-                            // Left is i64
-                            let (num, _) = (op1_fun)(num1, num2);
-                            Ok(INumber::from(num))
-                        } else if let Ok(num1) = v.get_ulong() {
-                            // Left is u64
-                            let (num, _) = op3_fun(num1, num2 as u64);
-                            Ok(INumber::from(num))
-                        } else {
-                            Err(RedisError::Str("integer exceeding u64 is not supported"))
+                        match v.get_type() {
+                            SelectValueType::Long => {
+                                // Left is i64, Right is i64
+                                let (num, _) = (op1_fun)(v.get_long(), num2);
+                                Ok(INumber::from(num))
+                            }
+                            SelectValueType::ULong => {
+                                // Left is u64, Right is i64
+                                let (num, _) = op3_fun(v.get_ulong(), num2 as u64);
+                                Ok(INumber::from(num))
+                            }
+                            _ => Err(RedisError::Str("integer exceeding u64 is not supported")),
                         }
                     }
                     (false, None) => {
                         // Left is integer, Right is f64 or u64
                         if let Some(num2) = in_value.as_u64() {
                             // Right is u64
-                            if let Ok(num1) = v.get_long() {
-                                // Left is i64
-                                let (num, _) = (op3_fun)(num1 as u64, num2);
-                                Ok(INumber::from(num))
-                            } else if let Ok(num1) = v.get_ulong() {
-                                // Left is u64
-                                let (num, _) = op3_fun(num1, num2 as u64);
-                                Ok(INumber::from(num))
-                            } else {
-                                Err(RedisError::Str("integer exceeding u64 is not supported"))
+                            match v.get_type() {
+                                SelectValueType::Long => {
+                                    // Left is i64
+                                    let (num, _) = (op3_fun)(v.get_long() as u64, num2);
+                                    Ok(INumber::from(num))
+                                }
+                                SelectValueType::ULong => {
+                                    // Left is u64
+                                    let (num, _) = op3_fun(v.get_ulong(), num2 as u64);
+                                    Ok(INumber::from(num))
+                                }
+                                _ => Err(RedisError::Str("integer exceeding u64 is not supported")),
                             }
                         } else if let Some(num2) = in_value.as_f64() {
                             // Right is f64

@@ -37,6 +37,8 @@ pub enum JSONType {
     Object = 4,
     Array = 5,
     Null = 6,
+    // For backward compatibility with RediSearch, skip JSONType__EOF = 7,
+    UInt = 8,
 }
 
 struct ResultsIterator<'a, V: SelectValue> {
@@ -157,13 +159,10 @@ pub fn json_api_get_json_from_iter<M: Manager>(
 pub fn json_api_get_int<M: Manager>(_: M, json: *const c_void, val: *mut c_longlong) -> c_int {
     let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
-        SelectValueType::Long => json.get_long().map_or_else(
-            |_| Status::Err as c_int,
-            |v| {
-                unsafe { *val = v };
-                Status::Ok as c_int
-            },
-        ),
+        SelectValueType::Long => {
+            unsafe { *val = json.get_long() };
+            Status::Ok as c_int
+        }
         _ => Status::Err as c_int,
     }
 }
@@ -172,13 +171,10 @@ pub fn json_api_get_int<M: Manager>(_: M, json: *const c_void, val: *mut c_longl
 pub fn json_api_get_uint<M: Manager>(_: M, json: *const c_void, val: *mut c_ulonglong) -> c_int {
     let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
-        SelectValueType::Long => json.get_ulong().map_or_else(
-            |_| Status::Err as c_int,
-            |u| {
-                unsafe { *val = u };
-                Status::Ok as c_int
-            },
-        ),
+        SelectValueType::ULong => {
+            unsafe { *val = json.get_ulong() };
+            Status::Ok as c_int
+        }
         _ => Status::Err as c_int,
     }
 }
@@ -191,21 +187,23 @@ pub fn json_api_get_double<M: Manager>(_: M, json: *const c_void, val: *mut c_do
             unsafe { *val = json.get_double() };
             Status::Ok as c_int
         }
-        SelectValueType::Long => json.get_long().map_or_else(
-            |_| {
-                json.get_ulong().map_or_else(
-                    |_| Status::Err as c_int,
-                    |u| {
-                        unsafe { *val = u as f64 };
-                        Status::Ok as c_int
-                    },
-                )
-            },
-            |v| {
-                unsafe { *val = v as f64 };
+        SelectValueType::Long => {
+            unsafe { *val = json.get_long() as f64 };
+            Status::Ok as c_int
+        }
+
+        SelectValueType::ULong => {
+            let u = json.get_ulong();
+            let f = u as f64;
+            if u == f as u64 {
+                // Conversion is not lossy
+                unsafe { *val = f };
                 Status::Ok as c_int
-            },
-        ),
+            } else {
+                Status::Err as c_int
+            }
+        }
+
         _ => Status::Err as c_int,
     }
 }
@@ -241,6 +239,7 @@ fn json_api_get_type_internal<V: SelectValue>(v: &V) -> JSONType {
         SelectValueType::Null => JSONType::Null,
         SelectValueType::Bool => JSONType::Bool,
         SelectValueType::Long => JSONType::Int,
+        SelectValueType::ULong => JSONType::UInt,
         SelectValueType::Double => JSONType::Double,
         SelectValueType::String => JSONType::String,
         SelectValueType::Array => JSONType::Array,
@@ -322,9 +321,9 @@ macro_rules! redis_json_module_export_shared_api {
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
         pub extern "C" fn JSONAPI_openKeyFromStr(
             ctx: *mut rawmod::RedisModuleCtx,
-            path: *const c_char,
+            key_str: *const c_char,
         ) -> *mut c_void {
-            let key = unsafe { CStr::from_ptr(path).to_str().unwrap() };
+            let key = unsafe { CStr::from_ptr(key_str).to_str().unwrap() };
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_mngr: $get_manager_expr,

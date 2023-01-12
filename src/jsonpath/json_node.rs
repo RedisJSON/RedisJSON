@@ -4,7 +4,6 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
-use crate::error::Error;
 use crate::jsonpath::select_value::{SelectValue, SelectValueType};
 use ijson::{IValue, ValueType};
 use serde_json::Value;
@@ -18,10 +17,12 @@ impl SelectValue for Value {
             Self::Array(_) => SelectValueType::Array,
             Self::Object(_) => SelectValueType::Object,
             Self::Number(n) => {
-                if n.is_i64() || n.is_u64() {
+                if n.is_i64() {
                     SelectValueType::Long
                 } else if n.is_f64() {
                     SelectValueType::Double
+                } else if n.is_u64() {
+                    SelectValueType::ULong
                 } else {
                     panic!("bad type for Number value");
                 }
@@ -119,30 +120,18 @@ impl SelectValue for Value {
         }
     }
 
-    fn get_long(&self) -> Result<i64, Error> {
+    fn get_long(&self) -> i64 {
         match self {
-            Self::Number(n) => {
-                if let Some(n) = n.as_i64() {
-                    Ok(n)
-                } else {
-                    Err(Error::from("not a long"))
-                }
-            }
+            Self::Number(n) => n.as_i64().unwrap(),
             _ => {
                 panic!("long is not a number");
             }
         }
     }
 
-    fn get_ulong(&self) -> Result<u64, Error> {
+    fn get_ulong(&self) -> u64 {
         match self {
-            Self::Number(n) => {
-                if let Some(n) = n.as_u64() {
-                    Ok(n)
-                } else {
-                    Err(Error::from("not a ulong"))
-                }
-            }
+            Self::Number(n) => n.as_u64().unwrap(),
             _ => {
                 panic!("ulong is not a number");
             }
@@ -177,8 +166,10 @@ impl SelectValue for IValue {
                 let num = self.as_number().unwrap();
                 if num.has_decimal_point() {
                     SelectValueType::Double
-                } else {
+                } else if num.to_i64().is_some() {
                     SelectValueType::Long
+                } else {
+                    SelectValueType::ULong
                 }
             }
         }
@@ -260,17 +251,13 @@ impl SelectValue for IValue {
         }
     }
 
-    fn get_long(&self) -> Result<i64, Error> {
+    fn get_long(&self) -> i64 {
         match self.as_number() {
             Some(n) => {
                 if n.has_decimal_point() {
                     panic!("not a long");
                 } else {
-                    if let Some(n) = n.to_i64() {
-                        Ok(n)
-                    } else {
-                        Err(Error::from("not a long"))
-                    }
+                    n.to_i64().unwrap()
                 }
             }
             _ => {
@@ -279,17 +266,13 @@ impl SelectValue for IValue {
         }
     }
 
-    fn get_ulong(&self) -> Result<u64, Error> {
+    fn get_ulong(&self) -> u64 {
         match self.as_number() {
             Some(n) => {
                 if n.has_decimal_point() {
                     panic!("not a long");
                 } else {
-                    if let Some(n) = n.to_u64() {
-                        Ok(n)
-                    } else {
-                        Err(Error::from("not a ulong"))
-                    }
+                    n.to_u64().unwrap()
                 }
             }
             _ => {
