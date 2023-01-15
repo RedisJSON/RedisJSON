@@ -210,6 +210,31 @@ def testSetBehaviorModifyingSubcommands(env):
     r.expect('JSON.SET', 'test', '.foo', '[]', 'XX', 'XN').raiseError()
     r.expect('JSON.SET', 'test', '.foo', '[]', 'XX', '').raiseError()
 
+
+def testSetExpire(env):
+    """Test JSON.SET's EX and PX subcommands"""
+    r = env
+    
+    # test set EX by seconds
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$', '{}', 'EX', '99'))
+    ttl = r.execute_command('TTL', 'test')
+    r.assertTrue(ttl > 90 and ttl < 100)
+
+    # test set PX by milseconds
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$', '{}', 'PX', '9999'))
+    ttl = r.execute_command('TTL', 'test')
+    r.assertTrue(ttl > 0 and ttl <= 10)
+
+    # Wrong arguments
+    r.expect('JSON.SET', 'test', '$', '{}', 'PX').raiseError()
+    r.expect('JSON.SET', 'test', '$', '{}', 'PX', '104f').raiseError()
+    r.expect('JSON.SET', 'test', '$', '{}', 'PX', '-50').raiseError()
+    r.expect('JSON.SET', 'test', '$', '{}', 'PX', '0').raiseError()
+    r.expect('JSON.SET', 'test', '$', '{}', 'EX').raiseError()
+    r.expect('JSON.SET', 'test', '$', '{}', 'EX', '234u64').raiseError()
+    r.expect('JSON.SET', 'test', '$', '{}', 'EX', '-12').raiseError()
+    r.expect('JSON.SET', 'test', '$', '{}', 'EX', '0').raiseError()
+    
 def testSetWithBracketNotation(env):
     r = env
 

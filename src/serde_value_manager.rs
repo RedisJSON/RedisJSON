@@ -16,6 +16,7 @@ use redis_module::rediserror::RedisError;
 use redis_module::{Context, NotifyEvent, RedisString};
 
 use std::marker::PhantomData;
+use std::time::Duration;
 
 use crate::redisjson::{normalize_arr_start_index, RedisJSON};
 use crate::Format;
@@ -436,6 +437,11 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
             _ => Ok(Some(v)),
         })?;
         Ok(cleared)
+    }
+
+    fn expire(&mut self, expire: Duration) -> Result<(), RedisError> {
+        self.key.set_expire(expire)?;
+        Ok(())
     }
 }
 

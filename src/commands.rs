@@ -14,7 +14,9 @@ use crate::redisjson::{normalize_arr_indices, Format, Path};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use std::cmp::Ordering;
+use std::num::NonZeroU64;
 use std::str::FromStr;
+use std::time::Duration;
 
 use crate::jsonpath::{
     calc_once, calc_once_paths, calc_once_with_paths, compile, json_path::JsonPathToken,
@@ -538,7 +540,7 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
 
-    // Set Capcity to 1 assumiung the common case has one path
+    // Set capacity to 1 assuming the common case has one path
     let mut paths: Vec<Path> = Vec::with_capacity(1);
     let mut format = Format::JSON;
     let mut indent = None;
@@ -586,6 +588,7 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
     let value = args.next_str()?;
 
     let mut format = Format::JSON;
+    let mut expire: Option<Duration> = None;
     let mut set_option = SetOptions::None;
 
     while let Some(s) = args.next() {
@@ -599,6 +602,22 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
             arg if arg.eq_ignore_ascii_case("FORMAT") => {
                 format = Format::from_str(args.next_str()?)?;
             }
+            arg if arg.eq_ignore_ascii_case("PX") => {
+                // Parse the expire time in milliseconds must be a positive integer non-zero
+                expire = Some(Duration::from_millis(
+                    NonZeroU64::from_str(args.next_str()?)
+                        .map_err(|e| RedisError::String(format!("PX {e}")))?
+                        .get(),
+                ));
+            }
+            arg if arg.eq_ignore_ascii_case("EX") => {
+                // Parse the expire time in seconds must be a positive integer non-zero
+                expire = Some(Duration::from_secs(
+                    NonZeroU64::from_str(args.next_str()?)
+                        .map_err(|e| RedisError::String(format!("EX {e}")))?
+                        .get(),
+                ));
+            }
             _ => return Err(RedisError::Str("ERR syntax error")),
         };
     }
@@ -608,7 +627,7 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
 
     let val = manager.from_str(value, format)?;
 
-    match (current, set_option) {
+    let result = match (current, set_option) {
         (Some(ref mut doc), ref op) => {
             if path.get_path() == JSON_ROOT_PATH {
                 if *op != SetOptions::NotExists {
@@ -662,7 +681,14 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
                 ))
             }
         }
+    };
+    // if json.set was successful and we have an expire we set it
+    if result.is_ok() {
+        if let Some(ex) = expire {
+            redis_key.expire(ex)?;
+        }
     }
+    result
 }
 
 fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(

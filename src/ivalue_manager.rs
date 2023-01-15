@@ -20,6 +20,7 @@ use serde::Serialize;
 use serde_json::Number;
 use std::marker::PhantomData;
 use std::mem::size_of;
+use std::time::Duration;
 
 use crate::redisjson::RedisJSON;
 
@@ -555,6 +556,11 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             _ => Ok(Some(())),
         })?;
         Ok(cleared)
+    }
+
+    fn expire(&mut self, expire: Duration) -> Result<(), RedisError> {
+        self.key.set_expire(expire)?;
+        Ok(())
     }
 }
 
