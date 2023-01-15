@@ -1,5 +1,13 @@
 version: 2.1
 
+parameters:
+  run_default_flow:
+    default: true
+    type: boolean
+  run_benchmark_flow_label:
+    default: false
+    type: boolean
+
 commands:
   early-returns:
     steps:
@@ -55,6 +63,7 @@ commands:
       - run:
           name: Setup automation
           command: |
+            export HOMEBREW_NO_AUTO_UPDATE=1
             git submodule update --init deps/readies
             ./deps/readies/bin/getpy3
             ./deps/readies/bin/getaws
@@ -83,6 +92,7 @@ commands:
           name: Install Redis
           shell: /bin/bash -l -eo pipefail
           command: |
+            export HOMEBREW_NO_AUTO_UPDATE=1
             ./deps/readies/bin/getredis -v '<<parameters.redis_version>>' --force <<parameters.getredis_params>>
       - run:
           name: System report
@@ -305,7 +315,16 @@ commands:
               --triggering_env << parameters.triggering_env >> \
               --push_results_redistimeseries \
               --allowed-envs << parameters.allowed_envs >> || true
-
+      - run:
+          name: Generate Pull Request Performance info
+          command: |
+            if [[ -n ${CIRCLE_PULL_REQUEST##*/} ]]; then
+                redisbench-admin compare  \
+                  --defaults_filename ./tests/benchmarks/defaults.yml \
+                  --comparison-branch $CIRCLE_BRANCH \
+                  --auto-approve \
+                  --pull-request ${CIRCLE_PULL_REQUEST##*/}
+            fi
 #----------------------------------------------------------------------------------------------------------------------------------
 
 jobs:
@@ -499,7 +518,6 @@ on-integ-branch: &on-integ-branch
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
-        - /^perf.*$/
     tags:
       ignore: /.*/
 
@@ -510,7 +528,6 @@ on-integ-branch-cron: &on-integ-branch-cron
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
-        - /^perf.*$/
 
 not-on-integ-branch: &not-on-integ-branch
   filters:
@@ -519,7 +536,6 @@ not-on-integ-branch: &not-on-integ-branch
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
-        - /^perf.*$/
     tags:
       ignore: /.*/
 
@@ -537,7 +553,6 @@ on-integ-and-version-tags: &on-integ-and-version-tags
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
-        - /^perf.*$/
     tags:
       only: /^v[0-9].*/
 
@@ -546,6 +561,8 @@ on-integ-and-version-tags: &on-integ-and-version-tags
 workflows:
   version: 2
   default-flow:
+    when:
+      << pipeline.parameters.run_default_flow >>
     jobs:
       - build-linux-debian:
           name: build
@@ -602,7 +619,17 @@ workflows:
           <<: *on-integ-and-version-tags
           context: common
 
-
+  benchmark_flow_label:
+    when:
+      << pipeline.parameters.run_benchmark_flow_label >>
+    jobs:
+      - benchmark-json-oss-standalone:
+          <<: *on-any-branch
+          context: common
+      - benchmark-json-oss-standalone-profiler:
+          <<: *on-any-branch
+          context: common
+  
   nightly:
     triggers:
       - schedule:
@@ -614,6 +641,16 @@ workflows:
           matrix:
             parameters:
               redis_version: ["6.0", "6.2", "7", "unstable"]
+  
+  nightly-perf-once-a-week:
+    triggers:
+      - schedule:
+          #  “At 07:00 on Mondays.”
+          cron: "00 07 * * 1"
+          filters:
+            branches:
+              only: master
+    jobs:
       - benchmark-json-oss-standalone:
           context: common
       - benchmark-json-oss-standalone-profiler:
