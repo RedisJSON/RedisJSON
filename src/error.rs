@@ -71,6 +71,12 @@ impl From<serde_json::Error> for Error {
     }
 }
 
+impl From<simd_json::Error> for Error {
+    fn from(e: simd_json::Error) -> Self {
+        Self { msg: e.to_string() }
+    }
+}
+
 impl From<Error> for redis_module::RedisError {
     fn from(e: Error) -> Self {
         Self::String(e.msg)

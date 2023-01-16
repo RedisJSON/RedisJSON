@@ -603,7 +603,10 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
 
     fn from_str(&self, val: &str, format: Format) -> Result<Self::O, Error> {
         match format {
-            Format::JSON => Ok(serde_json::from_str(val)?),
+            Format::JSON => {
+                let mut bytes = val.as_bytes().to_owned();
+                Ok(simd_json::serde::from_slice(&mut bytes)?)
+            }
             Format::BSON => decode_document(&mut Cursor::new(val.as_bytes())).map_or_else(
                 |e| Err(e.to_string().into()),
                 |docs| {
