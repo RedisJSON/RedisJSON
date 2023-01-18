@@ -1279,6 +1279,15 @@ def testFilterPrecedence(env):
     r.assertEqual(json.loads(res), [doc[0]])
     r.expect('JSON.GET', 'doc', '$[?(@.f==true || @.one==1 && @.t==false)]').equal('[]')
 
+def testMerge(env):
+    # Test JSON.MERGE
+    r = env
+    r.assertOk(r.execute_command('JSON.SET', 'test_merge', '$', '{"a":{"b":{"c":"d"}}}'))
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge', '$', '{"a":{"b":{"e":"f"}}}'))
+    r.expect('JSON.GET', 'test_merge').equal('{"a":{"b":{"c":"d","e":"f"}}}')
+
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge', '$.a.b', '{"h":"i"}'))
+    r.expect('JSON.GET', 'test_merge').equal('{"a":{"b":{"c":"d","e":"f","h":"i"}}}')
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property

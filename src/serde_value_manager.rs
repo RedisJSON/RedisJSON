@@ -35,7 +35,7 @@ pub struct KeyHolderWrite<'a> {
     val: Option<&'a mut RedisJSON<Value>>,
 }
 
-fn update<F: FnMut(Value) -> Result<Option<Value>, Error>>(
+fn replace<F: FnMut(Value) -> Result<Option<Value>, Error>>(
     path: &[String],
     root: &mut Value,
     mut func: F,
@@ -111,7 +111,7 @@ impl<'a> KeyHolderWrite<'a> {
                 }
             }
         } else {
-            update(paths, self.get_value().unwrap().unwrap(), op_fun)?;
+            replace(paths, self.get_value().unwrap().unwrap(), op_fun)?;
         }
 
         Ok(())
@@ -222,7 +222,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
             self.set_root(Some(v))?;
             updated = true;
         } else {
-            update(&path, self.get_value().unwrap().unwrap(), |_v| {
+            replace(&path, self.get_value()?.unwrap(), |_v| {
                 updated = true;
                 Ok(Some(v.take()))
             })?;
@@ -230,8 +230,20 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
         Ok(updated)
     }
 
-    fn merge_value(&mut self, path: Vec<String>, mut v: Value) -> Result<bool, RedisError> {
-        Err(RedisError::String("ERR Soon to come...".to_string()))
+    fn merge_value(&mut self, path: Vec<String>, v: Value) -> Result<bool, RedisError> {
+        let mut updated = false;
+        if path.is_empty() {
+            let val = merge(self.get_value()?.unwrap(), &v);
+            self.set_root(Some(val))?;
+            // update the root
+            updated = true;
+        } else {
+            replace(&path, self.get_value()?.unwrap(), |mut current| {
+                updated = true;
+                Ok(Some(merge(&mut current, &v)))
+            })?;
+        }
+        Ok(updated)
     }
 
     fn dict_add(&mut self, path: Vec<String>, key: &str, mut v: Value) -> Result<bool, RedisError> {
@@ -250,7 +262,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
             };
             self.set_root(Some(val))?;
         } else {
-            update(&path, self.get_value().unwrap().unwrap(), |val| {
+            replace(&path, self.get_value().unwrap().unwrap(), |val| {
                 let val = if let Value::Object(mut o) = val {
                     if !o.contains_key(key) {
                         updated = true;
@@ -268,7 +280,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
 
     fn delete_path(&mut self, path: Vec<String>) -> Result<bool, RedisError> {
         let mut deleted = false;
-        update(&path, self.get_value().unwrap().unwrap(), |_v| {
+        replace(&path, self.get_value().unwrap().unwrap(), |_v| {
             deleted = true; // might delete more than a single value
             Ok(None)
         })?;
@@ -452,6 +464,30 @@ impl ReadHolder<Value> for KeyHolderRead {
         let key_value = self.key.get_value::<RedisJSON<Value>>(&REDIS_JSON_TYPE)?;
         key_value.map_or(Ok(None), |v| Ok(Some(&v.data)))
     }
+}
+
+fn merge(doc: &mut Value, patch: &Value) -> Value {
+    if !patch.is_object() {
+        return patch.clone();
+    }
+
+    let mut res = doc.take();
+    if let Value::Object(ref mut map) = res {
+        for (key, value) in patch.as_object().unwrap() {
+            if value.is_null() {
+                map.remove(key.as_str());
+            } else {
+                let curr = map.entry(key.as_str());
+                if let Entry::Occupied(mut val) = curr {
+                    let new_val = merge(val.get_mut(), value);
+                    val.insert(new_val);
+                } else {
+                    map.insert(key.clone(), value.clone());
+                }
+            }
+        }
+    }
+    res
 }
 
 pub struct RedisJsonKeyManager<'a> {

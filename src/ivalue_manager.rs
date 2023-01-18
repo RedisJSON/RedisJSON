@@ -11,7 +11,7 @@ use crate::redisjson::normalize_arr_start_index;
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
 use ijson::object::Entry;
-use ijson::{DestructuredMut, INumber, IString, IValue, ValueType};
+use ijson::{DestructuredMut, INumber, IObject, IString, IValue, ValueType};
 use redis_module::key::{verify_type, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::rediserror::RedisError;
@@ -333,7 +333,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             self.set_root(Some(v))?;
             updated = true;
         } else {
-            replace(&path, self.get_value().unwrap().unwrap(), |_v| {
+            replace(&path, self.get_value()?.unwrap(), |_v| {
                 updated = true;
                 Ok(Some(v.take()))
             })?;
@@ -341,8 +341,20 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         Ok(updated)
     }
 
-    fn merge_value(&mut self, path: Vec<String>, mut v: IValue) -> Result<bool, RedisError> {
-        Err(RedisError::String("ERR Soon to come...".to_string()))
+    fn merge_value(&mut self, path: Vec<String>, v: IValue) -> Result<bool, RedisError> {
+        let mut updated = false;
+        if path.is_empty() {
+            merge(self.get_value()?.unwrap(), &v);
+            // update the root
+            updated = true;
+        } else {
+            replace(&path, self.get_value()?.unwrap(), |current| {
+                updated = true;
+                merge(current, &v);
+                Ok(Some(current.take()))
+            })?;
+        }
+        Ok(updated)
     }
 
     fn dict_add(
@@ -570,6 +582,25 @@ impl ReadHolder<IValue> for IValueKeyHolderRead {
     fn get_value(&self) -> Result<Option<&IValue>, RedisError> {
         let key_value = self.key.get_value::<RedisJSON<IValue>>(&REDIS_JSON_TYPE)?;
         key_value.map_or(Ok(None), |v| Ok(Some(&v.data)))
+    }
+}
+
+fn merge(doc: &mut IValue, patch: &IValue) {
+    if !patch.is_object() {
+        *doc = patch.clone();
+        return;
+    }
+
+    if !doc.is_object() {
+        *doc = IObject::new().into();
+    }
+    let map = doc.as_object_mut().unwrap();
+    for (key, value) in patch.as_object().unwrap() {
+        if value.is_null() {
+            map.remove(key.as_str());
+        } else {
+            merge(map.entry(key.as_str()).or_insert(IValue::NULL), value);
+        }
     }
 }
 
