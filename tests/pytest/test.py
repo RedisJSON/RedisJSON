@@ -6,6 +6,7 @@ import sys
 import os
 import redis
 import json
+import collections
 from RLTest import Env
 from includes import *
 
@@ -1279,11 +1280,12 @@ def testFilterPrecedence(env):
     r.assertEqual(json.loads(res), [doc[0]])
     r.expect('JSON.GET', 'doc', '$[?(@.f==true || @.one==1 && @.t==false)]').equal('[]')
 
+class TestOutOfRangeValues:
+    # Test various commands with out-of-range values
 
-def testOutOfRangeValues(env):
-    # Test numeric min/max values
-    r = env
-
+    def __init__(self):
+        self.env = Env()
+        
     doc_int_ok = {
         "beyond_max_u64": 18446744073709551616, # as f64       
     }
@@ -1321,114 +1323,168 @@ def testOutOfRangeValues(env):
         "max_u64": 18446744073709551615.0,
     }
 
-    doc_bad_values = {
-        "beyond_max_f64": 1.7976931348623159e+308,
-        "below_min_f64": -1.7976931348623159e+308
-    }
-    
-    r.expect('JSON.SET', 'doc_int_ok', '$', json.dumps(doc_int_ok)).ok()
-    r.expect('JSON.SET', 'doc_int_ok_overflow_mult', '$', json.dumps(doc_int_ok_overflow_mult)).ok()
-    r.expect('JSON.SET', 'doc_int_ok_overflow_incr', '$', json.dumps(doc_int_ok_overflow_incr)).ok()
-    r.expect('JSON.SET', 'doc_int_ok_overflow_both', '$', json.dumps(doc_int_ok_overflow_both)).ok()
+    ObjData = collections.namedtuple('ObjData', ['name', 'value', 'epsilon', 'check_num_incr', 'check_num_mult'])
 
-    r.expect('JSON.SET', 'doc_float_ok', '$', json.dumps(doc_float_ok)).ok()
-    r.expect('JSON.SET', 'doc_float_ok_overflow_incr', '$', json.dumps(doc_float_ok_overflow_incr)).ok()
+    objDatas = [
+        ObjData('doc_int_ok', doc_int_ok, 0, True, True),
+        ObjData('doc_int_ok_overflow_mult', doc_int_ok_overflow_mult, 0, True, False),
+        ObjData('doc_int_ok_overflow_incr', doc_int_ok_overflow_incr, 0, False, True),
+        ObjData('doc_int_ok_overflow_both', doc_int_ok_overflow_both, 0, False, False),
+        ObjData('doc_float_ok', doc_float_ok, sys.float_info.epsilon, True, True),
+        ObjData('doc_float_ok_overflow_incr', doc_float_ok_overflow_incr, sys.float_info.epsilon, False, True),
+        ObjData('doc_float_ok_2_overflow_incr', doc_float_ok_2_overflow_incr, sys.float_info.epsilon, False, True),
+        ]
 
-    r.expect('JSON.SET', 'doc_float_ok_2_overflow_incr', '$', json.dumps(doc_float_ok_2_overflow_incr)).ok()
-    
-    def check_object_values(obj, name, epsilon, check_num_incr=True, check_num_mult=True):
-        # Test values from JSON.GET are equal to JSON.SET
-        # Check no crash (using get_long internally)
-        copy_obj = obj.copy()
-        arr = []
-        for k, v in iter(obj.items()):
-            r.assertTrue(True, message='{} GET {}={}'.format(name, k, v))
-            res = r.execute_command('JSON.GET', name, '$.{}'.format(k))
-            r.assertAlmostEqual(json.loads(res)[0], v, epsilon, message=res)
-            
-            values = ['9223372036854775808', '18446744073709551615', '18446744073709551616', '-9223372036854775808', '-18446744073709551615', '-18446744073709551616']
-            
-            # Check NUMINCRBY
-            try:
-                r.assertTrue(True, message='{} NUMINCRBY {}: {} + 1'.format(name, k, v))
-                res = r.execute_command('JSON.NUMINCRBY', name, '$.{}'.format(k), '1')
-                if check_num_incr:
-                    res = json.loads(res)[0]
-                    r.assertAlmostEqual(res, v+1, epsilon, message='{} {} <=> {} + 1'.format(name, res, v))
-            except Exception as e:
-                r.assertTrue('result is not a number' in str(e), message=str(e))
-            
-            try:
-                r.assertTrue(True, message='{} NUMINCRBY {}: {} - 1'.format(name, k, v+1))
-                res = r.execute_command('JSON.NUMINCRBY', name, '$.{}'.format(k), '-1')
-                if check_num_incr:
-                    res = json.loads(res)[0]
-                    r.assertAlmostEqual(res, v, epsilon, message='{} {} <=> {}'.format(name, res, v))
-            except Exception as e:
-                r.assertTrue('result is not a number' in str(e), message=str(e))
-            # Check no crash on overflow
-            for val in values:
+    def setKeys(self):
+        r = self.env
+        for objData in TestOutOfRangeValues.objDatas:
+            r.expect('JSON.SET', objData.name, '$', json.dumps(objData.value)).ok()
+
+    def testBadValues(self):
+        # Test numeric values which fail JSON parsing
+        r = self.env
+
+        doc_bad_values = {
+            "beyond_max_f64": 1.7976931348623159e+308,
+            "below_min_f64": -1.7976931348623159e+308
+        }
+
+        # Not using json.dumps with out-of-range values here (would be converted to a string representation such as 'Infinity')
+        r.expect('JSON.SET', 'doc_bad_values', '$', '{}').ok()
+        for k, v in iter(doc_bad_values.items()):
+            r.debugPrint('SET {}={}'.format(k, v))
+            r.expect('JSON.SET', 'doc_bad_values', '$.{}'.format(k), '{}'.format(v)).error()
+
+    def testGetAndSet(self):
+        # Test values from JSON.GET are similar to JSON.SET
+        r = self.env
+
+        def check_object_values(obj, name, epsilon):
+            for k, v in iter(obj.items()):
+                r.debugPrint('{} GET {}={}'.format(name, k, v))
+                res = r.execute_command('JSON.GET', name, '$.{}'.format(k))
+                r.assertAlmostEqual(json.loads(res)[0], v, epsilon, message=res)
+
+        self.setKeys()
+        for objData in TestOutOfRangeValues.objDatas:
+            check_object_values(objData.value, objData.name, objData.epsilon)
+
+    def testNumOps(self):
+        # Test NUMINCRBY and NUMMULTBY
+        r = self.env
+
+        def check_object_values(obj, name, epsilon, check_num_incr=True, check_num_mult=True):
+            copy_obj = obj.copy()
+            for k, v in iter(obj.items()):
+                values = ['9223372036854775808', '18446744073709551615', '18446744073709551616', '-9223372036854775808', '-18446744073709551615', '-18446744073709551616']
+                
+                # Check NUMINCRBY
                 try:
-                    res = r.execute_command('JSON.GET', name, '$.{}'.format(k))
-                    res = json.loads(res)[0]
-                    r.execute_command('JSON.NUMINCRBY', name, '$.{}'.format(k), val)
+                    r.debugPrint('{} NUMINCRBY {}: {} + 1'.format(name, k, v))
+                    res = r.execute_command('JSON.NUMINCRBY', name, '$.{}'.format(k), '1')
+                    if check_num_incr:
+                        res = json.loads(res)[0]
+                        r.assertAlmostEqual(res, v+1, epsilon, message='{} {} <=> {} + 1'.format(name, res, v))
                 except Exception as e:
+                    r.assertTrue('result is not a number' in str(e), message=str(e))
+                
+                try:
+                    r.debugPrint('{} NUMINCRBY {}: {} - 1'.format(name, k, v+1))
+                    res = r.execute_command('JSON.NUMINCRBY', name, '$.{}'.format(k), '-1')
+                    if check_num_incr:
+                        res = json.loads(res)[0]
+                        r.assertAlmostEqual(res, v, epsilon, message='{} {} <=> {}'.format(name, res, v))
+                except Exception as e:
+                    r.assertTrue('result is not a number' in str(e), message=str(e))
+                # Check no crash on overflow
+                for val in values:
+                    try:
+                        res = r.execute_command('JSON.GET', name, '$.{}'.format(k))
+                        res = json.loads(res)[0]
+                        r.execute_command('JSON.NUMINCRBY', name, '$.{}'.format(k), val)
+                    except Exception as e:
+                            r.assertTrue('result is not a number' in str(e) or 'integer cannot be converted to a double' in str(e), message='{} {}'.format(val, str(e)))
+                
+                # Check NUMMULTBY
+                try:
+                    prev = r.execute_command('JSON.GET', name, '$.{}'.format(k))
+                    prev = json.loads(prev)[0]
+                    r.debugPrint('{} NUMMULTBY {}: {} * 2'.format(name, k, prev))
+                    res = r.execute_command('JSON.NUMMULTBY', name, '$.{}'.format(k), '2')
+                    if check_num_mult:
+                        res = json.loads(res)[0]
+                        r.assertAlmostEqual(res, float(prev)*2, epsilon, message='{} {} <=> {} * 2'.format(name, res, prev))
+                except Exception as e:
+                    r.assertTrue('result is not a number' in str(e), message=str(e))            
+                # Check no crash on overflow
+                for val in values:
+                    try:
+                        r.execute_command('JSON.NUMMULTBY', name, '$.{}'.format(k), val)
+                    except Exception as e:
                         r.assertTrue('result is not a number' in str(e) or 'integer cannot be converted to a double' in str(e), message='{} {}'.format(val, str(e)))
-            
-            # Check NUMMULTBY
-            try:
-                prev = r.execute_command('JSON.GET', name, '$.{}'.format(k))
-                prev = json.loads(prev)[0]
-                r.assertTrue(True, message='{} NUMMULTBY {}: {} * 2'.format(name, k, prev))
-                res = r.execute_command('JSON.NUMMULTBY', name, '$.{}'.format(k), '2')
-                if check_num_mult:
-                    res = json.loads(res)[0]
-                    r.assertAlmostEqual(res, float(prev)*2, epsilon, message='{} {} <=> {} * 2'.format(name, res, prev))
-            except Exception as e:
-                r.assertTrue('result is not a number' in str(e), message=str(e))            
-            # Check no crash on overflow
-            for val in values:
-                try:
-                    r.execute_command('JSON.NUMMULTBY', name, '$.{}'.format(k), val)
-                except Exception as e:
-                    r.assertTrue('result is not a number' in str(e) or 'integer cannot be converted to a double' in str(e), message='{} {}'.format(val, str(e)))
 
-            arr.append(v)
-        # Check no crash using values in a filter
-        r.expect('JSON.SET', 'arr', '$', json.dumps(arr)).ok()
-        res = r.execute_command('JSON.GET', 'arr', '$[?(@!=0)]')
-        for res_i, arr_i in zip(json.loads(res), arr):
-            r.assertAlmostEqual(res_i, arr_i, epsilon, message=res)
-        # Check no crash with other commands 
-        r.expect('JSON.ARRINDEX', 'arr', '$', '10').equal([-1])
-        res = r.execute_command('JSON.RESP', 'arr')
-        for res_i, arr_i in zip(res[1:], arr):
-            if type(res_i) is int:
+        self.setKeys()
+        for objData in TestOutOfRangeValues.objDatas:
+            check_object_values(objData.value, objData.name, objData.epsilon, objData.check_num_incr, objData.check_num_mult)
+
+    def testFilter(self):
+        # Test JSONPath filter
+        r = self.env
+
+        def check_object_values(obj, name, epsilon):
+            arr = [v for v in iter(obj.values())]
+            # Check no crash using values in a filter
+            r.expect('JSON.SET', 'arr', '$', json.dumps(arr)).ok()
+            res = r.execute_command('JSON.GET', 'arr', '$[?(@!=0)]')
+            for res_i, arr_i in zip(json.loads(res), arr):
                 r.assertAlmostEqual(res_i, arr_i, epsilon, message=res)
-            elif type(res_i) is str:
-                # Double are returned as strings
-                r.assertAlmostEqual(float(res_i), arr_i, epsilon, message=res)
+
+        for objData in TestOutOfRangeValues.objDatas:
+            check_object_values(objData.value, objData.name, objData.epsilon)
+
+    def testArrIndex(self):
+        # Test ARRINDEX
+        r = self.env
+
+        def check_object_values(obj):
+            arr = [v for v in iter(obj.values())]
+            r.expect('JSON.SET', 'arr', '$', json.dumps(arr)).ok()
+            r.expect('JSON.ARRINDEX', 'arr', '$', '10').equal([-1])   
+
+        for objData in TestOutOfRangeValues.objDatas:
+            check_object_values(objData.value)
+
+    def testResp(self):
+        # Test RESP
+        r = self.env
+
+        def check_object_values(obj, epsilon):
+            arr = [v for v in iter(obj.values())]
+            r.expect('JSON.SET', 'arr', '$', json.dumps(arr)).ok()
+            res = r.execute_command('JSON.RESP', 'arr')
+            for res_i, arr_i in zip(res[1:], arr):
+                if type(res_i) is int:
+                    r.assertAlmostEqual(res_i, arr_i, epsilon, message=res)
+                elif type(res_i) is str:
+                    # Double are returned as strings
+                    r.assertAlmostEqual(float(res_i), arr_i, epsilon, message=res)
+
+        for objData in TestOutOfRangeValues.objDatas:
+            check_object_values(objData.value, objData.epsilon)
+
+    def testClear(self):
+        # Test CLEAR
+        r = self.env
+
+        def check_object_values(obj, name, epsilon):
+            for k, v in iter(obj.items()):            
+                res = r.execute_command('JSON.CLEAR', name, '$.{}'.format(k))
+                r.assertEqual(res, 1, message='{} CLEAR {}={} ({})'.format(name, k, v, res))
+
+        self.setKeys()
+        for objData in TestOutOfRangeValues.objDatas:
+            check_object_values(objData.value, objData.name, objData.epsilon)
         
-        r.expect('JSON.SET', name, '$', json.dumps(copy_obj)).ok()
-        for k, v in iter(copy_obj.items()):            
-            res = r.execute_command('JSON.CLEAR', name, '$.{}'.format(k))
-            r.assertEqual(res, 1, message='{} CLEAR {}={} ({})'.format(name, k, v, res))
-
-    check_object_values(doc_int_ok, 'doc_int_ok', 0)
-    check_object_values(doc_int_ok_overflow_mult, 'doc_int_ok_overflow_mult', 0, check_num_mult=False)
-    check_object_values(doc_int_ok_overflow_incr, 'doc_int_ok_overflow_incr', 0, check_num_incr=False)
-    check_object_values(doc_int_ok_overflow_both, 'doc_int_ok_overflow_both', 0, check_num_incr=False, check_num_mult=False)
-    
-    check_object_values(doc_float_ok, 'doc_float_ok', sys.float_info.epsilon)
-    check_object_values(doc_float_ok_overflow_incr, 'doc_float_ok_overflow_incr', sys.float_info.epsilon, check_num_incr=False)
-
-    check_object_values(doc_float_ok_2_overflow_incr, 'doc_float_ok_2_overflow_incr', sys.float_info.epsilon, check_num_incr=False)
-    
-    # Not using json.dumps with out-of-range values here (would be converted to a string representation such as 'Infinity')
-    r.expect('JSON.SET', 'doc_bad_values', '$', '{}').ok()
-    for k, v in iter(doc_bad_values.items()):
-        r.assertTrue(True, message='SET {}={}'.format(k, v))
-        r.expect('JSON.SET', 'doc_bad_values', '$.{}'.format(k), '{}'.format(v)).error()
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property
