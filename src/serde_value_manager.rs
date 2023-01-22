@@ -13,7 +13,7 @@ use crate::manager::{Manager, ReadHolder, WriteHolder};
 use redis_module::key::{verify_type, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::rediserror::RedisError;
-use redis_module::{Context, NotifyEvent, RedisString};
+use redis_module::{Context, KeyType, NotifyEvent, RedisString};
 
 use std::marker::PhantomData;
 
@@ -29,10 +29,26 @@ use crate::array_index::ArrayIndex;
 
 use std::mem;
 
+///
+/// Either hold reference to the IValue stored in a RedisJSON key
+/// or a value that was parsed from a String
+///
+enum ValueHolder<'a> {
+    Ref(&'a mut RedisJSON<Value>),
+    Value(Value),
+    None,
+}
+
+impl<'a> ValueHolder<'a> {
+    pub const fn is_none(&self) -> bool {
+        matches!(*self, Self::None)
+    }
+}
+
 pub struct KeyHolderWrite<'a> {
     key: RedisKeyWritable,
     key_name: RedisString,
-    val: Option<&'a mut RedisJSON<Value>>,
+    value: ValueHolder<'a>,
 }
 
 fn update<F: FnMut(Value) -> Result<Option<Value>, Error>>(
@@ -157,25 +173,38 @@ impl<'a> KeyHolderWrite<'a> {
     }
 
     fn get_json_holder(&mut self) -> Result<(), RedisError> {
-        if self.val.is_none() {
-            self.val = self.key.get_value::<RedisJSON<Value>>(&REDIS_JSON_TYPE)?;
+        if self.value.is_none() {
+            self.value = match self.key.key_type() {
+                KeyType::Module => self
+                    .key
+                    .get_value::<RedisJSON<Value>>(&REDIS_JSON_TYPE)?
+                    .map_or(ValueHolder::None, ValueHolder::Ref),
+
+                KeyType::String => match self.key.read()? {
+                    Some(v) => ValueHolder::Value(serde_json::from_str(&v)?),
+                    None => ValueHolder::None,
+                },
+                KeyType::Empty => ValueHolder::None,
+                _ => return Err(RedisError::Str("Existing key has wrong Redis type")),
+            }
         }
         Ok(())
     }
 
-    fn set_root(&mut self, v: Option<Value>) -> Result<(), RedisError> {
-        match v {
+    fn set_root(&mut self, value: Option<Value>) -> Result<(), RedisError> {
+        match value {
             Some(inner) => {
                 self.get_json_holder()?;
-                match &mut self.val {
-                    Some(v) => v.data = inner,
-                    None => self
+                match &mut self.value {
+                    ValueHolder::Ref(v) => v.data = inner,
+                    ValueHolder::Value(_) => self.value = ValueHolder::Value(inner),
+                    ValueHolder::None => self
                         .key
                         .set_value(&REDIS_JSON_TYPE, RedisJSON { data: inner })?,
                 }
             }
             None => {
-                self.val = None;
+                self.value = ValueHolder::None;
                 self.key.delete()?;
             }
         }
@@ -193,6 +222,11 @@ impl<'a> KeyHolderWrite<'a> {
 
 impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
     fn apply_changes(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError> {
+        if let ValueHolder::Value(v) = &self.value {
+            let json = serde_json::to_string(&v)?;
+            self.key.write(&json)?;
+        }
+
         if ctx.notify_keyspace_event(NotifyEvent::MODULE, command, &self.key_name) == Status::Ok {
             ctx.replicate_verbatim();
             Ok(())
@@ -209,28 +243,36 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
     fn get_value(&mut self) -> Result<Option<&mut Value>, RedisError> {
         self.get_json_holder()?;
 
-        match &mut self.val {
-            Some(v) => Ok(Some(&mut v.data)),
-            None => Ok(None),
-        }
+        let res = match &mut self.value {
+            ValueHolder::Ref(v) => Some(&mut v.data),
+            ValueHolder::Value(v) => Some(v),
+            ValueHolder::None => None,
+        };
+
+        Ok(res)
     }
 
-    fn set_value(&mut self, path: Vec<String>, mut v: Value) -> Result<bool, RedisError> {
+    fn set_value(&mut self, path: Vec<String>, mut value: Value) -> Result<bool, RedisError> {
         let mut updated = false;
         if path.is_empty() {
             // update the root
-            self.set_root(Some(v))?;
+            self.set_root(Some(value))?;
             updated = true;
         } else {
             update(&path, self.get_value().unwrap().unwrap(), |_v| {
                 updated = true;
-                Ok(Some(v.take()))
+                Ok(Some(value.take()))
             })?;
         }
         Ok(updated)
     }
 
-    fn dict_add(&mut self, path: Vec<String>, key: &str, mut v: Value) -> Result<bool, RedisError> {
+    fn dict_add(
+        &mut self,
+        path: Vec<String>,
+        key: &str,
+        mut value: Value,
+    ) -> Result<bool, RedisError> {
         let mut updated = false;
         if path.is_empty() {
             // update the root
@@ -238,7 +280,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
             let val = if let Value::Object(mut o) = root.take() {
                 if !o.contains_key(key) {
                     updated = true;
-                    o.insert(key.to_string(), v.take());
+                    o.insert(key.to_string(), value.take());
                 }
                 Value::Object(o)
             } else {
@@ -250,7 +292,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
                 let val = if let Value::Object(mut o) = val {
                     if !o.contains_key(key) {
                         updated = true;
-                        o.insert(key.to_string(), v.take());
+                        o.insert(key.to_string(), value.take());
                     }
                     Value::Object(o)
                 } else {
@@ -441,12 +483,19 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
 
 pub struct KeyHolderRead {
     key: RedisKey,
+    value: Option<Value>,
 }
 
 impl ReadHolder<Value> for KeyHolderRead {
     fn get_value(&self) -> Result<Option<&Value>, RedisError> {
-        let key_value = self.key.get_value::<RedisJSON<Value>>(&REDIS_JSON_TYPE)?;
-        key_value.map_or(Ok(None), |v| Ok(Some(&v.data)))
+        let res = match self.value.as_ref() {
+            Some(v) => Some(v),
+            None => {
+                let key_value = self.key.get_value::<RedisJSON<Value>>(&REDIS_JSON_TYPE)?;
+                key_value.map(|v| &v.data)
+            }
+        };
+        Ok(res)
     }
 }
 
@@ -462,7 +511,17 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
 
     fn open_key_read(&self, ctx: &Context, key: &RedisString) -> Result<KeyHolderRead, RedisError> {
         let key = ctx.open_key(key);
-        Ok(KeyHolderRead { key })
+        let value = match key.key_type() {
+            KeyType::String => {
+                let value = key.read()?;
+                match value {
+                    Some(v) => Some(self.from_str(&v, Format::JSON)?),
+                    None => None,
+                }
+            }
+            _ => None,
+        };
+        Ok(KeyHolderRead { key, value })
     }
 
     fn open_key_write(
@@ -474,7 +533,7 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
         Ok(KeyHolderWrite {
             key: key_ptr,
             key_name: key,
-            val: None,
+            value: ValueHolder::None,
         })
     }
 
