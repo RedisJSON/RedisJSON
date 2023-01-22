@@ -732,7 +732,8 @@ pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
         }
         None => {
             if path.get_path() == JSON_ROOT_PATH {
-                redis_key.merge_value(Vec::new(), val)?;
+                // Nothing to merge with it's a new doc
+                redis_key.set_value(Vec::new(), val)?;
                 redis_key.apply_changes(ctx, "json.merge")?;
                 REDIS_OK
             } else {
