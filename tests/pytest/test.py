@@ -1282,12 +1282,26 @@ def testFilterPrecedence(env):
 def testMerge(env):
     # Test JSON.MERGE
     r = env
+
+    # Test with root path $
     r.assertOk(r.execute_command('JSON.SET', 'test_merge', '$', '{"a":{"b":{"c":"d"}}}'))
     r.assertOk(r.execute_command('JSON.MERGE', 'test_merge', '$', '{"a":{"b":{"e":"f"}}}'))
     r.expect('JSON.GET', 'test_merge').equal('{"a":{"b":{"c":"d","e":"f"}}}')
 
+    # Test with root path path $.a.b
     r.assertOk(r.execute_command('JSON.MERGE', 'test_merge', '$.a.b', '{"h":"i"}'))
     r.expect('JSON.GET', 'test_merge').equal('{"a":{"b":{"c":"d","e":"f","h":"i"}}}')
+
+    # Test with null value to delete a value
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge', '$.a.b', '{"c":null}'))
+    r.expect('JSON.GET', 'test_merge').equal('{"a":{"b":{"h":"i","e":"f"}}}')
+
+    # Test with none existing key with path $.a.b   
+    r.expect('JSON.MERGE', 'test_merge_new', '$.a', '{"a":"i"}').raiseError()
+
+    # Test with none existing key -> create key
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_new', '$', '{"h":"i"}'))
+    r.expect('JSON.GET', 'test_merge_new').equal('{"h":"i"}')
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property
