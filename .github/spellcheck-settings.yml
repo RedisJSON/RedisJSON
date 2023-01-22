@@ -4,6 +4,7 @@ matrix:
   apsell:
     lang: en
     d: en_US
+    ignore-case: true
   dictionary:
     wordlists:
     - .github/wordlist.txt
