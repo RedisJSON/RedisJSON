@@ -61,6 +61,7 @@ https
 io
 ioredis
 iorejson
+jedis
 js
 json
 lang
@@ -68,6 +69,8 @@ md
 mkorkmaz
 nitishm
 npm
+nredisstack
+rustis
 nst
 nuget
 occurances
