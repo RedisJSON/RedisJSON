@@ -6,7 +6,7 @@
 
 use libc::size_t;
 use std::ffi::CString;
-use std::os::raw::{c_double, c_int, c_longlong};
+use std::os::raw::{c_double, c_int, c_longlong, c_ulonglong};
 use std::ptr::{null, null_mut};
 use std::{
     ffi::CStr,
@@ -37,6 +37,8 @@ pub enum JSONType {
     Object = 4,
     Array = 5,
     Null = 6,
+    // For backward compatibility with RediSearch, skip JSONType__EOF = 7,
+    UInt = 8,
 }
 
 struct ResultsIterator<'a, V: SelectValue> {
@@ -166,6 +168,18 @@ pub fn json_api_get_int<M: Manager>(_: M, json: *const c_void, val: *mut c_longl
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub fn json_api_get_uint<M: Manager>(_: M, json: *const c_void, val: *mut c_ulonglong) -> c_int {
+    let json = unsafe { &*(json.cast::<M::V>()) };
+    match json.get_type() {
+        SelectValueType::ULong => {
+            unsafe { *val = json.get_ulong() };
+            Status::Ok as c_int
+        }
+        _ => Status::Err as c_int,
+    }
+}
+
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn json_api_get_double<M: Manager>(_: M, json: *const c_void, val: *mut c_double) -> c_int {
     let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
@@ -177,6 +191,19 @@ pub fn json_api_get_double<M: Manager>(_: M, json: *const c_void, val: *mut c_do
             unsafe { *val = json.get_long() as f64 };
             Status::Ok as c_int
         }
+
+        SelectValueType::ULong => {
+            let u = json.get_ulong();
+            let f = u as f64;
+            if u == f as u64 {
+                // Conversion is not lossy
+                unsafe { *val = f };
+                Status::Ok as c_int
+            } else {
+                Status::Err as c_int
+            }
+        }
+
         _ => Status::Err as c_int,
     }
 }
@@ -212,6 +239,7 @@ fn json_api_get_type_internal<V: SelectValue>(v: &V) -> JSONType {
         SelectValueType::Null => JSONType::Null,
         SelectValueType::Bool => JSONType::Bool,
         SelectValueType::Long => JSONType::Int,
+        SelectValueType::ULong => JSONType::UInt,
         SelectValueType::Double => JSONType::Double,
         SelectValueType::String => JSONType::String,
         SelectValueType::Array => JSONType::Array,
@@ -293,9 +321,9 @@ macro_rules! redis_json_module_export_shared_api {
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
         pub extern "C" fn JSONAPI_openKeyFromStr(
             ctx: *mut rawmod::RedisModuleCtx,
-            path: *const c_char,
+            key_str: *const c_char,
         ) -> *mut c_void {
-            let key = unsafe { CStr::from_ptr(path).to_str().unwrap() };
+            let key = unsafe { CStr::from_ptr(key_str).to_str().unwrap() };
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_mngr: $get_manager_expr,
@@ -372,6 +400,15 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_mngr: $get_manager_expr,
                 run: |mngr|{json_api_get_int(mngr, json, val)},
+            )
+        }
+
+        #[no_mangle]
+        pub extern "C" fn JSONAPI_getUInt(json: *const c_void, val: *mut c_ulonglong) -> c_int {
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_get_uint(mngr, json, val)},
             )
         }
 
@@ -478,9 +515,11 @@ macro_rules! redis_json_module_export_shared_api {
             )
         }
 
+
         static REDISJSON_GETAPI_V1: &str = concat!("RedisJSON_V1", "\0");
         static REDISJSON_GETAPI_V2: &str = concat!("RedisJSON_V2", "\0");
         static REDISJSON_GETAPI_V3: &str = concat!("RedisJSON_V3", "\0");
+        static REDISJSON_GETAPI_V4: &str = concat!("RedisJSON_V4", "\0");
 
         pub fn export_shared_api(ctx: &Context) {
             unsafe {
@@ -504,7 +543,13 @@ macro_rules! redis_json_module_export_shared_api {
                     REDISJSON_GETAPI_V3.as_ptr().cast::<c_char>(),
                 );
                 ctx.log_notice("Exported RedisJSON_V3 API");
-            };
+
+                ctx.export_shared_api(
+                    (&JSONAPI_CURRENT as *const RedisJSONAPI_CURRENT).cast::<c_void>(),
+                    REDISJSON_GETAPI_V4.as_ptr().cast::<c_char>(),
+                );
+                ctx.log_notice("Exported RedisJSON_V4 API");
+            }
         }
 
         static JSONAPI_CURRENT : RedisJSONAPI_CURRENT = RedisJSONAPI_CURRENT {
@@ -532,6 +577,8 @@ macro_rules! redis_json_module_export_shared_api {
             // V3 entries
             getJSONFromIter: JSONAPI_getJSONFromIter,
             resetIter: JSONAPI_resetIter,
+            // V4 entries
+            getUInt: JSONAPI_getUInt,
         };
 
         #[repr(C)]
@@ -574,6 +621,8 @@ macro_rules! redis_json_module_export_shared_api {
             // V3 entries
             pub getJSONFromIter: extern "C" fn(iter: *mut c_void, ctx: *mut rawmod::RedisModuleCtx, str: *mut *mut rawmod::RedisModuleString,) -> c_int,
             pub resetIter: extern "C" fn(iter: *mut c_void),
+            // V4 entries
+            pub getUInt: extern "C" fn(json: *const c_void, val: *mut c_ulonglong) -> c_int,
         }
     };
 }

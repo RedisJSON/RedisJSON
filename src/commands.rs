@@ -130,6 +130,12 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
 
             SelectValueType::Long => RedisValue::Integer(v.get_long()),
 
+            SelectValueType::ULong => {
+                // Return as a string until RedisValue has an unsigned integer type
+                //  (should also be supported by the dependency `redis-module` and its dependency `redis` client)
+                RedisValue::SimpleString(v.get_ulong().to_string())
+            }
+
             SelectValueType::Double => RedisValue::Float(v.get_double()),
 
             SelectValueType::String => RedisValue::BulkString(v.get_str()),
@@ -368,6 +374,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             SelectValueType::Null => "null",
             SelectValueType::Bool => "boolean",
             SelectValueType::Long => "integer",
+            SelectValueType::ULong => "uinteger",
             SelectValueType::Double => "number",
             SelectValueType::String => "string",
             SelectValueType::Array => "array",
@@ -418,6 +425,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             (SelectValueType::Null, SelectValueType::Null) => true,
             (SelectValueType::Bool, SelectValueType::Bool) => a.get_bool() == b.get_bool(),
             (SelectValueType::Long, SelectValueType::Long) => a.get_long() == b.get_long(),
+            (SelectValueType::ULong, SelectValueType::ULong) => a.get_ulong() == b.get_ulong(),
             (SelectValueType::Double, SelectValueType::Double) => a.get_double() == b.get_double(),
             (SelectValueType::String, SelectValueType::String) => a.get_str() == b.get_str(),
             (SelectValueType::Array, SelectValueType::Array) => {
@@ -1008,7 +1016,7 @@ where
     let paths = find_all_paths(path, root, |v| {
         matches!(
             v.get_type(),
-            SelectValueType::Double | SelectValueType::Long
+            SelectValueType::Double | SelectValueType::Long | SelectValueType::ULong
         )
     })?;
 
@@ -1050,7 +1058,10 @@ where
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
     let paths = find_paths(path, root, |v| {
-        v.get_type() == SelectValueType::Double || v.get_type() == SelectValueType::Long
+        matches!(
+            v.get_type(),
+            SelectValueType::Double | SelectValueType::Long | SelectValueType::ULong
+        )
     })?;
     if !paths.is_empty() {
         let mut res = None;
@@ -1934,6 +1945,7 @@ pub fn json_clear<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
     let paths = find_paths(path, root, |v| match v.get_type() {
         SelectValueType::Array | SelectValueType::Object => v.len().unwrap() > 0,
         SelectValueType::Long => v.get_long() != 0,
+        SelectValueType::ULong => v.get_ulong() != 0,
         SelectValueType::Double => v.get_double() != 0.0,
         _ => false,
     })?;

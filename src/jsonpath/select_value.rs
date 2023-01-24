@@ -12,6 +12,7 @@ pub enum SelectValueType {
     Null,
     Bool,
     Long,
+    ULong,
     Double,
     String,
     Array,
@@ -34,5 +35,6 @@ pub trait SelectValue: Debug + Eq + PartialEq + Default + Clone + Serialize {
     fn as_str(&self) -> &str;
     fn get_bool(&self) -> bool;
     fn get_long(&self) -> i64;
+    fn get_ulong(&self) -> u64;
     fn get_double(&self) -> f64;
 }

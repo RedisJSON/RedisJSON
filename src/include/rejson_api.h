@@ -20,7 +20,11 @@ typedef enum JSONType {
   JSONType_Object = 4,
   JSONType_Array = 5,
   JSONType_Null = 6,
-  JSONType__EOF
+  JSONType__EOF = 7, // keep this for backward compatibility
+  ///////////////
+  // V4 values //
+  ///////////////
+  JSONType_UInt = 8,
 } JSONType;
 
 typedef const void* RedisJSON;
@@ -35,7 +39,7 @@ typedef struct RedisJSONAPI {
 
   /* RedisJSON functions */
   RedisJSON (*openKey)(RedisModuleCtx *ctx, RedisModuleString *key_name);
-  RedisJSON (*openKeyFromStr)(RedisModuleCtx *ctx, const char *path);
+  RedisJSON (*openKeyFromStr)(RedisModuleCtx *ctx, const char *key_name);
 
   JSONResultsIterator (*get)(RedisJSON json, const char *path);
   
@@ -101,6 +105,13 @@ typedef struct RedisJSONAPI {
   
   // Reset the iterator to the beginning
   void (*resetIter)(JSONResultsIterator iter);
+
+  ////////////////
+  // V4 entries //
+  ////////////////
+
+  // Return unsigned int value from a Numeric field
+  int (*getUInt)(RedisJSON json, unsigned long long *uinteger);
 
 } RedisJSONAPI;
 
