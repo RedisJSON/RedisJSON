@@ -10,6 +10,7 @@ use serde_json::Number;
 use redis_module::raw::RedisModuleKey;
 use redis_module::rediserror::RedisError;
 use redis_module::{Context, RedisString};
+use std::time::Duration;
 
 use crate::Format;
 
@@ -56,6 +57,7 @@ pub trait WriteHolder<O: Clone, V: SelectValue> {
     fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<String>, RedisError>;
     fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> Result<usize, RedisError>;
     fn clear(&mut self, path: Vec<String>) -> Result<usize, RedisError>;
+    fn expire(&mut self, expire: Duration) -> Result<(), RedisError>;
     fn apply_changes(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError>;
 }
 
