@@ -479,11 +479,13 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
         })
     }
 
-    fn from_str(&self, val: &str, format: Format) -> Result<Value, Error> {
+    fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> Result<Value, Error> {
         match format {
             Format::JSON => {
                 let mut deserializer = serde_json::Deserializer::from_str(val);
-                deserializer.disable_recursion_limit();
+                if !limit_depth {
+                    deserializer.disable_recursion_limit();
+                }
                 Value::deserialize(&mut deserializer).map_err(|e| e.into())
             }
             Format::BSON => decode_document(&mut Cursor::new(val.as_bytes()))

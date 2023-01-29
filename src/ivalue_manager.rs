@@ -16,7 +16,7 @@ use redis_module::key::{verify_type, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::rediserror::RedisError;
 use redis_module::{Context, NotifyEvent, RedisString};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use serde_json::Number;
 use std::marker::PhantomData;
 use std::mem::size_of;
@@ -601,11 +601,13 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         })
     }
 
-    fn from_str(&self, val: &str, format: Format) -> Result<Self::O, Error> {
+    fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> Result<Self::O, Error> {
         match format {
             Format::JSON => {
                 let mut deserializer = serde_json::Deserializer::from_str(val);
-                deserializer.disable_recursion_limit();
+                if !limit_depth {
+                    deserializer.disable_recursion_limit();
+                }
                 IValue::deserialize(&mut deserializer).map_err(|e| e.into())
             }
             Format::BSON => decode_document(&mut Cursor::new(val.as_bytes())).map_or_else(
@@ -623,6 +625,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                                 self.from_str(
                                     &String::from_utf8(out.into_inner()).unwrap(),
                                     Format::JSON,
+                                    limit_depth,
                                 )
                                 .unwrap()
                             },
