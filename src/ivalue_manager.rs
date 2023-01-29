@@ -4,6 +4,7 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
+use crate::depth_deserializer::{Deserializer, Stats};
 use crate::error::Error;
 use crate::manager::{err_json, err_msg_json_expected, err_msg_json_path_doesnt_exist};
 use crate::manager::{Manager, ReadHolder, WriteHolder};
@@ -16,14 +17,13 @@ use redis_module::key::{verify_type, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::rediserror::RedisError;
 use redis_module::{Context, NotifyEvent, RedisString};
+use serde::Deserialize;
 use serde::Serialize;
-use serde_json::Number;
+use serde_json::de;
 use serde_json::de::StrRead;
+use serde_json::Number;
 use std::marker::PhantomData;
 use std::mem::size_of;
-use serde::Deserialize;
-use crate::depth_deserializer::{Stats, Deserializer};
-use serde_json::de;
 
 use crate::redisjson::RedisJSON;
 
@@ -609,7 +609,10 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         match format {
             Format::JSON => {
                 let mut de = de::Deserializer::new(StrRead::new(val));
-                let mut stats = Stats{max_depth: 0, curr_depth: 0};
+                let mut stats = Stats {
+                    max_depth: 0,
+                    curr_depth: 0,
+                };
                 let de = Deserializer::new(&mut de, &mut stats);
                 Ok((IValue::deserialize(de)?, stats.max_depth))
             }
@@ -625,11 +628,12 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                                 let v: serde_json::Value = b.clone().into();
                                 let mut out = serde_json::Serializer::new(Vec::new());
                                 v.serialize(&mut out).unwrap();
-                                let res = self.from_str(
-                                    &String::from_utf8(out.into_inner()).unwrap(),
-                                    Format::JSON,
-                                )
-                                .unwrap();
+                                let res = self
+                                    .from_str(
+                                        &String::from_utf8(out.into_inner()).unwrap(),
+                                        Format::JSON,
+                                    )
+                                    .unwrap();
                                 res
                             },
                         )

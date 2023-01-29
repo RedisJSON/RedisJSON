@@ -97,16 +97,17 @@ pub fn calc_once_paths<S: SelectValue>(q: Query, json: &S) -> (Vec<Vec<String>>,
         tracker_generator: Some(PTrackerGenerator),
     };
     let mut max_depth = 0;
-    let res = calculator.calc_with_paths_on_root(json, root)
-    .into_iter()
-    .map(|e| {
-        let p_t = e.path_tracker.unwrap();
-        if p_t.elemenets.len() > max_depth {
-            max_depth = p_t.elemenets.len();
-        } 
-        p_t.to_string_path()
-    })
-    .collect();
+    let res = calculator
+        .calc_with_paths_on_root(json, root)
+        .into_iter()
+        .map(|e| {
+            let p_t = e.path_tracker.unwrap();
+            if p_t.elemenets.len() > max_depth {
+                max_depth = p_t.elemenets.len();
+            }
+            p_t.to_string_path()
+        })
+        .collect();
     (res, max_depth)
 }
 

@@ -150,7 +150,8 @@ where
     where
         V: de::Visitor<'de>,
     {
-        self.de.deserialize_string(Visitor::new(visitor, self.stats))
+        self.de
+            .deserialize_string(Visitor::new(visitor, self.stats))
     }
 
     fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value, D::Error>
@@ -164,14 +165,16 @@ where
     where
         V: de::Visitor<'de>,
     {
-        self.de.deserialize_byte_buf(Visitor::new(visitor, self.stats))
+        self.de
+            .deserialize_byte_buf(Visitor::new(visitor, self.stats))
     }
 
     fn deserialize_option<V>(self, visitor: V) -> Result<V::Value, D::Error>
     where
         V: de::Visitor<'de>,
     {
-        self.de.deserialize_option(Visitor::new(visitor, self.stats))
+        self.de
+            .deserialize_option(Visitor::new(visitor, self.stats))
     }
 
     fn deserialize_unit<V>(self, visitor: V) -> Result<V::Value, D::Error>
@@ -216,7 +219,8 @@ where
     where
         V: de::Visitor<'de>,
     {
-        self.de.deserialize_tuple(len, Visitor::new(visitor, self.stats))
+        self.de
+            .deserialize_tuple(len, Visitor::new(visitor, self.stats))
     }
 
     fn deserialize_tuple_struct<V>(
@@ -277,7 +281,8 @@ where
     where
         V: de::Visitor<'de>,
     {
-        self.de.deserialize_identifier(Visitor::new(visitor, self.stats))
+        self.de
+            .deserialize_identifier(Visitor::new(visitor, self.stats))
     }
 
     fn is_human_readable(&self) -> bool {
@@ -691,26 +696,31 @@ where
 
 #[cfg(test)]
 mod json_path_tests {
-    use serde_json::{de::StrRead, Value};
-    use serde_json::json;
+    use crate::depth_deserializer::Deserializer;
+    use crate::depth_deserializer::Stats;
     use serde::Deserialize;
     use serde_json::de;
-    use crate::depth_deserializer::Stats;
-    use crate::depth_deserializer::Deserializer;
+    use serde_json::json;
+    use serde_json::{de::StrRead, Value};
 
-    macro_rules! verify_json {(
+    macro_rules! verify_json {
+        (
         json: $json:tt,
         expected_depth: $expected_depth:expr
     ) => {
-        let mut de = de::Deserializer::new(StrRead::new(stringify!($json)));
-        let mut stats = Stats{max_depth: 0, curr_depth: 0};
-        let de = Deserializer::new(&mut de, &mut stats);
+            let mut de = de::Deserializer::new(StrRead::new(stringify!($json)));
+            let mut stats = Stats {
+                max_depth: 0,
+                curr_depth: 0,
+            };
+            let de = Deserializer::new(&mut de, &mut stats);
 
-        let value: Value = Value::deserialize(de).unwrap();
-        assert_eq!(json!($json), value);
-        assert_eq!(stats.max_depth, $expected_depth);
-        assert_eq!(stats.curr_depth, 0);
-    }}
+            let value: Value = Value::deserialize(de).unwrap();
+            assert_eq!(json!($json), value);
+            assert_eq!(stats.max_depth, $expected_depth);
+            assert_eq!(stats.curr_depth, 0);
+        };
+    }
 
     #[test]
     fn basics() {

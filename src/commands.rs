@@ -275,7 +275,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                     let (res, curr_max_depth) = calc_once_paths(query, self.val);
 
                     if res.len() > 0 && max_depth + curr_max_depth >= 128 {
-                        return Err("Json max depth reached".into())
+                        return Err("Json max depth reached".into());
                     }
 
                     Ok(res
@@ -317,7 +317,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
 
             if !res.is_empty() {
                 if curr_max_depth + max_depth >= 128 {
-                    return Err("Json max depth reached".into())
+                    return Err("Json max depth reached".into());
                 }
                 return Ok(res
                     .into_iter()
@@ -628,7 +628,8 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
                     Ok(RedisValue::Null)
                 }
             } else {
-                let mut update_info = KeyValue::new(*doc).find_paths(path.get_path(), op, max_depth)?;
+                let mut update_info =
+                    KeyValue::new(*doc).find_paths(path.get_path(), op, max_depth)?;
                 if !update_info.is_empty() {
                     let mut res = false;
                     if update_info.len() == 1 {
@@ -686,9 +687,7 @@ fn find_paths<T: SelectValue, F: FnMut(&T, &[PTrackerElement]) -> bool>(
     let res = calc_once_with_paths(query, doc);
     Ok(res
         .into_iter()
-        .filter(|e| {
-            f(e.res, e.path_tracker.as_ref().unwrap().elemenets.as_slice())
-        })
+        .filter(|e| f(e.res, e.path_tracker.as_ref().unwrap().elemenets.as_slice()))
         .map(|e| e.path_tracker.unwrap().to_string_path())
         .collect())
 }
@@ -710,7 +709,10 @@ fn get_all_values_and_paths<'a, T: SelectValue>(
 }
 
 /// Returns a Vec of paths with `None` for Values that do not match the filter
-fn filter_paths<T, F>(values_and_paths: Vec<(&T, Vec<String>)>, mut f: F) -> Vec<Option<Vec<String>>>
+fn filter_paths<T, F>(
+    values_and_paths: Vec<(&T, Vec<String>)>,
+    mut f: F,
+) -> Vec<Option<Vec<String>>>
 where
     F: FnMut(&T, &[String]) -> bool,
 {
@@ -1388,9 +1390,7 @@ where
         true
     })?;
     if max_depth_reached {
-        return Err(RedisError::String(
-            "Max json depth readed.".into(),
-        ))
+        return Err(RedisError::String("Max json depth readed.".into()));
     }
     if paths.is_empty() {
         Err(RedisError::String(
@@ -1423,7 +1423,7 @@ where
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
-    let mut max_depth_readed = false;    
+    let mut max_depth_readed = false;
     let paths = find_all_paths(path, root, |v, p| {
         if v.get_type() != SelectValueType::Array {
             return false;
@@ -1434,9 +1434,7 @@ where
         true
     })?;
     if max_depth_readed {
-        return Err(RedisError::String(
-            "Max json depth readed.".into(),
-        ))
+        return Err(RedisError::String("Max json depth readed.".into()));
     }
     let mut res = vec![];
     let mut need_notify = false;
@@ -1533,7 +1531,7 @@ pub fn json_arr_insert<M: Manager>(
 
     // We require at least one JSON item to insert
     args.peek().ok_or(RedisError::WrongArity)?;
-    
+
     let mut max_depth = 0;
     let args = args.try_fold::<_, _, Result<_, RedisError>>(
         Vec::with_capacity(args.len()),
@@ -1571,7 +1569,7 @@ where
         .ok_or_else(RedisError::nonexistent_key)?;
 
     let mut max_depth_readed = false;
-    let paths = find_all_paths(path, root, |v, p|{
+    let paths = find_all_paths(path, root, |v, p| {
         if v.get_type() != SelectValueType::Array {
             return false;
         }
@@ -1582,9 +1580,7 @@ where
     })?;
 
     if max_depth_readed {
-        return Err(RedisError::String(
-            "Max json depth readed.".into(),
-        ))
+        return Err(RedisError::String("Max json depth readed.".into()));
     }
 
     let mut res: Vec<RedisValue> = vec![];
@@ -1621,7 +1617,7 @@ where
         .ok_or_else(RedisError::nonexistent_key)?;
 
     let mut max_depth_readed = false;
-    let paths = find_paths(path, root, |v, p|{
+    let paths = find_paths(path, root, |v, p| {
         if v.get_type() == SelectValueType::Array {
             return false;
         }
@@ -1631,9 +1627,7 @@ where
         true
     })?;
     if max_depth_readed {
-        return Err(RedisError::String(
-            "Max json depth readed.".into(),
-        ))
+        return Err(RedisError::String("Max json depth readed.".into()));
     }
 
     if paths.is_empty() {

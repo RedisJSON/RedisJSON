@@ -9,6 +9,7 @@ use serde_json::de::StrRead;
 use serde_json::map::Entry;
 use serde_json::{Number, Value};
 
+use crate::depth_deserializer::{Deserializer, Stats};
 use crate::manager::{err_json, err_msg_json_expected, err_msg_json_path_doesnt_exist};
 use crate::manager::{Manager, ReadHolder, WriteHolder};
 use redis_module::key::{verify_type, RedisKey, RedisKeyWritable};
@@ -17,7 +18,6 @@ use redis_module::rediserror::RedisError;
 use redis_module::{Context, NotifyEvent, RedisString};
 use serde::Deserialize;
 use serde::Serialize;
-use crate::depth_deserializer::{Stats, Deserializer};
 use serde_json::de;
 
 use std::marker::PhantomData;
@@ -487,7 +487,10 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
         match format {
             Format::JSON => {
                 let mut de = de::Deserializer::new(StrRead::new(val));
-                let mut stats = Stats{max_depth: 0, curr_depth: 0};
+                let mut stats = Stats {
+                    max_depth: 0,
+                    curr_depth: 0,
+                };
                 let de = Deserializer::new(&mut de, &mut stats);
                 Ok((Value::deserialize(de)?, stats.max_depth))
             }
@@ -496,19 +499,21 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
                     let v = if docs.is_empty() {
                         (Value::Null, 0)
                     } else {
-                        docs.iter()
-                            .next()
-                            .map_or_else(|| (Value::Null, 0), |(_, b)| {
+                        docs.iter().next().map_or_else(
+                            || (Value::Null, 0),
+                            |(_, b)| {
                                 let v: serde_json::Value = b.clone().into();
                                 let mut out = serde_json::Serializer::new(Vec::new());
                                 v.serialize(&mut out).unwrap();
-                                let res = self.from_str(
-                                    &String::from_utf8(out.into_inner()).unwrap(),
-                                    Format::JSON,
-                                )
-                                .unwrap();
+                                let res = self
+                                    .from_str(
+                                        &String::from_utf8(out.into_inner()).unwrap(),
+                                        Format::JSON,
+                                    )
+                                    .unwrap();
                                 res
-                            })
+                            },
+                        )
                     };
                     Ok(v)
                 })
