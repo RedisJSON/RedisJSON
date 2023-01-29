@@ -8,7 +8,7 @@ import redis
 import json
 from RLTest import Env
 from includes import *
-
+from redis.client import NEVER_DECODE
 from RLTest import Defaults
 
 Defaults.decode_responses = True
@@ -1280,7 +1280,7 @@ def testFilterPrecedence(env):
     r.expect('JSON.GET', 'doc', '$[?(@.f==true || @.one==1 && @.t==false)]').equal('[]')
 
 def testRDBUnboundedDepth(env):
-    # Test RDB Unbounded Depth
+    # Test RDB Unbounded Depth load
     r = env
     json_126 = '{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"z":"a"}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}'
     r.expect('JSON.SET', 'doc', '$', json_126).ok()
@@ -1289,9 +1289,9 @@ def testRDBUnboundedDepth(env):
     r.expect('JSON.SET', 'doc', '$..z', json_126).ok()
     
     # RDB dump and restore the key 'doc' and check that the key is still valid
-    res = r.execute_command('DUMP', 'doc')
-    r.execute_command('RESTORE', 'doc', 0, res).ok()
-    r.execute_command('JSON.SET', 'doc', '$..z').equal('["a"]')
+    dump = env.execute_command('dump', 'doc', **{NEVER_DECODE: []})
+    r.expect('RESTORE', 'doc1', 0, dump).ok()
+    r.expect('JSON.GET', 'doc1', '$..z..z').equal('["a"]')
 
 
 # class CacheTestCase(BaseReJSONTest):
