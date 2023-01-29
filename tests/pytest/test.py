@@ -107,7 +107,7 @@ def testSetRootWithInvalidJSONValuesShouldFail(env):
     """Test that setting the root of a ReJSON key with invalid JSON values fails"""
     r = env
     invalid = ['{', '}', '[', ']', '{]', '[}', '\\', '\\\\', '',
-               ' ', '\"', '\'', '\[', '\x00', '\x0a', '\x0c',
+               ' ', '\\"', '\'', '\[', '\x00', '\x0a', '\x0c',
                # '\xff' TODO pending https://github.com/RedisLabsModules/redismodule-rs/pull/15
                ]
     for i in invalid:
@@ -769,8 +769,8 @@ def testArrIndexMixCommand(env):
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 3), 3)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, 3), 5)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '[4]'), 4)
-    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '{"val":4}'), 8)
-    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '$.arr', '{"val":9}'), [9])
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '{\"val\":4}'), 8)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '$.arr', '{\"val\":9}'), [9])
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '["a", "b", 8]'), 11)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '$.arr', '[3, 4, 8]'), [10])
 
@@ -1203,12 +1203,12 @@ def testEscape(env):
     r = env
 
     # Escaped control characters \b, \f, \n, \r, \t \/, \\
-    r.expect('JSON.SET', 'doc', '$', r'{"val": "escaped control here:\b \f \n \r \t \/ \"}').ok()
-    r.expect('JSON.GET', 'doc', '$.val').equal(r'["escaped control here:\b \f \n \r \t / \"]')
+    r.expect('JSON.SET', 'doc', '$', r'{"val": "escaped control here:\b \f \n \r \t \/ \\"}').ok()
+    r.expect('JSON.GET', 'doc', '$.val').equal(r'["escaped control here:\b \f \n \r \t / \\"]')
 
     # Escaped quotes
-    r.expect('JSON.SET', 'doc', '$', '{"val": "escaped quote here:\""}').ok()
-    r.expect('JSON.GET', 'doc', '$.val').equal('["escaped quote here:\""]')
+    r.expect('JSON.SET', 'doc', '$', '{"val": "escaped quote here:\\""}').ok()
+    r.expect('JSON.GET', 'doc', '$.val').equal('["escaped quote here:\\""]')
 
     # Escaped unicode
     r.expect('JSON.SET', 'doc', '$', '{"val": "escaped unicode here:\u2B50"}').ok()
@@ -1332,9 +1332,9 @@ def testRDBUnboundedDepth(env):
 #         r.cmd('JSON.GET', 'myDoc', '.bar')
 #         r.cmd('JSON.GET', 'myDoc', 'bar')
 #
-#         res = r.cmd('JSON.GET', 'myDoc', '.foo', 'foo', '.bar', 'bar', '["key\"]')
+#         res = r.cmd('JSON.GET', 'myDoc', '.foo', 'foo', '.bar', 'bar', '["key\\"]')
 #         # print repr(json.loads(res))
-#         r.assertEqual({u'.foo': u'fooValue', u'foo': u'fooValue', u'bar': u'barValue', u'.bar': u'barValue', u'["key\"]': u'escapedKey'}, json.loads(res))
+#         r.assertEqual({u'.foo': u'fooValue', u'foo': u'fooValue', u'bar': u'barValue', u'.bar': u'barValue', u'["key\\"]': u'escapedKey'}, json.loads(res))
 #
 #         r.cmd('JSON.DEL', 'myDoc', '.')
 #         r.assertEqual(0, cacheItems())
@@ -1360,13 +1360,13 @@ def testRDBUnboundedDepth(env):
 #
 #         # Try with a document that contains top level object with an array child
 #         r.cmd('JSON.DEL', 'arr', '.')
-#         r.cmd('JSON.SET', 'mixed', '.', '{"arr":[{},"Hello",2,3,null]}')
-#         r.assertEqual(""Hello"", r.cmd('JSON.GET', 'mixed', '.arr[1]'))
+#         r.cmd('JSON.SET', 'mixed', '.', '{"arr":[{},\"Hello\",2,3,null]}')
+#         r.assertEqual("\"Hello\"", r.cmd('JSON.GET', 'mixed', '.arr[1]'))
 #         r.assertEqual(1, cacheItems())
 #
 #         r.cmd('JSON.ARRAPPEND', 'mixed', 'arr', '42')
 #         r.assertEqual(0, cacheItems())
-#         r.assertEqual(""Hello"", r.cmd('JSON.GET', 'mixed', 'arr[1]'))
+#         r.assertEqual("\"Hello\"", r.cmd('JSON.GET', 'mixed', 'arr[1]'))
 #
 #         # Test cache eviction
 #         r.cmd('json._cacheinit', 4096, 20, 0)
