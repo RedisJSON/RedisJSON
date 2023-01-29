@@ -1423,17 +1423,17 @@ where
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
-    let mut max_depth_readed = false;
+    let mut max_depth_reached = false;
     let paths = find_all_paths(path, root, |v, p| {
         if v.get_type() != SelectValueType::Array {
             return false;
         }
         if p.len() + max_depth >= 128 {
-            max_depth_readed = true;
+            max_depth_reached = true;
         }
         true
     })?;
-    if max_depth_readed {
+    if max_depth_reached {
         return Err(RedisError::String("Max json depth readed.".into()));
     }
     let mut res = vec![];
@@ -1568,18 +1568,18 @@ where
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let mut max_depth_readed = false;
+    let mut max_depth_reached = false;
     let paths = find_all_paths(path, root, |v, p| {
         if v.get_type() != SelectValueType::Array {
             return false;
         }
         if p.len() + max_depth >= 128 {
-            max_depth_readed = true;
+            max_depth_reached = true;
         }
         true
     })?;
 
-    if max_depth_readed {
+    if max_depth_reached {
         return Err(RedisError::String("Max json depth readed.".into()));
     }
 
@@ -1616,17 +1616,17 @@ where
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let mut max_depth_readed = false;
+    let mut max_depth_reached = false;
     let paths = find_paths(path, root, |v, p| {
         if v.get_type() == SelectValueType::Array {
             return false;
         }
         if p.len() + max_depth >= 128 {
-            max_depth_readed = true;
+            max_depth_reached = true;
         }
         true
     })?;
-    if max_depth_readed {
+    if max_depth_reached {
         return Err(RedisError::String("Max json depth readed.".into()));
     }
 
