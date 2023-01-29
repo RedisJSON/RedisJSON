@@ -5,6 +5,7 @@
  */
 
 use crate::jsonpath::select_value::SelectValue;
+use serde::Deserialize;
 use serde_json::map::Entry;
 use serde_json::{Number, Value};
 
@@ -480,7 +481,11 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
 
     fn from_str(&self, val: &str, format: Format) -> Result<Value, Error> {
         match format {
-            Format::JSON => Ok(serde_json::from_str(val)?),
+            Format::JSON => {
+                let mut deserializer = serde_json::Deserializer::from_str(val);
+                deserializer.disable_recursion_limit();
+                Value::deserialize(&mut deserializer).map_err(|e| e.into())
+            }
             Format::BSON => decode_document(&mut Cursor::new(val.as_bytes()))
                 .map(|docs| {
                     let v = if docs.is_empty() {
