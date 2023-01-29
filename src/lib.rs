@@ -41,6 +41,7 @@ pub mod jsonpath;
 pub mod manager;
 pub mod redisjson;
 pub mod serde_value_manager;
+pub mod depth_deserializer;
 
 pub const GIT_SHA: Option<&str> = std::option_env!("GIT_SHA");
 pub const GIT_BRANCH: Option<&str> = std::option_env!("GIT_BRANCH");

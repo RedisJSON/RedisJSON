@@ -18,8 +18,12 @@ use redis_module::rediserror::RedisError;
 use redis_module::{Context, NotifyEvent, RedisString};
 use serde::Serialize;
 use serde_json::Number;
+use serde_json::de::StrRead;
 use std::marker::PhantomData;
 use std::mem::size_of;
+use serde::Deserialize;
+use crate::depth_deserializer::{Stats, Deserializer};
+use serde_json::de;
 
 use crate::redisjson::RedisJSON;
 
@@ -601,26 +605,32 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         })
     }
 
-    fn from_str(&self, val: &str, format: Format) -> Result<Self::O, Error> {
+    fn from_str(&self, val: &str, format: Format) -> Result<(Self::O, usize), Error> {
         match format {
-            Format::JSON => Ok(serde_json::from_str(val)?),
+            Format::JSON => {
+                let mut de = de::Deserializer::new(StrRead::new(val));
+                let mut stats = Stats{max_depth: 0, curr_depth: 0};
+                let de = Deserializer::new(&mut de, &mut stats);
+                Ok((IValue::deserialize(de)?, stats.max_depth))
+            }
             Format::BSON => decode_document(&mut Cursor::new(val.as_bytes())).map_or_else(
                 |e| Err(e.to_string().into()),
                 |docs| {
                     let v = if docs.is_empty() {
-                        IValue::NULL
+                        (IValue::NULL, 0)
                     } else {
                         docs.iter().next().map_or_else(
-                            || IValue::NULL,
+                            || (IValue::NULL, 0),
                             |(_, b)| {
                                 let v: serde_json::Value = b.clone().into();
                                 let mut out = serde_json::Serializer::new(Vec::new());
                                 v.serialize(&mut out).unwrap();
-                                self.from_str(
+                                let res = self.from_str(
                                     &String::from_utf8(out.into_inner()).unwrap(),
                                     Format::JSON,
                                 )
-                                .unwrap()
+                                .unwrap();
+                                res
                             },
                         )
                     };

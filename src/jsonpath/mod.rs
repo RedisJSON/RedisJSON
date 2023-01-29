@@ -90,16 +90,24 @@ pub fn calc_once_with_paths<'j, 'p, S: SelectValue>(
 }
 
 /// A version of `calc_once` that returns only paths as Vec<Vec<String>>.
-pub fn calc_once_paths<S: SelectValue>(q: Query, json: &S) -> Vec<Vec<String>> {
+pub fn calc_once_paths<S: SelectValue>(q: Query, json: &S) -> (Vec<Vec<String>>, usize) {
     let root = q.root;
-    PathCalculator {
+    let calculator = PathCalculator {
         query: None,
         tracker_generator: Some(PTrackerGenerator),
-    }
-    .calc_with_paths_on_root(json, root)
+    };
+    let mut max_depth = 0;
+    let res = calculator.calc_with_paths_on_root(json, root)
     .into_iter()
-    .map(|e| e.path_tracker.unwrap().to_string_path())
-    .collect()
+    .map(|e| {
+        let p_t = e.path_tracker.unwrap();
+        if p_t.elemenets.len() > max_depth {
+            max_depth = p_t.elemenets.len();
+        } 
+        p_t.to_string_path()
+    })
+    .collect();
+    (res, max_depth)
 }
 
 #[cfg(test)]

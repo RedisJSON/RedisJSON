@@ -5,6 +5,7 @@
  */
 
 use crate::jsonpath::select_value::SelectValue;
+use serde_json::de::StrRead;
 use serde_json::map::Entry;
 use serde_json::{Number, Value};
 
@@ -14,6 +15,10 @@ use redis_module::key::{verify_type, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::rediserror::RedisError;
 use redis_module::{Context, NotifyEvent, RedisString};
+use serde::Deserialize;
+use serde::Serialize;
+use crate::depth_deserializer::{Stats, Deserializer};
+use serde_json::de;
 
 use std::marker::PhantomData;
 
@@ -478,17 +483,32 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
         })
     }
 
-    fn from_str(&self, val: &str, format: Format) -> Result<Value, Error> {
+    fn from_str(&self, val: &str, format: Format) -> Result<(Value, usize), Error> {
         match format {
-            Format::JSON => Ok(serde_json::from_str(val)?),
+            Format::JSON => {
+                let mut de = de::Deserializer::new(StrRead::new(val));
+                let mut stats = Stats{max_depth: 0, curr_depth: 0};
+                let de = Deserializer::new(&mut de, &mut stats);
+                Ok((Value::deserialize(de)?, stats.max_depth))
+            }
             Format::BSON => decode_document(&mut Cursor::new(val.as_bytes()))
                 .map(|docs| {
                     let v = if docs.is_empty() {
-                        Value::Null
+                        (Value::Null, 0)
                     } else {
                         docs.iter()
                             .next()
-                            .map_or_else(|| Value::Null, |(_, b)| b.clone().into())
+                            .map_or_else(|| (Value::Null, 0), |(_, b)| {
+                                let v: serde_json::Value = b.clone().into();
+                                let mut out = serde_json::Serializer::new(Vec::new());
+                                v.serialize(&mut out).unwrap();
+                                let res = self.from_str(
+                                    &String::from_utf8(out.into_inner()).unwrap(),
+                                    Format::JSON,
+                                )
+                                .unwrap();
+                                res
+                            })
                     };
                     Ok(v)
                 })
