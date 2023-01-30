@@ -615,7 +615,7 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
     let mut redis_key = manager.open_key_write(ctx, key)?;
     let current = redis_key.get_value()?;
 
-    let (val, max_depth) = manager.from_str(value, format)?;
+    let (val, max_depth) = manager.from_str(value, format, true)?;
 
     match (current, set_option) {
         (Some(ref mut doc), ref op) => {
@@ -1348,7 +1348,7 @@ pub fn json_arr_append<M: Manager>(
         Vec::with_capacity(args.len()),
         |mut acc, arg| {
             let json = arg.try_as_str()?;
-            let (res, curr_max_depth) = manager.from_str(json, Format::JSON)?;
+            let (res, curr_max_depth) = manager.from_str(json, Format::JSON, true)?;
             if curr_max_depth > max_depth {
                 max_depth = curr_max_depth;
             }
@@ -1537,7 +1537,7 @@ pub fn json_arr_insert<M: Manager>(
         Vec::with_capacity(args.len()),
         |mut acc, arg| {
             let json = arg.try_as_str()?;
-            let (res, curr_max_depth) = manager.from_str(json, Format::JSON)?;
+            let (res, curr_max_depth) = manager.from_str(json, Format::JSON, true)?;
             if curr_max_depth > max_depth {
                 max_depth = curr_max_depth;
             }

@@ -605,10 +605,18 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         })
     }
 
-    fn from_str(&self, val: &str, format: Format) -> Result<(Self::O, usize), Error> {
+    fn from_str(
+        &self,
+        val: &str,
+        format: Format,
+        limit_depth: bool,
+    ) -> Result<(Self::O, usize), Error> {
         match format {
             Format::JSON => {
                 let mut de = de::Deserializer::new(StrRead::new(val));
+                if !limit_depth {
+                    de.disable_recursion_limit();
+                }
                 let mut stats = Stats {
                     max_depth: 0,
                     curr_depth: 0,
@@ -632,6 +640,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                                     .from_str(
                                         &String::from_utf8(out.into_inner()).unwrap(),
                                         Format::JSON,
+                                        limit_depth,
                                     )
                                     .unwrap();
                                 res
