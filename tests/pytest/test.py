@@ -1282,17 +1282,17 @@ def testFilterPrecedence(env):
 def testRDBUnboundedDepth(env):
     # Test RDB Unbounded Depth load
     r = env
-    json_126 = '{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"z":"a"}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}'
-    r.expect('JSON.SET', 'doc', '$', json_126).ok()
+    json_value = nest_object(128, 5, "__leaf", 42)
+    r.expect('JSON.SET', 'doc', '$', json_value).ok()
 
     # concat the string_126 at the end of itself
-    r.expect('JSON.SET', 'doc', '$..z', json_126).ok()
+    json_value = nest_object(3, 5, "__deep_leaf", 420)
+    r.expect('JSON.SET', 'doc', '$..__leaf', json_value).ok()
     
     # RDB dump and restore the key 'doc' and check that the key is still valid
     dump = env.execute_command('dump', 'doc', **{NEVER_DECODE: []})
     r.expect('RESTORE', 'doc1', 0, dump).ok()
-    r.expect('JSON.GET', 'doc1', '$..z..z').equal('["a"]')
-
+    r.expect('JSON.GET', 'doc1', '$..__leaf..__deep_leaf').equal('[420]')
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property
