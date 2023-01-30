@@ -28,6 +28,8 @@ class RedisJSONSetup(paella.Setup):
         self.run("%s/bin/getcmake --usr" % READIES)
 
     def debian_compat(self):
+        self.run("apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421", sudo=True)
+
         self.install("python3-dev")
         self.run("%s/bin/getgcc" % READIES)
 
