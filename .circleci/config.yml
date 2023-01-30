@@ -580,8 +580,7 @@ workflows:
             parameters:
               platform: [jammy, bionic, focal]
       - build-macos:
-          #@@<<: *on-integ-and-version-tags
-          <<: *always
+          <<: *on-integ-and-version-tags
           context: common
       - coverage:
           <<: *on-any-branch
