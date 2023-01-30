@@ -47,7 +47,7 @@ macro_rules! verify_json_max_depth {
         if $curr_depth >= JSON_MAX_DEPTH {
             return Err(RedisError::Str("Json max depth reached").into());
         }
-    }
+    };
 }
 
 // Compile time evaluation of the max len() of all elements of the array
@@ -1250,7 +1250,9 @@ where
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_all_paths(path, root, |v, _| Ok(v.get_type() == SelectValueType::String))?;
+    let paths = find_all_paths(path, root, |v, _| {
+        Ok(v.get_type() == SelectValueType::String)
+    })?;
 
     let mut res: Vec<RedisValue> = vec![];
     let mut need_notify = false;
@@ -1282,7 +1284,9 @@ where
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_paths(path, root, |v, _| Ok(v.get_type() == SelectValueType::String))?;
+    let paths = find_paths(path, root, |v, _| {
+        Ok(v.get_type() == SelectValueType::String)
+    })?;
     if !paths.is_empty() {
         let mut res = None;
         for p in paths {
@@ -1719,7 +1723,11 @@ where
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_all_paths(path, root, |v, _| Ok(v.get_type() == SelectValueType::Array))?;
+    let paths = find_all_paths(
+        path,
+        root,
+        |v, _| Ok(v.get_type() == SelectValueType::Array),
+    )?;
     let mut res: Vec<RedisValue> = vec![];
     let mut need_notify = false;
     for p in paths {
@@ -1753,7 +1761,11 @@ where
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_paths(path, root, |v, _| Ok(v.get_type() == SelectValueType::Array))?;
+    let paths = find_paths(
+        path,
+        root,
+        |v, _| Ok(v.get_type() == SelectValueType::Array),
+    )?;
     if !paths.is_empty() {
         let mut res = None;
         for p in paths {
@@ -1806,7 +1818,11 @@ where
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_all_paths(path, root, |v, _| Ok(v.get_type() == SelectValueType::Array))?;
+    let paths = find_all_paths(
+        path,
+        root,
+        |v, _| Ok(v.get_type() == SelectValueType::Array),
+    )?;
     let mut res: Vec<RedisValue> = vec![];
     let mut need_notify = false;
     for p in paths {
@@ -1838,7 +1854,11 @@ where
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_paths(path, root, |v, _| Ok(v.get_type() == SelectValueType::Array))?;
+    let paths = find_paths(
+        path,
+        root,
+        |v, _| Ok(v.get_type() == SelectValueType::Array),
+    )?;
     if !paths.is_empty() {
         let mut res = None;
         for p in paths {
