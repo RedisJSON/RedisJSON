@@ -1618,7 +1618,7 @@ where
 
     let mut max_depth_reached = false;
     let paths = find_paths(path, root, |v, p| {
-        if v.get_type() == SelectValueType::Array {
+        if v.get_type() != SelectValueType::Array {
             return false;
         }
         if p.len() + max_depth >= 128 {
