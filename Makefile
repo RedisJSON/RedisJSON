@@ -106,7 +106,7 @@ endif
 
 ifeq ($(OS),macos)
 ifeq ($(ARCH),x64)
-	CARGO_TOOLCHAIN=1.66.1
+	CARGO_TOOLCHAIN = +1.66.1
 endif
 endif
 
