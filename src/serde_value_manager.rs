@@ -5,16 +5,20 @@
  */
 
 use crate::jsonpath::select_value::SelectValue;
-use serde::Deserialize;
+use serde_json::de::StrRead;
 use serde_json::map::Entry;
 use serde_json::{Number, Value};
 
+use crate::depth_deserializer::{Deserializer, Stats};
 use crate::manager::{err_json, err_msg_json_expected, err_msg_json_path_doesnt_exist};
 use crate::manager::{Manager, ReadHolder, WriteHolder};
 use redis_module::key::{verify_type, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::rediserror::RedisError;
 use redis_module::{Context, NotifyEvent, RedisString};
+use serde::Deserialize;
+use serde::Serialize;
+use serde_json::de;
 
 use std::marker::PhantomData;
 
@@ -479,23 +483,46 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
         })
     }
 
-    fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> Result<Value, Error> {
+    fn from_str(
+        &self,
+        val: &str,
+        format: Format,
+        limit_depth: bool,
+    ) -> Result<(Value, usize), Error> {
         match format {
             Format::JSON => {
-                let mut deserializer = serde_json::Deserializer::from_str(val);
+                let mut de = de::Deserializer::new(StrRead::new(val));
                 if !limit_depth {
-                    deserializer.disable_recursion_limit();
+                    de.disable_recursion_limit();
                 }
-                Value::deserialize(&mut deserializer).map_err(|e| e.into())
+                let mut stats = Stats {
+                    max_depth: 0,
+                    curr_depth: 0,
+                };
+                let de = Deserializer::new(&mut de, &mut stats);
+                Ok((Value::deserialize(de)?, stats.max_depth))
             }
             Format::BSON => decode_document(&mut Cursor::new(val.as_bytes()))
                 .map(|docs| {
                     let v = if docs.is_empty() {
-                        Value::Null
+                        (Value::Null, 0)
                     } else {
-                        docs.iter()
-                            .next()
-                            .map_or_else(|| Value::Null, |(_, b)| b.clone().into())
+                        docs.iter().next().map_or_else(
+                            || (Value::Null, 0),
+                            |(_, b)| {
+                                let v: serde_json::Value = b.clone().into();
+                                let mut out = serde_json::Serializer::new(Vec::new());
+                                v.serialize(&mut out).unwrap();
+                                let res = self
+                                    .from_str(
+                                        &String::from_utf8(out.into_inner()).unwrap(),
+                                        Format::JSON,
+                                        limit_depth,
+                                    )
+                                    .unwrap();
+                                res
+                            },
+                        )
                     };
                     Ok(v)
                 })

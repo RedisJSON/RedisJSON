@@ -34,6 +34,7 @@ mod array_index;
 mod backward;
 pub mod c_api;
 pub mod commands;
+pub mod depth_deserializer;
 pub mod error;
 mod formatter;
 pub mod ivalue_manager;
