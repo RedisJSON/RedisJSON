@@ -49,6 +49,8 @@ OS=$($READIES/bin/platform --os)
 [[ $OSNICK == ol8 ]] && OSNICK=rhel8
 [[ $OSNICK == rocky8 ]] && OSNICK=rhel8
 
+[[ $OSNICK == bigsur ]]  && OSNICK=catalina
+
 PLATFORM="$OS-$OSNICK-$ARCH"
 
 #----------------------------------------------------------------------------------------------
@@ -103,8 +105,8 @@ s3_ls() {
 }
 
 s3_upload() {
-	local prod_subdir="$1"
-	local prefix="$2"
+	local prod_subdir="$PROD"
+	local prefix="$PREFIX"
 	local upload_dir="${S3_URL}/${prod_subdir}${MAYBE_SNAP}"
 	local file
 	if [[ $SNAPSHOT == 1 ]]; then
@@ -129,4 +131,4 @@ if [[ $NOP != 1 ]]; then
 	fi
 fi
 
-s3_upload rejson-oss rejson-oss
+PROD=rejson-oss PREFIX=rejson-oss s3_upload
