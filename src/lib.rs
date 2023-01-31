@@ -40,6 +40,7 @@ pub mod ivalue_manager;
 pub mod jsonpath;
 pub mod manager;
 pub mod redisjson;
+pub mod serde_value_manager;
 
 pub const GIT_SHA: Option<&str> = std::option_env!("GIT_SHA");
 pub const GIT_BRANCH: Option<&str> = std::option_env!("GIT_BRANCH");
@@ -107,7 +108,7 @@ macro_rules! run_on_manager {
                     })
                 }
                 $crate::ManagerType::SerdeValue => {
-                    $run_expr($crate::manager::RedisJsonKeyManager {
+                    $run_expr($crate::serde_value_manager::RedisJsonKeyManager {
                         phantom: PhantomData,
                     })
                 }
@@ -252,7 +253,7 @@ redis_json_module_create! {
             _ => None,
         }
     },
-    version: 02_04_03,
+    version: 02_04_04,
     init: dummy_init,
     info: dummy_info,
 }

@@ -17,7 +17,8 @@ use std::os::raw::{c_int, c_void};
 use crate::backward;
 use crate::error::Error;
 use crate::ivalue_manager::RedisIValueJsonKeyManager;
-use crate::manager::{Manager, RedisJsonKeyManager};
+use crate::manager::Manager;
+use crate::serde_value_manager::RedisJsonKeyManager;
 use crate::{get_manager_type, ManagerType};
 use serde::Serialize;
 use std::fmt;
@@ -147,7 +148,7 @@ pub mod type_methods {
                     let m = RedisJsonKeyManager {
                         phantom: PhantomData,
                     };
-                    let v = m.from_str(&json_string, Format::JSON);
+                    let v = m.from_str(&json_string, Format::JSON, false);
                     v.map_or(null_mut(), |res| {
                         Box::into_raw(Box::new(res)).cast::<libc::c_void>()
                     })
@@ -156,7 +157,7 @@ pub mod type_methods {
                     let m = RedisIValueJsonKeyManager {
                         phantom: PhantomData,
                     };
-                    let v = m.from_str(&json_string, Format::JSON);
+                    let v = m.from_str(&json_string, Format::JSON, false);
                     v.map_or(null_mut(), |res| {
                         Box::into_raw(Box::new(res)).cast::<libc::c_void>()
                     })

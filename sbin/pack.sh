@@ -59,7 +59,10 @@ OSNICK=$($READIES/bin/platform --osnick)
 [[ $OSNICK == jammy ]]   && OSNICK=ubuntu22.04
 [[ $OSNICK == centos7 ]] && OSNICK=rhel7
 [[ $OSNICK == centos8 ]] && OSNICK=rhel8
+[[ $OSNICK == ol8 ]]     && OSNICK=rhel8
 [[ $OSNICK == rocky8 ]]  && OSNICK=rhel8
+
+[[ $OSNICK == bigsur ]]  && OSNICK=catalina
 
 #----------------------------------------------------------------------------------------------
 
@@ -159,7 +162,7 @@ pack_deps() {
 	sha256sum $tar_path | awk '{print $1}' > $tar_path.sha256
 
 	cd $ARTDIR/snapshots
-	if [[ ! -z $BRANCH ]]; then
+	if [[ -n $BRANCH ]]; then
 		local snap_dep=$stem.${BRANCH}${VARIANT}.tgz
 		ln -sf ../$fq_dep $snap_dep
 		ln -sf ../$fq_dep.sha256 $snap_dep.sha256
