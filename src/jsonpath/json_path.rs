@@ -40,7 +40,7 @@ pub struct QueryCompilationError {
 
 impl<'i> Query<'i> {
     /// Pop the last element from the compiled json path.
-    /// For example, if the json path is $.foo.bar then pop_last
+    /// For example, if the json path is $.foo.bar then `pop_last`
     /// will return bar and leave the json path query with foo only
     /// ($.foo)
     #[allow(dead_code)]
@@ -486,6 +486,7 @@ struct PathCalculatorData<'i, S: SelectValue, UPT: UserPathTracker> {
 }
 
 impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
+    #[must_use]
     pub const fn create(query: &'i Query<'i>) -> PathCalculator<'i, UPTG> {
         PathCalculator {
             query: Some(query),
@@ -930,7 +931,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         first_result
     }
 
-    fn populate_path_tracker<'k, 'l>(pt: &PathTracker<'l, 'k>, upt: &mut UPTG::PT) {
+    fn populate_path_tracker(pt: &PathTracker<'_, '_>, upt: &mut UPTG::PT) {
         if let Some(f) = pt.parent {
             Self::populate_path_tracker(f, upt);
         }

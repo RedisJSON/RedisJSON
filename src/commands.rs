@@ -466,7 +466,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             .get_values(path)?
             .iter()
             .map(|value| {
-                self.arr_first_index_single(value, &json_value, start, end)
+                Self::arr_first_index_single(value, &json_value, start, end)
                     .into()
             })
             .collect::<Vec<RedisValue>>();
@@ -481,7 +481,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         end: i64,
     ) -> Result<RedisValue, Error> {
         let arr = self.get_first(path)?;
-        match self.arr_first_index_single(arr, &json_value, start, end) {
+        match Self::arr_first_index_single(arr, &json_value, start, end) {
             FoundIndex::NotArray => Err(Error::from(err_msg_json_expected(
                 "array",
                 self.get_type(path).unwrap().as_str(),
@@ -490,8 +490,8 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    /// Returns first array index of `v` in `arr`, or NotFound if not found in `arr`, or NotArray if `arr` is not an array
-    fn arr_first_index_single(&self, arr: &V, v: &Value, start: i64, end: i64) -> FoundIndex {
+    /// Returns first array index of `v` in `arr`, or `NotFound` if not found in `arr`, or `NotArray` if `arr` is not an array
+    fn arr_first_index_single(arr: &V, v: &Value, start: i64, end: i64) -> FoundIndex {
         if !arr.is_array() {
             return FoundIndex::NotArray;
         }

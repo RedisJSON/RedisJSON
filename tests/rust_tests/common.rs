@@ -43,8 +43,7 @@ pub fn select_and_then_compare(path: &str, json: Value, target: Value) {
             Value::Array(vec) => vec,
             _ => panic!("Give me the Array!"),
         },
-        "{}",
-        path
+        "{path}"
     );
 
     // let mut selector = Selector::default();
