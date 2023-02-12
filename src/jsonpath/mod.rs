@@ -131,6 +131,7 @@ mod json_path_tests {
     ) => {
         let j = json!($json);
         let res = perform_search($path, &j);
+        #[allow(unused_mut)]
         let mut v = Vec::new();
         $(
             v.push(json!($result));
