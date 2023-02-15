@@ -16,7 +16,7 @@ use json_path::{
 
 /// Create a `PathCalculator` object. The path calculator can be re-used
 /// to calculate json paths on different JSONs.
-/// 
+///
 /// ```
 /// extern crate jsonpath_rs
 /// #[macro_use] extern crate serde_json;

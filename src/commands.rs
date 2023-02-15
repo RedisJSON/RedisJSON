@@ -465,10 +465,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         let res = self
             .get_values(path)?
             .iter()
-            .map(|value| {
-                Self::arr_first_index_single(value, &json_value, start, end)
-                    .into()
-            })
+            .map(|value| Self::arr_first_index_single(value, &json_value, start, end).into())
             .collect::<Vec<RedisValue>>();
         Ok(res.into())
     }
