@@ -670,7 +670,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         }
     }
 
-    fn calc_abs_index(&self, i: i64, n: usize) -> usize {
+    fn calc_abs_index(i: i64, n: usize) -> usize {
         if i >= 0 {
             (i as usize).min(n)
         } else {
@@ -692,7 +692,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         let n = json.len().unwrap();
         if let Some(pt) = path_tracker {
             for c in curr.into_inner() {
-                let i = self.calc_abs_index(c.as_str().parse::<i64>().unwrap(), n);
+                let i = Self::calc_abs_index(c.as_str().parse::<i64>().unwrap(), n);
                 let curr_val = json.get_index(i);
                 if let Some(e) = curr_val {
                     let new_tracker = Some(create_index_tracker(i, &pt));
@@ -701,7 +701,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             }
         } else {
             for c in curr.into_inner() {
-                let i = self.calc_abs_index(c.as_str().parse::<i64>().unwrap(), n);
+                let i = Self::calc_abs_index(c.as_str().parse::<i64>().unwrap(), n);
                 let curr_val = json.get_index(i);
                 if let Some(e) = curr_val {
                     self.calc_internal(pairs.clone(), e, None, calc_data);
@@ -728,7 +728,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 let mut curr = curr.into_inner();
                 let start = 0;
                 let end =
-                    self.calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
+                    Self::calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
                 let step = curr
                     .next()
                     .map_or(1, |s| s.as_str().parse::<usize>().unwrap());
@@ -744,7 +744,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             Rule::left_range => {
                 let mut curr = curr.into_inner();
                 let start =
-                    self.calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
+                    Self::calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
                 let end = n;
                 let step = curr
                     .next()
@@ -754,9 +754,9 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             Rule::full_range => {
                 let mut curr = curr.into_inner();
                 let start =
-                    self.calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
+                    Self::calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
                 let end =
-                    self.calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
+                    Self::calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
                 let step = curr
                     .next()
                     .map_or(1, |s| s.as_str().parse::<usize>().unwrap());

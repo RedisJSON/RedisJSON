@@ -53,6 +53,7 @@ pub const fn create<'i>(query: &'i Query<'i>) -> PathCalculator<'i, DummyTracker
 /// to calculate json paths on different JSONs.
 /// Unlike create(), this function will return results with full path as `PTracker` object.
 /// It is possible to create your own path tracker by implement the `PTrackerGenerator` trait.
+#[must_use]
 pub const fn create_with_generator<'i>(
     query: &'i Query<'i>,
 ) -> PathCalculator<'i, PTrackerGenerator> {

@@ -1774,17 +1774,17 @@ where
         .ok_or_else(RedisError::nonexistent_key)?;
 
     let paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
-    if !paths.is_empty() {
+    if paths.is_empty() {
+        Err(RedisError::String(
+            err_msg_json_path_doesnt_exist_with_param_or(path, "not an array"),
+        ))
+    } else {
         let mut res = None;
         for p in paths {
             res = Some(redis_key.arr_trim(p, start, stop)?);
         }
         redis_key.apply_changes(ctx, "json.arrtrim")?;
         Ok(res.unwrap().into())
-    } else {
-        Err(RedisError::String(
-            err_msg_json_path_doesnt_exist_with_param_or(path, "not an array"),
-        ))
     }
 }
 

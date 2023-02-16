@@ -234,11 +234,8 @@ impl<'a> IValueKeyHolderWrite<'a> {
                     _ => {
                         let num1 = v.to_f64().unwrap();
                         let num2 = in_value.as_f64().unwrap();
-                        if let Ok(num) = INumber::try_from((op2_fun)(num1, num2)) {
-                            Ok(num)
-                        } else {
-                            Err(RedisError::Str("result is not a number"))
-                        }
+                        INumber::try_from((op2_fun)(num1, num2))
+                            .map_err(|_| RedisError::Str("result is not a number"))
                     }
                 };
                 let new_val = IValue::from(num_res?);
