@@ -18,11 +18,12 @@ use json_path::{
 /// to calculate json paths on different JSONs.
 ///
 /// ```
-/// extern crate jsonpath_rs
 /// #[macro_use] extern crate serde_json;
 ///
-/// let query = jsonpath_rs::compile("$..friends[0]");
-/// let calculator = jsonpath_rs::create(&query)
+/// use rejson::jsonpath;
+///
+/// let query = jsonpath::compile("$..friends[0]").unwrap();
+/// let calculator = jsonpath::create(&query);
 ///
 /// let json_obj = json!({
 ///     "school": {
