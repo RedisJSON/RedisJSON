@@ -837,7 +837,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 None => TermEvaluationResult::Value(calc_data.root),
             },
             _ => {
-                panic!("{}", format!("{term:?}"))
+                panic!("{term:?}")
             }
         }
     }
