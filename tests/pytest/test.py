@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from functools import reduce
+import random
 import sys
 import os
 import redis
@@ -233,6 +234,44 @@ def testGetWithBracketNotation(env):
     r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$.[1]')), [2]) # dollar notation - array
     r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$[1]')), [2]) # dollar notation - array
 
+def testSetGetWithSpecialKey(env):
+    """ Test JSON.GET/JSON.SET with special keys also with legacy syntax """
+    r = env
+
+    doc = {
+        "$": "$",
+        "a": "a",
+        "$a": "$a",
+        "$a[": "$a["
+    }
+    
+    # Set doc using individual keys using legacy syntax (with implicit `$` root)
+    r.assertOk(r.execute_command('JSON.SET', 'x', '$', '{"$":"$"}'))
+    r.assertOk(r.execute_command('JSON.SET', 'x', 'a', '"a"'))
+    r.assertOk(r.execute_command('JSON.SET', 'x', '$a', '"$a"'))
+    r.assertOk(r.execute_command('JSON.SET', 'x', '$["$a["]', '"$a["'))
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$')), [doc])
+    # Set doc using individual keys using legacy syntax (with explicit `.` root)
+    r.assertOk(r.execute_command('JSON.SET', 'x', '.a', '"a"'))
+    r.assertOk(r.execute_command('JSON.SET', 'x', '.$a', '"$a"'))
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$')), [doc])
+
+    # Get key "$"
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$.$')), ["$"])         # dot notation
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$["$"]')), ["$"])      # bracket notation
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$')), [doc])           
+    # Get key "a"
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$.a')), ["a"])         # dot notation
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$["a"]')), ["a"])      # bracket notation
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', 'a')), "a")             # legacy
+    # Get key "$a"
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$.$a')), ["$a"])       # dot notation
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$["$a"]')), ["$a"])    # bracket notation
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$a')), "$a")           # legacy
+    # Get key "$a["
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$["$a["]')), ["$a["])  # bracket notation (cannot use dot notation)
+    
+
 def testSetWithPathErrors(env):
     r = env
 
@@ -255,10 +294,10 @@ def testGetWithPathErrors(env):
     # If paths contain illegal characters, the error message must not contain them
 
     # Path (and error message) with embedded nulls in path
-    r.expect('JSON.GET', 'x', 'gar\x00\x00bage').raiseError().contains("does not exist")
+    r.expect('JSON.GET', 'x', 'gar\x00\x00bage').raiseError().contains("expected one of the following")
 
     # Path (and error message) with end of line delimiters
-    r.expect('JSON.GET', 'x', 'not\x0d\x0aallowed by protocol').raiseError().contains("does not exist")
+    r.expect('JSON.GET', 'x', 'not\x0d\x0aallowed by protocol').raiseError()
 
 def testGetNonExistantPathsFromBasicDocumentShouldFail(env):
     """Test failure of getting non-existing values"""
@@ -734,7 +773,9 @@ def testArrIndexMixCommand(env):
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', 2, 3), 5)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '[4]'), 4)
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '{\"val\":4}'), 8)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '$.arr', '{\"val\":9}'), [9])
     r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '.arr', '["a", "b", 8]'), 11)
+    r.assertEqual(r.execute_command('JSON.ARRINDEX', 'test', '$.arr', '[3, 4, 8]'), [10])
 
 def testArrTrimCommand(env):
     """Test JSON.ARRTRIM command"""
@@ -839,7 +880,7 @@ def testLenCommands(env):
     r.expect('JSON.ARRLEN', 'test', '.arr[999]').raiseError().contains("does not exist")
 
     # test an infinite index
-    r.expect('JSON.ARRLEN', 'test', '.arr[-inf]').raiseError().contains("path error")
+    r.expect('JSON.ARRLEN', 'test', '.arr[-inf]').raiseError().contains("Error occurred")
     r.expect('JSON.ARRLEN', 'test', '.arr[4294967295]').raiseError().contains("does not exist")
 
 def testObjKeysCommand(env):
@@ -1004,7 +1045,9 @@ def testIssue_74(env):
 
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{}'))
     # This shouldn't crash Redis
-    r.expect('JSON.SET', 'test', '$a', '12').raiseError()
+    r.expect('JSON.SET', 'test', '$a', '12').equal("OK")    # using legacy path
+    r.expect('JSON.GET', 'test', '$a').equal('12')          # using legacy path
+    r.expect('JSON.GET', 'test', '$.$a').equal('[12]')
 
 def testDoubleParse(env):
     r = env
@@ -1044,10 +1087,10 @@ def testCrashInParserMOD2099(env):
     r = env
     r.assertOk(r.execute_command('JSON.SET', 'test', '$', '{"a":{"x":{"i":10}}, "b":{"x":{"i":20, "j":5}}}'))
     
-    res = r.execute_command('JSON.GET', 'test', '$..x[?(@.i>10)]')
-    r.assertEqual(res, '[{"i":20,"j":5}]')
+    res = r.execute_command('JSON.GET', 'test', '$..x[?(@>10)]')
+    r.assertEqual(res, '[20]')
     
-    res = r.execute_command('JSON.GET', 'test', '$..x[?($.i>10)]')
+    res = r.execute_command('JSON.GET', 'test', '$..x[?($>10)]')
     r.assertEqual(res, '[]')
     
 
@@ -1116,6 +1159,143 @@ def testCopyCommand(env):
     res = r.execute_command('JSON.GET', 'hash2', '$')
     r.assertEqual(json.loads(res), [new_values])
 
+def nest_object(depth, max_name_len, leaf_key, leaf_val):
+    """ Return a string of a Python object with `depth` nesting level, such as {"a":{"b":{"c":{"leaf":42}}}} """
+
+    res = {}
+    cur = res
+    for i in range(1, depth - 1):
+        name = ''.join([chr(random.randint(ord('a'), ord('z')))
+                       for _ in range(0, random.randint(1, max_name_len))])
+        cur[name] = {}
+        cur = cur[name]
+    cur[leaf_key] = leaf_val
+    return json.dumps(res)
+
+def testNesting(env):
+    """ Test JSONPath Object nesting depth """
+    r = env
+
+    # Max nesting level for a single JSON value
+    depth = 128
+    doc = nest_object(depth, 5, "__leaf", 42)
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$', doc))
+    res = r.execute_command('JSON.GET', 'test', '$..__leaf')
+    r.assertEqual(res, '[42]')
+
+    # No overall max nesting level (can exceeded the single value max nesting level)
+    doc = nest_object(depth, 5, "__deep_leaf", 420)
+    r.execute_command('JSON.SET', 'test', '$..__leaf', doc)
+    res = r.execute_command('JSON.GET', 'test', '$..__deep_leaf')
+    r.assertEqual(res, '[420]')
+
+    doc = nest_object(depth, 5, "__helms_deep_leaf", 42000)
+    r.execute_command('JSON.SET', 'test', '$..__deep_leaf', doc)
+    res = r.execute_command('JSON.GET', 'test', '$..__helms_deep_leaf')
+    r.assertEqual(res, '[42000]')
+
+    # Max nesting level for a single JSON value cannot be exceeded
+    depth = 129
+    doc = nest_object(depth, 5, "__leaf", 42)
+    r.expect('JSON.SET', 'test', '$', doc).raiseError().contains("recursion limit exceeded")
+
+
+def testEscape(env):
+    # Test json escape characters
+
+    r = env
+
+    # Escaped control characters \b, \f, \n, \r, \t \/, \\
+    r.expect('JSON.SET', 'doc', '$', r'{"val": "escaped control here:\b \f \n \r \t \/ \\"}').ok()
+    r.expect('JSON.GET', 'doc', '$.val').equal(r'["escaped control here:\b \f \n \r \t / \\"]')
+
+    # Escaped quotes
+    r.expect('JSON.SET', 'doc', '$', '{"val": "escaped quote here:\\""}').ok()
+    r.expect('JSON.GET', 'doc', '$.val').equal('["escaped quote here:\\""]')
+
+    # Escaped unicode
+    r.expect('JSON.SET', 'doc', '$', '{"val": "escaped unicode here:\u2B50"}').ok()
+    r.expect('JSON.GET', 'doc', '$.val').equal('["escaped unicode here:⭐"]')
+
+def testFilter(env):
+    # Test JSONPath filter
+    r = env
+
+    doc = {
+        "arr": ["kaboom", "kafoosh", "four", "bar", 7.0, "foolish", ["food", "foo", "FoO", "fight"], -9, {"in" : "fooctious"}, "ffool", "(?i)^[f][o][o]$", False, None],
+        "pat_regex": ".*foo",
+        "pat_plain": "(?i)^[f][o][o]$",
+        "pat_bad": "[f.*",
+        "pat_not_str1": 42,
+        "pat_not_str2": None,
+        "pat_not_str3": True,
+        "pat_not_str4": {"p":".*foo"},
+        "pat_not_str5": [".*foo"],
+    }
+    r.expect('JSON.SET', 'doc', '$', json.dumps(doc)).ok()
+    
+    # regex match using a static regex pattern
+    r.expect('JSON.GET', 'doc', '$.arr[?(@ =~ ".*foo")]').equal('["kafoosh","foolish","ffool"]')
+    
+    # regex match using a field
+    r.expect('JSON.GET', 'doc', '$.arr[?(@ =~ $.pat_regex)]').equal('["kafoosh","foolish","ffool"]')
+    
+    # regex case-insensitive match using a field (notice the `.*` before the filter)
+    r.expect('JSON.GET', 'doc', '$.arr.*[?(@ =~ $.pat_plain)]').equal('["foo","FoO"]')
+
+    # regex match using field after being modified
+    r.expect('JSON.SET', 'doc', '$.pat_regex', '"k.*foo"').ok()
+    r.expect('JSON.GET', 'doc', '$.arr[?(@ =~ $.pat_regex)]').equal('["kafoosh"]')
+
+    # regex mismatch (illegal pattern)
+    r.expect('JSON.GET', 'doc', '$.arr[?(@ == $.pat_bad)]').equal('[]')
+    r.expect('JSON.GET', 'doc', '$.arr[?(@ == $.pat_bad || @>4.5)]').equal('[7.0]')
+
+    # regex mismatch (missing pattern)
+    r.expect('JSON.GET', 'doc', '$.arr[?(@ =~ $.pat_missing)]').equal('[]')
+
+    # regex mismatch (not a string pattern)
+    for i in range(1, 6):
+        r.expect('JSON.GET', 'doc', '$.arr[?(@ =~ $.pat_not_str{})]'.format(i)).equal('[]')
+
+    # plain string match
+    r.expect('JSON.GET', 'doc', '$.arr[?(@ == $.pat_plain)]').equal('["(?i)^[f][o][o]$"]')
+    
+def testFilterExpression(env):
+    # Test JSONPath filter with 3 or more operands
+    r = env
+    doc = [
+        {"foo":1, "bar":2, "baz": 3, "quux": 4},
+        {"foo":2, "bar":4, "baz": 6, "quux": 9},
+        {"foo":2, "bar":3, "baz": 6, "quux": 10}
+    ]
+    r.expect('JSON.SET', 'doc', '$', json.dumps(doc)).ok()
+    res = r.execute_command('JSON.GET', 'doc', '$[?(@.foo>1 && @.quux>8 && @.bar>3 && @.baz>4)]')
+    r.assertEqual(json.loads(res), [doc[1]])
+
+def testFilterPrecedence(env):
+    # Test JSONPath filter precedence (&& precedes ||)
+    r = env
+    doc = [{"t": True, "f": False, "one": 1},{"t": True, "f": False, "one": 2}]
+    r.expect('JSON.SET', 'doc', '$', json.dumps(doc)).ok()
+    res = r.execute_command('JSON.GET', 'doc', '$[?(@.f==true || @.one==1 && @.t==true)]')
+    r.assertEqual(json.loads(res), [doc[0]])
+    r.expect('JSON.GET', 'doc', '$[?(@.f==true || @.one==1 && @.t==false)]').equal('[]')
+
+def testRDBUnboundedDepth(env):
+    # Test RDB Unbounded Depth load
+    r = env
+    json_value = nest_object(128, 5, "__leaf", 42)
+    r.expect('JSON.SET', 'doc', '$', json_value).ok()
+
+    # concat the string_126 at the end of itself
+    json_value = nest_object(3, 5, "__deep_leaf", 420)
+    r.expect('JSON.SET', 'doc', '$..__leaf', json_value).ok()
+    
+    # RDB dump and restore the key 'doc' and check that the key is still valid
+    dump = env.execute_command('dump', 'doc', **{NEVER_DECODE: []})
+    r.expect('RESTORE', 'doc1', 0, dump).ok()
+    r.expect('JSON.GET', 'doc1', '$..__leaf..__deep_leaf').equal('[420]')
 
 def testLargeKey(env):
     """ Test a key with more than 512MB data """

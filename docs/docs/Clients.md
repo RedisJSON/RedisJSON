@@ -33,6 +33,7 @@ While it is possible and simple to use the raw Redis commands API, in most cases
 | [phpredis-json][phpredis-json-url]  | PHP | MIT | [Rafa Campoy @averias][phpredis-json-author] | [![phpredis-json-stars]][phpredis-json-url] | [composer][phpredis-json-package] |
 | [redislabs-rejson][redislabs-rejson-url]  | PHP | MIT | [Mehmet Korkmaz @mkorkmaz][redislabs-rejson-author] | [![redislabs-rejson-stars]][redislabs-rejson-url] | [composer][redislabs-rejson-package] |
 | [rejson-rb][rejson-rb-url]  | Ruby | MIT | [Pavan Vachhani @vachhanihpavan][rejson-rb-author] | [![rejson-rb-stars]][rejson-rb-url] | [rubygems][rejson-rb-package]|
+| [rustis][rustis-url] | Rust | MIT | [Dahomey Technologies][rustis-author] | [![rustis-stars]][rustis-url] | [crate][rustis-package]|
 
 [node-redis-author]: https://redis.com
 [node-redis-url]: https://github.com/redis/node-redis
@@ -131,3 +132,8 @@ While it is possible and simple to use the raw Redis commands API, in most cases
 [redis-om-dotnet-author]: htts://redis.com
 [redis-om-dotnet-package]: https://www.nuget.org/packages/Redis.OM/
 [redis-om-dotnet-stars]: https://img.shields.io/github/stars/redis/redis-om-dotnet.svg?style=social&amp;label=Star&amp;maxAge=2592000
+
+[rustis-url]: https://github.com/dahomey-technologies/rustis
+[rustis-author]: https://github.com/dahomey-technologies
+[rustis-stars]: https://img.shields.io/github/stars/dahomey-technologies/rustis.svg?style=social&amp;label=Star&amp;maxAge=2592000
+[rustis-package]: https://crates.io/crates/rustis

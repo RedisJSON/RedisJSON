@@ -3,7 +3,7 @@ author: Redis Labs
 email: redismodules@redislabs.com
 description: Native JSON Data Type for Redis
 homepage: http://redisjson.io
-license: Redis Source Available License Agreement
+license: Redis Source Available License 2.0 (RSALv2) or the Server Side Public License v1 (SSPLv1)
 command_line_args: ""
 min_redis_version: "6.0"
 min_redis_pack_version: "6.0"
@@ -22,3 +22,4 @@ capabilities:
     - clustering
     - intershard_tls
     - intershard_tls_pass
+    - ipv6

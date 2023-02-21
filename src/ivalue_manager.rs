@@ -1,3 +1,9 @@
+/*
+ * Copyright Redis Ltd. 2016 - present
+ * Licensed under your choice of the Redis Source Available License 2.0 (RSALv2) or
+ * the Server Side Public License v1 (SSPLv1).
+ */
+
 use crate::error::Error;
 use crate::manager::{err_json, err_msg_json_expected, err_msg_json_path_doesnt_exist};
 use crate::manager::{Manager, ReadHolder, WriteHolder};
@@ -10,7 +16,7 @@ use redis_module::key::{verify_type, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::rediserror::RedisError;
 use redis_module::{Context, NotifyEvent, RedisString};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Number;
 use std::marker::PhantomData;
 use std::mem::size_of;
@@ -315,7 +321,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         self.get_json_holder()?;
 
         match &mut self.val {
-            Some(v) => Ok(Some(&mut (*v).data)),
+            Some(v) => Ok(Some(&mut v.data)),
             None => Ok(None),
         }
     }
@@ -483,7 +489,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 // Verify legel index in bounds
                 let len = array.len() as i64;
                 let index = normalize_arr_start_index(index, len) as usize;
-                res = Some(array.remove(index as usize).unwrap());
+                res = Some(array.remove(index).unwrap());
                 Ok(Some(()))
             } else {
                 Err(err_json(v, "array"))
@@ -559,10 +565,7 @@ pub struct IValueKeyHolderRead {
 impl ReadHolder<IValue> for IValueKeyHolderRead {
     fn get_value(&self) -> Result<Option<&IValue>, RedisError> {
         let key_value = self.key.get_value::<RedisJSON<IValue>>(&REDIS_JSON_TYPE)?;
-        match key_value {
-            Some(v) => Ok(Some(&v.data)),
-            None => Ok(None),
-        }
+        key_value.map_or(Ok(None), |v| Ok(Some(&v.data)))
     }
 }
 
@@ -598,9 +601,15 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         })
     }
 
-    fn from_str(&self, val: &str, format: Format) -> Result<Self::O, Error> {
+    fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> Result<Self::O, Error> {
         match format {
-            Format::JSON => Ok(serde_json::from_str(val)?),
+            Format::JSON => {
+                let mut deserializer = serde_json::Deserializer::from_str(val);
+                if !limit_depth {
+                    deserializer.disable_recursion_limit();
+                }
+                IValue::deserialize(&mut deserializer).map_err(|e| e.into())
+            }
             Format::BSON => decode_document(&mut Cursor::new(val.as_bytes())).map_or_else(
                 |e| Err(e.to_string().into()),
                 |docs| {
@@ -616,6 +625,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                                 self.from_str(
                                     &String::from_utf8(out.into_inner()).unwrap(),
                                     Format::JSON,
+                                    limit_depth,
                                 )
                                 .unwrap()
                             },

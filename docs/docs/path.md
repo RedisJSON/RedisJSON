@@ -11,9 +11,12 @@ RedisJSON supports two query syntaxes: [JSONPath syntax](#jsonpath-syntax) and t
 
 RedisJSON knows which syntax to use depending on the first character of the path query. If the query starts with the character `$`, it uses JSONPath syntax. Otherwise, it defaults to the legacy path syntax.
 
+The returned value is a JSON string with a top-level array of JSON serialized strings. 
+And if multi-paths are used, the return value is a JSON string with a top-level object with values that are arrays of serialized JSON values.
+
 ## JSONPath support
 
-RedisJSON v2.0 introduces [JSONPath](http://goessner.net/articles/JsonPath/) support. It follows the syntax described by Goessner in his article.
+RedisJSON v2.0 introduced [JSONPath](http://goessner.net/articles/JsonPath/) support. It follows the syntax described by Goessner in his [article](http://goessner.net/articles/JsonPath/).
 
 A JSONPath query can resolve to several locations in a JSON document. In this case, the JSON commands apply the operation to every possible location. This is a major improvement over [legacy path](#legacy-path-syntax) queries, which only operate on the first path.
 
@@ -40,7 +43,7 @@ The following JSONPath syntax table was adapted from Goessner's [path syntax com
 | [] | Subscript operator, accesses an array element. |
 | [,] | Union, selects multiple elements. |
 | [start\:end\:step] | Array slice where start, end, and step are indexes. |
-| ?() | Filters a JSON object or array. Supports comparison operators <nobr>(==, !=, <, <=, >, >=)</nobr> and logical operators <nobr>(&&, \|\|)</nobr>. |
+| ?() | Filters a JSON object or array. Supports comparison operators <nobr>(`==`, `!=`, `<`, `<=`, `>`, `>=`, `=~`)</nobr>, logical operators <nobr>(`&&`, `\|\|`)</nobr>, and parenthesis <nobr>(`(`, `)`)</nobr>. |
 | () | Script expression. |
 | @ | The current element, used in filter or script expressions. |
 
@@ -154,9 +157,23 @@ You can use an array slice to select a range of elements from an array. This exa
 "[\"Noise-cancelling Bluetooth headphones\",\"Wireless earbuds\"]"
 ```
 
-Filter expressions `?()` let you select JSON elements based on certain conditions. You can use comparison operators (==, !=, <, <=, >, >=) and logical operators (&&, \|\|) within these expressions.
+Filter expressions `?()` let you select JSON elements based on certain conditions. You can use comparison operators (`==`, `!=`, `<`, `<=`, `>`, `>=`, and starting with version v2.4.2, also `=~`), logical operators (`&&`, `||`), and parenthesis (`(`, `)`) within these expressions. A filter expression can be applied on an array or on an object, iterating over all the **elements** in the array or all the **values** in the object, retrieving only the ones that match the filter condition. 
 
-For example, this filter only returns wireless headphones with a price less than 70:
+Paths within the filter condition are using the dot notation with either `@` to denote the current array element or the current object value, or `$` to denote the top-level element. For example, use `@.key_name` to refer to a nested value and `$.top_level_key_name` to refer to a top-level value.
+
+Starting with version v2.4.2, the comparison operator `=~` can be used for matching a path of a string value on the left side against a regular expression pattern on the right side. For more information, see the [supported regular expression syntax docs](https://docs.rs/regex/latest/regex/#syntax).
+
+Non-string values do not match. A match can only occur when the left side is a path of a string value and the right side is either a hard-coded string, or a path of a string value. See [examples](#json-filter-examples) below.
+
+The regex match is partial, meaning `"foo"` regex pattern matches a string such as `"barefoots"`.
+To make it exact, use the regex pattern `"^foo$"`.
+
+Other JSONPath engines may use regex pattern between slashes, e.g., `/foo/`, and their match is exact.
+They can perform partial matches using a regex pattern such as `/.*foo.*/`.
+
+#### JSON Filter examples
+
+In the following example, the filter only returns wireless headphones with a price less than 70:
 
 ```sh
 127.0.0.1:6379> JSON.GET store $..headphones[?(@.price<70&&@.wireless==true)]
@@ -168,6 +185,30 @@ This example filters the inventory for the names of items that support Bluetooth
 ```sh
 127.0.0.1:6379> JSON.GET store '$.inventory.*[?(@.connection=="Bluetooth")].name'
 "[\"Noise-cancelling Bluetooth headphones\",\"Wireless earbuds\",\"Wireless keyboard\"]"
+```
+
+This example, starting with version v2.4.2, filters only keyboards with some sort of USB connection using regex match. Notice this match is case-insensitive thanks to the prefix `(?i)` in the regular expression pattern `"(?i)usb"`:
+
+```sh
+127.0.0.1:6379> JSON.GET store '$.inventory.keyboards[?(@.connection =~ "(?i)usb")]'
+"[{\"id\":22346,\"name\":\"USB-C keyboard\",\"description\":\"Wired USB-C keyboard\",\"wireless\":false,\"connection\":\"USB-C\",\"price\":29.99,\"stock\":30,\"free-shipping\":false}]"
+```
+The regular expression pattern can also be specified using a path of a string value on the right side.
+
+For example, let's add each keybaord object with a string value named `regex_pat`:
+
+```sh
+127.0.0.1:6379> JSON.SET store '$.inventory.keyboards[0].regex_pat' '"(?i)bluetooth"'
+OK
+127.0.0.1:6379> JSON.SET store '$.inventory.keyboards[1].regex' '"usb"'
+OK
+```
+
+Now we can match against the value of `regex_pat` instead of a hard-coded regular expression pattern, and get the keyboard with the `Bluetooth` string in its `connection` key. Notice the one with `USB-C` does not match since its regular expression pattern is case-sensitive and the regular expression pattern is using lowercase:
+
+```sh
+127.0.0.1:6379> JSON.GET store '$.inventory.keyboards[?(@.connection =~ @.regex_pat)]'
+"[{\"id\":22345,\"name\":\"Wireless keyboard\",\"description\":\"Wireless Bluetooth keyboard\",\"wireless\":true,\"connection\":\"Bluetooth\",\"price\":44.99,\"stock\":23,\"free-shipping\":false,\"colors\":[\"black\",\"silver\"],\"regex\":\"(?i)Bluetooth\",\"regex_pat\":\"(?i)bluetooth\"}]"
 ```
 
 #### Update JSON examples

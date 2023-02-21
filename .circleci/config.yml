@@ -1,5 +1,13 @@
 version: 2.1
 
+parameters:
+  run_default_flow:
+    default: true
+    type: boolean
+  run_benchmark_flow_label:
+    default: false
+    type: boolean
+
 commands:
   early-returns:
     steps:
@@ -40,7 +48,7 @@ commands:
             apt-get -q install -y git openssh-client curl ca-certificates make tar gzip
             bash <(curl -fsSL https://raw.githubusercontent.com/docker/docker-install/master/install.sh)
       - setup_remote_docker:
-          version: 20.10.7
+          version: 20.10.14
           docker_layer_caching: true
 
   checkout-all:
@@ -55,9 +63,12 @@ commands:
       - run:
           name: Setup automation
           command: |
+            export HOMEBREW_NO_AUTO_UPDATE=1
             git submodule update --init deps/readies
             ./deps/readies/bin/getpy3
+            ./deps/readies/bin/getaws
             python3 --version
+            python3 -m pip list
 
   install-prerequisites:
     parameters:
@@ -77,19 +88,18 @@ commands:
           shell: /bin/bash -l -eo pipefail
           command: |
             ./sbin/system-setup.py <<parameters.system_setup_params>>
-            python3 -m pip list
-            source $HOME/.cargo/env
-            rustc --version
-            cargo --version
-            rustup --version
-            if command -v gcc &> /dev/null; then gcc --version; fi
-            if command -v clang &> /dev/null; then clang --version; fi
       - run:
           name: Install Redis
           shell: /bin/bash -l -eo pipefail
           command: |
+            export HOMEBREW_NO_AUTO_UPDATE=1
             ./deps/readies/bin/getredis -v '<<parameters.redis_version>>' --force <<parameters.getredis_params>>
-            redis-server --version
+      - run:
+          name: System report
+          shell: /bin/bash -l -eo pipefail
+          command: |
+            source $HOME/.cargo/env
+            make info
 
   save-tests-logs:
     steps:
@@ -304,8 +314,17 @@ commands:
               --fail_fast \
               --triggering_env << parameters.triggering_env >> \
               --push_results_redistimeseries \
-              --allowed-envs << parameters.allowed_envs >>
-
+              --allowed-envs << parameters.allowed_envs >> || true
+      - run:
+          name: Generate Pull Request Performance info
+          command: |
+            if [[ -n ${CIRCLE_PULL_REQUEST##*/} ]]; then
+                redisbench-admin compare  \
+                  --defaults_filename ./tests/benchmarks/defaults.yml \
+                  --comparison-branch $CIRCLE_BRANCH \
+                  --auto-approve \
+                  --pull-request ${CIRCLE_PULL_REQUEST##*/}
+            fi
 #----------------------------------------------------------------------------------------------------------------------------------
 
 jobs:
@@ -358,7 +377,7 @@ jobs:
 
   build-macos:
     macos:
-      xcode: 12.4.0
+      xcode: 12.5.1
     resource_class: macos.x86.medium.gen2
     parameters:
       upload:
@@ -471,6 +490,13 @@ on-any-branch: &on-any-branch
     tags:
       only: /.*/
 
+always: &always
+  filters:
+    branches:
+      only: /.*/
+    tags:
+      only: /.*/
+
 never: &never
   filters:
     branches:
@@ -492,9 +518,16 @@ on-integ-branch: &on-integ-branch
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
-        - /^perf.*$/
     tags:
       ignore: /.*/
+
+on-integ-branch-cron: &on-integ-branch-cron
+  filters:
+    branches:
+      only:
+        - master
+        - /^\d+\.\d+.*$/
+        - /^feature-.*$/
 
 not-on-integ-branch: &not-on-integ-branch
   filters:
@@ -503,7 +536,6 @@ not-on-integ-branch: &not-on-integ-branch
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
-        - /^perf.*$/
     tags:
       ignore: /.*/
 
@@ -521,7 +553,6 @@ on-integ-and-version-tags: &on-integ-and-version-tags
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
-        - /^perf.*$/
     tags:
       only: /^v[0-9].*/
 
@@ -530,6 +561,8 @@ on-integ-and-version-tags: &on-integ-and-version-tags
 workflows:
   version: 2
   default-flow:
+    when:
+      << pipeline.parameters.run_default_flow >>
     jobs:
       - build-linux-debian:
           name: build
@@ -545,7 +578,7 @@ workflows:
           context: common
           matrix:
             parameters:
-              platform: [bionic, focal]
+              platform: [jammy, bionic, focal]
       - build-macos:
           <<: *on-integ-and-version-tags
           context: common
@@ -556,7 +589,7 @@ workflows:
           <<: *on-any-branch
           matrix:
             parameters:
-              san-type: [address] # [address, memory]
+              san-type: [address] # [memory]
       - upload-artifacts:
           name: upload-artifacts-to-staging-lab
           <<: *on-integ-branch
@@ -586,23 +619,38 @@ workflows:
           <<: *on-integ-and-version-tags
           context: common
 
-
+  benchmark_flow_label:
+    when:
+      << pipeline.parameters.run_benchmark_flow_label >>
+    jobs:
+      - benchmark-json-oss-standalone:
+          <<: *on-any-branch
+          context: common
+      - benchmark-json-oss-standalone-profiler:
+          <<: *on-any-branch
+          context: common
+  
   nightly:
     triggers:
       - schedule:
           cron: "07 20 * * *"
-          filters:
-            branches:
-              only:
-                - master
-                - /^\d+\.\d+.*$/
-                - /^feature-.*$/
+          <<: *on-integ-branch-cron
     jobs:
       - build-linux-debian:
           name: build-with-redis-<<matrix.redis_version>>
           matrix:
             parameters:
-              redis_version: ["6.0", "7", "unstable"]
+              redis_version: ["6.0", "6.2", "7", "unstable"]
+  
+  nightly-perf-once-a-week:
+    triggers:
+      - schedule:
+          #  “At 07:00 on Mondays.”
+          cron: "00 07 * * 1"
+          filters:
+            branches:
+              only: master
+    jobs:
       - benchmark-json-oss-standalone:
           context: common
       - benchmark-json-oss-standalone-profiler:

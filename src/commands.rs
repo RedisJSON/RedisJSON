@@ -1,16 +1,25 @@
+/*
+ * Copyright Redis Ltd. 2016 - present
+ * Licensed under your choice of the Redis Source Available License 2.0 (RSALv2) or
+ * the Server Side Public License v1 (SSPLv1).
+ */
+
 use crate::error::Error;
 use crate::formatter::RedisJsonFormatter;
+use crate::jsonpath::select_value::{SelectValue, SelectValueType};
 use crate::manager::err_msg_json_path_doesnt_exist_with_param;
 use crate::manager::{err_msg_json_expected, err_msg_json_path_doesnt_exist_with_param_or};
 use crate::manager::{AddUpdateInfo, Manager, ReadHolder, SetUpdateInfo, UpdateInfo, WriteHolder};
-use crate::nodevisitor::{StaticPathElement, StaticPathParser, VisitStatus};
 use crate::redisjson::{normalize_arr_indices, Format, Path};
-use jsonpath_lib::select::select_value::{SelectValue, SelectValueType};
-use jsonpath_lib::select::Selector;
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use std::cmp::Ordering;
 use std::str::FromStr;
+
+use crate::jsonpath::{
+    calc_once, calc_once_paths, calc_once_with_paths, compile, json_path::JsonPathToken,
+    json_path::UserPathTracker,
+};
 
 use crate::redisjson::SetOptions;
 
@@ -78,7 +87,7 @@ pub struct KeyValue<'a, V: SelectValue> {
     val: &'a V,
 }
 
-impl<'a, V: SelectValue> KeyValue<'a, V> {
+impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     pub fn new(v: &'a V) -> KeyValue<'a, V> {
         KeyValue { val: v }
     }
@@ -96,18 +105,18 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     fn resp_serialize(&'a self, path: Path) -> RedisResult {
         if path.is_legacy() {
             let v = self.get_first(path.get_path())?;
-            Ok(self.resp_serialize_inner(v))
+            Ok(Self::resp_serialize_inner(v))
         } else {
             Ok(self
                 .get_values(path.get_path())?
                 .iter()
-                .map(|v| self.resp_serialize_inner(v))
+                .map(|v| Self::resp_serialize_inner(v))
                 .collect::<Vec<RedisValue>>()
                 .into())
         }
     }
 
-    fn resp_serialize_inner(&'a self, v: &V) -> RedisValue {
+    fn resp_serialize_inner(v: &V) -> RedisValue {
         match v.get_type() {
             SelectValueType::Null => RedisValue::Null,
 
@@ -130,7 +139,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 res.push(RedisValue::SimpleStringStatic("["));
                 v.values()
                     .unwrap()
-                    .for_each(|v| res.push(self.resp_serialize_inner(v)));
+                    .for_each(|v| res.push(Self::resp_serialize_inner(v)));
                 RedisValue::Array(res)
             }
 
@@ -139,7 +148,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                 res.push(RedisValue::SimpleStringStatic("{"));
                 for (k, v) in v.items().unwrap() {
                     res.push(RedisValue::BulkString(k.to_string()));
-                    res.push(self.resp_serialize_inner(v));
+                    res.push(Self::resp_serialize_inner(v));
                 }
                 RedisValue::Array(res)
             }
@@ -147,10 +156,8 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     }
 
     fn get_values<'b>(&'a self, path: &'b str) -> Result<Vec<&'a V>, Error> {
-        let mut selector = Selector::new();
-        selector.str_path(path)?;
-        selector.value(self.val);
-        let results = selector.select()?;
+        let query = compile(path)?;
+        let results = calc_once(query, self.val);
         Ok(results)
     }
 
@@ -181,15 +188,19 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         // memory efficient and we're using it anyway. See https://github.com/serde-rs/json/issues/635.
         let mut missing_path = None;
         let temp_doc = paths.drain(..).fold(HashMap::new(), |mut acc, path: Path| {
-            let mut selector = Selector::new();
-            selector.value(self.val);
-            if selector.str_path(path.get_path()).is_err() {
+            let query = compile(path.get_path());
+            if query.is_err() {
                 return acc;
             }
-            let value = match selector.select() {
-                Ok(s) if is_legacy && !s.is_empty() => Some(Values::Single(s[0])),
-                Ok(s) if !is_legacy => Some(Values::Multi(s)),
-                _ => None,
+            let query = query.unwrap();
+            let s = calc_once(query, self.val);
+
+            let value = if is_legacy && !s.is_empty() {
+                Some(Values::Single(s[0]))
+            } else if !is_legacy {
+                Some(Values::Multi(s))
+            } else {
+                None
             };
 
             if value.is_none() && missing_path.is_none() {
@@ -239,63 +250,53 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     }
 
     fn find_add_paths(&mut self, path: &str) -> Result<Vec<UpdateInfo>, Error> {
-        let mut parsed_static_path = StaticPathParser::check(path)?;
-
-        if parsed_static_path.valid != VisitStatus::Valid {
-            return Err("Err: wrong static path".into());
-        }
-        if parsed_static_path.static_path_elements.len() < 2 {
-            return Err("Err: path must end with object key to set".into());
+        let mut query = compile(path)?;
+        if !query.is_static() {
+            return Err("Err wrong static path".into());
         }
 
-        let last = parsed_static_path.static_path_elements.pop().unwrap();
+        if query.size() < 1 {
+            return Err("Err path must end with object key to set".into());
+        }
 
-        if let StaticPathElement::ObjectKey(key) = last {
-            if let StaticPathElement::Root = parsed_static_path.static_path_elements.last().unwrap()
-            {
-                // Adding to the root
-                Ok(vec![UpdateInfo::AUI(AddUpdateInfo {
-                    path: Vec::new(),
-                    key,
-                })])
-            } else {
-                // Adding somewhere in existing object, use jsonpath_lib::replace_with
-                let p = parsed_static_path
-                    .static_path_elements
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<String>();
-                let mut selector = Selector::default();
-                if let Err(e) = selector.str_path(&p) {
-                    return Err(e.into());
-                }
-                selector.value(self.val);
-                let res = selector.select_with_paths(|_| true)?;
-                Ok(res
-                    .into_iter()
-                    .map(|v| {
-                        UpdateInfo::AUI(AddUpdateInfo {
-                            path: v,
-                            key: key.to_string(),
+        let (last, token_type) = query.pop_last().unwrap();
+
+        match token_type {
+            JsonPathToken::String => {
+                if query.size() == 1 {
+                    // Adding to the root
+                    Ok(vec![UpdateInfo::AUI(AddUpdateInfo {
+                        path: Vec::new(),
+                        key: last,
+                    })])
+                } else {
+                    // Adding somewhere in existing object
+                    let res = calc_once_paths(query, self.val);
+
+                    Ok(res
+                        .into_iter()
+                        .map(|v| {
+                            UpdateInfo::AUI(AddUpdateInfo {
+                                path: v,
+                                key: last.to_string(),
+                            })
                         })
-                    })
-                    .collect())
+                        .collect())
+                }
             }
-        } else if let StaticPathElement::ArrayIndex(_) = last {
-            // if we reach here with array path we are either out of range
-            // or no-oping an NX where the value is already present
-            let mut selector = Selector::default();
-            let res = selector
-                .str_path(path)?
-                .value(self.val)
-                .select_with_paths(|_| true)?;
-            if res.is_empty() {
-                Err("ERR array index out of range".into())
-            } else {
-                Ok(Vec::new())
+            JsonPathToken::Number => {
+                // if we reach here with array path we are either out of range
+                // or no-oping an NX where the value is already present
+
+                let query = compile(path)?;
+                let res = calc_once_paths(query, self.val);
+
+                if res.is_empty() {
+                    Err("ERR array index out of range".into())
+                } else {
+                    Ok(Vec::new())
+                }
             }
-        } else {
-            Err("ERR path not an object or array".into())
         }
     }
 
@@ -305,11 +306,9 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         option: &SetOptions,
     ) -> Result<Vec<UpdateInfo>, Error> {
         if SetOptions::NotExists != *option {
-            let mut selector = Selector::default();
-            let res = selector
-                .str_path(path)?
-                .value(self.val)
-                .select_with_paths(|_| true)?;
+            let query = compile(path)?;
+            let res = calc_once_paths(query, self.val);
+
             if !res.is_empty() {
                 return Ok(res
                     .into_iter()
@@ -414,7 +413,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         }
     }
 
-    pub fn is_equal<T1: SelectValue, T2: SelectValue>(&self, a: &T1, b: &T2) -> bool {
+    pub fn is_equal<T1: SelectValue, T2: SelectValue>(a: &T1, b: &T2) -> bool {
         match (a.get_type(), b.get_type()) {
             (SelectValueType::Null, SelectValueType::Null) => true,
             (SelectValueType::Bool, SelectValueType::Bool) => a.get_bool() == b.get_bool(),
@@ -426,7 +425,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                     false
                 } else {
                     for (i, e) in a.values().unwrap().into_iter().enumerate() {
-                        if !self.is_equal(e, b.get_index(i).unwrap()) {
+                        if !Self::is_equal(e, b.get_index(i).unwrap()) {
                             return false;
                         }
                     }
@@ -442,7 +441,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
                         let temp2 = b.get_key(k);
                         match (temp1, temp2) {
                             (Some(a1), Some(b1)) => {
-                                if !self.is_equal(a1, b1) {
+                                if !Self::is_equal(a1, b1) {
                                     return false;
                                 }
                             }
@@ -459,7 +458,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     pub fn arr_index(
         &self,
         path: &str,
-        scalar_value: Value,
+        json_value: Value,
         start: i64,
         end: i64,
     ) -> Result<RedisValue, Error> {
@@ -467,7 +466,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
             .get_values(path)?
             .iter()
             .map(|value| {
-                self.arr_first_index_single(value, &scalar_value, start, end)
+                self.arr_first_index_single(value, &json_value, start, end)
                     .into()
             })
             .collect::<Vec<RedisValue>>();
@@ -477,12 +476,12 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
     pub fn arr_index_legacy(
         &self,
         path: &str,
-        scalar_value: Value,
+        json_value: Value,
         start: i64,
         end: i64,
     ) -> Result<RedisValue, Error> {
         let arr = self.get_first(path)?;
-        match self.arr_first_index_single(arr, &scalar_value, start, end) {
+        match self.arr_first_index_single(arr, &json_value, start, end) {
             FoundIndex::NotArray => Err(Error::from(err_msg_json_expected(
                 "array",
                 self.get_type(path).unwrap().as_str(),
@@ -510,7 +509,7 @@ impl<'a, V: SelectValue> KeyValue<'a, V> {
         }
 
         for index in start..end {
-            if self.is_equal(arr.get_index(index as usize).unwrap(), v) {
+            if Self::is_equal(arr.get_index(index as usize).unwrap(), v) {
                 return FoundIndex::Index(index);
             }
         }
@@ -607,7 +606,7 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
     let mut redis_key = manager.open_key_write(ctx, key)?;
     let current = redis_key.get_value()?;
 
-    let val = manager.from_str(value, format)?;
+    let val = manager.from_str(value, format, true)?;
 
     match (current, set_option) {
         (Some(ref mut doc), ref op) => {
@@ -669,12 +668,18 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
 fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
     path: &str,
     doc: &T,
-    f: F,
+    mut f: F,
 ) -> Result<Vec<Vec<String>>, RedisError> {
-    Ok(Selector::default()
-        .str_path(path)?
-        .value(doc)
-        .select_with_paths(f)?)
+    let query = match compile(path) {
+        Ok(q) => q,
+        Err(e) => return Err(RedisError::String(e.to_string())),
+    };
+    let res = calc_once_with_paths(query, doc);
+    Ok(res
+        .into_iter()
+        .filter(|e| f(e.res))
+        .map(|e| e.path_tracker.unwrap().to_string_path())
+        .collect())
 }
 
 /// Returns tuples of Value and its concrete path which match the given `path`
@@ -682,10 +687,15 @@ fn get_all_values_and_paths<'a, T: SelectValue>(
     path: &str,
     doc: &'a T,
 ) -> Result<Vec<(&'a T, Vec<String>)>, RedisError> {
-    Ok(Selector::default()
-        .str_path(path)?
-        .value(doc)
-        .select_values_with_paths()?)
+    let query = match compile(path) {
+        Ok(q) => q,
+        Err(e) => return Err(RedisError::String(e.to_string())),
+    };
+    let res = calc_once_with_paths(query, doc);
+    Ok(res
+        .into_iter()
+        .map(|e| (e.res, e.path_tracker.unwrap().to_string_path()))
+        .collect())
 }
 
 /// Returns a Vec of paths with `None` for Values that do not match the filter
@@ -752,10 +762,7 @@ where
 {
     values
         .into_iter()
-        .map(|n| match n {
-            Some(t) => t.into(),
-            _ => none_value.clone(),
-        })
+        .map(|n| n.map_or_else(|| none_value.clone(), |t| t.into()))
         .collect::<Vec<Value>>()
 }
 
@@ -943,9 +950,10 @@ where
 {
     let value = redis_key.get_value()?.map_or_else(
         || RedisValue::Null,
-        |doc| match KeyValue::new(doc).get_type(path) {
-            Ok(s) => s.into(),
-            Err(_) => RedisValue::Null,
+        |doc| {
+            KeyValue::new(doc)
+                .get_type(path)
+                .map_or(RedisValue::Null, |s| s.into())
         },
     );
 
@@ -1291,10 +1299,7 @@ where
     let values = find_all_values(path, root, |v| v.get_type() == SelectValueType::String)?;
     let mut res: Vec<RedisValue> = vec![];
     for v in values {
-        res.push(match v {
-            Some(v) => (v.get_str().len() as i64).into(),
-            _ => RedisValue::Null,
-        });
+        res.push(v.map_or(RedisValue::Null, |v| (v.get_str().len() as i64).into()));
     }
     Ok(res.into())
 }
@@ -1329,7 +1334,7 @@ pub fn json_arr_append<M: Manager>(
         Vec::with_capacity(args.len()),
         |mut acc, arg| {
             let json = arg.try_as_str()?;
-            acc.push(manager.from_str(json, Format::JSON)?);
+            acc.push(manager.from_str(json, Format::JSON, true)?);
             Ok(acc)
         },
     )?;
@@ -1430,9 +1435,7 @@ pub enum ObjectLen {
 }
 
 ///
-/// JSON.ARRINDEX <key> <path> <json-scalar> [start [stop]]
-///
-/// scalar - number, string, Boolean (true or false), or null
+/// JSON.ARRINDEX <key> <path> <json-value> [start [stop]]
 ///
 pub fn json_arr_index<M: Manager>(
     manager: M,
@@ -1443,7 +1446,7 @@ pub fn json_arr_index<M: Manager>(
 
     let key = args.next_arg()?;
     let path = Path::new(args.next_str()?);
-    let json_scalar = args.next_str()?;
+    let value = args.next_str()?;
     let start: i64 = args.next().map_or(Ok(0), |v| v.parse_integer())?;
     let end: i64 = args.next().map_or(Ok(0), |v| v.parse_integer())?;
 
@@ -1451,14 +1454,7 @@ pub fn json_arr_index<M: Manager>(
 
     let key = manager.open_key_read(ctx, &key)?;
 
-    let is_legacy = path.is_legacy();
-    let scalar_value: Value = serde_json::from_str(json_scalar)?;
-    if !is_legacy && (scalar_value.is_array() || scalar_value.is_object()) {
-        return Err(RedisError::String(err_msg_json_expected(
-            "scalar",
-            json_scalar,
-        )));
-    }
+    let json_value: Value = serde_json::from_str(value)?;
 
     let res = key.get_value()?.map_or_else(
         || {
@@ -1468,9 +1464,9 @@ pub fn json_arr_index<M: Manager>(
         },
         |doc| {
             if path.is_legacy() {
-                KeyValue::new(doc).arr_index_legacy(path.get_path(), scalar_value, start, end)
+                KeyValue::new(doc).arr_index_legacy(path.get_path(), json_value, start, end)
             } else {
-                KeyValue::new(doc).arr_index(path.get_path(), scalar_value, start, end)
+                KeyValue::new(doc).arr_index(path.get_path(), json_value, start, end)
             }
         },
     )?;
@@ -1498,7 +1494,7 @@ pub fn json_arr_insert<M: Manager>(
         Vec::with_capacity(args.len()),
         |mut acc, arg| {
             let json = arg.try_as_str()?;
-            acc.push(manager.from_str(json, Format::JSON)?);
+            acc.push(manager.from_str(json, Format::JSON, true)?);
             Ok(acc)
         },
     )?;

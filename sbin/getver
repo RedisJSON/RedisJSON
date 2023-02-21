@@ -13,14 +13,13 @@ READIES = os.path.join(ROOT, "deps/readies")
 sys.path.insert(0, READIES)
 import paella
 
-parser = argparse.ArgumentParser(description='Create relative symlink')
+parser = argparse.ArgumentParser(description='Print RedisJSON module version')
 parser.add_argument('-n', '--numeric', action="store_true", default=False, help='Show numeric version')
 args = parser.parse_args()
 
 t = Dict(toml.load(os.path.join(ROOT, 'Cargo.toml')))
 ver = t.package.version
 
-BB()
 if args.numeric:
 	print(foldl(lambda s, x: s * 100 + int(x), 0, ver.split('.')))
 else:
