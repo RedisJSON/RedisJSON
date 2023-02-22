@@ -33,6 +33,7 @@ class RedisJSONSetup(paella.Setup):
 
     def redhat_compat(self):
         self.install("redhat-lsb-core")
+        self.install("which")
         self.run("%s/bin/getgcc --modern" % READIES)
 
         if not self.platform.is_arm():
