@@ -19,9 +19,11 @@ if [[ $1 == --help || $1 == help || $HELP == 1 ]]; then
 		OSNICK=nick   Operate on packages for given OSNICK (default: host)
 
 		RELEASE=1     Upload release artifacts
+		STAGING=1     Upload into staging area
 
 		FORCE=1       Allow uploading outside of CI
 		NOP=1         No operation
+		VERBOSE=1     Show artifacts details
 		HELP=1        Show help
 
 	END
@@ -41,10 +43,13 @@ OS=$($READIES/bin/platform --os)
 [[ $OSNICK == xenial ]] && OSNICK=ubuntu16.04
 [[ $OSNICK == bionic ]] && OSNICK=ubuntu18.04
 [[ $OSNICK == focal ]] && OSNICK=ubuntu20.04
+[[ $OSNICK == jammy ]] && OSNICK=ubuntu22.04
 [[ $OSNICK == centos7 ]] && OSNICK=rhel7
 [[ $OSNICK == centos8 ]] && OSNICK=rhel8
 [[ $OSNICK == ol8 ]] && OSNICK=rhel8
 [[ $OSNICK == rocky8 ]] && OSNICK=rhel8
+
+[[ $OSNICK == bigsur ]]  && OSNICK=catalina
 
 PLATFORM="$OS-$OSNICK-$ARCH"
 
@@ -100,8 +105,8 @@ s3_ls() {
 }
 
 s3_upload() {
-	local prod_subdir="$1"
-	local prefix="$2"
+	local prod_subdir="$PROD"
+	local prefix="$PREFIX"
 	local upload_dir="${S3_URL}/${prod_subdir}${MAYBE_SNAP}"
 	local file
 	if [[ $SNAPSHOT == 1 ]]; then
@@ -114,7 +119,7 @@ s3_upload() {
 		done
 	fi
 	[[ $VERBOSE == 1 ]] && s3_ls $upload_dir
-	
+
 	return 0
 }
 
@@ -126,4 +131,4 @@ if [[ $NOP != 1 ]]; then
 	fi
 fi
 
-s3_upload rejson-oss rejson-oss
+PROD=rejson-oss PREFIX=rejson-oss s3_upload

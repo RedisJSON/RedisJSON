@@ -3,7 +3,8 @@
 [[ $IGNERR == 1 ]] || set -e
 # [[ $VERBOSE == 1 ]] && set -x
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+PROGNAME="${BASH_SOURCE[0]}"
+HERE="$(cd "$(dirname "$PROGNAME")" &>/dev/null && pwd)"
 ROOT=$(cd $HERE/../.. && pwd)
 READIES=$ROOT/deps/readies
 . $READIES/shibumi/defs
@@ -122,7 +123,7 @@ setup_redis_server() {
 #----------------------------------------------------------------------------------------------
 
 valgrind_config() {
-	export VG_OPTIONS="
+	export VG_OPTIONS="\
 		-q \
 		--leak-check=full \
 		--show-reachable=no \

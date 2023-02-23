@@ -1,4 +1,4 @@
-redis ~= 4.3.3
-RLTest ~= 0.5.4
-ramp-packer ~= 2.3.1
+redis ~= 4.3.4
+RLTest ~= 0.5.12
+ramp-packer ~= 2.5.2
 six >= 1.10.0
