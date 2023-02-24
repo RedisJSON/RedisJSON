@@ -56,8 +56,16 @@ commands:
           name: Setup automation
           command: |
             git submodule update --init deps/readies
+            if [[ $(uname -s) == Darwin ]]; then rm -f /usr/local/bin/python3; fi
             ./deps/readies/bin/getpy3
+      - run:
+          name: Setup automation (part 2)
+          shell: /bin/bash -l -eo pipefail
+          command: |
+            export HOMEBREW_NO_AUTO_UPDATE=1
             ./deps/readies/bin/getaws
+            ls -l /usr/local/bin/python* || true
+            echo "python3: $(command -v python3)"
             python3 --version
             python3 -m pip list
 
@@ -79,19 +87,18 @@ commands:
           shell: /bin/bash -l -eo pipefail
           command: |
             ./sbin/system-setup.py <<parameters.system_setup_params>>
-            python3 -m pip list
-            source $HOME/.cargo/env
-            rustc --version
-            cargo --version
-            rustup --version
-            if command -v gcc &> /dev/null; then gcc --version; fi
-            if command -v clang &> /dev/null; then clang --version; fi
       - run:
           name: Install Redis
           shell: /bin/bash -l -eo pipefail
           command: |
+            export HOMEBREW_NO_AUTO_UPDATE=1
             ./deps/readies/bin/getredis -v '<<parameters.redis_version>>' --force <<parameters.getredis_params>>
-            redis-server --version
+      - run:
+          name: System report
+          shell: /bin/bash -l -eo pipefail
+          command: |
+            source $HOME/.cargo/env
+            make info
 
   save-tests-logs:
     steps:
@@ -360,7 +367,7 @@ jobs:
 
   build-macos:
     macos:
-      xcode: 11.7.0
+      xcode: 12.5.1
     resource_class: macos.x86.medium.gen2
     parameters:
       upload:
@@ -473,6 +480,13 @@ on-any-branch: &on-any-branch
     tags:
       only: /.*/
 
+always: &always
+  filters:
+    branches:
+      only: /.*/
+    tags:
+      only: /.*/
+
 never: &never
   filters:
     branches:
@@ -494,9 +508,16 @@ on-integ-branch: &on-integ-branch
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
-        - /^perf.*$/
     tags:
       ignore: /.*/
+
+on-integ-branch-cron: &on-integ-branch-cron
+  filters:
+    branches:
+      only:
+        - master
+        - /^\d+\.\d+.*$/
+        - /^feature-.*$/
 
 not-on-integ-branch: &not-on-integ-branch
   filters:
@@ -505,7 +526,6 @@ not-on-integ-branch: &not-on-integ-branch
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
-        - /^perf.*$/
     tags:
       ignore: /.*/
 
@@ -523,7 +543,6 @@ on-integ-and-version-tags: &on-integ-and-version-tags
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
-        - /^perf.*$/
     tags:
       only: /^v[0-9].*/
 
@@ -547,7 +566,7 @@ workflows:
           context: common
           matrix:
             parameters:
-              platform: [bionic, focal]
+              platform: [jammy, bionic, focal]
       - build-macos:
           <<: *on-integ-and-version-tags
           context: common
@@ -558,7 +577,7 @@ workflows:
           <<: *on-any-branch
           matrix:
             parameters:
-              san-type: [address] # [address, memory]
+              san-type: [address] # [memory]
       - upload-artifacts:
           name: upload-artifacts-to-staging-lab
           <<: *on-integ-branch
@@ -593,18 +612,13 @@ workflows:
     triggers:
       - schedule:
           cron: "07 20 * * *"
-          filters:
-            branches:
-              only:
-                - master
-                - /^\d+\.\d+.*$/
-                - /^feature-.*$/
+          <<: *on-integ-branch-cron
     jobs:
       - build-linux-debian:
           name: build-with-redis-<<matrix.redis_version>>
           matrix:
             parameters:
-              redis_version: ["6.0", "7", "unstable"]
+              redis_version: ["6.0", "6.2", "7", "unstable"]
       - benchmark-json-oss-standalone:
           context: common
       - benchmark-json-oss-standalone-profiler:
