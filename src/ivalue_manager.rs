@@ -649,7 +649,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                     if num.has_decimal_point() {
                         // 64bit float
                         16
-                    } else if num > &INumber::from(-128) && num <= &INumber::from(383) {
+                    } else if num >= &INumber::from(-128) && num <= &INumber::from(383) {
                         // 8bit
                         0
                     } else if num > &INumber::from(-8_388_608) && num <= &INumber::from(8_388_607) {
