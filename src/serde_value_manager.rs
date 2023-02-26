@@ -480,7 +480,7 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
                 if !limit_depth {
                     deserializer.disable_recursion_limit();
                 }
-                Value::deserialize(&mut deserializer).map_err(|e| e.into())
+                Value::deserialize(&mut deserializer).map_err(Into::into)
             }
             Format::BSON => decode_document(&mut Cursor::new(val.as_bytes()))
                 .map(|docs| {
