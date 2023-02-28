@@ -9,6 +9,7 @@ JRedisJSON
 JS
 JSONPath
 JSONTestSuite
+jedis
 Jedis
 KeyRef
 KeyRefs
@@ -90,6 +91,7 @@ repo
 rubygems
 rueian
 rueidis
+rustis
 schulzf
 sdk
 seriot

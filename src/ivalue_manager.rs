@@ -234,11 +234,8 @@ impl<'a> IValueKeyHolderWrite<'a> {
                     _ => {
                         let num1 = v.to_f64().unwrap();
                         let num2 = in_value.as_f64().unwrap();
-                        if let Ok(num) = INumber::try_from((op2_fun)(num1, num2)) {
-                            Ok(num)
-                        } else {
-                            Err(RedisError::Str("result is not a number"))
-                        }
+                        INumber::try_from((op2_fun)(num1, num2))
+                            .map_err(|_| RedisError::Str("result is not a number"))
                     }
                 };
                 let new_val = IValue::from(num_res?);
@@ -404,10 +401,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             }
             Ok(Some(()))
         })?;
-        match res {
-            None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
-            Some(n) => Ok(n),
-        }
+        res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
     }
 
     fn str_append(&mut self, path: Vec<String>, val: String) -> Result<usize, RedisError> {
@@ -421,10 +415,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 *v_str = IString::intern(&new_str);
                 Ok(Some(()))
             })?;
-            match res {
-                None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
-                Some(l) => Ok(l),
-            }
+            res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
         } else {
             Err(RedisError::String(err_msg_json_expected(
                 "string",
@@ -443,10 +434,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             res = Some(arr.len());
             Ok(Some(()))
         })?;
-        match res {
-            None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
-            Some(n) => Ok(n),
-        }
+        res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
     }
 
     fn arr_insert(
@@ -473,10 +461,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             res = Some(curr.len());
             Ok(Some(()))
         })?;
-        match res {
-            None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
-            Some(l) => Ok(l),
-        }
+        res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
     }
 
     fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<String>, RedisError> {
@@ -526,10 +511,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 Err(err_json(v, "array"))
             }
         })?;
-        match res {
-            None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
-            Some(l) => Ok(l),
-        }
+        res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
     }
 
     fn clear(&mut self, path: Vec<String>) -> Result<usize, RedisError> {
