@@ -11,7 +11,7 @@ is key to modify.
 
 <details open><summary><code>path</code></summary> 
 
-is JSONPath to specify. Default is root `$`.
+is JSONPath to specify.
 </details>
 
 <details open><summary><code>value</code></summary> 
