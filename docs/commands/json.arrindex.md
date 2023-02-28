@@ -9,6 +9,11 @@ Search for the first occurrence of a JSON value in an array
 is key to parse.
 </details>
 
+<details open><summary><code>path</code></summary> 
+
+is JSONPath to specify.
+</details>
+
 <details open><summary><code>value</code></summary> 
 
 is value to find its index in one or more arrays. 
