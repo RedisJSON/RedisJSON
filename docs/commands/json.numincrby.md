@@ -9,16 +9,14 @@ Increment the number value stored at `path` by `number`
 is key to modify.
 </details>
 
+<details open><summary><code>path</code></summary> 
+
+is JSONPath to specify.
+</details>
+
 <details open><summary><code>value</code></summary> 
 
 is number value to increment. 
-</details>
-
-## Optional arguments
-
-<details open><summary><code>path</code></summary> 
-
-is JSONPath to specify. Default is root `$`.
 </details>
 
 ## Return 
