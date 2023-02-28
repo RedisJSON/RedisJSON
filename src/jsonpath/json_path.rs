@@ -40,7 +40,7 @@ pub struct QueryCompilationError {
 
 impl<'i> Query<'i> {
     /// Pop the last element from the compiled json path.
-    /// For example, if the json path is $.foo.bar then pop_last
+    /// For example, if the json path is $.foo.bar then `pop_last`
     /// will return bar and leave the json path query with foo only
     /// ($.foo)
     #[allow(dead_code)]
@@ -128,7 +128,7 @@ impl std::fmt::Display for Rule {
             Self::numbers_range => write!(f, "['start:end:steps']"),
             Self::number => write!(f, "'<number>'"),
             Self::filter => write!(f, "'[?(filter_expression)]'"),
-            _ => write!(f, "{:?}", self),
+            _ => write!(f, "{self:?}"),
         }
     }
 }
@@ -163,7 +163,7 @@ pub(crate) fn compile(path: &str) -> Result<Query, QueryCompilationError> {
                         Some(
                             positives
                                 .iter()
-                                .map(|v| format!("{}", v))
+                                .map(|v| format!("{v}"))
                                 .collect::<Vec<_>>()
                                 .join(", "),
                         )
@@ -174,7 +174,7 @@ pub(crate) fn compile(path: &str) -> Result<Query, QueryCompilationError> {
                         Some(
                             negatives
                                 .iter()
-                                .map(|v| format!("{}", v))
+                                .map(|v| format!("{v}"))
                                 .collect::<Vec<_>>()
                                 .join(", "),
                         )
@@ -182,11 +182,10 @@ pub(crate) fn compile(path: &str) -> Result<Query, QueryCompilationError> {
 
                     match (positives, negatives) {
                         (None, None) => "parsing error".to_string(),
-                        (Some(p), None) => format!("expected one of the following: {}", p),
-                        (None, Some(n)) => format!("unexpected tokens found: {}", n),
+                        (Some(p), None) => format!("expected one of the following: {p}"),
+                        (None, Some(n)) => format!("unexpected tokens found: {n}"),
                         (Some(p), Some(n)) => format!(
-                            "expected one of the following: {}, unexpected tokens found: {}",
-                            p, n
+                            "expected one of the following: {p}, unexpected tokens found: {n}"
                         ),
                     }
                 }
@@ -194,7 +193,7 @@ pub(crate) fn compile(path: &str) -> Result<Query, QueryCompilationError> {
             };
 
             let final_msg = if pos == path.len() {
-                format!("\"{} <<<<----\", {}.", path, msg)
+                format!("\"{path} <<<<----\", {msg}.")
             } else {
                 format!("\"{} ---->>>> {}\", {}.", &path[..pos], &path[pos..], msg)
             };
@@ -493,7 +492,8 @@ struct PathCalculatorData<'i, S: SelectValue, UPT: UserPathTracker> {
 }
 
 impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
-    pub fn create(query: &'i Query<'i>) -> PathCalculator<'i, UPTG> {
+    #[must_use]
+    pub const fn create(query: &'i Query<'i>) -> PathCalculator<'i, UPTG> {
         PathCalculator {
             query: Some(query),
             tracker_generator: None,
@@ -501,7 +501,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
     }
 
     #[allow(dead_code)]
-    pub fn create_with_generator(
+    pub const fn create_with_generator(
         query: &'i Query<'i>,
         tracker_generator: UPTG,
     ) -> PathCalculator<'i, UPTG> {
@@ -649,7 +649,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                     Rule::string_value_escape_2 => {
                         json.get_key(&(s.replace("\\\\", "\\").replace("\\\"", "\"")))
                     }
-                    _ => panic!("{}", format!("{:?}", c)),
+                    _ => panic!("{c:?}"),
                 };
                 if let Some(e) = curr_val {
                     let new_tracker = Some(create_str_tracker(s, &pt));
@@ -667,7 +667,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                     Rule::string_value_escape_2 => {
                         json.get_key(&(s.replace("\\\\", "\\").replace("\\'", "'")))
                     }
-                    _ => panic!("{}", format!("{:?}", c)),
+                    _ => panic!("{c:?}"),
                 };
                 if let Some(e) = curr_val {
                     self.calc_internal(pairs.clone(), e, None, calc_data);
@@ -676,7 +676,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         }
     }
 
-    fn calc_abs_index(&self, i: i64, n: usize) -> usize {
+    fn calc_abs_index(i: i64, n: usize) -> usize {
         if i >= 0 {
             (i as usize).min(n)
         } else {
@@ -698,7 +698,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         let n = json.len().unwrap();
         if let Some(pt) = path_tracker {
             for c in curr.into_inner() {
-                let i = self.calc_abs_index(c.as_str().parse::<i64>().unwrap(), n);
+                let i = Self::calc_abs_index(c.as_str().parse::<i64>().unwrap(), n);
                 let curr_val = json.get_index(i);
                 if let Some(e) = curr_val {
                     let new_tracker = Some(create_index_tracker(i, &pt));
@@ -707,7 +707,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             }
         } else {
             for c in curr.into_inner() {
-                let i = self.calc_abs_index(c.as_str().parse::<i64>().unwrap(), n);
+                let i = Self::calc_abs_index(c.as_str().parse::<i64>().unwrap(), n);
                 let curr_val = json.get_index(i);
                 if let Some(e) = curr_val {
                     self.calc_internal(pairs.clone(), e, None, calc_data);
@@ -734,11 +734,10 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 let mut curr = curr.into_inner();
                 let start = 0;
                 let end =
-                    self.calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
-                let step = match curr.next() {
-                    Some(s) => s.as_str().parse::<usize>().unwrap(),
-                    None => 1,
-                };
+                    Self::calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
+                let step = curr
+                    .next()
+                    .map_or(1, |s| s.as_str().parse::<usize>().unwrap());
                 (start, end, step)
             }
             Rule::all_range => {
@@ -751,7 +750,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             Rule::left_range => {
                 let mut curr = curr.into_inner();
                 let start =
-                    self.calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
+                    Self::calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
                 let end = n;
                 let step = curr
                     .next()
@@ -761,16 +760,15 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             Rule::full_range => {
                 let mut curr = curr.into_inner();
                 let start =
-                    self.calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
+                    Self::calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
                 let end =
-                    self.calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
-                let step = match curr.next() {
-                    Some(s) => s.as_str().parse::<usize>().unwrap(),
-                    None => 1,
-                };
+                    Self::calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
+                let step = curr
+                    .next()
+                    .map_or(1, |s| s.as_str().parse::<usize>().unwrap());
                 (start, end, step)
             }
-            _ => panic!("{}", format!("{:?}", curr)),
+            _ => panic!("{curr:?}"),
         };
 
         if let Some(pt) = path_tracker {
@@ -846,7 +844,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 None => TermEvaluationResult::Value(calc_data.root),
             },
             _ => {
-                panic!("{}", format!("{:?}", term))
+                panic!("{term:?}")
             }
         }
     }
@@ -876,7 +874,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 Rule::eq => term1_val.eq(&term2_val),
                 Rule::ne => term1_val.ne(&term2_val),
                 Rule::re => term1_val.re(&term2_val),
-                _ => panic!("{}", format!("{:?}", op)),
+                _ => panic!("{op:?}"),
             }
         } else {
             !matches!(term1_val, TermEvaluationResult::Invalid)
@@ -894,7 +892,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         let mut first_result = match first_filter.as_rule() {
             Rule::single_filter => self.evaluate_single_filter(first_filter, json, calc_data),
             Rule::filter => self.evaluate_filter(first_filter.into_inner(), json, calc_data),
-            _ => panic!("{}", format!("{:?}", first_filter)),
+            _ => panic!("{first_filter:?}"),
         };
         trace!("evaluate_filter first_result {:?}", &first_result);
 
@@ -907,44 +905,40 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         // When a parenthesized filter is encountered (Rule::filter), e.g., ... || ( A || B ) && C,
         //  recurse on it and use the result as the operand.
 
-        loop {
-            if let Some(relation) = curr.next() {
-                match relation.as_rule() {
-                    Rule::and => {
-                        // Consume the operand even if not needed for evaluation
-                        let second_filter = curr.next().unwrap();
-                        trace!("evaluate_filter && second_filter {:?}", &second_filter);
-                        if !first_result {
-                            continue; // Skip eval till next OR
-                        }
-                        first_result = match second_filter.as_rule() {
-                            Rule::single_filter => {
-                                self.evaluate_single_filter(second_filter, json, calc_data)
-                            }
-                            Rule::filter => {
-                                self.evaluate_filter(second_filter.into_inner(), json, calc_data)
-                            }
-                            _ => panic!("{}", format!("{:?}", second_filter)),
-                        };
+        while let Some(relation) = curr.next() {
+            match relation.as_rule() {
+                Rule::and => {
+                    // Consume the operand even if not needed for evaluation
+                    let second_filter = curr.next().unwrap();
+                    trace!("evaluate_filter && second_filter {:?}", &second_filter);
+                    if !first_result {
+                        continue; // Skip eval till next OR
                     }
-                    Rule::or => {
-                        trace!("evaluate_filter ||");
-                        if first_result {
-                            break; // can return True
+                    first_result = match second_filter.as_rule() {
+                        Rule::single_filter => {
+                            self.evaluate_single_filter(second_filter, json, calc_data)
                         }
-                        // Tail recursion with the rest of the expression to give precedence to AND
-                        return self.evaluate_filter(curr, json, calc_data);
-                    }
-                    _ => panic!("{}", format!("{:?}", relation)),
+                        Rule::filter => {
+                            self.evaluate_filter(second_filter.into_inner(), json, calc_data)
+                        }
+                        _ => panic!("{second_filter:?}"),
+                    };
                 }
-            } else {
-                break;
+                Rule::or => {
+                    trace!("evaluate_filter ||");
+                    if first_result {
+                        break; // can return True
+                    }
+                    // Tail recursion with the rest of the expression to give precedence to AND
+                    return self.evaluate_filter(curr, json, calc_data);
+                }
+                _ => panic!("{relation:?}"),
             }
         }
         first_result
     }
 
-    fn populate_path_tracker<'k, 'l>(pt: &PathTracker<'l, 'k>, upt: &mut UPTG::PT) {
+    fn populate_path_tracker(pt: &PathTracker<'_, '_>, upt: &mut UPTG::PT) {
         if let Some(f) = pt.parent {
             Self::populate_path_tracker(f, upt);
         }
@@ -1027,7 +1021,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                                     }
                                 }
                             }
-                        } else if self.evaluate_filter(curr.clone().into_inner(), json, calc_data) {
+                        } else if self.evaluate_filter(curr.into_inner(), json, calc_data) {
                             trace!(
                                 "calc_internal type {:?} path_tracker {:?}",
                                 json.get_type(),
@@ -1042,7 +1036,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                             path_tracker: path_tracker.map(|pt| self.generate_path(pt)),
                         });
                     }
-                    _ => panic!("{}", format!("{:?}", curr)),
+                    _ => panic!("{curr:?}"),
                 }
             }
             None => {

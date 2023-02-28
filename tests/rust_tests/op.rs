@@ -343,9 +343,7 @@ fn op_compare_different_types() {
         r#"$[?(1 == "1")]"#,
         r#"$[?(true == 1)]"#,
         r#"$[?(@ == 1)]"#,
-    ]
-    .iter()
-    {
+    ] {
         select_and_then_compare(path, json!({}), json!([]));
     }
 }

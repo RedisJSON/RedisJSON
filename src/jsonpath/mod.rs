@@ -14,14 +14,16 @@ use json_path::{
     PathCalculator, Query, QueryCompilationError, UserPathTracker,
 };
 
-/// Create a PathCalculator object. The path calculator can be re-used
-/// to calculate json paths on different jsons.
-/// /// ```rust
-/// extern crate jsonpath_rs
+/// Create a `PathCalculator` object. The path calculator can be re-used
+/// to calculate json paths on different JSONs.
+///
+/// ```
 /// #[macro_use] extern crate serde_json;
 ///
-/// let query = jsonpath_rs::compile("$..friends[0]");
-/// let calculator = jsonpath_rs::create(&query)
+/// use rejson::jsonpath;
+///
+/// let query = jsonpath::compile("$..friends[0]").unwrap();
+/// let calculator = jsonpath::create(&query);
 ///
 /// let json_obj = json!({
 ///     "school": {
@@ -42,15 +44,19 @@ use json_path::{
 ///     &json!({"name": "foo1", "age": 20})
 /// ]);
 /// ```
-pub fn create<'i>(query: &'i Query<'i>) -> PathCalculator<'i, DummyTrackerGenerator> {
+#[must_use]
+pub const fn create<'i>(query: &'i Query<'i>) -> PathCalculator<'i, DummyTrackerGenerator> {
     PathCalculator::create(query)
 }
 
-/// Create a PathCalculator object. The path calculator can be re-used
-/// to calculate json paths on different jsons.
-/// Unlike create(), this function will return results with full path as PTracker object.
-/// It is possible to create your own path tracker by implement the PTrackerGenerator trait.
-pub fn create_with_generator<'i>(query: &'i Query<'i>) -> PathCalculator<'i, PTrackerGenerator> {
+/// Create a `PathCalculator` object. The path calculator can be re-used
+/// to calculate json paths on different JSONs.
+/// Unlike create(), this function will return results with full path as `PTracker` object.
+/// It is possible to create your own path tracker by implement the `PTrackerGenerator` trait.
+#[must_use]
+pub const fn create_with_generator<'i>(
+    query: &'i Query<'i>,
+) -> PathCalculator<'i, PTrackerGenerator> {
     PathCalculator::create_with_generator(query, PTrackerGenerator)
 }
 
@@ -77,8 +83,8 @@ pub fn calc_once<'j, 'p, S: SelectValue>(q: Query<'j>, json: &'p S) -> Vec<&'p S
 }
 
 /// A version of `calc_once` that returns also paths.
-pub fn calc_once_with_paths<'j, 'p, S: SelectValue>(
-    q: Query<'j>,
+pub fn calc_once_with_paths<'p, S: SelectValue>(
+    q: Query<'_>,
     json: &'p S,
 ) -> Vec<CalculationResult<'p, S, PTracker>> {
     let root = q.root;
@@ -118,7 +124,7 @@ mod json_path_tests {
         path_calculator.calc(json)
     }
 
-    fn perform_path_search<'a>(path: &str, json: &'a Value) -> Vec<Vec<String>> {
+    fn perform_path_search(path: &str, json: &Value) -> Vec<Vec<String>> {
         let query = crate::jsonpath::compile(path).unwrap();
         let path_calculator = crate::jsonpath::create_with_generator(&query);
         path_calculator.calc_paths(json)
@@ -131,11 +137,7 @@ mod json_path_tests {
     ) => {
         let j = json!($json);
         let res = perform_search($path, &j);
-        #[allow(unused_mut)]
-        let mut v = Vec::new();
-        $(
-            v.push(json!($result));
-        )*
+        let v = vec![$(json!($result)),*];
         assert_eq!(res, v.iter().collect::<Vec<&Value>>());
     }}
 
@@ -146,14 +148,7 @@ mod json_path_tests {
     ) => {
         let j = json!($json);
         let res = perform_path_search($path, &j);
-        let mut v = Vec::new();
-        $(
-            let mut s = Vec::new();
-            $(
-                s.push(stringify!($result));
-            )*
-            v.push(s);
-        )*
+        let v = vec![$(vec![$(stringify!($result),)*],)*];
         assert_eq!(res, v);
     }}
 
