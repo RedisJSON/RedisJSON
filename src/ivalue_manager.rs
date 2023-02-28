@@ -234,11 +234,8 @@ impl<'a> IValueKeyHolderWrite<'a> {
                     _ => {
                         let num1 = v.to_f64().unwrap();
                         let num2 = in_value.as_f64().unwrap();
-                        if let Ok(num) = INumber::try_from((op2_fun)(num1, num2)) {
-                            Ok(num)
-                        } else {
-                            Err(RedisError::Str("result is not a number"))
-                        }
+                        INumber::try_from((op2_fun)(num1, num2))
+                            .map_err(|_| RedisError::Str("result is not a number"))
                     }
                 };
                 let new_val = IValue::from(num_res?);
@@ -404,10 +401,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             }
             Ok(Some(()))
         })?;
-        match res {
-            None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
-            Some(n) => Ok(n),
-        }
+        res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
     }
 
     fn str_append(&mut self, path: Vec<String>, val: String) -> Result<usize, RedisError> {
@@ -421,10 +415,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 *v_str = IString::intern(&new_str);
                 Ok(Some(()))
             })?;
-            match res {
-                None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
-                Some(l) => Ok(l),
-            }
+            res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
         } else {
             Err(RedisError::String(err_msg_json_expected(
                 "string",
@@ -443,10 +434,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             res = Some(arr.len());
             Ok(Some(()))
         })?;
-        match res {
-            None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
-            Some(n) => Ok(n),
-        }
+        res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
     }
 
     fn arr_insert(
@@ -473,10 +461,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             res = Some(curr.len());
             Ok(Some(()))
         })?;
-        match res {
-            None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
-            Some(l) => Ok(l),
-        }
+        res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
     }
 
     fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<String>, RedisError> {
@@ -526,10 +511,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 Err(err_json(v, "array"))
             }
         })?;
-        match res {
-            None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
-            Some(l) => Ok(l),
-        }
+        res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
     }
 
     fn clear(&mut self, path: Vec<String>) -> Result<usize, RedisError> {
@@ -637,23 +619,56 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         }
     }
 
+    ///
+    /// following https://github.com/Diggsey/ijson/issues/23#issuecomment-1377270111
+    ///
     fn get_memory(&self, v: &Self::V) -> Result<usize, RedisError> {
         let res = size_of::<IValue>()
             + match v.type_() {
-                ValueType::Null | ValueType::Bool | ValueType::Number => 0,
+                ValueType::Null | ValueType::Bool => 0,
+                ValueType::Number => {
+                    let num = v.as_number().unwrap();
+                    if num.has_decimal_point() {
+                        // 64bit float
+                        16
+                    } else if num >= &INumber::from(-128) && num <= &INumber::from(383) {
+                        // 8bit
+                        0
+                    } else if num > &INumber::from(-8_388_608) && num <= &INumber::from(8_388_607) {
+                        // 24bit
+                        4
+                    } else {
+                        // 64bit
+                        16
+                    }
+                }
                 ValueType::String => v.as_string().unwrap().len(),
-                ValueType::Array => v
-                    .as_array()
-                    .unwrap()
-                    .into_iter()
-                    .map(|v| self.get_memory(v).unwrap())
-                    .sum(),
-                ValueType::Object => v
-                    .as_object()
-                    .unwrap()
-                    .into_iter()
-                    .map(|(s, v)| s.len() + self.get_memory(v).unwrap())
-                    .sum(),
+                ValueType::Array => {
+                    let arr = v.as_array().unwrap();
+                    let capacity = arr.capacity();
+                    if capacity == 0 {
+                        0
+                    } else {
+                        size_of::<usize>() * (capacity + 2)
+                            + arr
+                                .into_iter()
+                                .map(|v| self.get_memory(v).unwrap())
+                                .sum::<usize>()
+                    }
+                }
+                ValueType::Object => {
+                    let val = v.as_object().unwrap();
+                    let capacity = val.capacity();
+                    if capacity == 0 {
+                        0
+                    } else {
+                        size_of::<usize>() * (capacity * 3 + 2)
+                            + val
+                                .into_iter()
+                                .map(|(s, v)| s.len() + self.get_memory(v).unwrap())
+                                .sum::<usize>()
+                    }
+                }
             };
         Ok(res)
     }
@@ -663,5 +678,36 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
             Ok(_) => Ok(true),
             Err(_) => Ok(false),
         }
+    }
+}
+
+// a unit test for get_memory
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_memory() {
+        let manager = RedisIValueJsonKeyManager {
+            phantom: PhantomData,
+        };
+        let json = r#"{
+                            "a": 100.12, 
+                            "b": "foo", 
+                            "c": true, 
+                            "d": 126, 
+                            "e": -112, 
+                            "f": 7388608,
+                            "g": -6388608,
+                            "h": 9388608,
+                            "i": -9485608,
+                            "j": [],
+                            "k": {},
+                            "l": [1, "asas", {"a": 1}],
+                            "m": {"t": "f"}
+                        }"#;
+        let value = serde_json::from_str(json).unwrap();
+        let res = manager.get_memory(&value).unwrap();
+        assert_eq!(res, 903);
     }
 }
