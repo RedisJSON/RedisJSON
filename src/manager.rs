@@ -93,14 +93,11 @@ pub(crate) fn err_json<V: SelectValue>(value: &V, expected_value: &'static str) 
 }
 
 pub(crate) fn err_msg_json_expected(expected_value: &'static str, found: &str) -> String {
-    format!(
-        "WRONGTYPE wrong type of path value - expected {} but found {}",
-        expected_value, found
-    )
+    format!("WRONGTYPE wrong type of path value - expected {expected_value} but found {found}")
 }
 
 pub(crate) fn err_msg_json_path_doesnt_exist_with_param(path: &str) -> String {
-    format!("ERR Path '{}' does not exist", path)
+    format!("ERR Path '{path}' does not exist")
 }
 
 pub(crate) fn err_msg_json_path_doesnt_exist() -> String {
@@ -108,5 +105,5 @@ pub(crate) fn err_msg_json_path_doesnt_exist() -> String {
 }
 
 pub(crate) fn err_msg_json_path_doesnt_exist_with_param_or(path: &str, or: &str) -> String {
-    format!("ERR Path '{}' does not exist or {}", path, or)
+    format!("ERR Path '{path}' does not exist or {or}")
 }
