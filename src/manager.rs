@@ -81,7 +81,7 @@ pub trait Manager {
         key: RedisString,
     ) -> Result<Self::WriteHolder, RedisError>;
     #[allow(clippy::wrong_self_convention)]
-    fn from_str(&self, val: &str, format: Format) -> Result<Self::O, Error>;
+    fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> Result<Self::O, Error>;
     fn get_memory(&self, v: &Self::V) -> Result<usize, RedisError>;
     fn is_json(&self, key: *mut RedisModuleKey) -> Result<bool, RedisError>;
 }
@@ -94,14 +94,11 @@ pub(crate) fn err_json<V: SelectValue>(value: &V, expected_value: &'static str) 
 }
 
 pub(crate) fn err_msg_json_expected(expected_value: &'static str, found: &str) -> String {
-    format!(
-        "WRONGTYPE wrong type of path value - expected {} but found {}",
-        expected_value, found
-    )
+    format!("WRONGTYPE wrong type of path value - expected {expected_value} but found {found}")
 }
 
 pub(crate) fn err_msg_json_path_doesnt_exist_with_param(path: &str) -> String {
-    format!("ERR Path '{}' does not exist", path)
+    format!("ERR Path '{path}' does not exist")
 }
 
 pub(crate) fn err_msg_json_path_doesnt_exist() -> String {
@@ -109,5 +106,5 @@ pub(crate) fn err_msg_json_path_doesnt_exist() -> String {
 }
 
 pub(crate) fn err_msg_json_path_doesnt_exist_with_param_or(path: &str, or: &str) -> String {
-    format!("ERR Path '{}' does not exist or {}", path, or)
+    format!("ERR Path '{path}' does not exist or {or}")
 }

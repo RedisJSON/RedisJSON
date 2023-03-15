@@ -8,7 +8,7 @@ import redis
 import json
 from RLTest import Env
 from includes import *
-
+from redis.client import NEVER_DECODE
 from RLTest import Defaults
 
 Defaults.decode_responses = True
@@ -1302,6 +1302,21 @@ def testMerge(env):
     # Test with none existing key -> create key
     r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_new', '$', '{"h":"i"}'))
     r.expect('JSON.GET', 'test_merge_new').equal('{"h":"i"}')
+
+def testRDBUnboundedDepth(env):
+    # Test RDB Unbounded Depth load
+    r = env
+    json_value = nest_object(128, 5, "__leaf", 42)
+    r.expect('JSON.SET', 'doc', '$', json_value).ok()
+
+    # concat the string_126 at the end of itself
+    json_value = nest_object(3, 5, "__deep_leaf", 420)
+    r.expect('JSON.SET', 'doc', '$..__leaf', json_value).ok()
+    
+    # RDB dump and restore the key 'doc' and check that the key is still valid
+    dump = env.execute_command('dump', 'doc', **{NEVER_DECODE: []})
+    r.expect('RESTORE', 'doc1', 0, dump).ok()
+    r.expect('JSON.GET', 'doc1', '$..__leaf..__deep_leaf').equal('[420]')
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property
