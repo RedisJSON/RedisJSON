@@ -686,7 +686,7 @@ pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
     let mut redis_key = manager.open_key_write(ctx, key)?;
     let current = redis_key.get_value()?;
 
-    let val = manager.from_str(value, format)?;
+    let val = manager.from_str(value, format, true)?;
 
     match current {
         Some(doc) => {
