@@ -578,6 +578,10 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
 pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
+    if args.len() < 3 {
+        return Err(RedisError::WrongArity);
+    }
+
     let key = args.next_arg()?;
     let path = Path::new(args.next_str()?);
     let value = args.next_str()?;
@@ -660,6 +664,79 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
             }
         }
     }
+}
+
+///
+/// JSON.MSET <key> <path> <json> [[<key> <path> <json>]...]
+///
+pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+
+    if args.len() < 3 {
+        return Err(RedisError::WrongArity);
+    }
+
+    // Collect all the actions from the args (redis_key, update_info, value)
+    let mut actions = Vec::new();
+    while let Ok(key) = args.next_arg() {
+        let mut redis_key = manager.open_key_write(ctx, key)?;
+
+        // Verify the key is a JSON type
+        let key_value = redis_key.get_value()?;
+
+        // Verify the path is valid and get all the update info
+        let path = Path::new(args.next_str()?);
+        let update_info = if path.get_path() == JSON_ROOT_PATH {
+            None
+        } else if let Some(value) = key_value {
+            Some(KeyValue::new(value).find_paths(path.get_path(), &SetOptions::None)?)
+        } else {
+            return Err(RedisError::Str(
+                "ERR new objects must be created at the root",
+            ));
+        };
+
+        // Parse the input and validate it's valid JSON
+        let value_str = args.next_str()?;
+        let value = manager.from_str(value_str, Format::JSON, true)?;
+
+        actions.push((redis_key, update_info, value));
+    }
+
+    actions
+        .drain(..)
+        .for_each(|(mut redis_key, update_info, value)| {
+            if let Some(mut update_info) = update_info {
+                if !update_info.is_empty() {
+                    let mut res = false;
+                    if update_info.len() == 1 {
+                        res = match update_info.pop().unwrap() {
+                            UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value).unwrap(),
+                            UpdateInfo::AUI(aui) => {
+                                redis_key.dict_add(aui.path, &aui.key, value).unwrap()
+                            }
+                        }
+                    } else {
+                        for ui in update_info {
+                            res = match ui {
+                                UpdateInfo::SUI(sui) => {
+                                    redis_key.set_value(sui.path, value.clone()).unwrap()
+                                }
+                                UpdateInfo::AUI(aui) => redis_key
+                                    .dict_add(aui.path, &aui.key, value.clone())
+                                    .unwrap(),
+                            }
+                        }
+                    }
+                    if res {
+                        redis_key.apply_changes(ctx, "json.mset").unwrap();
+                    }
+                }
+            } else {
+                redis_key.set_value(Vec::new(), value).unwrap();
+            }
+        });
+    REDIS_OK
 }
 
 fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
