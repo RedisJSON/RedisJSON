@@ -1072,6 +1072,33 @@ def testMultiPathResults(env):
     # make sure legacy json path returns single result
     env.expect("JSON.GET", "k", '.*[0,2]').equal('1')
 
+def testMSET(env):
+    env.expect("JSON.MSET", "a", '$', '"a_val"').ok()
+    env.expect("JSON.GET", "a", '$').equal('["a_val"]')
+
+    env.expect("JSON.MSET", "a", '$', '{"aa":"a_val"}',"b", '$', '{"bb":"b_val"}').ok()
+    env.expect("JSON.MGET", "a", "b", '$').equal(['[{"aa":"a_val"}]', '[{"bb":"b_val"}]'])
+
+    env.expect("JSON.MSET", "a", '$.ab', '"a_val2"',"b", '$..bb', '"b_val2"').ok()
+    env.expect("JSON.MGET", "a", "b", '$').equal(['[{"aa":"a_val","ab":"a_val2"}]', '[{"bb":"b_val2"}]'])
+
+def testMSET_Error(env):
+    env.expect("JSON.SET", "a", '$', '"a_val"').ok()
+
+    env.expect("JSON.MSET", "a").raiseError()
+    # make sure value was not changed
+    env.expect("JSON.GET", "a", '$').equal('["a_val"]')
+
+    env.expect("JSON.MSET", "a", '$', '"a_val2"', "b", '$').raiseError()
+    # make sure value was not changed
+    env.expect("JSON.GET", "a", '$').equal('["a_val"]')
+    env.expect("JSON.GET", "b", '$').equal(None)
+
+    env.expect("JSON.MSET", "a", '$', '"a_val2"', "b", '$.....a', '"b_val"').raiseError()
+    # make sure value was not changed
+    env.expect("JSON.GET", "a", '$').equal('["a_val"]')
+    env.expect("JSON.GET", "b", '$').equal(None)
+
 def testIssue_597(env):
     env.expect("JSON.SET", "test", ".", "[0]").ok()
     env.assertEqual(env.execute_command("JSON.SET", "test", ".[0]", "[0]", "NX"), None)

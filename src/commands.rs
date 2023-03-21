@@ -709,6 +709,8 @@ pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
             if let Some(mut update_info) = update_info {
                 if !update_info.is_empty() {
                     let mut res = false;
+
+                    // If there is only one update info, we can avoid cloning the value
                     if update_info.len() == 1 {
                         res = match update_info.pop().unwrap() {
                             UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value).unwrap(),
