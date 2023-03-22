@@ -578,10 +578,6 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
 pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
-    if args.len() < 3 {
-        return Err(RedisError::WrongArity);
-    }
-
     let key = args.next_arg()?;
     let path = Path::new(args.next_str()?);
     let value = args.next_str()?;
@@ -706,13 +702,12 @@ pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
     actions
         .drain(..)
         .for_each(|(mut redis_key, update_info, value)| {
+            let mut updated = false;
             if let Some(mut update_info) = update_info {
                 if !update_info.is_empty() {
-                    let mut res = false;
-
                     // If there is only one update info, we can avoid cloning the value
                     if update_info.len() == 1 {
-                        res = match update_info.pop().unwrap() {
+                        updated = match update_info.pop().unwrap() {
                             UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value).unwrap(),
                             UpdateInfo::AUI(aui) => {
                                 redis_key.dict_add(aui.path, &aui.key, value).unwrap()
@@ -720,22 +715,23 @@ pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
                         }
                     } else {
                         for ui in update_info {
-                            res = match ui {
-                                UpdateInfo::SUI(sui) => {
-                                    redis_key.set_value(sui.path, value.clone()).unwrap()
+                            updated = updated
+                                || match ui {
+                                    UpdateInfo::SUI(sui) => {
+                                        redis_key.set_value(sui.path, value.clone()).unwrap()
+                                    }
+                                    UpdateInfo::AUI(aui) => redis_key
+                                        .dict_add(aui.path, &aui.key, value.clone())
+                                        .unwrap(),
                                 }
-                                UpdateInfo::AUI(aui) => redis_key
-                                    .dict_add(aui.path, &aui.key, value.clone())
-                                    .unwrap(),
-                            }
                         }
-                    }
-                    if res {
-                        redis_key.apply_changes(ctx, "json.mset").unwrap();
                     }
                 }
             } else {
-                redis_key.set_value(Vec::new(), value).unwrap();
+                updated = redis_key.set_value(Vec::new(), value).unwrap();
+            }
+            if updated {
+                redis_key.apply_changes(ctx, "json.mset").unwrap();
             }
         });
     REDIS_OK
