@@ -616,27 +616,10 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
                     Ok(RedisValue::Null)
                 }
             } else {
-                let mut update_info = KeyValue::new(doc).find_paths(path.get_path(), &op)?;
+                let update_info = KeyValue::new(doc).find_paths(path.get_path(), &op)?;
                 if !update_info.is_empty() {
-                    let mut res = false;
-                    if update_info.len() == 1 {
-                        res = match update_info.pop().unwrap() {
-                            UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, val)?,
-                            UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, val)?,
-                        }
-                    } else {
-                        for ui in update_info {
-                            res = match ui {
-                                UpdateInfo::SUI(sui) => {
-                                    redis_key.set_value(sui.path, val.clone())?
-                                }
-                                UpdateInfo::AUI(aui) => {
-                                    redis_key.dict_add(aui.path, &aui.key, val.clone())?
-                                }
-                            }
-                        }
-                    }
-                    if res {
+                    let updated = apply_updates::<M>(&mut redis_key, val, update_info);
+                    if updated {
                         redis_key.apply_changes(ctx, "json.set")?;
                         REDIS_OK
                     } else {
@@ -702,39 +685,49 @@ pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
     actions
         .drain(..)
         .for_each(|(mut redis_key, update_info, value)| {
-            let mut updated = false;
-            if let Some(mut update_info) = update_info {
-                if !update_info.is_empty() {
-                    // If there is only one update info, we can avoid cloning the value
-                    if update_info.len() == 1 {
-                        updated = match update_info.pop().unwrap() {
-                            UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value).unwrap(),
-                            UpdateInfo::AUI(aui) => {
-                                redis_key.dict_add(aui.path, &aui.key, value).unwrap()
-                            }
-                        }
-                    } else {
-                        for ui in update_info {
-                            updated = updated
-                                || match ui {
-                                    UpdateInfo::SUI(sui) => {
-                                        redis_key.set_value(sui.path, value.clone()).unwrap()
-                                    }
-                                    UpdateInfo::AUI(aui) => redis_key
-                                        .dict_add(aui.path, &aui.key, value.clone())
-                                        .unwrap(),
-                                }
-                        }
-                    }
-                }
+            let updated = if let Some(update_info) = update_info {
+                !update_info.is_empty() && apply_updates::<M>(&mut redis_key, value, update_info)
             } else {
-                updated = redis_key.set_value(Vec::new(), value).unwrap();
-            }
+                // In case it is a root path
+                redis_key.set_value(Vec::new(), value).unwrap()
+            };
             if updated {
                 redis_key.apply_changes(ctx, "json.mset").unwrap();
             }
         });
     REDIS_OK
+}
+
+fn apply_updates<M: Manager>(
+    redis_key: &mut M::WriteHolder,
+    value: M::O,
+    mut update_info: Vec<UpdateInfo>,
+) -> bool {
+    // If there is only one update info, we can avoid cloning the value
+    if update_info.len() == 1 {
+        match update_info.pop().unwrap() {
+            UpdateInfo::SUI(sui) => redis_key
+                .set_value(sui.path, value)
+                .unwrap_or_else(|_| false),
+            UpdateInfo::AUI(aui) => redis_key
+                .dict_add(aui.path, &aui.key, value)
+                .unwrap_or_else(|_| false),
+        }
+    } else {
+        let mut updated = false;
+        for ui in update_info {
+            updated = updated
+                || match ui {
+                    UpdateInfo::SUI(sui) => redis_key
+                        .set_value(sui.path, value.clone())
+                        .unwrap_or_else(|_| false),
+                    UpdateInfo::AUI(aui) => redis_key
+                        .dict_add(aui.path, &aui.key, value.clone())
+                        .unwrap_or_else(|_| false),
+                }
+        }
+        updated
+    }
 }
 
 fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
