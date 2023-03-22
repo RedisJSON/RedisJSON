@@ -706,25 +706,22 @@ fn apply_updates<M: Manager>(
     // If there is only one update info, we can avoid cloning the value
     if update_info.len() == 1 {
         match update_info.pop().unwrap() {
-            UpdateInfo::SUI(sui) => redis_key
-                .set_value(sui.path, value)
-                .unwrap_or_else(|_| false),
+            UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value).unwrap_or(false),
             UpdateInfo::AUI(aui) => redis_key
                 .dict_add(aui.path, &aui.key, value)
-                .unwrap_or_else(|_| false),
+                .unwrap_or(false),
         }
     } else {
         let mut updated = false;
         for ui in update_info {
-            updated = updated
-                || match ui {
-                    UpdateInfo::SUI(sui) => redis_key
-                        .set_value(sui.path, value.clone())
-                        .unwrap_or_else(|_| false),
-                    UpdateInfo::AUI(aui) => redis_key
-                        .dict_add(aui.path, &aui.key, value.clone())
-                        .unwrap_or_else(|_| false),
-                }
+            updated = match ui {
+                UpdateInfo::SUI(sui) => redis_key
+                    .set_value(sui.path, value.clone())
+                    .unwrap_or(false),
+                UpdateInfo::AUI(aui) => redis_key
+                    .dict_add(aui.path, &aui.key, value.clone())
+                    .unwrap_or(false),
+            } || updated
         }
         updated
     }
