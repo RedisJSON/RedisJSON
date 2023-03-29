@@ -45,23 +45,19 @@ impl<'i> Query<'i> {
     /// ($.foo)
     #[allow(dead_code)]
     pub fn pop_last(&mut self) -> Option<(String, JsonPathToken)> {
-        let last = self.root.next_back();
-        match last {
-            Some(last) => match last.as_rule() {
-                Rule::literal => Some((last.as_str().to_string(), JsonPathToken::String)),
-                Rule::number => Some((last.as_str().to_string(), JsonPathToken::Number)),
-                Rule::numbers_list => {
-                    let first_on_list = last.into_inner().next();
-                    first_on_list.map(|first| (first.as_str().to_string(), JsonPathToken::Number))
-                }
-                Rule::string_list => {
-                    let first_on_list = last.into_inner().next();
-                    first_on_list.map(|first| (first.as_str().to_string(), JsonPathToken::String))
-                }
-                _ => panic!("pop last was used in a none static path"),
-            },
-            None => None,
-        }
+        self.root.next_back().and_then(|last| match last.as_rule() {
+            Rule::literal => Some((last.as_str().to_string(), JsonPathToken::String)),
+            Rule::number => Some((last.as_str().to_string(), JsonPathToken::Number)),
+            Rule::numbers_list => {
+                let first_on_list = last.into_inner().next();
+                first_on_list.map(|first| (first.as_str().to_string(), JsonPathToken::Number))
+            }
+            Rule::string_list => {
+                let first_on_list = last.into_inner().next();
+                first_on_list.map(|first| (first.as_str().to_string(), JsonPathToken::String))
+            }
+            _ => panic!("pop last was used in a none static path"),
+        })
     }
 
     /// Returns the amount of elements in the json path

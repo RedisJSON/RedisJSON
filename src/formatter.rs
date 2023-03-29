@@ -175,6 +175,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn test_default_formatter() {
         let mut formatter = RedisJsonFormatter::new(None, None, None);
         let mut writer = vec![];
@@ -232,6 +233,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn test_ident_formatter() {
         let mut formatter = RedisJsonFormatter::new(Some("_"), None, None);
         let mut writer = vec![];
@@ -289,6 +291,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn test_space_formatter() {
         let mut formatter = RedisJsonFormatter::new(None, Some("s"), None);
         let mut writer = vec![];
@@ -346,6 +349,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn test_new_line_formatter() {
         let mut formatter = RedisJsonFormatter::new(None, None, Some("n"));
         let mut writer = vec![];
