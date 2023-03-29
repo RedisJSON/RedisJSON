@@ -218,59 +218,32 @@ impl SelectValue for IValue {
     }
 
     fn get_str(&self) -> String {
-        match self.as_string() {
-            Some(s) => s.to_string(),
-            _ => {
-                panic!("not a string");
-            }
-        }
+        self.as_string().expect("not a string").to_string()
     }
 
     fn as_str(&self) -> &str {
-        match self.as_string() {
-            Some(s) => s.as_str(),
-            _ => {
-                panic!("not a string");
-            }
-        }
+        self.as_string().expect("not a string").as_str()
     }
 
     fn get_bool(&self) -> bool {
-        match self.to_bool() {
-            Some(b) => b,
-            _ => {
-                panic!("not a bool");
-            }
-        }
+        self.to_bool().expect("not a bool")
     }
 
     fn get_long(&self) -> i64 {
-        match self.as_number() {
-            Some(n) => {
-                if n.has_decimal_point() {
-                    panic!("not a long");
-                } else {
-                    n.to_i64().unwrap()
-                }
-            }
-            _ => {
-                panic!("not a number");
-            }
+        let n = self.as_number().expect("not a number");
+        if n.has_decimal_point() {
+            panic!("not a long");
+        } else {
+            n.to_i64().unwrap()
         }
     }
 
     fn get_double(&self) -> f64 {
-        match self.as_number() {
-            Some(n) => {
-                if n.has_decimal_point() {
-                    n.to_f64().unwrap()
-                } else {
-                    panic!("not a double");
-                }
-            }
-            _ => {
-                panic!("not a number");
-            }
+        let n = self.as_number().expect("not a number");
+        if n.has_decimal_point() {
+            n.to_f64().unwrap()
+        } else {
+            panic!("not a double");
         }
     }
 }
