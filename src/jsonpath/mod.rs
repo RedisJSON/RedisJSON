@@ -14,14 +14,16 @@ use json_path::{
     PathCalculator, Query, QueryCompilationError, UserPathTracker,
 };
 
-/// Create a PathCalculator object. The path calculator can be re-used
-/// to calculate json paths on different jsons.
-/// /// ```rust
-/// extern crate jsonpath_rs
+/// Create a `PathCalculator` object. The path calculator can be re-used
+/// to calculate json paths on different JSONs.
+///
+/// ```
 /// #[macro_use] extern crate serde_json;
 ///
-/// let query = jsonpath_rs::compile("$..friends[0]");
-/// let calculator = jsonpath_rs::create(&query)
+/// use rejson::jsonpath;
+///
+/// let query = jsonpath::compile("$..friends[0]").unwrap();
+/// let calculator = jsonpath::create(&query);
 ///
 /// let json_obj = json!({
 ///     "school": {
@@ -42,15 +44,19 @@ use json_path::{
 ///     &json!({"name": "foo1", "age": 20})
 /// ]);
 /// ```
-pub fn create<'i>(query: &'i Query<'i>) -> PathCalculator<'i, DummyTrackerGenerator> {
+#[must_use]
+pub const fn create<'i>(query: &'i Query<'i>) -> PathCalculator<'i, DummyTrackerGenerator> {
     PathCalculator::create(query)
 }
 
-/// Create a PathCalculator object. The path calculator can be re-used
-/// to calculate json paths on different jsons.
-/// Unlike create(), this function will return results with full path as PTracker object.
-/// It is possible to create your own path tracker by implement the PTrackerGenerator trait.
-pub fn create_with_generator<'i>(query: &'i Query<'i>) -> PathCalculator<'i, PTrackerGenerator> {
+/// Create a `PathCalculator` object. The path calculator can be re-used
+/// to calculate json paths on different JSONs.
+/// Unlike create(), this function will return results with full path as `PTracker` object.
+/// It is possible to create your own path tracker by implement the `PTrackerGenerator` trait.
+#[must_use]
+pub const fn create_with_generator<'i>(
+    query: &'i Query<'i>,
+) -> PathCalculator<'i, PTrackerGenerator> {
     PathCalculator::create_with_generator(query, PTrackerGenerator)
 }
 
@@ -77,8 +83,8 @@ pub fn calc_once<'j, 'p, S: SelectValue>(q: Query<'j>, json: &'p S) -> Vec<&'p S
 }
 
 /// A version of `calc_once` that returns also paths.
-pub fn calc_once_with_paths<'j, 'p, S: SelectValue>(
-    q: Query<'j>,
+pub fn calc_once_with_paths<'p, S: SelectValue>(
+    q: Query<'_>,
     json: &'p S,
 ) -> Vec<CalculationResult<'p, S, PTracker>> {
     let root = q.root;
@@ -106,9 +112,11 @@ pub fn calc_once_paths<S: SelectValue>(q: Query, json: &S) -> Vec<Vec<String>> {
 mod json_path_tests {
     use serde_json::json;
     use serde_json::Value;
-    // fn setup() {
 
-    // }
+    #[allow(dead_code)]
+    pub fn setup() {
+        let _ = env_logger::try_init();
+    }
 
     fn perform_search<'a>(path: &str, json: &'a Value) -> Vec<&'a Value> {
         let query = crate::jsonpath::compile(path).unwrap();
@@ -116,7 +124,7 @@ mod json_path_tests {
         path_calculator.calc(json)
     }
 
-    fn perform_path_search<'a>(path: &str, json: &'a Value) -> Vec<Vec<String>> {
+    fn perform_path_search(path: &str, json: &Value) -> Vec<Vec<String>> {
         let query = crate::jsonpath::compile(path).unwrap();
         let path_calculator = crate::jsonpath::create_with_generator(&query);
         path_calculator.calc_paths(json)
@@ -129,10 +137,7 @@ mod json_path_tests {
     ) => {
         let j = json!($json);
         let res = perform_search($path, &j);
-        let mut v = Vec::new();
-        $(
-            v.push(json!($result));
-        )*
+        let v = vec![$(json!($result)),*];
         assert_eq!(res, v.iter().collect::<Vec<&Value>>());
     }}
 
@@ -143,14 +148,7 @@ mod json_path_tests {
     ) => {
         let j = json!($json);
         let res = perform_path_search($path, &j);
-        let mut v = Vec::new();
-        $(
-            let mut s = Vec::new();
-            $(
-                s.push(stringify!($result));
-            )*
-            v.push(s);
-        )*
+        let v = vec![$(vec![$(stringify!($result),)*],)*];
         assert_eq!(res, v);
     }}
 
@@ -161,6 +159,7 @@ mod json_path_tests {
 
     #[test]
     fn basic_bracket_notation() {
+        setup();
         verify_json!(path:"$[\"foo\"]", json:{"foo":[1,2,3]}, results:[[1,2,3]]);
     }
 
@@ -186,51 +185,61 @@ mod json_path_tests {
 
     #[test]
     fn basic_bracket_notation_with_all() {
+        setup();
         verify_json!(path:"$.foo.[\"boo\"][*]", json:{"foo":{"boo":[1,2,3]}}, results:[1,2,3]);
     }
 
     #[test]
     fn basic_bracket_notation_with_multi_indexes() {
+        setup();
         verify_json!(path:"$.foo.[\"boo\"][0,2]", json:{"foo":{"boo":[1,2,3]}}, results:[1,3]);
     }
 
     #[test]
     fn basic_bracket_notation_with_multi_neg_indexes() {
+        setup();
         verify_json!(path:"$.foo.[\"boo\"][-3,-1]", json:{"foo":{"boo":[1,2,3]}}, results:[1,3]);
     }
 
     #[test]
     fn basic_bracket_notation_with_range() {
+        setup();
         verify_json!(path:"$.foo.[\"boo\"][0:2]", json:{"foo":{"boo":[1,2,3]}}, results:[1,2]);
     }
 
     #[test]
     fn basic_bracket_notation_with_all_range() {
+        setup();
         verify_json!(path:"$.foo.[\"boo\"][:]", json:{"foo":{"boo":[1,2,3]}}, results:[1,2,3]);
     }
 
     #[test]
     fn basic_bracket_notation_with_right_range() {
+        setup();
         verify_json!(path:"$.foo.[\"boo\"][:2]", json:{"foo":{"boo":[1,2,3]}}, results:[1,2]);
     }
 
     #[test]
     fn basic_bracket_notation_with_left_range() {
+        setup();
         verify_json!(path:"$.foo.[\"boo\"][1:]", json:{"foo":{"boo":[1,2,3]}}, results:[2,3]);
     }
 
     #[test]
     fn basic_bracket_notation_with_left_range_neg() {
+        setup();
         verify_json!(path:"$.foo.[\"boo\"][-2:]", json:{"foo":{"boo":[1,2,3]}}, results:[2,3]);
     }
 
     #[test]
     fn basic_bracket_notation_with_right_range_neg() {
+        setup();
         verify_json!(path:"$.foo.[\"boo\"][:-1]", json:{"foo":{"boo":[1,2,3]}}, results:[1,2]);
     }
 
     #[test]
     fn basic_bracket_notation_with_multi_strings() {
+        setup();
         verify_json!(path:"$.[\"foo1\",\"foo2\"].boo[0,2]", json:{"foo1":{"boo":[1,2,3]}, "foo2":{"boo":[4,5,6]}}, results:[1,3,4,6]);
     }
 
@@ -271,131 +280,217 @@ mod json_path_tests {
 
     #[test]
     fn root_only() {
+        setup();
         verify_json!(path:"$", json:{"foo":[1,2,3]}, results:[{"foo":[1,2,3]}]);
     }
 
     #[test]
     fn test_filter_number_eq() {
+        setup();
         verify_json!(path:"$.foo[?@ == 1]", json:{"foo":[1,2,3]}, results:[1]);
     }
 
     #[test]
     fn test_filter_number_eq_on_literal() {
+        setup();
         verify_json!(path:"$[?@.foo>=1].foo", json:[{"foo":1}], results:[1]);
     }
 
     #[test]
     fn test_filter_number_eq_floats() {
+        setup();
         verify_json!(path:"$.foo[?@ == 1.1]", json:{"foo":[1.1,2,3]}, results:[1.1]);
     }
 
     #[test]
     fn test_filter_string_eq() {
+        setup();
         verify_json!(path:"$.*[?@ == \"a\"]", json:{"foo":["a","b","c"], "bar":["d","e","f"]}, results:["a"]);
     }
 
     #[test]
     fn test_filter_number_ne() {
+        setup();
         verify_json!(path:"$.*[?@ != 1]", json:{"foo":[1,2,3], "bar":[4,5,6]}, results:[2,3,4,5,6]);
     }
 
     #[test]
     fn test_filter_number_ne_floats() {
+        setup();
         verify_json!(path:"$.*[?@ != 1.1]", json:{"foo":[1.1,2,3], "bar":[4.1,5,6]}, results:[2,3,4.1,5,6]);
     }
 
     #[test]
     fn test_filter_string_ne() {
+        setup();
         verify_json!(path:"$.*[?@ != \"a\"]", json:{"foo":["a","b","c"], "bar":["d","e","f"]}, results:["b","c","d","e","f"]);
     }
 
     #[test]
     fn test_filter_number_gt() {
+        setup();
         verify_json!(path:"$.*[?@ > 3]", json:{"foo":[1,2,3], "bar":[4,5,6]}, results:[4,5,6]);
     }
 
     #[test]
     fn test_filter_number_gt_floats() {
+        setup();
         verify_json!(path:"$.*[?@ > 1.2]", json:{"foo":[1.1,2,3], "bar":[4,5,6]}, results:[2,3,4,5,6]);
     }
 
     #[test]
     fn test_filter_string_gt() {
+        setup();
         verify_json!(path:"$.*[?@ > \"a\"]", json:{"foo":["a","b","c"], "bar":["d","e","f"]}, results:["b","c","d","e","f"]);
     }
 
     #[test]
     fn test_filter_number_ge() {
+        setup();
         verify_json!(path:"$.*[?@ >= 3]", json:{"foo":[1,2,3], "bar":[4,5,6]}, results:[3,4,5,6]);
     }
 
     #[test]
     fn test_filter_number_ge_floats() {
+        setup();
         verify_json!(path:"$.*[?@ >= 3.1]", json:{"foo":[1,2,3.1], "bar":[4,5,6]}, results:[3.1,4,5,6]);
     }
 
     #[test]
     fn test_filter_string_ge() {
+        setup();
         verify_json!(path:"$.*[?@ >= \"a\"]", json:{"foo":["a","b","c"], "bar":["d","e","f"]}, results:["a", "b", "c", "d", "e", "f"]);
     }
 
     #[test]
     fn test_filter_number_lt() {
+        setup();
         verify_json!(path:"$.*[?@ < 4]", json:{"foo":[1,2,3], "bar":[4,5,6]}, results:[1,2,3]);
     }
 
     #[test]
     fn test_filter_number_lt_floats() {
+        setup();
         verify_json!(path:"$.*[?@ < 3.9]", json:{"foo":[1,2,3], "bar":[3,5,6.9]}, results:[1,2,3,3]);
     }
 
     #[test]
     fn test_filter_string_lt() {
+        setup();
         verify_json!(path:"$.*[?@ < \"d\"]", json:{"foo":["a","b","c"], "bar":["d","e","f"]}, results:["a", "b", "c"]);
     }
 
     #[test]
     fn test_filter_number_le() {
+        setup();
         verify_json!(path:"$.*[?@ <= 6]", json:{"foo":[1,2,3], "bar":[4,5,6]}, results:[1,2,3,4,5,6]);
     }
 
     #[test]
     fn test_filter_number_le_floats() {
+        setup();
         verify_json!(path:"$.*[?@ <= 6.1]", json:{"foo":[1,2,3], "bar":[4,5,6]}, results:[1,2,3,4,5,6]);
     }
 
     #[test]
     fn test_filter_string_le() {
+        setup();
         verify_json!(path:"$.*[?@ <= \"d\"]", json:{"foo":["a","b","c"], "bar":["d","e","f"]}, results:["a", "b", "c", "d"]);
     }
 
     #[test]
     fn test_filter_and() {
+        setup();
         verify_json!(path:"$[?@.foo[0] == 1 && @foo[1] == 2].foo[0,1,2]", json:[{"foo":[1,2,3], "bar":[4,5,6]}], results:[1,2,3]);
     }
 
     #[test]
+    fn test_filter_and_three() {
+        setup();
+        verify_json!(path:"$[?@.foo[0] == 1 && @foo[1] == 2 && @foo[2] == 0]", json:[{"foo":[1,2,3], "bar":[4,5,6]}], results:[]);
+    }
+
+    #[test]
+    fn test_filter_and_four() {
+        setup();
+        verify_json!(path:"$[?@.foo[0] == 1 && @foo[1] == 2 && @foo[2] == 2 && @foo[3] == 0]", json:[{"foo":[1,2,3,4], "bar":[4,5,6]}], results:[]);
+    }
+
+    #[test]
+    fn test_filter_and_four_obj() {
+        setup();
+        verify_json!(path:"$[?(@.foo>1 && @.quux>8 && @.bar>3 && @.baz>4)]",
+            json:[{"foo":1, "bar":2, "baz": 3, "quux": 4}, {"foo":2, "bar":4, "baz": 6, "quux": 9}, {"foo":2, "bar":3, "baz": 6, "quux": 10}],
+            results:[{"foo":2, "bar":4, "baz": 6, "quux": 9}]);
+    }
+
+    #[test]
     fn test_filter_or() {
+        setup();
+        verify_json!(path:"$[?@.foo[0] == 2 || @.bar[0] == 4].*[0,1,2]", json:[{"foo":[1,2,3], "bar":[4,5,6]}], results:[1,2,3,4,5,6]);
+    }
+
+    #[test]
+    fn test_filter_or_three() {
+        setup();
+        verify_json!(path:"$[?@.foo[0] == 0 || @.bar[0] == 0 || @.foo[1] == 0 || @.bar[0] == 4 ].*[0,1,2]",
+            json:[{"foo":[1,2,3], "bar":[4,5,6]}],
+            results:[1,2,3,4,5,6]);
+    }
+
+    #[test]
+    fn test_filter_or_four() {
+        setup();
         verify_json!(path:"$[?@.foo[0] == 2 || @.bar[0] == 4].*[0,1,2]", json:[{"foo":[1,2,3], "bar":[4,5,6]}], results:[1,2,3,4,5,6]);
     }
 
     #[test]
     fn test_complex_filter() {
+        setup();
         verify_json!(path:"$[?(@.foo[0] == 1 && @.foo[2] == 3)||(@.bar[0]==4&&@.bar[2]==6)].*[0,1,2]", json:[{"foo":[1,2,3], "bar":[4,5,6]}], results:[1,2,3,4,5,6]);
     }
 
     #[test]
+    fn test_complex_filter_precedence() {
+        setup();
+        let json = json!([{"t":true, "f":false, "one":1}, {"t":true, "f":false, "one":3}]);
+        verify_json!(path:"$[?(@.f==true || @.one==1 && @.t==false)]", json:json, results:[]);
+        verify_json!(path:"$[?(@.f==true || @.one==1 && @.t==true)].*", json:json, results:[true, false, 1]);
+        verify_json!(path:"$[?(@.t==true && @.one==1 || @.t==true)].*", json:json, results:[true, false, 1, true, false, 3]);
+
+        // With A=False, B=False, C=True
+        // "(A && B) || C"  ==> True
+        // "A && (B  || C)" ==> False
+        verify_json!(path:"$[?(@.f==true &&  @.t==false || @.one==1)].*", json:json, results:[true, false, 1]);
+        verify_json!(path:"$[?(@.f==true && (@.t==false || @.one==1))].*", json:json, results:[]);
+    }
+
+    #[test]
+    fn test_complex_filter_nesting() {
+        setup();
+        let json = json!([{"t":true, "f":false, "one":1}, {"t":true, "f":false, "one":3}]);
+        // With A=False, B=False, C=True
+        // "(A && B) || C"  ==> True
+        // "A && (B  || C)" ==> False
+        verify_json!(path:"$[?(@.f==true &&  (@.f==true || (@.t==true && (@.one>1 && @.f==true))) || ((@.one==2 || @.one==1) && @.t==true))].*", json:json, results:[true, false, 1]);
+        verify_json!(path:"$[?(@.f==true &&  ((@.f==true || (@.t==true && (@.one>1 && @.f==true))) || ((@.one==2 || @.one==1) && @.t==true)))].*", json:json, results:[]);
+    }
+
+    #[test]
     fn test_filter_with_full_scan() {
+        setup();
         verify_json!(path:"$..[?(@.code==\"2\")].code", json:[{"code":"1"},{"code":"2"}], results:["2"]);
     }
 
     #[test]
     fn test_full_scan_with_all() {
+        setup();
         verify_json!(path:"$..*.*", json:[{"code":"1"},{"code":"2"}], results:["1", "2"]);
     }
 
     #[test]
     fn test_filter_with_all() {
+        setup();
         verify_json!(path:"$.*.[?(@.code==\"2\")].code", json:[[{"code":"1"},{"code":"2"}]], results:["2"]);
         verify_json!(path:"$.*[?(@.code==\"2\")].code", json:[[{"code":"1"},{"code":"2"}]], results:["2"]);
         verify_json!(path:"$*[?(@.code==\"2\")].code", json:[[{"code":"1"},{"code":"2"}]], results:["2"]);
@@ -403,12 +498,14 @@ mod json_path_tests {
 
     #[test]
     fn test_filter_bool() {
+        setup();
         verify_json!(path:"$.*[?(@==true)]", json:{"a":true, "b":false}, results:[true]);
         verify_json!(path:"$.*[?(@==false)]", json:{"a":true, "b":false}, results:[false]);
     }
 
     #[test]
     fn test_complex_filter_from_root() {
+        setup();
         verify_json!(path:"$.bar.*[?@ == $.foo]",
                      json:{"foo":1, "bar":{"a":[1,2,3], "b":[4,5,6]}},
                      results:[1]);
@@ -416,6 +513,7 @@ mod json_path_tests {
 
     #[test]
     fn test_complex_filter_with_literal() {
+        setup();
         verify_json!(path:"$.foo[?@.a == @.b].boo[:]",
                      json:{"foo":[{"boo":[1,2,3],"a":1,"b":1}]},
                      results:[1,2,3]);
@@ -433,6 +531,7 @@ mod json_path_tests {
 
     #[test]
     fn test_expend_all() {
+        setup();
         verify_json!(path:"$.foo.*.val", 
                           json:{"foo":{"bar1":{"val":[1,2,3]}, "bar2":{"val":[1,2,3]}}},
                           results:[[1,2,3], [1,2,3]]);
@@ -440,6 +539,7 @@ mod json_path_tests {
 
     #[test]
     fn test_full_scan() {
+        setup();
         verify_json!(path:"$..val", 
                           json:{"foo":{"bar1":{"val":[1,2,3]}, "bar2":{"val":[1,2,3]}}, "val":[1,2,3]},
                           results:[[1,2,3], [1,2,3], [1,2,3]]);
@@ -447,11 +547,13 @@ mod json_path_tests {
 
     #[test]
     fn test_with_path() {
+        setup();
         verify_json_path!(path:"$.foo", json:{"foo":[1,2,3]}, results:[[foo]]);
     }
 
     #[test]
     fn test_expend_all_with_path() {
+        setup();
         verify_json_path!(path:"$.foo.*.val",
                           json:{"foo":{"bar1":{"val":[1,2,3]}, "bar2":{"val":[1,2,3]}}},
                           results:[[foo, bar1, val], [foo, bar2, val]]);
@@ -459,6 +561,7 @@ mod json_path_tests {
 
     #[test]
     fn test_expend_all_with_array_path() {
+        setup();
         verify_json_path!(path:"$.foo.*.val",
                           json:{"foo":[
                                 {"val":[1,2,3]},

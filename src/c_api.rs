@@ -80,10 +80,9 @@ pub fn json_api_open_key_internal<M: Manager>(
 pub fn json_api_get_at<M: Manager>(_: M, json: *const c_void, index: size_t) -> *const c_void {
     let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
-        SelectValueType::Array => match json.get_index(index) {
-            Some(v) => (v as *const M::V).cast::<c_void>(),
-            _ => null(),
-        },
+        SelectValueType::Array => json
+            .get_index(index)
+            .map_or_else(null, |v| (v as *const M::V).cast::<c_void>()),
         _ => null(),
     }
 }
@@ -264,10 +263,7 @@ pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -
 }
 
 pub fn json_api_is_json<M: Manager>(m: M, key: *mut rawmod::RedisModuleKey) -> c_int {
-    match m.is_json(key) {
-        Ok(res) => res as c_int,
-        Err(_) => 0,
-    }
+    m.is_json(key).map_or(0, |res| res as c_int)
 }
 
 pub fn get_llapi_ctx() -> Context {
@@ -483,6 +479,7 @@ macro_rules! redis_json_module_export_shared_api {
 
         static REDISJSON_GETAPI_V1: &str = concat!("RedisJSON_V1", "\0");
         static REDISJSON_GETAPI_V2: &str = concat!("RedisJSON_V2", "\0");
+        static REDISJSON_GETAPI_V3: &str = concat!("RedisJSON_V3", "\0");
 
         pub fn export_shared_api(ctx: &Context) {
             unsafe {
@@ -494,11 +491,18 @@ macro_rules! redis_json_module_export_shared_api {
                     REDISJSON_GETAPI_V1.as_ptr().cast::<c_char>(),
                 );
                 ctx.log_notice("Exported RedisJSON_V1 API");
+
                 ctx.export_shared_api(
                     (&JSONAPI_CURRENT as *const RedisJSONAPI_CURRENT).cast::<c_void>(),
                     REDISJSON_GETAPI_V2.as_ptr().cast::<c_char>(),
                 );
                 ctx.log_notice("Exported RedisJSON_V2 API");
+
+                ctx.export_shared_api(
+                    (&JSONAPI_CURRENT as *const RedisJSONAPI_CURRENT).cast::<c_void>(),
+                    REDISJSON_GETAPI_V3.as_ptr().cast::<c_char>(),
+                );
+                ctx.log_notice("Exported RedisJSON_V3 API");
             };
         }
 
@@ -524,6 +528,7 @@ macro_rules! redis_json_module_export_shared_api {
             pathFree: JSONAPI_pathFree,
             pathIsSingle: JSONAPI_pathIsSingle,
             pathHasDefinedOrder: JSONAPI_pathHasDefinedOrder,
+            // V3 entries
             getJSONFromIter: JSONAPI_getJSONFromIter,
             resetIter: JSONAPI_resetIter,
         };
@@ -565,6 +570,7 @@ macro_rules! redis_json_module_export_shared_api {
             pub pathFree: extern "C" fn(json_path: *mut c_void),
             pub pathIsSingle: extern "C" fn(json_path: *mut c_void) -> c_int,
             pub pathHasDefinedOrder: extern "C" fn(json_path: *mut c_void) -> c_int,
+            // V3 entries
             pub getJSONFromIter: extern "C" fn(iter: *mut c_void, ctx: *mut rawmod::RedisModuleCtx, str: *mut *mut rawmod::RedisModuleString,) -> c_int,
             pub resetIter: extern "C" fn(iter: *mut c_void),
         }

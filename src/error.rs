@@ -55,7 +55,7 @@ impl From<redis_module::error::Error> for Error {
 
 impl From<RedisError> for Error {
     fn from(e: RedisError) -> Self {
-        Self::from(format!("ERR {}", e))
+        Self::from(format!("ERR {e}"))
     }
 }
 

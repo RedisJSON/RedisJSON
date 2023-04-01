@@ -44,7 +44,11 @@ pub struct RedisJsonFormatter<'a> {
 }
 
 impl<'a> RedisJsonFormatter<'a> {
-    pub fn new(indent: Option<&'a str>, space: Option<&'a str>, newline: Option<&'a str>) -> Self {
+    pub const fn new(
+        indent: Option<&'a str>,
+        space: Option<&'a str>,
+        newline: Option<&'a str>,
+    ) -> Self {
         RedisJsonFormatter {
             current_indent: 0,
             has_value: false,
@@ -54,9 +58,9 @@ impl<'a> RedisJsonFormatter<'a> {
         }
     }
 
-    fn new_line<W: ?Sized>(&self, wr: &mut W) -> io::Result<()>
+    fn new_line<W>(&self, wr: &mut W) -> io::Result<()>
     where
-        W: io::Write,
+        W: io::Write + ?Sized,
     {
         // Write new line if defined
         if let Some(n) = self.newline {
@@ -76,18 +80,18 @@ impl<'a> RedisJsonFormatter<'a> {
 }
 
 impl Formatter for RedisJsonFormatter<'_> {
-    fn begin_array<W: ?Sized>(&mut self, writer: &mut W) -> io::Result<()>
+    fn begin_array<W>(&mut self, writer: &mut W) -> io::Result<()>
     where
-        W: io::Write,
+        W: io::Write + ?Sized,
     {
         self.current_indent += 1;
         self.has_value = false;
         writer.write_all(b"[")
     }
 
-    fn end_array<W: ?Sized>(&mut self, writer: &mut W) -> io::Result<()>
+    fn end_array<W>(&mut self, writer: &mut W) -> io::Result<()>
     where
-        W: io::Write,
+        W: io::Write + ?Sized,
     {
         self.current_indent -= 1;
 
@@ -98,9 +102,9 @@ impl Formatter for RedisJsonFormatter<'_> {
         writer.write_all(b"]")
     }
 
-    fn begin_array_value<W: ?Sized>(&mut self, writer: &mut W, first: bool) -> io::Result<()>
+    fn begin_array_value<W>(&mut self, writer: &mut W, first: bool) -> io::Result<()>
     where
-        W: io::Write,
+        W: io::Write + ?Sized,
     {
         if !first {
             writer.write_all(b",")?;
@@ -108,26 +112,26 @@ impl Formatter for RedisJsonFormatter<'_> {
         self.new_line(writer)
     }
 
-    fn end_array_value<W: ?Sized>(&mut self, _writer: &mut W) -> io::Result<()>
+    fn end_array_value<W>(&mut self, _writer: &mut W) -> io::Result<()>
     where
-        W: io::Write,
+        W: io::Write + ?Sized,
     {
         self.has_value = true;
         Ok(())
     }
 
-    fn begin_object<W: ?Sized>(&mut self, writer: &mut W) -> io::Result<()>
+    fn begin_object<W>(&mut self, writer: &mut W) -> io::Result<()>
     where
-        W: io::Write,
+        W: io::Write + ?Sized,
     {
         self.current_indent += 1;
         self.has_value = false;
         writer.write_all(b"{")
     }
 
-    fn end_object<W: ?Sized>(&mut self, writer: &mut W) -> io::Result<()>
+    fn end_object<W>(&mut self, writer: &mut W) -> io::Result<()>
     where
-        W: io::Write,
+        W: io::Write + ?Sized,
     {
         self.current_indent -= 1;
 
@@ -138,9 +142,9 @@ impl Formatter for RedisJsonFormatter<'_> {
         writer.write_all(b"}")
     }
 
-    fn begin_object_key<W: ?Sized>(&mut self, writer: &mut W, first: bool) -> io::Result<()>
+    fn begin_object_key<W>(&mut self, writer: &mut W, first: bool) -> io::Result<()>
     where
-        W: io::Write,
+        W: io::Write + ?Sized,
     {
         if !first {
             writer.write_all(b",")?;
@@ -148,18 +152,18 @@ impl Formatter for RedisJsonFormatter<'_> {
         self.new_line(writer)
     }
 
-    fn begin_object_value<W: ?Sized>(&mut self, writer: &mut W) -> io::Result<()>
+    fn begin_object_value<W>(&mut self, writer: &mut W) -> io::Result<()>
     where
-        W: io::Write,
+        W: io::Write + ?Sized,
     {
         writer.write_all(b":")?;
         self.space
             .map_or(Ok(()), |s| writer.write_all(s.as_bytes()))
     }
 
-    fn end_object_value<W: ?Sized>(&mut self, _writer: &mut W) -> io::Result<()>
+    fn end_object_value<W>(&mut self, _writer: &mut W) -> io::Result<()>
     where
-        W: io::Write,
+        W: io::Write + ?Sized,
     {
         self.has_value = true;
         Ok(())
@@ -171,6 +175,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn test_default_formatter() {
         let mut formatter = RedisJsonFormatter::new(None, None, None);
         let mut writer = vec![];
@@ -228,6 +233,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn test_ident_formatter() {
         let mut formatter = RedisJsonFormatter::new(Some("_"), None, None);
         let mut writer = vec![];
@@ -285,6 +291,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn test_space_formatter() {
         let mut formatter = RedisJsonFormatter::new(None, Some("s"), None);
         let mut writer = vec![];
@@ -342,6 +349,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn test_new_line_formatter() {
         let mut formatter = RedisJsonFormatter::new(None, None, Some("n"));
         let mut writer = vec![];

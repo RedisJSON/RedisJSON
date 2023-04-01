@@ -1,4 +1,4 @@
-Search for the first occurrence of a scalar JSON value in an array
+Search for the first occurrence of a JSON value in an array
 
 [Examples](#examples)
 
@@ -7,6 +7,11 @@ Search for the first occurrence of a scalar JSON value in an array
 <details open><summary><code>key</code></summary> 
 
 is key to parse.
+</details>
+
+<details open><summary><code>path</code></summary> 
+
+is JSONPath to specify.
 </details>
 
 <details open><summary><code>value</code></summary> 

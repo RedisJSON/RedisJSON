@@ -1,5 +1,13 @@
 version: 2.1
 
+parameters:
+  run_default_flow:
+    default: true
+    type: boolean
+  run_benchmark_flow_label:
+    default: false
+    type: boolean
+
 commands:
   early-returns:
     steps:
@@ -56,8 +64,16 @@ commands:
           name: Setup automation
           command: |
             git submodule update --init deps/readies
+            if [[ $(uname -s) == Darwin ]]; then rm -f /usr/local/bin/python3; fi
             ./deps/readies/bin/getpy3
+      - run:
+          name: Setup automation (part 2)
+          shell: /bin/bash -l -eo pipefail
+          command: |
+            export HOMEBREW_NO_AUTO_UPDATE=1
             ./deps/readies/bin/getaws
+            ls -l /usr/local/bin/python* || true
+            echo "python3: $(command -v python3)"
             python3 --version
             python3 -m pip list
 
@@ -83,6 +99,7 @@ commands:
           name: Install Redis
           shell: /bin/bash -l -eo pipefail
           command: |
+            export HOMEBREW_NO_AUTO_UPDATE=1
             ./deps/readies/bin/getredis -v '<<parameters.redis_version>>' --force <<parameters.getredis_params>>
       - run:
           name: System report
@@ -307,8 +324,9 @@ commands:
               --redistimeseries_port $PERFORMANCE_RTS_PORT \
               --redistimeseries_pass "$PERFORMANCE_RTS_AUTH" \
               --push_results_redistimeseries \
-              --allowed-envs << parameters.allowed_envs >>
-  benchmark-steps-test:
+              --allowed-envs << parameters.allowed_envs >> || true
+
+benchmark-steps-test:
     parameters:
       github_actor:
         type: string
@@ -389,6 +407,17 @@ commands:
               --push_results_redistimeseries \
               --allowed-envs << parameters.allowed_envs >> 
 
+      - run:
+          name: Generate Pull Request Performance info
+          command: |
+            if [[ -n ${CIRCLE_PULL_REQUEST##*/} ]]; then
+                redisbench-admin compare  \
+                  --defaults_filename ./tests/benchmarks/defaults.yml \
+                  --comparison-branch $CIRCLE_BRANCH \
+                  --auto-approve \
+                  --pull-request ${CIRCLE_PULL_REQUEST##*/}
+            fi
+
 #----------------------------------------------------------------------------------------------------------------------------------
 
 jobs:
@@ -439,9 +468,9 @@ jobs:
       - vm-build-platforms-steps:
           platform: <<parameters.platform>>
 
-  build-macos:
+  build-macos-x64:
     macos:
-      xcode: 11.7.0
+      xcode: 12.5.1
     resource_class: macos.x86.medium.gen2
     parameters:
       upload:
@@ -456,6 +485,26 @@ jobs:
           command: |
             if [[ -n $CIRCLE_BRANCH && "<<parameters.upload>>" == "yes" ]]; then
                 make upload-artifacts SHOW=1
+            fi
+      - persist-artifacts
+
+  build-macos-m1:
+    macos:
+      xcode: 14.2.0
+    resource_class: macos.m1.large.gen1
+    parameters:
+      upload:
+        type: string
+        default: "yes"
+    steps:
+      - early-returns
+      - build-steps
+      - test-steps
+      - run:
+          name: Upload artifacts to S3
+          command: |
+            if [[ -n $CIRCLE_BRANCH && "<<parameters.upload>>" == "yes" ]]; then
+                make upload-artifacts SHOW=1 VERBOSE=1
             fi
       - persist-artifacts
 
@@ -589,7 +638,6 @@ on-integ-branch: &on-integ-branch
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
-        - /^perf.*$/
     tags:
       ignore: /.*/
 
@@ -600,7 +648,6 @@ on-integ-branch-cron: &on-integ-branch-cron
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
-        - /^perf.*$/
 
 not-on-integ-branch: &not-on-integ-branch
   filters:
@@ -609,7 +656,6 @@ not-on-integ-branch: &not-on-integ-branch
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
-        - /^perf.*$/
     tags:
       ignore: /.*/
 
@@ -627,7 +673,6 @@ on-integ-and-version-tags: &on-integ-and-version-tags
         - master
         - /^\d+\.\d+.*$/
         - /^feature-.*$/
-        - /^perf.*$/
     tags:
       only: /^v[0-9].*/
 
@@ -644,6 +689,8 @@ on-test-branch: &on-test-branch
 workflows:
   version: 2
   default-flow:
+    when:
+      << pipeline.parameters.run_default_flow >>
     jobs:
       - build-linux-debian:
           name: build
@@ -653,16 +700,19 @@ workflows:
           context: common
           matrix:
             parameters:
-              platform: [jammy, focal, bionic, xenial, rocky8, centos7, bullseye]
+              platform: [jammy, focal, bionic, xenial, amzn2, rocky8, centos7, bullseye]
       - build-arm-platforms:
           <<: *on-integ-and-version-tags
           context: common
           matrix:
             parameters:
-              platform: [jammy, bionic, focal]
-      - build-macos:
+              platform: [jammy, focal, bionic]
+      - build-macos-x64:
           <<: *on-integ-and-version-tags
           context: common
+      - build-macos-m1:
+          context: common
+          <<: *on-integ-and-version-tags
       - coverage:
           <<: *on-any-branch
       - sanitize:
@@ -679,7 +729,8 @@ workflows:
           requires:
             - build-platforms
             - build-arm-platforms
-            - build-macos
+            - build-macos-x64
+            - build-macos-m1
       - upload-artifacts:
           name: upload-release-artifacts
           <<: *on-version-tags
@@ -687,7 +738,8 @@ workflows:
           requires:
             - build-platforms
             - build-arm-platforms
-            - build-macos
+            - build-macos-x64
+            - build-macos-m1
       - release-qa-tests:
           <<: *on-version-tags
           context: common
@@ -703,7 +755,17 @@ workflows:
           <<: *on-integ-and-version-tags
           context: common
 
-
+  benchmark_flow_label:
+    when:
+      << pipeline.parameters.run_benchmark_flow_label >>
+    jobs:
+      - benchmark-json-oss-standalone:
+          <<: *on-any-branch
+          context: common
+      - benchmark-json-oss-standalone-profiler:
+          <<: *on-any-branch
+          context: common
+  
   nightly:
     triggers:
       - schedule:
@@ -715,7 +777,28 @@ workflows:
           matrix:
             parameters:
               redis_version: ["6.0", "6.2", "7", "unstable"]
+  
+  nightly-perf-once-a-week:
+    triggers:
+      - schedule:
+          #  “At 07:00 on Mondays.”
+          cron: "00 07 * * 1"
+          filters:
+            branches:
+              only: master
+    jobs:
       - benchmark-json-oss-standalone:
           context: common
       - benchmark-json-oss-standalone-profiler:
           context: common
+
+  nightly-twice-a-week:
+    triggers:
+      - schedule:
+          cron: "20 17 * * 0,3"
+          <<: *on-integ-branch-cron
+    jobs:
+      - build-macos-x64:
+          upload: "no"
+      - build-macos-m1:
+          upload: "no"

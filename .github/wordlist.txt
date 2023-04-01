@@ -9,6 +9,7 @@ JRedisJSON
 JS
 JSONPath
 JSONTestSuite
+jedis
 Jedis
 KeyRef
 KeyRefs
@@ -29,6 +30,7 @@ PyPi
 README
 RSALv
 Rafa
+Redisson
 ReJSON
 RediSearch
 RedisJSON
@@ -60,6 +62,7 @@ https
 io
 ioredis
 iorejson
+jedis
 js
 json
 lang
@@ -67,6 +70,8 @@ md
 mkorkmaz
 nitishm
 npm
+nredisstack
+rustis
 nst
 nuget
 occurances
@@ -86,6 +91,7 @@ repo
 rubygems
 rueian
 rueidis
+rustis
 schulzf
 sdk
 seriot

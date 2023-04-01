@@ -11,7 +11,9 @@ use serde_json::Value;
 use rejson::jsonpath::{compile, create};
 
 #[allow(dead_code)]
-pub fn setup() {}
+pub fn setup() {
+    let _ = env_logger::try_init();
+}
 
 #[allow(dead_code)]
 pub fn read_json(path: &str) -> Value {
@@ -36,16 +38,12 @@ pub fn select_and_then_compare(path: &str, json: Value, target: Value) {
     let result = calculator.calc(&json);
 
     assert_eq!(
-        result
-            .iter()
-            .map(|v| v.clone().clone())
-            .collect::<Vec<Value>>(),
+        result.iter().map(|v| (*v).clone()).collect::<Vec<Value>>(),
         match target {
             Value::Array(vec) => vec,
             _ => panic!("Give me the Array!"),
         },
-        "{}",
-        path
+        "{path}"
     );
 
     // let mut selector = Selector::default();

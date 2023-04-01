@@ -851,7 +851,7 @@ def testDebugCommand(env):
     # Test multi
     # json.get a $..a ==> "[{},[],\"str\",42,1.2,false,null]"
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1', '$..a')
-    r.assertEqual(res, [8, 8, 11, 8, 8, 8, 8])
+    r.assertEqual(res, [8, 8, 11, 8, 24, 8, 8])
 
     # Test single
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1', '$.nested2.a')
@@ -860,9 +860,10 @@ def testDebugCommand(env):
     # Test legacy
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1', '..a')
     r.assertEqual(res, 8)
+
     # Test missing path (defaults to root)
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1')
-    r.assertEqual(res, 179)
+    r.assertEqual(res, 1187)
 
     # Test missing subcommand
     r.expect('JSON.DEBUG', 'non_existing_doc', '$..a').raiseError()
@@ -1002,10 +1003,10 @@ def testArrIndexCommand(env):
     res = r.execute_command('JSON.ARRINDEX', 'test_null', '$..arr', 'null')
     r.assertEqual(res, [3, 8, -1, None, -1])
 
-    # Fail with none-scalar value
-    r.expect('JSON.ARRINDEX', 'test_null', '$..nested42_empty_arr.arr', '{"arr":[]}').raiseError()
+    # Search none-scalar value
+    res = r.execute_command('JSON.ARRINDEX', 'test_null', '$.[4][1].nested42_empty_arr.arr', '{"arr":[]}')
+    r.assertEqual(res, [-1])
 
-    # Do not fail with none-scalar value in legacy mode
     res = r.execute_command('JSON.ARRINDEX', 'test_null', '.[4][1].nested42_empty_arr.arr', '{"arr":[]}')
     r.assertEqual(res, -1)
 
