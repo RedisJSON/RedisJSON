@@ -325,6 +325,16 @@ commands:
               --redistimeseries_pass "$PERFORMANCE_RTS_AUTH" \
               --push_results_redistimeseries \
               --allowed-envs << parameters.allowed_envs >> || true
+      - run:
+          name: Generate Pull Request Performance info
+          command: |
+            if [[ -n ${CIRCLE_PULL_REQUEST##*/} ]]; then
+                redisbench-admin compare  \
+                  --defaults_filename ./tests/benchmarks/defaults.yml \
+                  --comparison-branch $CIRCLE_BRANCH \
+                  --auto-approve \
+                  --pull-request ${CIRCLE_PULL_REQUEST##*/}
+            fi
 
 benchmark-steps-test:
     parameters:
@@ -406,17 +416,6 @@ benchmark-steps-test:
               --triggering_env << parameters.triggering_env >> \
               --push_results_redistimeseries \
               --allowed-envs << parameters.allowed_envs >> 
-
-      - run:
-          name: Generate Pull Request Performance info
-          command: |
-            if [[ -n ${CIRCLE_PULL_REQUEST##*/} ]]; then
-                redisbench-admin compare  \
-                  --defaults_filename ./tests/benchmarks/defaults.yml \
-                  --comparison-branch $CIRCLE_BRANCH \
-                  --auto-approve \
-                  --pull-request ${CIRCLE_PULL_REQUEST##*/}
-            fi
 
 #----------------------------------------------------------------------------------------------------------------------------------
 
