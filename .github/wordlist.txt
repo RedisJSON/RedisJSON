@@ -21,6 +21,7 @@ Malhotra
 Mehmet
 Misspelled words:
 NReJSON
+NRedisStack
 Nitish
 OBJSET
 OSX
