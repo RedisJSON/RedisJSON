@@ -5,13 +5,13 @@
 [![Codecov](https://codecov.io/gh/RedisJSON/RedisJSON/branch/master/graph/badge.svg)](https://codecov.io/gh/RedisJSON/RedisJSON)
 
 # RedisJSON
+
 [![Forum](https://img.shields.io/badge/Forum-RedisJSON-blue)](https://forum.redislabs.com/c/modules/redisjson)
 [![Discord](https://img.shields.io/discord/697882427875393627?style=flat-square)](https://discord.gg/QUkjSsk)
 
-
 RedisJSON is a [Redis](https://redis.io/) module that implements [ECMA-404 The JSON Data Interchange Standard](https://json.org/) as a native data type. It allows storing, updating and fetching JSON values from Redis keys (documents).
 
-## Primary features:
+## Primary features
 
 * Full support of the JSON standard
 * [JSONPath](https://goessner.net/articles/JsonPath/) syntax for selecting elements inside documents
@@ -21,18 +21,18 @@ RedisJSON is a [Redis](https://redis.io/) module that implements [ECMA-404 The J
 
 ## Quick start
 
-```
+```bash
 docker run -p 6379:6379 --name redis-stack redis/redis-stack:latest
 ```
 
 ## Documentation
 
-Read the docs at http://redisjson.io
+Read the docs at <http://redisjson.io>
 
 ## Build
 
 Make sure you have Rust installed:
-https://www.rust-lang.org/tools/install
+<https://www.rust-lang.org/tools/install>
 
 Then, build as usual:
 
@@ -52,19 +52,38 @@ If you forget to do this, you'll see an error mentioning `signal: 4, SIGILL: ill
 
 ### Linux
 
-```
+```bash
 redis-server --loadmodule ./target/release/librejson.so
 ```
 
 ### Mac OS
 
-```
+```bash
 redis-server --loadmodule ./target/release/librejson.dylib
 ```
 
 ## Client libraries
 
-Some languages have client libraries that provide support for RedisJSON's commands:
+### Official clients
+
+| [<img width="75" src="https://user-images.githubusercontent.com/1655867/228534778-d0b41ce8-3ce4-4340-bd32-754f01ebed43.svg" />][dotnet-quickstart]  | [<img width="75" src="https://raw.githubusercontent.com/devicons/devicon/master/icons/java/java-plain-wordmark.svg" />][java-quickstart]  | [<img width="75" src="https://raw.githubusercontent.com/devicons/devicon/master/icons/nodejs/nodejs-original-wordmark.svg" />][nodejs-quickstart]   | [<img width="75" src="https://raw.githubusercontent.com/devicons/devicon/master/icons/python/python-original-wordmark.svg" />][python-quickstart]  |
+|---|---|---|---|
+|  [NRedisStack][dotnet-quickstart] | [Jedis][java-quickstart]  | [node-redis][nodejs-quickstart]  |  [redis-py][python-quickstart] |
+|  [Redis.OM][dotnet-om] | [Redis OM Spring][java-om]  | [redis-om-node][nodejs-om]  |  [redis-om][python-om] |
+
+[dotnet-quickstart]: https://redis.io/docs/redis-clients/dotnet/
+[dotnet-om]: https://github.com/redis/redis-om-dotnet
+
+[java-quickstart]: https://redis.io/docs/redis-clients/java/
+[java-om]: https://github.com/redis/redis-om-spring
+
+[nodejs-quickstart]: https://redis.io/docs/redis-clients/nodejs/
+[nodejs-om]: https://github.com/redis/redis-om-node
+
+[python-quickstart]: https://redis.io/docs/redis-clients/python/
+[python-om]: https://github.com/redis/redis-om-python
+
+### Community supported clients
 
 | Project | Language | License | Author | Stars | Package | Comment |
 | ------- | -------- | ------- | ------ | ----- | ------- | ------- |
@@ -88,16 +107,6 @@ Some languages have client libraries that provide support for RedisJSON's comman
 | [redislabs-rejson][redislabs-rejson-url]  | PHP | MIT | [Mehmet Korkmaz @mkorkmaz][redislabs-rejson-author] | [![redislabs-rejson-stars]][redislabs-rejson-url] | [composer][redislabs-rejson-package] |
 | [rejson-rb][rejson-rb-url]  | Ruby | MIT | [Pavan Vachhani @vachhanihpavan][rejson-rb-author] | [![rejson-rb-stars]][rejson-rb-url] | [rubygems][rejson-rb-package]|
 | [rustis][rustis-url] | Rust | MIT | [Dahomey Technologies][rustis-author] | [![rustis-stars]][rustis-url] | [crate][rustis-package]| [Documentation](https://docs.rs/rustis/latest/rustis/commands/trait.JsonCommands.html) |
-
-[redis-url]: https://redis.com
-[Jedis-url]: https://github.com/redis/jedis
-[Jedis-package]: https://search.maven.org/artifact/redis.clients/jedis
-[Jedis-stars]: https://img.shields.io/github/stars/redis/jedis.svg?style=social&amp;label=Star&amp;maxAge=2592000
-
-[JRedisJSON-author]: https://redislabs.com
-[JRedisJSON-url]: https://github.com/RedisJSON/JRedisJSON
-[JRedisJSON-package]: https://search.maven.org/artifact/com.redislabs/jrejson/
-[JRedisJSON-stars]: https://img.shields.io/github/stars/RedisJSON/JRedisJSON.svg?style=social&amp;label=Star&amp;maxAge=2592000
 
 [Redisson-author]: https://github.com/redisson/
 [Redisson-url]: https://github.com/redisson/redisson
@@ -138,7 +147,6 @@ Some languages have client libraries that provide support for RedisJSON's comman
 
 [go-rejson-author]: https://github.com/nitishm
 [go-rejson-url]: https://github.com/nitishm/go-rejson/
-[go-rejson-package]: https://www.npmjs.com/package/iorejson
 [go-rejson-stars]: https://img.shields.io/github/stars/nitishm/go-rejson.svg?style=social&amp;label=Star&amp;maxAge=2592000
 
 [rueidis-url]: https://github.com/rueian/rueidis
@@ -147,7 +155,6 @@ Some languages have client libraries that provide support for RedisJSON's comman
 
 [rejonson-author]: https://github.com/KromDaniel
 [rejonson-url]: https://github.com/KromDaniel/rejonson
-[rejonson-package]: https://www.npmjs.com/package/iorejson
 [rejonson-stars]: https://img.shields.io/github/stars/KromDaniel/rejonson?style=social&amp;label=Star&amp;maxAge=2592000
 
 [NReJSON-author]: https://github.com/tombatron
