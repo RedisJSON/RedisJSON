@@ -39,7 +39,9 @@ boolean = _{boolean_true | boolean_false}
     boolean_true = @{"true"}
     boolean_false = @{"false"}
 
-term = _{select_term | decimal | string | boolean}
+null = @{"null"}
+
+term = _{select_term | decimal | string | boolean | null}
 
 single_filter = {term ~ op ~ term | term}
 

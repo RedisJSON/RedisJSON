@@ -328,12 +328,13 @@ enum TermEvaluationResult<'i, 'j, S: SelectValue> {
     String(String),
     Value(&'j S),
     Bool(bool),
+    Null,
     Invalid,
 }
 
 enum CmpResult {
     Ord(Ordering),
-    NotCmparable,
+    NotComparable,
 }
 
 impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
@@ -372,48 +373,53 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             (TermEvaluationResult::Bool(b1), TermEvaluationResult::Bool(b2)) => {
                 CmpResult::Ord(b1.cmp(b2))
             }
+            (TermEvaluationResult::Null, TermEvaluationResult::Null) => {
+                CmpResult::Ord(Ordering::Equal)
+            }
             (TermEvaluationResult::Value(v), _) => match v.get_type() {
                 SelectValueType::Long => TermEvaluationResult::Integer(v.get_long()).cmp(s),
                 SelectValueType::Double => TermEvaluationResult::Float(v.get_double()).cmp(s),
                 SelectValueType::String => TermEvaluationResult::Str(v.as_str()).cmp(s),
                 SelectValueType::Bool => TermEvaluationResult::Bool(v.get_bool()).cmp(s),
-                _ => CmpResult::NotCmparable,
+                SelectValueType::Null => TermEvaluationResult::Null.cmp(s),
+                _ => CmpResult::NotComparable,
             },
             (_, TermEvaluationResult::Value(v)) => match v.get_type() {
                 SelectValueType::Long => self.cmp(&TermEvaluationResult::Integer(v.get_long())),
                 SelectValueType::Double => self.cmp(&TermEvaluationResult::Float(v.get_double())),
                 SelectValueType::String => self.cmp(&TermEvaluationResult::Str(v.as_str())),
                 SelectValueType::Bool => self.cmp(&TermEvaluationResult::Bool(v.get_bool())),
-                _ => CmpResult::NotCmparable,
+                SelectValueType::Null => self.cmp(&TermEvaluationResult::Null),
+                _ => CmpResult::NotComparable,
             },
-            (_, _) => CmpResult::NotCmparable,
+            (_, _) => CmpResult::NotComparable,
         }
     }
     fn gt(&self, s: &Self) -> bool {
         match self.cmp(s) {
             CmpResult::Ord(o) => o.is_gt(),
-            CmpResult::NotCmparable => false,
+            CmpResult::NotComparable => false,
         }
     }
 
     fn ge(&self, s: &Self) -> bool {
         match self.cmp(s) {
             CmpResult::Ord(o) => o.is_ge(),
-            CmpResult::NotCmparable => false,
+            CmpResult::NotComparable => false,
         }
     }
 
     fn lt(&self, s: &Self) -> bool {
         match self.cmp(s) {
             CmpResult::Ord(o) => o.is_lt(),
-            CmpResult::NotCmparable => false,
+            CmpResult::NotComparable => false,
         }
     }
 
     fn le(&self, s: &Self) -> bool {
         match self.cmp(s) {
             CmpResult::Ord(o) => o.is_le(),
-            CmpResult::NotCmparable => false,
+            CmpResult::NotComparable => false,
         }
     }
 
@@ -422,7 +428,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             (TermEvaluationResult::Value(v1), TermEvaluationResult::Value(v2)) => v1 == v2,
             (_, _) => match self.cmp(s) {
                 CmpResult::Ord(o) => o.is_eq(),
-                CmpResult::NotCmparable => false,
+                CmpResult::NotComparable => false,
             },
         }
     }
@@ -795,6 +801,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             }
             Rule::boolean_true => TermEvaluationResult::Bool(true),
             Rule::boolean_false => TermEvaluationResult::Bool(false),
+            Rule::null => TermEvaluationResult::Null,
             Rule::string_value => TermEvaluationResult::Str(term.as_str()),
             Rule::string_value_escape_1 => TermEvaluationResult::String(
                 term.as_str().replace("\\\\", "\\").replace("\\'", "'"),
