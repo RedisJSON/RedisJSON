@@ -512,6 +512,13 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_filter_null() {
+        setup();
+        verify_json!(path:"$.*[?(@==null)]", json:{"a":null}, results:[null]);
+        verify_json!(path:"$[?(@.*==null)]", json:[{"a":10}, {"b":null}, {"c":30}], results:[{"b": null}]);
+    }
+
+    #[test]
     fn test_complex_filter_from_root() {
         setup();
         verify_json!(path:"$.bar.*[?@ == $.foo]",
