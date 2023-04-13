@@ -202,6 +202,14 @@ mod json_path_tests {
     }
 
     #[test]
+    fn basic_full_range() {
+        setup();
+        verify_json!(path:"$.foo.[\"boo\"][0:2:1]", json:{"foo":{"boo":[1,2,3]}}, results:[1,2]);
+        verify_json!(path:"$.foo.[\"boo\"][0:3:2]", json:{"foo":{"boo":[1,2,3]}}, results:[1,3]);
+        assert!(crate::jsonpath::compile("$.foo.[\"boo\"][0:3:0]").is_err());
+    }
+
+    #[test]
     fn basic_bracket_notation_with_range() {
         setup();
         verify_json!(path:"$.foo.[\"boo\"][0:2]", json:{"foo":{"boo":[1,2,3]}}, results:[1,2]);
