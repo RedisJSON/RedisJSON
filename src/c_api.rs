@@ -276,6 +276,8 @@ macro_rules! redis_json_module_export_shared_api {
         get_manage: $get_manager_expr:expr,
         pre_command_function: $pre_command_function_expr:expr,
     ) => {
+        use std::ptr::NonNull;
+
         #[no_mangle]
         pub extern "C" fn JSONAPI_openKey(
             ctx: *mut rawmod::RedisModuleCtx,
@@ -284,7 +286,7 @@ macro_rules! redis_json_module_export_shared_api {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_mngr: $get_manager_expr,
-                run: |mngr|{json_api_open_key_internal(mngr, ctx, RedisString::new(ctx, key_str))as *mut c_void},
+                run: |mngr|{json_api_open_key_internal(mngr, ctx, RedisString::new(NonNull::new(ctx), key_str))as *mut c_void},
             )
         }
 
@@ -298,7 +300,7 @@ macro_rules! redis_json_module_export_shared_api {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_mngr: $get_manager_expr,
-                run: |mngr|{json_api_open_key_internal(mngr, ctx, RedisString::create(ctx, key)) as *mut c_void},
+                run: |mngr|{json_api_open_key_internal(mngr, ctx, RedisString::create(NonNull::new(ctx), key)) as *mut c_void},
             )
         }
 

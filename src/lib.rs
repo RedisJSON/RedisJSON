@@ -73,6 +73,11 @@ pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
         unlink: None,
         copy: Some(redisjson::type_methods::copy),
         defrag: None,
+
+        free_effort2: None,
+        unlink2: None,
+        copy2: None,
+        mem_usage2: None,
     },
 );
 /////////////////////////////////////////////////////
