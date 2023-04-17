@@ -15,7 +15,7 @@ use crate::Format;
 
 use crate::error::Error;
 
-use crate::commands::KeyValue;
+use crate::key_value::KeyValue;
 
 pub struct SetUpdateInfo {
     pub path: Vec<String>,
