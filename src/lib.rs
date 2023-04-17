@@ -38,6 +38,7 @@ pub mod error;
 mod formatter;
 pub mod ivalue_manager;
 pub mod jsonpath;
+mod key_value;
 pub mod manager;
 pub mod redisjson;
 pub mod serde_value_manager;
