@@ -14,7 +14,7 @@ use regex::Regex;
 use std::fmt::Debug;
 
 #[derive(Parser)]
-#[grammar = "jsonpath/grammer.pest"]
+#[grammar = "jsonpath/grammar.pest"]
 pub struct JsonPathParser;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -240,19 +240,19 @@ pub enum PTrackerElement {
 /* An actual representation of a path that the user gets as a result. */
 #[derive(Debug, PartialEq, Eq)]
 pub struct PTracker {
-    pub elemenets: Vec<PTrackerElement>,
+    pub elements: Vec<PTrackerElement>,
 }
 impl UserPathTracker for PTracker {
     fn add_str(&mut self, s: &str) {
-        self.elemenets.push(PTrackerElement::Key(s.to_string()));
+        self.elements.push(PTrackerElement::Key(s.to_string()));
     }
 
     fn add_index(&mut self, i: usize) {
-        self.elemenets.push(PTrackerElement::Index(i));
+        self.elements.push(PTrackerElement::Index(i));
     }
 
     fn to_string_path(self) -> Vec<String> {
-        self.elemenets
+        self.elements
             .into_iter()
             .map(|e| match e {
                 PTrackerElement::Key(s) => s,
@@ -268,7 +268,7 @@ impl UserPathTrackerGenerator for PTrackerGenerator {
     type PT = PTracker;
     fn generate(&self) -> Self::PT {
         PTracker {
-            elemenets: Vec::new(),
+            elements: Vec::new(),
         }
     }
 }
@@ -983,7 +983,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                             || json.get_type() == SelectValueType::Object
                         {
                             /* lets expend the array, this is how most json path engines work.
-                             * Pesonally, I think this if should not exists. */
+                             * Personally, I think this if should not exists. */
                             let values = json.values().unwrap();
                             if let Some(pt) = path_tracker {
                                 trace!(
@@ -1108,7 +1108,7 @@ mod json_path_compiler_tests {
     }
 
     #[test]
-    fn test_compiler_pop_last_string_brucket_notation() {
+    fn test_compiler_pop_last_string_bracket_notation() {
         let query = compile("$.[\"foo\"]");
         assert_eq!(
             query.unwrap().pop_last().unwrap(),
