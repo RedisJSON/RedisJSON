@@ -81,7 +81,7 @@ commands:
     parameters:
       redis_version:
         type: string
-        default: "6"
+        default: "7.0"
       getredis_params:
         type: string
         default: ""
@@ -143,7 +143,7 @@ commands:
         default: ""
       redis_version:
         type: string
-        default: "6"
+        default: "7.0"
       getredis_params:
         type: string
         default: ""
@@ -341,7 +341,7 @@ jobs:
     parameters:
       redis_version:
         type: string
-        default: "6"
+        default: "7.0"
       persist:
         type: string
         default: "yes"
@@ -382,7 +382,7 @@ jobs:
       - vm-build-platforms-steps:
           platform: <<parameters.platform>>
 
-  build-macos:
+  build-macos-x64:
     macos:
       xcode: 12.5.1
     resource_class: macos.x86.medium.gen2
@@ -399,6 +399,26 @@ jobs:
           command: |
             if [[ -n $CIRCLE_BRANCH && "<<parameters.upload>>" == "yes" ]]; then
                 make upload-artifacts SHOW=1
+            fi
+      - persist-artifacts
+
+  build-macos-m1:
+    macos:
+      xcode: 14.2.0
+    resource_class: macos.m1.large.gen1
+    parameters:
+      upload:
+        type: string
+        default: "yes"
+    steps:
+      - early-returns
+      - build-steps
+      - test-steps
+      - run:
+          name: Upload artifacts to S3
+          command: |
+            if [[ -n $CIRCLE_BRANCH && "<<parameters.upload>>" == "yes" ]]; then
+                make upload-artifacts SHOW=1 VERBOSE=1
             fi
       - persist-artifacts
 
@@ -585,10 +605,13 @@ workflows:
           context: common
           matrix:
             parameters:
-              platform: [jammy, bionic, focal]
-      - build-macos:
+              platform: [jammy, focal, bionic]
+      - build-macos-x64:
           <<: *on-integ-and-version-tags
           context: common
+      - build-macos-m1:
+          context: common
+          <<: *on-integ-and-version-tags
       - coverage:
           <<: *on-any-branch
       - sanitize:
@@ -605,7 +628,8 @@ workflows:
           requires:
             - build-platforms
             - build-arm-platforms
-            - build-macos
+            - build-macos-x64
+            - build-macos-m1
       - upload-artifacts:
           name: upload-release-artifacts
           <<: *on-version-tags
@@ -613,7 +637,8 @@ workflows:
           requires:
             - build-platforms
             - build-arm-platforms
-            - build-macos
+            - build-macos-x64
+            - build-macos-m1
       - release-qa-tests:
           <<: *on-version-tags
           context: common
@@ -647,7 +672,7 @@ workflows:
           name: build-with-redis-<<matrix.redis_version>>
           matrix:
             parameters:
-              redis_version: ["6.0", "6.2", "7", "unstable"]
+              redis_version: ["6.0", "6.2", "7", "7.2-rc1", "unstable"]
   
   nightly-perf-once-a-week:
     triggers:
@@ -662,3 +687,14 @@ workflows:
           context: common
       - benchmark-json-oss-standalone-profiler:
           context: common
+
+  nightly-twice-a-week:
+    triggers:
+      - schedule:
+          cron: "20 17 * * 0,3"
+          <<: *on-integ-branch-cron
+    jobs:
+      - build-macos-x64:
+          upload: "no"
+      - build-macos-m1:
+          upload: "no"
