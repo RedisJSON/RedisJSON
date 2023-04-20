@@ -833,8 +833,8 @@ def testArrWrongChars(env):
     r = env
 
     r.assertOk(r.execute_command('JSON.SET', 'test','.', '{"arr":[1,2]}'))
-    r.expect('JSON.ARRINSERT', 'test', '.arr', 0, b'\x80abc').error().contains("Couldn't parse as UTF-8 string")
-    r.expect('JSON.ARRAPPEND', 'test', '.arr', b'\x80abc').error().contains("Couldn't parse as UTF-8 string")
+    r.expect('JSON.ARRINSERT', 'test', '.arr', 0, b'\x80abc').error().contains("expected value at line 1 column 1")
+    r.expect('JSON.ARRAPPEND', 'test', '.arr', b'\x80abc').error().contains("expected value at line 1 column 1")
 
 def testArrTrimErrors(env):
     r = env
