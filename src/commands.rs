@@ -684,18 +684,18 @@ pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
 
     actions
         .drain(..)
-        .for_each(|(mut redis_key, update_info, value)| {
+        .fold(REDIS_OK, |res, (mut redis_key, update_info, value)| {
             let updated = if let Some(update_info) = update_info {
                 !update_info.is_empty() && apply_updates::<M>(&mut redis_key, value, update_info)
             } else {
                 // In case it is a root path
-                redis_key.set_value(Vec::new(), value).unwrap()
+                redis_key.set_value(Vec::new(), value)?
             };
             if updated {
-                redis_key.apply_changes(ctx, "json.mset").unwrap();
+                redis_key.apply_changes(ctx, "json.mset")?
             }
-        });
-    REDIS_OK
+            res
+        })
 }
 
 fn apply_updates<M: Manager>(
