@@ -66,7 +66,7 @@ pub fn compile(s: &str) -> Result<Query, QueryCompilationError> {
     json_path::compile(s)
 }
 
-/// Calc once allows to performe a one time calculation on the give query.
+/// Calc once allows to perform a one time calculation on the give query.
 /// The query ownership is taken so it can not be used after. This allows
 /// the get a better performance if there is a need to calculate the query
 /// only once.

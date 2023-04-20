@@ -155,7 +155,7 @@ redis-server --loadmodule ./target/release/librejson.dylib
 
 RedisJSON is developed with <3 at [Redis Labs](https://redislabs.com).
 
-RedisJSON is made possible only because of the existance of this amazing open source project:
+RedisJSON is made possible only because of the existence of this amazing open source project:
 
 * [redis](https://github.com/antirez/redis)
 

@@ -76,7 +76,7 @@ impl FromStr for Format {
 }
 
 ///
-/// Backwards compatibility convertor for `RedisJSON` 1.x clients
+/// Backwards compatibility converter for `RedisJSON` 1.x clients
 ///
 pub struct Path<'a> {
     original_path: &'a str,
