@@ -136,7 +136,7 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
 
     let key = args.next_arg()?;
     let path = Path::new(args.next_str()?);
-    let value = args.next_str()?;
+    let value = args.next_arg()?;
 
     let mut format = Format::JSON;
     let mut set_option = SetOptions::None;
@@ -159,7 +159,7 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
     let mut redis_key = manager.open_key_write(ctx, key)?;
     let current = redis_key.get_value()?;
 
-    let val = manager.from_str(value, format, true)?;
+    let val = manager.from_string(&value, format, true)?;
 
     match (current, set_option) {
         (Some(doc), op) => {
@@ -885,9 +885,8 @@ pub fn json_arr_append<M: Manager>(
 
     let args = args.try_fold::<_, _, Result<_, RedisError>>(
         Vec::with_capacity(args.len()),
-        |mut acc, arg| {
-            let json = arg.try_as_str()?;
-            acc.push(manager.from_str(json, Format::JSON, true)?);
+        |mut acc, val| {
+            acc.push(manager.from_string(&val, Format::JSON, true)?);
             Ok(acc)
         },
     )?;
@@ -1045,9 +1044,8 @@ pub fn json_arr_insert<M: Manager>(
     args.peek().ok_or(RedisError::WrongArity)?;
     let args = args.try_fold::<_, _, Result<_, RedisError>>(
         Vec::with_capacity(args.len()),
-        |mut acc, arg| {
-            let json = arg.try_as_str()?;
-            acc.push(manager.from_str(json, Format::JSON, true)?);
+        |mut acc, val| {
+            acc.push(manager.from_string(&val, Format::JSON, true)?);
             Ok(acc)
         },
     )?;

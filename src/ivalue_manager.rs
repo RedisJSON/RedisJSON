@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Number;
 use std::marker::PhantomData;
 use std::mem::size_of;
+use std::ptr::null_mut;
 
 use crate::redisjson::RedisJSON;
 
@@ -583,16 +584,21 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         })
     }
 
-    fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> Result<Self::O, Error> {
+    fn from_string(
+        &self,
+        val: &RedisString,
+        format: Format,
+        limit_depth: bool,
+    ) -> Result<Self::O, Error> {
         match format {
             Format::JSON => {
-                let mut deserializer = serde_json::Deserializer::from_str(val);
+                let mut deserializer = serde_json::Deserializer::from_slice(val.as_slice());
                 if !limit_depth {
                     deserializer.disable_recursion_limit();
                 }
                 IValue::deserialize(&mut deserializer).map_err(|e| e.into())
             }
-            Format::BSON => decode_document(&mut Cursor::new(val.as_bytes())).map_or_else(
+            Format::BSON => decode_document(&mut Cursor::new(val.as_slice())).map_or_else(
                 |e| Err(e.to_string().into()),
                 |docs| {
                     let v = if docs.is_empty() {
@@ -604,8 +610,11 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                                 let v: serde_json::Value = b.clone().into();
                                 let mut out = serde_json::Serializer::new(Vec::new());
                                 v.serialize(&mut out).unwrap();
-                                self.from_str(
-                                    &String::from_utf8(out.into_inner()).unwrap(),
+                                self.from_string(
+                                    &RedisString::create(
+                                        null_mut(),
+                                        &String::from_utf8(out.into_inner()).unwrap(),
+                                    ),
                                     Format::JSON,
                                     limit_depth,
                                 )

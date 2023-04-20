@@ -137,6 +137,8 @@ pub struct RedisJSON<T> {
 }
 
 pub mod type_methods {
+    use redis_module::RedisString;
+
     use super::*;
     use std::{ffi::CString, ptr::null_mut};
 
@@ -148,7 +150,7 @@ pub mod type_methods {
                     let m = RedisJsonKeyManager {
                         phantom: PhantomData,
                     };
-                    let v = m.from_str(&json_string, Format::JSON, false);
+                    let v = m.from_string(&json_string, Format::JSON, false);
                     v.map_or(null_mut(), |res| {
                         Box::into_raw(Box::new(res)).cast::<libc::c_void>()
                     })
@@ -157,7 +159,7 @@ pub mod type_methods {
                     let m = RedisIValueJsonKeyManager {
                         phantom: PhantomData,
                     };
-                    let v = m.from_str(&json_string, Format::JSON, false);
+                    let v = m.from_string(&json_string, Format::JSON, false);
                     v.map_or(null_mut(), |res| {
                         Box::into_raw(Box::new(res)).cast::<libc::c_void>()
                     })
@@ -171,14 +173,14 @@ pub mod type_methods {
     pub fn value_rdb_load_json(
         rdb: *mut raw::RedisModuleIO,
         encver: c_int,
-    ) -> Result<String, Error> {
+    ) -> Result<RedisString, Error> {
         Ok(match encver {
             0 => {
                 let v = backward::json_rdb_load(rdb)?;
 
                 let mut out = serde_json::Serializer::new(Vec::new());
                 v.serialize(&mut out).unwrap();
-                String::from_utf8(out.into_inner()).unwrap()
+                RedisString::create(null_mut(), &String::from_utf8(out.into_inner()).unwrap())
             }
             2 => {
                 let data = raw::load_string(rdb)?;
@@ -189,12 +191,9 @@ pub mod type_methods {
                     raw::load_string(rdb)?;
                     raw::load_string(rdb)?;
                 }
-                data.try_as_str()?.to_string()
+                data
             }
-            3 => {
-                let data = raw::load_string(rdb)?;
-                data.try_as_str()?.to_string()
-            }
+            3 => raw::load_string(rdb)?,
             _ => panic!("Can't load old RedisJSON RDB"),
         })
     }
