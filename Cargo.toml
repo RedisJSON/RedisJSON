@@ -16,7 +16,6 @@ name = "rejson"
 
 [dev-dependencies]
 env_logger = "0.10.0"
-#redis-module = { version="1.0", features = ["experimental-api", "test"]}
 
 [dependencies]
 pest = "2.1"
@@ -28,14 +27,11 @@ ijson = "0.1.3"
 serde_json = { version="1.0", features = ["unbounded_depth"]}
 serde = "1.0"
 libc = "0.2"
-redis-module = { git="https://github.com/RedisLabsModules/redismodule-rs.git", features = ["experimental-api"]}
+redis-module = { git="https://github.com/RedisLabsModules/redismodule-rs.git"}
 itertools = "0.10"
 regex = "1"
+
 [features]
-# Workaround to allow cfg(feature = "test") in redismodue-rs dependencies:
-# https://github.com/RedisLabsModules/redismodule-rs/pull/68
-# This requires running the tests with `--features test`
-test = ["redis-module/test"]
 as-library = []
 
 [[test]]

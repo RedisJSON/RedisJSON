@@ -205,6 +205,7 @@ macro_rules! redis_json_module_create {(
         redis_module! {
             name: $crate::MODULE_NAME,
             version: $version,
+            allocator: (redis_module::alloc::RedisAlloc, redis_module::alloc::RedisAlloc),
             data_types: [$($data_type,)*],
             init: json_init_config,
             init: initialize,
