@@ -30,6 +30,12 @@ def test_keyspace_set(env):
         assert_msg(env, pubsub.get_message(timeout=1), 'pmessage', 'json.set')
         assert_msg(env, pubsub.get_message(timeout=1), 'pmessage', 'test_key')
 
+        env.assertEqual('OK', r.execute_command('JSON.MSET', 'test_key', '$.foo', '"gogo"', 'test_key', '$.fu', '"fufu"'))
+        assert_msg(env, pubsub.get_message(timeout=1), 'pmessage', 'json.set')
+        assert_msg(env, pubsub.get_message(timeout=1), 'pmessage', 'test_key')
+        assert_msg(env, pubsub.get_message(timeout=1), 'pmessage', 'json.set')
+        assert_msg(env, pubsub.get_message(timeout=1), 'pmessage', 'test_key')
+
         env.assertEqual([8], r.execute_command('JSON.STRAPPEND', 'test_key', '$.foo', '"toto"'))
         assert_msg(env, pubsub.get_message(timeout=1), 'pmessage', 'json.strappend')
         assert_msg(env, pubsub.get_message(timeout=1), 'pmessage', 'test_key')
