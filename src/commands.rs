@@ -91,7 +91,7 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
 
-    // Set Capcity to 1 assumiung the common case has one path
+    // Set Capacity to 1 assuming the common case has one path
     let mut paths: Vec<Path> = Vec::with_capacity(1);
     let mut format = Format::JSON;
     let mut indent = None;
