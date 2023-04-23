@@ -376,7 +376,7 @@ impl<'a> WriteHolder<Value, Value> for KeyHolderWrite<'a> {
                 if array.is_empty() {
                     return Ok(Some(v));
                 }
-                // Verify legel index in bounds
+                // Verify legal index in bounds
                 let len = array.len() as i64;
                 let index = normalize_arr_start_index(index, len) as usize;
 

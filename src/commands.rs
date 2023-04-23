@@ -5,21 +5,18 @@
  */
 
 use crate::error::Error;
-use crate::formatter::RedisJsonFormatter;
 use crate::jsonpath::select_value::{SelectValue, SelectValueType};
+use crate::key_value::KeyValue;
 use crate::manager::err_msg_json_path_doesnt_exist_with_param;
-use crate::manager::{err_msg_json_expected, err_msg_json_path_doesnt_exist_with_param_or};
-use crate::manager::{AddUpdateInfo, Manager, ReadHolder, SetUpdateInfo, UpdateInfo, WriteHolder};
-use crate::redisjson::{normalize_arr_indices, Format, Path};
+use crate::manager::err_msg_json_path_doesnt_exist_with_param_or;
+use crate::manager::{Manager, ReadHolder, UpdateInfo, WriteHolder};
+use crate::redisjson::{Format, Path};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use std::cmp::Ordering;
 use std::str::FromStr;
 
-use crate::jsonpath::{
-    calc_once, calc_once_paths, calc_once_with_paths, compile, json_path::JsonPathToken,
-    json_path::UserPathTracker,
-};
+use crate::jsonpath::{calc_once_with_paths, compile, json_path::UserPathTracker};
 
 use crate::redisjson::SetOptions;
 
@@ -28,7 +25,6 @@ use serde_json::{Number, Value};
 use itertools::FoldWhile::{Continue, Done};
 use itertools::{EitherOrBoth, Itertools};
 use serde::{Serialize, Serializer};
-use std::collections::HashMap;
 
 const JSON_ROOT_PATH: &str = "$";
 const JSON_ROOT_PATH_LEGACY: &str = ".";
@@ -66,7 +62,7 @@ const JSONGET_SUBCOMMANDS_MAXSTRLEN: usize = max_strlen(&[
     CMD_ARG_FORMAT,
 ]);
 
-enum Values<'a, V: SelectValue> {
+pub enum Values<'a, V: SelectValue> {
     Single(&'a V),
     Multi(Vec<&'a V>),
 }
@@ -83,446 +79,6 @@ impl<'a, V: SelectValue> Serialize for Values<'a, V> {
     }
 }
 
-pub struct KeyValue<'a, V: SelectValue> {
-    val: &'a V,
-}
-
-impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
-    pub const fn new(v: &'a V) -> KeyValue<'a, V> {
-        KeyValue { val: v }
-    }
-
-    fn get_first<'b>(&'a self, path: &'b str) -> Result<&'a V, Error> {
-        let results = self.get_values(path)?;
-        match results.first() {
-            Some(s) => Ok(s),
-            None => Err(err_msg_json_path_doesnt_exist_with_param(path)
-                .as_str()
-                .into()),
-        }
-    }
-
-    fn resp_serialize(&'a self, path: Path) -> RedisResult {
-        if path.is_legacy() {
-            let v = self.get_first(path.get_path())?;
-            Ok(Self::resp_serialize_inner(v))
-        } else {
-            Ok(self
-                .get_values(path.get_path())?
-                .iter()
-                .map(|v| Self::resp_serialize_inner(v))
-                .collect::<Vec<RedisValue>>()
-                .into())
-        }
-    }
-
-    fn resp_serialize_inner(v: &V) -> RedisValue {
-        match v.get_type() {
-            SelectValueType::Null => RedisValue::Null,
-
-            SelectValueType::Bool => {
-                let bool_val = v.get_bool();
-                match bool_val {
-                    true => RedisValue::SimpleString("true".to_string()),
-                    false => RedisValue::SimpleString("false".to_string()),
-                }
-            }
-
-            SelectValueType::Long => RedisValue::Integer(v.get_long()),
-
-            SelectValueType::Double => RedisValue::Float(v.get_double()),
-
-            SelectValueType::String => RedisValue::BulkString(v.get_str()),
-
-            SelectValueType::Array => {
-                let mut res: Vec<RedisValue> = Vec::with_capacity(v.len().unwrap() + 1);
-                res.push(RedisValue::SimpleStringStatic("["));
-                v.values()
-                    .unwrap()
-                    .for_each(|v| res.push(Self::resp_serialize_inner(v)));
-                RedisValue::Array(res)
-            }
-
-            SelectValueType::Object => {
-                let mut res: Vec<RedisValue> = Vec::with_capacity(v.len().unwrap() + 1);
-                res.push(RedisValue::SimpleStringStatic("{"));
-                for (k, v) in v.items().unwrap() {
-                    res.push(RedisValue::BulkString(k.to_string()));
-                    res.push(Self::resp_serialize_inner(v));
-                }
-                RedisValue::Array(res)
-            }
-        }
-    }
-
-    fn get_values<'b>(&'a self, path: &'b str) -> Result<Vec<&'a V>, Error> {
-        let query = compile(path)?;
-        let results = calc_once(query, self.val);
-        Ok(results)
-    }
-
-    pub fn serialize_object<O: Serialize>(
-        o: &O,
-        indent: Option<&str>,
-        newline: Option<&str>,
-        space: Option<&str>,
-    ) -> String {
-        let formatter = RedisJsonFormatter::new(indent, space, newline);
-
-        let mut out = serde_json::Serializer::with_formatter(Vec::new(), formatter);
-        o.serialize(&mut out).unwrap();
-        String::from_utf8(out.into_inner()).unwrap()
-    }
-
-    fn to_json_multi(
-        &'a self,
-        paths: &mut Vec<Path>,
-        indent: Option<&str>,
-        newline: Option<&str>,
-        space: Option<&str>,
-        is_legacy: bool,
-    ) -> Result<RedisValue, Error> {
-        // TODO: Creating a temp doc here duplicates memory usage. This can be very memory inefficient.
-        // A better way would be to create a doc of references to the original doc but no current support
-        // in serde_json. I'm going for this implementation anyway because serde_json isn't supposed to be
-        // memory efficient and we're using it anyway. See https://github.com/serde-rs/json/issues/635.
-        let mut missing_path = None;
-        let temp_doc = paths.drain(..).fold(HashMap::new(), |mut acc, path: Path| {
-            let query = compile(path.get_path());
-            if query.is_err() {
-                return acc;
-            }
-            let query = query.unwrap();
-            let s = calc_once(query, self.val);
-
-            let value = if is_legacy && !s.is_empty() {
-                Some(Values::Single(s[0]))
-            } else if !is_legacy {
-                Some(Values::Multi(s))
-            } else {
-                None
-            };
-
-            if value.is_none() && missing_path.is_none() {
-                missing_path = Some(path.get_original().to_string());
-            }
-            acc.insert(path.get_original(), value);
-            acc
-        });
-        if let Some(p) = missing_path {
-            return Err(err_msg_json_path_doesnt_exist_with_param(p.as_str()).into());
-        }
-        Ok(Self::serialize_object(&temp_doc, indent, newline, space).into())
-    }
-
-    fn to_json_single(
-        &'a self,
-        path: &str,
-        indent: Option<&str>,
-        newline: Option<&str>,
-        space: Option<&str>,
-        is_legacy: bool,
-    ) -> Result<RedisValue, Error> {
-        if is_legacy {
-            Ok(self.to_string_single(path, indent, newline, space)?.into())
-        } else {
-            Ok(self.to_string_multi(path, indent, newline, space)?.into())
-        }
-    }
-
-    fn to_json(
-        &'a self,
-        paths: &mut Vec<Path>,
-        indent: Option<&str>,
-        newline: Option<&str>,
-        space: Option<&str>,
-        format: Format,
-    ) -> Result<RedisValue, Error> {
-        if format == Format::BSON {
-            return Err("ERR Soon to come...".into());
-        }
-        let is_legacy = !paths.iter().any(|p| !p.is_legacy());
-        if paths.len() > 1 {
-            self.to_json_multi(paths, indent, newline, space, is_legacy)
-        } else {
-            self.to_json_single(paths[0].get_path(), indent, newline, space, is_legacy)
-        }
-    }
-
-    fn find_add_paths(&mut self, path: &str) -> Result<Vec<UpdateInfo>, Error> {
-        let mut query = compile(path)?;
-        if !query.is_static() {
-            return Err("Err wrong static path".into());
-        }
-
-        if query.size() < 1 {
-            return Err("Err path must end with object key to set".into());
-        }
-
-        let (last, token_type) = query.pop_last().unwrap();
-
-        match token_type {
-            JsonPathToken::String => {
-                if query.size() == 1 {
-                    // Adding to the root
-                    Ok(vec![UpdateInfo::AUI(AddUpdateInfo {
-                        path: Vec::new(),
-                        key: last,
-                    })])
-                } else {
-                    // Adding somewhere in existing object
-                    let res = calc_once_paths(query, self.val);
-
-                    Ok(res
-                        .into_iter()
-                        .map(|v| {
-                            UpdateInfo::AUI(AddUpdateInfo {
-                                path: v,
-                                key: last.to_string(),
-                            })
-                        })
-                        .collect())
-                }
-            }
-            JsonPathToken::Number => {
-                // if we reach here with array path we are either out of range
-                // or no-oping an NX where the value is already present
-
-                let query = compile(path)?;
-                let res = calc_once_paths(query, self.val);
-
-                if res.is_empty() {
-                    Err("ERR array index out of range".into())
-                } else {
-                    Ok(Vec::new())
-                }
-            }
-        }
-    }
-
-    pub fn find_paths(
-        &mut self,
-        path: &str,
-        option: &SetOptions,
-    ) -> Result<Vec<UpdateInfo>, Error> {
-        if SetOptions::NotExists != *option {
-            let query = compile(path)?;
-            let res = calc_once_paths(query, self.val);
-
-            if !res.is_empty() {
-                return Ok(res
-                    .into_iter()
-                    .map(|v| UpdateInfo::SUI(SetUpdateInfo { path: v }))
-                    .collect());
-            }
-        }
-        if SetOptions::AlreadyExists == *option {
-            Ok(Vec::new()) // empty vector means no updates
-        } else {
-            self.find_add_paths(path)
-        }
-    }
-
-    pub fn serialize(results: &V, format: Format) -> Result<String, Error> {
-        let res = match format {
-            Format::JSON => serde_json::to_string(results)?,
-            Format::BSON => return Err("ERR Soon to come...".into()), //results.into() as Bson,
-        };
-        Ok(res)
-    }
-
-    pub fn to_string(&self, path: &str, format: Format) -> Result<String, Error> {
-        let results = self.get_first(path)?;
-        Self::serialize(results, format)
-    }
-
-    pub fn to_string_single(
-        &self,
-        path: &str,
-        indent: Option<&str>,
-        newline: Option<&str>,
-        space: Option<&str>,
-    ) -> Result<String, Error> {
-        let result = self.get_first(path)?;
-        Ok(Self::serialize_object(&result, indent, newline, space))
-    }
-
-    pub fn to_string_multi(
-        &self,
-        path: &str,
-        indent: Option<&str>,
-        newline: Option<&str>,
-        space: Option<&str>,
-    ) -> Result<String, Error> {
-        let results = self.get_values(path)?;
-        Ok(Self::serialize_object(&results, indent, newline, space))
-    }
-
-    pub fn get_type(&self, path: &str) -> Result<String, Error> {
-        let s = Self::value_name(self.get_first(path)?);
-        Ok(s.to_string())
-    }
-
-    pub fn value_name(value: &V) -> &str {
-        match value.get_type() {
-            SelectValueType::Null => "null",
-            SelectValueType::Bool => "boolean",
-            SelectValueType::Long => "integer",
-            SelectValueType::Double => "number",
-            SelectValueType::String => "string",
-            SelectValueType::Array => "array",
-            SelectValueType::Object => "object",
-        }
-    }
-
-    pub fn str_len(&self, path: &str) -> Result<usize, Error> {
-        let first = self.get_first(path)?;
-        match first.get_type() {
-            SelectValueType::String => Ok(first.get_str().len()),
-            _ => Err(
-                err_msg_json_expected("string", self.get_type(path).unwrap().as_str())
-                    .as_str()
-                    .into(),
-            ),
-        }
-    }
-
-    pub fn arr_len(&self, path: &str) -> Result<usize, Error> {
-        let first = self.get_first(path)?;
-        match first.get_type() {
-            SelectValueType::Array => Ok(first.len().unwrap()),
-            _ => Err(
-                err_msg_json_expected("array", self.get_type(path).unwrap().as_str())
-                    .as_str()
-                    .into(),
-            ),
-        }
-    }
-
-    pub fn obj_len(&self, path: &str) -> Result<ObjectLen, Error> {
-        match self.get_first(path) {
-            Ok(first) => match first.get_type() {
-                SelectValueType::Object => Ok(ObjectLen::Len(first.len().unwrap())),
-                _ => Err(
-                    err_msg_json_expected("object", self.get_type(path).unwrap().as_str())
-                        .as_str()
-                        .into(),
-                ),
-            },
-            _ => Ok(ObjectLen::NoneExisting),
-        }
-    }
-
-    pub fn is_equal<T1: SelectValue, T2: SelectValue>(a: &T1, b: &T2) -> bool {
-        match (a.get_type(), b.get_type()) {
-            (SelectValueType::Null, SelectValueType::Null) => true,
-            (SelectValueType::Bool, SelectValueType::Bool) => a.get_bool() == b.get_bool(),
-            (SelectValueType::Long, SelectValueType::Long) => a.get_long() == b.get_long(),
-            (SelectValueType::Double, SelectValueType::Double) => a.get_double() == b.get_double(),
-            (SelectValueType::String, SelectValueType::String) => a.get_str() == b.get_str(),
-            (SelectValueType::Array, SelectValueType::Array) => {
-                if a.len().unwrap() != b.len().unwrap() {
-                    false
-                } else {
-                    for (i, e) in a.values().unwrap().enumerate() {
-                        if !Self::is_equal(e, b.get_index(i).unwrap()) {
-                            return false;
-                        }
-                    }
-                    true
-                }
-            }
-            (SelectValueType::Object, SelectValueType::Object) => {
-                if a.len().unwrap() != b.len().unwrap() {
-                    false
-                } else {
-                    for k in a.keys().unwrap() {
-                        let temp1 = a.get_key(k);
-                        let temp2 = b.get_key(k);
-                        match (temp1, temp2) {
-                            (Some(a1), Some(b1)) => {
-                                if !Self::is_equal(a1, b1) {
-                                    return false;
-                                }
-                            }
-                            (_, _) => return false,
-                        }
-                    }
-                    true
-                }
-            }
-            (_, _) => false,
-        }
-    }
-
-    pub fn arr_index(
-        &self,
-        path: &str,
-        json_value: Value,
-        start: i64,
-        end: i64,
-    ) -> Result<RedisValue, Error> {
-        let res = self
-            .get_values(path)?
-            .iter()
-            .map(|value| Self::arr_first_index_single(value, &json_value, start, end).into())
-            .collect::<Vec<RedisValue>>();
-        Ok(res.into())
-    }
-
-    pub fn arr_index_legacy(
-        &self,
-        path: &str,
-        json_value: Value,
-        start: i64,
-        end: i64,
-    ) -> Result<RedisValue, Error> {
-        let arr = self.get_first(path)?;
-        match Self::arr_first_index_single(arr, &json_value, start, end) {
-            FoundIndex::NotArray => Err(Error::from(err_msg_json_expected(
-                "array",
-                self.get_type(path).unwrap().as_str(),
-            ))),
-            i => Ok(i.into()),
-        }
-    }
-
-    /// Returns first array index of `v` in `arr`, or `NotFound` if not found in `arr`, or `NotArray` if `arr` is not an array
-    fn arr_first_index_single(arr: &V, v: &Value, start: i64, end: i64) -> FoundIndex {
-        if !arr.is_array() {
-            return FoundIndex::NotArray;
-        }
-
-        let len = arr.len().unwrap() as i64;
-        if len == 0 {
-            return FoundIndex::NotFound;
-        }
-        // end=0 means INFINITY to support backward with RedisJSON
-        let (start, end) = normalize_arr_indices(start, end, len);
-
-        if end < start {
-            // don't search at all
-            return FoundIndex::NotFound;
-        }
-
-        for index in start..end {
-            if Self::is_equal(arr.get_index(index as usize).unwrap(), v) {
-                return FoundIndex::Index(index);
-            }
-        }
-
-        FoundIndex::NotFound
-    }
-
-    pub fn obj_keys(&self, path: &str) -> Result<Box<dyn Iterator<Item = &'_ str> + '_>, Error> {
-        self.get_first(path)?.keys().ok_or_else(|| {
-            err_msg_json_expected("object", self.get_type(path).unwrap().as_str())
-                .as_str()
-                .into()
-        })
-    }
-}
-
 ///
 /// JSON.GET <key>
 ///         [INDENT indentation-string]
@@ -535,7 +91,7 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
 
-    // Set Capcity to 1 assumiung the common case has one path
+    // Set Capacity to 1 assuming the common case has one path
     let mut paths: Vec<Path> = Vec::with_capacity(1);
     let mut format = Format::JSON;
     let mut indent = None;
@@ -1489,7 +1045,7 @@ where
     Ok(res.into())
 }
 
-enum FoundIndex {
+pub enum FoundIndex {
     Index(i64),
     NotFound,
     NotArray,

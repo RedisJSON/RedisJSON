@@ -14,7 +14,7 @@ use regex::Regex;
 use std::fmt::Debug;
 
 #[derive(Parser)]
-#[grammar = "jsonpath/grammer.pest"]
+#[grammar = "jsonpath/grammar.pest"]
 pub struct JsonPathParser;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -45,23 +45,19 @@ impl<'i> Query<'i> {
     /// ($.foo)
     #[allow(dead_code)]
     pub fn pop_last(&mut self) -> Option<(String, JsonPathToken)> {
-        let last = self.root.next_back();
-        match last {
-            Some(last) => match last.as_rule() {
-                Rule::literal => Some((last.as_str().to_string(), JsonPathToken::String)),
-                Rule::number => Some((last.as_str().to_string(), JsonPathToken::Number)),
-                Rule::numbers_list => {
-                    let first_on_list = last.into_inner().next();
-                    first_on_list.map(|first| (first.as_str().to_string(), JsonPathToken::Number))
-                }
-                Rule::string_list => {
-                    let first_on_list = last.into_inner().next();
-                    first_on_list.map(|first| (first.as_str().to_string(), JsonPathToken::String))
-                }
-                _ => panic!("pop last was used in a none static path"),
-            },
-            None => None,
-        }
+        self.root.next_back().and_then(|last| match last.as_rule() {
+            Rule::literal => Some((last.as_str().to_string(), JsonPathToken::String)),
+            Rule::number => Some((last.as_str().to_string(), JsonPathToken::Number)),
+            Rule::numbers_list => {
+                let first_on_list = last.into_inner().next();
+                first_on_list.map(|first| (first.as_str().to_string(), JsonPathToken::Number))
+            }
+            Rule::string_list => {
+                let first_on_list = last.into_inner().next();
+                first_on_list.map(|first| (first.as_str().to_string(), JsonPathToken::String))
+            }
+            _ => panic!("pop last was used in a none static path"),
+        })
     }
 
     /// Returns the amount of elements in the json path
@@ -244,19 +240,19 @@ pub enum PTrackerElement {
 /* An actual representation of a path that the user gets as a result. */
 #[derive(Debug, PartialEq, Eq)]
 pub struct PTracker {
-    pub elemenets: Vec<PTrackerElement>,
+    pub elements: Vec<PTrackerElement>,
 }
 impl UserPathTracker for PTracker {
     fn add_str(&mut self, s: &str) {
-        self.elemenets.push(PTrackerElement::Key(s.to_string()));
+        self.elements.push(PTrackerElement::Key(s.to_string()));
     }
 
     fn add_index(&mut self, i: usize) {
-        self.elemenets.push(PTrackerElement::Index(i));
+        self.elements.push(PTrackerElement::Index(i));
     }
 
     fn to_string_path(self) -> Vec<String> {
-        self.elemenets
+        self.elements
             .into_iter()
             .map(|e| match e {
                 PTrackerElement::Key(s) => s,
@@ -272,7 +268,7 @@ impl UserPathTrackerGenerator for PTrackerGenerator {
     type PT = PTracker;
     fn generate(&self) -> Self::PT {
         PTracker {
-            elemenets: Vec::new(),
+            elements: Vec::new(),
         }
     }
 }
@@ -332,12 +328,13 @@ enum TermEvaluationResult<'i, 'j, S: SelectValue> {
     String(String),
     Value(&'j S),
     Bool(bool),
+    Null,
     Invalid,
 }
 
 enum CmpResult {
     Ord(Ordering),
-    NotCmparable,
+    NotComparable,
 }
 
 impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
@@ -376,48 +373,53 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             (TermEvaluationResult::Bool(b1), TermEvaluationResult::Bool(b2)) => {
                 CmpResult::Ord(b1.cmp(b2))
             }
+            (TermEvaluationResult::Null, TermEvaluationResult::Null) => {
+                CmpResult::Ord(Ordering::Equal)
+            }
             (TermEvaluationResult::Value(v), _) => match v.get_type() {
                 SelectValueType::Long => TermEvaluationResult::Integer(v.get_long()).cmp(s),
                 SelectValueType::Double => TermEvaluationResult::Float(v.get_double()).cmp(s),
                 SelectValueType::String => TermEvaluationResult::Str(v.as_str()).cmp(s),
                 SelectValueType::Bool => TermEvaluationResult::Bool(v.get_bool()).cmp(s),
-                _ => CmpResult::NotCmparable,
+                SelectValueType::Null => TermEvaluationResult::Null.cmp(s),
+                _ => CmpResult::NotComparable,
             },
             (_, TermEvaluationResult::Value(v)) => match v.get_type() {
                 SelectValueType::Long => self.cmp(&TermEvaluationResult::Integer(v.get_long())),
                 SelectValueType::Double => self.cmp(&TermEvaluationResult::Float(v.get_double())),
                 SelectValueType::String => self.cmp(&TermEvaluationResult::Str(v.as_str())),
                 SelectValueType::Bool => self.cmp(&TermEvaluationResult::Bool(v.get_bool())),
-                _ => CmpResult::NotCmparable,
+                SelectValueType::Null => self.cmp(&TermEvaluationResult::Null),
+                _ => CmpResult::NotComparable,
             },
-            (_, _) => CmpResult::NotCmparable,
+            (_, _) => CmpResult::NotComparable,
         }
     }
     fn gt(&self, s: &Self) -> bool {
         match self.cmp(s) {
             CmpResult::Ord(o) => o.is_gt(),
-            CmpResult::NotCmparable => false,
+            CmpResult::NotComparable => false,
         }
     }
 
     fn ge(&self, s: &Self) -> bool {
         match self.cmp(s) {
             CmpResult::Ord(o) => o.is_ge(),
-            CmpResult::NotCmparable => false,
+            CmpResult::NotComparable => false,
         }
     }
 
     fn lt(&self, s: &Self) -> bool {
         match self.cmp(s) {
             CmpResult::Ord(o) => o.is_lt(),
-            CmpResult::NotCmparable => false,
+            CmpResult::NotComparable => false,
         }
     }
 
     fn le(&self, s: &Self) -> bool {
         match self.cmp(s) {
             CmpResult::Ord(o) => o.is_le(),
-            CmpResult::NotCmparable => false,
+            CmpResult::NotComparable => false,
         }
     }
 
@@ -426,7 +428,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             (TermEvaluationResult::Value(v1), TermEvaluationResult::Value(v2)) => v1 == v2,
             (_, _) => match self.cmp(s) {
                 CmpResult::Ord(o) => o.is_eq(),
-                CmpResult::NotCmparable => false,
+                CmpResult::NotComparable => false,
             },
         }
     }
@@ -799,6 +801,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             }
             Rule::boolean_true => TermEvaluationResult::Bool(true),
             Rule::boolean_false => TermEvaluationResult::Bool(false),
+            Rule::null => TermEvaluationResult::Null,
             Rule::string_value => TermEvaluationResult::Str(term.as_str()),
             Rule::string_value_escape_1 => TermEvaluationResult::String(
                 term.as_str().replace("\\\\", "\\").replace("\\'", "'"),
@@ -980,7 +983,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                             || json.get_type() == SelectValueType::Object
                         {
                             /* lets expend the array, this is how most json path engines work.
-                             * Pesonally, I think this if should not exists. */
+                             * Personally, I think this if should not exists. */
                             let values = json.values().unwrap();
                             if let Some(pt) = path_tracker {
                                 trace!(
@@ -1105,7 +1108,7 @@ mod json_path_compiler_tests {
     }
 
     #[test]
-    fn test_compiler_pop_last_string_brucket_notation() {
+    fn test_compiler_pop_last_string_bracket_notation() {
         let query = compile("$.[\"foo\"]");
         assert_eq!(
             query.unwrap().pop_last().unwrap(),
