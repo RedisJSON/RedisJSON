@@ -1085,18 +1085,17 @@ def testMSET(env):
 
 
 def testMSET_Partial(env):
-
     # Make sure MSET doesn't stop on the first update that can't be updated 
     env.expect("JSON.SET", "a{s}", '$', '{"x": {"y":[10,20], "z":[30,40]}}').ok()
     env.expect("JSON.SET", "b{s}", '$', '{"x": 60}').ok()
-    env.expect("JSON.MSET", "a{s}" '$.x', '{}', "a{s}", '$.x.z[1]', '50', 'b{s}', '$.x', '70').ok()
-    env.expect("JSON.GET", "a{s}", '$').equal('{"x":{}}')
+    env.expect("JSON.MSET", "a{s}", '$.x', '{}', "a{s}", '$.x.z[1]', '50', 'b{s}', '$.x', '70').ok()
+    env.expect("JSON.GET", "a{s}", '$').equal('[{"x":{}}]')
     env.expect("JSON.GET", "b{s}", '$').equal('[{"x":70}]')
 
     # Update the same key twice with a failure in the middle
     env.expect("JSON.SET", "a{s}", '$', '{"x": {"y":[10,20], "z":[30,40]}}').ok()
-    env.expect("JSON.MSET", "a{s}" '$.x', '{}', "a{s}", '$.x.z[1]', '50', "a{s}",  '$.u', '70').ok()
-    env.expect("JSON.GET", "a{s}", '$').equal('"{"x":{},"u":70}"')
+    env.expect("JSON.MSET", "a{s}", '$.x', '{}', "a{s}", '$.x.z[1]', '50', "a{s}",  '$.u', '70').ok()
+    env.expect("JSON.GET", "a{s}", '$').equal('[{"x":{},"u":70}]')
 
 def testMSET_Error(env):
     env.expect("JSON.SET", "a{s}", '$', '"a_val"').ok()
