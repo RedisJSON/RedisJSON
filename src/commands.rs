@@ -998,7 +998,7 @@ pub fn json_arr_index<M: Manager>(
 
     let key = args.next_arg()?;
     let path = Path::new(args.next_str()?);
-    let value = args.next_str()?;
+    let value = args.next_arg()?;
     let start: i64 = args.next().map_or(Ok(0), |v| v.parse_integer())?;
     let end: i64 = args.next().map_or(Ok(0), |v| v.parse_integer())?;
 
@@ -1006,7 +1006,7 @@ pub fn json_arr_index<M: Manager>(
 
     let key = manager.open_key_read(ctx, &key)?;
 
-    let json_value: Value = serde_json::from_str(value)?;
+    let json_value: Value = serde_json::from_slice(value.as_slice())?;
 
     let res = key.get_value()?.map_or_else(
         || {
