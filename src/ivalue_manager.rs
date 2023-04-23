@@ -471,7 +471,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 if array.is_empty() {
                     return Ok(Some(()));
                 }
-                // Verify legel index in bounds
+                // Verify legal index in bounds
                 let len = array.len() as i64;
                 let index = normalize_arr_start_index(index, len) as usize;
                 res = Some(array.remove(index).unwrap());

@@ -8,7 +8,7 @@ string = _{("'" ~ (string_value) ~ "'") | ("\"" ~ (string_value) ~ "\"") | ("\""
 
 string_list = {string ~ ("," ~ string)*}
 
-pos_number = @{ASCII_NONZERO_DIGIT ~ ASCII_DIGIT* | ASCII_DIGIT}
+pos_number = @{ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*}
 number = @{"-"? ~ ASCII_NONZERO_DIGIT ~ ASCII_DIGIT* | "-"? ~ ASCII_DIGIT}
 
 decimal = @{number ~ ("." ~ ASCII_DIGIT+)?}
@@ -39,7 +39,9 @@ boolean = _{boolean_true | boolean_false}
     boolean_true = @{"true"}
     boolean_false = @{"false"}
 
-term = _{select_term | decimal | string | boolean}
+null = @{"null"}
+
+term = _{select_term | decimal | string | boolean | null}
 
 single_filter = {term ~ op ~ term | term}
 

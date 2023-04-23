@@ -66,7 +66,7 @@ pub fn compile(s: &str) -> Result<Query, QueryCompilationError> {
     json_path::compile(s)
 }
 
-/// Calc once allows to performe a one time calculation on the give query.
+/// Calc once allows to perform a one time calculation on the give query.
 /// The query ownership is taken so it can not be used after. This allows
 /// the get a better performance if there is a need to calculate the query
 /// only once.
@@ -199,6 +199,14 @@ mod json_path_tests {
     fn basic_bracket_notation_with_multi_neg_indexes() {
         setup();
         verify_json!(path:"$.foo.[\"boo\"][-3,-1]", json:{"foo":{"boo":[1,2,3]}}, results:[1,3]);
+    }
+
+    #[test]
+    fn basic_full_range() {
+        setup();
+        verify_json!(path:"$.foo.[\"boo\"][0:2:1]", json:{"foo":{"boo":[1,2,3]}}, results:[1,2]);
+        verify_json!(path:"$.foo.[\"boo\"][0:3:2]", json:{"foo":{"boo":[1,2,3]}}, results:[1,3]);
+        assert!(crate::jsonpath::compile("$.foo.[\"boo\"][0:3:0]").is_err());
     }
 
     #[test]
@@ -501,6 +509,13 @@ mod json_path_tests {
         setup();
         verify_json!(path:"$.*[?(@==true)]", json:{"a":true, "b":false}, results:[true]);
         verify_json!(path:"$.*[?(@==false)]", json:{"a":true, "b":false}, results:[false]);
+    }
+
+    #[test]
+    fn test_filter_null() {
+        setup();
+        verify_json!(path:"$.*[?(@==null)]", json:{"a":null}, results:[null]);
+        verify_json!(path:"$[?(@.*==null)]", json:[{"a":10}, {"b":null}, {"c":30}], results:[{"b": null}]);
     }
 
     #[test]

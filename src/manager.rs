@@ -15,7 +15,7 @@ use crate::Format;
 
 use crate::error::Error;
 
-use crate::commands::KeyValue;
+use crate::key_value::KeyValue;
 
 pub struct SetUpdateInfo {
     pub path: Vec<String>,
@@ -62,8 +62,8 @@ pub trait WriteHolder<O: Clone, V: SelectValue> {
 pub trait Manager {
     /* V - SelectValue that the json path library can work on
      * O - SelectValue Holder
-     * Naiv implementation is that V and O are from the same type but its not
-     * always possible so they are seperated
+     * Naive implementation is that V and O are from the same type but its not
+     * always possible so they are separated
      */
     type V: SelectValue;
     type O: Clone;
