@@ -1072,6 +1072,48 @@ def testMultiPathResults(env):
     # make sure legacy json path returns single result
     env.expect("JSON.GET", "k", '.*[0,2]').equal('1')
 
+
+def testMSET(env):
+    env.expect("JSON.MSET", "a{s}", '$', '"a_val"').ok()
+    env.expect("JSON.GET", "a{s}", '$').equal('["a_val"]')
+
+    env.expect("JSON.MSET", "a{s}", '$', '{"aa":"a_val"}', "b{s}", '$', '{"bb":"b_val"}').ok()
+    env.expect("JSON.MGET", "a{s}", "b{s}", '$').equal(['[{"aa":"a_val"}]', '[{"bb":"b_val"}]'])
+
+    env.expect("JSON.MSET", "a{s}", '$.ab', '"a_val2"', "b{s}", '$..bb', '"b_val2"').ok()
+    env.expect("JSON.MGET", "a{s}", "b{s}", '$').equal(['[{"aa":"a_val","ab":"a_val2"}]', '[{"bb":"b_val2"}]'])
+
+
+def testMSET_Partial(env):
+    # Make sure MSET doesn't stop on the first update that can't be updated 
+    env.expect("JSON.SET", "a{s}", '$', '{"x": {"y":[10,20], "z":[30,40]}}').ok()
+    env.expect("JSON.SET", "b{s}", '$', '{"x": 60}').ok()
+    env.expect("JSON.MSET", "a{s}", '$.x', '{}', "a{s}", '$.x.z[1]', '50', 'b{s}', '$.x', '70').ok()
+    env.expect("JSON.GET", "a{s}", '$').equal('[{"x":{}}]')
+    env.expect("JSON.GET", "b{s}", '$').equal('[{"x":70}]')
+
+    # Update the same key twice with a failure in the middle
+    env.expect("JSON.SET", "a{s}", '$', '{"x": {"y":[10,20], "z":[30,40]}}').ok()
+    env.expect("JSON.MSET", "a{s}", '$.x', '{}', "a{s}", '$.x.z[1]', '50', "a{s}",  '$.u', '70').ok()
+    env.expect("JSON.GET", "a{s}", '$').equal('[{"x":{},"u":70}]')
+
+def testMSET_Error(env):
+    env.expect("JSON.SET", "a{s}", '$', '"a_val"').ok()
+
+    env.expect("JSON.MSET", "a{s}").raiseError()
+    # make sure value was not changed
+    env.expect("JSON.GET", "a{s}", '$').equal('["a_val"]')
+
+    env.expect("JSON.MSET", "a{s}", '$', '"a_val2"', "b{s}", '$').raiseError()
+    # make sure value was not changed
+    env.expect("JSON.GET", "a{s}", '$').equal('["a_val"]')
+    env.expect("JSON.GET", "b{s}", '$').equal(None)
+
+    env.expect("JSON.MSET", "a{s}", '$', '"a_val2"', "b{s}", '$.....a', '"b_val"').raiseError()
+    # make sure value was not changed
+    env.expect("JSON.GET", "a{s}", '$').equal('["a_val"]')
+    env.expect("JSON.GET", "b{s}", '$').equal(None)
+
 def testIssue_597(env):
     env.expect("JSON.SET", "test", ".", "[0]").ok()
     env.assertEqual(env.execute_command("JSON.SET", "test", ".[0]", "[0]", "NX"), None)

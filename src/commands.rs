@@ -172,27 +172,10 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
                     Ok(RedisValue::Null)
                 }
             } else {
-                let mut update_info = KeyValue::new(doc).find_paths(path.get_path(), &op)?;
+                let update_info = KeyValue::new(doc).find_paths(path.get_path(), &op)?;
                 if !update_info.is_empty() {
-                    let mut res = false;
-                    if update_info.len() == 1 {
-                        res = match update_info.pop().unwrap() {
-                            UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, val)?,
-                            UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, val)?,
-                        }
-                    } else {
-                        for ui in update_info {
-                            res = match ui {
-                                UpdateInfo::SUI(sui) => {
-                                    redis_key.set_value(sui.path, val.clone())?
-                                }
-                                UpdateInfo::AUI(aui) => {
-                                    redis_key.dict_add(aui.path, &aui.key, val.clone())?
-                                }
-                            }
-                        }
-                    }
-                    if res {
+                    let updated = apply_updates::<M>(&mut redis_key, val, update_info);
+                    if updated {
                         redis_key.apply_changes(ctx, "json.set")?;
                         REDIS_OK
                     } else {
@@ -295,6 +278,88 @@ pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
                 ))
             }
         }
+    }        
+}
+
+///
+/// JSON.MSET <key> <path> <json> [[<key> <path> <json>]...]
+///
+pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+
+    if args.len() < 3 {
+        return Err(RedisError::WrongArity);
+    }
+
+    // Collect all the actions from the args (redis_key, update_info, value)
+    let mut actions = Vec::new();
+    while let Ok(key) = args.next_arg() {
+        let mut redis_key = manager.open_key_write(ctx, key)?;
+
+        // Verify the key is a JSON type
+        let key_value = redis_key.get_value()?;
+
+        // Verify the path is valid and get all the update info
+        let path = Path::new(args.next_str()?);
+        let update_info = if path.get_path() == JSON_ROOT_PATH {
+            None
+        } else if let Some(value) = key_value {
+            Some(KeyValue::new(value).find_paths(path.get_path(), &SetOptions::None)?)
+        } else {
+            return Err(RedisError::Str(
+                "ERR new objects must be created at the root",
+            ));
+        };
+
+        // Parse the input and validate it's valid JSON
+        let value_str = args.next_str()?;
+        let value = manager.from_str(value_str, Format::JSON, true)?;
+
+        actions.push((redis_key, update_info, value));
+    }
+
+    actions
+        .drain(..)
+        .fold(REDIS_OK, |res, (mut redis_key, update_info, value)| {
+            let updated = if let Some(update_info) = update_info {
+                !update_info.is_empty() && apply_updates::<M>(&mut redis_key, value, update_info)
+            } else {
+                // In case it is a root path
+                redis_key.set_value(Vec::new(), value)?
+            };
+            if updated {
+                redis_key.apply_changes(ctx, "json.mset")?
+            }
+            res
+        })
+}
+
+fn apply_updates<M: Manager>(
+    redis_key: &mut M::WriteHolder,
+    value: M::O,
+    mut update_info: Vec<UpdateInfo>,
+) -> bool {
+    // If there is only one update info, we can avoid cloning the value
+    if update_info.len() == 1 {
+        match update_info.pop().unwrap() {
+            UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value).unwrap_or(false),
+            UpdateInfo::AUI(aui) => redis_key
+                .dict_add(aui.path, &aui.key, value)
+                .unwrap_or(false),
+        }
+    } else {
+        let mut updated = false;
+        for ui in update_info {
+            updated = match ui {
+                UpdateInfo::SUI(sui) => redis_key
+                    .set_value(sui.path, value.clone())
+                    .unwrap_or(false),
+                UpdateInfo::AUI(aui) => redis_key
+                    .dict_add(aui.path, &aui.key, value.clone())
+                    .unwrap_or(false),
+            } || updated
+        }
+        updated
     }
 }
 
