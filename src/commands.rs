@@ -278,7 +278,7 @@ pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
                 ))
             }
         }
-    }        
+    }
 }
 
 ///
