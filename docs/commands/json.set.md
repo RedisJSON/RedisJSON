@@ -44,11 +44,11 @@ For more information about replies, see [Redis serialization protocol specificat
 <summary><b>Replace an existing value</b></summary>
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.SET doc $ '{"a":2}'
+redis> JSON.SET doc $ '{"a":2}'
 OK
-127.0.0.1:6379> JSON.SET doc $.a '3'
+redis> JSON.SET doc $.a '3'
 OK
-127.0.0.1:6379> JSON.GET doc $
+redis> JSON.GET doc $
 "[{\"a\":3}]"
 {{< / highlight >}}
 </details>
@@ -57,11 +57,11 @@ OK
 <summary><b>Add a new value</b></summary>
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.SET doc $ '{"a":2}'
+redis> JSON.SET doc $ '{"a":2}'
 OK
-127.0.0.1:6379> JSON.SET doc $.b '8'
+redis> JSON.SET doc $.b '8'
 OK
-127.0.0.1:6379> JSON.GET doc $
+redis> JSON.GET doc $
 "[{\"a\":2,\"b\":8}]"
 {{< / highlight >}}
 </details>
@@ -70,11 +70,11 @@ OK
 <summary><b>Update multi-paths</b></summary>
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.SET doc $ '{"f1": {"a":1}, "f2":{"a":2}}'
+redis> JSON.SET doc $ '{"f1": {"a":1}, "f2":{"a":2}}'
 OK
-127.0.0.1:6379> JSON.SET doc $..a 3
+redis> JSON.SET doc $..a 3
 OK
-127.0.0.1:6379> JSON.GET doc
+redis> JSON.GET doc
 "{\"f1\":{\"a\":3},\"f2\":{\"a\":3}}"
 {{< / highlight >}}
 </details>
