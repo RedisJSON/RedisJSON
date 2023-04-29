@@ -25,9 +25,9 @@ For more information about replies, see [Redis serialization protocol specificat
 ## Examples
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.SET doc $ '{"a":[3], "nested": {"a": {"b":2, "c": 1}}}'
+redis> JSON.SET doc $ '{"a":[3], "nested": {"a": {"b":2, "c": 1}}}'
 OK
-127.0.0.1:6379> JSON.OBJLEN doc $..a
+redis> JSON.OBJLEN doc $..a
 1) (nil)
 2) (integer) 2
 {{< / highlight >}}
