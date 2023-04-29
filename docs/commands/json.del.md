@@ -35,21 +35,21 @@ For more information about replies, see [Redis serialization protocol specificat
 Create a JSON document.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.SET doc $ '{"a": 1, "nested": {"a": 2, "b": 3}}'
+redis> JSON.SET doc $ '{"a": 1, "nested": {"a": 2, "b": 3}}'
 OK
 {{< / highlight >}}
 
 Delete specified values.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.DEL doc $..a
+redis> JSON.DEL doc $..a
 (integer) 2
 {{< / highlight >}}
 
 Get the updated document.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.GET doc $
+redis> JSON.GET doc $
 "[{\"nested\":{\"b\":3}}]"
 {{< / highlight >}}
 </details>
