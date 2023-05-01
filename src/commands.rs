@@ -119,9 +119,16 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
         paths.push(Path::new(JSON_ROOT_PATH_LEGACY));
     }
 
+    // check context flags to see if RESP3 is enabled
+    let resp3 = ctx
+        .get_flags()
+        .contains(redis_module::ContextFlags::FLAGS_RESP3);
+
     let key = manager.open_key_read(ctx, &key)?;
     let value = match key.get_value()? {
-        Some(doc) => KeyValue::new(doc).to_json(&mut paths, indent, newline, space, format)?,
+        Some(doc) => {
+            KeyValue::new(doc).to_json(&mut paths, indent, newline, space, format, resp3)?
+        }
         None => RedisValue::Null,
     };
 
@@ -495,6 +502,11 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
     args.last().ok_or(RedisError::WrongArity).and_then(|path| {
         let path = Path::new(path.try_as_str()?);
         let keys = &args[1..args.len() - 1];
+
+        // check context flags to see if RESP3 is enabled
+        let resp3 = ctx
+            .get_flags()
+            .contains(redis_module::ContextFlags::FLAGS_RESP3);
 
         let to_string =
             |doc: &M::V| KeyValue::new(doc).to_string_multi(path.get_path(), None, None, None);
