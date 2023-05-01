@@ -1338,12 +1338,32 @@ def testMerge(env):
     r.assertOk(r.execute_command('JSON.MERGE', 'test_merge', '$.a.b', '{"c":null}'))
     r.expect('JSON.GET', 'test_merge').equal('{"a":{"b":{"h":"i","e":"f"}}}')
 
-    # Test with none existing key with path $.a.b   
+    # Test with none existing key with path $.a   
     r.expect('JSON.MERGE', 'test_merge_new', '$.a', '{"a":"i"}').raiseError()
 
     # Test with none existing key -> create key
     r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_new', '$', '{"h":"i"}'))
     r.expect('JSON.GET', 'test_merge_new').equal('{"h":"i"}')
+
+def testMergeArray(env):
+    # Test JSON.MERGE with arrays
+    r = env
+
+    # Test merge on an array
+    r.assertOk(r.execute_command('JSON.SET', 'test_merge_array', '$', '{"a":{"b":{"c":["d","e"]}}}'))
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_array', '$.a.b.c', '["f"]'))
+    r.expect('JSON.GET', 'test_merge_array').equal('{"a":{"b":{"c":["f"]}}}')
+
+    # Test merge an array on a value
+    r.assertOk(r.execute_command('JSON.SET', 'test_merge_array', '$', '{"a":{"b":{"c":"d"}}}'))
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_array', '$.a.b.c', '["f"]'))
+    r.expect('JSON.GET', 'test_merge_array').equal('{"a":{"b":{"c":["f"]}}}')
+
+    # Test with null value to delete an array value
+    r.assertOk(r.execute_command('JSON.SET', 'test_merge_array', '$', '{"a":{"b":{"c":["d","e"]}}}'))
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_array', '$.a.b', '{"c":null}'))
+    r.expect('JSON.GET', 'test_merge_array').equal('{"a":{"b":{}}}')
+
 
 def testRDBUnboundedDepth(env):
     # Test RDB Unbounded Depth load
