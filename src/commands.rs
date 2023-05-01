@@ -234,11 +234,28 @@ pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
                 redis_key.apply_changes(ctx, "json.merge")?;
                 REDIS_OK
             } else {
-                let update_info =
+                let mut update_info =
                     KeyValue::new(doc).find_paths(path.get_path(), &SetOptions::None)?;
                 if !update_info.is_empty() {
-                    let updated = apply_updates::<M>(&mut redis_key, val, update_info);
-                    if updated {
+                    let mut res = false;
+                    if update_info.len() == 1 {
+                        res = match update_info.pop().unwrap() {
+                            UpdateInfo::SUI(sui) => redis_key.merge_value(sui.path, val)?,
+                            UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, val)?,
+                        }
+                    } else {
+                        for ui in update_info {
+                            res = match ui {
+                                UpdateInfo::SUI(sui) => {
+                                    redis_key.merge_value(sui.path, val.clone())?
+                                }
+                                UpdateInfo::AUI(aui) => {
+                                    redis_key.dict_add(aui.path, &aui.key, val.clone())?
+                                }
+                            }
+                        }
+                    }
+                    if res {
                         redis_key.apply_changes(ctx, "json.merge")?;
                         REDIS_OK
                     } else {
