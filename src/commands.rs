@@ -5,6 +5,7 @@
  */
 
 use crate::error::Error;
+use crate::formatter::FormatOptions;
 use crate::jsonpath::select_value::{SelectValue, SelectValueType};
 use crate::key_value::KeyValue;
 use crate::manager::err_msg_json_path_doesnt_exist_with_param;
@@ -93,22 +94,25 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
 
     // Set Capacity to 1 assuming the common case has one path
     let mut paths: Vec<Path> = Vec::with_capacity(1);
-    let mut format = Format::JSON;
-    let mut indent = None;
-    let mut space = None;
-    let mut newline = None;
+    let mut format_options = FormatOptions::default();
     while let Ok(arg) = args.next_str() {
         match arg {
             // fast way to consider arg a path by using the max length of all possible subcommands
             // See #390 for the comparison of this function with/without this optimization
             arg if arg.len() > JSONGET_SUBCOMMANDS_MAXSTRLEN => paths.push(Path::new(arg)),
-            arg if arg.eq_ignore_ascii_case(CMD_ARG_INDENT) => indent = Some(args.next_str()?),
-            arg if arg.eq_ignore_ascii_case(CMD_ARG_NEWLINE) => newline = Some(args.next_str()?),
-            arg if arg.eq_ignore_ascii_case(CMD_ARG_SPACE) => space = Some(args.next_str()?),
+            arg if arg.eq_ignore_ascii_case(CMD_ARG_INDENT) => {
+                format_options.indent = Some(args.next_str()?)
+            }
+            arg if arg.eq_ignore_ascii_case(CMD_ARG_NEWLINE) => {
+                format_options.newline = Some(args.next_str()?)
+            }
+            arg if arg.eq_ignore_ascii_case(CMD_ARG_SPACE) => {
+                format_options.space = Some(args.next_str()?)
+            }
             // Silently ignore. Compatibility with ReJSON v1.0 which has this option. See #168 TODO add support
             arg if arg.eq_ignore_ascii_case(CMD_ARG_NOESCAPE) => continue,
             arg if arg.eq_ignore_ascii_case(CMD_ARG_FORMAT) => {
-                format = Format::from_str(args.next_str()?)?;
+                format_options.format = Format::from_str(args.next_str()?)?;
             }
             _ => paths.push(Path::new(arg)),
         };
@@ -120,15 +124,13 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
     }
 
     // check context flags to see if RESP3 is enabled
-    let resp3 = ctx
+    format_options.resp3 = ctx
         .get_flags()
         .contains(redis_module::ContextFlags::FLAGS_RESP3);
 
     let key = manager.open_key_read(ctx, &key)?;
     let value = match key.get_value()? {
-        Some(doc) => {
-            KeyValue::new(doc).to_json(&mut paths, indent, newline, space, format, resp3)?
-        }
+        Some(doc) => KeyValue::new(doc).to_json(&mut paths, &format_options)?,
         None => RedisValue::Null,
     };
 
@@ -508,10 +510,15 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
             .get_flags()
             .contains(redis_module::ContextFlags::FLAGS_RESP3);
 
+        let format_options = FormatOptions {
+            resp3,
+            ..Default::default()
+        };
+
         let to_string =
-            |doc: &M::V| KeyValue::new(doc).to_string_multi(path.get_path(), None, None, None);
+            |doc: &M::V| KeyValue::new(doc).to_string_multi(path.get_path(), &format_options);
         let to_string_legacy =
-            |doc: &M::V| KeyValue::new(doc).to_string_single(path.get_path(), None, None, None);
+            |doc: &M::V| KeyValue::new(doc).to_string_single(path.get_path(), &format_options);
         let is_legacy = path.is_legacy();
 
         let results: Result<Vec<RedisValue>, RedisError> = keys
@@ -662,7 +669,7 @@ where
     }
 
     let res = to_json_value::<Number>(res, Value::Null);
-    Ok(KeyValue::<M::V>::serialize_object(&res, None, None, None).into())
+    Ok(KeyValue::<M::V>::serialize_object(&res, &FormatOptions::default()).into())
 }
 
 fn json_num_op_legacy<M>(

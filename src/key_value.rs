@@ -7,7 +7,7 @@ use serde_json::Value;
 use crate::{
     commands::{FoundIndex, ObjectLen, Values},
     error::Error,
-    formatter::RedisJsonFormatter,
+    formatter::{FormatOptions, RedisJsonFormatter},
     jsonpath::{
         calc_once, calc_once_paths, compile,
         json_path::JsonPathToken,
@@ -98,13 +98,8 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         Ok(results)
     }
 
-    pub fn serialize_object<O: Serialize>(
-        o: &O,
-        indent: Option<&str>,
-        newline: Option<&str>,
-        space: Option<&str>,
-    ) -> String {
-        let formatter = RedisJsonFormatter::new(indent, space, newline);
+    pub fn serialize_object<O: Serialize>(o: &O, format: &FormatOptions) -> String {
+        let formatter = RedisJsonFormatter::new(format);
 
         let mut out = serde_json::Serializer::with_formatter(Vec::new(), formatter);
         o.serialize(&mut out).unwrap();
@@ -114,17 +109,15 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     fn to_json_multi(
         &'a self,
         paths: &mut Vec<Path>,
-        indent: Option<&str>,
-        newline: Option<&str>,
-        space: Option<&str>,
+        format: &FormatOptions,
         is_legacy: bool,
-        resp3: bool,
     ) -> Result<RedisValue, Error> {
         // TODO: Creating a temp doc here duplicates memory usage. This can be very memory inefficient.
         // A better way would be to create a doc of references to the original doc but no current support
         // in serde_json. I'm going for this implementation anyway because serde_json isn't supposed to be
         // memory efficient and we're using it anyway. See https://github.com/serde-rs/json/issues/635.
         let mut missing_path = None;
+
         let temp_doc = paths.drain(..).fold(HashMap::new(), |mut acc, path: Path| {
             let query = compile(path.get_path());
             if query.is_err() {
@@ -150,19 +143,17 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         if let Some(p) = missing_path {
             return Err(err_msg_json_path_doesnt_exist_with_param(p.as_str()).into());
         }
-        let res = if resp3 {
+        let res = if format.resp3 {
             let map = temp_doc
                 .iter()
                 .map(|(k, v)| {
                     // let mut arr = Vec::with_capacity(2);
                     let key = RedisValueKey::String(k.to_string());
                     let value = match v {
-                        Some(Values::Single(v)) => {
-                            Self::serialize_object(v, indent, newline, space).into()
-                        }
+                        Some(Values::Single(v)) => Self::serialize_object(v, format).into(),
                         Some(Values::Multi(v)) => RedisValue::Array(
                             v.iter()
-                                .map(|v| Self::serialize_object(v, indent, newline, space).into())
+                                .map(|v| Self::serialize_object(v, format).into())
                                 .collect::<Vec<RedisValue>>(),
                         ),
                         None => RedisValue::Null,
@@ -172,7 +163,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 .collect::<HashMap<RedisValueKey, RedisValue>>();
             RedisValue::Map(map)
         } else {
-            Self::serialize_object(&temp_doc, indent, newline, space).into()
+            Self::serialize_object(&temp_doc, format).into()
         };
         Ok(res)
     }
@@ -180,18 +171,26 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     fn to_json_single(
         &'a self,
         path: &str,
-        indent: Option<&str>,
-        newline: Option<&str>,
-        space: Option<&str>,
+        format: &FormatOptions,
         is_legacy: bool,
-        resp3: bool,
     ) -> Result<RedisValue, Error> {
         let res = if is_legacy {
-            self.to_string_single(path, indent, newline, space)?.into()
-        } else if resp3 {
-            self.to_multi_string(path, indent, newline, space)?.into()
+            self.to_string_single(path, format)?.into()
+        } else if format.resp3 {
+            self.get_values(path)?
+                .iter()
+                .map(|v| match v.get_type() {
+                    SelectValueType::Null => RedisValue::Null,
+                    SelectValueType::Bool => RedisValue::Bool(v.get_bool()),
+                    SelectValueType::Long => RedisValue::Integer(v.get_long()),
+                    SelectValueType::Double => RedisValue::Float(v.get_double()),
+                    SelectValueType::String => RedisValue::BulkString(v.get_str()),
+                    _ => RedisValue::BulkString(Self::serialize_object(&v, format)),
+                })
+                .collect::<Vec<RedisValue>>()
+                .into()
         } else {
-            self.to_string_multi(path, indent, newline, space)?.into()
+            self.to_string_multi(path, format)?.into()
         };
         Ok(res)
     }
@@ -199,27 +198,16 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     pub fn to_json(
         &'a self,
         paths: &mut Vec<Path>,
-        indent: Option<&str>,
-        newline: Option<&str>,
-        space: Option<&str>,
-        format: Format,
-        resp3: bool,
+        format: &FormatOptions,
     ) -> Result<RedisValue, Error> {
-        if format == Format::BSON {
+        if format.format == Format::BSON {
             return Err("ERR Soon to come...".into());
         }
         let is_legacy = !paths.iter().any(|p| !p.is_legacy());
         if paths.len() > 1 {
-            self.to_json_multi(paths, indent, newline, space, is_legacy, resp3)
+            self.to_json_multi(paths, format, is_legacy)
         } else {
-            self.to_json_single(
-                paths[0].get_path(),
-                indent,
-                newline,
-                space,
-                is_legacy,
-                resp3,
-            )
+            self.to_json_single(paths[0].get_path(), format, is_legacy)
         }
     }
 
@@ -297,41 +285,14 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    pub fn to_string_single(
-        &self,
-        path: &str,
-        indent: Option<&str>,
-        newline: Option<&str>,
-        space: Option<&str>,
-    ) -> Result<String, Error> {
+    pub fn to_string_single(&self, path: &str, format: &FormatOptions) -> Result<String, Error> {
         let result = self.get_first(path)?;
-        Ok(Self::serialize_object(&result, indent, newline, space))
+        Ok(Self::serialize_object(&result, format))
     }
 
-    pub fn to_string_multi(
-        &self,
-        path: &str,
-        indent: Option<&str>,
-        newline: Option<&str>,
-        space: Option<&str>,
-    ) -> Result<String, Error> {
+    pub fn to_string_multi(&self, path: &str, format: &FormatOptions) -> Result<String, Error> {
         let results = self.get_values(path)?;
-        Ok(Self::serialize_object(&results, indent, newline, space))
-    }
-
-    pub fn to_multi_string(
-        &self,
-        path: &str,
-        indent: Option<&str>,
-        newline: Option<&str>,
-        space: Option<&str>,
-    ) -> Result<Vec<String>, Error> {
-        let results = self
-            .get_values(path)?
-            .iter()
-            .map(|v| Self::serialize_object(&v, indent, newline, space))
-            .collect();
-        Ok(results)
+        Ok(Self::serialize_object(&results, format))
     }
 
     pub fn get_type(&self, path: &str) -> Result<String, Error> {
