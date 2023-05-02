@@ -25,14 +25,14 @@ For more information about replies, see [Redis serialization protocol specificat
 ## Examples
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.SET doc $ '{"a":2, "nested": {"a": true}, "foo": "bar"}'
+redis> JSON.SET doc $ '{"a":2, "nested": {"a": true}, "foo": "bar"}'
 OK
-127.0.0.1:6379> JSON.TYPE doc $..foo
+redis> JSON.TYPE doc $..foo
 1) "string"
-127.0.0.1:6379> JSON.TYPE doc $..a
+redis> JSON.TYPE doc $..a
 1) "integer"
 2) "boolean"
-127.0.0.1:6379> JSON.TYPE doc $..dummy
+redis> JSON.TYPE doc $..dummy
 {{< / highlight >}}
 
 ## See also
@@ -43,6 +43,3 @@ OK
 
 * [RedisJSON](/docs/stack/json)
 * [Index and search JSON documents](/docs/stack/search/indexing_json)
-
-
-

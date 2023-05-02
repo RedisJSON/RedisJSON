@@ -34,42 +34,42 @@ For more information about replies, see [Redis serialization protocol specificat
 Create two headphone products with maximum sound levels.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.SET key $ '[{"name":"Healthy headphones","description":"Wireless Bluetooth headphones with noise-cancelling technology","connection":{"wireless":true,"type":"Bluetooth"},"price":99.98,"stock":25,"colors":["black","silver"],"max_level":[60,70,80]},{"name":"Noisy headphones","description":"Wireless Bluetooth headphones with noise-cancelling technology","connection":{"wireless":true,"type":"Bluetooth"},"price":99.98,"stock":25,"colors":["black","silver"],"max_level":[80,90,100,120]}]'
+redis> JSON.SET key $ '[{"name":"Healthy headphones","description":"Wireless Bluetooth headphones with noise-cancelling technology","connection":{"wireless":true,"type":"Bluetooth"},"price":99.98,"stock":25,"colors":["black","silver"],"max_level":[60,70,80]},{"name":"Noisy headphones","description":"Wireless Bluetooth headphones with noise-cancelling technology","connection":{"wireless":true,"type":"Bluetooth"},"price":99.98,"stock":25,"colors":["black","silver"],"max_level":[80,90,100,120]}]'
 OK
 {{< / highlight >}}
 
 Get all maximum values for the second product.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.GET key $.[1].max_level
+redis> JSON.GET key $.[1].max_level
 "[[80,90,100,120]]"
 {{< / highlight >}}
 
 Update the `max_level` field of the product: remove an unavailable value and add a newly available value.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.ARRPOP key $.[1].max_level 0
+redis> JSON.ARRPOP key $.[1].max_level 0
 1) "80"
 {{< / highlight >}}
 
 Get the updated array.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.GET key $.[1].max_level
+redis> JSON.GET key $.[1].max_level
 "[[90,100,120]]"
 {{< / highlight >}}
 
 Now insert a new lowest value.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.ARRINSERT key $.[1].max_level 0 85
+redis> JSON.ARRINSERT key $.[1].max_level 0 85
 1) (integer) 4
 {{< / highlight >}}
 
 Get the updated array.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.GET key $.[1].max_level
+redis> JSON.GET key $.[1].max_level
 "[[85,90,100,120]]"
 {{< / highlight >}}
 </details>

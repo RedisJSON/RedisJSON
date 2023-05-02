@@ -29,11 +29,11 @@ For more information about replies, see [Redis serialization protocol specificat
 ## Examples
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.SET doc . '{"a":"b","b":[{"a":2}, {"a":5}, {"a":"c"}]}'
+redis> JSON.SET doc . '{"a":"b","b":[{"a":2}, {"a":5}, {"a":"c"}]}'
 OK
-127.0.0.1:6379> JSON.NUMMULTBY doc $.a 2
+redis> JSON.NUMMULTBY doc $.a 2
 "[null]"
-127.0.0.1:6379> JSON.NUMMULTBY doc $..a 2
+redis> JSON.NUMMULTBY doc $..a 2
 "[null,4,10,null]"
 {{< / highlight >}}
 
