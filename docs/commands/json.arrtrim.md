@@ -50,7 +50,7 @@ For more information about replies, see [Redis serialization protocol specificat
 Create two headphone products with maximum sound levels.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.GET key $
+redis> JSON.GET key $
 "[[{\"name\":\"Healthy headphones\",\"description\":\"Wireless Bluetooth headphones with noise-cancelling technology\",\"connection\":{\"wireless\":true,\"type\":\"Bluetooth\"},\"price\":99.98,\"stock\":25,\"colors\":[\"black\",\"silver\"],\"max_level\":[60,70,80]},{\"name\":\"Noisy headphones\",\"description\":\"Wireless Bluetooth headphones with noise-cancelling technology\",\"connection\":{\"wireless\":true,\"type\":\"Bluetooth\"},\"price\":99.98,\"stock\":25,\"colors\":[\"black\",\"silver\"],\"max_level\":[85,90,100,120]}]]"
 OK
 {{< / highlight >}}
@@ -58,28 +58,28 @@ OK
 Add new sound level values to the second product.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.ARRAPPEND key $.[1].max_level 140 160 180 200 220 240 260 280
+redis> JSON.ARRAPPEND key $.[1].max_level 140 160 180 200 220 240 260 280
 1) (integer) 12
 {{< / highlight >}}
 
 Get the updated array.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.GET key $.[1].max_level
+redis> JSON.GET key $.[1].max_level
 "[[85,90,100,120,140,160,180,200,220,240,260,280]]"
 {{< / highlight >}}
 
 Keep only the values between the fifth and the ninth element, inclusive of that last element.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.ARRTRIM key $.[1].max_level 4 8
+redis> JSON.ARRTRIM key $.[1].max_level 4 8
 1) (integer) 5
 {{< / highlight >}}
 
 Get the updated array.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.GET key $.[1].max_level
+redis> JSON.GET key $.[1].max_level
 "[[140,160,180,200,220]]"
 {{< / highlight >}}
 </details>

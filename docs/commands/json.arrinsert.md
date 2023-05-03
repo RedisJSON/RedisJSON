@@ -43,14 +43,14 @@ For more information about replies, see [Redis serialization protocol specificat
 Create a document for noise-cancelling headphones in black and silver colors.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.SET item:1 $ '{"name":"Noise-cancelling Bluetooth headphones","description":"Wireless Bluetooth headphones with noise-cancelling technology","connection":{"wireless":true,"type":"Bluetooth"},"price":99.98,"stock":25,"colors":["black","silver"]}'
+redis> JSON.SET item:1 $ '{"name":"Noise-cancelling Bluetooth headphones","description":"Wireless Bluetooth headphones with noise-cancelling technology","connection":{"wireless":true,"type":"Bluetooth"},"price":99.98,"stock":25,"colors":["black","silver"]}'
 OK
 {{< / highlight >}}
 
 Add color `blue` to the end of the `colors` array. `JSON.ARRAPEND` returns the array's new size.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.ARRAPPEND item:1 $.colors '"blue"'
+redis> JSON.ARRAPPEND item:1 $.colors '"blue"'
 1) (integer) 3
 {{< / highlight >}}
 
@@ -64,21 +64,21 @@ JSON.GET item:1
 Get the list of colors for the product.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.GET item:1 '$.colors[*]'
+redis> JSON.GET item:1 '$.colors[*]'
 "[\"black\",\"silver\",\"blue\"]"
 {{< / highlight >}}
 
 Insert two more colors after the second color. You now have five colors.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.ARRINSERT item:1 $.colors 2 '"yellow"' '"gold"'
+redis> JSON.ARRINSERT item:1 $.colors 2 '"yellow"' '"gold"'
 1) (integer) 5
 {{< / highlight >}}
 
 Get the updated list of colors.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.GET item:1 $.colors
+redis> JSON.GET item:1 $.colors
 "[[\"black\",\"silver\",\"yellow\",\"gold\",\"blue\"]]"
 {{< / highlight >}}
 </details>

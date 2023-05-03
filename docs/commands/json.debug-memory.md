@@ -29,14 +29,14 @@ For more information about replies, see [Redis serialization protocol specificat
 Create a JSON document.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.SET item:2 $ '{"name":"Wireless earbuds","description":"Wireless Bluetooth in-ear headphones","connection":{"wireless":true,"type":"Bluetooth"},"price":64.99,"stock":17,"colors":["black","white"], "max_level":[80, 100, 120]}'
+redis> JSON.SET item:2 $ '{"name":"Wireless earbuds","description":"Wireless Bluetooth in-ear headphones","connection":{"wireless":true,"type":"Bluetooth"},"price":64.99,"stock":17,"colors":["black","white"], "max_level":[80, 100, 120]}'
 OK
 {{< / highlight >}}
 
 Get the values' memory usage in bytes.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.DEBUG MEMORY item:2
+redis> JSON.DEBUG MEMORY item:2
 (integer) 253
 {{< / highlight >}}
 </details>

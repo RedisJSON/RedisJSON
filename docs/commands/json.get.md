@@ -49,7 +49,7 @@ Produce pretty-formatted JSON with `redis-cli` by following this example:
 
 {{< highlight bash >}}
 ~/$ redis-cli --raw
-127.0.0.1:6379> JSON.GET myjsonkey INDENT "\t" NEWLINE "\n" SPACE " " path.to.value[1]
+redis> JSON.GET myjsonkey INDENT "\t" NEWLINE "\n" SPACE " " path.to.value[1]
 {{< / highlight >}}
 
 {{% /alert %}}
@@ -70,21 +70,21 @@ For more information about replies, see [Redis serialization protocol specificat
 Create a JSON document.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.SET doc $ '{"a":2, "b": 3, "nested": {"a": 4, "b": null}}'
+redis> JSON.SET doc $ '{"a":2, "b": 3, "nested": {"a": 4, "b": null}}'
 OK
 {{< / highlight >}}
 
 With a single JSONPath (JSON array bulk string):
 
 {{< highlight bash >}}
-127.0.0.1:6379>  JSON.GET doc $..b
+redis>  JSON.GET doc $..b
 "[3,null]"
 {{< / highlight >}}
 
 Using multiple paths with at least one JSONPath returns a JSON string with a top-level object with an array of JSON values per path:
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.GET doc ..a $..b
+redis> JSON.GET doc ..a $..b
 "{\"$..b\":[3,null],\"..a\":[2,4]}"
 {{< / highlight >}}
 </details>

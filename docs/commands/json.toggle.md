@@ -30,35 +30,35 @@ For more information about replies, see [Redis serialization protocol specificat
 Create a JSON document.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.SET doc $ '{"bool": true}'
+redis> JSON.SET doc $ '{"bool": true}'
 OK
 {{< / highlight >}}
 
 Toggle the Boolean value.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.TOGGLE doc $.bool
+redis> JSON.TOGGLE doc $.bool
 1) (integer) 0
 {{< / highlight >}}
 
 Get the updated document.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.GET doc $
+redis> JSON.GET doc $
 "[{\"bool\":false}]"
 {{< / highlight >}}
 
 Toggle the Boolean value.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.TOGGLE doc $.bool
+redis> JSON.TOGGLE doc $.bool
 1) (integer) 1
 {{< / highlight >}}
 
 Get the updated document.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.GET doc $
+redis> JSON.GET doc $
 "[{\"bool\":true}]"
 {{< / highlight >}}
 </details>

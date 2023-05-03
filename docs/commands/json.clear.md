@@ -35,21 +35,21 @@ Already cleared values are ignored for empty containers and zero numbers.
 Create a JSON document.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.SET doc $ '{"obj":{"a":1, "b":2}, "arr":[1,2,3], "str": "foo", "bool": true, "int": 42, "float": 3.14}'
+redis> JSON.SET doc $ '{"obj":{"a":1, "b":2}, "arr":[1,2,3], "str": "foo", "bool": true, "int": 42, "float": 3.14}'
 OK
 {{< / highlight >}}
 
 Clear all container values. This returns the number of objects with cleared values.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.CLEAR doc $.*
+redis> JSON.CLEAR doc $.*
 (integer) 4
 {{< / highlight >}}
 
 Get the updated document. Note that numeric values have been set to `0`.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.GET doc $
+redis> JSON.GET doc $
 "[{\"obj\":{},\"arr\":[],\"str\":\"foo\",\"bool\":true,\"int\":0,\"float\":0}]"
 {{< / highlight >}}
 </details>
