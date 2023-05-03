@@ -1338,13 +1338,16 @@ def testMerge(env):
     r.assertOk(r.execute_command('JSON.MERGE', 'test_merge', '$.a.b', '{"c":null}'))
     r.expect('JSON.GET', 'test_merge').equal('{"a":{"b":{"h":"i","e":"f"}}}')
 
+    # Test merge error - invalid JSON
+    r.expect('JSON.MERGE', 'test_merge', '$.a', '{"b":{"h":"i" "bye"}}').error().contains("expected")
+
     # Test with none existing key with path $.a   
     r.expect('JSON.MERGE', 'test_merge_new', '$.a', '{"a":"i"}').raiseError()
 
     # Test with none existing key -> create key
     r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_new', '$', '{"h":"i"}'))
     r.expect('JSON.GET', 'test_merge_new').equal('{"h":"i"}')
-
+    
 def testMergeArray(env):
     # Test JSON.MERGE with arrays
     r = env
@@ -1364,6 +1367,24 @@ def testMergeArray(env):
     r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_array', '$.a.b', '{"c":null}'))
     r.expect('JSON.GET', 'test_merge_array').equal('{"a":{"b":{}}}')
 
+def testMergeDynamicPath(env):
+    # Test JSON.MERGE with dynamic jsonpath
+    r = env
+
+    # Test with simple dynamic path
+    r.assertOk(r.execute_command('JSON.SET', 'test_merge_dynamic', '$', '{"a1":{"b":{"c":1}},"a2":{"b":{"c":2}}}'))
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_dynamic', '$..b', '{"f":3}'))
+    r.expect('JSON.GET', 'test_merge_dynamic', '$..b').equal('[{\"c\":1,\"f\":3},{\"c\":2,\"f\":3}]')
+
+    # Test with overlapping dynamic path
+    r.assertOk(r.execute_command('JSON.SET', 'test_merge_dynamic', '$', '{"a1":{"b":{"b":1}}}'))
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_dynamic', '$..b', '{"f":3}'))
+    r.expect('JSON.GET', 'test_merge_dynamic').equal('{"a1":{"b":{"b":{"f":3},"f":3}}}')
+
+    # Test with overriding dynamic path
+    r.assertOk(r.execute_command('JSON.SET', 'test_merge_dynamic', '$', '{"a1":{"b":{"f":{"b":1}}}}'))
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_dynamic', '$..b', '{"f":3}'))
+    r.expect('JSON.GET', 'test_merge_dynamic').equal('{"a1":{"b":{"f":3}}}')
 
 def testRDBUnboundedDepth(env):
     # Test RDB Unbounded Depth load

@@ -252,7 +252,7 @@ pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
                                 UpdateInfo::AUI(aui) => {
                                     redis_key.dict_add(aui.path, &aui.key, val.clone())?
                                 }
-                            }
+                            } || res; // If any of the updates succeed, return true
                         }
                     }
                     if res {
