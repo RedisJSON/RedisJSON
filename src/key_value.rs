@@ -39,7 +39,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    pub fn resp_serialize(&'a self, path: Path) -> RedisResult {
+    pub fn resp_serialize(&self, path: Path) -> RedisResult {
         if path.is_legacy() {
             let v = self.get_first(path.get_path())?;
             Ok(Self::resp_serialize_inner(v))
@@ -107,7 +107,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     fn to_json_multi(
-        &'a self,
+        &self,
         paths: &mut Vec<Path>,
         format: &FormatOptions,
         is_legacy: bool,
@@ -155,15 +155,10 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             let map = temp_doc
                 .iter()
                 .map(|(k, v)| {
-                    // let mut arr = Vec::with_capacity(2);
                     let key = RedisValueKey::String(k.to_string());
                     let value = match v {
-                        Some(Values::Single(v)) => Self::serialize_object(v, format).into(),
-                        Some(Values::Multi(v)) => RedisValue::Array(
-                            v.iter()
-                                .map(|v| Self::serialize_object(v, format).into())
-                                .collect::<Vec<RedisValue>>(),
-                        ),
+                        Some(Values::Single(value)) => self.value_to_resp3(value, format),
+                        Some(Values::Multi(values)) => self.values_to_resp3(values, format),
                         None => RedisValue::Null,
                     };
                     (key, value)
@@ -177,7 +172,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     fn to_json_single(
-        &'a self,
+        &self,
         path: &str,
         format: &FormatOptions,
         is_legacy: bool,
@@ -185,26 +180,35 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         let res = if is_legacy {
             self.to_string_single(path, format)?.into()
         } else if format.resp3 {
-            self.get_values(path)?
-                .iter()
-                .map(|v| match v.get_type() {
-                    SelectValueType::Null => RedisValue::Null,
-                    SelectValueType::Bool => RedisValue::Bool(v.get_bool()),
-                    SelectValueType::Long => RedisValue::Integer(v.get_long()),
-                    SelectValueType::Double => RedisValue::Float(v.get_double()),
-                    SelectValueType::String => RedisValue::BulkString(v.get_str()),
-                    _ => RedisValue::BulkString(Self::serialize_object(&v, format)),
-                })
-                .collect::<Vec<RedisValue>>()
-                .into()
+            let values = self.get_values(path)?;
+            self.values_to_resp3(&values, format)
         } else {
             self.to_string_multi(path, format)?.into()
         };
         Ok(res)
     }
 
+    fn values_to_resp3(&self, values: &[&V], format: &FormatOptions) -> RedisValue {
+        values
+            .iter()
+            .map(|v| self.value_to_resp3(v, format))
+            .collect::<Vec<RedisValue>>()
+            .into()
+    }
+
+    fn value_to_resp3(&self, value: &V, format: &FormatOptions) -> RedisValue {
+        match value.get_type() {
+            SelectValueType::Null => RedisValue::Null,
+            SelectValueType::Bool => RedisValue::Bool(value.get_bool()),
+            SelectValueType::Long => RedisValue::Integer(value.get_long()),
+            SelectValueType::Double => RedisValue::Float(value.get_double()),
+            SelectValueType::String => RedisValue::BulkString(value.get_str()),
+            _ => RedisValue::BulkString(Self::serialize_object(value, format)),
+        }
+    }
+
     pub fn to_json(
-        &'a self,
+        &self,
         paths: &mut Vec<Path>,
         format: &FormatOptions,
     ) -> Result<RedisValue, Error> {
