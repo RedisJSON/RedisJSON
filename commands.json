@@ -139,6 +139,26 @@
     "since": "1.0.0",
     "group": "json"
   },
+  "JSON.MERGE": {
+    "summary": "Sets or updates the JSON value at a path",
+    "complexity": "O(M+N) when path is evaluated to a single value where M is the size of the original value (if it exists) and N is the size of the new value, O(M+N) when path is evaluated to multiple values where M is the size of the key and N is the size of the new value",
+    "arguments": [
+      {
+        "name": "key",
+        "type": "key"
+      },
+      {
+        "name": "path",
+        "type": "string"
+      },
+      {
+        "name": "value",
+        "type": "string"
+      }
+    ],
+    "since": "2.6.0",
+    "group": "json"
+  },
   "JSON.MGET": {
     "summary": "Returns the values at a path from one or more keys",
     "complexity": "O(M*N) when path is evaluated to a single value where M is the number of keys and N is the size of the value, O(N1+N2+...+Nm) when path is evaluated to multiple values where m is the number of keys and Ni is the size of the i-th key",

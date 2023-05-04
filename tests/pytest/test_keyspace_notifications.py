@@ -40,10 +40,17 @@ def test_keyspace_set(env):
         assert_msg(env, pubsub.get_message(timeout=1), 'pmessage', 'json.strappend')
         assert_msg(env, pubsub.get_message(timeout=1), 'pmessage', 'test_key')
 
+        env.assertEqual('OK', r.execute_command('JSON.MERGE', 'test_key', '$', '{"mu":1}'))
+        assert_msg(env, pubsub.get_message(timeout=1), 'pmessage', 'json.merge')
+        assert_msg(env, pubsub.get_message(timeout=1), 'pmessage', 'test_key')
+
         # Negative tests should not get an event
         # Read-only commands should not get an event
         env.assertEqual(None, r.execute_command('JSON.SET', 'test_key', '$.foo.a', '"nono"'))
         env.assertEqual(None, pubsub.get_message(timeout=1))       
+
+        env.assertEqual(None, r.execute_command('JSON.MERGE', 'test_key', '$.foo.a', '{"zu":1}'))
+        env.assertEqual(None, pubsub.get_message(timeout=1)) 
 
         env.assertEqual([8], r.execute_command('JSON.STRLEN', 'test_key', '$.foo'))
         env.assertEqual(None, pubsub.get_message(timeout=1))       
@@ -54,10 +61,10 @@ def test_keyspace_set(env):
         env.assertEqual(['["gogototo"]', None], r.execute_command('JSON.MGET', 'test_key', 'test_key1', '$.foo'))
         env.assertEqual(None, pubsub.get_message(timeout=1))       
 
-        env.assertEqual([['foo', 'fu']], r.execute_command('JSON.OBJKEYS', 'test_key', '$'))
+        env.assertEqual([['foo', 'fu', 'mu']], r.execute_command('JSON.OBJKEYS', 'test_key', '$'))
         env.assertEqual(None, pubsub.get_message(timeout=1))       
 
-        env.assertEqual([2], r.execute_command('JSON.OBJLEN', 'test_key', '$'))
+        env.assertEqual([3], r.execute_command('JSON.OBJLEN', 'test_key', '$'))
         env.assertEqual(None, pubsub.get_message(timeout=1))
 
         env.assertEqual([None], r.execute_command('JSON.STRAPPEND', 'test_key', '$.fu', '"bark"'))

@@ -1321,6 +1321,94 @@ def testFilterPrecedence(env):
     r.assertEqual(json.loads(res), [doc[0]])
     r.expect('JSON.GET', 'doc', '$[?(@.f==true || @.one==1 && @.t==false)]').equal('[]')
 
+def testMerge(env):
+    # Test JSON.MERGE
+    r = env
+
+    # Test with root path $
+    r.assertOk(r.execute_command('JSON.SET', 'test_merge', '$', '{"a":{"b":{"c":"d"}}}'))
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge', '$', '{"a":{"b":{"e":"f"}}}'))
+    r.expect('JSON.GET', 'test_merge').equal('{"a":{"b":{"c":"d","e":"f"}}}')
+
+    # Test with root path path $.a.b
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge', '$.a.b', '{"h":"i"}'))
+    r.expect('JSON.GET', 'test_merge').equal('{"a":{"b":{"c":"d","e":"f","h":"i"}}}')
+
+    # Test with null value to delete a value
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge', '$.a.b', '{"c":null}'))
+    r.expect('JSON.GET', 'test_merge').equal('{"a":{"b":{"h":"i","e":"f"}}}')
+
+    # Test merge error - invalid JSON
+    r.expect('JSON.MERGE', 'test_merge', '$.a', '{"b":{"h":"i" "bye"}}').error().contains("expected")
+
+    # Test with none existing key with path $.a   
+    r.expect('JSON.MERGE', 'test_merge_new', '$.a', '{"a":"i"}').raiseError()
+
+    # Test with none existing key -> create key
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_new', '$', '{"h":"i"}'))
+    r.expect('JSON.GET', 'test_merge_new').equal('{"h":"i"}')
+    
+    
+def testMergeArray(env):
+    # Test JSON.MERGE with arrays
+    r = env
+
+    # Test merge on an array
+    r.assertOk(r.execute_command('JSON.SET', 'test_merge_array', '$', '{"a":{"b":{"c":["d","e"]}}}'))
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_array', '$.a.b.c', '["f"]'))
+    r.expect('JSON.GET', 'test_merge_array').equal('{"a":{"b":{"c":["f"]}}}')
+
+    # Test merge an array on a value
+    r.assertOk(r.execute_command('JSON.SET', 'test_merge_array', '$', '{"a":{"b":{"c":"d"}}}'))
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_array', '$.a.b.c', '["f"]'))
+    r.expect('JSON.GET', 'test_merge_array').equal('{"a":{"b":{"c":["f"]}}}')
+
+    # Test with null value to delete an array value
+    r.assertOk(r.execute_command('JSON.SET', 'test_merge_array', '$', '{"a":{"b":{"c":["d","e"]}}}'))
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_array', '$.a.b', '{"c":null}'))
+    r.expect('JSON.GET', 'test_merge_array').equal('{"a":{"b":{}}}')
+
+
+def testMergeDynamicPath(env):
+    # Test JSON.MERGE with dynamic jsonpath
+    r = env
+
+    # Test with simple dynamic path
+    r.assertOk(r.execute_command('JSON.SET', 'test_merge_dynamic', '$', '{"a1":{"b":{"c":1}},"a2":{"b":{"c":2}}}'))
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_dynamic', '$..b', '{"f":3}'))
+    r.expect('JSON.GET', 'test_merge_dynamic', '$..b').equal('[{\"c\":1,\"f\":3},{\"c\":2,\"f\":3}]')
+
+    # Test with overlapping dynamic path
+    r.assertOk(r.execute_command('JSON.SET', 'test_merge_dynamic', '$', '{"a1":{"b":{"b":1}}}'))
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_dynamic', '$..b', '{"f":3}'))
+    r.expect('JSON.GET', 'test_merge_dynamic').equal('{"a1":{"b":{"b":{"f":3},"f":3}}}')
+
+    # Test with overriding dynamic path
+    r.assertOk(r.execute_command('JSON.SET', 'test_merge_dynamic', '$', '{"a1":{"b":{"f":{"b":1}}}}'))
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_dynamic', '$..b', '{"f":3}'))
+    r.expect('JSON.GET', 'test_merge_dynamic').equal('{"a1":{"b":{"f":3}}}')
+
+
+def testMergeNested(env):
+    # Test JSON.MERGE with nested value
+    r = env
+
+    # Test with simple nested merge
+    r.assertOk(r.execute_command('JSON.SET', 'test_merge_nested', '$', '{"a":{"b":{"f":{"b":1}}}}'))
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_nested', '$.a', '{"b":{"f":{"c":3}}}'))
+    r.expect('JSON.GET', 'test_merge_nested').equal('{"a":{"b":{"f":{"b":1,"c":3}}}}')
+
+    # Test with simple nested merge
+    r.assertOk(r.execute_command('JSON.SET', 'test_merge_nested', '$', '{"a":{"b":{"f1":{"b1":1},"f2":{"b2":2}}}}'))
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_nested', '$.a', '{"b":{"f1":{"c1":3},"f2":{"c2":4}}}'))
+    r.expect('JSON.GET', 'test_merge_nested').equal('{"a":{"b":{"f1":{"b1":1,"c1":3},"f2":{"b2":2,"c2":4}}}}')
+
+    # Test with simple nested merge on dynamic path
+    r.assertOk(r.execute_command('JSON.SET', 'test_merge_nested', '$', '{"a":{"b1":{"f":{"c1":1}}, "b2":{"f":{"c2":2}}}}}'))
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_nested', '$.a.*', '{"f":{"t":6}}'))
+    r.expect('JSON.GET', 'test_merge_nested').equal('{"a":{"b1":{"f":{"c1":1,"t":6}},"b2":{"f":{"c2":2,"t":6}}}}')
+
+
 def testRDBUnboundedDepth(env):
     # Test RDB Unbounded Depth load
     r = env

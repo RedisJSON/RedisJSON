@@ -202,6 +202,86 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
 }
 
 ///
+/// JSON.MERGE <key> <path> <json> [FORMAT <format>]
+///
+pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+
+    let key = args.next_arg()?;
+    let path = Path::new(args.next_str()?);
+    let value = args.next_str()?;
+
+    let mut format = Format::JSON;
+
+    while let Some(s) = args.next() {
+        match s.try_as_str()? {
+            arg if arg.eq_ignore_ascii_case("FORMAT") => {
+                format = Format::from_str(args.next_str()?)?;
+            }
+            _ => return Err(RedisError::Str("ERR syntax error")),
+        };
+    }
+
+    let mut redis_key = manager.open_key_write(ctx, key)?;
+    let current = redis_key.get_value()?;
+
+    let val = manager.from_str(value, format, true)?;
+
+    match current {
+        Some(doc) => {
+            if path.get_path() == JSON_ROOT_PATH {
+                redis_key.merge_value(Vec::new(), val)?;
+                redis_key.apply_changes(ctx, "json.merge")?;
+                REDIS_OK
+            } else {
+                let mut update_info =
+                    KeyValue::new(doc).find_paths(path.get_path(), &SetOptions::None)?;
+                if !update_info.is_empty() {
+                    let mut res = false;
+                    if update_info.len() == 1 {
+                        res = match update_info.pop().unwrap() {
+                            UpdateInfo::SUI(sui) => redis_key.merge_value(sui.path, val)?,
+                            UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, val)?,
+                        }
+                    } else {
+                        for ui in update_info {
+                            res = match ui {
+                                UpdateInfo::SUI(sui) => {
+                                    redis_key.merge_value(sui.path, val.clone())?
+                                }
+                                UpdateInfo::AUI(aui) => {
+                                    redis_key.dict_add(aui.path, &aui.key, val.clone())?
+                                }
+                            } || res; // If any of the updates succeed, return true
+                        }
+                    }
+                    if res {
+                        redis_key.apply_changes(ctx, "json.merge")?;
+                        REDIS_OK
+                    } else {
+                        Ok(RedisValue::Null)
+                    }
+                } else {
+                    Ok(RedisValue::Null)
+                }
+            }
+        }
+        None => {
+            if path.get_path() == JSON_ROOT_PATH {
+                // Nothing to merge with it's a new doc
+                redis_key.set_value(Vec::new(), val)?;
+                redis_key.apply_changes(ctx, "json.merge")?;
+                REDIS_OK
+            } else {
+                Err(RedisError::Str(
+                    "ERR new objects must be created at the root",
+                ))
+            }
+        }
+    }
+}
+
+///
 /// JSON.MSET <key> <path> <json> [[<key> <path> <json>]...]
 ///
 pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {

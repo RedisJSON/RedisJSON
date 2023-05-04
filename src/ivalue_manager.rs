@@ -11,7 +11,7 @@ use crate::redisjson::normalize_arr_start_index;
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
 use ijson::object::Entry;
-use ijson::{DestructuredMut, INumber, IString, IValue, ValueType};
+use ijson::{DestructuredMut, INumber, IObject, IString, IValue, ValueType};
 use redis_module::key::{verify_type, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::rediserror::RedisError;
@@ -54,43 +54,31 @@ fn replace<F: FnMut(&mut IValue) -> Result<Option<IValue>, Error>>(
         let target_once = target;
         let is_last = i == last_index;
         let target_opt = match target_once.type_() {
-            // ValueType::Object(ref mut map) => {
             ValueType::Object => {
                 let obj = target_once.as_object_mut().unwrap();
                 if is_last {
                     if let Entry::Occupied(mut e) = obj.entry(token) {
                         let v = e.get_mut();
-                        match (func)(v) {
-                            Ok(res) => {
-                                if let Some(res) = res {
-                                    *v = res;
-                                } else {
-                                    e.remove();
-                                }
-                            }
-                            Err(err) => return Err(err),
+                        if let Some(res) = (func)(v)? {
+                            *v = res;
+                        } else {
+                            e.remove();
                         }
                     }
                     return Ok(());
                 }
                 obj.get_mut(token.as_str())
             }
-            // Value::Array(ref mut vec) => {
             ValueType::Array => {
                 let arr = target_once.as_array_mut().unwrap();
                 if let Ok(x) = token.parse::<usize>() {
                     if is_last {
                         if x < arr.len() {
                             let v = &mut arr.as_mut_slice()[x];
-                            match (func)(v) {
-                                Ok(res) => {
-                                    if let Some(res) = res {
-                                        *v = res;
-                                    } else {
-                                        arr.remove(x);
-                                    }
-                                }
-                                Err(err) => return Err(err),
+                            if let Some(res) = (func)(v)? {
+                                *v = res;
+                            } else {
+                                arr.remove(x);
                             }
                         }
                         return Ok(());
@@ -330,9 +318,25 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             self.set_root(Some(v))?;
             updated = true;
         } else {
-            replace(&path, self.get_value().unwrap().unwrap(), |_v| {
+            replace(&path, self.get_value()?.unwrap(), |_v| {
                 updated = true;
                 Ok(Some(v.take()))
+            })?;
+        }
+        Ok(updated)
+    }
+
+    fn merge_value(&mut self, path: Vec<String>, v: IValue) -> Result<bool, RedisError> {
+        let mut updated = false;
+        if path.is_empty() {
+            merge(self.get_value()?.unwrap(), &v);
+            // update the root
+            updated = true;
+        } else {
+            replace(&path, self.get_value()?.unwrap(), |current| {
+                updated = true;
+                merge(current, &v);
+                Ok(Some(current.take()))
             })?;
         }
         Ok(updated)
@@ -548,6 +552,25 @@ impl ReadHolder<IValue> for IValueKeyHolderRead {
     fn get_value(&self) -> Result<Option<&IValue>, RedisError> {
         let key_value = self.key.get_value::<RedisJSON<IValue>>(&REDIS_JSON_TYPE)?;
         key_value.map_or(Ok(None), |v| Ok(Some(&v.data)))
+    }
+}
+
+fn merge(doc: &mut IValue, patch: &IValue) {
+    if !patch.is_object() {
+        *doc = patch.clone();
+        return;
+    }
+
+    if !doc.is_object() {
+        *doc = IObject::new().into();
+    }
+    let map = doc.as_object_mut().unwrap();
+    for (key, value) in patch.as_object().unwrap() {
+        if value.is_null() {
+            map.remove(key.as_str());
+        } else {
+            merge(map.entry(key.as_str()).or_insert(IValue::NULL), value);
+        }
     }
 }
 
