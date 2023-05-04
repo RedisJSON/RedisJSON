@@ -462,7 +462,7 @@ impl ReadHolder<Value> for KeyHolderRead {
 }
 
 fn merge(doc: &mut Value, patch: &Value) -> Value {
-    if !patch.is_object() {
+    if !patch.is_object() || !doc.is_object() {
         return patch.clone();
     }
 

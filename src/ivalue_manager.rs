@@ -54,43 +54,31 @@ fn replace<F: FnMut(&mut IValue) -> Result<Option<IValue>, Error>>(
         let target_once = target;
         let is_last = i == last_index;
         let target_opt = match target_once.type_() {
-            // ValueType::Object(ref mut map) => {
             ValueType::Object => {
                 let obj = target_once.as_object_mut().unwrap();
                 if is_last {
                     if let Entry::Occupied(mut e) = obj.entry(token) {
                         let v = e.get_mut();
-                        match (func)(v) {
-                            Ok(res) => {
-                                if let Some(res) = res {
-                                    *v = res;
-                                } else {
-                                    e.remove();
-                                }
-                            }
-                            Err(err) => return Err(err),
+                        if let Some(res) = (func)(v)? {
+                            *v = res;
+                        } else {
+                            e.remove();
                         }
                     }
                     return Ok(());
                 }
                 obj.get_mut(token.as_str())
             }
-            // Value::Array(ref mut vec) => {
             ValueType::Array => {
                 let arr = target_once.as_array_mut().unwrap();
                 if let Ok(x) = token.parse::<usize>() {
                     if is_last {
                         if x < arr.len() {
                             let v = &mut arr.as_mut_slice()[x];
-                            match (func)(v) {
-                                Ok(res) => {
-                                    if let Some(res) = res {
-                                        *v = res;
-                                    } else {
-                                        arr.remove(x);
-                                    }
-                                }
-                                Err(err) => return Err(err),
+                            if let Some(res) = (func)(v)? {
+                                *v = res;
+                            } else {
+                                arr.remove(x);
                             }
                         }
                         return Ok(());
