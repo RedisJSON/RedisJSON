@@ -1424,6 +1424,55 @@ def testRDBUnboundedDepth(env):
     r.expect('RESTORE', 'doc1', 0, dump).ok()
     r.expect('JSON.GET', 'doc1', '$..__leaf..__deep_leaf').equal('[420]')
 
+def testFilterRegexEscape(env):
+    # Test JSONPath filter escaped regex
+    r = env
+
+    doc1 = {
+        "arr": ["ab[cd]", "ab[c]", "[ccd]", "[]", "[cda]]", "[ccd", "[[[d]"],
+        "pat1": r'\[[c-d]+\]',
+        "pat2":  "\\[[c-d]+\\]"
+    }
+
+    r.expect('JSON.SET', 'doc1', '$', json.dumps(doc1)).ok()
+    
+    expected = ["ab[cd]", "ab[c]", "[ccd]", "[[[d]"]
+    # regex match using a static regex pattern
+    res = r.execute_command('JSON.GET', 'doc1', r'$.arr[?(@ =~ "\\[[c-d]+\\]")]')
+    r.assertEqual(json.loads(res), expected)
+    res = r.execute_command('JSON.GET', 'doc1', '$.arr[?(@ =~ "\\\\[[c-d]+\\\\]")]')
+    r.assertEqual(json.loads(res), expected)
+
+    # regex match using a field
+    res = r.execute_command('JSON.GET', 'doc1', '$.arr[?(@ =~ $.pat1)]')
+    r.assertEqual(json.loads(res), expected)
+    res = r.execute_command('JSON.GET', 'doc1', '$.arr[?(@ =~ $.pat2)]')
+    r.assertEqual(json.loads(res), expected)
+
+
+    doc2 = {
+        "arr": ["six.six", "1.2.3", "a1.2.3", "0x.2.3", "7.8", "5", "5.", "0.0.0", "00.0.0", "1.2.00", "2.42.2", "9", "9.8", "9.87.65", "9.87.65a", "1.2.3.4"],
+        "pat1": r'^(0|[1-9]\d*)(\.(0|[1-9]\d*)){0,2}$',
+        "pat2":  "^(0|[1-9]\\d*)(\\.(0|[1-9]\\d*)){0,2}$"
+    }
+    r.expect('JSON.SET', 'doc2', '$', json.dumps(doc2)).ok()
+    
+    expected = ["1.2.3", "7.8", "5", "0.0.0", "2.42.2", "9", "9.8", "9.87.65"]
+
+    # regex match using a static regex pattern
+    res = r.execute_command('JSON.GET', 'doc2', r'$.arr[?(@ =~ "^(0|[1-9]\\d*)(\\.(0|[1-9]\\d*)){0,2}$")]')
+    r.assertEqual(json.loads(res), expected)
+    res = r.execute_command('JSON.GET', 'doc2', '$.arr[?(@ =~ "^(0|[1-9]\\\\d*)(\\\\.(0|[1-9]\\\\d*)){0,2}$")]')
+    r.assertEqual(json.loads(res), expected)
+
+    # regex match using a field
+    res = r.execute_command('JSON.GET', 'doc2', '$.arr[?(@ =~ $.pat1)]')
+    r.assertEqual(json.loads(res), expected)
+    res = r.execute_command('JSON.GET', 'doc2', '$.arr[?(@ =~ $.pat2)]')
+    r.assertEqual(json.loads(res), expected)
+
+
+
 # class CacheTestCase(BaseReJSONTest):
 #     @property
 #     def module_args(env):
