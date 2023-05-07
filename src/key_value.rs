@@ -171,6 +171,20 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         Ok(res)
     }
 
+    fn to_resp3(&self, paths: &mut Vec<Path>, format: &FormatOptions) -> Result<RedisValue, Error> {
+        let results = paths
+            .drain(..)
+            .map(|path: Path| {
+                compile(path.get_path()).map_or_else(
+                    |_| RedisValue::Array(vec![]),
+                    |q| self.values_to_resp3(&calc_once(q, self.val), format),
+                )
+            })
+            .collect::<Vec<RedisValue>>();
+
+        Ok(RedisValue::Array(results))
+    }
+
     fn to_json_single(
         &self,
         path: &str,
@@ -215,7 +229,9 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             return Err("ERR Soon to come...".into());
         }
         let is_legacy = !paths.iter().any(|p| !p.is_legacy());
-        if paths.len() > 1 {
+        if format.resp3 {
+            self.to_resp3(paths, format)
+        } else if paths.len() > 1 {
             self.to_json_multi(paths, format, is_legacy)
         } else {
             self.to_json_single(paths[0].get_path(), format, is_legacy)

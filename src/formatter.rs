@@ -43,6 +43,7 @@ pub struct FormatOptions<'a> {
     pub space: Option<&'a str>,
     pub newline: Option<&'a str>,
     pub resp3: bool,
+    
 }
 
 impl Default for FormatOptions<'_> {
