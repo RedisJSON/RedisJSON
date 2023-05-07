@@ -831,7 +831,7 @@ dependencies = [
 
 [[package]]
 name = "redisjson"
-version = "2.6.99"
+version = "2.6.0"
 dependencies = [
  "bitflags",
  "bson",
