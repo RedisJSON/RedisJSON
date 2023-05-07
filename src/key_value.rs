@@ -202,7 +202,6 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             SelectValueType::Bool => RedisValue::Bool(value.get_bool()),
             SelectValueType::Long => RedisValue::Integer(value.get_long()),
             SelectValueType::Double => RedisValue::Float(value.get_double()),
-            SelectValueType::String => RedisValue::BulkString(value.get_str()),
             _ => RedisValue::BulkString(Self::serialize_object(value, format)),
         }
     }
