@@ -5,13 +5,13 @@ include $(ROOT)/deps/readies/mk/main
 
 REPO=rejson
 
-REDIS_VERSION=6.2.10
+REDIS_VERSION=7.2-rc1
 
 OSNICK.official=bullseye
 
-INT_BRANCHES=2.4 2.2 2.0 1.2 1.0
+INT_BRANCHES=2.6 2.4 2.2 2.0 1.2 1.0
 LATEST_BRANCH=2.4
-PREVIEW_BRANCH=2.4
+PREVIEW_BRANCH=2.6
 
 ART_DIR=$(ROOT)/bin/artifacts
 
