@@ -19,8 +19,6 @@ env_logger = "0.10.0"
 #redis-module = { version="1.0", features = ["experimental-api", "test"]}
 
 [dependencies]
-pest = "2.1"
-pest_derive = "2.1"
 bitflags = "1.3"
 log = "0.4"
 bson = "0.14"
@@ -31,6 +29,8 @@ libc = "0.2"
 redis-module = { version="1.0", features = ["experimental-api"]}
 itertools = "0.10"
 regex = "1"
+json_path = {path="./json_path"}
+
 
 [features]
 # Workaround to allow cfg(feature = "test") in redismodue-rs dependencies:
@@ -38,30 +38,6 @@ regex = "1"
 # This requires running the tests with `--features test`
 test = ["redis-module/test"]
 as-library = []
-
-[[test]]
-name = "array_filter"
-path = "tests/rust_tests/array_filter.rs"
-
-[[test]]
-name = "filter"
-path = "tests/rust_tests/filter.rs"
-
-[[test]]
-name = "jsonpath_examples"
-path = "tests/rust_tests/jsonpath_examples.rs"
-
-[[test]]
-name = "op"
-path = "tests/rust_tests/op.rs"
-
-[[test]]
-name = "paths"
-path = "tests/rust_tests/paths.rs"
-
-[[test]]
-name = "return_type"
-path = "tests/rust_tests/return_type.rs"
 
 [profile.release]
 debug = 1

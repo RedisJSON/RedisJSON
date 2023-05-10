@@ -3,16 +3,16 @@ use std::collections::HashMap;
 use redis_module::{RedisResult, RedisValue};
 use serde::Serialize;
 use serde_json::Value;
+use json_path::{
+    calc_once, calc_once_paths, compile,
+    json_path::JsonPathToken,
+    select_value::{SelectValue, SelectValueType},
+};
 
 use crate::{
     commands::{FoundIndex, ObjectLen, Values},
     error::Error,
     formatter::RedisJsonFormatter,
-    jsonpath::{
-        calc_once, calc_once_paths, compile,
-        json_path::JsonPathToken,
-        select_value::{SelectValue, SelectValueType},
-    },
     manager::{
         err_msg_json_expected, err_msg_json_path_doesnt_exist_with_param, AddUpdateInfo,
         SetUpdateInfo, UpdateInfo,

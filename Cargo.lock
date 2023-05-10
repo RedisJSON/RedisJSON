@@ -544,6 +544,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "json_path"
+version = "0.1.0"
+dependencies = [
+ "ijson",
+ "log",
+ "pest",
+ "pest_derive",
+ "regex",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -838,10 +851,9 @@ dependencies = [
  "env_logger 0.10.0",
  "ijson",
  "itertools",
+ "json_path",
  "libc",
  "log",
- "pest",
- "pest_derive",
  "redis-module",
  "regex",
  "serde",

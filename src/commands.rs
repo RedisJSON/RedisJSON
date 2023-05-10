@@ -5,7 +5,7 @@
  */
 
 use crate::error::Error;
-use crate::jsonpath::select_value::{SelectValue, SelectValueType};
+use json_path::select_value::{SelectValue, SelectValueType};
 use crate::key_value::KeyValue;
 use crate::manager::err_msg_json_path_doesnt_exist_with_param;
 use crate::manager::err_msg_json_path_doesnt_exist_with_param_or;
@@ -16,7 +16,7 @@ use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use std::cmp::Ordering;
 use std::str::FromStr;
 
-use crate::jsonpath::{calc_once_with_paths, compile, json_path::UserPathTracker};
+use json_path::{calc_once_with_paths, compile, json_path::UserPathTracker};
 
 use crate::redisjson::SetOptions;
 
