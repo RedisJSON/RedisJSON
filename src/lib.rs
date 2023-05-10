@@ -161,6 +161,20 @@ macro_rules! redis_json_module_create {(
             };
         }
 
+        #[cfg(not(test))]
+        macro_rules! get_allocator {
+            () => {
+                redis_module::alloc::RedisAlloc
+            };
+        }
+
+        #[cfg(test)]
+        macro_rules! get_allocator {
+            () => {
+                std::alloc::System
+            };
+        }
+
         redis_json_module_export_shared_api! {
             get_manage:$get_manager_expr,
             pre_command_function: $pre_command_function_expr,
@@ -205,7 +219,7 @@ macro_rules! redis_json_module_create {(
         redis_module! {
             name: $crate::MODULE_NAME,
             version: $version,
-            allocator: (redis_module::alloc::RedisAlloc, redis_module::alloc::RedisAlloc),
+            allocator:  (get_allocator!(), get_allocator!()),
             data_types: [$($data_type,)*],
             init: json_init_config,
             init: initialize,

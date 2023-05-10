@@ -150,7 +150,7 @@ fn array_range_only_from_index() {
 }
 
 #[test]
-fn array_range_only_nagative_end_index() {
+fn array_range_only_negative_end_index() {
     setup();
 
     select_and_then_compare(
