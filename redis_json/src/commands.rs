@@ -5,12 +5,12 @@
  */
 
 use crate::error::Error;
-use json_path::select_value::{SelectValue, SelectValueType};
 use crate::key_value::KeyValue;
 use crate::manager::err_msg_json_path_doesnt_exist_with_param;
 use crate::manager::err_msg_json_path_doesnt_exist_with_param_or;
 use crate::manager::{Manager, ReadHolder, UpdateInfo, WriteHolder};
 use crate::redisjson::{Format, Path};
+use json_path::select_value::{SelectValue, SelectValueType};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use std::cmp::Ordering;

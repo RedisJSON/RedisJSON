@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
-use redis_module::{RedisResult, RedisValue};
-use serde::Serialize;
-use serde_json::Value;
 use json_path::{
     calc_once, calc_once_paths, compile,
     json_path::JsonPathToken,
     select_value::{SelectValue, SelectValueType},
 };
+use redis_module::{RedisResult, RedisValue};
+use serde::Serialize;
+use serde_json::Value;
 
 use crate::{
     commands::{FoundIndex, ObjectLen, Values},

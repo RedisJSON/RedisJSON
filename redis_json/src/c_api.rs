@@ -13,9 +13,9 @@ use std::{
     os::raw::{c_char, c_void},
 };
 
+use crate::key_value::KeyValue;
 use json_path::select_value::{SelectValue, SelectValueType};
 use json_path::{compile, create};
-use crate::key_value::KeyValue;
 use redis_module::raw as rawmod;
 use redis_module::{Context, RedisString, Status};
 
