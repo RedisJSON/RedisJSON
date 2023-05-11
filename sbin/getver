@@ -17,7 +17,7 @@ parser = argparse.ArgumentParser(description='Print RedisJSON module version')
 parser.add_argument('-n', '--numeric', action="store_true", default=False, help='Show numeric version')
 args = parser.parse_args()
 
-t = Dict(toml.load(os.path.join(ROOT, 'redis_json/נ')))
+t = Dict(toml.load(os.path.join(ROOT, 'redis_json/Cargo.toml')))
 ver = t.package.version
 
 if args.numeric:
