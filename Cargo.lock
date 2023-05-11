@@ -853,9 +853,7 @@ dependencies = [
  "itertools",
  "json_path",
  "libc",
- "log",
  "redis-module",
- "regex",
  "serde",
  "serde_json",
 ]
