@@ -14,17 +14,15 @@ A JSON value is a hierarchical structure. If you change a value in a specific pa
 is key to modify.
 </details>
 
+<details open><summary><code>path</code></summary>
+
+is JSONPath to specify. For new Redis keys the `path` must be the root. For existing keys, when the entire `path` exists, the value that it contains is replaced with the `json` value. For existing keys, when the `path` exists, except for the last element, a new child is added with the `json` value.
+
+</details>
+
 <details open><summary><code>value</code></summary>
 
 is value to set at the specified path
-</details>
-
-## Optional arguments
-
-<details open><summary><code>path</code></summary>
-
-is JSONPath to specify. Default is root `$`. For new Redis keys the `path` must be the root. For existing keys, when the entire `path` exists, the value that it contains is replaced with the `json` value. For existing keys, when the `path` exists, except for the last element, a new child is added with the `json` value.
-
 </details>
 
 ## Return value
