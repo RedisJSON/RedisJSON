@@ -37,12 +37,6 @@ pub fn select_and_then_compare(path: &str, json: Value, target: Value) {
     let calculator = create(&json_path);
     let result = calculator.calc(&json);
 
-    if !result.is_empty() {
-        println!("[");
-        result.iter().for_each(|v| println!("{},", v));
-        println!("]");
-    }
-
     assert_eq!(
         result.iter().map(|v| (*v).clone()).collect::<Vec<Value>>(),
         match target {

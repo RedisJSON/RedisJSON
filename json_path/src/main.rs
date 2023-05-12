@@ -3,11 +3,6 @@
  * Licensed under your choice of the Redis Source Available License 2.0 (RSALv2) or
  * the Server Side Public License v1 (SSPLv1).
  */
-
-extern crate pest;
-extern crate pest_derive;
-extern crate serde_json;
-
 mod json_node;
 mod json_path;
 mod select_value;
