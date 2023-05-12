@@ -13,7 +13,7 @@ is key to merge.
 
 <details open><summary><code>path</code></summary>
 
-is JSONPath to specify. Default is root `$`. For new Redis keys the `path` must be the root. For existing keys, when the entire `path` exists, the value that it contains is replaced with the `json` value. For existing keys, when the `path` exists, except for the last element, a new child is added with the `json` value.
+is JSONPath to specify. For non-existing keys the `path` must be `$`. For existing keys, for each matched `path`, the value that matches the `path` is being merged with the JSON `value`. For existing keys, when the path exists, except for the last element, a new child is added with the JSON `value`.
 
 </details>
 
