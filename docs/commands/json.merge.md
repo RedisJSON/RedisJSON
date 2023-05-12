@@ -19,7 +19,11 @@ is JSONPath to specify. For non-existing keys the `path` must be `$`. For existi
 
 <details open><summary><code>value</code></summary>
 
-is value to set at the specified path. `null` value delete the path. An array as value will replace the previous array
+is JSON value to merge with at the specified path. Merging is done according to the following rules per JSON value in the `value` argument while considering the corresponding original value if it exists:
+*   merging an existing object key with a `null` value deletes the key
+*   merging an existing object key with non-null value updates the value
+*   merging a non-existing object key adds the key and value
+*   merging an existing array with any merged value, replaces the entire array with the value
 </details>
 
 ## Return value
