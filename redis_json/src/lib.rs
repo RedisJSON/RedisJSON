@@ -4,9 +4,6 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
-extern crate pest;
-#[macro_use]
-extern crate pest_derive;
 extern crate redis_module;
 
 #[cfg(not(feature = "as-library"))]
@@ -37,7 +34,6 @@ pub mod commands;
 pub mod error;
 mod formatter;
 pub mod ivalue_manager;
-pub mod jsonpath;
 mod key_value;
 pub mod manager;
 pub mod redisjson;

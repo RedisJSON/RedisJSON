@@ -1,18 +1,18 @@
 use std::collections::HashMap;
 
-use redis_module::{redisvalue::RedisValueKey, RedisResult, RedisValue};
+use json_path::{
+    calc_once, calc_once_paths, compile,
+    json_path::JsonPathToken,
+    select_value::{SelectValue, SelectValueType},
+};
+use redis_module::{RedisResult, RedisValue, redisvalue::RedisValueKey};
 use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
     commands::{FoundIndex, ObjectLen, Values},
     error::Error,
-    formatter::{FormatOptions, RedisJsonFormatter},
-    jsonpath::{
-        calc_once, calc_once_paths, compile,
-        json_path::JsonPathToken,
-        select_value::{SelectValue, SelectValueType},
-    },
+    formatter::{RedisJsonFormatter, FormatOptions},
     manager::{
         err_msg_json_expected, err_msg_json_path_doesnt_exist_with_param, AddUpdateInfo,
         SetUpdateInfo, UpdateInfo,
