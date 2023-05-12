@@ -8,7 +8,7 @@ Compliance with Json Merge Patch [RFC7396](https://datatracker.ietf.org/doc/html
 
 <details open><summary><code>key</code></summary>
 
-is key to merge.
+is key to merge into.
 </details>
 
 <details open><summary><code>path</code></summary>
