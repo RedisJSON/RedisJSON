@@ -8,7 +8,7 @@ use std::io::Read;
 
 use serde_json::Value;
 
-use rejson::jsonpath::{compile, create};
+use json_path::{compile, create};
 
 #[allow(dead_code)]
 pub fn setup() {
