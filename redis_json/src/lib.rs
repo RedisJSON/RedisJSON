@@ -4,9 +4,6 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
-extern crate pest;
-#[macro_use]
-extern crate pest_derive;
 extern crate redis_module;
 
 #[cfg(not(feature = "as-library"))]
@@ -37,7 +34,6 @@ pub mod commands;
 pub mod error;
 mod formatter;
 pub mod ivalue_manager;
-pub mod jsonpath;
 mod key_value;
 pub mod manager;
 pub mod redisjson;
@@ -229,6 +225,7 @@ macro_rules! redis_json_module_create {(
                 ["json.debug", json_command!(json_debug), "readonly", 2,2,1],
                 ["json.forget", json_command!(json_del), "write", 1,1,1],
                 ["json.resp", json_command!(json_resp), "readonly", 1,1,1],
+                ["json.merge", json_command!(json_merge), "write deny-oom", 1,1,1],
             ],
         }
     }

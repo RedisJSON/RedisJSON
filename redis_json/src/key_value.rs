@@ -1,5 +1,10 @@
 use std::collections::HashMap;
 
+use json_path::{
+    calc_once, calc_once_paths, compile,
+    json_path::JsonPathToken,
+    select_value::{SelectValue, SelectValueType},
+};
 use redis_module::{RedisResult, RedisValue};
 use serde::Serialize;
 use serde_json::Value;
@@ -8,11 +13,6 @@ use crate::{
     commands::{FoundIndex, ObjectLen, Values},
     error::Error,
     formatter::RedisJsonFormatter,
-    jsonpath::{
-        calc_once, calc_once_paths, compile,
-        json_path::JsonPathToken,
-        select_value::{SelectValue, SelectValueType},
-    },
     manager::{
         err_msg_json_expected, err_msg_json_path_doesnt_exist_with_param, AddUpdateInfo,
         SetUpdateInfo, UpdateInfo,
@@ -124,28 +124,37 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         // in serde_json. I'm going for this implementation anyway because serde_json isn't supposed to be
         // memory efficient and we're using it anyway. See https://github.com/serde-rs/json/issues/635.
         let mut missing_path = None;
-        let temp_doc = paths.drain(..).fold(HashMap::new(), |mut acc, path: Path| {
-            let query = compile(path.get_path());
-            if query.is_err() {
-                return acc;
-            }
-            let query = query.unwrap();
-            let s = calc_once(query, self.val);
+        let path_len = paths.len();
+        let temp_doc =
+            paths
+                .drain(..)
+                .fold(HashMap::with_capacity(path_len), |mut acc, path: Path| {
+                    let query = compile(path.get_path());
 
-            let value = if is_legacy && !s.is_empty() {
-                Some(Values::Single(s[0]))
-            } else if !is_legacy {
-                Some(Values::Multi(s))
-            } else {
-                None
-            };
+                    // If we can't compile the path, we can't continue
+                    if query.is_err() {
+                        return acc;
+                    }
 
-            if value.is_none() && missing_path.is_none() {
-                missing_path = Some(path.get_original().to_string());
-            }
-            acc.insert(path.get_original(), value);
-            acc
-        });
+                    let query = query.unwrap();
+                    let results = calc_once(query, self.val);
+
+                    let value = if is_legacy {
+                        if results.is_empty() {
+                            None
+                        } else {
+                            Some(Values::Single(results[0]))
+                        }
+                    } else {
+                        Some(Values::Multi(results))
+                    };
+
+                    if value.is_none() && missing_path.is_none() {
+                        missing_path = Some(path.get_original().to_string());
+                    }
+                    acc.insert(path.get_original(), value);
+                    acc
+                });
         if let Some(p) = missing_path {
             return Err(err_msg_json_path_doesnt_exist_with_param(p.as_str()).into());
         }

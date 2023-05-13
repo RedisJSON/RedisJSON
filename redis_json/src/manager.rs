@@ -4,7 +4,7 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
-use crate::jsonpath::select_value::SelectValue;
+use json_path::select_value::SelectValue;
 use serde_json::Number;
 
 use redis_module::raw::RedisModuleKey;
@@ -39,6 +39,7 @@ pub trait WriteHolder<O: Clone, V: SelectValue> {
     fn delete(&mut self) -> Result<(), RedisError>;
     fn get_value(&mut self) -> Result<Option<&mut V>, RedisError>;
     fn set_value(&mut self, path: Vec<String>, v: O) -> Result<bool, RedisError>;
+    fn merge_value(&mut self, path: Vec<String>, v: O) -> Result<bool, RedisError>;
     fn dict_add(&mut self, path: Vec<String>, key: &str, v: O) -> Result<bool, RedisError>;
     fn delete_path(&mut self, path: Vec<String>) -> Result<bool, RedisError>;
     fn incr_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError>;

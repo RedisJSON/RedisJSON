@@ -81,7 +81,7 @@ commands:
     parameters:
       redis_version:
         type: string
-        default: "7.0"
+        default: "7"
       getredis_params:
         type: string
         default: ""
@@ -143,7 +143,7 @@ commands:
         default: ""
       redis_version:
         type: string
-        default: "7.0"
+        default: "7"
       getredis_params:
         type: string
         default: ""
@@ -341,7 +341,7 @@ jobs:
     parameters:
       redis_version:
         type: string
-        default: "7.0"
+        default: "7"
       persist:
         type: string
         default: "yes"
@@ -602,7 +602,7 @@ workflows:
           context: common
           matrix:
             parameters:
-              platform: [jammy, focal, bionic, xenial, amzn2, rocky8, centos7, bullseye]
+              platform: [jammy, focal, bionic, amzn2, rocky8, centos7, bullseye]
       - build-arm-platforms:
           <<: *on-integ-and-version-tags
           context: common
@@ -675,7 +675,7 @@ workflows:
           name: build-with-redis-<<matrix.redis_version>>
           matrix:
             parameters:
-              redis_version: ["6.0", "6.2", "7", "7.2-rc1", "unstable"]
+              redis_version: ["6.0", "6.2", "7.0", "7.2-rc1", "unstable"]
   
   nightly-perf-once-a-week:
     triggers:

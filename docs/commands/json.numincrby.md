@@ -32,21 +32,21 @@ For more information about replies, see [Redis serialization protocol specificat
 Create a document.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.SET doc . '{"a":"b","b":[{"a":2}, {"a":5}, {"a":"c"}]}'
+redis> JSON.SET doc . '{"a":"b","b":[{"a":2}, {"a":5}, {"a":"c"}]}'
 OK
 {{< / highlight >}}
 
 Increment a value of `a` object by 2. The command fails to find a number and returns `null`.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.NUMINCRBY doc $.a 2
+redis> JSON.NUMINCRBY doc $.a 2
 "[null]"
 {{< / highlight >}}
 
 Recursively find and increment a value of all `a` objects. The command increments numbers it finds and returns `null` for nonnumber values.
 
 {{< highlight bash >}}
-127.0.0.1:6379> JSON.NUMINCRBY doc $..a 2
+redis> JSON.NUMINCRBY doc $..a 2
 "[null,4,7,null]"
 {{< / highlight >}}
 
