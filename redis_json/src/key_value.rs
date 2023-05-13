@@ -5,14 +5,14 @@ use json_path::{
     json_path::JsonPathToken,
     select_value::{SelectValue, SelectValueType},
 };
-use redis_module::{RedisResult, RedisValue, redisvalue::RedisValueKey};
+use redis_module::{redisvalue::RedisValueKey, RedisResult, RedisValue};
 use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
     commands::{FoundIndex, ObjectLen, Values},
     error::Error,
-    formatter::{RedisJsonFormatter, FormatOptions},
+    formatter::{FormatOptions, RedisJsonFormatter},
     manager::{
         err_msg_json_expected, err_msg_json_path_doesnt_exist_with_param, AddUpdateInfo,
         SetUpdateInfo, UpdateInfo,
