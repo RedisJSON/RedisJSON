@@ -4,7 +4,7 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
-/// Use SelectValue
+/// Use `SelectValue`
 use crate::select_value::{SelectValue, SelectValueType};
 use ijson::{IValue, ValueType};
 use serde_json::Value;
