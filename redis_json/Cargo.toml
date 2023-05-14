@@ -2,13 +2,14 @@
 name = "redisjson"
 version = "99.99.99"
 authors = ["Guy Korland <guy.korland@redis.com>", "Meir Shpilraien <meir@redis.com>", "Omer Shadmi <omer.shadmi@redis.com>"]
-edition = "2021"
+edition.workspace = true
 description = "JSON data type for Redis"
 repository = "https://github.com/RedisJSON/RedisJSON"
 readme = "README.md" 
 license = "Redis Source Available License 2.0 (RSALv2) or the Server Side Public License v1 (SSPLv1)"
 keywords = ["redis", "json", "plugin"]
 categories = ["database-implementations"]
+homepage = "https://redis.io/docs/stack/json/"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
