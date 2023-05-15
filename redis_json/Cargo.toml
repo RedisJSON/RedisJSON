@@ -27,7 +27,7 @@ serde.workspace = true
 libc = "0.2"
 redis-module = { version="1.0", features = ["experimental-api"]}
 itertools = "0.10"
-json_path = {path="../json_path", version="0.1"}
+json_path = {path="../json_path"}
 
 [features]
 # Workaround to allow cfg(feature = "test") in redismodue-rs dependencies:
