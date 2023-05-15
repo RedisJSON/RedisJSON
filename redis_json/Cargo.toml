@@ -1,14 +1,15 @@
 [package]
-name = "redisjson"
+name = "redis_json"
 version = "99.99.99"
 authors = ["Guy Korland <guy.korland@redis.com>", "Meir Shpilraien <meir@redis.com>", "Omer Shadmi <omer.shadmi@redis.com>"]
-edition = "2021"
+edition.workspace = true
 description = "JSON data type for Redis"
-repository = "https://github.com/RedisJSON/RedisJSON"
+repository.workspace = true
 readme = "README.md" 
-license = "Redis Source Available License 2.0 (RSALv2) or the Server Side Public License v1 (SSPLv1)"
+license.workspace = true
 keywords = ["redis", "json", "plugin"]
 categories = ["database-implementations"]
+homepage = "https://redis.io/docs/stack/json/"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -16,14 +17,13 @@ name = "rejson"
 
 [dev-dependencies]
 env_logger = "0.10.0"
-#redis-module = { version="1.0", features = ["experimental-api", "test"]}
 
 [dependencies]
 bitflags = "1.3"
 bson = "0.14"
-ijson = "0.1.3"
-serde_json = { version="1.0", features = ["unbounded_depth"]}
-serde = "1.0"
+ijson.workspace = true
+serde_json.workspace = true
+serde.workspace = true
 libc = "0.2"
 redis-module = { version="1.0", features = ["experimental-api"]}
 itertools = "0.10"
