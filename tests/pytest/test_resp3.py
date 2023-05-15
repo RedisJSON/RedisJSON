@@ -14,6 +14,7 @@ from functools import reduce
 
 Defaults.decode_responses = True
 
+
 def is_redis_version_smaller_than(con, _version, is_cluster=False):
 
     res = con.execute_command('INFO')
@@ -37,10 +38,10 @@ class testResp3():
 
         r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
 
-        # Test JSON.SET RESP3 
+        # Test JSON.SET RESP3
         r.assertOk(r.execute_command('JSON.SET', 'test_resp3', '$', '{"a1":{"b":{"c":1}},"a2":{"b":{"c":2}}}'))
 
-        # Test JSON.GET RESP3 
+        # Test JSON.GET RESP3
         r.assertEqual(r.execute_command('JSON.GET', 'test_resp3', '$'), [['{"a1":{"b":{"c":1}},"a2":{"b":{"c":2}}}']])
         r.assertEqual(r.execute_command('JSON.GET', 'test_resp3', '$..b'), [['{"c":1}', '{"c":2}']])
         r.assertEqual(r.execute_command('JSON.GET', 'test_resp3', '$.a1', '$.a2'),  [['{"b":{"c":1}}'], ['{"b":{"c":2}}']])
@@ -73,7 +74,7 @@ class testResp3():
         r.expect('JSON.DEL', 'test_not_JSON', '$.a1.b').raiseError()
 
     # Test JSON.NUMINCRBY RESP3
-    def test_resp_json_numincrby(self):
+    def test_resp_json_num_ops(self):
         r = self.env
 
         r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
@@ -82,7 +83,7 @@ class testResp3():
 
         # TODO - fix this test
         # r.assertEqual(r.execute_command('JSON.NUMINCRBY', 'test_resp3', '$.a1.b.c', 1), [2])
-
+        # r.assertEqual(r.execute_command('JSON.NUMMULTBY', 'test_resp3', '$.a1.b.c', 1), [2])
 
     # Test JSON.MSET RESP3
     def test_resp_json_mset(self):
@@ -97,3 +98,19 @@ class testResp3():
 
         # Test not a JSON key
         r.expect('JSON.MSET', 'test_not_JSON', '$.a1.b', '1').raiseError()
+
+    # Test JSON.MERGE RESP3
+    def test_resp_json_merge(self):
+        r = self.env
+
+        r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
+
+        r.assertOk(r.execute_command('JSON.SET', 'test_resp3', '$', '{"a1":{"b":{"c":1}},"a2":{"b":{"c":2}}}'))
+
+        r.assertOk(r.execute_command('JSON.MERGE', 'test_resp3', '$', '{"a3":4}' ))
+
+        # Test none existing key
+        r.expect('JSON.MERGE', 'test_no_such_key', 'test_resp3_1', '$', '{"a3":4}').raiseError()
+
+        # Test not a JSON key
+        r.expect('JSON.MERGE', 'test_not_JSON', '$', '{"a3":4}').raiseError()
