@@ -780,7 +780,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "redisjson"
+name = "redis_json"
 version = "99.99.99"
 dependencies = [
  "bitflags",
