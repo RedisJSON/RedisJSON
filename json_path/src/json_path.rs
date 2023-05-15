@@ -6,15 +6,16 @@
 
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
+use pest_derive::Parser;
 use std::cmp::Ordering;
 
-use crate::jsonpath::select_value::{SelectValue, SelectValueType};
+use crate::select_value::{SelectValue, SelectValueType};
 use log::trace;
 use regex::Regex;
 use std::fmt::Debug;
 
 #[derive(Parser)]
-#[grammar = "jsonpath/grammar.pest"]
+#[grammar = "grammar.pest"]
 pub struct JsonPathParser;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -1086,8 +1087,8 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
 
 #[cfg(test)]
 mod json_path_compiler_tests {
-    use crate::jsonpath::json_path::compile;
-    use crate::jsonpath::json_path::JsonPathToken;
+    use crate::json_path::compile;
+    use crate::json_path::JsonPathToken;
 
     #[test]
     fn test_compiler_pop_last() {
