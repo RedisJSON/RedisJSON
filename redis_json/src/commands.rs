@@ -701,10 +701,34 @@ where
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
 
-    if path.is_legacy() {
+    // check context flags to see if RESP3 is enabled
+    let resp3 = ctx
+        .get_flags()
+        .contains(redis_module::ContextFlags::FLAGS_RESP3);
+
+    if resp3 {
+        let res = json_num_op_impl::<M>(&mut redis_key, ctx, path.get_path(), number, op, cmd)?
+            .drain(..)
+            .map(|v| {
+                v.map_or(RedisValue::Null, |v| {
+                    if let Some(i) = v.as_i64() {
+                        RedisValue::Integer(i)
+                    } else {
+                        RedisValue::Float(v.as_f64().unwrap_or_default())
+                    }
+                })
+            })
+            .collect::<Vec<RedisValue>>()
+            .into();
+        Ok(res)
+    } else if path.is_legacy() {
         json_num_op_legacy::<M>(&mut redis_key, ctx, path.get_path(), number, op, cmd)
     } else {
-        json_num_op_impl::<M>(&mut redis_key, ctx, path.get_path(), number, op, cmd)
+        let results = json_num_op_impl::<M>(&mut redis_key, ctx, path.get_path(), number, op, cmd)?;
+
+        // Convert to RESP2 format return as one JSON array
+        let values = to_json_value::<Number>(results, Value::Null);
+        Ok(KeyValue::<M::V>::serialize_object(&values, &FormatOptions::default()).into())
     }
 }
 
@@ -715,7 +739,7 @@ fn json_num_op_impl<M>(
     number: &str,
     op: NumOp,
     cmd: &str,
-) -> RedisResult
+) -> Result<Vec<Option<Number>>, RedisError>
 where
     M: Manager,
 {
@@ -747,9 +771,7 @@ where
     if need_notify {
         redis_key.apply_changes(ctx, cmd)?;
     }
-
-    let res = to_json_value::<Number>(res, Value::Null);
-    Ok(KeyValue::<M::V>::serialize_object(&res, &FormatOptions::default()).into())
+    Ok(res)
 }
 
 fn json_num_op_legacy<M>(

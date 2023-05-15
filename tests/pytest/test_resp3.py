@@ -79,11 +79,22 @@ class testResp3():
 
         r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
 
-        r.assertOk(r.execute_command('JSON.SET', 'test_resp3', '$', '{"a1":{"b":{"c":1}},"a2":{"b":{"c":2}}}'))
+        r.assertOk(r.execute_command('JSON.SET', 'test_resp3', '$', '{"a1":{"b":{"c":1}},"a2":{"b":{"c":2.2}},"a3":{"b":{"c":"val"}}}'))
 
-        # TODO - fix this test
-        # r.assertEqual(r.execute_command('JSON.NUMINCRBY', 'test_resp3', '$.a1.b.c', 1), [2])
-        # r.assertEqual(r.execute_command('JSON.NUMMULTBY', 'test_resp3', '$.a1.b.c', 1), [2])
+        # Test NUMINCRBY
+        r.assertEqual(r.execute_command('JSON.NUMINCRBY', 'test_resp3', '$.a1.b.c', 1), [2])
+        r.assertEqual(r.execute_command('JSON.NUMINCRBY', 'test_resp3', '$..c', 2), [4, 4.2, None])
+
+        # Test NUMMULTBY
+        r.assertEqual(r.execute_command('JSON.NUMMULTBY', 'test_resp3', '$.a2.b.c', 2.3), [9.66])
+        r.assertEqual(r.execute_command('JSON.NUMMULTBY', 'test_resp3', '$..c', 2), [8, 19.32, None])
+
+        # Test none existing key
+        r.expect('JSON.NUMINCRBY', 'test_no_such_key', '$.a1.b', '1').raiseError()
+
+        # Test not a JSON key
+        r.expect('JSON.NUMMULTBY', 'test_not_JSON', '$.a1.b', '1').raiseError()
+
 
     # Test JSON.MSET RESP3
     def test_resp_json_mset(self):
