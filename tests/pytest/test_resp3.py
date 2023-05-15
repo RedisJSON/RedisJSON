@@ -107,7 +107,7 @@ class testResp3():
 
         r.assertOk(r.execute_command('JSON.SET', 'test_resp3', '$', '{"a1":{"b":{"c":1}},"a2":{"b":{"c":2}}}'))
 
-        r.assertOk(r.execute_command('JSON.MERGE', 'test_resp3', '$', '{"a3":4}' ))
+        r.assertOk(r.execute_command('JSON.MERGE', 'test_resp3', '$', '{"a3":4}'))
 
         # Test none existing key
         r.expect('JSON.MERGE', 'test_no_such_key', 'test_resp3_1', '$', '{"a3":4}').raiseError()
