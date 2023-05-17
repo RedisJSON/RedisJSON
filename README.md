@@ -102,6 +102,7 @@ redis-server --loadmodule ./target/release/librejson.dylib
 | [redislabs-rejson][redislabs-rejson-url]  | PHP | MIT | [Mehmet Korkmaz @mkorkmaz][redislabs-rejson-author] | [![redislabs-rejson-stars]][redislabs-rejson-url] | [composer][redislabs-rejson-package] |
 | [rejson-rb][rejson-rb-url]  | Ruby | MIT | [Pavan Vachhani @vachhanihpavan][rejson-rb-author] | [![rejson-rb-stars]][rejson-rb-url] | [rubygems][rejson-rb-package]|
 | [rustis][rustis-url] | Rust | MIT | [Dahomey Technologies][rustis-author] | [![rustis-stars]][rustis-url] | [crate][rustis-package]| [Documentation](https://docs.rs/rustis/latest/rustis/commands/trait.JsonCommands.html) |
+| [coredis][coredis-url] | Python | MIT | [Ali-Akber Saifee @alisaifee][coredis-author] | [![coredis-stars]][coredis-url] | [pypi][coredis-package]| [Documentation][coredis-documentation] |
 
 [Redisson-author]: https://github.com/redisson/
 [Redisson-url]: https://github.com/redisson/redisson
@@ -154,6 +155,12 @@ redis-server --loadmodule ./target/release/librejson.dylib
 [rustis-author]: https://github.com/dahomey-technologies
 [rustis-stars]: https://img.shields.io/github/stars/dahomey-technologies/rustis.svg?style=social&amp;label=Star&amp;maxAge=2592000
 [rustis-package]: https://crates.io/crates/rustis
+
+[coredis-author]: https://github.com/alisaifee
+[coredis-url]: https://github.com/alisaifee/coredis
+[coredis-package]: https://pypi.org/project/coredis/
+[coredis-stars]: https://img.shields.io/github/stars/alisaifee/coredis.svg?style=social&amp;label=Star&amp;maxAge=2592000
+[coredis-documentation]: https://coredis.readthedocs.io/en/stable/handbook/modules.html#redisjson
 
 ## Acknowledgments
 

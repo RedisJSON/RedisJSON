@@ -373,21 +373,19 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             (SelectValueType::Double, SelectValueType::Double) => a.get_double() == b.get_double(),
             (SelectValueType::String, SelectValueType::String) => a.get_str() == b.get_str(),
             (SelectValueType::Array, SelectValueType::Array) => {
-                if a.len().unwrap() != b.len().unwrap() {
-                    false
-                } else {
+                if a.len().unwrap() == b.len().unwrap() {
                     for (i, e) in a.values().unwrap().enumerate() {
                         if !Self::is_equal(e, b.get_index(i).unwrap()) {
                             return false;
                         }
                     }
                     true
+                } else {
+                    false
                 }
             }
             (SelectValueType::Object, SelectValueType::Object) => {
-                if a.len().unwrap() != b.len().unwrap() {
-                    false
-                } else {
+                if a.len().unwrap() == b.len().unwrap() {
                     for k in a.keys().unwrap() {
                         let temp1 = a.get_key(k);
                         let temp2 = b.get_key(k);
@@ -401,6 +399,8 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                         }
                     }
                     true
+                } else {
+                    false
                 }
             }
             (_, _) => false,

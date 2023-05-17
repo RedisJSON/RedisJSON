@@ -328,7 +328,7 @@ pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
     }
 
     actions
-        .drain(..)
+        .into_iter()
         .fold(REDIS_OK, |res, (mut redis_key, update_info, value)| {
             let updated = if let Some(update_info) = update_info {
                 !update_info.is_empty() && apply_updates::<M>(&mut redis_key, value, update_info)
