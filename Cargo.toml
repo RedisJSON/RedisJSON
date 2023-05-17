@@ -6,7 +6,7 @@ members = [
 ]
 
 [workspace.dependencies]
-ijson = { git="https://github.com/gkorland/ijson", branch = "gkorland-glbal"}
+ijson = { git="https://github.com/RedisJSON/ijson", branch = "unsafe_string", features=["thread_unsafe"]}
 serde_json = { version="1.0", features = ["unbounded_depth"]}
 serde = "1.0"
 
