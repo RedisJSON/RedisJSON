@@ -125,3 +125,23 @@ class testResp3():
 
         # Test not a JSON key
         r.expect('JSON.MERGE', 'test_not_JSON', '$', '{"a3":4}').raiseError()
+
+    # Test JSON.TYPE RESP3
+    def test_resp_json_type(self):
+        r = self.env
+            
+        r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
+
+        r.assertOk(r.execute_command('JSON.SET', 'test_resp3', '$', '{"a1":{"b":{"c":1}},"a2":{"b":{"c":2}}}'))
+
+        # Test JSON.TYPE RESP3
+        r.assertEqual(r.execute_command('JSON.TYPE', 'test_resp3', '$.a1.b.c'), [['integer']])
+        r.assertEqual(r.execute_command('JSON.TYPE', 'test_resp3', '$..b'), [['object', 'object']])
+        r.assertEqual(r.execute_command('JSON.TYPE', 'test_resp3', '$'), [['object']])
+        r.assertEqual(r.execute_command('JSON.TYPE', 'test_resp3', '$.a3'), [[]])
+
+        # Test none existing key
+        r.assertEqual(r.execute_command('JSON.TYPE', 'test_no_such_key', '$.a1.b.c'), [None])
+
+        # Test not a JSON key
+        r.expect('JSON.TYPE', 'test_not_JSON', '$.a1.b.c').raiseError()
