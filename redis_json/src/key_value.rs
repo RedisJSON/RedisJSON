@@ -99,11 +99,15 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     pub fn serialize_object<O: Serialize>(o: &O, format: &FormatOptions) -> String {
-        let formatter = RedisJsonFormatter::new(format);
-
-        let mut out = serde_json::Serializer::with_formatter(Vec::new(), formatter);
-        o.serialize(&mut out).unwrap();
-        String::from_utf8(out.into_inner()).unwrap()
+        // When using the default format, we can use serde_json's default serializer
+        if format == &FormatOptions::default() {
+            serde_json::to_string(o).unwrap()
+        } else {
+            let formatter = RedisJsonFormatter::new(format);
+            let mut out = serde_json::Serializer::with_formatter(Vec::new(), formatter);
+            o.serialize(&mut out).unwrap();
+            String::from_utf8(out.into_inner()).unwrap()
+        }
     }
 
     fn to_json_multi(

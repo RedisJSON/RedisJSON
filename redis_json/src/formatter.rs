@@ -45,6 +45,16 @@ pub struct FormatOptions<'a> {
     pub resp3: bool,
 }
 
+impl PartialEq for &FormatOptions<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.format == other.format
+            && self.indent == other.indent
+            && self.space == other.space
+            && self.newline == other.newline
+            && self.resp3 == other.resp3
+    }
+}
+
 impl Default for FormatOptions<'_> {
     fn default() -> Self {
         Self {
