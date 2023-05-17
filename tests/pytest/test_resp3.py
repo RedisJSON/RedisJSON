@@ -102,7 +102,7 @@ class testResp3():
 
         r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
 
-        r.assertOk(r.execute_command('JSON.MSET', 'test_resp3_1', '$', '{"a1":{"b":{"c":1}},"a2":{"b":{"c":2}}}', 'test_resp3_2', '$', '{"a1":{"b":{"c":1}},"a2":{"b":{"c":2}}}'))
+        r.assertOk(r.execute_command('JSON.MSET', 'test_resp3_1{s}', '$', '{"a1":{"b":{"c":1}},"a2":{"b":{"c":2}}}', 'test_resp3_2{s}', '$', '{"a1":{"b":{"c":1}},"a2":{"b":{"c":2}}}'))
 
         # Test none existing key
         r.expect('JSON.MSET', 'test_no_such_key', '$.a1.b', '1').raiseError()
