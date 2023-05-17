@@ -187,6 +187,7 @@ impl<'a> KeyHolderWrite<'a> {
         let res = match format {
             Format::JSON => serde_json::to_string(results)?,
             Format::BSON => return Err("ERR Soon to come...".into()), //results.into() as Bson,
+            Format::EXPAND => return Err("ERR Unknown format specified".into()),
         };
         Ok(res)
     }
@@ -534,6 +535,7 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
                     Ok(v)
                 })
                 .unwrap_or_else(|e| Err(e.to_string().into())),
+            Format::EXPAND => Err("Unsupported format".into()),
         }
     }
 

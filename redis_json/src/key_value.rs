@@ -157,8 +157,8 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 .map(|(k, v)| {
                     let key = RedisValueKey::String(k.to_string());
                     let value = match v {
-                        Some(Values::Single(value)) => self.value_to_resp3(value, format),
-                        Some(Values::Multi(values)) => self.values_to_resp3(values, format),
+                        Some(Values::Single(value)) => Self::value_to_resp3(value, format),
+                        Some(Values::Multi(values)) => Self::values_to_resp3(values, format),
                         None => RedisValue::Null,
                     };
                     (key, value)
@@ -177,7 +177,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             .map(|path: Path| {
                 compile(path.get_path()).map_or_else(
                     |_| RedisValue::Array(vec![]),
-                    |q| self.values_to_resp3(&calc_once(q, self.val), format),
+                    |q| Self::values_to_resp3(&calc_once(q, self.val), format),
                 )
             })
             .collect::<Vec<RedisValue>>();
@@ -195,28 +195,57 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             self.to_string_single(path, format)?.into()
         } else if format.resp3 {
             let values = self.get_values(path)?;
-            self.values_to_resp3(&values, format)
+            Self::values_to_resp3(&values, format)
         } else {
             self.to_string_multi(path, format)?.into()
         };
         Ok(res)
     }
 
-    fn values_to_resp3(&self, values: &[&V], format: &FormatOptions) -> RedisValue {
+    fn values_to_resp3(values: &[&V], format: &FormatOptions) -> RedisValue {
         values
             .iter()
-            .map(|v| self.value_to_resp3(v, format))
+            .map(|v| Self::value_to_resp3(v, format))
             .collect::<Vec<RedisValue>>()
             .into()
     }
 
-    fn value_to_resp3(&self, value: &V, format: &FormatOptions) -> RedisValue {
-        match value.get_type() {
-            SelectValueType::Null => RedisValue::Null,
-            SelectValueType::Bool => RedisValue::Bool(value.get_bool()),
-            SelectValueType::Long => RedisValue::Integer(value.get_long()),
-            SelectValueType::Double => RedisValue::Float(value.get_double()),
-            _ => RedisValue::BulkString(Self::serialize_object(value, format)),
+    fn value_to_resp3(value: &V, format: &FormatOptions) -> RedisValue {
+        if format.format == Format::EXPAND {
+            match value.get_type() {
+                SelectValueType::Null => RedisValue::Null,
+                SelectValueType::Bool => RedisValue::Bool(value.get_bool()),
+                SelectValueType::Long => RedisValue::Integer(value.get_long()),
+                SelectValueType::Double => RedisValue::Float(value.get_double()),
+                SelectValueType::String => RedisValue::BulkString(value.get_str()),
+                SelectValueType::Array => RedisValue::Array(
+                    value
+                        .values()
+                        .unwrap()
+                        .map(|v| Self::value_to_resp3(v, format))
+                        .collect::<Vec<RedisValue>>(),
+                ),
+                SelectValueType::Object => RedisValue::Map(
+                    value
+                        .items()
+                        .unwrap()
+                        .map(|(k, v)| {
+                            (
+                                RedisValueKey::String(k.to_string()),
+                                Self::value_to_resp3(v, format),
+                            )
+                        })
+                        .collect::<HashMap<RedisValueKey, RedisValue>>(),
+                ),
+            }
+        } else {
+            match value.get_type() {
+                SelectValueType::Null => RedisValue::Null,
+                SelectValueType::Bool => RedisValue::Bool(value.get_bool()),
+                SelectValueType::Long => RedisValue::Integer(value.get_long()),
+                SelectValueType::Double => RedisValue::Float(value.get_double()),
+                _ => RedisValue::BulkString(Self::serialize_object(value, format)),
+            }
         }
     }
 

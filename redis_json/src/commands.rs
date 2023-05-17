@@ -80,6 +80,11 @@ impl<'a, V: SelectValue> Serialize for Values<'a, V> {
     }
 }
 
+fn is_resp3(ctx: &Context) -> bool {
+    ctx.get_flags()
+        .contains(redis_module::ContextFlags::FLAGS_RESP3)
+}
+
 ///
 /// JSON.GET <key>
 ///         [INDENT indentation-string]
@@ -94,12 +99,20 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
 
     // Set Capacity to 1 assuming the common case has one path
     let mut paths: Vec<Path> = Vec::with_capacity(1);
-    let mut format_options = FormatOptions::default();
+
+    let mut format_options = FormatOptions {
+        resp3: is_resp3(ctx),
+        ..Default::default()
+    };
+
     while let Ok(arg) = args.next_str() {
         match arg {
             // fast way to consider arg a path by using the max length of all possible subcommands
             // See #390 for the comparison of this function with/without this optimization
             arg if arg.len() > JSONGET_SUBCOMMANDS_MAXSTRLEN => paths.push(Path::new(arg)),
+            arg if arg.eq_ignore_ascii_case(CMD_ARG_FORMAT) => {
+                format_options.format = Format::from_str(args.next_str()?)?;
+            }
             arg if arg.eq_ignore_ascii_case(CMD_ARG_INDENT) => {
                 format_options.indent = Some(args.next_str()?)
             }
@@ -111,9 +124,6 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
             }
             // Silently ignore. Compatibility with ReJSON v1.0 which has this option. See #168 TODO add support
             arg if arg.eq_ignore_ascii_case(CMD_ARG_NOESCAPE) => continue,
-            arg if arg.eq_ignore_ascii_case(CMD_ARG_FORMAT) => {
-                format_options.format = Format::from_str(args.next_str()?)?;
-            }
             _ => paths.push(Path::new(arg)),
         };
     }
@@ -122,11 +132,6 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
     if paths.is_empty() {
         paths.push(Path::new(JSON_ROOT_PATH_LEGACY));
     }
-
-    // check context flags to see if RESP3 is enabled
-    format_options.resp3 = ctx
-        .get_flags()
-        .contains(redis_module::ContextFlags::FLAGS_RESP3);
 
     let key = manager.open_key_read(ctx, &key)?;
     let value = match key.get_value()? {
@@ -585,13 +590,8 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
         let path = Path::new(path.try_as_str()?);
         let keys = &args[1..args.len() - 1];
 
-        // check context flags to see if RESP3 is enabled
-        let resp3 = ctx
-            .get_flags()
-            .contains(redis_module::ContextFlags::FLAGS_RESP3);
-
         let format_options = FormatOptions {
-            resp3,
+            resp3: is_resp3(ctx),
             ..Default::default()
         };
 
@@ -638,9 +638,7 @@ pub fn json_type<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
     let key = manager.open_key_read(ctx, &key)?;
 
     // check context flags to see if RESP3 is enabled
-    let resp3 = ctx
-        .get_flags()
-        .contains(redis_module::ContextFlags::FLAGS_RESP3);
+    let resp3 = is_resp3(ctx);
 
     if path.is_legacy() {
         json_type_legacy::<M>(&key, path.get_path(), resp3)
@@ -716,11 +714,7 @@ where
     let mut redis_key = manager.open_key_write(ctx, key)?;
 
     // check context flags to see if RESP3 is enabled
-    let resp3 = ctx
-        .get_flags()
-        .contains(redis_module::ContextFlags::FLAGS_RESP3);
-
-    if resp3 {
+    if is_resp3(ctx) {
         let res = json_num_op_impl::<M>(&mut redis_key, ctx, path.get_path(), number, op, cmd)?
             .drain(..)
             .map(|v| {
