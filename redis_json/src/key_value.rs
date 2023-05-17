@@ -258,9 +258,6 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         paths: &mut Vec<Path>,
         format: &FormatOptions,
     ) -> Result<RedisValue, Error> {
-        if format.format == Format::BSON {
-            return Err("ERR Soon to come...".into());
-        }
         let is_legacy = !paths.iter().any(|p| !p.is_legacy());
         if format.resp3 {
             self.to_resp3(paths, format)

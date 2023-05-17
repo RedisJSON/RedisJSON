@@ -61,7 +61,6 @@ pub enum SetOptions {
 #[derive(Debug, PartialEq, Eq)]
 pub enum Format {
     JSON,
-    BSON,
     EXPAND,
 }
 impl FromStr for Format {
@@ -70,7 +69,6 @@ impl FromStr for Format {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "JSON" => Ok(Self::JSON),
-            "BSON" => Ok(Self::BSON),
             "EXPAND" => Ok(Self::EXPAND),
             _ => Err("ERR wrong format".into()),
         }
