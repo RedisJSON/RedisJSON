@@ -24,7 +24,7 @@ ijson.workspace = true
 serde_json.workspace = true
 serde.workspace = true
 libc = "0.2"
-redis-module = { version="2.0"}
+redis-module = "2.0"
 itertools = "0.10"
 json_path = {path="../json_path"}
 
