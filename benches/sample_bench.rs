@@ -4,17 +4,16 @@ fn fibonacci(n: u64) -> u64 {
     match n {
         0 => 1,
         1 => 1,
-        n => fibonacci(n-1) + fibonacci(n-2),
+        n => fibonacci(n - 1) + fibonacci(n - 2),
     }
 }
 
 pub fn criterion_benchmark(c: &mut Criterion) {
-    c.bench_function(
-        "sample benchmark", 
-        |b| b.iter(|| {
+    c.bench_function("sample benchmark", |b| {
+        b.iter(|| {
             let _ = fibonacci(black_box(20));
-        }),
-    );
+        })
+    });
 }
 
 criterion_group!(benches, criterion_benchmark);
