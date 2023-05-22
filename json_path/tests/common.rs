@@ -24,6 +24,7 @@ pub fn read_json(path: &str) -> Value {
 }
 
 #[allow(dead_code)]
+#[must_use]
 pub fn read_contents(path: &str) -> String {
     let mut f = std::fs::File::open(path).unwrap();
     let mut contents = String::new();
