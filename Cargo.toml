@@ -17,6 +17,7 @@ name = "rejson"
 [dev-dependencies]
 env_logger = "0.10.0"
 #redis-module = { version="1.0", features = ["experimental-api", "test"]}
+criterion = "0.4"
 
 [dependencies]
 pest = "2.1"
@@ -38,6 +39,14 @@ regex = "1"
 # This requires running the tests with `--features test`
 test = ["redis-module/test"]
 as-library = []
+
+[[bench]]
+name = "json_path_bench"
+harness = false
+
+[[bench]]
+name = "sample_bench"
+harness = false
 
 [[test]]
 name = "array_filter"
