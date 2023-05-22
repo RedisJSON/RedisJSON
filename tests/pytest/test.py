@@ -370,6 +370,12 @@ def testBackwardRDB(env):
     data = json.loads(res)
     r.assertEqual(data, {"a":{"b":[{"c":{"d":[1,'2'],"e":None}},True],"a":'a'},"b":1,"c":True,"d":None})
 
+def testSetBSON(env):
+    r = env
+    bson = open(os.path.join(JSON_PATH , 'bson_bytes_1.bson'), 'rb').read()
+    r.assertOk(r.execute_command('JSON.SET', 'test', '.', bson, 'FORMAT', 'BSON'))
+    r.expect('JSON.GET', 'test', *docs['values'].keys()).raiseError()
+
 def testMgetCommand(env):
     """Test REJSON.MGET command"""
     r = env

@@ -51,13 +51,13 @@ fn all_things_both_books_and_bicycles() {
         r#"$.store.*"#,
         read_json("./json_examples/example.json"),
         json!([
-            {"color" : "red","price" : 19.95},
             [
                 {"category" : "reference", "author" : "Nigel Rees","title" : "Sayings of the Century", "price" : 8.95},
                 {"category" : "fiction", "author" : "Evelyn Waugh","title" : "Sword of Honour","price" : 12.99},
                 {"category" : "fiction", "author" : "Herman Melville","title" : "Moby Dick","isbn" : "0-553-21311-3","price" : 8.99},
                 {"category" : "fiction", "author" : "J. R. R. Tolkien","title" : "The Lord of the Rings","isbn" : "0-395-19395-8","price" : 22.99}
             ],
+            {"color" : "red","price" : 19.95},
         ]),
     );
 }
@@ -69,7 +69,7 @@ fn the_price_of_everything() {
     select_and_then_compare(
         r#"$.store..price"#,
         read_json("./json_examples/example.json"),
-        json!([19.95, 8.95, 12.99, 8.99, 22.99]),
+        json!([8.95, 12.99, 8.99, 22.99, 19.95]),
     );
 }
 
