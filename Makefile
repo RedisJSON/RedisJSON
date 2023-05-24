@@ -199,7 +199,7 @@ pytest:
 	$(SHOW)MODULE=$(abspath $(TARGET)) $(realpath ./tests/pytest/tests.sh)
 
 cargo_test:
-	$(SHOW)cargo $(CARGO_TOOLCHAIN) test --features test --all
+	$(SHOW)cargo $(CARGO_TOOLCHAIN) test --all
 
 .PHONY: pytest cargo_test
 

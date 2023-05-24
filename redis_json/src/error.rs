@@ -4,7 +4,7 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
-use crate::jsonpath::json_path::QueryCompilationError;
+use json_path::json_path::QueryCompilationError;
 use redis_module::RedisError;
 use std::num::ParseIntError;
 

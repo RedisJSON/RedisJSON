@@ -4,7 +4,7 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
-use crate::jsonpath::select_value::SelectValue;
+use json_path::select_value::SelectValue;
 use serde::Deserialize;
 use serde_json::map::Entry;
 use serde_json::{Number, Value};
