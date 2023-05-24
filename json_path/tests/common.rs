@@ -8,7 +8,7 @@ use std::io::Read;
 
 use serde_json::Value;
 
-use rejson::jsonpath::{compile, create};
+use json_path::{compile, create};
 
 #[allow(dead_code)]
 pub fn setup() {
@@ -24,6 +24,7 @@ pub fn read_json(path: &str) -> Value {
 }
 
 #[allow(dead_code)]
+#[must_use]
 pub fn read_contents(path: &str) -> String {
     let mut f = std::fs::File::open(path).unwrap();
     let mut contents = String::new();
