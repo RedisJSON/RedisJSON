@@ -13,9 +13,9 @@ use std::{
     os::raw::{c_char, c_void},
 };
 
-use crate::jsonpath::select_value::{SelectValue, SelectValueType};
-use crate::jsonpath::{compile, create};
 use crate::key_value::KeyValue;
+use json_path::select_value::{SelectValue, SelectValueType};
+use json_path::{compile, create};
 use redis_module::raw as rawmod;
 use redis_module::{Context, RedisString, Status};
 
@@ -276,6 +276,8 @@ macro_rules! redis_json_module_export_shared_api {
         get_manage: $get_manager_expr:expr,
         pre_command_function: $pre_command_function_expr:expr,
     ) => {
+        use std::ptr::NonNull;
+
         #[no_mangle]
         pub extern "C" fn JSONAPI_openKey(
             ctx: *mut rawmod::RedisModuleCtx,
@@ -284,7 +286,7 @@ macro_rules! redis_json_module_export_shared_api {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_mngr: $get_manager_expr,
-                run: |mngr|{json_api_open_key_internal(mngr, ctx, RedisString::new(ctx, key_str))as *mut c_void},
+                run: |mngr|{json_api_open_key_internal(mngr, ctx, RedisString::new(NonNull::new(ctx), key_str))as *mut c_void},
             )
         }
 
@@ -298,7 +300,7 @@ macro_rules! redis_json_module_export_shared_api {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_mngr: $get_manager_expr,
-                run: |mngr|{json_api_open_key_internal(mngr, ctx, RedisString::create(ctx, key)) as *mut c_void},
+                run: |mngr|{json_api_open_key_internal(mngr, ctx, RedisString::create(NonNull::new(ctx), key)) as *mut c_void},
             )
         }
 
@@ -442,7 +444,7 @@ macro_rules! redis_json_module_export_shared_api {
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
         pub extern "C" fn JSONAPI_pathParse(path: *const c_char, ctx: *mut rawmod::RedisModuleCtx, err_msg: *mut *mut rawmod::RedisModuleString) -> *const c_void {
             let path = unsafe { CStr::from_ptr(path).to_str().unwrap() };
-            match jsonpath::compile(path) {
+            match json_path::compile(path) {
                 Ok(q) => Box::into_raw(Box::new(q)).cast::<c_void>(),
                 Err(e) => {
                     create_rmstring(ctx, &format!("{}", e), err_msg);
@@ -453,18 +455,18 @@ macro_rules! redis_json_module_export_shared_api {
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_pathFree(json_path: *mut c_void) {
-            unsafe { Box::from_raw(json_path.cast::<jsonpath::json_path::Query>()) };
+            unsafe { Box::from_raw(json_path.cast::<json_path::json_path::Query>()) };
         }
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_pathIsSingle(json_path: *mut c_void) -> c_int {
-            let q = unsafe { &mut *(json_path.cast::<jsonpath::json_path::Query>()) };
+            let q = unsafe { &mut *(json_path.cast::<json_path::json_path::Query>()) };
             q.is_static() as c_int
         }
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_pathHasDefinedOrder(json_path: *mut c_void) -> c_int {
-            let q = unsafe { &mut *(json_path.cast::<jsonpath::json_path::Query>()) };
+            let q = unsafe { &mut *(json_path.cast::<json_path::json_path::Query>()) };
             q.is_static() as c_int
         }
 

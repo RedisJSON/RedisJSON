@@ -1,5 +1,6 @@
 /bin/
 /target/
+/json_path/target/
 /tests/pytest/logs/
 /1/
 
