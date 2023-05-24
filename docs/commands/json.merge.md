@@ -1,4 +1,4 @@
-Merge one or more values in a JSON document at `path` in `key`
+Merge a given JSON value into matching paths. Consequently, JSON values at matching paths are updated, deleted, or expanded with new children.
 
 This command complies with [RFC7396](https://datatracker.ietf.org/doc/html/rfc7396) Json Merge Patch
 
