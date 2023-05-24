@@ -1,6 +1,7 @@
-redis ~= 4.5.0
-RLTest ~= 0.6.0
-ramp-packer ~= 2.5.2
+# redis ~= 5.0.0b3
+# RLTest ~= 0.7.0
+# ramp-packer ~= 2.5.4
+# psutil >= 5.8.0
+
 six >= 1.10.0
-psutil >= 5.8.0
 gevent ~= 22.10.1
