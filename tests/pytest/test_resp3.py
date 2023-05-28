@@ -54,19 +54,19 @@ class testResp3():
         # TEST JSON.GET with not a JSON key
         r.expect('JSON.GET', 'test_not_JSON', '$.a3').raiseError()
 
-    def test_resp3_set_get_expend(self):
+    def test_resp3_set_get_expand(self):
         r = self.env
 
         r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
 
         # Test JSON.SET RESP3
-        r.assertOk(r.execute_command('JSON.SET', 'test_resp3', '$', '{"a1":{"b":{"c":true,"d":null}},"a2":{"b":{"c":2}}}'))
+        r.assertOk(r.execute_command('JSON.SET', 'test_resp3', '$', '{"a1":{"b":{"c":true,"d":null}},"a2":{"b":{"c":2, "e":[1,true, {"f":null}]}}}'))
 
         # Test JSON.GET RESP3
-        r.assertEqual(r.execute_command('JSON.GET', 'test_resp3', 'FORMAT', 'EXPAND', '$'), [[{'a1': {'b': {'c': True, 'd': None}}, 'a2': {'b': {'c': 2}}}]])
-        r.assertEqual(r.execute_command('JSON.GET', 'test_resp3', 'FORMAT', 'EXPAND','$..b'), [[{'c': True, 'd': None}, {'c': 2}]])
-        r.assertEqual(r.execute_command('JSON.GET', 'test_resp3', 'FORMAT', 'EXPAND','$.a1', '$.a2'),  [[{'b': {'c': True, 'd': None}}], [{'b': {'c': 2}}]])
-        r.assertEqual(r.execute_command('JSON.GET', 'test_resp3', 'FORMAT', 'EXPAND','$.a1', '$.a3', '$.a2'),  [[{'b': {'c': True, 'd': None}}], [], [{'b': {'c': 2}}]])
+        r.assertEqual(r.execute_command('JSON.GET', 'test_resp3', 'FORMAT', 'EXPAND', '$'), [[{'a1': {'b': {'c': True, 'd': None}}, 'a2': {'b': {'e': [1, True, {'f': None}], 'c': 2}}}]])
+        r.assertEqual(r.execute_command('JSON.GET', 'test_resp3', 'FORMAT', 'EXPAND','$..b'), [[{'d': None, 'c': True}, {'c': 2, 'e': [1, True, {'f': None}]}]])
+        r.assertEqual(r.execute_command('JSON.GET', 'test_resp3', 'FORMAT', 'EXPAND','$.a1', '$.a2'),  [[{'b': {'d': None, 'c': True}}], [{'b': {'e': [1, True, {'f': None}], 'c': 2}}]])
+        r.assertEqual(r.execute_command('JSON.GET', 'test_resp3', 'FORMAT', 'EXPAND','$.a1', '$.a3', '$.a2'),  [[{'b': {'c': True, 'd': None}}], [], [{'b': {'c': 2, 'e': [1, True, {'f': None}]}}]])
         r.assertEqual(r.execute_command('JSON.GET', 'test_resp3', 'FORMAT', 'EXPAND','$.a3'), [[]])
 
         # TEST JSON.GET with none existent key
@@ -154,13 +154,16 @@ class testResp3():
             
         r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
 
-        r.assertOk(r.execute_command('JSON.SET', 'test_resp3', '$', '{"a1":{"b":{"c":1}},"a2":{"b":{"c":2}}}'))
+        r.assertOk(r.execute_command('JSON.SET', 'test_resp3', '$', '{"a1":{"b":{"c":1}},"a2":{"b":{"c":true}}, "a4":[1.2,2,3.32], "c":null}'))
 
         # Test JSON.TYPE RESP3
         r.assertEqual(r.execute_command('JSON.TYPE', 'test_resp3', '$.a1.b.c'), [['integer']])
         r.assertEqual(r.execute_command('JSON.TYPE', 'test_resp3', '$..b'), [['object', 'object']])
         r.assertEqual(r.execute_command('JSON.TYPE', 'test_resp3', '$'), [['object']])
         r.assertEqual(r.execute_command('JSON.TYPE', 'test_resp3', '$.a3'), [[]])
+        r.assertEqual(r.execute_command('JSON.TYPE', 'test_resp3', '$.a4'), [['array']])
+        r.assertEqual(r.execute_command('JSON.TYPE', 'test_resp3', '$.a4[*]'), [['number', 'integer', 'number']])
+        r.assertEqual(r.execute_command('JSON.TYPE', 'test_resp3', '$..c'), [['null', 'integer', 'boolean']])
 
         # Test none existing key
         r.assertEqual(r.execute_command('JSON.TYPE', 'test_no_such_key', '$.a1.b.c'), [None])

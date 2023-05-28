@@ -637,17 +637,21 @@ pub fn json_type<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
 
     let key = manager.open_key_read(ctx, &key)?;
 
-    // check context flags to see if RESP3 is enabled
-    let resp3 = is_resp3(ctx);
-
-    if path.is_legacy() {
-        json_type_legacy::<M>(&key, path.get_path(), resp3)
+    let value = if path.is_legacy() {
+        json_type_legacy::<M>(&key, path.get_path())?
     } else {
-        json_type_impl::<M>(&key, path.get_path(), resp3)
+        json_type_impl::<M>(&key, path.get_path())?
+    };
+
+    // Check context flags to see if RESP3 is enabled and return the appropriate result
+    if is_resp3(ctx) {
+        Ok(vec![value].into())
+    } else {
+        Ok(value)
     }
 }
 
-fn json_type_impl<M>(redis_key: &M::ReadHolder, path: &str, resp3: bool) -> RedisResult
+fn json_type_impl<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
 where
     M: Manager,
 {
@@ -661,15 +665,10 @@ where
             .into(),
         None => RedisValue::Null,
     };
-
-    if resp3 {
-        Ok(vec![value].into())
-    } else {
-        Ok(value)
-    }
+    Ok(value)
 }
 
-fn json_type_legacy<M>(redis_key: &M::ReadHolder, path: &str, resp3: bool) -> RedisResult
+fn json_type_legacy<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
 where
     M: Manager,
 {
@@ -681,12 +680,7 @@ where
                 .map_or(RedisValue::Null, |s| s.into())
         },
     );
-
-    if resp3 {
-        Ok(vec![value].into())
-    } else {
-        Ok(value)
-    }
+    Ok(value)
 }
 
 enum NumOp {
