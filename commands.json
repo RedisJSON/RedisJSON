@@ -167,7 +167,7 @@
     "group": "json"
   },
   "JSON.MERGE": {
-    "summary": "Sets or updates the JSON value at a path",
+    "summary": "Merges a given JSON value into matching paths. Consequently, JSON values at matching paths are updated, deleted, or expanded with new children",
     "complexity": "O(M+N) when path is evaluated to a single value where M is the size of the original value (if it exists) and N is the size of the new value, O(M+N) when path is evaluated to multiple values where M is the size of the key and N is the size of the new value * the number of original values in the key",
     "arguments": [
       {
