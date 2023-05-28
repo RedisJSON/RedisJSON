@@ -441,6 +441,7 @@ dependencies = [
 name = "json_path"
 version = "0.1.0"
 dependencies = [
+ "bson",
  "env_logger",
  "ijson",
  "log",

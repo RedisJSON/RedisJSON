@@ -13,6 +13,7 @@ use std::{
     os::raw::{c_char, c_void},
 };
 
+use crate::formatter::FormatOptions;
 use crate::key_value::KeyValue;
 use json_path::select_value::{SelectValue, SelectValueType};
 use json_path::{compile, create};
@@ -132,7 +133,7 @@ pub fn json_api_get_json<M: Manager>(
     str: *mut *mut rawmod::RedisModuleString,
 ) -> c_int {
     let json = unsafe { &*(json.cast::<M::V>()) };
-    let res = KeyValue::<M::V>::serialize_object(json, None, None, None);
+    let res = KeyValue::<M::V>::serialize_object(json, &FormatOptions::default());
     create_rmstring(ctx, &res, str)
 }
 
@@ -146,7 +147,7 @@ pub fn json_api_get_json_from_iter<M: Manager>(
     if iter.pos >= iter.results.len() {
         Status::Err as c_int
     } else {
-        let res = KeyValue::<M::V>::serialize_object(&iter.results, None, None, None);
+        let res = KeyValue::<M::V>::serialize_object(&iter.results, &FormatOptions::default());
         create_rmstring(ctx, &res, str);
         Status::Ok as c_int
     }
