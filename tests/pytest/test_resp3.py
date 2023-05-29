@@ -15,26 +15,13 @@ from functools import reduce
 Defaults.decode_responses = True
 
 
-def is_redis_version_smaller_than(con, _version, is_cluster=False):
-
-    res = con.execute_command('INFO')
-    ver = ""
-    if is_cluster:
-        try:
-            ver = ((list(res.values()))[0])['redis_version']
-        except:
-            ver = res['redis_version']
-    else:
-        ver = res['redis_version']
-    return (version.parse(ver) < version.parse(_version))
-
-
 class testResp3():
     def __init__(self):
         self.env = Env(protocol=3)
 
     def test_resp3_set_get(self):
         r = self.env
+        r.skipOnVersionSmaller('7.0')
 
         r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
 
@@ -56,6 +43,7 @@ class testResp3():
 
     def test_resp3_set_get_expand(self):
         r = self.env
+        r.skipOnVersionSmaller('7.0')
 
         r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
 
@@ -79,6 +67,7 @@ class testResp3():
     # Test JSON.DEL RESP3
     def test_resp_json_del(self):
         r = self.env
+        r.skipOnVersionSmaller('7.0')
 
         r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
 
@@ -98,6 +87,7 @@ class testResp3():
     # Test JSON.NUMINCRBY RESP3
     def test_resp_json_num_ops(self):
         r = self.env
+        r.skipOnVersionSmaller('7.0')
 
         r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
 
@@ -121,6 +111,7 @@ class testResp3():
     # Test JSON.MSET RESP3
     def test_resp_json_mset(self):
         r = self.env
+        r.skipOnVersionSmaller('7.0')
 
         r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
 
@@ -135,6 +126,7 @@ class testResp3():
     # Test JSON.MERGE RESP3
     def test_resp_json_merge(self):
         r = self.env
+        r.skipOnVersionSmaller('7.0')
 
         r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
 
@@ -151,6 +143,7 @@ class testResp3():
     # Test JSON.TYPE RESP3
     def test_resp_json_type(self):
         r = self.env
+        r.skipOnVersionSmaller('7.0')
             
         r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
 
