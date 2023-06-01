@@ -32,5 +32,3 @@ json_path = {path="../json_path"}
 [features]
 as-library = []
 
-[profile.release]
-debug = 1

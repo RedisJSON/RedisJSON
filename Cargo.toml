@@ -15,3 +15,6 @@ bson = "0.14"
 edition = "2021"
 repository = "https://github.com/RedisJSON/RedisJSON"
 license = "Redis Source Available License 2.0 (RSALv2) or the Server Side Public License v1 (SSPLv1)"
+
+[profile.release]
+debug = 1
