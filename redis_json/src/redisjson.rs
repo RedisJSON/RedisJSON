@@ -62,6 +62,7 @@ pub enum SetOptions {
 pub enum Format {
     JSON,
     BSON,
+    EXPAND,
 }
 impl FromStr for Format {
     type Err = Error;
@@ -70,6 +71,7 @@ impl FromStr for Format {
         match s {
             "JSON" => Ok(Self::JSON),
             "BSON" => Ok(Self::BSON),
+            "EXPAND" => Ok(Self::EXPAND),
             _ => Err("ERR wrong format".into()),
         }
     }

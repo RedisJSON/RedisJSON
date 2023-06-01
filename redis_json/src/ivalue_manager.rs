@@ -10,6 +10,7 @@ use crate::manager::{Manager, ReadHolder, WriteHolder};
 use crate::redisjson::normalize_arr_start_index;
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
+use bson::decode_document;
 use ijson::object::Entry;
 use ijson::{DestructuredMut, INumber, IObject, IString, IValue, ValueType};
 use redis_module::key::{verify_type, RedisKey, RedisKeyWritable};
@@ -18,15 +19,13 @@ use redis_module::rediserror::RedisError;
 use redis_module::{Context, NotifyEvent, RedisString};
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
+use std::io::Cursor;
 use std::marker::PhantomData;
 use std::mem::size_of;
 
 use crate::redisjson::RedisJSON;
 
 use crate::array_index::ArrayIndex;
-
-use bson::decode_document;
-use std::io::Cursor;
 
 pub struct IValueKeyHolderWrite<'a> {
     key: RedisKeyWritable,
@@ -282,6 +281,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
         let res = match format {
             Format::JSON => serde_json::to_string(results)?,
             Format::BSON => return Err("ERR Soon to come...".into()), //results.into() as Bson,
+            Format::EXPAND => return Err("ERR Unknown format specified".into()),
         };
         Ok(res)
     }
@@ -639,6 +639,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                     Ok(v)
                 },
             ),
+            Format::EXPAND => Err("Unsupported format".into()),
         }
     }
 

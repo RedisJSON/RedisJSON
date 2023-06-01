@@ -4,7 +4,8 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
-use crate::jsonpath::select_value::SelectValue;
+use bson::decode_document;
+use json_path::select_value::SelectValue;
 use serde::Deserialize;
 use serde_json::map::Entry;
 use serde_json::{Number, Value};
@@ -16,6 +17,7 @@ use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::rediserror::RedisError;
 use redis_module::{Context, NotifyEvent, RedisString};
 
+use std::io::Cursor;
 use std::marker::PhantomData;
 
 use crate::redisjson::{normalize_arr_start_index, RedisJSON};
@@ -23,8 +25,6 @@ use crate::Format;
 use crate::REDIS_JSON_TYPE;
 
 use crate::error::Error;
-use bson::decode_document;
-use std::io::Cursor;
 
 use crate::array_index::ArrayIndex;
 
@@ -187,6 +187,7 @@ impl<'a> KeyHolderWrite<'a> {
         let res = match format {
             Format::JSON => serde_json::to_string(results)?,
             Format::BSON => return Err("ERR Soon to come...".into()), //results.into() as Bson,
+            Format::EXPAND => return Err("ERR Unknown format specified".into()),
         };
         Ok(res)
     }
@@ -534,6 +535,7 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
                     Ok(v)
                 })
                 .unwrap_or_else(|e| Err(e.to_string().into())),
+            Format::EXPAND => Err("Unsupported format".into()),
         }
     }
 

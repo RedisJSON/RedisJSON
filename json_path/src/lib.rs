@@ -8,11 +8,11 @@ pub mod json_node;
 pub mod json_path;
 pub mod select_value;
 
-use crate::jsonpath::select_value::SelectValue;
-use json_path::{
+use crate::json_path::{
     CalculationResult, DummyTracker, DummyTrackerGenerator, PTracker, PTrackerGenerator,
     PathCalculator, Query, QueryCompilationError, UserPathTracker,
 };
+use crate::select_value::SelectValue;
 
 /// Create a `PathCalculator` object. The path calculator can be re-used
 /// to calculate json paths on different JSONs.
@@ -20,10 +20,10 @@ use json_path::{
 /// ```
 /// #[macro_use] extern crate serde_json;
 ///
-/// use rejson::jsonpath;
+/// use json_path;
 ///
-/// let query = jsonpath::compile("$..friends[0]").unwrap();
-/// let calculator = jsonpath::create(&query);
+/// let query = json_path::compile("$..friends[0]").unwrap();
+/// let calculator = json_path::create(&query);
 ///
 /// let json_obj = json!({
 ///     "school": {
@@ -110,6 +110,8 @@ pub fn calc_once_paths<S: SelectValue>(q: Query, json: &S) -> Vec<Vec<String>> {
 
 #[cfg(test)]
 mod json_path_tests {
+    use crate::json_path;
+    use crate::{create, create_with_generator};
     use serde_json::json;
     use serde_json::Value;
 
@@ -119,38 +121,38 @@ mod json_path_tests {
     }
 
     fn perform_search<'a>(path: &str, json: &'a Value) -> Vec<&'a Value> {
-        let query = crate::jsonpath::compile(path).unwrap();
-        let path_calculator = crate::jsonpath::create(&query);
+        let query = json_path::compile(path).unwrap();
+        let path_calculator = create(&query);
         path_calculator.calc(json)
     }
 
     fn perform_path_search(path: &str, json: &Value) -> Vec<Vec<String>> {
-        let query = crate::jsonpath::compile(path).unwrap();
-        let path_calculator = crate::jsonpath::create_with_generator(&query);
+        let query = json_path::compile(path).unwrap();
+        let path_calculator = create_with_generator(&query);
         path_calculator.calc_paths(json)
     }
 
     macro_rules! verify_json {(
-        path: $path:expr,
-        json: $json:tt,
-        results: [$($result:tt),* $(,)*]
-    ) => {
-        let j = json!($json);
-        let res = perform_search($path, &j);
-        let v = vec![$(json!($result)),*];
-        assert_eq!(res, v.iter().collect::<Vec<&Value>>());
-    }}
+         path: $path:expr,
+         json: $json:tt,
+         results: [$($result:tt),* $(,)*]
+     ) => {
+         let j = json!($json);
+         let res = perform_search($path, &j);
+         let v = vec![$(json!($result)),*];
+         assert_eq!(res, v.iter().collect::<Vec<&Value>>());
+     }}
 
     macro_rules! verify_json_path {(
-        path: $path:expr,
-        json: $json:tt,
-        results: [$([$($result:tt),*]),* $(,)*]
-    ) => {
-        let j = json!($json);
-        let res = perform_path_search($path, &j);
-        let v = vec![$(vec![$(stringify!($result),)*],)*];
-        assert_eq!(res, v);
-    }}
+         path: $path:expr,
+         json: $json:tt,
+         results: [$([$($result:tt),*]),* $(,)*]
+     ) => {
+         let j = json!($json);
+         let res = perform_path_search($path, &j);
+         let v = vec![$(vec![$(stringify!($result),)*],)*];
+         assert_eq!(res, v);
+     }}
 
     #[test]
     fn basic1() {
@@ -206,7 +208,7 @@ mod json_path_tests {
         setup();
         verify_json!(path:"$.foo.[\"boo\"][0:2:1]", json:{"foo":{"boo":[1,2,3]}}, results:[1,2]);
         verify_json!(path:"$.foo.[\"boo\"][0:3:2]", json:{"foo":{"boo":[1,2,3]}}, results:[1,3]);
-        assert!(crate::jsonpath::compile("$.foo.[\"boo\"][0:3:0]").is_err());
+        assert!(json_path::compile("$.foo.[\"boo\"][0:3:0]").is_err());
     }
 
     #[test]
@@ -428,8 +430,8 @@ mod json_path_tests {
     fn test_filter_and_four_obj() {
         setup();
         verify_json!(path:"$[?(@.foo>1 && @.quux>8 && @.bar>3 && @.baz>4)]",
-            json:[{"foo":1, "bar":2, "baz": 3, "quux": 4}, {"foo":2, "bar":4, "baz": 6, "quux": 9}, {"foo":2, "bar":3, "baz": 6, "quux": 10}],
-            results:[{"foo":2, "bar":4, "baz": 6, "quux": 9}]);
+             json:[{"foo":1, "bar":2, "baz": 3, "quux": 4}, {"foo":2, "bar":4, "baz": 6, "quux": 9}, {"foo":2, "bar":3, "baz": 6, "quux": 10}],
+             results:[{"foo":2, "bar":4, "baz": 6, "quux": 9}]);
     }
 
     #[test]
@@ -442,8 +444,8 @@ mod json_path_tests {
     fn test_filter_or_three() {
         setup();
         verify_json!(path:"$[?@.foo[0] == 0 || @.bar[0] == 0 || @.foo[1] == 0 || @.bar[0] == 4 ].*[0,1,2]",
-            json:[{"foo":[1,2,3], "bar":[4,5,6]}],
-            results:[1,2,3,4,5,6]);
+             json:[{"foo":[1,2,3], "bar":[4,5,6]}],
+             results:[1,2,3,4,5,6]);
     }
 
     #[test]
@@ -522,16 +524,16 @@ mod json_path_tests {
     fn test_complex_filter_from_root() {
         setup();
         verify_json!(path:"$.bar.*[?@ == $.foo]",
-                     json:{"foo":1, "bar":{"a":[1,2,3], "b":[4,5,6]}},
-                     results:[1]);
+                      json:{"foo":1, "bar":{"a":[1,2,3], "b":[4,5,6]}},
+                      results:[1]);
     }
 
     #[test]
     fn test_complex_filter_with_literal() {
         setup();
         verify_json!(path:"$.foo[?@.a == @.b].boo[:]",
-                     json:{"foo":[{"boo":[1,2,3],"a":1,"b":1}]},
-                     results:[1,2,3]);
+                      json:{"foo":[{"boo":[1,2,3],"a":1,"b":1}]},
+                      results:[1,2,3]);
     }
 
     #[test]
@@ -548,16 +550,16 @@ mod json_path_tests {
     fn test_expend_all() {
         setup();
         verify_json!(path:"$.foo.*.val", 
-                          json:{"foo":{"bar1":{"val":[1,2,3]}, "bar2":{"val":[1,2,3]}}},
-                          results:[[1,2,3], [1,2,3]]);
+                           json:{"foo":{"bar1":{"val":[1,2,3]}, "bar2":{"val":[1,2,3]}}},
+                           results:[[1,2,3], [1,2,3]]);
     }
 
     #[test]
     fn test_full_scan() {
         setup();
         verify_json!(path:"$..val", 
-                          json:{"foo":{"bar1":{"val":[1,2,3]}, "bar2":{"val":[1,2,3]}}, "val":[1,2,3]},
-                          results:[[1,2,3], [1,2,3], [1,2,3]]);
+                           json:{"foo":{"bar1":{"val":[1,2,3]}, "bar2":{"val":[1,2,3]}}, "val":[1,2,3]},
+                           results:[[1,2,3], [1,2,3], [1,2,3]]);
     }
 
     #[test]
@@ -570,19 +572,19 @@ mod json_path_tests {
     fn test_expend_all_with_path() {
         setup();
         verify_json_path!(path:"$.foo.*.val",
-                          json:{"foo":{"bar1":{"val":[1,2,3]}, "bar2":{"val":[1,2,3]}}},
-                          results:[[foo, bar1, val], [foo, bar2, val]]);
+                           json:{"foo":{"bar1":{"val":[1,2,3]}, "bar2":{"val":[1,2,3]}}},
+                           results:[[foo, bar1, val], [foo, bar2, val]]);
     }
 
     #[test]
     fn test_expend_all_with_array_path() {
         setup();
         verify_json_path!(path:"$.foo.*.val",
-                          json:{"foo":[
-                                {"val":[1,2,3]},
-                                {"val":[1,2,3]}
-                            ]
-                          },
-                          results:[[foo, 0, val], [foo, 1, val]]);
+                           json:{"foo":[
+                                 {"val":[1,2,3]},
+                                 {"val":[1,2,3]}
+                             ]
+                           },
+                           results:[[foo, 0, val], [foo, 1, val]]);
     }
 }
