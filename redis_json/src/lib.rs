@@ -4,9 +4,6 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
-extern crate pest;
-#[macro_use]
-extern crate pest_derive;
 extern crate redis_module;
 
 #[cfg(not(feature = "as-library"))]
@@ -37,7 +34,6 @@ pub mod commands;
 pub mod error;
 mod formatter;
 pub mod ivalue_manager;
-pub mod jsonpath;
 mod key_value;
 pub mod manager;
 pub mod redisjson;
@@ -74,6 +70,11 @@ pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
         unlink: None,
         copy: Some(redisjson::type_methods::copy),
         defrag: None,
+
+        free_effort2: None,
+        unlink2: None,
+        copy2: None,
+        mem_usage2: None,
     },
 );
 /////////////////////////////////////////////////////
@@ -130,7 +131,7 @@ macro_rules! redis_json_module_create {(
         info: $info_func:ident,
     ) => {
 
-        use redis_module::{redis_command, redis_module, RedisString};
+        use redis_module::{redis_module, RedisString};
         use std::marker::PhantomData;
         use std::os::raw::{c_double, c_int, c_longlong};
         use redis_module::{raw as rawmod, LogLevel};
@@ -153,6 +154,20 @@ macro_rules! redis_json_module_create {(
                         run: |mngr|$cmd(mngr, ctx, args),
                     )
                 }
+            };
+        }
+
+        #[cfg(not(test))]
+        macro_rules! get_allocator {
+            () => {
+                redis_module::alloc::RedisAlloc
+            };
+        }
+
+        #[cfg(test)]
+        macro_rules! get_allocator {
+            () => {
+                std::alloc::System
             };
         }
 
@@ -200,6 +215,7 @@ macro_rules! redis_json_module_create {(
         redis_module! {
             name: $crate::MODULE_NAME,
             version: $version,
+            allocator: (get_allocator!(), get_allocator!()),
             data_types: [$($data_type,)*],
             init: json_init_config,
             init: initialize,
@@ -256,7 +272,7 @@ redis_json_module_create! {
             _ => None,
         }
     },
-    version: 02_06_99,
+    version: 02_06_01,
     init: dummy_init,
     info: dummy_info,
 }

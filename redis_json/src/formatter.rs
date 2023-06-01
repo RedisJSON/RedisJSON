@@ -35,6 +35,38 @@ DEALINGS IN THE SOFTWARE.
 use serde_json::ser::Formatter;
 use std::io;
 
+use crate::redisjson::Format;
+
+pub struct FormatOptions<'a> {
+    pub format: Format,
+    pub indent: Option<&'a str>,
+    pub space: Option<&'a str>,
+    pub newline: Option<&'a str>,
+    pub resp3: bool,
+}
+
+impl PartialEq for &FormatOptions<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.format == other.format
+            && self.indent == other.indent
+            && self.space == other.space
+            && self.newline == other.newline
+            && self.resp3 == other.resp3
+    }
+}
+
+impl Default for FormatOptions<'_> {
+    fn default() -> Self {
+        Self {
+            format: Format::JSON,
+            indent: None,
+            space: None,
+            newline: None,
+            resp3: false,
+        }
+    }
+}
+
 pub struct RedisJsonFormatter<'a> {
     current_indent: usize,
     has_value: bool,
@@ -44,17 +76,13 @@ pub struct RedisJsonFormatter<'a> {
 }
 
 impl<'a> RedisJsonFormatter<'a> {
-    pub const fn new(
-        indent: Option<&'a str>,
-        space: Option<&'a str>,
-        newline: Option<&'a str>,
-    ) -> Self {
+    pub const fn new(format: &'a FormatOptions) -> Self {
         RedisJsonFormatter {
             current_indent: 0,
             has_value: false,
-            indent,
-            space,
-            newline,
+            indent: format.indent,
+            space: format.space,
+            newline: format.newline,
         }
     }
 
@@ -177,7 +205,13 @@ mod tests {
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn test_default_formatter() {
-        let mut formatter = RedisJsonFormatter::new(None, None, None);
+        let mut formatter = RedisJsonFormatter::new(&FormatOptions {
+            format: Format::JSON,
+            indent: None,
+            space: None,
+            newline: None,
+            resp3: false,
+        });
         let mut writer = vec![];
 
         assert!(matches!(formatter.begin_array(&mut writer), Ok(())));
@@ -235,7 +269,13 @@ mod tests {
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn test_ident_formatter() {
-        let mut formatter = RedisJsonFormatter::new(Some("_"), None, None);
+        let mut formatter = RedisJsonFormatter::new(&FormatOptions {
+            format: Format::JSON,
+            indent: Some("_"),
+            space: None,
+            newline: None,
+            resp3: false,
+        });
         let mut writer = vec![];
 
         assert!(matches!(formatter.begin_array(&mut writer), Ok(())));
@@ -293,7 +333,13 @@ mod tests {
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn test_space_formatter() {
-        let mut formatter = RedisJsonFormatter::new(None, Some("s"), None);
+        let mut formatter = RedisJsonFormatter::new(&FormatOptions {
+            format: Format::JSON,
+            indent: None,
+            space: Some("s"),
+            newline: None,
+            resp3: false,
+        });
         let mut writer = vec![];
 
         assert!(matches!(formatter.begin_array(&mut writer), Ok(())));
@@ -351,7 +397,13 @@ mod tests {
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn test_new_line_formatter() {
-        let mut formatter = RedisJsonFormatter::new(None, None, Some("n"));
+        let mut formatter = RedisJsonFormatter::new(&FormatOptions {
+            format: Format::JSON,
+            indent: None,
+            space: None,
+            newline: Some("n"),
+            resp3: false,
+        });
         let mut writer = vec![];
 
         assert!(matches!(formatter.begin_array(&mut writer), Ok(())));

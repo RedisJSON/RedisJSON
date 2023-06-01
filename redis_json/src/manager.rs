@@ -4,7 +4,7 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
-use crate::jsonpath::select_value::SelectValue;
+use json_path::select_value::SelectValue;
 use serde_json::Number;
 
 use redis_module::raw::RedisModuleKey;
