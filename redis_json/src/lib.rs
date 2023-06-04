@@ -37,7 +37,6 @@ pub mod ivalue_manager;
 mod key_value;
 pub mod manager;
 pub mod redisjson;
-pub mod serde_value_manager;
 
 pub const GIT_SHA: Option<&str> = std::option_env!("GIT_SHA");
 pub const GIT_BRANCH: Option<&str> = std::option_env!("GIT_BRANCH");
@@ -79,19 +78,6 @@ pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
 );
 /////////////////////////////////////////////////////
 
-#[derive(Copy, Clone)]
-pub enum ManagerType {
-    SerdeValue,
-    IValue,
-}
-
-pub static mut MANAGER: ManagerType = ManagerType::IValue;
-
-#[must_use]
-pub fn get_manager_type() -> ManagerType {
-    unsafe { MANAGER }
-}
-
 #[macro_export]
 macro_rules! run_on_manager {
     (
@@ -103,18 +89,9 @@ macro_rules! run_on_manager {
         let m = $get_mngr_expr;
         match m {
             Some(mngr) => $run_expr(mngr),
-            None => match $crate::get_manager_type() {
-                $crate::ManagerType::IValue => {
-                    $run_expr($crate::ivalue_manager::RedisIValueJsonKeyManager {
-                        phantom: PhantomData,
-                    })
-                }
-                $crate::ManagerType::SerdeValue => {
-                    $run_expr($crate::serde_value_manager::RedisJsonKeyManager {
-                        phantom: PhantomData,
-                    })
-                }
-            },
+            None => $run_expr($crate::ivalue_manager::RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            }),
         }
     }};
 }
@@ -198,17 +175,6 @@ macro_rules! redis_json_module_create {(
                 args_map.insert(args[i].to_string_lossy(), args[i + 1].to_string_lossy());
             }
 
-            if let Some(backend) = args_map.get("JSON_BACKEND") {
-                if  backend == "SERDE_JSON" {
-                    unsafe {$crate::MANAGER = $crate::ManagerType::SerdeValue};
-                } else if backend == "IJSON" {
-                    unsafe {$crate::MANAGER = $crate::ManagerType::IValue};
-                } else {
-                    ctx.log(LogLevel::Warning, "Unsupported json backend was given");
-                    return Status::Err;
-                }
-            }
-
             Status::Ok
         }
 
@@ -266,12 +232,7 @@ const fn dummy_info(_ctx: &InfoContext, _for_crash_report: bool) {}
 redis_json_module_create! {
     data_types: [REDIS_JSON_TYPE],
     pre_command_function: pre_command,
-    get_manage: {
-        match get_manager_type() {
-            ManagerType::IValue => Some(ivalue_manager::RedisIValueJsonKeyManager{phantom:PhantomData}),
-            _ => None,
-        }
-    },
+    get_manage: Some(ivalue_manager::RedisIValueJsonKeyManager{phantom:PhantomData}),
     version: 99_99_99,
     init: dummy_init,
     info: dummy_info,
