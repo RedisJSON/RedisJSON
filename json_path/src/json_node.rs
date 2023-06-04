@@ -189,10 +189,8 @@ impl SelectValue for IValue {
     }
 
     fn items<'a>(&'a self) -> Option<Box<dyn Iterator<Item = (&'a str, &'a Self)> + 'a>> {
-        match self.as_object() {
-            Some(o) => Some(Box::new(o.iter().map(|(k, v)| (&k[..], v)))),
-            _ => None,
-        }
+        self.as_object()
+            .map_or(None, |o| Some(Box::new(o.iter().map(|(k, v)| (&k[..], v)))))
     }
 
     fn len(&self) -> Option<usize> {

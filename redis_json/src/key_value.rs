@@ -159,7 +159,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             let map = temp_doc
                 .iter()
                 .map(|(k, v)| {
-                    let key = RedisValueKey::String(k.to_string());
+                    let key = RedisValueKey::String((*k).to_string());
                     let value = match v {
                         Some(Values::Single(value)) => Self::value_to_resp3(value, format),
                         Some(Values::Multi(values)) => Self::values_to_resp3(values, format),

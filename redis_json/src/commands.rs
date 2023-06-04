@@ -342,7 +342,7 @@ pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
                 redis_key.set_value(Vec::new(), value)?
             };
             if updated {
-                redis_key.apply_changes(ctx, "json.mset")?
+                redis_key.apply_changes(ctx, "json.mset")?;
             }
             res
         })
@@ -371,7 +371,7 @@ fn apply_updates<M: Manager>(
                 UpdateInfo::AUI(aui) => redis_key
                     .dict_add(aui.path, &aui.key, value.clone())
                     .unwrap_or(false),
-            } || updated
+            } || updated;
         }
         updated
     }
@@ -474,7 +474,7 @@ where
 {
     values
         .into_iter()
-        .map(|n| n.map_or_else(|| none_value.clone(), |t| t.into()))
+        .map(|n| n.map_or_else(|| none_value.clone(), Into::into))
         .collect::<Vec<Value>>()
 }
 
@@ -610,10 +610,10 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
                         json_key.get_value().map_or(Ok(RedisValue::Null), |value| {
                             value
                                 .map(|doc| {
-                                    if !is_legacy {
-                                        to_string(doc)
-                                    } else {
+                                    if is_legacy {
                                         to_string_legacy(doc)
+                                    } else {
+                                        to_string(doc)
                                     }
                                 })
                                 .transpose()
@@ -677,7 +677,7 @@ where
         |doc| {
             KeyValue::new(doc)
                 .get_type(path)
-                .map_or(RedisValue::Null, |s| s.into())
+                .map_or(RedisValue::Null, Into::into)
         },
     );
     Ok(value)
