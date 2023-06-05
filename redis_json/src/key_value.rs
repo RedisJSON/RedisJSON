@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use ijson::IValue;
 use json_path::{
     calc_once, calc_once_paths, compile,
     json_path::JsonPathToken,
@@ -7,7 +8,6 @@ use json_path::{
 };
 use redis_module::{redisvalue::RedisValueKey, RedisResult, RedisValue};
 use serde::Serialize;
-use serde_json::Value;
 
 use crate::{
     commands::{FoundIndex, ObjectLen, Values},
@@ -443,7 +443,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     pub fn arr_index(
         &self,
         path: &str,
-        json_value: Value,
+        json_value: IValue,
         start: i64,
         end: i64,
     ) -> Result<RedisValue, Error> {
@@ -458,7 +458,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     pub fn arr_index_legacy(
         &self,
         path: &str,
-        json_value: Value,
+        json_value: IValue,
         start: i64,
         end: i64,
     ) -> Result<RedisValue, Error> {
@@ -473,7 +473,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     /// Returns first array index of `v` in `arr`, or `NotFound` if not found in `arr`, or `NotArray` if `arr` is not an array
-    fn arr_first_index_single(arr: &V, v: &Value, start: i64, end: i64) -> FoundIndex {
+    fn arr_first_index_single(arr: &V, v: &IValue, start: i64, end: i64) -> FoundIndex {
         if !arr.is_array() {
             return FoundIndex::NotArray;
         }
