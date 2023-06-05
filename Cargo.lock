@@ -436,7 +436,7 @@ dependencies = [
 [[package]]
 name = "ijson"
 version = "0.1.3"
-source = "git+https://github.com/RedisJSON/ijson?branch=unsafe_string#6be4c4f7b596e37092133439257714f99b835274"
+source = "git+https://github.com/RedisJSON/ijson?branch=unsafe_string#ea7c391199d4d90a88effa7838862f11208bda3a"
 dependencies = [
  "dashmap",
  "hashbrown 0.13.2",
