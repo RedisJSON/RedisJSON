@@ -11,13 +11,13 @@ use crate::manager::err_msg_json_path_doesnt_exist_with_param;
 use crate::manager::err_msg_json_path_doesnt_exist_with_param_or;
 use crate::manager::{Manager, ReadHolder, UpdateInfo, WriteHolder};
 use crate::redisjson::{Format, Path};
-use ijson::IValue;
 use json_path::select_value::{SelectValue, SelectValueType};
-use json_path::{calc_once_with_paths, compile, json_path::UserPathTracker};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use std::cmp::Ordering;
 use std::str::FromStr;
+
+use json_path::{calc_once_with_paths, compile, json_path::UserPathTracker};
 
 use crate::redisjson::SetOptions;
 
@@ -1195,7 +1195,7 @@ pub fn json_arr_index<M: Manager>(
 
     let key = manager.open_key_read(ctx, &key)?;
 
-    let json_value: IValue = serde_json::from_str(value)?;
+    let json_value: Value = serde_json::from_str(value)?;
 
     let res = key.get_value()?.map_or_else(
         || {
