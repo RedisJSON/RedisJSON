@@ -31,6 +31,4 @@ json_path = {path="../json_path"}
 
 [features]
 as-library = []
-
-[profile.release]
-debug = 1
+thread_safe = ["ijson/thread_safe"]
