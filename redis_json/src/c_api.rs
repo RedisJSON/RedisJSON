@@ -13,6 +13,7 @@ use std::{
     os::raw::{c_char, c_void},
 };
 
+use crate::formatter::FormatOptions;
 use crate::key_value::KeyValue;
 use json_path::select_value::{SelectValue, SelectValueType};
 use json_path::{compile, create};
@@ -132,7 +133,7 @@ pub fn json_api_get_json<M: Manager>(
     str: *mut *mut rawmod::RedisModuleString,
 ) -> c_int {
     let json = unsafe { &*(json.cast::<M::V>()) };
-    let res = KeyValue::<M::V>::serialize_object(json, None, None, None);
+    let res = KeyValue::<M::V>::serialize_object(json, &FormatOptions::default());
     create_rmstring(ctx, &res, str)
 }
 
@@ -146,7 +147,7 @@ pub fn json_api_get_json_from_iter<M: Manager>(
     if iter.pos >= iter.results.len() {
         Status::Err as c_int
     } else {
-        let res = KeyValue::<M::V>::serialize_object(&iter.results, None, None, None);
+        let res = KeyValue::<M::V>::serialize_object(&iter.results, &FormatOptions::default());
         create_rmstring(ctx, &res, str);
         Status::Ok as c_int
     }
@@ -276,6 +277,8 @@ macro_rules! redis_json_module_export_shared_api {
         get_manage: $get_manager_expr:expr,
         pre_command_function: $pre_command_function_expr:expr,
     ) => {
+        use std::ptr::NonNull;
+
         #[no_mangle]
         pub extern "C" fn JSONAPI_openKey(
             ctx: *mut rawmod::RedisModuleCtx,
@@ -284,7 +287,7 @@ macro_rules! redis_json_module_export_shared_api {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_mngr: $get_manager_expr,
-                run: |mngr|{json_api_open_key_internal(mngr, ctx, RedisString::new(ctx, key_str))as *mut c_void},
+                run: |mngr|{json_api_open_key_internal(mngr, ctx, RedisString::new(NonNull::new(ctx), key_str))as *mut c_void},
             )
         }
 
@@ -298,7 +301,7 @@ macro_rules! redis_json_module_export_shared_api {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_mngr: $get_manager_expr,
-                run: |mngr|{json_api_open_key_internal(mngr, ctx, RedisString::create(ctx, key)) as *mut c_void},
+                run: |mngr|{json_api_open_key_internal(mngr, ctx, RedisString::create(NonNull::new(ctx), key)) as *mut c_void},
             )
         }
 

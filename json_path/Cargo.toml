@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 pest = "2.1"
 pest_derive = "2.1"
+bson.workspace = true
 serde_json.workspace = true
 serde.workspace = true
 ijson.workspace = true
