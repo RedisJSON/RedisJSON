@@ -36,7 +36,6 @@ help() {
 		SLAVES=1              Tests with --test-slaves
 		CLUSTER=1             Test with OSS cluster, one shard
 		QUICK=1               Perform only common test variant (~1: all but common)
-		SERDE=0               Skip serde_json tests
 
 		TEST=name             Run specific test (e.g. test.py:test_name)
 		TESTFILE=file         Run tests listed in `file`
@@ -327,10 +326,6 @@ run_tests() {
 		fi
 	fi
 
-	if [[ $SERDE_JSON == 1 ]]; then 
-		MODARGS+=" JSON_BACKEND SERDE_JSON"
-	fi
-
 	if [[ $EXT != 1 ]]; then
 		rltest_config=$(mktemp "${TMPDIR:-/tmp}/rltest.XXXXXXX")
 		rm -f $rltest_config
@@ -419,10 +414,6 @@ run_tests() {
 	if [[ -n $XREDIS_PID ]]; then
 		echo "killing external redis-server: $XREDIS_PID"
 		kill -TERM $XREDIS_PID
-	fi
-
-	if [[ $QUICK != 1 && $FINAL != 1 && $SERDE != 0 ]]; then
-		{ (SERDE_JSON=1 FINAL=1 run_tests "$title (with serde_json)"); (( E |= $? )); } || true
 	fi
 	
 	if [[ -n $GITHUB_ACTIONS ]]; then

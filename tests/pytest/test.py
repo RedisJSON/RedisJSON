@@ -23,8 +23,6 @@ JSON_PATH = os.path.join(TESTS_ROOT, 'files')
 
 # ----------------------------------------------------------------------------------------------
 
-IS_SERDE_JSON = os.getenv('SERDE_JSON', 0)
-
 # TODO: these are currently not supported so ignore them
 json_ignore = [
     'pass-json-parser-0002.json',   # UTF-8 to Unicode
@@ -739,13 +737,13 @@ def testArrInsertCommand(env):
         r.assertEqual(r.execute_command('JSON.GET', 'test', jpath), '[3,5,2,7,{"A":"Z"},9,6,1,4]')
 
         r.expect('JSON.ARRINSERT', 'test', jpath, -10, '10').raiseError()
-        if not IS_SERDE_JSON:
-            # Value should remain
-            r.assertEqual(r.execute_command('JSON.GET', 'test', jpath), '[3,5,2,7,{"A":"Z"},9,6,1,4]')
+
+        # Value should remain
+        r.assertEqual(r.execute_command('JSON.GET', 'test', jpath), '[3,5,2,7,{"A":"Z"},9,6,1,4]')
         r.expect('JSON.ARRINSERT', 'test', jpath, 10, '10').raiseError()
-        if not IS_SERDE_JSON:
-            # Value should remain
-            r.assertEqual(r.execute_command('JSON.GET', 'test', jpath), '[3,5,2,7,{"A":"Z"},9,6,1,4]')
+
+        # Value should remain
+        r.assertEqual(r.execute_command('JSON.GET', 'test', jpath), '[3,5,2,7,{"A":"Z"},9,6,1,4]')
 
 
 def testArrIndexMixCommand(env):
@@ -927,8 +925,6 @@ def testNumIncrCommand(env):
 def testNumCommandOverflow(env):
     """Test JSON.NUMINCRBY and JSON.NUMMULTBY commands overflow """
     r = env
-    if IS_SERDE_JSON:
-            env.skip()
             
     # test overflow on root
     r.assertOk(r.execute_command('JSON.SET', 'big_num', '.', '1.6350000000001313e+308'))
