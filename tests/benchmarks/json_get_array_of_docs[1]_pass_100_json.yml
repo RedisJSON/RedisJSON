@@ -15,3 +15,7 @@ clientconfig:
     - threads: 2
     - pipeline: 1
     - command: 'JSON.GET pass-100 $.array_of_docs[1]'
+clientconfig:
+  benchmark_type: "read-only"
+  tool: memtier_benchmark
+  arguments: "--test-time 120 -c 16 -t 1 --hide-histogram --command 'JSON.GET pass-100 $.array_of_docs[1]'"

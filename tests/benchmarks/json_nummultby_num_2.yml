@@ -15,3 +15,6 @@ clientconfig:
     - threads: 2
     - pipeline: 1
     - command: 'JSON.NUMMULTBY num $ 2'
+clientconfig:
+  tool: memtier_benchmark
+  arguments: "--test-time 120 -c 16 -t 1 --hide-histogram --command 'JSON.NUMMULTBY num $ 2'"
