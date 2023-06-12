@@ -155,7 +155,9 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         if let Some(p) = missing_path {
             return Err(err_msg_json_path_doesnt_exist_with_param(p.as_str()).into());
         }
-        let res = if format.resp3 {
+
+        // If we're using RESP3, we need to convert the HashMap to a RedisValue::Map unless we're using the legacy format
+        let res = if format.is_resp3_reply() {
             let map = temp_doc
                 .iter()
                 .map(|(k, v)| {
@@ -197,7 +199,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     ) -> Result<RedisValue, Error> {
         let res = if is_legacy {
             self.to_string_single(path, format)?.into()
-        } else if format.resp3 {
+        } else if format.is_resp3_reply() {
             let values = self.get_values(path)?;
             Self::values_to_resp3(&values, format)
         } else {
@@ -262,7 +264,9 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             return Err("ERR Soon to come...".into());
         }
         let is_legacy = !paths.iter().any(|p| !p.is_legacy());
-        if format.resp3 {
+
+        // If we're using RESP3, we need to reply with an array of values
+        if format.is_resp3_reply() {
             self.to_resp3(paths, format)
         } else if paths.len() > 1 {
             self.to_json_multi(paths, format, is_legacy)

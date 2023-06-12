@@ -279,7 +279,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
 
     fn serialize(results: &IValue, format: Format) -> Result<String, Error> {
         let res = match format {
-            Format::JSON => serde_json::to_string(results)?,
+            Format::JSON | Format::LEGACY => serde_json::to_string(results)?,
             Format::BSON => return Err("ERR Soon to come...".into()), //results.into() as Bson,
             Format::EXPAND => return Err("ERR Unknown format specified".into()),
         };
@@ -608,7 +608,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
 
     fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> Result<Self::O, Error> {
         match format {
-            Format::JSON => {
+            Format::JSON | Format::LEGACY => {
                 let mut deserializer = serde_json::Deserializer::from_str(val);
                 if !limit_depth {
                     deserializer.disable_recursion_limit();
