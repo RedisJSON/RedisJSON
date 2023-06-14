@@ -64,7 +64,7 @@ class testResp3():
         r.expect('JSON.GET', 'test_not_JSON', 'FORMAT', 'EXPAND','$.a3').raiseError()
 
 
-    def test_resp3_set_get_legacy_format(self):
+    def test_resp3_set_get_string_format(self):
         r = self.env
         r.skipOnVersionSmaller('7.0')
 
@@ -82,12 +82,12 @@ class testResp3():
         r.assertEqual(r.execute_command('JSON.GET', 'test_resp3', '$.a3'), '[]')
 
         # Test JSON.GET RESP3
-        r.assertEqual(r.execute_command('JSON.GET', 'test_resp3', 'FORMAT', 'LEGACY', '$'), '[{"a1":{"b":{"c":true,"d":null}},"a2":{"b":{"c":2}}}]')
-        r.assertEqual(r.execute_command('JSON.GET', 'test_resp3', 'FORMAT', 'LEGACY', '$..b'), '[{"c":true,"d":null},{"c":2}]')
-        r.assertEqual(json.loads(r.execute_command('JSON.GET', 'test_resp3', 'FORMAT', 'LEGACY', '$.a1', '$.a2')), {"$.a2":[{"b":{"c":2}}],"$.a1":[{"b":{"c":True,"d":None}}]})
-        r.assertEqual(json.loads(r.execute_command('JSON.GET', 'test_resp3', 'FORMAT', 'LEGACY', '.a1', '$.a2')), {"$.a2":[{"b":{"c":2}}],".a1":[{"b":{"c":True,"d":None}}]})
-        r.assertEqual(json.loads(r.execute_command('JSON.GET', 'test_resp3', 'FORMAT', 'LEGACY', '$.a1', '$.a3', '$.a2')),  {"$.a3":[],"$.a2":[{"b":{"c":2}}],"$.a1":[{"b":{"c":True,"d":None}}]})
-        r.assertEqual(r.execute_command('JSON.GET', 'test_resp3', 'FORMAT', 'LEGACY', '$.a3'), '[]')
+        r.assertEqual(r.execute_command('JSON.GET', 'test_resp3', 'FORMAT', 'STRING', '$'), '[{"a1":{"b":{"c":true,"d":null}},"a2":{"b":{"c":2}}}]')
+        r.assertEqual(r.execute_command('JSON.GET', 'test_resp3', 'FORMAT', 'STRING', '$..b'), '[{"c":true,"d":null},{"c":2}]')
+        r.assertEqual(json.loads(r.execute_command('JSON.GET', 'test_resp3', 'FORMAT', 'STRING', '$.a1', '$.a2')), {"$.a2":[{"b":{"c":2}}],"$.a1":[{"b":{"c":True,"d":None}}]})
+        r.assertEqual(json.loads(r.execute_command('JSON.GET', 'test_resp3', 'FORMAT', 'STRING', '.a1', '$.a2')), {"$.a2":[{"b":{"c":2}}],".a1":[{"b":{"c":True,"d":None}}]})
+        r.assertEqual(json.loads(r.execute_command('JSON.GET', 'test_resp3', 'FORMAT', 'STRING', '$.a1', '$.a3', '$.a2')),  {"$.a3":[],"$.a2":[{"b":{"c":2}}],"$.a1":[{"b":{"c":True,"d":None}}]})
+        r.assertEqual(r.execute_command('JSON.GET', 'test_resp3', 'FORMAT', 'STRING', '$.a3'), '[]')
 
         # TEST JSON.GET with none existent key
         r.assertEqual(r.execute_command('JSON.GET', 'test_no_such_key', '$.a3'), None)
