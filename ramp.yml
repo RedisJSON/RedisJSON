@@ -1,4 +1,5 @@
 display_name: RedisJSON
+capability_name: JSON
 author: Redis Labs
 email: redismodules@redislabs.com
 description: Native JSON Data Type for Redis
