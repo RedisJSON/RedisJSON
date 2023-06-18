@@ -611,7 +611,8 @@ workflows:
           context: common
       - build-macos-m1:
           context: common
-          <<: *on-integ-and-version-tags
+          #@@<<: *on-integ-and-version-tags
+          <<: *not-on-integ-branch
       - coverage:
           <<: *on-any-branch
       - sanitize:
