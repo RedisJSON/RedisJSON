@@ -544,7 +544,7 @@ on-integ-branch: &on-integ-branch
       only:
         - master
         - /^\d+\.\d+.*$/
-        - /^feature-.*$/
+        - /^feature.*$/
     tags:
       ignore: /.*/
 
@@ -554,7 +554,7 @@ on-integ-branch-cron: &on-integ-branch-cron
       only:
         - master
         - /^\d+\.\d+.*$/
-        - /^feature-.*$/
+        - /^feature.*$/
 
 not-on-integ-branch: &not-on-integ-branch
   filters:
@@ -562,7 +562,7 @@ not-on-integ-branch: &not-on-integ-branch
       ignore:
         - master
         - /^\d+\.\d+.*$/
-        - /^feature-.*$/
+        - /^feature.*$/
     tags:
       ignore: /.*/
 
@@ -579,7 +579,7 @@ on-integ-and-version-tags: &on-integ-and-version-tags
       only:
         - master
         - /^\d+\.\d+.*$/
-        - /^feature-.*$/
+        - /^feature.*$/
     tags:
       only: /^v[0-9].*/
 
@@ -599,7 +599,7 @@ workflows:
           context: common
           matrix:
             parameters:
-              platform: [jammy, focal, bionic, amzn2, rocky8, centos7, bullseye]
+              platform: [jammy, focal, bionic, centos7, rocky8, bullseye, amzn2]
       - build-arm-platforms:
           <<: *on-integ-and-version-tags
           context: common
@@ -607,20 +607,19 @@ workflows:
             parameters:
               platform: [jammy, focal, bionic]
       - build-macos-x64:
-          <<: *on-integ-and-version-tags
+          <<: *on-version-tags
           context: common
       - build-macos-m1:
           context: common
-          #@@<<: *on-integ-and-version-tags
-          <<: *not-on-integ-branch
+          <<: *on-version-tags
       - coverage:
-          <<: *on-any-branch
+          <<: *always
       - sanitize:
           name: sanitize-<< matrix.san-type >>
-          <<: *on-any-branch
+          <<: *always
           matrix:
             parameters:
-              san-type: [address] # [memory]
+              san-type: [address]
       - upload-artifacts:
           name: upload-artifacts-to-staging-lab
           <<: *on-integ-branch
@@ -696,6 +695,6 @@ workflows:
           <<: *on-integ-branch-cron
     jobs:
       - build-macos-x64:
-          upload: "no"
+          upload: "yes"
       - build-macos-m1:
-          upload: "no"
+          upload: "yes"
