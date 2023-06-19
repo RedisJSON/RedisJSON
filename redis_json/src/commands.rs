@@ -888,7 +888,7 @@ where
         });
     }
     if need_notify {
-        redis_key.apply_changes(ctx, "json.arrpop")?;
+        redis_key.apply_changes(ctx, "json.toggle")?;
     }
     Ok(res.into())
 }
