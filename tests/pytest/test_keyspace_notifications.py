@@ -183,3 +183,33 @@ def test_keyspace_num(env):
 
         env.assertEqual('[null]', r.execute_command('JSON.NUMPOWBY', 'test_key', '$.bar', 3))
         env.assertEqual(None, pubsub.get_message(timeout=1))
+
+
+def test_keyspace_bool(env):
+    env.skipOnVersionSmaller('6.2')
+    with env.getClusterConnectionIfNeeded() as r:
+        r.execute_command('config', 'set', 'notify-keyspace-events', 'KEA')
+
+        pubsub = r.pubsub()
+        pubsub.psubscribe('__key*')
+
+        time.sleep(1)
+        env.assertEqual('psubscribe', pubsub.get_message(timeout=1)['type']) 
+
+        r.execute_command('JSON.SET', 'test_key', '$', '{"foo": true, "bar": "baro"}')
+        assert_msg(env, pubsub.get_message(timeout=1), 'pmessage', 'json.set')
+        assert_msg(env, pubsub.get_message(timeout=1), 'pmessage', 'test_key')
+
+        env.assertEqual('false', r.execute_command('JSON.TOGGLE', 'test_key', '.foo'))
+        assert_msg(env, pubsub.get_message(timeout=1), 'pmessage', 'json.toggle')
+        assert_msg(env, pubsub.get_message(timeout=1), 'pmessage', 'test_key')
+
+        env.assertEqual([1], r.execute_command('JSON.TOGGLE', 'test_key', '$..foo'))
+        assert_msg(env, pubsub.get_message(timeout=1), 'pmessage', 'json.toggle')
+        assert_msg(env, pubsub.get_message(timeout=1), 'pmessage', 'test_key')
+
+        env.assertEqual([None], r.execute_command('JSON.TOGGLE', 'test_key', '$.bar'))
+        env.assertEqual(None, pubsub.get_message(timeout=1))
+
+        env.expect('JSON.TOGGLE', 'test_key', '.bar').raiseError()
+        env.assertEqual(None, pubsub.get_message(timeout=1))
