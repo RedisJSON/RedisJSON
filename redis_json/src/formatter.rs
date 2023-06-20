@@ -45,6 +45,14 @@ pub struct FormatOptions<'a> {
     pub resp3: bool,
 }
 
+impl FormatOptions<'_> {
+    /// Returns true if the format is RESP3 and the format is not STRING format
+    /// STRING format is fully backward compatible with RESP2
+    pub fn is_resp3_reply(&self) -> bool {
+        self.resp3 && self.format != Format::STRING
+    }
+}
+
 impl PartialEq for &FormatOptions<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.format == other.format
@@ -58,7 +66,7 @@ impl PartialEq for &FormatOptions<'_> {
 impl Default for FormatOptions<'_> {
     fn default() -> Self {
         Self {
-            format: Format::JSON,
+            format: Format::EXPAND,
             indent: None,
             space: None,
             newline: None,

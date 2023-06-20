@@ -18,8 +18,6 @@ use crate::backward;
 use crate::error::Error;
 use crate::ivalue_manager::RedisIValueJsonKeyManager;
 use crate::manager::Manager;
-use crate::serde_value_manager::RedisJsonKeyManager;
-use crate::{get_manager_type, ManagerType};
 use serde::Serialize;
 use std::fmt;
 use std::fmt::Display;
@@ -60,6 +58,7 @@ pub enum SetOptions {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Format {
+    STRING,
     JSON,
     BSON,
     EXPAND,
@@ -69,6 +68,7 @@ impl FromStr for Format {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
+            "STRING" => Ok(Self::STRING),
             "JSON" => Ok(Self::JSON),
             "BSON" => Ok(Self::BSON),
             "EXPAND" => Ok(Self::EXPAND),
@@ -145,26 +145,15 @@ pub mod type_methods {
     pub extern "C" fn rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
         let json_string = value_rdb_load_json(rdb, encver);
         match json_string {
-            Ok(json_string) => match get_manager_type() {
-                ManagerType::SerdeValue => {
-                    let m = RedisJsonKeyManager {
-                        phantom: PhantomData,
-                    };
-                    let v = m.from_str(&json_string, Format::JSON, false);
-                    v.map_or(null_mut(), |res| {
-                        Box::into_raw(Box::new(res)).cast::<libc::c_void>()
-                    })
-                }
-                ManagerType::IValue => {
-                    let m = RedisIValueJsonKeyManager {
-                        phantom: PhantomData,
-                    };
-                    let v = m.from_str(&json_string, Format::JSON, false);
-                    v.map_or(null_mut(), |res| {
-                        Box::into_raw(Box::new(res)).cast::<libc::c_void>()
-                    })
-                }
-            },
+            Ok(json_string) => {
+                let m = RedisIValueJsonKeyManager {
+                    phantom: PhantomData,
+                };
+                let v = m.from_str(&json_string, Format::JSON, false);
+                v.map_or(null_mut(), |res| {
+                    Box::into_raw(Box::new(res)).cast::<libc::c_void>()
+                })
+            }
             Err(_) => null_mut(),
         }
     }
@@ -208,36 +197,20 @@ pub mod type_methods {
             // on Redis 6.0 we might get a NULL value here, so we need to handle it.
             return;
         }
-        match get_manager_type() {
-            ManagerType::SerdeValue => {
-                let v = value.cast::<RedisJSON<serde_json::Value>>();
-                // Take ownership of the data from Redis (causing it to be dropped when we return)
-                Box::from_raw(v);
-            }
-            ManagerType::IValue => {
-                let v = value.cast::<RedisJSON<ijson::IValue>>();
-                // Take ownership of the data from Redis (causing it to be dropped when we return)
-                Box::from_raw(v);
-            }
-        };
+        let v = value.cast::<RedisJSON<ijson::IValue>>();
+        // Take ownership of the data from Redis (causing it to be dropped when we return)
+        Box::from_raw(v);
     }
 
     /// # Safety
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
         let mut out = serde_json::Serializer::new(Vec::new());
-        let json = match get_manager_type() {
-            ManagerType::SerdeValue => {
-                let v = unsafe { &*value.cast::<RedisJSON<serde_json::Value>>() };
-                v.data.serialize(&mut out).unwrap();
-                String::from_utf8(out.into_inner()).unwrap()
-            }
-            ManagerType::IValue => {
-                let v = unsafe { &*value.cast::<RedisJSON<ijson::IValue>>() };
-                v.data.serialize(&mut out).unwrap();
-                String::from_utf8(out.into_inner()).unwrap()
-            }
-        };
+
+        let v = unsafe { &*value.cast::<RedisJSON<ijson::IValue>>() };
+        v.data.serialize(&mut out).unwrap();
+        let json = String::from_utf8(out.into_inner()).unwrap();
+
         let cjson = CString::new(json).unwrap();
         raw::save_string(rdb, cjson.to_str().unwrap());
     }
@@ -249,38 +222,18 @@ pub mod type_methods {
         tokey: *mut raw::RedisModuleString,
         value: *const c_void,
     ) -> *mut c_void {
-        match get_manager_type() {
-            ManagerType::SerdeValue => {
-                let v = unsafe { &*value.cast::<RedisJSON<serde_json::Value>>() };
-                let value = v.data.clone();
-                Box::into_raw(Box::new(value)).cast::<c_void>()
-            }
-            ManagerType::IValue => {
-                let v = unsafe { &*value.cast::<RedisJSON<ijson::IValue>>() };
-                let value = v.data.clone();
-                Box::into_raw(Box::new(value)).cast::<c_void>()
-            }
-        }
+        let v = unsafe { &*value.cast::<RedisJSON<ijson::IValue>>() };
+        let value = v.data.clone();
+        Box::into_raw(Box::new(value)).cast::<c_void>()
     }
 
     /// # Safety
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn mem_usage(value: *const c_void) -> usize {
-        match get_manager_type() {
-            ManagerType::SerdeValue => {
-                let json = unsafe { &*(value as *mut RedisJSON<serde_json::Value>) };
-                let manager = RedisJsonKeyManager {
-                    phantom: PhantomData,
-                };
-                manager.get_memory(&json.data).unwrap_or(0)
-            }
-            ManagerType::IValue => {
-                let json = unsafe { &*(value as *mut RedisJSON<ijson::IValue>) };
-                let manager = RedisIValueJsonKeyManager {
-                    phantom: PhantomData,
-                };
-                manager.get_memory(&json.data).unwrap_or(0)
-            }
-        }
+        let json = unsafe { &*(value as *mut RedisJSON<ijson::IValue>) };
+        let manager = RedisIValueJsonKeyManager {
+            phantom: PhantomData,
+        };
+        manager.get_memory(&json.data).unwrap_or(0)
     }
 }
