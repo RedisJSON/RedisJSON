@@ -1,6 +1,6 @@
 [package]
 name = "redis_json"
-version = "2.6.1"
+version = "2.6.99"
 authors = ["Guy Korland <guy.korland@redis.com>", "Meir Shpilraien <meir@redis.com>", "Omer Shadmi <omer.shadmi@redis.com>"]
 edition.workspace = true
 description = "JSON data type for Redis"
@@ -31,4 +31,4 @@ json_path = {path="../json_path"}
 
 [features]
 as-library = []
-
+thread_safe = ["ijson/thread_safe"]

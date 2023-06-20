@@ -819,11 +819,6 @@ def testToggleCommand(env):
 #     """
 #     Test MEMORY USAGE key
 #     """
-#     if env.moduleArgs is not None and ['JSON_BACKEND SERDE_JSON'] in env.moduleArgs:
-#         env.skip()
-
-#     env
-
 #     r = env
 #     jdata, jtypes = load_types_data('a')    
 #     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', json.dumps(jdata)))
@@ -840,9 +835,6 @@ def testDebugCommand(env):
     """
     Test REJSON.DEBUG MEMORY command
     """
-    if env.moduleArgs is not None and ['JSON_BACKEND SERDE_JSON'] in env.moduleArgs:
-        env.skip()
-
     r = env
     jdata, jtypes = load_types_data('a')
 
