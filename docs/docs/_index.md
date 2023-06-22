@@ -3,6 +3,7 @@ title: RedisJSON
 description: JSON support for Redis
 linkTitle: JSON
 type: docs
+stack: true
 ---
 
 [![Discord](https://img.shields.io/discord/697882427875393627?style=flat-square)](https://discord.gg/QUkjSsk)
