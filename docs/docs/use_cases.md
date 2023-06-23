@@ -1,6 +1,6 @@
 ---
-title: "JSON Use cases"
-linkTitle: "title: "JSON Use cases""
+title: "Use cases"
+linkTitle: "Use cases"
 weight: 4
 description: >
     Learn how to use query syntax
