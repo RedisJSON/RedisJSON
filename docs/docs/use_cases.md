@@ -3,7 +3,7 @@ title: "Use cases"
 linkTitle: "Use cases"
 weight: 4
 description: >
-    Learn how to use query syntax
+    JSON use cases
 aliases:
   - /docs/stack/search/reference/query_syntax/    
 ---
