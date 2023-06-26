@@ -6,12 +6,12 @@ description: >
     Notes on debugging, testing and documentation
 ---
 
-# Developing RedisJSON
+# Developing Redis JSON
 
-Developing RedisJSON involves setting up the development environment (which can be either Linux-based or macOS-based), building RedisJSON, running tests and benchmarks, and debugging both the RedisJSON module and its tests.
+Developing Redis JSON involves setting up the development environment (which can be either Linux-based or macOS-based), building JSON, running tests and benchmarks, and debugging both the JSON module and its tests.
 
 ## Cloning the git repository
-To clone the RedisJSON module and its submodules, run:
+To clone the JSON module and its submodules, run:
 ```sh
 git clone --recursive https://github.com/RedisJSON/RedisJSON.git
 ```
@@ -38,11 +38,11 @@ rejson=$(docker run -d -it -v $PWD:/build redisjson1 bash)
 docker exec -it $rejson bash
 ```
 
-You can replace `debian:bullseye` with your OS of choice. If you use the same OS as your host machine, you can run the RedisJSON binary on your host after it is built.
+You can replace `debian:bullseye` with your OS of choice. If you use the same OS as your host machine, you can run the JSON binary on your host after it is built.
 
 ## Installing prerequisites
 
-To build and test RedisJSON one needs to install several packages, depending on the underlying OS. Currently, we support the Ubuntu/Debian, CentOS, Fedora, and macOS.
+To build and test JSON one needs to install several packages, depending on the underlying OS. Currently, we support Ubuntu/Debian, CentOS, Fedora, and macOS.
 
 Enter `RedisJSON` directory and run:
 
@@ -124,13 +124,13 @@ make sanbox        # create container for CLang Sanitizer tests
 ```
 
 ## Building from source
-Run ```make build``` to build RedisJSON.
+Run ```make build``` to build JSON.
 
 Notes:
 
 * Binary files are placed under `target/release/`, according to platform and build variant.
 
-* RedisJSON uses [Cargo](https://github.com/rust-lang/cargo) as its build system. ```make build``` will invoke both Cargo and the subsequent `make` command that's required to complete the build.
+* JSON uses [Cargo](https://github.com/rust-lang/cargo) as its build system. ```make build``` will invoke both Cargo and the subsequent `make` command that's required to complete the build.
 
 Use ```make clean``` to remove built artifacts. ```make clean ALL=1``` will remove the entire bin subdirectory.
 
@@ -154,7 +154,7 @@ $ REDIS_PORT=6379 make test
 ```
 
 ## Debugging
-To include debugging information, you need to set the `DEBUG` environment variable before you compile RedisJSON. For example, run `export DEBUG=1`.
+To include debugging information, you need to set the `DEBUG` environment variable before you compile JSON. For example, run `export DEBUG=1`.
 
 You can add breakpoints to Python tests in single-test mode. To set a breakpoint, call the ```BB()``` function inside a test.
 

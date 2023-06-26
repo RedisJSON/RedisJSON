@@ -6,7 +6,7 @@ description: >
     Performance benchmarks
 ---
 
-To get an early sense of what RedisJSON is capable of, you can test it with `redis-benchmark` just like
+To get an early sense of what Redis JSON is capable of, you can test it with `redis-benchmark` just like
 any other Redis command. However, in order to have more control over the tests, we'll use a 
 a tool written in Go called _ReJSONBenchmark_ that we expect to release in the near future.
 
@@ -14,10 +14,10 @@ The following figures were obtained from an AWS EC2 c4.8xlarge instance that ran
 server as well the as the benchmarking tool. Connections to the server are via the networking stack.
 All tests are non-pipelined.
 
-> NOTE: The results below are measured using the preview version of RedisJSON, which is still very much
+> NOTE: The results below are measured using the preview version of Redis JSON, which is still very much
 unoptimized.
 
-## RedisJSON baseline
+## Redis JSON baseline
 
 ### A smallish object
 
@@ -87,7 +87,7 @@ Note how our benchmarking tool does slightly worse in PINGing - producing only 1
 
 ### The empty string
 
-Another RedisJSON benchmark is that of setting and getting an empty string - a value that's only two
+Another JSON benchmark is that of setting and getting an empty string - a value that's only two
 bytes long (i.e. `""`). Granted, that's not very useful, but it teaches us something about the basic
 performance of the module:
 
@@ -97,9 +97,9 @@ performance of the module:
 
 ## Comparison vs. server-side Lua scripting
 
-We compare RedisJSON's performance with Redis' embedded Lua engine. For this purpose, we use the Lua
+We compare JSON's performance with Redis' embedded Lua engine. For this purpose, we use the Lua
 scripts at [/benchmarks/lua](https://github.com/RedisLabsModules/redisjson/tree/master/benchmarks/lua).
-These scripts provide RedisJSON's GET and SET functionality on values stored in JSON or MessagePack
+These scripts provide JSON's GET and SET functionality on values stored in JSON or MessagePack
 formats. Each of the different operations (set root, get root, set path and get path) is executed
 with each "engine" on objects of varying sizes. 
 
@@ -109,9 +109,9 @@ Storing raw JSON performs best in this test, but that isn't really surprising as
 serve unprocessed strings. While you can and should use Redis for caching opaque data, and JSON
 "blobs" are just one example, this does not allow any updates other than these of the entire value.
 
-A more meaningful comparison therefore is between RedisJSON and the MessagePack variant, since both
+A more meaningful comparison therefore is between JSON and the MessagePack variant, since both
 process the incoming JSON value before actually storing it. While the rates and latencies of these 
-two behave in a very similar way, the absolute measurements suggest that RedisJSON's performance may be
+two behave in a very similar way, the absolute measurements suggest that JSON's performance may be
 further improved.
 
 ![VS. Lua set root](images/bench_lua_set_root.png)
@@ -124,8 +124,8 @@ further improved.
 
 ### Setting and getting parts of objects
 
-This test shows why RedisJSON exists. Not only does it outperform the Lua variants, it retains constant
-rates and latencies regardless the object's overall size. There's no magic here - RedisJSON keeps the
+This test shows why Redis JSON exists. Not only does it outperform the Lua variants, it retains constant
+rates and latencies regardless the object's overall size. There's no magic here - JSON keeps the
 value deserialized so that accessing parts of it is a relatively inexpensive operation. In deep contrast
 are both raw JSON as well as MessagePack, which require decoding the entire object before anything can
 be done with it (a process that becomes more expensive the larger the object is).
@@ -166,7 +166,7 @@ These charts are more of the same but independent for each file (value):
 
 The following are the raw results from the benchmark in CSV format.
 
-### RedisJSON results
+### JSON results
 
 ```
 title,concurrency,rate,average latency,50.00%-tile,90.00%-tile,95.00%-tile,99.00%-tile,99.50%-tile,100.00%-tile

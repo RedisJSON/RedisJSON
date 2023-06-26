@@ -9,11 +9,11 @@ description: >
 
 ### Supported JSON
 
-RedisJSON aims to provide full support for [ECMA-404 The JSON Data Interchange Standard](http://json.org/).
+Redis JSON aims to provide full support for [ECMA-404 The JSON Data Interchange Standard](http://json.org/).
 
 The term _JSON Value_ refers to any of the valid values. A _Container_ is either a _JSON Array_ or a _JSON Object_. A _JSON Scalar_ is a _JSON Number_, a _JSON String_, or a literal (_JSON False_, _JSON True_, or _JSON Null_).
 
-### RedisJSON API
+### JSON API
 
 Details on module's [commands](/commands/?group=json) can be filtered for a specific module or command, e.g., [`JSON`](/commands/?group=json&name=json.arr).
 The details also include the syntax for the commands, where:

@@ -4,7 +4,7 @@
 [![Dockerhub](https://img.shields.io/docker/pulls/redis/redis-stack-server?label=redis-stack-server)](https://hub.docker.com/r/redis/redis-stack-server/)
 [![Codecov](https://codecov.io/gh/RedisJSON/RedisJSON/branch/master/graph/badge.svg)](https://codecov.io/gh/RedisJSON/RedisJSON)
 
-# RedisJSON
+# Redis JSON
 
 [![Forum](https://img.shields.io/badge/Forum-RedisJSON-blue)](https://forum.redislabs.com/c/modules/redisjson)
 [![Discord](https://img.shields.io/discord/697882427875393627?style=flat-square)](https://discord.gg/QUkjSsk)
@@ -13,7 +13,7 @@
 
 ## Overview
 
-RedisJSON is a [Redis](https://redis.io/) module that implements [ECMA-404 The JSON Data Interchange Standard](https://json.org/) as a native data type. It allows storing, updating and fetching JSON values from Redis keys (documents).
+JSON is a [Redis](https://redis.io/) module that implements [ECMA-404 The JSON Data Interchange Standard](https://json.org/) as a native data type. It allows storing, updating and fetching JSON values from Redis keys (documents).
 
 ## Primary features
 
@@ -164,12 +164,12 @@ redis-server --loadmodule ./target/release/librejson.dylib
 
 ## Acknowledgments
 
-RedisJSON is developed with <3 at [Redis Labs](https://redislabs.com).
+JSON is developed with <3 at [Redis Labs](https://redislabs.com).
 
-RedisJSON is made possible only because of the existence of this amazing open source project:
+JSON is made possible only because of the existence of this amazing open source project:
 
 * [redis](https://github.com/antirez/redis)
 
 ## License
 
-RedisJSON is licensed under the [Redis Source Available License 2.0 (RSALv2)](https://redis.com/legal/rsalv2-agreement) or the [Server Side Public License v1 (SSPLv1)](https://www.mongodb.com/licensing/server-side-public-license).
+Redis JSON is licensed under the [Redis Source Available License 2.0 (RSALv2)](https://redis.com/legal/rsalv2-agreement) or the [Server Side Public License v1 (SSPLv1)](https://www.mongodb.com/licensing/server-side-public-license).
