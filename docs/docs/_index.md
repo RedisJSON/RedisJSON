@@ -1,5 +1,5 @@
 ---
-title: RedisJSON
+title: JSON
 description: JSON support for Redis
 linkTitle: JSON
 type: docs
@@ -9,7 +9,7 @@ stack: true
 [![Discord](https://img.shields.io/discord/697882427875393627?style=flat-square)](https://discord.gg/QUkjSsk)
 [![Github](https://img.shields.io/static/v1?label=&message=repository&color=5961FF&logo=github)](https://github.com/RedisJSON/RedisJSON/)
 
-The RedisJSON module provides JSON support for Redis. RedisJSON lets you store, update, and retrieve JSON values in a Redis database, similar to any other Redis data type. RedisJSON also works seamlessly with [RediSearch](https://redis.io/docs/stack/search/) to let you [index and query JSON documents](https://redis.io/docs/stack/search/indexing_json).
+Redis JSON provides JavaScript Object Notation (JSON) support for Redis. It lets you store, update, and retrieve JSON values in a Redis database, similar to any other Redis data type. Redis JSON also works seamlessly with [Search and Query](https://redis.io/docs/stack/search/) to let you [index and query JSON documents](https://redis.io/docs/stack/search/indexing_json).
 
 ## Primary features
 
@@ -18,22 +18,22 @@ The RedisJSON module provides JSON support for Redis. RedisJSON lets you store, 
 * Documents stored as binary data in a tree structure, allowing fast access to sub-elements
 * Typed atomic operations for all JSON value types
 
-## Use RedisJSON
+## Use Redis JSON
 
-To learn how to use RedisJSON, it's best to start with the Redis CLI. The following examples assume that you're connected to a Redis server with RedisJSON enabled.
+To learn how to use JSON, it's best to start with the Redis CLI. The following examples assume that you're connected to a Redis server with JSON enabled.
 
 ### `redis-cli` examples
 
 First, start [`redis-cli`](http://redis.io/topics/rediscli) in interactive mode.
 
-The first RedisJSON command to try is `JSON.SET`, which sets a Redis key with a JSON value. `JSON.SET` accepts all JSON value types. This example creates a JSON string:
+The first JSON command to try is `JSON.SET`, which sets a Redis key with a JSON value. `JSON.SET` accepts all JSON value types. This example creates a JSON string:
 
 ```sh
-127.0.0.1:6379> JSON.SET animal $ '"dog"'
+> JSON.SET animal $ '"dog"'
 "OK"
-127.0.0.1:6379> JSON.GET animal $
+> JSON.GET animal $
 "[\"dog\"]"
-127.0.0.1:6379> JSON.TYPE animal $
+> JSON.TYPE animal $
 1) "string"
 ```
 
@@ -42,77 +42,77 @@ Note how the commands include the dollar sign character `$`. This is the [path](
 Here are a few more string operations. `JSON.STRLEN` tells you the length of the string, and you can append another string to it with `JSON.STRAPPEND`.
 
 ```sh
-127.0.0.1:6379> JSON.STRLEN animal $
+> JSON.STRLEN animal $
 1) "3"
-127.0.0.1:6379> JSON.STRAPPEND animal $ '" (Canis familiaris)"'
+> JSON.STRAPPEND animal $ '" (Canis familiaris)"'
 1) "22"
-127.0.0.1:6379> JSON.GET animal $
+> JSON.GET animal $
 "[\"dog (Canis familiaris)\"]"
 ``` 
 
 Numbers can be [incremented](/commands/json.numincrby) and [multiplied](/commands/json.nummultby):
 
 ```
-127.0.0.1:6379> JSON.SET num $ 0
+> JSON.SET num $ 0
 OK
-127.0.0.1:6379> JSON.NUMINCRBY num $ 1
+> JSON.NUMINCRBY num $ 1
 "[1]"
-127.0.0.1:6379> JSON.NUMINCRBY num $ 1.5
+> JSON.NUMINCRBY num $ 1.5
 "[2.5]"
-127.0.0.1:6379> JSON.NUMINCRBY num $ -0.75
+> JSON.NUMINCRBY num $ -0.75
 "[1.75]"
-127.0.0.1:6379> JSON.NUMMULTBY num $ 24
+> JSON.NUMMULTBY num $ 24
 "[42]"
 ```
 
 Here's a more interesting example that includes JSON arrays and objects:
 
 ```
-127.0.0.1:6379> JSON.SET example $ '[ true, { "answer": 42 }, null ]'
+> JSON.SET example $ '[ true, { "answer": 42 }, null ]'
 OK
-127.0.0.1:6379> JSON.GET example $
+> JSON.GET example $
 "[[true,{\"answer\":42},null]]"
-127.0.0.1:6379> JSON.GET example $[1].answer
+> JSON.GET example $[1].answer
 "[42]"
-127.0.0.1:6379> JSON.DEL example $[-1]
+> JSON.DEL example $[-1]
 (integer) 1
-127.0.0.1:6379> JSON.GET example $
+> JSON.GET example $
 "[[true,{\"answer\":42}]]"
 ```
 
 The `JSON.DEL` command deletes any JSON value you specify with the `path` parameter.
 
-You can manipulate arrays with a dedicated subset of RedisJSON commands:
+You can manipulate arrays with a dedicated subset of JSON commands:
 
 ```
-127.0.0.1:6379> JSON.SET arr $ []
+> JSON.SET arr $ []
 OK
-127.0.0.1:6379> JSON.ARRAPPEND arr $ 0
+> JSON.ARRAPPEND arr $ 0
 1) (integer) 1
-127.0.0.1:6379> JSON.GET arr $
+> JSON.GET arr $
 "[[0]]"
-127.0.0.1:6379> JSON.ARRINSERT arr $ 0 -2 -1
+> JSON.ARRINSERT arr $ 0 -2 -1
 1) (integer) 3
-127.0.0.1:6379> JSON.GET arr $
+> JSON.GET arr $
 "[[-2,-1,0]]"
-127.0.0.1:6379> JSON.ARRTRIM arr $ 1 1
+> JSON.ARRTRIM arr $ 1 1
 1) (integer) 1
-127.0.0.1:6379> JSON.GET arr $
+> JSON.GET arr $
 "[[-1]]"
-127.0.0.1:6379> JSON.ARRPOP arr $
+> JSON.ARRPOP arr $
 1) "-1"
-127.0.0.1:6379> JSON.ARRPOP arr $
+> JSON.ARRPOP arr $
 1) (nil)
 ```
 
 JSON objects also have their own commands:
 
 ```
-127.0.0.1:6379> JSON.SET obj $ '{"name":"Leonard Cohen","lastSeen":1478476800,"loggedOut": true}'
+> JSON.SET obj $ '{"name":"Leonard Cohen","lastSeen":1478476800,"loggedOut": true}'
 OK
-127.0.0.1:6379> JSON.OBJLEN obj $
+> JSON.OBJLEN obj $
 1) (integer) 3
-127.0.0.1:6379> JSON.OBJKEYS obj $
+> JSON.OBJKEYS obj $
 1) 1) "name"
    2) "lastSeen"
    3) "loggedOut"
@@ -122,7 +122,7 @@ To return a JSON response in a more human-readable format, run `redis-cli` in ra
 
 ```sh
 $ redis-cli --raw
-127.0.0.1:6379> JSON.GET obj INDENT "\t" NEWLINE "\n" SPACE " " $
+> JSON.GET obj INDENT "\t" NEWLINE "\n" SPACE " " $
 [
 	{
 		"name": "Leonard Cohen",
@@ -134,7 +134,7 @@ $ redis-cli --raw
 
 ### Python example
 
-This code snippet shows how to use RedisJSON with raw Redis commands from Python with [redis-py](https://github.com/redis/redis-py):
+This code snippet shows how to use JSON with raw Redis commands from Python with [redis-py](https://github.com/redis/redis-py):
 
 ```Python
 import redis
@@ -154,7 +154,7 @@ scientific_name = r.json().get('doc', '$..scientific-name')
 
 ### Run with Docker
 
-To run RedisJSON with Docker, use the `redis-stack-server` Docker image:
+To run JSON with Docker, use the `redis-stack-server` Docker image:
 
 ```sh
 $ docker run -d --name redis-stack-server -p 6379:6379 redis/redis-stack-server:latest
@@ -164,11 +164,11 @@ For more information about running Redis Stack in a Docker container, see [Run R
 
 ### Download binaries
 
-To download and run RedisJSON from a precompiled binary:
+To download and run JSON from a precompiled binary:
 
-1. Download a precompiled version of RediSearch from the [Redis download center](https://redis.com/download-center/modules/).
+1. Download a precompiled version of Search and Query from the [Redis download center](https://redis.com/download-center/modules/).
 
-1. Run Redis with RedisJSON:
+1. Run Redis with JSON:
 
     ```sh
     $ redis-server --loadmodule /path/to/module/src/rejson.so
@@ -176,22 +176,22 @@ To download and run RedisJSON from a precompiled binary:
 
 ### Build from source
 
-To build RedisJSON from the source code:
+To build JSON from the source code:
 
-1. Clone the [RedisJSON repository](https://github.com/RedisJSON/RedisJSON) (make sure you include the `--recursive` option to properly clone submodules):
+1. Clone the [repository](https://github.com/RedisJSON/RedisJSON) (make sure you include the `--recursive` option to properly clone submodules):
 
     ```sh
     $ git clone --recursive https://github.com/RedisJSON/RedisJSON.git
     $ cd RedisJSON
     ```
 
-1. Install dependencies:
+2. Install dependencies:
 
     ```sh
     $ ./sbin/setup
     ```
 
-1. Build:
+3. Build:
     ```sh
     $ make build
     ```
@@ -210,7 +210,7 @@ Otherwise, you can invoke
 $ ./deps/readies/bin/getredis
 ```
 
-To load the RedisJSON module, use one of the following methods:
+To load the JSON module, use one of the following methods:
 
 * [Makefile recipe](#makefile-recipe)
 * [Configuration file](#configuration-file)
@@ -219,7 +219,7 @@ To load the RedisJSON module, use one of the following methods:
 
 #### Makefile recipe
 
-Run Redis with RedisJSON:
+Run Redis with JSON:
 
 ```sh
 $ make run
@@ -241,9 +241,9 @@ loadmodule /path/to/module/target/release/librejson.dylib
 
 In the above lines replace `/path/to/module/` with the actual path to the module.
 
-Alternatively, you can download and run RedisJSON from a precompiled binary:
+Alternatively, you can download and run JSON from a precompiled binary:
 
-1. Download a precompiled version of RedisJSON from the [Redis download center](https://redis.com/download-center/modules/).
+1. Download a precompiled version of JSON from the [Redis download center](https://redis.com/download-center/modules/).
 
 #### Command-line option
 
@@ -257,7 +257,7 @@ In the above lines replace `/path/to/module/` with the actual path to the module
 
 #### `MODULE LOAD` command
 
-You can also use the `MODULE LOAD` command to load RedisJSON. Note that `MODULE LOAD` is a **dangerous command** and may be blocked/deprecated in the future due to security considerations.
+You can also use the `MODULE LOAD` command to load JSON. Note that `MODULE LOAD` is a **dangerous command** and may be blocked/deprecated in the future due to security considerations.
 
 After the module has been loaded successfully, the Redis log should have lines similar to:
 
