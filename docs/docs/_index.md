@@ -154,7 +154,7 @@ scientific_name = r.json().get('doc', '$..scientific-name')
 
 ### Run with Docker
 
-To run JSON with Docker, use the `redis-stack-server` Docker image:
+To run RedisJSON with Docker, use the `redis-stack-server` Docker image:
 
 ```sh
 $ docker run -d --name redis-stack-server -p 6379:6379 redis/redis-stack-server:latest
@@ -164,11 +164,11 @@ For more information about running Redis Stack in a Docker container, see [Run R
 
 ### Download binaries
 
-To download and run JSON from a precompiled binary:
+To download and run the RedisJSON module that provides the JSON data structure from a precompiled binary:
 
-1. Download a precompiled version of Search and Query from the [Redis download center](https://redis.com/download-center/modules/).
+1. Download a precompiled version from the [Redis download center](https://redis.com/download-center/modules/).
 
-1. Run Redis with JSON:
+2. Load the module it in Redis
 
     ```sh
     $ redis-server --loadmodule /path/to/module/src/rejson.so
@@ -176,7 +176,7 @@ To download and run JSON from a precompiled binary:
 
 ### Build from source
 
-To build JSON from the source code:
+To build RedisJSON from the source code:
 
 1. Clone the [repository](https://github.com/RedisJSON/RedisJSON) (make sure you include the `--recursive` option to properly clone submodules):
 
@@ -210,7 +210,7 @@ Otherwise, you can invoke
 $ ./deps/readies/bin/getredis
 ```
 
-To load the JSON module, use one of the following methods:
+To load the RedisJSON module, use one of the following methods:
 
 * [Makefile recipe](#makefile-recipe)
 * [Configuration file](#configuration-file)
@@ -219,7 +219,7 @@ To load the JSON module, use one of the following methods:
 
 #### Makefile recipe
 
-Run Redis with JSON:
+Run Redis with RedisJSON:
 
 ```sh
 $ make run
@@ -241,9 +241,9 @@ loadmodule /path/to/module/target/release/librejson.dylib
 
 In the above lines replace `/path/to/module/` with the actual path to the module.
 
-Alternatively, you can download and run JSON from a precompiled binary:
+Alternatively, you can download and run Redis from a precompiled binary:
 
-1. Download a precompiled version of JSON from the [Redis download center](https://redis.com/download-center/modules/).
+1. Download a precompiled version of RedisJSON from the [Redis download center](https://redis.com/download-center/modules/).
 
 #### Command-line option
 
@@ -257,7 +257,7 @@ In the above lines replace `/path/to/module/` with the actual path to the module
 
 #### `MODULE LOAD` command
 
-You can also use the `MODULE LOAD` command to load JSON. Note that `MODULE LOAD` is a **dangerous command** and may be blocked/deprecated in the future due to security considerations.
+You can also use the `MODULE LOAD` command to load RedisJSON. Note that `MODULE LOAD` is a **dangerous command** and may be blocked/deprecated in the future due to security considerations.
 
 After the module has been loaded successfully, the Redis log should have lines similar to:
 

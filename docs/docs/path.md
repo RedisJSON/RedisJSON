@@ -16,7 +16,7 @@ And if multi-paths are used, the return value is a JSON string with a top-level 
 
 ## JSONPath support
 
-JSON v2.0 introduced [JSONPath](http://goessner.net/articles/JsonPath/) support. It follows the syntax described by Goessner in his [article](http://goessner.net/articles/JsonPath/).
+RedisJSON v2.0 introduced [JSONPath](http://goessner.net/articles/JsonPath/) support. It follows the syntax described by Goessner in his [article](http://goessner.net/articles/JsonPath/).
 
 A JSONPath query can resolve to several locations in a JSON document. In this case, the JSON commands apply the operation to every possible location. This is a major improvement over [legacy path](#legacy-path-syntax) queries, which only operate on the first path.
 
@@ -248,11 +248,11 @@ JSONPath queries also work with other JSON commands that accept a path as an arg
 
 ## Legacy path syntax
 
-JSON v1 had the following path implementation. JSON v2 still supports this legacy path in addition to JSONPath.
+RedisJSON v1 had the following path implementation. JSON v2 still supports this legacy path in addition to JSONPath.
 
 Paths always begin at the root of a Redis JSON value. The root is denoted by a period character (`.`). For paths that reference the root's children, it is optional to prefix the path with the root.
 
-JSON supports both dot notation and bracket notation for object key access. The following paths refer to _headphones_, which is a child of _inventory_ under the root:
+Redis JSON supports both dot notation and bracket notation for object key access. The following paths refer to _headphones_, which is a child of _inventory_ under the root:
 
 *   `.inventory.headphones`
 *   `inventory["headphones"]`

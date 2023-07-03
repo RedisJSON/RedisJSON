@@ -14,8 +14,7 @@ The following figures were obtained from an AWS EC2 c4.8xlarge instance that ran
 server as well the as the benchmarking tool. Connections to the server are via the networking stack.
 All tests are non-pipelined.
 
-> NOTE: The results below are measured using the preview version of Redis JSON, which is still very much
-unoptimized.
+> NOTE: The results below are measured using the preview version of Redis JSON, which is still very much unoptimized.
 
 ## Redis JSON baseline
 
@@ -97,7 +96,7 @@ performance of the module:
 
 ## Comparison vs. server-side Lua scripting
 
-We compare JSON's performance with Redis' embedded Lua engine. For this purpose, we use the Lua
+We compare Redis Stack's JSON performance with Redis' embedded Lua engine. For this purpose, we use the Lua
 scripts at [/benchmarks/lua](https://github.com/RedisLabsModules/redisjson/tree/master/benchmarks/lua).
 These scripts provide JSON's GET and SET functionality on values stored in JSON or MessagePack
 formats. Each of the different operations (set root, get root, set path and get path) is executed
