@@ -4,6 +4,8 @@ linkTitle: "Memory Usage"
 weight: 6
 description: >
     Debugging memory consumption
+aliases:
+    - /docs/stack/json/ram    
 ---
 
 Every key in Redis takes memory and requires at least the amount of RAM to store the key name, as

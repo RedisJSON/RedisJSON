@@ -4,6 +4,8 @@ linkTitle: "Performance"
 weight: 5
 description: >
     Performance benchmarks
+aliases:
+    - /docs/stack/json/performance
 ---
 
 To get an early sense of what Redis JSON is capable of, you can test it with `redis-benchmark` just like

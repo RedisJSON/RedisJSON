@@ -4,6 +4,8 @@ linkTitle: "Developer notes"
 weight: 7
 description: >
     Notes on debugging, testing and documentation
+aliases:
+    - /docs/stack/json/developer    
 ---
 
 # Developing Redis JSON

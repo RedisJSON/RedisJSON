@@ -3,6 +3,8 @@ title: "Path"
 linkTitle: "Path"
 weight: 3
 description: Access specific elements within a JSON document
+aliases:
+    - /docs/stack/json/path
 ---
 
 Paths help you access specific elements within a JSON document. Since no standard for JSON path syntax exists, Redis JSON implements its own. JSON's syntax is based on common best practices and intentionally resembles [JSONPath](http://goessner.net/articles/JsonPath/).
