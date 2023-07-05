@@ -5,7 +5,7 @@ linkTitle: JSON
 type: docs
 stack: true
 aliases:
-    /docs/stack/json
+    - /docs/stack/json
 ---
 
 [![Discord](https://img.shields.io/discord/697882427875393627?style=flat-square)](https://discord.gg/QUkjSsk)

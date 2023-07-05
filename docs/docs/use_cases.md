@@ -4,8 +4,6 @@ linkTitle: "Use cases"
 weight: 4
 description: >
     JSON use cases
-aliases:
-  - /docs/stack/search/reference/query_syntax/    
 ---
 
 You can of course use Redis native data structures to store JSON objects, and that's a common practice. For example, you can serialize JSON and save it in a Redis String.
