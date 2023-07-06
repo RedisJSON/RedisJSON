@@ -162,7 +162,7 @@ To run RedisJSON with Docker, use the `redis-stack-server` Docker image:
 $ docker run -d --name redis-stack-server -p 6379:6379 redis/redis-stack-server:latest
 ```
 
-For more information about running Redis Stack in a Docker container, see [Run Redis Stack on Docker](/docs/stack/get-started/install/docker/).
+For more information about running Redis Stack in a Docker container, see [Run Redis Stack on Docker](/docs/getting-started/install-stack/docker/).
 
 ### Download binaries
 
