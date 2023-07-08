@@ -92,7 +92,6 @@ fn is_resp3(ctx: &Context) -> bool {
 ///         [SPACE space-string]
 ///         [path ...]
 ///
-/// TODO add support for multi path
 pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
