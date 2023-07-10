@@ -99,8 +99,8 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     pub fn serialize_object<O: Serialize>(o: &O, format: &FormatOptions) -> String {
-        // When using the default format, we can use serde_json's default serializer
-        if format == &FormatOptions::default() {
+        // When using the default formatting, we can use serde_json's default serializer
+        if format.no_formatting() {
             serde_json::to_string(o).unwrap()
         } else {
             let formatter = RedisJsonFormatter::new(format);
@@ -216,7 +216,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             .into()
     }
 
-    fn value_to_resp3(value: &V, format: &FormatOptions) -> RedisValue {
+    pub fn value_to_resp3(value: &V, format: &FormatOptions) -> RedisValue {
         if format.format == Format::EXPAND {
             match value.get_type() {
                 SelectValueType::Null => RedisValue::Null,

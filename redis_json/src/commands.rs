@@ -100,10 +100,7 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
     // Set Capacity to 1 assuming the common case has one path
     let mut paths: Vec<Path> = Vec::with_capacity(1);
 
-    let mut format_options = FormatOptions {
-        resp3: is_resp3(ctx),
-        ..Default::default()
-    };
+    let mut format_options = FormatOptions::new(is_resp3(ctx));
 
     while let Ok(arg) = args.next_str() {
         match arg {
@@ -128,7 +125,7 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
         };
     }
 
-    // path is optional -> no path found we use root "$"
+    // path is optional -> no path found we use legacy root "."
     if paths.is_empty() {
         paths.push(Path::new(JSON_ROOT_PATH_LEGACY));
     }
@@ -590,10 +587,7 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
         let path = Path::new(path.try_as_str()?);
         let keys = &args[1..args.len() - 1];
 
-        let format_options = FormatOptions {
-            resp3: is_resp3(ctx),
-            ..Default::default()
-        };
+        let format_options = FormatOptions::new(is_resp3(ctx));
 
         let to_string =
             |doc: &M::V| KeyValue::new(doc).to_string_multi(path.get_path(), &format_options);
@@ -1361,14 +1355,33 @@ pub fn json_arr_len<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString
 }
 
 ///
-/// JSON.ARRPOP <key> [path [index]]
+/// JSON.ARRPOP <key>
+///         [FORMAT {STRING|JSON|EXPAND}]
+///         [path [index]]
 ///
 pub fn json_arr_pop<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;
 
-    let (path, index) = match args.next() {
+    let is_resp3 = is_resp3(ctx);
+    let mut format_options = FormatOptions::new(is_resp3);
+
+    // Only on RESP3 if the first argument is FORMAT, then the second argument is the format
+    // but it's optional so it might be the path
+    let path = if let Some(arg) = args.next() {
+        if is_resp3 && arg.try_as_str()?.eq_ignore_ascii_case("FORMAT") {
+            format_options.format = Format::from_str(args.next_str()?)?;
+            args.next()
+        } else {
+            // if it's not FORMAT, then it's the path
+            Some(arg)
+        }
+    } else {
+        None
+    };
+
+    let (path, index) = match path {
         None => (Path::new(JSON_ROOT_PATH_LEGACY), i64::MAX),
         Some(s) => {
             let path = Path::new(s.try_as_str()?);
@@ -1379,9 +1392,15 @@ pub fn json_arr_pop<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
     if path.is_legacy() {
+        if format_options.is_resp3_reply() {
+            return Err(RedisError::Str(
+                "FORMAT argument cannot be used with a legacy path",
+            ));
+        }
+
         json_arr_pop_legacy::<M>(&mut redis_key, ctx, path.get_path(), index)
     } else {
-        json_arr_pop_impl::<M>(&mut redis_key, ctx, path.get_path(), index)
+        json_arr_pop_impl::<M>(&mut redis_key, ctx, path.get_path(), index, &format_options)
     }
 }
 
@@ -1390,6 +1409,7 @@ fn json_arr_pop_impl<M>(
     ctx: &Context,
     path: &str,
     index: i64,
+    format_options: &FormatOptions,
 ) -> RedisResult
 where
     M: Manager,
@@ -1406,7 +1426,11 @@ where
             Some(p) => match redis_key.arr_pop(p, index)? {
                 Some(v) => {
                     need_notify = true;
-                    v.into()
+                    if format_options.is_resp3_reply() {
+                        KeyValue::value_to_resp3(&v, format_options)
+                    } else {
+                        serde_json::to_string(&v)?.into()
+                    }
                 }
                 _ => RedisValue::Null, // Empty array
             },
@@ -1441,7 +1465,7 @@ where
         match res.unwrap() {
             Some(r) => {
                 redis_key.apply_changes(ctx, "json.arrpop")?;
-                Ok(r.into())
+                Ok(serde_json::to_string(&r)?.into())
             }
             None => Ok(().into()),
         }

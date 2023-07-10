@@ -54,7 +54,7 @@ pub trait WriteHolder<O: Clone, V: SelectValue> {
         args: &[O],
         index: i64,
     ) -> Result<usize, RedisError>;
-    fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<String>, RedisError>;
+    fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<V>, RedisError>;
     fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> Result<usize, RedisError>;
     fn clear(&mut self, path: Vec<String>) -> Result<usize, RedisError>;
     fn apply_changes(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError>;

@@ -46,10 +46,30 @@ pub struct FormatOptions<'a> {
 }
 
 impl FormatOptions<'_> {
+    /// Creates a new FormatOptions with the default values according to the RESP version
+    pub fn new(resp3: bool) -> Self {
+        Self {
+            format: if resp3 {
+                Format::EXPAND
+            } else {
+                Format::STRING
+            },
+            indent: None,
+            space: None,
+            newline: None,
+            resp3,
+        }
+    }
+
     /// Returns true if the format is RESP3 and the format is not STRING format
     /// STRING format is fully backward compatible with RESP2
     pub fn is_resp3_reply(&self) -> bool {
         self.resp3 && self.format != Format::STRING
+    }
+
+    /// Checks if the JSON formatting options are the default ones with no overrides
+    pub fn no_formatting(&self) -> bool {
+        self.indent.is_none() && self.space.is_none() && self.newline.is_none()
     }
 }
 
@@ -64,9 +84,10 @@ impl PartialEq for &FormatOptions<'_> {
 }
 
 impl Default for FormatOptions<'_> {
+    /// Creates a new FormatOptions with the default values matching RESP2
     fn default() -> Self {
         Self {
-            format: Format::EXPAND,
+            format: Format::STRING,
             indent: None,
             space: None,
             newline: None,
