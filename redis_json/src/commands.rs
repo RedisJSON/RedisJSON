@@ -576,7 +576,7 @@ pub fn json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
 }
 
 ///
-/// JSON.MGET <key> [key ...] <path>
+/// JSON.MGET <key> [key ...] [FORMAT STRING|JSON|EXPAND] <path>
 ///
 pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     if args.len() < 3 {
@@ -585,14 +585,32 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
 
     args.last().ok_or(RedisError::WrongArity).and_then(|path| {
         let path = Path::new(path.try_as_str()?);
-        let keys = &args[1..args.len() - 1];
 
-        let format_options = FormatOptions::new(is_resp3(ctx));
+        let is_resp3 = is_resp3(ctx);
+        let mut format_options = FormatOptions::new(is_resp3);
 
-        let to_string =
-            |doc: &M::V| KeyValue::new(doc).to_string_multi(path.get_path(), &format_options);
-        let to_string_legacy =
-            |doc: &M::V| KeyValue::new(doc).to_string_single(path.get_path(), &format_options);
+        // Check if the optional argument [FORMAT STRING|JSON|EXPAND] is present
+        let keys = if is_resp3 {
+            let format = &args[args.len() - 3..args.len() - 1];
+            if let Ok(s) = format[0].try_as_str() {
+                if s.eq_ignore_ascii_case("FORMAT") {
+                    format_options.format = Format::from_str(format[1].try_as_str()?)?;
+                    &args[1..args.len() - 3] // Skip the format arguments
+                } else {
+                    &args[1..args.len() - 1] // No Format arguments
+                }
+            } else {
+                &args[1..args.len() - 1] // No Format arguments
+            }
+        } else {
+            &args[1..args.len() - 1] // No Format arguments
+        };
+
+        // Verify that at least one key exists
+        if keys.is_empty() {
+            return Err(RedisError::WrongArity);
+        }
+
         let is_legacy = path.is_legacy();
 
         let results: Result<Vec<RedisValue>, RedisError> = keys
@@ -602,16 +620,27 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
                     .open_key_read(ctx, key)
                     .map_or(Ok(RedisValue::Null), |json_key| {
                         json_key.get_value().map_or(Ok(RedisValue::Null), |value| {
-                            value
-                                .map(|doc| {
-                                    if !is_legacy {
-                                        to_string(doc)
+                            value.map_or(Ok(RedisValue::Null), |doc| {
+                                let key_value = KeyValue::new(doc);
+
+                                // let value = match key.get_value()? {
+                                //     Some(doc) => KeyValue::new(doc).to_json(&mut paths, &format_options)?,
+                                //     None => RedisValue::Null,
+                                // };
+
+                                // value_to_resp3
+
+                                if format_options.is_resp3_reply() {
+                                    Ok(key_value.to_resp3_path(&path, &format_options))
+                                } else {
+                                    let res = if !is_legacy {
+                                        key_value.to_string_multi(path.get_path(), &format_options)
                                     } else {
-                                        to_string_legacy(doc)
-                                    }
-                                })
-                                .transpose()
-                                .map_or(Ok(RedisValue::Null), |v| Ok(v.into()))
+                                        key_value.to_string_single(path.get_path(), &format_options)
+                                    };
+                                    Ok(res.map_or(RedisValue::Null, |v| v.into()))
+                                }
+                            })
                         })
                     })
             })
@@ -620,7 +649,6 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
         Ok(results?.into())
     })
 }
-
 ///
 /// JSON.TYPE <key> [path]
 ///
@@ -1381,8 +1409,16 @@ pub fn json_arr_pop<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString
         None
     };
 
+    // Try to retrieve the optional arguments [path [index]]
     let (path, index) = match path {
-        None => (Path::new(JSON_ROOT_PATH_LEGACY), i64::MAX),
+        None => {
+            if format_options.is_resp3_reply() {
+                (Path::new(JSON_ROOT_PATH), i64::MAX)
+            } else {
+                // Legacy behavior for backward compatibility
+                (Path::new(JSON_ROOT_PATH_LEGACY), i64::MAX)
+            }
+        }
         Some(s) => {
             let path = Path::new(s.try_as_str()?);
             let index = args.next_i64().unwrap_or(-1);
@@ -1392,7 +1428,7 @@ pub fn json_arr_pop<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
     if path.is_legacy() {
-        if format_options.is_resp3_reply() {
+        if format_options.format != Format::STRING {
             return Err(RedisError::Str(
                 "FORMAT argument cannot be used with a legacy path",
             ));
