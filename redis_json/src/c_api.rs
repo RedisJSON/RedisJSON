@@ -301,7 +301,9 @@ where
 {
     let iter = unsafe { &mut *(iter.cast::<KeyValuesIterator<M::V>>()) };
     if iter.pos < iter.results.len() {
-        create_rmstring(ctx, iter.results[iter.pos].0, str);
+        if !str.is_null() {
+            create_rmstring(ctx, iter.results[iter.pos].0, str);
+        }
         let res = (iter.results[iter.pos].1 as *const M::V).cast::<c_void>();
         iter.pos += 1;
         res
@@ -561,6 +563,8 @@ macro_rules! redis_json_module_export_shared_api {
             )
         }
 
+        static REDISJSON_GETAPI_V1: &str = concat!("RedisJSON_V1", "\0");
+        static REDISJSON_GETAPI_V2: &str = concat!("RedisJSON_V2", "\0");
         static REDISJSON_GETAPI_V3: &str = concat!("RedisJSON_V3", "\0");
         static REDISJSON_GETAPI_V4: &str = concat!("RedisJSON_V4", "\0");
 
@@ -569,6 +573,18 @@ macro_rules! redis_json_module_export_shared_api {
                 LLAPI_CTX = Some(rawmod::RedisModule_GetThreadSafeContext.unwrap()(
                     std::ptr::null_mut(),
                 ));
+                ctx.export_shared_api(
+                    (&JSONAPI_CURRENT as *const RedisJSONAPI_CURRENT).cast::<c_void>(),
+                    REDISJSON_GETAPI_V1.as_ptr().cast::<c_char>(),
+                );
+                ctx.log_notice("Exported RedisJSON_V1 API");
+
+                ctx.export_shared_api(
+                    (&JSONAPI_CURRENT as *const RedisJSONAPI_CURRENT).cast::<c_void>(),
+                    REDISJSON_GETAPI_V2.as_ptr().cast::<c_char>(),
+                );
+                ctx.log_notice("Exported RedisJSON_V2 API");
+
                 ctx.export_shared_api(
                     (&JSONAPI_CURRENT as *const RedisJSONAPI_CURRENT).cast::<c_void>(),
                     REDISJSON_GETAPI_V3.as_ptr().cast::<c_char>(),
