@@ -293,7 +293,6 @@ where
 pub fn json_api_next_key_value<'a, M: Manager>(
     _: M,
     iter: *mut c_void,
-    ctx: *mut rawmod::RedisModuleCtx,
     str: *mut *mut rawmod::RedisModuleString,
 ) -> *const c_void
 where
@@ -302,7 +301,7 @@ where
     let iter = unsafe { &mut *(iter.cast::<KeyValuesIterator<M::V>>()) };
     if iter.pos < iter.results.len() {
         if !str.is_null() {
-            create_rmstring(ctx, iter.results[iter.pos].0, str);
+            create_rmstring(null_mut(), iter.results[iter.pos].0, str);
         }
         let res = (iter.results[iter.pos].1 as *const M::V).cast::<c_void>();
         iter.pos += 1;
@@ -545,12 +544,12 @@ macro_rules! redis_json_module_export_shared_api {
         }
 
         #[no_mangle]
-        pub extern "C" fn JSONAPI_nextKeyValue(iter: *mut c_void, ctx: *mut rawmod::RedisModuleCtx,
+        pub extern "C" fn JSONAPI_nextKeyValue(iter: *mut c_void,
             str: *mut *mut rawmod::RedisModuleString) -> *const c_void {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_mngr: $get_manager_expr,
-                run: |mngr|{json_api_next_key_value(mngr, iter, ctx, str)},
+                run: |mngr|{json_api_next_key_value(mngr, iter, str)},
             )
         }
 
@@ -674,7 +673,6 @@ macro_rules! redis_json_module_export_shared_api {
             pub getKeyValues: extern "C" fn(json: *const c_void) -> *const c_void,
             pub nextKeyValue: extern "C" fn(
                 iter: *mut c_void,
-                ctx: *mut rawmod::RedisModuleCtx,
                 str: *mut *mut rawmod::RedisModuleString
             ) -> *const c_void,
             pub freeKeyValuesIter: extern "C" fn(iter: *mut c_void),
