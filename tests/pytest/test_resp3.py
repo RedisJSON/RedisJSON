@@ -194,3 +194,84 @@ class testResp3():
 
         # Test not a JSON key
         r.expect('JSON.TYPE', 'test_not_JSON', '$.a1.b.c').raiseError()
+
+
+    # Test JSON.ARRPOP RESP3 (Default FORMAT EXPAND)
+    def test_resp_json_arrpop(self):
+        r = self.env
+        r.skipOnVersionSmaller('7.0')
+
+        r.assertTrue(r.execute_command('JSON.SET', 'test_resp3', '$', '{"a":[{"b":2},{"g":[1,2]},3]}'))
+
+        # Test JSON.TYPE RESP3
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', '$.a', 1), [{'g':[1,2]}])
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', '$.a'), [3])
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', '$.a', 0), [{'b': 2}])
+
+        # Test not a JSON key
+        r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
+        r.expect('JSON.ARRPOP', 'test_not_JSON', '$.a1').raiseError()
+
+
+    # Test JSON.ARRPOP RESP3 with FORMAT EXPAND
+    def test_resp_json_arrpop_format_expand(self):
+        r = self.env
+        r.skipOnVersionSmaller('7.0')
+
+        r.assertTrue(r.execute_command('JSON.SET', 'test_resp3', '$', '{"a":[{"b":2},{"g":[1,2]},3]}'))
+
+        # Test JSON.TYPE RESP3
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'EXPAND', '$.a', 1), [{'g':[1,2]}])
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'EXPAND','$.a'), [3])
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'EXPAND','$.a', 0), [{'b': 2}])
+
+        # Test FORMAT EXPAND with legacy path
+        r.expect('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'EXPAND', '.a[1]').raiseError()
+
+
+        # Test not a JSON key
+        r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
+        r.expect('JSON.ARRPOP', 'test_not_JSON', 'FORMAT', 'EXPAND',  '$.a1').raiseError()
+
+
+    # Test JSON.ARRPOP RESP3 with FORMAT JSON
+    def test_resp_json_arrpop_format_json(self):
+        r = self.env
+        r.skipOnVersionSmaller('7.0')
+
+        r.assertTrue(r.execute_command('JSON.SET', 'test_resp3', '$', '{"a":[{"b":2},{"g":[1,2]},3]}'))
+
+        # Test JSON.TYPE RESP3
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'JSON', '$.a', 1), ['{"g":[1,2]}'])
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'JSON', '$.a'), [3])
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'JSON', '$.a', 0), ['{"b":2}'])
+
+        # Test FORMAT JSON with legacy path
+        r.expect('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'EXPAND', '.a[1]').raiseError()
+
+        # Test not a JSON key
+        r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
+        r.expect('JSON.ARRPOP', 'test_not_JSON', 'FORMAT', 'JSON',  '$.a1').raiseError()
+
+
+
+    # Test JSON.MGET RESP3
+    def test_resp_json_mget(self):
+        r = self.env
+        r.skipOnVersionSmaller('7.0')
+
+        r.assertTrue(r.execute_command('JSON.SET', 'test_resp3_1', '$', '{"a":1, "b":2, "c":3}'))
+        r.assertTrue(r.execute_command('JSON.SET', 'test_resp3_2', '$', '{"a":5, "b":6, "d":7}'))
+
+        # Test JSON.MGET RESP3
+        r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', '$'), [[{'b': 2, 'c': 3, 'a': 1}], [{'a': 5, 'b': 6, 'd': 7}]])
+        r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', 'FORMAT', 'EXPAND', '$'), [[{'b': 2, 'c': 3, 'a': 1}], [{'a': 5, 'b': 6, 'd': 7}]])
+        r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', 'FORMAT', 'JSON', '$'), [['{"a":1,"b":2,"c":3}'], ['{"a":5,"b":6,"d":7}']])
+        r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', 'FORMAT', 'STRING', '$'), ['[{"a":1,"b":2,"c":3}]', '[{"a":5,"b":6,"d":7}]'])
+
+        # Test FORMAT with legacy path
+        # r.expect('JSON.MGET', 'test_resp3_1', 'FORMAT', 'EXPAND', '.a[1]').raiseError()
+
+        # # Test not a JSON key
+        # r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
+        # r.expect('JSON.MGET', 'test_not_JSON', '$.a').raiseError()
