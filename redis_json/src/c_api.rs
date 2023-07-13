@@ -299,16 +299,15 @@ where
     M::V: 'a,
 {
     let iter = unsafe { &mut *(iter.cast::<KeyValuesIterator<M::V>>()) };
-    if iter.pos < iter.results.len() {
-        if !str.is_null() {
-            create_rmstring(null_mut(), iter.results[iter.pos].0, str);
-        }
-        let res = (iter.results[iter.pos].1 as *const M::V).cast::<c_void>();
-        iter.pos += 1;
-        res
-    } else {
-        null()
+    if iter.pos >= iter.results.len() {
+        return null();
     }
+    if !str.is_null() {
+        create_rmstring(null_mut(), iter.results[iter.pos].0, str);
+    }
+    let res = (iter.results[iter.pos].1 as *const M::V).cast::<c_void>();
+    iter.pos += 1;
+    res
 }
 
 pub fn json_api_free_key_values_iter<'a, M: Manager>(_: M, iter: *mut c_void)
