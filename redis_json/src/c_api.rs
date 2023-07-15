@@ -45,11 +45,6 @@ struct ResultsIterator<'a, V: SelectValue> {
     pos: usize,
 }
 
-struct KeyValuesIterator<'a, V: SelectValue> {
-    results: Vec<(&'a str, &'a V)>,
-    pos: usize,
-}
-
 //---------------------------------------------------------------------------------------------
 
 pub static mut LLAPI_CTX: Option<*mut rawmod::RedisModuleCtx> = None;
@@ -272,20 +267,10 @@ pub fn json_api_is_json<M: Manager>(m: M, key: *mut rawmod::RedisModuleKey) -> c
     m.is_json(key).map_or(0, |res| res as c_int)
 }
 
-pub fn json_api_get_key_value<'a, M: Manager>(_: M, val: *const c_void) -> *const c_void
-where
-    M::V: 'a,
-{
+pub fn json_api_get_key_value<M: Manager>(_: M, val: *const c_void) -> *const c_void {
     let json = unsafe { &*(val.cast::<M::V>()) };
     match json.get_type() {
-        SelectValueType::Object => {
-            let vec = json.items().unwrap().collect::<Vec<(&'a str, &'a M::V)>>();
-            Box::into_raw(Box::new(KeyValuesIterator {
-                results: vec,
-                pos: 0,
-            }))
-            .cast::<c_void>()
-        }
+        SelectValueType::Object => Box::into_raw(Box::new(json.items().unwrap())).cast::<c_void>(),
         _ => null(),
     }
 }
@@ -298,23 +283,20 @@ pub fn json_api_next_key_value<'a, M: Manager>(
 where
     M::V: 'a,
 {
-    let iter = unsafe { &mut *(iter.cast::<KeyValuesIterator<M::V>>()) };
-    if iter.pos >= iter.results.len() {
-        return null();
+    let iter = unsafe { &mut *(iter.cast::<Box<dyn Iterator<Item = (&'a str, &'a M::V)> + 'a>>()) };
+    if let Some((k, v)) = iter.next() {
+        create_rmstring(null_mut(), k, str);
+        (v as *const M::V).cast::<c_void>()
+    } else {
+        null()
     }
-    if !str.is_null() {
-        create_rmstring(null_mut(), iter.results[iter.pos].0, str);
-    }
-    let res = (iter.results[iter.pos].1 as *const M::V).cast::<c_void>();
-    iter.pos += 1;
-    res
 }
 
 pub fn json_api_free_key_values_iter<'a, M: Manager>(_: M, iter: *mut c_void)
 where
     M::V: 'a,
 {
-    let iter = unsafe { &mut *(iter.cast::<KeyValuesIterator<M::V>>()) };
+    let iter = unsafe { &mut *(iter.cast::<Box<dyn Iterator<Item = (&'a str, &'a M::V)> + 'a>>()) };
     unsafe {
         drop(Box::from_raw(iter));
     }
