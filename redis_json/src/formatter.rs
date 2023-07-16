@@ -73,16 +73,6 @@ impl FormatOptions<'_> {
     }
 }
 
-impl PartialEq for &FormatOptions<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        self.format == other.format
-            && self.indent == other.indent
-            && self.space == other.space
-            && self.newline == other.newline
-            && self.resp3 == other.resp3
-    }
-}
-
 impl Default for FormatOptions<'_> {
     /// Creates a new FormatOptions with the default values matching RESP2
     fn default() -> Self {

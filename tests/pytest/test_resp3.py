@@ -262,7 +262,6 @@ class testResp3():
 
         r.assertTrue(r.execute_command('JSON.SET', 'test_resp3_1', '$', '{"a":1, "b":{"f":"g"}, "c":3}'))
         r.assertTrue(r.execute_command('JSON.SET', 'test_resp3_2', '$', '{"a":5, "b":[true, 3, null], "d":7}'))
-        r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
 
         # Test JSON.MGET RESP3 with FORMAT EXPAND
         r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', '$.not'), [[], []])
@@ -270,7 +269,8 @@ class testResp3():
         r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', '$'), [[{'a': 1, 'b': {'f': 'g'}, 'c': 3}], [{'b': [True, 3, None], 'd': 7, 'a': 5}]])
         r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', '$..*'), [[1, {'f': 'g'}, 3, 'g'], [5, [True, 3, None], 7, True, 3, None]])
 
-
+        # Test FORMAT is set with at least one key
+        r.expect('JSON.ARRPOP', 'FORMAT', 'EXPAND',  '$.a1').raiseError()        
 
     # Test JSON.MGET RESP3 FORMAT EXPAND
     def test_resp_json_mget_expand(self):
