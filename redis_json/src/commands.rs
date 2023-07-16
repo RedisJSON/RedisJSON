@@ -1439,7 +1439,7 @@ pub fn json_arr_pop<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString
     if path.is_legacy() {
         if format_options.format != Format::STRING {
             return Err(RedisError::Str(
-                "FORMAT argument cannot be used with a legacy path",
+                "Legacy paths are supported only with FORMAT STRING",
             ));
         }
 
