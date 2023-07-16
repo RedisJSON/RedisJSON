@@ -350,9 +350,9 @@ class testResp3():
 
         # Test JSON.strX commands on object type when default path is used
         r.assertTrue(r.execute_command('JSON.SET', 'test_resp3_str', '$', '"test_resp3_str"'))
-        r.assertEqual(r.execute_command('JSON.strlen', 'test_resp3_str'), [14])
+        r.assertEqual(r.execute_command('JSON.STRLEN', 'test_resp3_str'), [14])
 
         # Test JSON.arrX commands on object type when default path is used
         r.assertTrue(r.execute_command('JSON.SET', 'test_resp3_str', '$', '[true, 1, "dud"]'))
-        r.assertEqual(r.execute_command('JSON.arrlen', 'test_resp3_str'), [3])
+        r.assertEqual(r.execute_command('JSON.ARRLEN', 'test_resp3_str'), [3])
         
