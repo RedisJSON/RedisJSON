@@ -233,7 +233,6 @@ class testResp3():
         r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
         r.expect('JSON.ARRPOP', 'test_not_JSON', 'FORMAT', 'EXPAND',  '$.a1').raiseError()
 
-
     # Test JSON.ARRPOP RESP3 with FORMAT JSON
     def test_resp_json_arrpop_format_json(self):
         r = self.env
@@ -247,13 +246,30 @@ class testResp3():
         r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'JSON', '$.a', 0), ['{"b":2}'])
 
         # Test FORMAT JSON with legacy path
-        r.expect('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'EXPAND', '.a[1]').raiseError()
+        r.expect('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'JSON', '.a[1]').raiseError()
 
         # Test not a JSON key
         r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
         r.expect('JSON.ARRPOP', 'test_not_JSON', 'FORMAT', 'JSON',  '$.a1').raiseError()
 
+    # Test JSON.ARRPOP RESP3 with FORMAT STRING
+    def test_resp_json_arrpop_format_json(self):
+        r = self.env
+        r.skipOnVersionSmaller('7.0')
 
+        r.assertTrue(r.execute_command('JSON.SET', 'test_resp3', '$', '{"a":[{"b":2},{"g":[1,2]},3]}'))
+
+        # Test JSON.TYPE RESP3
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'STRING', '$.a', 1), ['{"g":[1,2]}'])
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'STRING', '$.a'), ['3'])
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'STRING', '$.a', 0), ['{"b":2}'])
+
+        # Test FORMAT JSON with legacy path
+        r.expect('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'STRING', '.a[1]').raiseError()
+
+        # Test not a JSON key
+        r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
+        r.expect('JSON.ARRPOP', 'test_not_JSON', 'FORMAT', 'STRING',  '$.a1').raiseError()
 
     # Test JSON.MGET RESP3 default format
     def test_resp_json_mget(self):
