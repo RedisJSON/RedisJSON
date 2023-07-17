@@ -81,9 +81,9 @@ FT.SEARCH userIdx '@name:(John)'
 
 ## Indexing JSON arrays
 
-Any JSON path that resolves to an array of strings is indexable as a TAG field.
-This means that we can index any JSON array of strings, as well as any objects
-we can derive a JSON path from, to resolve to an array of strings.
+Any JSON path that resolves to an array of strings is indexable as a `TAG` field.
+This means that you can index any JSON array of strings, as well as any objects
+you derive a JSON path from, to resolve to an array of strings.
 
 Take the following example, which has an array of strings (`phone_numbers`), and an array of objects `addresses`:
 
@@ -119,7 +119,7 @@ You can index any JSON path that will resolve to an array. For example, `$.phone
 FT.CREATE idx ON JSON SCHEMA $.phone_numbers.* AS numbers TAG $.addresses[*].city AS cities TAG
 ```
 
-You can then query those documents with the typical `TAG` syntax e.g.
+You can then query those documents with the typical `TAG` syntax, for example:
 
 ```
 FT.SEARCH idx "@cities:{Orlando}"
@@ -201,18 +201,18 @@ FT.AGGREGATE userIdx '*' LOAD 6 $.user.hp AS hp $.user.dmg AS dmg APPLY '@hp-@dm
 
 ### Multiple-values cannot be indexed for non-TAG fields
 
-JSON paths that resolve to multiple values are only supported for TAG fields, and currently`TEXT`, `NUMERIC`,
+JSON paths that resolve to multiple values are supported only for `TAG` fields, while `TEXT`, `NUMERIC`,
 and `GEO` are not supported. The JSON paths for these non-TAG fields must resolve to a single scalar value.
 If they resolve to anything but a single scalar value, the index will fail.
 
 ### It is not possible to index whole JSON objects.
 
-To be indexed, a JSONPath expression must return a single scalar value (e.g. a string or number),
-with the exception of `TAG` fields, which can index arrays of scalar strings and booleans.
+To be indexed, a JSONPath expression must return a single scalar value (a string or a number),
+with the exception of `TAG` fields, which can index arrays of scalar strings and Booleans.
 
 If the JSONPath expression returns an object, it will be ignored.
 
-However it is possible to index the scalars within JSON objects and arrays.
+However, you can index scalars within JSON objects and arrays.
 
 Given the following document:
 
@@ -232,7 +232,7 @@ Given the following document:
 }
 ```
 
-The path `$.address` returns the whole object for address, so this cannot be indexed. However, you can index the components of `address` with a JSON path resolving to the scalars within it e.g. `$.address.unit`. Additionally if you wanted to create a rule where you'd consider the first element of the `phone_numbers` array the primary phone number, you could use the path $.phone_numbers[0] to resolve to that item:
+The path `$.address` returns the whole object for address, so this cannot be indexed. However, you can index the components of `address` with a JSON path resolving to the scalars within it, for example, `$.address.unit`. Additionally, if you want to create a rule where you consider the first element of the `phone_numbers` array the primary phone number, you can use the path $.phone_numbers[0] to resolve to that item:
 
 ```SQL
 FT.CREATE orgIdx ON JSON SCHEMA $.address.unit AS unit TEXT $.phone_numbers[0] AS primary_phone TAG
