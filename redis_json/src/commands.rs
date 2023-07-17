@@ -600,6 +600,8 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
 
         // Check if the optional argument [FORMAT STRING|JSON|EXPAND] is present
         let keys = if is_resp3 {
+            // look at the last 3 arguments for the format options we know there
+            // are at least 3 arguments because we checked the arity
             let format = &args[args.len() - 3..args.len() - 1];
             if let Ok(s) = format[0].try_as_str() {
                 if s.eq_ignore_ascii_case("FORMAT") {
@@ -609,7 +611,8 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
                     &args[1..args.len() - 1] // No Format arguments
                 }
             } else {
-                &args[1..args.len() - 1] // No Format arguments
+                // No FORMAT argument (first argument is not a string probably a key)
+                &args[1..args.len() - 1]
             }
         } else {
             &args[1..args.len() - 1] // No Format arguments
@@ -631,14 +634,6 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
                         json_key.get_value().map_or(Ok(RedisValue::Null), |value| {
                             value.map_or(Ok(RedisValue::Null), |doc| {
                                 let key_value = KeyValue::new(doc);
-
-                                // let value = match key.get_value()? {
-                                //     Some(doc) => KeyValue::new(doc).to_json(&mut paths, &format_options)?,
-                                //     None => RedisValue::Null,
-                                // };
-
-                                // value_to_resp3
-
                                 if format_options.is_resp3_reply() {
                                     Ok(key_value.to_resp3_path(&path, &format_options))
                                 } else {
