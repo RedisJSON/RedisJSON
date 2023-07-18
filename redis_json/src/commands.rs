@@ -585,7 +585,7 @@ pub fn json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
 }
 
 ///
-/// JSON.MGET <key> [key ...] [FORMAT STRING|JSON|EXPAND] <path>
+/// JSON.MGET <key> [key ...] <path>
 ///
 pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     if args.len() < 3 {

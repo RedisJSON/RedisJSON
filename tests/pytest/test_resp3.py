@@ -203,7 +203,7 @@ class testResp3():
 
         r.assertTrue(r.execute_command('JSON.SET', 'test_resp3', '$', '{"a":[{"b":2},{"g":[1,2]},3]}'))
 
-        # Test JSON.TYPE RESP3
+        # Test JSON.ARRPOP RESP3
         r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', '$.a', 1), [{'g':[1,2]}])
         r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', '$.a'), [3])
         r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', '$.a', 0), [{'b': 2}])
