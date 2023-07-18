@@ -276,15 +276,6 @@ impl<'a> IValueKeyHolderWrite<'a> {
         }
         Ok(())
     }
-
-    fn serialize(results: &IValue, format: Format) -> Result<String, Error> {
-        let res = match format {
-            Format::JSON | Format::STRING => serde_json::to_string(results)?,
-            Format::BSON => return Err("ERR Soon to come...".into()), //results.into() as Bson,
-            Format::EXPAND => return Err("ERR Unknown format specified".into()),
-        };
-        Ok(res)
-    }
 }
 
 impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
@@ -468,7 +459,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
     }
 
-    fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<String>, RedisError> {
+    fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<IValue>, RedisError> {
         let mut res = None;
         self.do_op(&path, |v| {
             if let Some(array) = v.as_array_mut() {
@@ -484,10 +475,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 Err(err_json(v, "array"))
             }
         })?;
-        match res {
-            None => Ok(None),
-            Some(n) => Ok(Some(Self::serialize(&n, Format::JSON)?)),
-        }
+        Ok(res)
     }
 
     fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> Result<usize, RedisError> {
