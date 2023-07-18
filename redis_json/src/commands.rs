@@ -594,29 +594,9 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
 
     args.last().ok_or(RedisError::WrongArity).and_then(|path| {
         let path = Path::new(path.try_as_str()?);
+        let keys = &args[1..args.len() - 1];
 
-        let is_resp3 = is_resp3(ctx);
-        let mut format_options = FormatOptions::new(is_resp3);
-
-        // Check if the optional argument [FORMAT STRING|JSON|EXPAND] is present
-        let keys = if is_resp3 {
-            // look at the last 3 arguments for the format options we know there
-            // are at least 3 arguments because we checked the arity
-            let format = &args[args.len() - 3..args.len() - 1];
-            if let Ok(s) = format[0].try_as_str() {
-                if s.eq_ignore_ascii_case("FORMAT") {
-                    format_options.format = Format::from_str(format[1].try_as_str()?)?;
-                    &args[1..args.len() - 3] // Skip the format arguments
-                } else {
-                    &args[1..args.len() - 1] // No Format arguments
-                }
-            } else {
-                // No FORMAT argument (first argument is not a string probably a key)
-                &args[1..args.len() - 1]
-            }
-        } else {
-            &args[1..args.len() - 1] // No Format arguments
-        };
+        let format_options = FormatOptions::new(is_resp3(ctx));
 
         // Verify that at least one key exists
         if keys.is_empty() {

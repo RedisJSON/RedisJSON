@@ -190,7 +190,7 @@ macro_rules! redis_json_module_create {(
             commands: [
                 ["json.del", json_command!(json_del), "write", 1,1,1],
                 ["json.get", json_command!(json_get), "readonly", 1,1,1],
-                ["json.mget", json_command!(json_mget), "readonly", 1,1,1],
+                ["json.mget", json_command!(json_mget), "readonly", 1,-1,1],
                 ["json.set", json_command!(json_set), "write deny-oom", 1,1,1],
                 ["json.mset", json_command!(json_mset), "write deny-oom", 1,-1,3],
                 ["json.type", json_command!(json_type), "readonly", 1,1,1],

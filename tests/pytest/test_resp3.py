@@ -280,7 +280,6 @@ class testResp3():
         r.assertTrue(r.execute_command('JSON.SET', 'test_resp3_2', '$', '{"a":5, "b":[true, 3, null], "d":7}'))
 
         # Test JSON.MGET RESP3 with default FORMAT EXPAND
-        r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2'), [[{'a': 1, 'b': {'f': 'g'}, 'c': 3}], [{'b': [True, 3, None], 'd': 7, 'a': 5}]])
         r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', '$.not'), [[], []])
         r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', 'test_not_JSON', '$.b'), [[{'f': 'g'}], [[True, 3, None]], None])
         r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', '$'), [[{'a': 1, 'b': {'f': 'g'}, 'c': 3}], [{'b': [True, 3, None], 'd': 7, 'a': 5}]])
@@ -288,51 +287,6 @@ class testResp3():
 
         # Test FORMAT is set with at least one key
         r.expect('JSON.ARRPOP', 'FORMAT', 'EXPAND',  '$.a1').raiseError()        
-
-    # Test JSON.MGET RESP3 FORMAT EXPAND
-    def test_resp_json_mget_expand(self):
-        r = self.env
-        r.skipOnVersionSmaller('7.0')
-
-        r.assertTrue(r.execute_command('JSON.SET', 'test_resp3_1', '$', '{"a":1, "b":{"f":"g"}, "c":3}'))
-        r.assertTrue(r.execute_command('JSON.SET', 'test_resp3_2', '$', '{"a":5, "b":[true, 3, null], "d":7}'))
-        r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
-
-        # Test JSON.MGET RESP3 with FORMAT EXPAND
-        r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', 'FORMAT', 'EXPAND', '$.not'), [[], []])
-        r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', 'test_not_JSON', 'FORMAT', 'EXPAND', '$.b'), [[{'f': 'g'}], [[True, 3, None]], None])
-        r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', 'FORMAT', 'EXPAND', '$'), [[{'a': 1, 'b': {'f': 'g'}, 'c': 3}], [{'b': [True, 3, None], 'd': 7, 'a': 5}]])
-        r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', 'FORMAT', 'EXPAND', '$..*'), [[1, {'f': 'g'}, 3, 'g'], [5, [True, 3, None], 7, True, 3, None]])
-
-    # Test JSON.MGET RESP3 FORMAT JSON
-    def test_resp_json_mget(self):
-        r = self.env
-        r.skipOnVersionSmaller('7.0')
-
-        r.assertTrue(r.execute_command('JSON.SET', 'test_resp3_1', '$', '{"a":1, "b":{"f":"g"}, "c":3}'))
-        r.assertTrue(r.execute_command('JSON.SET', 'test_resp3_2', '$', '{"a":5, "b":[true, 3, null], "d":7}'))
-        r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
-   
-        # Test JSON.MGET RESP3 with FORMAT JSON
-        r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', 'FORMAT', 'JSON', '$.not'),  [[], []])
-        r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', 'test_not_JSON', 'FORMAT', 'JSON', '$.b'),  [['{"f":"g"}'], ['[true,3,null]'], None])
-        r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', 'FORMAT', 'JSON', '$'),  [['{"a":1,"b":{"f":"g"},"c":3}'], ['{"a":5,"b":[true,3,null],"d":7}']])
-        r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', 'FORMAT', 'JSON', '$..*'), [[1, '{"f":"g"}', 3, '"g"'], [5, '[true,3,null]', 7, True, 3, None]])
-
-    # Test JSON.MGET RESP3 FORMAT STRING
-    def test_resp_json_mget(self):
-        r = self.env
-        r.skipOnVersionSmaller('7.0')
-
-        r.assertTrue(r.execute_command('JSON.SET', 'test_resp3_1', '$', '{"a":1, "b":{"f":"g"}, "c":3}'))
-        r.assertTrue(r.execute_command('JSON.SET', 'test_resp3_2', '$', '{"a":5, "b":[true, 3, null], "d":7}'))
-        r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
-
-        # Test JSON.MGET RESP3 with FORMAT STRING        
-        r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', 'FORMAT', 'STRING', '$.not'), ['[]', '[]'])
-        r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', 'test_not_JSON', 'FORMAT', 'STRING', '$.b'),  ['[{"f":"g"}]', '[[true,3,null]]', None])
-        r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', 'FORMAT', 'STRING', '$'), ['[{"a":1,"b":{"f":"g"},"c":3}]', '[{"a":5,"b":[true,3,null],"d":7}]'])
-        r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', 'FORMAT', 'STRING', '$..*'), ['[1,{"f":"g"},3,"g"]', '[5,[true,3,null],7,true,3,null]'])
 
     # Test different commands with RESP3 when default path is used
     def test_resp_default_path(self):
