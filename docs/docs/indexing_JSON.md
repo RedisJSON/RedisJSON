@@ -113,7 +113,7 @@ Take the following example, which has an array of strings (`phone_numbers`), and
 }
 ```
 
-You can index any JSON path that will resolve to an array. For example, `$.phone_numbers.*` resolves to the array `['555-555-5555', 123-456-7890]` so it can be indexed. Also, the string fields WITHIN the objects of the `addresses` field can also be indexed. For example, the JSON path `$.addresses[*].city` resolves to an array of strings `[Orlando, Atlanta]`. Consequentially, you can create a corresponding index to index both of these fields:
+You can index any JSON path that will resolve to an array. For example, `$.phone_numbers.*` resolves to the array `['555-555-5555', '123-456-7890']` so it can be indexed. Also, the string fields WITHIN the objects of the `addresses` field can also be indexed. For example, the JSON path `$.addresses[*].city` resolves to an array of strings `[Orlando, Atlanta]`. Consequentially, you can create a corresponding index to index both of these fields:
 
 ```
 FT.CREATE idx ON JSON SCHEMA $.phone_numbers.* AS numbers TAG $.addresses[*].city AS cities TAG
