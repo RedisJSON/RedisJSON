@@ -9,7 +9,7 @@ use serde_json::Number;
 
 use redis_module::raw::RedisModuleKey;
 use redis_module::rediserror::RedisError;
-use redis_module::{Context, RedisString};
+use redis_module::{Context, RedisResult, RedisString};
 
 use crate::Format;
 
@@ -54,7 +54,12 @@ pub trait WriteHolder<O: Clone, V: SelectValue> {
         args: &[O],
         index: i64,
     ) -> Result<usize, RedisError>;
-    fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<V>, RedisError>;
+    fn arr_pop<C: FnOnce(Option<&V>) -> RedisResult>(
+        &mut self,
+        path: Vec<String>,
+        index: i64,
+        serialize_callback: C,
+    ) -> RedisResult;
     fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> Result<usize, RedisError>;
     fn clear(&mut self, path: Vec<String>) -> Result<usize, RedisError>;
     fn apply_changes(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError>;

@@ -1443,17 +1443,16 @@ where
     let mut need_notify = false;
     for p in paths {
         res.push(match p {
-            Some(p) => match redis_key.arr_pop(p, index)? {
-                Some(v) => {
+            Some(p) => redis_key.arr_pop(p, index, |v| {
+                v.map_or(Ok(RedisValue::Null), |v| {
                     need_notify = true;
                     if format_options.is_resp3_reply() {
-                        KeyValue::value_to_resp3(&v, format_options)
+                        Ok(KeyValue::value_to_resp3(v, format_options))
                     } else {
-                        serde_json::to_string(&v)?.into()
+                        Ok(serde_json::to_string(&v)?.into())
                     }
-                }
-                _ => RedisValue::Null, // Empty array
-            },
+                })
+            })?,
             _ => RedisValue::Null, // Not an array
         });
     }
@@ -1478,17 +1477,15 @@ where
 
     let paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
     if !paths.is_empty() {
-        let mut res = None;
+        let mut res = Ok(().into());
         for p in paths {
-            res = Some(redis_key.arr_pop(p, index)?);
+            res = Ok(redis_key.arr_pop(p, index, |v| match v {
+                Some(r) => Ok(serde_json::to_string(&r)?.into()),
+                None => Ok(().into()),
+            })?);
         }
-        match res.unwrap() {
-            Some(r) => {
-                redis_key.apply_changes(ctx, "json.arrpop")?;
-                Ok(serde_json::to_string(&r)?.into())
-            }
-            None => Ok(().into()),
-        }
+        redis_key.apply_changes(ctx, "json.arrpop")?;
+        res
     } else {
         Err(RedisError::String(
             err_msg_json_path_doesnt_exist_with_param_or(path, "not an array"),

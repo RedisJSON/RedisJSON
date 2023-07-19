@@ -16,7 +16,7 @@ use ijson::{DestructuredMut, INumber, IObject, IString, IValue, ValueType};
 use redis_module::key::{verify_type, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::rediserror::RedisError;
-use redis_module::{Context, NotifyEvent, RedisString};
+use redis_module::{Context, NotifyEvent, RedisResult, RedisString};
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
 use std::io::Cursor;
@@ -459,7 +459,12 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
     }
 
-    fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<IValue>, RedisError> {
+    fn arr_pop<C: FnOnce(Option<&IValue>) -> RedisResult>(
+        &mut self,
+        path: Vec<String>,
+        index: i64,
+        serialize_callback: C,
+    ) -> RedisResult {
         let mut res = None;
         self.do_op(&path, |v| {
             if let Some(array) = v.as_array_mut() {
@@ -475,7 +480,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 Err(err_json(v, "array"))
             }
         })?;
-        Ok(res)
+        serialize_callback(res.as_ref())
     }
 
     fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> Result<usize, RedisError> {
