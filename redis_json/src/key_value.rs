@@ -99,8 +99,8 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     pub fn serialize_object<O: Serialize>(o: &O, format: &FormatOptions) -> String {
-        // When using the default format, we can use serde_json's default serializer
-        if format == &FormatOptions::default() {
+        // When using the default formatting, we can use serde_json's default serializer
+        if format.no_formatting() {
             serde_json::to_string(o).unwrap()
         } else {
             let formatter = RedisJsonFormatter::new(format);
@@ -180,15 +180,17 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     fn to_resp3(&self, paths: &mut Vec<Path>, format: &FormatOptions) -> Result<RedisValue, Error> {
         let results = paths
             .drain(..)
-            .map(|path: Path| {
-                compile(path.get_path()).map_or_else(
-                    |_| RedisValue::Array(vec![]),
-                    |q| Self::values_to_resp3(&calc_once(q, self.val), format),
-                )
-            })
+            .map(|path: Path| self.to_resp3_path(&path, format))
             .collect::<Vec<RedisValue>>();
 
         Ok(RedisValue::Array(results))
+    }
+
+    pub fn to_resp3_path(&self, path: &Path, format: &FormatOptions) -> RedisValue {
+        compile(path.get_path()).map_or_else(
+            |_| RedisValue::Array(vec![]),
+            |q| Self::values_to_resp3(&calc_once(q, self.val), format),
+        )
     }
 
     fn to_json_single(
@@ -216,7 +218,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             .into()
     }
 
-    fn value_to_resp3(value: &V, format: &FormatOptions) -> RedisValue {
+    pub fn value_to_resp3(value: &V, format: &FormatOptions) -> RedisValue {
         if format.format == Format::EXPAND {
             match value.get_type() {
                 SelectValueType::Null => RedisValue::Null,

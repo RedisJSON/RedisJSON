@@ -4,11 +4,13 @@ linkTitle: "Developer notes"
 weight: 7
 description: >
     Notes on debugging, testing and documentation
+aliases:
+    - /docs/stack/json/developer    
 ---
 
-# Developing RedisJSON
+# Developing Redis JSON
 
-Developing RedisJSON involves setting up the development environment (which can be either Linux-based or macOS-based), building RedisJSON, running tests and benchmarks, and debugging both the RedisJSON module and its tests.
+Developing Redis JSON involves setting up the development environment (which can be either Linux-based or macOS-based), building RedisJSON (the Redis module providing JSON), running tests and benchmarks, and debugging both the JSON module and its tests.
 
 ## Cloning the git repository
 To clone the RedisJSON module and its submodules, run:
@@ -44,7 +46,7 @@ You can replace `debian:bullseye` with your OS of choice. If you use the same OS
 
 To build and test RedisJSON one needs to install several packages, depending on the underlying OS. Currently, we support the Ubuntu/Debian, CentOS, Fedora, and macOS.
 
-Enter `RedisJSON` directory and run:
+Enter the `RedisJSON` directory and run:
 
 ```sh
 $ ./sbin/setup

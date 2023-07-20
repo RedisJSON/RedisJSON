@@ -194,3 +194,119 @@ class testResp3():
 
         # Test not a JSON key
         r.expect('JSON.TYPE', 'test_not_JSON', '$.a1.b.c').raiseError()
+
+
+    # Test JSON.ARRPOP RESP3 (Default FORMAT EXPAND)
+    def test_resp_json_arrpop(self):
+        r = self.env
+        r.skipOnVersionSmaller('7.0')
+
+        r.assertTrue(r.execute_command('JSON.SET', 'test_resp3', '$', '{"a":[{"b":2},{"g":[1,2]},3]}'))
+
+        # Test JSON.ARRPOP RESP3
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', '$.a', 1), [{'g':[1,2]}])
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', '$.a'), [3])
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', '$.a', 0), [{'b': 2}])
+
+        # Test not a JSON key
+        r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
+        r.expect('JSON.ARRPOP', 'test_not_JSON', '$.a1').raiseError()
+
+
+    # Test JSON.ARRPOP RESP3 with FORMAT EXPAND
+    def test_resp_json_arrpop_format_expand(self):
+        r = self.env
+        r.skipOnVersionSmaller('7.0')
+
+        r.assertTrue(r.execute_command('JSON.SET', 'test_resp3', '$', '{"a":[{"b":2},{"g":[1,2]},3]}'))
+
+        # Test JSON.TYPE RESP3
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'EXPAND', '$.a', 1), [{'g':[1,2]}])
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'EXPAND','$.a'), [3])
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'EXPAND','$.a', 0), [{'b': 2}])
+
+        # Test FORMAT EXPAND with legacy path
+        r.expect('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'EXPAND', '.a[1]').raiseError()
+
+
+        # Test not a JSON key
+        r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
+        r.expect('JSON.ARRPOP', 'test_not_JSON', 'FORMAT', 'EXPAND',  '$.a1').raiseError()
+
+    # Test JSON.ARRPOP RESP3 with FORMAT JSON
+    def test_resp_json_arrpop_format_json(self):
+        r = self.env
+        r.skipOnVersionSmaller('7.0')
+
+        r.assertTrue(r.execute_command('JSON.SET', 'test_resp3', '$', '{"a":[{"b":2},{"g":[1,2]},3]}'))
+
+        # Test JSON.TYPE RESP3
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'JSON', '$.a', 1), ['{"g":[1,2]}'])
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'JSON', '$.a'), [3])
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'JSON', '$.a', 0), ['{"b":2}'])
+
+        # Test FORMAT JSON with legacy path
+        r.expect('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'JSON', '.a[1]').raiseError()
+
+        # Test not a JSON key
+        r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
+        r.expect('JSON.ARRPOP', 'test_not_JSON', 'FORMAT', 'JSON',  '$.a1').raiseError()
+
+    # Test JSON.ARRPOP RESP3 with FORMAT STRING
+    def test_resp_json_arrpop_format_json(self):
+        r = self.env
+        r.skipOnVersionSmaller('7.0')
+
+        r.assertTrue(r.execute_command('JSON.SET', 'test_resp3', '$', '{"a":[{"b":2},{"g":[1,2]},3]}'))
+
+        # Test JSON.TYPE RESP3
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'STRING', '$.a', 1), ['{"g":[1,2]}'])
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'STRING', '$.a'), ['3'])
+        r.assertEqual(r.execute_command('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'STRING', '$.a', 0), ['{"b":2}'])
+
+        # Test FORMAT JSON with legacy path
+        r.expect('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'STRING', '.a[1]').raiseError()
+
+        # Test not a JSON key
+        r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
+        r.expect('JSON.ARRPOP', 'test_not_JSON', 'FORMAT', 'STRING',  '$.a1').raiseError()
+
+    # Test JSON.MGET RESP3 default format
+    def test_resp_json_mget(self):
+        r = self.env
+        r.skipOnVersionSmaller('7.0')
+
+        r.assertTrue(r.execute_command('JSON.SET', 'test_resp3_1', '$', '{"a":1, "b":{"f":"g"}, "c":3}'))
+        r.assertTrue(r.execute_command('JSON.SET', 'test_resp3_2', '$', '{"a":5, "b":[true, 3, null], "d":7}'))
+
+        # Test JSON.MGET RESP3 with default FORMAT EXPAND
+        r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', '$.not'), [[], []])
+        r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', 'test_not_JSON', '$.b'), [[{'f': 'g'}], [[True, 3, None]], None])
+        r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', '$'), [[{'a': 1, 'b': {'f': 'g'}, 'c': 3}], [{'b': [True, 3, None], 'd': 7, 'a': 5}]])
+        r.assertEqual(r.execute_command('JSON.MGET', 'test_resp3_1', 'test_resp3_2', '$..*'), [[1, {'f': 'g'}, 3, 'g'], [5, [True, 3, None], 7, True, 3, None]])
+
+        # Test FORMAT is set with at least one key
+        r.expect('JSON.ARRPOP', 'FORMAT', 'EXPAND',  '$.a1').raiseError()        
+
+    # Test different commands with RESP3 when default path is used
+    def test_resp_default_path(self):
+        r = self.env
+        r.skipOnVersionSmaller('7.0')
+
+        # Test JSON.X commands on object type when default path is used
+        r.assertTrue(r.execute_command('JSON.SET', 'test_resp3', '$', '{"a":[{"b":2},{"g":[1,2]},3]}'))
+        r.assertEqual(r.execute_command('JSON.GET', 'test_resp3'), [[{"a":[{"b":2},{"g":[1,2]},3]}]])
+        r.assertEqual(r.execute_command('JSON.OBJKEYS', 'test_resp3'), [['a']])
+        r.assertEqual(r.execute_command('JSON.OBJLEN', 'test_resp3'), [1])
+        r.assertEqual(r.execute_command('JSON.TYPE', 'test_resp3'), [['object']])
+        r.assertEqual(r.execute_command('JSON.DEBUG', 'MEMORY', 'test_resp3'), [507])
+        r.assertEqual(r.execute_command('JSON.DEL', 'test_resp3'), 1)
+
+        # Test JSON.strX commands on object type when default path is used
+        r.assertTrue(r.execute_command('JSON.SET', 'test_resp3_str', '$', '"test_resp3_str"'))
+        r.assertEqual(r.execute_command('JSON.STRLEN', 'test_resp3_str'), [14])
+
+        # Test JSON.arrX commands on object type when default path is used
+        r.assertTrue(r.execute_command('JSON.SET', 'test_resp3_arr', '$', '[true, 1, "dud"]'))
+        r.assertEqual(r.execute_command('JSON.ARRLEN', 'test_resp3_arr'), [3])
+        
