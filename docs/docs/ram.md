@@ -1,17 +1,19 @@
 ---
-title: "RedisJSON RAM Usage"
+title: "Redis JSON RAM Usage"
 linkTitle: "Memory Usage"
 weight: 6
 description: >
     Debugging memory consumption
+aliases:
+    - /docs/stack/json/ram    
 ---
 
 Every key in Redis takes memory and requires at least the amount of RAM to store the key name, as
 well as some per-key overhead that Redis uses. On top of that, the value in the key also requires
 RAM.
 
-RedisJSON stores JSON values as binary data after deserializing them. This representation is often more
-expensive, size-wize, than the serialized form. The RedisJSON data type uses at least 24 bytes (on
+Redis JSON stores JSON values as binary data after deserializing them. This representation is often more
+expensive, size-wize, than the serialized form. The JSON data type uses at least 24 bytes (on
 64-bit architectures) for every value, as can be seen by sampling an empty string with the
 `JSON.DEBUG MEMORY` command:
 
@@ -90,10 +92,10 @@ OK
 ```
 
 This table gives the size (in bytes) of a few of the test files on disk and when stored using
-RedisJSON. The _MessagePack_ column is for reference purposes and reflects the length of the value
+JSON. The _MessagePack_ column is for reference purposes and reflects the length of the value
 when stored using MessagePack.
 
-| File                                   | Filesize  | RedisJSON | MessagePack |
+| File                                   | Filesize  | Redis JSON | MessagePack |
 | -------------------------------------- | --------- | ------ | ----------- |
 | /tests/files/pass-100.json              | 380       | 1079   | 140         |
 | /tests/files/pass-jsonsl-1.json         | 1441      | 3666   | 753         |
