@@ -6,7 +6,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-pest = "2.1"
+pest = "2.7"
 pest_derive = "2.1"
 bson.workspace = true
 serde_json.workspace = true
