@@ -224,9 +224,9 @@ class testResp3():
 
         # Test JSON.ARRPOP FORMAT STRINGS
         r.assertTrue(r.execute_command('JSON.SET', 'test_resp3', '$', '{"a":[{"b":2},{"g":[1,2]},3]}'))
-        r.assertEqual(list(map(lambda x:json.loads(x), r.execute_command('JSON.ARRPOP', 'test_resp3', '$.a', 1, 'FORMAT', 'STRINGS'))), [{'g':[1,2]}])
-        r.assertEqual(list(map(lambda x:json.loads(x), r.execute_command('JSON.ARRPOP', 'test_resp3', '$.a', 'FORMAT', 'STRINGS'))), [3])
-        r.assertEqual(list(map(lambda x:json.loads(x), r.execute_command('JSON.ARRPOP', 'test_resp3', '$.a', 0, 'FORMAT', 'STRINGS'))), [{'b': 2}])
+        r.assertEqual(list(map(lambda x:json.loads(x), r.execute_command('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'STRINGS', '$.a', 1))), [{'g':[1,2]}])
+        r.assertEqual(list(map(lambda x:json.loads(x), r.execute_command('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'STRINGS', '$.a'))), [3])
+        r.assertEqual(list(map(lambda x:json.loads(x), r.execute_command('JSON.ARRPOP', 'test_resp3', 'FORMAT', 'STRINGS', '$.a', 0))), [{'b': 2}])
 
         # Test not a JSON key
         r.assertTrue(r.execute_command('SET', 'test_not_JSON', 'test_not_JSON'))
@@ -336,3 +336,17 @@ class testResp3():
         r.assertTrue(r.execute_command('JSON.SET', 'test_resp3_arr', '$', '[true, 1, "dud"]'))
         r.assertEqual(r.execute_command('JSON.ARRLEN', 'test_resp3_arr'), [3])
         
+def test_fail_with_resp2():
+    r = Env(protocol=2)
+    r.assertOk(r.execute_command('JSON.SET', 'doc', '$', '{"a":[1, 2, 3], "FORMAT": [1]}'))
+    
+    # JSON.GET key [INDENT indent] [NEWLINE newline] [SPACE space] [FORMAT STRING|EXPAND] [path [path ...]]
+    r.expect('JSON.GET', 'doc', 'FORMAT', 'EXPAND', '$').error().contains('not supported on RESP2')
+    # Token beyond the first path are not considered as subcommands anymore
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'doc', 'INDENT', ' ', '$.a[0]', 'FORMAT', 'EXPAND')), [1]) 
+    
+    # JSON.ARRPOP <key> [FORMAT {STRINGS|EXPAND1|EXPAND}] [path [index]]
+    r.expect('JSON.ARRPOP', 'doc', 'FORMAT', 'STRINGS', '$', 0).error().contains('not supported on RESP2')
+    r.expect('JSON.ARRPOP', 'doc', 'FORMAT', '$', 0).error().contains('wrong reply format')
+    r.assertEqual(r.execute_command('JSON.ARRPOP', 'doc', 'FORMAT'), '1')
+
