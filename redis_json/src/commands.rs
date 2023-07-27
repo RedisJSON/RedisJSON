@@ -117,6 +117,11 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
             // See #390 for the comparison of this function with/without this optimization
             arg if arg.len() > JSONGET_SUBCOMMANDS_MAXSTRLEN => paths.push(Path::new(arg)),
             arg if arg.eq_ignore_ascii_case(CMD_ARG_FORMAT) => {
+                if !format_options.resp3 && paths.is_empty() {
+                    return Err(RedisError::Str(
+                        "ERR FORMAT argument is not supported on RESP2",
+                    ));
+                }
                 // Temporary fix until STRINGS is also supported
                 let next = args.next_str()?;
                 if next.eq_ignore_ascii_case("STRINGS") {
@@ -1384,16 +1389,24 @@ pub fn json_arr_pop<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString
     let is_resp3 = is_resp3(ctx);
     let mut format_options = ReplyFormatOptions::new(is_resp3, ReplyFormat::STRINGS);
 
-    // Only on RESP3 if the first argument is FORMAT, then the second argument is the format
-    // but it's optional so it might be the path
     let path = if let Some(arg) = args.next() {
-        if is_resp3 && arg.try_as_str()?.eq_ignore_ascii_case("FORMAT") {
-            let next = args.next_str()?;
-            if next.eq_ignore_ascii_case("STRING") {
-                return Err(RedisError::Str("ERR wrong reply format"));
+        if arg.try_as_str()?.eq_ignore_ascii_case(CMD_ARG_FORMAT) {
+            if let Ok(next) = args.next_str() {
+                format_options.format = ReplyFormat::from_str(next)?;
+                if format_options.format == ReplyFormat::STRING {
+                    // ARRPOP FORMAT STRING is not supported
+                    return Err(RedisError::Str("ERR wrong reply format"));
+                }
+                if !format_options.resp3 {
+                    return Err(RedisError::Str(
+                        "ERR FORMAT argument is not supported on RESP2",
+                    ));
+                }
+                args.next()
+            } else {
+                // If only the FORMAT subcommand is provided, then it's the path
+                Some(arg)
             }
-            format_options.format = ReplyFormat::from_str(next)?;
-            args.next()
         } else {
             // if it's not FORMAT, then it's the path
             Some(arg)
@@ -1418,6 +1431,7 @@ pub fn json_arr_pop<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString
             (path, index)
         }
     };
+    //args.done()?;
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
     if path.is_legacy() {
