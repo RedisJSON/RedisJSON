@@ -101,7 +101,8 @@ redis-server --loadmodule ./target/release/librejson.dylib
 | [phpredis-json][phpredis-json-url]  | PHP | MIT | [Rafa Campoy @averias][phpredis-json-author] | [![phpredis-json-stars]][phpredis-json-url] | [composer][phpredis-json-package] |
 | [redislabs-rejson][redislabs-rejson-url]  | PHP | MIT | [Mehmet Korkmaz @mkorkmaz][redislabs-rejson-author] | [![redislabs-rejson-stars]][redislabs-rejson-url] | [composer][redislabs-rejson-package] |
 | [rejson-rb][rejson-rb-url]  | Ruby | MIT | [Pavan Vachhani @vachhanihpavan][rejson-rb-author] | [![rejson-rb-stars]][rejson-rb-url] | [rubygems][rejson-rb-package]|
-| [rustis][rustis-url] | Rust | MIT | [Dahomey Technologies][rustis-author] | [![rustis-stars]][rustis-url] | [crate][rustis-package]| [Documentation](https://docs.rs/rustis/latest/rustis/commands/trait.JsonCommands.html) |
+| [rustis][rustis-url] | Rust | MIT | [Dahomey Technologies][rustis-author] | [![rustis-stars]][rustis-url] | [crate][rustis-package]| [Documentation][rustis-documentation] |
+| [redis-rs][redis-rs-url] | Rust | [Custom][redis-rs-license] | [Armin Ronacher @mitsuhiko][redis-rs-author] | [![redis-rs-stars]][redis-rs-stars] | [crate][redis-rs-package]| [Documentation][redis-rs-documentation] |
 | [coredis][coredis-url] | Python | MIT | [Ali-Akber Saifee @alisaifee][coredis-author] | [![coredis-stars]][coredis-url] | [pypi][coredis-package]| [Documentation][coredis-documentation] |
 
 [Redisson-author]: https://github.com/redisson/
@@ -155,6 +156,14 @@ redis-server --loadmodule ./target/release/librejson.dylib
 [rustis-author]: https://github.com/dahomey-technologies
 [rustis-stars]: https://img.shields.io/github/stars/dahomey-technologies/rustis.svg?style=social&amp;label=Star&amp;maxAge=2592000
 [rustis-package]: https://crates.io/crates/rustis
+[rustis-documentation]: https://docs.rs/rustis/latest/rustis/commands/trait.JsonCommands.html
+
+[redis-rs-author]: https://github.com/mitsuhiko
+[redis-rs-url]: https://github.com/redis-rs/redis-rs
+[redis-rs-package]: https://crates.io/crates/redis
+[redis-rs-stars]: https://img.shields.io/github/stars/redis-rs/redis-rs.svg?style=social&amp;label=Star&amp;maxAge=2592000
+[redis-rs-documentation]: https://docs.rs/redis/latest/redis/trait.JsonAsyncCommands.html
+[redis-rs-license]: https://github.com/redis-rs/redis-rs/blob/main/LICENSE
 
 [coredis-author]: https://github.com/alisaifee
 [coredis-url]: https://github.com/alisaifee/coredis
