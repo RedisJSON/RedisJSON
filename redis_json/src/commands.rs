@@ -5,12 +5,12 @@
  */
 
 use crate::error::Error;
-use crate::formatter::FormatOptions;
+use crate::formatter::ReplyFormatOptions;
 use crate::key_value::KeyValue;
 use crate::manager::err_msg_json_path_doesnt_exist_with_param;
 use crate::manager::err_msg_json_path_doesnt_exist_with_param_or;
 use crate::manager::{Manager, ReadHolder, UpdateInfo, WriteHolder};
-use crate::redisjson::{Format, Path};
+use crate::redisjson::{Format, Path, ReplyFormat};
 use json_path::select_value::{SelectValue, SelectValueType};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
@@ -99,9 +99,9 @@ fn default_path(ctx: &Context) -> &str {
 ///         [INDENT indentation-string]
 ///         [NEWLINE line-break-string]
 ///         [SPACE space-string]
+///         [FORMAT {STRING|EXPAND1|EXPAND}]      /* default is STRING */
 ///         [path ...]
 ///
-/// TODO add support for multi path
 pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
@@ -109,7 +109,7 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
     // Set Capacity to 1 assuming the common case has one path
     let mut paths: Vec<Path> = Vec::with_capacity(1);
 
-    let mut format_options = FormatOptions::new(is_resp3(ctx));
+    let mut format_options = ReplyFormatOptions::new(is_resp3(ctx), ReplyFormat::STRING);
 
     while let Ok(arg) = args.next_str() {
         match arg {
@@ -117,7 +117,12 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
             // See #390 for the comparison of this function with/without this optimization
             arg if arg.len() > JSONGET_SUBCOMMANDS_MAXSTRLEN => paths.push(Path::new(arg)),
             arg if arg.eq_ignore_ascii_case(CMD_ARG_FORMAT) => {
-                format_options.format = Format::from_str(args.next_str()?)?;
+                // Temporary fix until STRINGS is also supported
+                let next = args.next_str()?;
+                if next.eq_ignore_ascii_case("STRINGS") {
+                    return Err(RedisError::Str("ERR wrong reply format"));
+                }
+                format_options.format = ReplyFormat::from_str(next)?;
             }
             arg if arg.eq_ignore_ascii_case(CMD_ARG_INDENT) => {
                 format_options.indent = Some(args.next_str()?)
@@ -596,7 +601,7 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
         let path = Path::new(path.try_as_str()?);
         let keys = &args[1..args.len() - 1];
 
-        let format_options = FormatOptions::new(is_resp3(ctx));
+        let format_options = ReplyFormatOptions::new(is_resp3(ctx), ReplyFormat::STRING);
 
         // Verify that at least one key exists
         if keys.is_empty() {
@@ -736,7 +741,7 @@ where
 
         // Convert to RESP2 format return as one JSON array
         let values = to_json_value::<Number>(results, Value::Null);
-        Ok(KeyValue::<M::V>::serialize_object(&values, &FormatOptions::default()).into())
+        Ok(KeyValue::<M::V>::serialize_object(&values, &ReplyFormatOptions::default()).into())
     }
 }
 
@@ -1368,7 +1373,7 @@ pub fn json_arr_len<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString
 
 ///
 /// JSON.ARRPOP <key>
-///         [FORMAT {STRING|JSON|EXPAND}]
+///         [FORMAT {STRINGS|EXPAND1|EXPAND}]   /* default is STRINGS */
 ///         [path [index]]
 ///
 pub fn json_arr_pop<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
@@ -1377,13 +1382,17 @@ pub fn json_arr_pop<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString
     let key = args.next_arg()?;
 
     let is_resp3 = is_resp3(ctx);
-    let mut format_options = FormatOptions::new(is_resp3);
+    let mut format_options = ReplyFormatOptions::new(is_resp3, ReplyFormat::STRINGS);
 
     // Only on RESP3 if the first argument is FORMAT, then the second argument is the format
     // but it's optional so it might be the path
     let path = if let Some(arg) = args.next() {
         if is_resp3 && arg.try_as_str()?.eq_ignore_ascii_case("FORMAT") {
-            format_options.format = Format::from_str(args.next_str()?)?;
+            let next = args.next_str()?;
+            if next.eq_ignore_ascii_case("STRING") {
+                return Err(RedisError::Str("ERR wrong reply format"));
+            }
+            format_options.format = ReplyFormat::from_str(next)?;
             args.next()
         } else {
             // if it's not FORMAT, then it's the path
@@ -1412,9 +1421,9 @@ pub fn json_arr_pop<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
     if path.is_legacy() {
-        if format_options.format != Format::STRING {
+        if format_options.format != ReplyFormat::STRINGS {
             return Err(RedisError::Str(
-                "Legacy paths are supported only with FORMAT STRING",
+                "Legacy paths are supported only with FORMAT STRINGS",
             ));
         }
 
@@ -1429,7 +1438,7 @@ fn json_arr_pop_impl<M>(
     ctx: &Context,
     path: &str,
     index: i64,
-    format_options: &FormatOptions,
+    format_options: &ReplyFormatOptions,
 ) -> RedisResult
 where
     M: Manager,
