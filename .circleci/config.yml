@@ -475,7 +475,7 @@ jobs:
             mkdir -p bin
             ln -s ~/workspace/artifacts bin/artifacts
             if [[ -n $CIRCLE_TAG && "<<parameters.staging-lab>>" != 1 ]]; then
-                make upload-release SHOW=1
+                make upload-release SHOW=1 STAGING=0
             else
                 make upload-release SHOW=1 STAGING=1
             fi
