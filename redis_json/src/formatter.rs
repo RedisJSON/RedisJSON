@@ -35,25 +35,21 @@ DEALINGS IN THE SOFTWARE.
 use serde_json::ser::Formatter;
 use std::io;
 
-use crate::redisjson::Format;
+pub use crate::redisjson::{Format, ReplyFormat};
 
-pub struct FormatOptions<'a> {
-    pub format: Format,
+pub struct ReplyFormatOptions<'a> {
+    pub format: ReplyFormat,
     pub indent: Option<&'a str>,
     pub space: Option<&'a str>,
     pub newline: Option<&'a str>,
     pub resp3: bool,
 }
 
-impl FormatOptions<'_> {
-    /// Creates a new FormatOptions with the default values according to the RESP version
-    pub fn new(resp3: bool) -> Self {
+impl ReplyFormatOptions<'_> {
+    /// Creates a new FormatOptions
+    pub fn new(resp3: bool, format: ReplyFormat) -> Self {
         Self {
-            format: if resp3 {
-                Format::EXPAND
-            } else {
-                Format::STRING
-            },
+            format,
             indent: None,
             space: None,
             newline: None,
@@ -61,10 +57,10 @@ impl FormatOptions<'_> {
         }
     }
 
-    /// Returns true if the format is RESP3 and the format is not STRING format
-    /// STRING format is fully backward compatible with RESP2
+    /// Returns true if the format is RESP3 and the format is not STRING/STRINGS format
+    /// STRING/STRINGS format (depending on the command) is fully backward compatible with RESP2
     pub fn is_resp3_reply(&self) -> bool {
-        self.resp3 && self.format != Format::STRING
+        self.resp3 && self.format != ReplyFormat::STRING && self.format != ReplyFormat::STRINGS
     }
 
     /// Checks if the JSON formatting options are the default ones with no overrides
@@ -73,11 +69,11 @@ impl FormatOptions<'_> {
     }
 }
 
-impl Default for FormatOptions<'_> {
+impl Default for ReplyFormatOptions<'_> {
     /// Creates a new FormatOptions with the default values matching RESP2
     fn default() -> Self {
         Self {
-            format: Format::STRING,
+            format: ReplyFormat::STRING,
             indent: None,
             space: None,
             newline: None,
@@ -95,7 +91,7 @@ pub struct RedisJsonFormatter<'a> {
 }
 
 impl<'a> RedisJsonFormatter<'a> {
-    pub const fn new(format: &'a FormatOptions) -> Self {
+    pub const fn new(format: &'a ReplyFormatOptions) -> Self {
         RedisJsonFormatter {
             current_indent: 0,
             has_value: false,
@@ -224,8 +220,8 @@ mod tests {
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn test_default_formatter() {
-        let mut formatter = RedisJsonFormatter::new(&FormatOptions {
-            format: Format::JSON,
+        let mut formatter = RedisJsonFormatter::new(&ReplyFormatOptions {
+            format: ReplyFormat::STRING,
             indent: None,
             space: None,
             newline: None,
@@ -288,8 +284,8 @@ mod tests {
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn test_ident_formatter() {
-        let mut formatter = RedisJsonFormatter::new(&FormatOptions {
-            format: Format::JSON,
+        let mut formatter = RedisJsonFormatter::new(&ReplyFormatOptions {
+            format: ReplyFormat::STRING,
             indent: Some("_"),
             space: None,
             newline: None,
@@ -352,8 +348,8 @@ mod tests {
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn test_space_formatter() {
-        let mut formatter = RedisJsonFormatter::new(&FormatOptions {
-            format: Format::JSON,
+        let mut formatter = RedisJsonFormatter::new(&ReplyFormatOptions {
+            format: ReplyFormat::STRING,
             indent: None,
             space: Some("s"),
             newline: None,
@@ -416,8 +412,8 @@ mod tests {
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn test_new_line_formatter() {
-        let mut formatter = RedisJsonFormatter::new(&FormatOptions {
-            format: Format::JSON,
+        let mut formatter = RedisJsonFormatter::new(&ReplyFormatOptions {
+            format: ReplyFormat::STRING,
             indent: None,
             space: None,
             newline: Some("n"),

@@ -61,7 +61,6 @@ pub enum Format {
     STRING,
     JSON,
     BSON,
-    EXPAND,
 }
 impl FromStr for Format {
     type Err = Error;
@@ -71,8 +70,28 @@ impl FromStr for Format {
             "STRING" => Ok(Self::STRING),
             "JSON" => Ok(Self::JSON),
             "BSON" => Ok(Self::BSON),
-            "EXPAND" => Ok(Self::EXPAND),
             _ => Err("ERR wrong format".into()),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum ReplyFormat {
+    STRING,
+    STRINGS,
+    EXPAND1,
+    EXPAND,
+}
+impl FromStr for ReplyFormat {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "STRING" => Ok(Self::STRING),
+            "STRINGS" => Ok(Self::STRINGS),
+            "EXPAND1" => Ok(Self::EXPAND1),
+            "EXPAND" => Ok(Self::EXPAND),
+            _ => Err("ERR wrong reply format".into()),
         }
     }
 }

@@ -632,7 +632,6 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                     Ok(v)
                 },
             ),
-            Format::EXPAND => Err("Unsupported format".into()),
         }
     }
 
