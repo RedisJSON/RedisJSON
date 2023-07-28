@@ -607,11 +607,11 @@ workflows:
             parameters:
               platform: [jammy, focal, bionic]
       - build-macos-x64:
-          <<: *always
+          <<: *on-version-tags
           context: common
       - build-macos-m1:
           context: common
-          <<: *always
+          <<: *on-version-tags
       - coverage:
           <<: *always
       - sanitize:
@@ -622,21 +622,21 @@ workflows:
               san-type: [address]
       - upload-artifacts:
           name: upload-artifacts-to-staging-lab
-          <<: *always
+          <<: *on-integ-branch
           staging-lab: "1"
           context: common
           requires:
-            #- build-platforms
-            #- build-arm-platforms
+            - build-platforms
+            - build-arm-platforms
             - build-macos-x64
             - build-macos-m1
       - upload-artifacts:
           name: upload-release-artifacts
-          <<: *always
+          <<: *on-version-tags
           context: common
           requires:
-            #- build-platforms
-            #- build-arm-platforms
+            - build-platforms
+            - build-arm-platforms
             - build-macos-x64
             - build-macos-m1
       - release-qa-tests:
