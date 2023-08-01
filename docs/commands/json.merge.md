@@ -8,12 +8,12 @@ This command complies with [RFC7396](https://datatracker.ietf.org/doc/html/rfc73
 
 <details open><summary><code>key</code></summary>
 
-is the key to merge into.
+is key to merge into.
 </details>
 
 <details open><summary><code>path</code></summary>
 
-is the JSONPath to specify where in the JSON document to apply the merge. For non-existing keys the `path` must be `$`. For existing keys, for each matched `path`, the value that matches the `path` is merged with the JSON `value`. For existing keys, when the path exists, except for the last element, a new child is added with the JSON `value`.
+is JSONPath to specify where in the JSON document to apply the merge. For non-existing keys the `path` must be `$`. For existing keys, for each matched `path`, the value that matches the `path` is merged with the JSON `value`. For existing keys, when the path exists, except for the last element, a new child is added with the JSON `value`.
 
 </details>
 
