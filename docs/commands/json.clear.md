@@ -18,7 +18,7 @@ is JSONPath to specify. Default is root `$`. Nonexisting paths are ignored.
 
 ## Return
 
-JSON.CLEAR returns an integer reply specifying the number of matching JSON arrays and maps cleared + number of matching JSON numerical values zeroed.
+JSON.CLEAR returns an integer reply specifying the number of matching JSON arrays and objects cleared + number of matching JSON numerical values zeroed.
 For more information about replies, see [Redis serialization protocol specification](/docs/reference/protocol-spec).
 
 {{% alert title="Note" color="warning" %}}
