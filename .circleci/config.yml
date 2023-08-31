@@ -695,6 +695,8 @@ workflows:
           <<: *on-integ-branch-cron
     jobs:
       - build-macos-x64:
+          context: common
           upload: "yes"
       - build-macos-m1:
+          context: common
           upload: "yes"
