@@ -202,7 +202,7 @@ For example, let's add each keybaord object with a string value named `regex_pat
 ```sh
 127.0.0.1:6379> JSON.SET store '$.inventory.keyboards[0].regex_pat' '"(?i)bluetooth"'
 OK
-127.0.0.1:6379> JSON.SET store '$.inventory.keyboards[1].regex' '"usb"'
+127.0.0.1:6379> JSON.SET store '$.inventory.keyboards[1].regex_pat' '"usb"'
 OK
 ```
 
