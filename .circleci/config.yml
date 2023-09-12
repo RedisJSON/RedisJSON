@@ -320,6 +320,9 @@ commands:
               --upload_results_s3 \
               --fail_fast \
               --triggering_env << parameters.triggering_env >> \
+              --redistimeseries_host $PERFORMANCE_RTS_HOST \
+              --redistimeseries_port $PERFORMANCE_RTS_PORT \
+              --redistimeseries_pass "$PERFORMANCE_RTS_AUTH" \
               --push_results_redistimeseries \
               --allowed-envs << parameters.allowed_envs >> || true
       - run:
@@ -332,6 +335,88 @@ commands:
                   --auto-approve \
                   --pull-request ${CIRCLE_PULL_REQUEST##*/}
             fi
+
+benchmark-steps-test:
+    parameters:
+      github_actor:
+        type: string
+        default: $CIRCLE_USERNAME
+      module_path:
+        type: string
+        default: bin/linux-x64-release/rejson.so
+      profile_env:
+        type: string
+        default: "0"
+      benchmark_glob:
+        type: string
+        default: "*.yml"
+      triggering_env:
+        type: string
+        default: "circleci"
+      allowed_envs:
+        type: string
+        default: "oss-standalone"
+    steps:
+      - run:
+          name: Prepare automation
+          shell: /bin/bash -l -eo pipefail
+          command: |
+            ./deps/readies/bin/getpy3
+            git clone -b feature/async-run git@github.com:RedisLabsModules/redisbench-admin.git --depth=1
+            cd redisbench-admin
+            echo "install poetry"
+            curl -sSL https://install.python-poetry.org | POETRY_VERSION=1.2.2 python3 -
+            echo "export variables"
+            export PATH="/root/.local/bin:$PATH"
+            export LC_ALL=C.UTF-8
+            export LANG=C.UTF-8
+            export LANGUAGE=C.UTF-8
+            echo "poetry install packages"
+            poetry install
+            echo "activate venv"
+            source $(poetry env info --path)/bin/activate
+            echo "create run.py"
+            echo "IyEvdXNyL2Jpbi9lbnYgcHl0aG9uCiMgLSotIGNvZGluZzogdXRmLTggLSotCmltcG9ydCByZQppbXBvcnQgc3lzCmZyb20gcmVkaXNiZW5jaF9hZG1pbi5jbGkgaW1wb3J0IG1haW4KCmlmIF9fbmFtZV9fID09ICJfX21haW5fXyI6CiAgICBzeXMuYXJndlswXSA9IHJlLnN1YihyIigtc2NyaXB0XC5weXd8XC5leGUpPyQiLCAiIiwgc3lzLmFyZ3ZbMF0pCiAgICBzeXMuZXhpdChtYWluKCkpCg==" | base64 -d > run.py
+            echo "make run.py executable"
+            chmod +x run.py
+            echo "create link"
+            ln -s run.py /usr/local/bin/benchmark-admin
+            echo "go back and get terraform"
+            cd ..
+            VERSION=0.14.8 ./deps/readies/bin/getterraform
+      - run:
+          name: Run CI benchmarks on aws
+          timeout: 60m
+          no_output_timeout: 30m
+          command: |
+            ROOT="$PWD"
+            cd redisbench-admin
+            export PATH="/root/.local/bin:$PATH"
+            source $(poetry env info --path)/bin/activate
+            cd ../tests/benchmarks
+            export AWS_ACCESS_KEY_ID=$PERFORMANCE_EC2_ACCESS_KEY
+            export AWS_SECRET_ACCESS_KEY=$PERFORMANCE_EC2_SECRET_KEY
+            export AWS_DEFAULT_REGION=$PERFORMANCE_EC2_REGION
+            export EC2_PRIVATE_PEM=$PERFORMANCE_EC2_PRIVATE_PEM
+            export PROFILE=<< parameters.profile_env >>
+            export BENCHMARK_GLOB=<< parameters.benchmark_glob >>
+            export PERF_CALLGRAPH_MODE="dwarf"
+            python ../../redisbench-admin/run.py run-async \
+              --required-module ReJSON \
+              --module_path "$ROOT/<< parameters.module_path >>" \
+              --github_actor "<< parameters.github_actor >>" \
+              --github_repo $CIRCLE_PROJECT_REPONAME \
+              --github_org $CIRCLE_PROJECT_USERNAME \
+              --github_sha $CIRCLE_SHA1 \
+              --github_branch $CIRCLE_BRANCH \
+              --upload_results_s3 \
+              --fail_fast \
+              --callback \
+              --callback_url https://dashi.cto.redislabs.com/callback \
+              --triggering_env << parameters.triggering_env >> \
+              --push_results_redistimeseries \
+              --allowed-envs << parameters.allowed_envs >> 
+
 #----------------------------------------------------------------------------------------------------------------------------------
 
 jobs:
@@ -499,6 +584,13 @@ jobs:
       - build-steps
       - benchmark-steps
 
+  benchmark-json-oss-standalone-test:
+    docker:
+      - image: redisfab/rmbuilder:6.2.7-x64-focal
+    steps:
+      - build-steps
+      - benchmark-steps-test
+
   benchmark-json-oss-standalone-profiler:
     docker:
       - image: redisfab/rmbuilder:6.2.7-x64-focal
@@ -583,6 +675,14 @@ on-integ-and-version-tags: &on-integ-and-version-tags
     tags:
       only: /^v[0-9].*/
 
+on-test-branch: &on-test-branch
+  filters:
+    branches:
+      only:
+        - /^test.*$/
+    tags:
+      ignore: /.*/
+
 #----------------------------------------------------------------------------------------------------------------------------------
 
 workflows:
@@ -646,6 +746,9 @@ workflows:
             - upload-release-artifacts
       - benchmark-json-oss-standalone:
           <<: *on-integ-and-version-tags
+          context: common
+      - benchmark-json-oss-standalone-test:
+          <<: *on-test-branch
           context: common
       - benchmark-json-oss-standalone-profiler:
           <<: *on-integ-and-version-tags
