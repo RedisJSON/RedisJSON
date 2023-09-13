@@ -30,95 +30,93 @@ First, start [`redis-cli`](http://redis.io/topics/rediscli) in interactive mode.
 
 The first JSON command to try is `JSON.SET`, which sets a Redis key with a JSON value. `JSON.SET` accepts all JSON value types. This example creates a JSON string:
 
-```sh
-> JSON.SET animal $ '"dog"'
+{{< clients-example json_tutorial set_get >}}
+> JSON.SET bike $ '"Hyperion"'
 "OK"
-> JSON.GET animal $
-"[\"dog\"]"
-> JSON.TYPE animal $
+> JSON.GET bike $
+"[\"Hyperion\"]"
+> JSON.TYPE bike $
 1) "string"
-```
+{{ /clients-example }}
 
 Note how the commands include the dollar sign character `$`. This is the [path](/redisjson/path) to the value in the JSON document (in this case it just means the root).
 
 Here are a few more string operations. `JSON.STRLEN` tells you the length of the string, and you can append another string to it with `JSON.STRAPPEND`.
 
-```sh
-> JSON.STRLEN animal $
-1) "3"
-> JSON.STRAPPEND animal $ '" (Canis familiaris)"'
-1) "22"
-> JSON.GET animal $
-"[\"dog (Canis familiaris)\"]"
-``` 
+{{< clients-example json_tutorial str >}}
+> JSON.STRLEN bike $
+1) (integer) 10
+> JSON.STRAPPEND bike $ '" (Enduro bikes)"'
+1) (integer) 27
+> JSON.GET bike $
+"[\"Hyperion (Enduro bikes)\"]"
+{{ /clients-example }}
 
-Numbers can be [incremented](/commands/json.numincrby) and [multiplied](/commands/json.nummultby):
+Numbers can be [incremented](/commands/json.numincrby):
 
-```
-> JSON.SET num $ 0
+{{< clients-example json_tutorial num >}}
+> JSON.SET crashes $ 0
 OK
-> JSON.NUMINCRBY num $ 1
+> JSON.NUMINCRBY crashes $ 1
 "[1]"
-> JSON.NUMINCRBY num $ 1.5
+> JSON.NUMINCRBY crashes $ 1.5
 "[2.5]"
-> JSON.NUMINCRBY num $ -0.75
+> JSON.NUMINCRBY crashes $ -0.75
 "[1.75]"
-> JSON.NUMMULTBY num $ 24
-"[42]"
-```
+{{ /clients-example }}
 
 Here's a more interesting example that includes JSON arrays and objects:
 
-```
-> JSON.SET example $ '[ true, { "answer": 42 }, null ]'
+{{< clients-example json_tutorial arr >}}
+> JSON.SET newbike $ '[ "Deimos", { "crashes": 0 }, null ]'
 OK
-> JSON.GET example $
-"[[true,{\"answer\":42},null]]"
-> JSON.GET example $[1].answer
-"[42]"
-> JSON.DEL example $[-1]
+> JSON.GET newbike $
+"[[\"Deimos\",{\"crashes\":0},null]]"
+> JSON.GET newbike $[1].crashes
+"[0]"
+> JSON.DEL newbike $[-1]
 (integer) 1
-> JSON.GET example $
-"[[true,{\"answer\":42}]]"
-```
+> JSON.GET newbike $
+"[[\"Deimos\",{\"crashes\":0}]]"
+{{ /clients-example }}
 
 The `JSON.DEL` command deletes any JSON value you specify with the `path` parameter.
 
 You can manipulate arrays with a dedicated subset of JSON commands:
 
-```
-> JSON.SET arr $ []
+{{< clients-example json_tutorial arr2 >}}
+> JSON.SET riders $ []
 OK
-> JSON.ARRAPPEND arr $ 0
+> JSON.ARRAPPEND riders $ '"Norem"'
 1) (integer) 1
-> JSON.GET arr $
-"[[0]]"
-> JSON.ARRINSERT arr $ 0 -2 -1
-1) (integer) 3
-> JSON.GET arr $
-"[[-2,-1,0]]"
-> JSON.ARRTRIM arr $ 1 1
+> JSON.GET riders $
+"[[\"Norem\"]]"
+> JSON.ARRINSERT riders $ 1 '"Prickett"' '"Royce"' '"Castilla"'
+1) (integer) 4
+> JSON.GET riders $
+"[[\"Norem\",\"Prickett\",\"Royce\",\"Castilla\"]]"
+> JSON.ARRTRIM riders $ 1 1
 1) (integer) 1
-> JSON.GET arr $
-"[[-1]]"
-> JSON.ARRPOP arr $
-1) "-1"
-> JSON.ARRPOP arr $
+> JSON.GET riders $
+"[[\"Prickett\"]]"
+> JSON.ARRPOP riders $
+1) "\"Prickett\""
+> JSON.ARRPOP riders $
 1) (nil)
-```
+{{ /clients-example }}
 
 JSON objects also have their own commands:
 
-```
-> JSON.SET obj $ '{"name":"Leonard Cohen","lastSeen":1478476800,"loggedOut": true}'
+{{< clients-example json_tutorial obj >}}
+> JSON.SET bike:1 $ '{"model":"Deimos","brand":"Ergonom","price": 4972}'
 OK
-> JSON.OBJLEN obj $
+> JSON.OBJLEN bike:1 $
 1) (integer) 3
-> JSON.OBJKEYS obj $
-1) 1) "name"
-   2) "lastSeen"
-   3) "loggedOut"
-```
+> JSON.OBJKEYS bike:1 $
+1) 1) "model"
+   2) "brand"
+   3) "price"
+{{ /clients-example }}
 
 To return a JSON response in a more human-readable format, run `redis-cli` in raw output mode and include formatting keywords such as `INDENT`, `NEWLINE`, and `SPACE` with the `JSON.GET` command:
 
@@ -127,31 +125,11 @@ $ redis-cli --raw
 > JSON.GET obj INDENT "\t" NEWLINE "\n" SPACE " " $
 [
 	{
-		"name": "Leonard Cohen",
-		"lastSeen": 1478476800,
-		"loggedOut": true
+		"model": "Deimos",
+		"brand": "Ergonom",
+		"price": 4972
 	}
 ]
-```
-
-### Python example
-
-This code snippet shows how to use JSON with raw Redis commands from Python with [redis-py](https://github.com/redis/redis-py):
-
-```Python
-import redis
-
-data = {
-    'dog': {
-        'scientific-name' : 'Canis familiaris'
-    }
-}
-
-r = redis.Redis()
-r.json().set('doc', '$', data)
-doc = r.json().get('doc', '$')
-dog = r.json().get('doc', '$.dog')
-scientific_name = r.json().get('doc', '$..scientific-name')
 ```
 
 ### Run with Docker
@@ -276,3 +254,4 @@ After the module has been loaded successfully, the Redis log should have lines s
 ### Limitation
 
 A JSON value passed to a command can have a depth of up to 128. If you pass to a command a JSON value that contains an object or an array with a nesting level of more than 128, the command returns an error.
+
