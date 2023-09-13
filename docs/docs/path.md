@@ -29,7 +29,7 @@ The new syntax supports bracket notation, which allows the use of special charac
 If you want to include double quotes in your query, enclose the JSONPath within single quotes. For example:
 
 ```sh
-JSON.GET store '$.inventory["headphones"]'
+JSON.GET store '$.inventory["mountain_bikes"]'
 ```
 
 ### JSONPath syntax
@@ -56,61 +56,61 @@ The following JSONPath examples use this JSON document, which stores details abo
 ```json
 {
    "inventory": {
-      "headphones": [
+      "mountain_bikes": [
          {
-            "id": 12345,
-            "name": "Noise-cancelling Bluetooth headphones",
-            "description": "Wireless Bluetooth headphones with noise-cancelling technology",
-            "wireless": true,
-            "connection": "Bluetooth",
-            "price": 99.98,
-            "stock": 25,
-            "free-shipping": false,
+            "id": "bike:1",
+            "model": "Phoebe",
+            "description": "This is a mid-travel trail slayer that is a fantastic daily driver or one bike quiver. The Shimano Claris 8-speed groupset gives plenty of gear range to tackle hills and there\u2019s room for mudguards and a rack too.  This is the bike for the rider who wants trail manners with low fuss ownership.",
+            "price": 1920,
+            "specs": {
+               "material": "carbon", 
+               "weight": 13.1
+               },
             "colors": ["black", "silver"]
          },
          {
-            "id": 12346,
-            "name": "Wireless earbuds",
-            "description": "Wireless Bluetooth in-ear headphones",
-            "wireless": true,
-            "connection": "Bluetooth",
-            "price": 64.99,
-            "stock": 17,
-            "free-shipping": false,
+            "id": "bike:2",
+            "model": "Quaoar",
+            "description": "Redesigned for the 2020 model year, this bike impressed our testers and is the best all-around trail bike we\'ve ever tested. The Shimano gear system effectively does away with an external cassette, so is super low maintenance in terms of wear and tear. All in all it\'s an impressive package for the price, making it very competitive.",
+            "price": 2072,
+            "specs": {
+               "material": "aluminium", 
+               "weight": 7.9
+               },
             "colors": ["black", "white"]
          },
          {
-            "id": 12347,
-            "name": "Mic headset",
-            "description": "Headset with built-in microphone",
-            "wireless": false,
-            "connection": "USB",
-            "price": 35.01,
-            "stock": 28,
-            "free-shipping": false
+            "id": "bike:3",
+            "model": "Weywot",
+            "description": "This bike gives kids aged six years and older a durable and uberlight mountain bike for their first experience on tracks and easy cruising through forests and fields. A set of powerful Shimano hydraulic disc brakes provide ample stopping ability. If you\'re after a budget option, this is one of the best bikes you could get.",
+            "price": 3264,
+            "specs": {
+               "material": "alloy", 
+               "weight": 13.8
+               }
          }
       ],
-      "keyboards": [
+      "commuter_bikes": [
          {
-            "id": 22345,
-            "name": "Wireless keyboard",
-            "description": "Wireless Bluetooth keyboard",
-            "wireless": true,
-            "connection": "Bluetooth",
-            "price": 44.99,
-            "stock": 23,
-            "free-shipping": false,
+            "id": "bike:4",
+            "model": "Salacia",
+            "description": "This bike is a great option for anyone who just wants a bike to get about on With a slick-shifting Claris gears from Shimano\u2019s, this is a bike which doesn\u2019t break the bank and delivers craved performance.  It\u2019s for the rider who wants both efficiency and capability.",
+            "price": 1475,
+            "specs": {
+               "material": "aluminium", 
+               "weight": 16.6
+               },
             "colors": ["black", "silver"]
          },
          {
-            "id": 22346,
-            "name": "USB-C keyboard",
-            "description": "Wired USB-C keyboard",
-            "wireless": false,
-            "connection": "USB-C",
-            "price": 29.99,
-            "stock": 30,
-            "free-shipping": false
+            "id": "bike:5",
+            "model": "Mimas",
+            "description": "A real joy to ride, this bike got very high scores in last years Bike of the year report. The carefully crafted 50-34 tooth chainset and 11-32 tooth cassette give an easy-on-the-legs bottom gear for climbing, and the high-quality Vittoria Zaffiro tires give balance and grip.It includes a low-step frame , our memory foam seat, bump-resistant shocks and conveniently placed thumb throttle. Put it all together and you get a bike that helps redefine what can be done for this price.",
+            "price": 3941,
+            "specs": {
+               "material": "alloy", 
+               "weight": 11.6
+               }
          }
       ]
    }
@@ -119,9 +119,9 @@ The following JSONPath examples use this JSON document, which stores details abo
 
 First, create the JSON document in your database:
 
-```sh
-JSON.SET store $ '{"inventory":{"headphones":[{"id":12345,"name":"Noise-cancelling Bluetooth headphones","description":"Wireless Bluetooth headphones with noise-cancelling technology","wireless":true,"connection":"Bluetooth","price":99.98,"stock":25,"free-shipping":false,"colors":["black","silver"]},{"id":12346,"name":"Wireless earbuds","description":"Wireless Bluetooth in-ear headphones","wireless":true,"connection":"Bluetooth","price":64.99,"stock":17,"free-shipping":false,"colors":["black","white"]},{"id":12347,"name":"Mic headset","description":"Headset with built-in microphone","wireless":false,"connection":"USB","price":35.01,"stock":28,"free-shipping":false}],"keyboards":[{"id":22345,"name":"Wireless keyboard","description":"Wireless Bluetooth keyboard","wireless":true,"connection":"Bluetooth","price":44.99,"stock":23,"free-shipping":false,"colors":["black","silver"]},{"id":22346,"name":"USB-C keyboard","description":"Wired USB-C keyboard","wireless":false,"connection":"USB-C","price":29.99,"stock":30,"free-shipping":false}]}}'
-```
+{{< clients-example json_tutorial set_bikes >}}
+> JSON.SET "bikes:inventory" "$" "{\"mountain_bikes\": [{\"id\": \"bike:1\", \"model\": \"Phoebe\", \"description\": \"This is a mid-travel trail slayer that is a fantastic daily driver or one bike quiver. The Shimano Claris 8-speed groupset gives plenty of gear range to tackle hills and there\\u2019s room for mudguards and a rack too.  This is the bike for the rider who wants trail manners with low fuss ownership.\", \"price\": 1920, \"specs\": {\"material\": \"carbon\", \"weight\": 13.1}, \"colors\": [\"black\", \"silver\"]}, {\"id\": \"bike:2\", \"model\": \"Quaoar\", \"description\": \"Redesigned for the 2020 model year, this bike impressed our testers and is the best all-around trail bike we've ever tested. The Shimano gear system effectively does away with an external cassette, so is super low maintenance in terms of wear and tear. All in all it's an impressive package for the price, making it very competitive.\", \"price\": 2072, \"specs\": {\"material\": \"aluminium\", \"weight\": 7.9}, \"colors\": [\"black\", \"white\"]}, {\"id\": \"bike:3\", \"model\": \"Weywot\", \"description\": \"This bike gives kids aged six years and older a durable and uberlight mountain bike for their first experience on tracks and easy cruising through forests and fields. A set of powerful Shimano hydraulic disc brakes provide ample stopping ability. If you're after a budget option, this is one of the best bikes you could get.\", \"price\": 3264, \"specs\": {\"material\": \"alloy\", \"weight\": 13.8}}], \"commuter_bikes\": [{\"id\": \"bike:4\", \"model\": \"Salacia\", \"description\": \"This bike is a great option for anyone who just wants a bike to get about on With a slick-shifting Claris gears from Shimano\\u2019s, this is a bike which doesn\\u2019t break the bank and delivers craved performance.  It\\u2019s for the rider who wants both efficiency and capability.\", \"price\": 1475, \"specs\": {\"material\": \"aluminium\", \"weight\": 16.6}, \"colors\": [\"black\", \"silver\"]}, {\"id\": \"bike:5\", \"model\": \"Mimas\", \"description\": \"A real joy to ride, this bike got very high scores in last years Bike of the year report. The carefully crafted 50-34 tooth chainset and 11-32 tooth cassette give an easy-on-the-legs bottom gear for climbing, and the high-quality Vittoria Zaffiro tires give balance and grip.It includes a low-step frame , our memory foam seat, bump-resistant shocks and conveniently placed thumb throttle. Put it all together and you get a bike that helps redefine what can be done for this price.\", \"price\": 3941, \"specs\": {\"material\": \"alloy\", \"weight\": 11.6}}]}"
+{{ /clients-example }}
 
 #### Access JSON examples
 
@@ -129,35 +129,35 @@ The following examples use the `JSON.GET` command to retrieve data from various 
 
 You can use the wildcard operator `*` to return a list of all items in the inventory:
 
-```sh
-127.0.0.1:6379> JSON.GET store $.inventory.*
-"[[{\"id\":12345,\"name\":\"Noise-cancelling Bluetooth headphones\",\"description\":\"Wireless Bluetooth headphones with noise-cancelling technology\",\"wireless\":true,\"connection\":\"Bluetooth\",\"price\":99.98,\"stock\":25,\"free-shipping\":false,\"colors\":[\"black\",\"silver\"]},{\"id\":12346,\"name\":\"Wireless earbuds\",\"description\":\"Wireless Bluetooth in-ear headphones\",\"wireless\":true,\"connection\":\"Bluetooth\",\"price\":64.99,\"stock\":17,\"free-shipping\":false,\"colors\":[\"black\",\"white\"]},{\"id\":12347,\"name\":\"Mic headset\",\"description\":\"Headset with built-in microphone\",\"wireless\":false,\"connection\":\"USB\",\"price\":35.01,\"stock\":28,\"free-shipping\":false}],[{\"id\":22345,\"name\":\"Wireless keyboard\",\"description\":\"Wireless Bluetooth keyboard\",\"wireless\":true,\"connection\":\"Bluetooth\",\"price\":44.99,\"stock\":23,\"free-shipping\":false,\"colors\":[\"black\",\"silver\"]},{\"id\":22346,\"name\":\"USB-C keyboard\",\"description\":\"Wired USB-C keyboard\",\"wireless\":false,\"connection\":\"USB-C\",\"price\":29.99,\"stock\":30,\"free-shipping\":false}]]"
-```
+{{< clients-example json_tutorial get_bikes >}}
+> JSON.GET "bikes:inventory" $.inventory.*
+"[[{\"id\":\"bike:1\",\"model\":\"Phoebe\",\"description\":\"This is a mid-travel trail slayer that is a fantastic daily driver or one bike quiver. The Shimano Claris 8-speed groupset gives plenty of gear range to tackle hills and there\xe2\x80\x99s room for mudguards and a rack too.  This is the bike for the rider who wants trail manners with low fuss ownership.\",\"price\":1920,\"specs\":{\"material\":\"carbon\",\"weight\":13.1},\"colors\":[\"black\",\"silver\"]},{\"id\":\"bike:2\",\"model\":\"Quaoar\",\"description\":\"Redesigned for the 2020 model year, this bike impressed our testers and is the best all-around trail bike we've ever tested. The Shimano gear system effectively does away with an external cassette, so is super low maintenance in terms of wear and tear. All in all it's an impressive package for the price, making it very competitive.\",\"price\":2072,\"specs\":{\"material\":\"aluminium\",\"weight\":7.9},\"colors\":[\"black\",\"white\"]},{\"id\":\"bike:3\",\"model\":\"Weywot\",\"description\":\"This bike gives kids aged six years and older a durable and uberlight mountain bike for their first experience on tracks and easy cruising through forests and fields. A set of powerful Shimano hydraulic disc brakes provide ample stopping ability. If you're after a budget option, this is one of the best bikes you could get.\",\"price\":3264,\"specs\":{\"material\":\"alloy\",\"weight\":13.8}}],[{\"id\":\"bike:4\",\"model\":\"Salacia\",\"description\":\"This bike is a great option for anyone who just wants a bike to get about on With a slick-shifting Claris gears from Shimano\xe2\x80\x99s, this is a bike which doesn\xe2\x80\x99t break the bank and delivers craved performance.  It\xe2\x80\x99s for the rider who wants both efficiency and capability.\",\"price\":1475,\"specs\":{\"material\":\"aluminium\",\"weight\":16.6},\"colors\":[\"black\",\"silver\"]},{\"id\":\"bike:5\",\"model\":\"Mimas\",\"description\":\"A real joy to ride, this bike got very high scores in last years Bike of the year report. The carefully crafted 50-34 tooth chainset and 11-32 tooth cassette give an easy-on-the-legs bottom gear for climbing, and the high-quality Vittoria Zaffiro tires give balance and grip.It includes a low-step frame , our memory foam seat, bump-resistant shocks and conveniently placed thumb throttle. Put it all together and you get a bike that helps redefine what can be done for this price.\",\"price\":3941,\"specs\":{\"material\":\"alloy\",\"weight\":11.6}}]]"
+{{ /clients-example }}
 
-For some queries, multiple paths can produce the same results. For example, the following paths return the names of all headphones:
+For some queries, multiple paths can produce the same results. For example, the following paths return the models of mountain bikes:
 
-```sh
-127.0.0.1:6379> JSON.GET store $.inventory.headphones[*].name
-"[\"Noise-cancelling Bluetooth headphones\",\"Wireless earbuds\",\"Mic headset\"]"
-127.0.0.1:6379> JSON.GET store '$.inventory["headphones"][*].name'
-"[\"Noise-cancelling Bluetooth headphones\",\"Wireless earbuds\",\"Mic headset\"]"
-127.0.0.1:6379> JSON.GET store $..headphones[*].name
-"[\"Noise-cancelling Bluetooth headphones\",\"Wireless earbuds\",\"Mic headset\"]"
-```
+{{< clients-example json_tutorial get_mtnbikes >}}
+> JSON.GET "bikes:inventory" $.inventory.mountain_bikes[*].model
+"[\"Phoebe\",\"Quaoar\",\"Weywot\"]"
+> JSON.GET "bikes:inventory" '$.inventory["mountain_bikes"][*].model'
+"[\"Phoebe\",\"Quaoar\",\"Weywot\"]"
+> JSON.GET "bikes:inventory" $..mountain_bikes[*].model
+"[\"Phoebe\",\"Quaoar\",\"Weywot\"]"
+{{ /clients-example }}
 
-The recursive descent operator `..` can retrieve a field from multiple sections of a JSON document. The following example returns the names of all inventory items:
+The recursive descent operator `..` can retrieve a field from multiple sections of a JSON document. The following example returns the model of all inventory items:
 
-```sh
-127.0.0.1:6379> JSON.GET store $..name
-"[\"Noise-cancelling Bluetooth headphones\",\"Wireless earbuds\",\"Mic headset\",\"Wireless keyboard\",\"USB-C keyboard\"]"
-```
+{{< clients-example json_tutorial get_models >}}
+> JSON.GET "bikes:inventory" $..model
+"[\"Phoebe\",\"Quaoar\",\"Weywot\",\"Salacia\",\"Mimas\"]"
+{{ /clients-example }}
 
-You can use an array slice to select a range of elements from an array. This example returns the names of the first two headphones:
+You can use an array slice to select a range of elements from an array. This example returns the models of the first two mountain bikes:
 
-```sh
-127.0.0.1:6379> JSON.GET store $..headphones[0:2].name
-"[\"Noise-cancelling Bluetooth headphones\",\"Wireless earbuds\"]"
-```
+{{< clients-example json_tutorial get2mtnbikes >}}
+> JSON.GET "bikes:inventory" $..mountain_bikes[0:2].model
+"[\"Phoebe\",\"Quaoar\"]"
+{{ /clients-example }}
 
 Filter expressions `?()` let you select JSON elements based on certain conditions. You can use comparison operators (`==`, `!=`, `<`, `<=`, `>`, `>=`, and starting with version v2.4.2, also `=~`), logical operators (`&&`, `||`), and parenthesis (`(`, `)`) within these expressions. A filter expression can be applied on an array or on an object, iterating over all the **elements** in the array or all the **values** in the object, retrieving only the ones that match the filter condition. 
 
@@ -175,78 +175,46 @@ They can perform partial matches using a regex pattern such as `/.*foo.*/`.
 
 #### JSON Filter examples
 
-In the following example, the filter only returns wireless headphones with a price less than 70:
+In the following examples, the filter only returns 
+1 - mountain bikes with a price less than 3,000 and a weight less than 10
+2 - the names of bikes made from an alloy
+3 - starting with version v2.4.2 this will return only bikes whose description has the word 'easy' somewhere in it. Notice this match is case-insensitive thanks to the prefix `(?i)` in the regular expression pattern `"(?i)easy"`:
 
-```sh
-127.0.0.1:6379> JSON.GET store $..headphones[?(@.price<70&&@.wireless==true)]
-"[{\"id\":12346,\"name\":\"Wireless earbuds\",\"description\":\"Wireless Bluetooth in-ear headphones\",\"wireless\":true,\"connection\":\"Bluetooth\",\"price\":64.99,\"stock\":17,\"free-shipping\":false,\"colors\":[\"black\",\"white\"]}]"
-```
+{{< clients-example json_tutorial filters >}}
+> JSON.GET "bikes:inventory" "$..mountain_bikes[?(@.price < 3000 && @.specs.weight < 10)]"
+"[{\"id\":\"bike:2\",\"model\":\"Quaoar\",\"description\":\"Redesigned for the 2020 model year, this bike impressed our testers and is the best all-around trail bike we've ever tested. The Shimano gear system effectively does away with an external cassette, so is super low maintenance in terms of wear and tear. All in all it's an impressive package for the price, making it very competitive.\",\"price\":2072,\"specs\":{\"material\":\"aluminium\",\"weight\":7.9},\"colors\":[\"black\",\"white\"]}]"
 
-This example filters the inventory for the names of items that support Bluetooth connections:
+> JSON.GET "bikes:inventory" "$..[?(@.specs.material == 'alloy')].model"
+"[\"Weywot\",\"Mimas\"]"
 
-```sh
-127.0.0.1:6379> JSON.GET store '$.inventory.*[?(@.connection=="Bluetooth")].name'
-"[\"Noise-cancelling Bluetooth headphones\",\"Wireless earbuds\",\"Wireless keyboard\"]"
-```
-
-This example, starting with version v2.4.2, filters only keyboards with some sort of USB connection using regex match. Notice this match is case-insensitive thanks to the prefix `(?i)` in the regular expression pattern `"(?i)usb"`:
-
-```sh
-127.0.0.1:6379> JSON.GET store '$.inventory.keyboards[?(@.connection =~ "(?i)usb")]'
-"[{\"id\":22346,\"name\":\"USB-C keyboard\",\"description\":\"Wired USB-C keyboard\",\"wireless\":false,\"connection\":\"USB-C\",\"price\":29.99,\"stock\":30,\"free-shipping\":false}]"
-```
-The regular expression pattern can also be specified using a path of a string value on the right side.
-
-For example, let's add each keybaord object with a string value named `regex_pat`:
-
-```sh
-127.0.0.1:6379> JSON.SET store '$.inventory.keyboards[0].regex_pat' '"(?i)bluetooth"'
-OK
-127.0.0.1:6379> JSON.SET store '$.inventory.keyboards[1].regex_pat' '"usb"'
-OK
-```
-
-Now we can match against the value of `regex_pat` instead of a hard-coded regular expression pattern, and get the keyboard with the `Bluetooth` string in its `connection` key. Notice the one with `USB-C` does not match since its regular expression pattern is case-sensitive and the regular expression pattern is using lowercase:
-
-```sh
-127.0.0.1:6379> JSON.GET store '$.inventory.keyboards[?(@.connection =~ @.regex_pat)]'
-"[{\"id\":22345,\"name\":\"Wireless keyboard\",\"description\":\"Wireless Bluetooth keyboard\",\"wireless\":true,\"connection\":\"Bluetooth\",\"price\":44.99,\"stock\":23,\"free-shipping\":false,\"colors\":[\"black\",\"silver\"],\"regex\":\"(?i)Bluetooth\",\"regex_pat\":\"(?i)bluetooth\"}]"
-```
+> JSON.GET "bikes:inventory" "$..[?(@.description =~ '(?i)easy')].model"
+"[\"Quaoar\",\"Weywot\",\"Salacia\",\"Mimas\"]"
+{{ /clients-example }}
 
 #### Update JSON examples
 
 You can also use JSONPath queries when you want to update specific sections of a JSON document.
 
-For example, you can pass a JSONPath to the `JSON.SET` command to update a specific field. This example changes the price of the first item in the headphones list:
+For example, you can pass a JSONPath to the `JSON.NUMINCRBY` command to update a specific field. This example removes 100 to the price of each bike for a temporary sale, then adds it back:
 
-```sh
-127.0.0.1:6379> JSON.GET store $..headphones[0].price
-"[99.98]"
-127.0.0.1:6379> JSON.SET store $..headphones[0].price 78.99
-"OK"
-127.0.0.1:6379> JSON.GET store $..headphones[0].price
-"[78.99]"
-```
+{{< clients-example json_tutorial update_bikes >}}
+> JSON.GET "bikes:inventory" $..price
+"[1920,2072,3264,1475,3941]"
+> JSON.NUMINCRBY "bikes:inventory" $..price -100
+"[1820,1972,3164,1375,3841]"
+> JSON.NUMINCRBY "bikes:inventory" $..price 100
+"[1920,2072,3264,1475,3941]"
+{{ /clients-example }}
 
-You can use filter expressions to update only JSON elements that match certain conditions. The following example changes `free-shipping` to `true` for any items with a price greater than 49:
+You can use filter expressions to update only JSON elements that match certain conditions. JSONPath queries also work with other JSON commands that accept a path as an argument. The following example adds a new color option for bikes that cost less thatn 2,000. Note that it will also only apply to bikes that already have a color list as `JSON.ARRAPPEND` will not create the colors field for the other entries.
 
-```sh
-127.0.0.1:6379> JSON.SET store $.inventory.*[?(@.price>49)].free-shipping true
-"OK"
-127.0.0.1:6379> JSON.GET store $.inventory.*[?(@.free-shipping==true)].name
-"[\"Noise-cancelling Bluetooth headphones\",\"Wireless earbuds\"]"
-```
-
-JSONPath queries also work with other JSON commands that accept a path as an argument. For example, you can add a new color option for a set of headphones with `JSON.ARRAPPEND`:
-
-```sh
-127.0.0.1:6379> JSON.GET store $..headphones[0].colors
-"[[\"black\",\"silver\"]]"
-127.0.0.1:6379> JSON.ARRAPPEND store $..headphones[0].colors '"pink"'
-1) "3"
-127.0.0.1:6379> JSON.GET store $..headphones[0].colors
-"[[\"black\",\"silver\",\"pink\"]]"
-```
+{{< clients-example json_tutorial update_filters >}}
+> JSON.ARRAPPEND "bikes:inventory" $.inventory.*[?(@.price<2000)].colors '"pink"'
+1) (integer) 3
+2) (integer) 3
+> JSON.GET "bikes:inventory" $..[*].colors
+"[[\"black\",\"silver\",\"pink\"],[\"black\",\"white\"],[\"black\",\"silver\",\"pink\"]]"
+{{ /clients-example }}
 
 ## Legacy path syntax
 
@@ -254,11 +222,11 @@ RedisJSON v1 had the following path implementation. JSON v2 still supports this 
 
 Paths always begin at the root of a Redis JSON value. The root is denoted by a period character (`.`). For paths that reference the root's children, it is optional to prefix the path with the root.
 
-Redis JSON supports both dot notation and bracket notation for object key access. The following paths refer to _headphones_, which is a child of _inventory_ under the root:
+Redis JSON supports both dot notation and bracket notation for object key access. The following paths refer to _mountain bikes_, which is a child of _inventory_ under the root:
 
-*   `.inventory.headphones`
-*   `inventory["headphones"]`
-*   `['inventory']["headphones"]`
+*   `.inventory.mountain_bikes`
+*   `inventory["mountain_bikes"]`
+*   `['inventory']["mountain_bikes"]`
 
 To access an array element, enclose its index within a pair of square brackets. The index is 0-based, with 0 being the first element of the array, 1 being the next element, and so on. You can use negative offsets to access elements starting from the end of the array. For example, -1 is the last element in the array, -2 is the second to last element, and so on.
 
