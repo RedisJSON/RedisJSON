@@ -75,6 +75,7 @@ pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
         unlink2: None,
         copy2: None,
         mem_usage2: None,
+        aux_save2: None,
     },
 );
 /////////////////////////////////////////////////////
@@ -112,7 +113,8 @@ macro_rules! redis_json_module_create {(
         use redis_module::{redis_module, RedisString};
         use std::marker::PhantomData;
         use std::os::raw::{c_double, c_int, c_longlong};
-        use redis_module::{raw as rawmod, LogLevel};
+        use redis_module::raw as rawmod;
+        use redis_module::logging::RedisLogLevel;
         use rawmod::ModuleOptions;
 
         use std::{
@@ -168,7 +170,7 @@ macro_rules! redis_json_module_create {(
 
         fn json_init_config(ctx: &Context, args: &[RedisString]) -> Status{
             if args.len() % 2 != 0 {
-                ctx.log(LogLevel::Warning, "RedisJson arguments must be key:value pairs");
+                ctx.log(RedisLogLevel::Warning, "RedisJson arguments must be key:value pairs");
                 return Status::Err;
             }
             let mut args_map = HashMap::<String, String>::new();

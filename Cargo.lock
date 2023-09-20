@@ -75,11 +75,11 @@ dependencies = [
 
 [[package]]
 name = "bindgen"
-version = "0.65.1"
+version = "0.66.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfdf7b466f9a4903edc73f95d6d2bcd5baf8ae620638762244d3f60143643cc5"
+checksum = "f2b84e06fc203107bfbad243f4aba2af864eb7db3b1cf46ea0a023b0b433d2a7"
 dependencies = [
- "bitflags 1.3.2",
+ "bitflags 2.4.0",
  "cexpr",
  "clang-sys",
  "lazy_static",
@@ -790,9 +790,9 @@ dependencies = [
 
 [[package]]
 name = "redis-module"
-version = "2.0.4"
+version = "2.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f44c13151f81bd51dcee24944c1146f52eb481a36d5a194733b227e9c8fd74c1"
+checksum = "5d56e69a7b714b77ac2b43f5ae97b401b9174b7f4548553481cfa113f73c810f"
 dependencies = [
  "backtrace",
  "bindgen",
@@ -802,6 +802,7 @@ dependencies = [
  "enum-primitive-derive",
  "libc",
  "linkme",
+ "log",
  "nix",
  "num-traits 0.2.16",
  "redis-module-macros-internals",
@@ -812,9 +813,9 @@ dependencies = [
 
 [[package]]
 name = "redis-module-macros-internals"
-version = "2.0.4"
+version = "2.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0396c62561c0eda86e7b6992bb89f20d283818c5570cbdf7e0f67c77848932e"
+checksum = "21305e9453d5a343287d2c93d285941de0faa1b6ca6151a4d62bcfe6090a2082"
 dependencies = [
  "lazy_static",
  "proc-macro2",
