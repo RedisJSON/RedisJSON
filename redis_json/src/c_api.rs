@@ -18,7 +18,7 @@ use crate::key_value::KeyValue;
 use json_path::select_value::{SelectValue, SelectValueType};
 use json_path::{compile, create};
 use redis_module::raw as rawmod;
-use redis_module::{Context, RedisString, Status};
+use redis_module::{Context, RedisString, Status, key::KeyFlags};
 
 use crate::manager::{Manager, ReadHolder};
 
@@ -71,6 +71,21 @@ pub fn json_api_open_key_internal<M: Manager>(
 ) -> *const M::V {
     let ctx = Context::new(ctx);
     if let Ok(h) = manager.open_key_read(&ctx, &key) {
+        if let Ok(Some(v)) = h.get_value() {
+            return v;
+        }
+    }
+    null()
+}
+
+pub fn json_api_open_key_with_flags_internal<M: Manager>(
+    manager: M,
+    ctx: *mut rawmod::RedisModuleCtx,
+    key: RedisString,
+    flags: KeyFlags,
+) -> *const M::V {
+    let ctx: Context = Context::new(ctx);
+    if let Ok(h) = manager.open_key_read_with_flags(&ctx, &key, flags) {
         if let Ok(Some(v)) = h.get_value() {
             return v;
         }
@@ -323,6 +338,26 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_mngr: $get_manager_expr,
                 run: |mngr|{json_api_open_key_internal(mngr, ctx, RedisString::new(NonNull::new(ctx), key_str))as *mut c_void},
+            )
+        }
+
+        #[no_mangle]
+        pub extern "C" fn JSONAPI_openKey_withFlags(
+            ctx: *mut rawmod::RedisModuleCtx,
+            key_str: *mut rawmod::RedisModuleString,
+            flags: c_int,
+        ) -> *mut c_void {
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr| {
+                    json_api_open_key_with_flags_internal(
+                        mngr,
+                        ctx,
+                        RedisString::new(NonNull::new(ctx), key_str),
+                        KeyFlags::from_bits_truncate(flags as i32),
+                    ) as *mut c_void
+                },
             )
         }
 
