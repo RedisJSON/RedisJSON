@@ -27,7 +27,8 @@ use crate::c_api::{
     json_api_get_at, json_api_get_boolean, json_api_get_double, json_api_get_int,
     json_api_get_json, json_api_get_json_from_iter, json_api_get_key_value, json_api_get_len,
     json_api_get_string, json_api_get_type, json_api_is_json, json_api_len, json_api_next,
-    json_api_next_key_value, json_api_open_key_internal, json_api_open_key_with_flags_internal, json_api_reset_iter, LLAPI_CTX,
+    json_api_next_key_value, json_api_open_key_internal, json_api_open_key_with_flags_internal,
+    json_api_reset_iter, LLAPI_CTX,
 };
 use crate::redisjson::Format;
 

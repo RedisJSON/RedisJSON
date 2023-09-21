@@ -13,7 +13,7 @@ use crate::REDIS_JSON_TYPE;
 use bson::decode_document;
 use ijson::object::Entry;
 use ijson::{DestructuredMut, INumber, IObject, IString, IValue, ValueType};
-use redis_module::key::{verify_type, RedisKey, RedisKeyWritable, KeyFlags};
+use redis_module::key::{verify_type, KeyFlags, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::rediserror::RedisError;
 use redis_module::{Context, NotifyEvent, RedisResult, RedisString};
@@ -587,13 +587,13 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     }
 
     fn open_key_read_with_flags(
-            &self,
-            ctx: &Context,
-            key: &RedisString,
-            flags: KeyFlags,
-        ) -> Result<Self::ReadHolder, RedisError> {
-            let key = ctx.open_key_with_flags(key, flags);
-            Ok(IValueKeyHolderRead { key })
+        &self,
+        ctx: &Context,
+        key: &RedisString,
+        flags: KeyFlags,
+    ) -> Result<Self::ReadHolder, RedisError> {
+        let key = ctx.open_key_with_flags(key, flags);
+        Ok(IValueKeyHolderRead { key })
     }
 
     fn open_key_write(

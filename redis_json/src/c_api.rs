@@ -18,7 +18,7 @@ use crate::key_value::KeyValue;
 use json_path::select_value::{SelectValue, SelectValueType};
 use json_path::{compile, create};
 use redis_module::raw as rawmod;
-use redis_module::{Context, RedisString, Status, key::KeyFlags};
+use redis_module::{key::KeyFlags, Context, RedisString, Status};
 
 use crate::manager::{Manager, ReadHolder};
 
