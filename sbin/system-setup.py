@@ -32,7 +32,10 @@ class RedisJSONSetup(paella.Setup):
         self.run(f"{READIES}/bin/getgcc")
 
     def redhat_compat(self):
-        self.install("redhat-lsb-core")
+        # redhat-lsb-core is not available for RHEL 9
+        if(self.os_version[0] < 9):
+            self.install("redhat-lsb-core")
+
         self.install("which")
         self.run(f"{READIES}/bin/getgcc --modern")
 
@@ -49,7 +52,10 @@ class RedisJSONSetup(paella.Setup):
         self.run(f"{READIES}/bin/getclang --modern")
 
     def common_last(self):
-        if self.dist != "arch":
+        if self.dist == "redhat":
+            # TODO: There is a dependency issue with lcov in rhel 9
+            pass
+        elif self.dist != "arch":
             self.install("lcov")
         else:
             self.install("lcov-git", aur=True)
