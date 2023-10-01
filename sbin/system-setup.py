@@ -32,10 +32,8 @@ class RedisJSONSetup(paella.Setup):
         self.run(f"{READIES}/bin/getgcc")
 
     def redhat_compat(self):
-        # redhat-lsb-core is not available for RHEL 9
-        if(self.os_version[0] < 9):
+        if self.dist == "centos" and self.os_version[0] < 9:
             self.install("redhat-lsb-core")
-
         self.install("which")
         self.run(f"{READIES}/bin/getgcc --modern")
 
