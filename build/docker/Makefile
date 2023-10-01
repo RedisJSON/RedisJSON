@@ -5,7 +5,7 @@ include $(ROOT)/deps/readies/mk/main
 
 REPO=rejson
 
-REDIS_VERSION=7.2.0
+REDIS_VERSION=7.2.1
 
 OSNICK.official=bullseye
 
