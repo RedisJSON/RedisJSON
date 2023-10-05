@@ -13,12 +13,13 @@ jobs:
       image: mcr.microsoft.com/cbl-mariner/base/core:2.0
     steps:
       - run: |
-          tdnf install --noplugins --skipsignature -y git
+          tdnf install --noplugins --skipsignature -y ca-certificates git
       - name: checkout
         uses: actions/checkout@v4
-      - run: |
-          git config --global --add safe.directory '*'
-          git submodule update --init --recursive
+        with:
+          submodules: 'recursive'
+      # - run: |
+      #     git config --global --add safe.directory '*'
       - name: install dependencies
         run: |
           .install/mariner2.sh
