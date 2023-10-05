@@ -13,7 +13,7 @@ jobs:
       image: mcr.microsoft.com/cbl-mariner/base/core:2.0
     steps:
       - run: |
-          tdnf install -y git
+          tdnf install --skipsignature -y git
       - name: checkout
         uses: actions/checkout@v4
       - run: |
