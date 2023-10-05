@@ -6,20 +6,30 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l -o pipefail {0}
     container:
       image: mcr.microsoft.com/cbl-mariner/base/core:2.0
     steps:
       - name: checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: true
+      - run: |
+          git config --global --add safe.directory '*'
+          git submodule update --init --recursive
       - name: install dependencies
-        run: .install/mariner2.sh
+        run: |
+          .install/mariner2.sh
       - name: get redis latest
-        run: .install/get_redis.sh
+        run: |
+          .install/get_redis.sh
       - name: build and test
-        run: make test
+        run: |
+          make test
       - name: pack module
-        run: make pack
+        run: |
+          make pack
 
 # todo: upload artifacts to S3
