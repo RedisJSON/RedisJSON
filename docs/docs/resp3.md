@@ -1,6 +1,6 @@
 ---
 title: "Guide for Migrating from RESP2 to RESP3 Replies"
-linkTitle: "Migration guide from RESP2 to RESP3"
+linkTitle: "RESP3 migration guide"
 weight: 6
 description: JSON RESP2 to RESP3 replies reference for clients developers
 ---
