@@ -1,5 +1,5 @@
 # redis ~= 5.0.0b3
-# RLTest ~= 0.7.0
+RLTest ~= 0.7.0
 # ramp-packer ~= 2.5.4
 # psutil >= 5.8.0
 

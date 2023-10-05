@@ -1,0 +1,23 @@
+name: build for mariner2
+
+on:
+  push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/cbl-mariner/base/core:2.0
+    steps:
+      - name: install dependencies
+        run: .install/mariner2.sh
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: get redis latest
+        run: .install/get_redis.sh
+      - name: build and test
+        run: make test
+      - name: pack module
+        run: make pack
+
+# todo: upload artifacts to S3
