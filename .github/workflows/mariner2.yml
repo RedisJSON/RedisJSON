@@ -9,10 +9,12 @@ jobs:
     container:
       image: mcr.microsoft.com/cbl-mariner/base/core:2.0
     steps:
-      - name: install dependencies
-        run: .install/mariner2.sh
       - name: checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: install dependencies
+        run: .install/mariner2.sh
       - name: get redis latest
         run: .install/get_redis.sh
       - name: build and test
