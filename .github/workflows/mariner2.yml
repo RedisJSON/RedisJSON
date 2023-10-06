@@ -33,6 +33,13 @@ jobs:
           make test
       - name: pack module
         run: |
-          make pack
+          make pack BRANCH=${{ github.ref_name }}
+      - name: get aws
+        # TODO: New script .install/get_aws.sh?
+        run: |
+          bash ./deps/readies/bin/getaws
+      - name: upload to staging
+        run: |
+          make upload-release SHOW=1 STAGING=1
 
 # todo: upload artifacts to S3
