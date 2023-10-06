@@ -96,7 +96,7 @@ s3_upload_file() {
 	local s3_dir="$2"
 	[[ $s3_dir != */ ]] && s3_dir="${s3_dir}/"
 	
-	$OP aws --debug s3 cp $file $s3_dir --acl public-read --no-progress --region $AWS_REGION
+	$OP aws --debug s3 cp $file $s3_dir --acl public-read --no-progress --region $AWS_DEFAULT_REGION
 }
 
 s3_ls() {
