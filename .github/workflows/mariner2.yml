@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        shell: bash -l -o pipefail {0}
+        shell: bash -l -eo pipefail {0}
     container:
       image: mcr.microsoft.com/cbl-mariner/base/core:2.0
     steps:
