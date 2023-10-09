@@ -32,11 +32,11 @@ jobs:
       #   run: |
       #     bash .install/get_redis.sh
       - name: Get Redis
-        working-directory: /tmp/redis
         uses: actions/checkout@v4
         with:
           repository: redis/redis
           ref: '7.2.1'
+          path: /tmp/redis
       - name: Build Redis
         working-directory: /tmp/redis
         run: make install
