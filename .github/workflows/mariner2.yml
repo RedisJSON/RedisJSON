@@ -36,9 +36,9 @@ jobs:
         with:
           repository: redis/redis
           ref: '7.2.1'
-          path: /tmp/redis
+          path: redis
       - name: Build Redis
-        working-directory: /tmp/redis
+        working-directory: redis
         run: make install
       - name: Build module
         run: |
