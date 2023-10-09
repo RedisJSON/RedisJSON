@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - nafraf_support_mariner2
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
 
@@ -27,10 +28,19 @@ jobs:
       - name: Install dependencies
         run: |
           bash .install/mariner2.sh
-      - name: Get redis latest
-        run: |
-          bash .install/get_redis.sh
-      - name: Build
+      # - name: Get redis latest
+      #   run: |
+      #     bash .install/get_redis.sh
+      - name: Get Redis
+        working-directory: /tmp/redis
+        uses: actions/checkout@v4
+        with:
+          repository: redis/redis
+          ref: '7.2.1'
+      - name: Build Redis
+        working-directory: /tmp/redis
+        run: make install
+      - name: Build module
         run: |
           make build
       - name: Test
@@ -48,8 +58,8 @@ jobs:
       - name: Upload artifacts to S3 - staging
         run: |
           make upload-artifacts SHOW=1 STAGING=1 VERBOSE=1
-      - name: Upload artifacts to s3 - release  # todo: trigger this manually instead
-        if: ${{ github.ref != 'refs/heads/master' }}
-        run: make upload-artifacts SHOW=1 VERBOSE=1
+      # - name: Upload artifacts to s3 - release  # todo: trigger this manually instead
+      #   if: ${{ github.ref != 'refs/heads/master' }}
+      #   run: make upload-artifacts SHOW=1 VERBOSE=1
 
 # todo: upload artifacts to S3
