@@ -9,7 +9,7 @@ In RESP3, the default value of the optional path argument was changed from `.` t
 Due to this change, the replies of some commands have slightly changed. 
 This page provides a brief comparison between RESP2 and RESP3 responses for JSON commands to help developers in migrating their clients from RESP2 to RESP3.
 
-### JSON Command Replies Comparison 
+### JSON command replies comparison 
 
 The types are described using a [“TypeScript-like” syntax](https://www.typescriptlang.org/docs/handbook/2/everyday-types.html). `Array<a>` denotes an [array](https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#arrays) where the type of elements is known, but the number of elements is not.
 
