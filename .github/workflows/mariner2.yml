@@ -54,6 +54,6 @@ jobs:
       - name: Upload artifacts to S3 - staging
         run: |
           make upload-artifacts SHOW=1 STAGING=1 VERBOSE=1
-      - name: Upload artifacts to s3 - release  # todo: trigger this manually instead
+      - name: Upload artifacts to S3 - release  # todo: trigger this manually instead
         if: ${{ github.ref != 'refs/heads/master' }}
         run: make upload-artifacts SHOW=1 VERBOSE=1
