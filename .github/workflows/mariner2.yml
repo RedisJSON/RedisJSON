@@ -1,7 +1,11 @@
-name: build for mariner2
+name: Build for mariner2
 
 on:
-  push
+  push:
+    branches:
+      - master
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
   build:
@@ -44,5 +48,8 @@ jobs:
       - name: Upload artifacts to S3 - staging
         run: |
           make upload-artifacts SHOW=1 STAGING=1 VERBOSE=1
+      - name: Upload artifacts to s3 - release  # todo: trigger this manually instead
+        if: ${{ github.ref != 'refs/heads/master' }}
+        run: make upload-artifacts SHOW=1 VERBOSE=1
 
 # todo: upload artifacts to S3
