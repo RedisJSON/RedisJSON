@@ -41,8 +41,8 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: "eu-west-2"
-      - name: Upload to staging
+      - name: Upload artifacts to S3 - staging
         run: |
-          make upload-release SHOW=1 STAGING=1 FORCE=1 VERBOSE=1
+          make upload-artifacts SHOW=1 STAGING=1 VERBOSE=1
 
 # todo: upload artifacts to S3
