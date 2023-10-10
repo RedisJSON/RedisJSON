@@ -58,7 +58,10 @@ jobs:
         run: make install
 
       - name: Build RedisJSON
-        run: make build
+        run: |
+          source $HOME/.cargo/env
+          make build
+
       - name: Prepare automation
         run: |
           ./deps/readies/bin/getpy3
