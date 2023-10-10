@@ -42,8 +42,10 @@ jobs:
           git init
           git config --global --add safe.directory '*'
           git submodule update --init --recursive
-      - name: Setup
-        run: ./sbin/setup
+
+      - name: System setup
+        run: ./sbin/system-setup.py
+
       - name: Get Redis
         uses: actions/checkout@v4
         with:
