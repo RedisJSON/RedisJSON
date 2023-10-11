@@ -59,8 +59,7 @@ jobs:
 
       - name: Build RedisJSON
         run: |
-          apt install -y build-essential
-          source $HOME/.cargo/env
+          . $HOME/.cargo/env
           make build
 
       - name: Prepare automation
