@@ -59,7 +59,7 @@ jobs:
 
       - name: Build RedisJSON
         run: |
-          sudo apt-get -y install linux-source
+          apt install -y linux-source
           source $HOME/.cargo/env
           make build
 
