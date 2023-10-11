@@ -59,7 +59,7 @@ jobs:
 
       - name: Build RedisJSON
         run: |
-          apt install -y linux-source
+          apt install -y build-essential
           source $HOME/.cargo/env
           make build
 
