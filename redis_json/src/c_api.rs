@@ -328,6 +328,7 @@ macro_rules! redis_json_module_export_shared_api {
         pre_command_function: $pre_command_function_expr:expr,
     ) => {
         use std::ptr::NonNull;
+        use std::ffi::CString;
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_openKey(
@@ -578,39 +579,21 @@ macro_rules! redis_json_module_export_shared_api {
             )
         }
 
-        static REDISJSON_GETAPI_V1: &str = concat!("RedisJSON_V1", "\0");
-        static REDISJSON_GETAPI_V2: &str = concat!("RedisJSON_V2", "\0");
-        static REDISJSON_GETAPI_V3: &str = concat!("RedisJSON_V3", "\0");
-        static REDISJSON_GETAPI_V4: &str = concat!("RedisJSON_V4", "\0");
-
         pub fn export_shared_api(ctx: &Context) {
             unsafe {
                 LLAPI_CTX = Some(rawmod::RedisModule_GetThreadSafeContext.unwrap()(
                     std::ptr::null_mut(),
                 ));
-                ctx.export_shared_api(
-                    (&JSONAPI_CURRENT as *const RedisJSONAPI_CURRENT).cast::<c_void>(),
-                    REDISJSON_GETAPI_V1.as_ptr().cast::<c_char>(),
-                );
-                ctx.log_notice("Exported RedisJSON_V1 API");
 
-                ctx.export_shared_api(
-                    (&JSONAPI_CURRENT as *const RedisJSONAPI_CURRENT).cast::<c_void>(),
-                    REDISJSON_GETAPI_V2.as_ptr().cast::<c_char>(),
-                );
-                ctx.log_notice("Exported RedisJSON_V2 API");
-
-                ctx.export_shared_api(
-                    (&JSONAPI_CURRENT as *const RedisJSONAPI_CURRENT).cast::<c_void>(),
-                    REDISJSON_GETAPI_V3.as_ptr().cast::<c_char>(),
-                );
-                ctx.log_notice("Exported RedisJSON_V3 API");
-
-                ctx.export_shared_api(
-                    (&JSONAPI_CURRENT as *const RedisJSONAPI_CURRENT).cast::<c_void>(),
-                    REDISJSON_GETAPI_V4.as_ptr().cast::<c_char>(),
-                );
-                ctx.log_notice("Exported RedisJSON_V4 API");
+                for v in 1..6 {
+                    let version = format!("RedisJSON_V{}", v);
+                    let version = CString::new(version.as_str()).unwrap();
+                    ctx.export_shared_api(
+                        (&JSONAPI_CURRENT as *const RedisJSONAPI_CURRENT).cast::<c_void>(),
+                        version.as_ptr().cast::<c_char>(),
+                    );
+                    ctx.log_notice(&format!("Exported {} API", version.to_str().unwrap()));
+                }
             };
         }
 
@@ -643,6 +626,8 @@ macro_rules! redis_json_module_export_shared_api {
             getKeyValues: JSONAPI_getKeyValues,
             nextKeyValue: JSONAPI_nextKeyValue,
             freeKeyValuesIter: JSONAPI_freeKeyValuesIter,
+            // V5 entries
+            openKeyWithFlags: JSONAPI_openKey_withFlags,
         };
 
         #[repr(C)]
@@ -692,6 +677,13 @@ macro_rules! redis_json_module_export_shared_api {
                 str: *mut *mut rawmod::RedisModuleString
             ) -> *const c_void,
             pub freeKeyValuesIter: extern "C" fn(iter: *mut c_void),
+            // V5
+            pub openKeyWithFlags: extern "C" fn(
+                ctx: *mut rawmod::RedisModuleCtx,
+                key_str: *mut rawmod::RedisModuleString,
+                flags: c_int,
+            ) -> *mut c_void,
+
         }
     };
 }
