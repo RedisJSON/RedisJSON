@@ -4,9 +4,6 @@ parameters:
   run_default_flow:
     default: true
     type: boolean
-  run_nightly_flow:
-    default: true
-    type: boolean
 
 commands:
   early-returns:
@@ -567,13 +564,10 @@ workflows:
 
   
   nightly:
-    # temporary change to test nightly builds
-    # triggers:
-    #   - schedule:
-    #       cron: "07 20 * * *"
-    #       <<: *on-integ-branch-cron
-    when:
-      << pipeline.parameters.run_nightly_flow >>
+    triggers:
+      - schedule:
+          cron: "07 20 * * *"
+          <<: *on-integ-branch-cron
     jobs:
       - build-linux-debian:
           name: build-with-redis-<<matrix.redis_version>>
