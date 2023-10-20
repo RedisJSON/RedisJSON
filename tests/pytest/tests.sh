@@ -11,7 +11,7 @@ READIES=$ROOT/deps/readies
 export PYTHONUNBUFFERED=1
 
 VALGRIND_REDIS_VER=7.2
-SAN_REDIS_VER=7.2-rc2
+SAN_REDIS_VER=7.2
 SAN_REDIS_SUFFIX=7.2
 # SAN_REDIS_VER=6.2
 # SAN_REDIS_SUFFIX=6.2
@@ -156,6 +156,7 @@ setup_rltest() {
 	if [[ $RLTEST_CONSOLE == 1 ]]; then
 		RLTEST_ARGS+=" -i"
 	fi
+	RLTEST_ARGS+=" --enable-debug-command --enable-protected-configs"
 }
 
 #----------------------------------------------------------------------------------------------
