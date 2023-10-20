@@ -12,12 +12,12 @@ use serde_json::Value;
 use crate::{
     commands::{FoundIndex, ObjectLen, Values},
     error::Error,
-    formatter::{FormatOptions, RedisJsonFormatter},
+    formatter::{RedisJsonFormatter, ReplyFormatOptions},
     manager::{
         err_msg_json_expected, err_msg_json_path_doesnt_exist_with_param, AddUpdateInfo,
         SetUpdateInfo, UpdateInfo,
     },
-    redisjson::{normalize_arr_indices, Format, Path, SetOptions},
+    redisjson::{normalize_arr_indices, Path, ReplyFormat, SetOptions},
 };
 
 pub struct KeyValue<'a, V: SelectValue> {
@@ -98,9 +98,9 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         Ok(results)
     }
 
-    pub fn serialize_object<O: Serialize>(o: &O, format: &FormatOptions) -> String {
-        // When using the default format, we can use serde_json's default serializer
-        if format == &FormatOptions::default() {
+    pub fn serialize_object<O: Serialize>(o: &O, format: &ReplyFormatOptions) -> String {
+        // When using the default formatting, we can use serde_json's default serializer
+        if format.no_formatting() {
             serde_json::to_string(o).unwrap()
         } else {
             let formatter = RedisJsonFormatter::new(format);
@@ -113,7 +113,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     fn to_json_multi(
         &self,
         paths: &mut Vec<Path>,
-        format: &FormatOptions,
+        format: &ReplyFormatOptions,
         is_legacy: bool,
     ) -> Result<RedisValue, Error> {
         // TODO: Creating a temp doc here duplicates memory usage. This can be very memory inefficient.
@@ -177,24 +177,30 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         Ok(res)
     }
 
-    fn to_resp3(&self, paths: &mut Vec<Path>, format: &FormatOptions) -> Result<RedisValue, Error> {
+    fn to_resp3(
+        &self,
+        paths: &mut Vec<Path>,
+        format: &ReplyFormatOptions,
+    ) -> Result<RedisValue, Error> {
         let results = paths
             .drain(..)
-            .map(|path: Path| {
-                compile(path.get_path()).map_or_else(
-                    |_| RedisValue::Array(vec![]),
-                    |q| Self::values_to_resp3(&calc_once(q, self.val), format),
-                )
-            })
+            .map(|path: Path| self.to_resp3_path(&path, format))
             .collect::<Vec<RedisValue>>();
 
         Ok(RedisValue::Array(results))
     }
 
+    pub fn to_resp3_path(&self, path: &Path, format: &ReplyFormatOptions) -> RedisValue {
+        compile(path.get_path()).map_or_else(
+            |_| RedisValue::Array(vec![]),
+            |q| Self::values_to_resp3(&calc_once(q, self.val), format),
+        )
+    }
+
     fn to_json_single(
         &self,
         path: &str,
-        format: &FormatOptions,
+        format: &ReplyFormatOptions,
         is_legacy: bool,
     ) -> Result<RedisValue, Error> {
         let res = if is_legacy {
@@ -208,7 +214,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         Ok(res)
     }
 
-    fn values_to_resp3(values: &[&V], format: &FormatOptions) -> RedisValue {
+    fn values_to_resp3(values: &[&V], format: &ReplyFormatOptions) -> RedisValue {
         values
             .iter()
             .map(|v| Self::value_to_resp3(v, format))
@@ -216,8 +222,8 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             .into()
     }
 
-    fn value_to_resp3(value: &V, format: &FormatOptions) -> RedisValue {
-        if format.format == Format::EXPAND {
+    pub fn value_to_resp3(value: &V, format: &ReplyFormatOptions) -> RedisValue {
+        if format.format == ReplyFormat::EXPAND {
             match value.get_type() {
                 SelectValueType::Null => RedisValue::Null,
                 SelectValueType::Bool => RedisValue::Bool(value.get_bool()),
@@ -258,11 +264,8 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     pub fn to_json(
         &self,
         paths: &mut Vec<Path>,
-        format: &FormatOptions,
+        format: &ReplyFormatOptions,
     ) -> Result<RedisValue, Error> {
-        if format.format == Format::BSON {
-            return Err("ERR Soon to come...".into());
-        }
         let is_legacy = !paths.iter().any(|p| !p.is_legacy());
 
         // If we're using RESP3, we need to reply with an array of values
@@ -349,12 +352,20 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    pub fn to_string_single(&self, path: &str, format: &FormatOptions) -> Result<String, Error> {
+    pub fn to_string_single(
+        &self,
+        path: &str,
+        format: &ReplyFormatOptions,
+    ) -> Result<String, Error> {
         let result = self.get_first(path)?;
         Ok(Self::serialize_object(&result, format))
     }
 
-    pub fn to_string_multi(&self, path: &str, format: &FormatOptions) -> Result<String, Error> {
+    pub fn to_string_multi(
+        &self,
+        path: &str,
+        format: &ReplyFormatOptions,
+    ) -> Result<String, Error> {
         let results = self.get_values(path)?;
         Ok(Self::serialize_object(&results, format))
     }

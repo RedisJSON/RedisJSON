@@ -5,12 +5,12 @@
  */
 
 use crate::error::Error;
-use crate::formatter::FormatOptions;
+use crate::formatter::ReplyFormatOptions;
 use crate::key_value::KeyValue;
 use crate::manager::err_msg_json_path_doesnt_exist_with_param;
 use crate::manager::err_msg_json_path_doesnt_exist_with_param_or;
 use crate::manager::{Manager, ReadHolder, UpdateInfo, WriteHolder};
-use crate::redisjson::{Format, Path};
+use crate::redisjson::{Format, Path, ReplyFormat};
 use json_path::select_value::{SelectValue, SelectValueType};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
@@ -85,11 +85,21 @@ fn is_resp3(ctx: &Context) -> bool {
         .contains(redis_module::ContextFlags::FLAGS_RESP3)
 }
 
+/// Returns the deault path for the given RESP version
+fn default_path(ctx: &Context) -> &str {
+    if is_resp3(ctx) {
+        JSON_ROOT_PATH
+    } else {
+        JSON_ROOT_PATH_LEGACY
+    }
+}
+
 ///
 /// JSON.GET <key>
 ///         [INDENT indentation-string]
 ///         [NEWLINE line-break-string]
 ///         [SPACE space-string]
+///         [FORMAT {STRING|EXPAND1|EXPAND}]      /* default is STRING */
 ///         [path ...]
 ///
 pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
@@ -99,10 +109,7 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
     // Set Capacity to 1 assuming the common case has one path
     let mut paths: Vec<Path> = Vec::with_capacity(1);
 
-    let mut format_options = FormatOptions {
-        resp3: is_resp3(ctx),
-        ..Default::default()
-    };
+    let mut format_options = ReplyFormatOptions::new(is_resp3(ctx), ReplyFormat::STRING);
 
     while let Ok(arg) = args.next_str() {
         match arg {
@@ -110,7 +117,17 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
             // See #390 for the comparison of this function with/without this optimization
             arg if arg.len() > JSONGET_SUBCOMMANDS_MAXSTRLEN => paths.push(Path::new(arg)),
             arg if arg.eq_ignore_ascii_case(CMD_ARG_FORMAT) => {
-                format_options.format = Format::from_str(args.next_str()?)?;
+                if !format_options.resp3 && paths.is_empty() {
+                    return Err(RedisError::Str(
+                        "ERR FORMAT argument is not supported on RESP2",
+                    ));
+                }
+                // Temporary fix until STRINGS is also supported
+                let next = args.next_str()?;
+                if next.eq_ignore_ascii_case("STRINGS") {
+                    return Err(RedisError::Str("ERR wrong reply format"));
+                }
+                format_options.format = ReplyFormat::from_str(next)?;
             }
             arg if arg.eq_ignore_ascii_case(CMD_ARG_INDENT) => {
                 format_options.indent = Some(args.next_str()?)
@@ -127,9 +144,9 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
         };
     }
 
-    // path is optional -> no path found we use root "$"
+    // path is optional -> no path found we use legacy root "."
     if paths.is_empty() {
-        paths.push(Path::new(JSON_ROOT_PATH_LEGACY));
+        paths.push(Path::new(default_path(ctx)));
     }
 
     let key = manager.open_key_read(ctx, &key)?;
@@ -546,7 +563,7 @@ pub fn json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
 
     let key = args.next_arg()?;
     let path = match args.next() {
-        None => Path::new(JSON_ROOT_PATH_LEGACY),
+        None => Path::new(default_path(ctx)),
         Some(s) => Path::new(s.try_as_str()?),
     };
 
@@ -589,15 +606,13 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
         let path = Path::new(path.try_as_str()?);
         let keys = &args[1..args.len() - 1];
 
-        let format_options = FormatOptions {
-            resp3: is_resp3(ctx),
-            ..Default::default()
-        };
+        let format_options = ReplyFormatOptions::new(is_resp3(ctx), ReplyFormat::STRING);
 
-        let to_string =
-            |doc: &M::V| KeyValue::new(doc).to_string_multi(path.get_path(), &format_options);
-        let to_string_legacy =
-            |doc: &M::V| KeyValue::new(doc).to_string_single(path.get_path(), &format_options);
+        // Verify that at least one key exists
+        if keys.is_empty() {
+            return Err(RedisError::WrongArity);
+        }
+
         let is_legacy = path.is_legacy();
 
         let results: Result<Vec<RedisValue>, RedisError> = keys
@@ -607,16 +622,19 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
                     .open_key_read(ctx, key)
                     .map_or(Ok(RedisValue::Null), |json_key| {
                         json_key.get_value().map_or(Ok(RedisValue::Null), |value| {
-                            value
-                                .map(|doc| {
-                                    if !is_legacy {
-                                        to_string(doc)
+                            value.map_or(Ok(RedisValue::Null), |doc| {
+                                let key_value = KeyValue::new(doc);
+                                if format_options.is_resp3_reply() {
+                                    Ok(key_value.to_resp3_path(&path, &format_options))
+                                } else {
+                                    let res = if !is_legacy {
+                                        key_value.to_string_multi(path.get_path(), &format_options)
                                     } else {
-                                        to_string_legacy(doc)
-                                    }
-                                })
-                                .transpose()
-                                .map_or(Ok(RedisValue::Null), |v| Ok(v.into()))
+                                        key_value.to_string_single(path.get_path(), &format_options)
+                                    };
+                                    Ok(res.map_or(RedisValue::Null, |v| v.into()))
+                                }
+                            })
                         })
                     })
             })
@@ -625,14 +643,13 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
         Ok(results?.into())
     })
 }
-
 ///
 /// JSON.TYPE <key> [path]
 ///
 pub fn json_type<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
-    let path = Path::new(args.next_str().unwrap_or(JSON_ROOT_PATH_LEGACY));
+    let path = Path::new(args.next_str().unwrap_or(default_path(ctx)));
 
     let key = manager.open_key_read(ctx, &key)?;
 
@@ -729,7 +746,7 @@ where
 
         // Convert to RESP2 format return as one JSON array
         let values = to_json_value::<Number>(results, Value::Null);
-        Ok(KeyValue::<M::V>::serialize_object(&values, &FormatOptions::default()).into())
+        Ok(KeyValue::<M::V>::serialize_object(&values, &ReplyFormatOptions::default()).into())
     }
 }
 
@@ -939,7 +956,7 @@ pub fn json_str_append<M: Manager>(
         path = Path::new(path_or_json);
         json = val.try_as_str()?;
     } else {
-        path = Path::new(JSON_ROOT_PATH_LEGACY);
+        path = Path::new(default_path(ctx));
         json = path_or_json;
     }
 
@@ -1018,7 +1035,7 @@ where
 pub fn json_str_len<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
-    let path = Path::new(args.next_str().unwrap_or(JSON_ROOT_PATH_LEGACY));
+    let path = Path::new(args.next_str().unwrap_or(default_path(ctx)));
 
     let key = manager.open_key_read(ctx, &key)?;
 
@@ -1315,7 +1332,7 @@ where
 pub fn json_arr_len<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
-    let path = Path::new(args.next_str().unwrap_or(JSON_ROOT_PATH_LEGACY));
+    let path = Path::new(args.next_str().unwrap_or(default_path(ctx)));
     let is_legacy = path.is_legacy();
     let key = manager.open_key_read(ctx, &key)?;
     let root = match key.get_value()? {
@@ -1360,27 +1377,73 @@ pub fn json_arr_len<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString
 }
 
 ///
-/// JSON.ARRPOP <key> [path [index]]
+/// JSON.ARRPOP <key>
+///         [FORMAT {STRINGS|EXPAND1|EXPAND}]   /* default is STRINGS */
+///         [path [index]]
 ///
 pub fn json_arr_pop<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;
 
-    let (path, index) = match args.next() {
-        None => (Path::new(JSON_ROOT_PATH_LEGACY), i64::MAX),
+    let is_resp3 = is_resp3(ctx);
+    let mut format_options = ReplyFormatOptions::new(is_resp3, ReplyFormat::STRINGS);
+
+    let path = if let Some(arg) = args.next() {
+        if arg.try_as_str()?.eq_ignore_ascii_case(CMD_ARG_FORMAT) {
+            if let Ok(next) = args.next_str() {
+                format_options.format = ReplyFormat::from_str(next)?;
+                if format_options.format == ReplyFormat::STRING {
+                    // ARRPOP FORMAT STRING is not supported
+                    return Err(RedisError::Str("ERR wrong reply format"));
+                }
+                if !format_options.resp3 {
+                    return Err(RedisError::Str(
+                        "ERR FORMAT argument is not supported on RESP2",
+                    ));
+                }
+                args.next()
+            } else {
+                // If only the FORMAT subcommand is provided, then it's the path
+                Some(arg)
+            }
+        } else {
+            // if it's not FORMAT, then it's the path
+            Some(arg)
+        }
+    } else {
+        None
+    };
+
+    // Try to retrieve the optional arguments [path [index]]
+    let (path, index) = match path {
+        None => {
+            if format_options.is_resp3_reply() {
+                (Path::new(JSON_ROOT_PATH), i64::MAX)
+            } else {
+                // Legacy behavior for backward compatibility
+                (Path::new(JSON_ROOT_PATH_LEGACY), i64::MAX)
+            }
+        }
         Some(s) => {
             let path = Path::new(s.try_as_str()?);
             let index = args.next_i64().unwrap_or(-1);
             (path, index)
         }
     };
+    //args.done()?;
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
     if path.is_legacy() {
+        if format_options.format != ReplyFormat::STRINGS {
+            return Err(RedisError::Str(
+                "Legacy paths are supported only with FORMAT STRINGS",
+            ));
+        }
+
         json_arr_pop_legacy::<M>(&mut redis_key, ctx, path.get_path(), index)
     } else {
-        json_arr_pop_impl::<M>(&mut redis_key, ctx, path.get_path(), index)
+        json_arr_pop_impl::<M>(&mut redis_key, ctx, path.get_path(), index, &format_options)
     }
 }
 
@@ -1389,6 +1452,7 @@ fn json_arr_pop_impl<M>(
     ctx: &Context,
     path: &str,
     index: i64,
+    format_options: &ReplyFormatOptions,
 ) -> RedisResult
 where
     M: Manager,
@@ -1402,13 +1466,16 @@ where
     let mut need_notify = false;
     for p in paths {
         res.push(match p {
-            Some(p) => match redis_key.arr_pop(p, index)? {
-                Some(v) => {
+            Some(p) => redis_key.arr_pop(p, index, |v| {
+                v.map_or(Ok(RedisValue::Null), |v| {
                     need_notify = true;
-                    v.into()
-                }
-                _ => RedisValue::Null, // Empty array
-            },
+                    if format_options.is_resp3_reply() {
+                        Ok(KeyValue::value_to_resp3(v, format_options))
+                    } else {
+                        Ok(serde_json::to_string(&v)?.into())
+                    }
+                })
+            })?,
             _ => RedisValue::Null, // Not an array
         });
     }
@@ -1433,17 +1500,15 @@ where
 
     let paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
     if !paths.is_empty() {
-        let mut res = None;
+        let mut res = Ok(().into());
         for p in paths {
-            res = Some(redis_key.arr_pop(p, index)?);
+            res = Ok(redis_key.arr_pop(p, index, |v| match v {
+                Some(r) => Ok(serde_json::to_string(&r)?.into()),
+                None => Ok(().into()),
+            })?);
         }
-        match res.unwrap() {
-            Some(r) => {
-                redis_key.apply_changes(ctx, "json.arrpop")?;
-                Ok(r.into())
-            }
-            None => Ok(().into()),
-        }
+        redis_key.apply_changes(ctx, "json.arrpop")?;
+        res
     } else {
         Err(RedisError::String(
             err_msg_json_path_doesnt_exist_with_param_or(path, "not an array"),
@@ -1537,7 +1602,7 @@ where
 pub fn json_obj_keys<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
-    let path = Path::new(args.next_str().unwrap_or(JSON_ROOT_PATH_LEGACY));
+    let path = Path::new(args.next_str().unwrap_or(default_path(ctx)));
 
     let mut key = manager.open_key_read(ctx, &key)?;
     if path.is_legacy() {
@@ -1595,7 +1660,8 @@ where
 pub fn json_obj_len<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
-    let path = Path::new(args.next_str().unwrap_or(JSON_ROOT_PATH_LEGACY));
+
+    let path = Path::new(args.next_str().unwrap_or(default_path(ctx)));
 
     let key = manager.open_key_read(ctx, &key)?;
     if path.is_legacy() {
@@ -1701,7 +1767,7 @@ pub fn json_debug<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
     match args.next_str()?.to_uppercase().as_str() {
         "MEMORY" => {
             let key = args.next_arg()?;
-            let path = Path::new(args.next_str().unwrap_or(JSON_ROOT_PATH_LEGACY));
+            let path = Path::new(args.next_str().unwrap_or(default_path(ctx)));
 
             let key = manager.open_key_read(ctx, &key)?;
             if path.is_legacy() {
@@ -1745,7 +1811,7 @@ pub fn json_resp<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
 
     let key = args.next_arg()?;
     let path = match args.next() {
-        None => Path::new(JSON_ROOT_PATH_LEGACY),
+        None => Path::new(default_path(ctx)),
         Some(s) => Path::new(s.try_as_str()?),
     };
 

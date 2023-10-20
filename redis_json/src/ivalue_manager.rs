@@ -16,7 +16,7 @@ use ijson::{DestructuredMut, INumber, IObject, IString, IValue, ValueType};
 use redis_module::key::{verify_type, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::rediserror::RedisError;
-use redis_module::{Context, NotifyEvent, RedisString};
+use redis_module::{Context, NotifyEvent, RedisResult, RedisString};
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
 use std::io::Cursor;
@@ -276,15 +276,6 @@ impl<'a> IValueKeyHolderWrite<'a> {
         }
         Ok(())
     }
-
-    fn serialize(results: &IValue, format: Format) -> Result<String, Error> {
-        let res = match format {
-            Format::JSON | Format::STRING => serde_json::to_string(results)?,
-            Format::BSON => return Err("ERR Soon to come...".into()), //results.into() as Bson,
-            Format::EXPAND => return Err("ERR Unknown format specified".into()),
-        };
-        Ok(res)
-    }
 }
 
 impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
@@ -468,7 +459,12 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
     }
 
-    fn arr_pop(&mut self, path: Vec<String>, index: i64) -> Result<Option<String>, RedisError> {
+    fn arr_pop<C: FnOnce(Option<&IValue>) -> RedisResult>(
+        &mut self,
+        path: Vec<String>,
+        index: i64,
+        serialize_callback: C,
+    ) -> RedisResult {
         let mut res = None;
         self.do_op(&path, |v| {
             if let Some(array) = v.as_array_mut() {
@@ -484,10 +480,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 Err(err_json(v, "array"))
             }
         })?;
-        match res {
-            None => Ok(None),
-            Some(n) => Ok(Some(Self::serialize(&n, Format::JSON)?)),
-        }
+        serialize_callback(res.as_ref())
     }
 
     fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> Result<usize, RedisError> {
@@ -639,7 +632,6 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                     Ok(v)
                 },
             ),
-            Format::EXPAND => Err("Unsupported format".into()),
         }
     }
 
