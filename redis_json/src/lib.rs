@@ -168,7 +168,7 @@ macro_rules! redis_json_module_create {(
                 match GIT_BRANCH { Some(val) => val, _ => "unknown"},
                 ));
             export_shared_api(ctx);
-            ctx.set_module_options(ModuleOptions::HANDLE_IO_ERRORS);
+            ctx.set_module_options(ModuleOptions::HANDLE_IO_ERRORS | ModuleOptions::HANDLE_REPL_ASYNC_LOAD);
             ctx.log_notice("Enabled diskless replication");
             $init_func(ctx, args)
         }
