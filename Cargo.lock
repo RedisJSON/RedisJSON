@@ -790,8 +790,9 @@ dependencies = [
 
 [[package]]
 name = "redis-module"
-version = "99.99.99"
-source = "git+https://github.com/RedisLabsModules/redismodule-rs?branch=master#0bb8c124cae1b42aa6c242c9bc30ca24fa4f1972"
+version = "2.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d3b95d9fe5b8681bacea6532bbc7632590ae4499cecc8e019685b515fddda71"
 dependencies = [
  "backtrace",
  "bindgen",
@@ -812,9 +813,9 @@ dependencies = [
 
 [[package]]
 name = "redis-module-macros"
-version = "2.0.5"
+version = "2.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cec6cedc00206075029d2a9fef94132fd0b4eb0e2a5adfad17e7f2cf9e0104f1"
+checksum = "a9c92438cbeaaba0f99e2944ceeb2e34fc8fa7955576296570575df046b81197"
 dependencies = [
  "proc-macro2",
  "quote 1.0.33",
@@ -825,8 +826,9 @@ dependencies = [
 
 [[package]]
 name = "redis-module-macros-internals"
-version = "99.99.99"
-source = "git+https://github.com/RedisLabsModules/redismodule-rs?branch=master#0bb8c124cae1b42aa6c242c9bc30ca24fa4f1972"
+version = "2.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd1ba5724bf8bfd0c9d6f1169e45255957175b7d81944b325909024a159bc74c"
 dependencies = [
  "lazy_static",
  "proc-macro2",
