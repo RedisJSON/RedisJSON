@@ -328,7 +328,7 @@ jobs:
       - build-steps
       - run:
           name: Install Darwin
-          command: rustup target add 1.66.1-x86_64-apple-darwin
+          command: rustup target add stable-x86_64-apple-darwin
       - test-steps
       - run:
           name: Upload artifacts to S3
