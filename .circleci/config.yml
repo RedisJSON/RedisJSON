@@ -393,6 +393,9 @@ jobs:
     steps:
       - early-returns
       - build-steps
+      - run:
+          name: Install Darwin
+          command: rustup target add x86_64-apple-darwin
       - test-steps
       - run:
           name: Upload artifacts to S3
@@ -607,7 +610,7 @@ workflows:
             parameters:
               platform: [jammy, focal, bionic]
       - build-macos-x64:
-          <<: *on-version-tags
+          <<: *always
           context: common
       - build-macos-m1:
           context: common
