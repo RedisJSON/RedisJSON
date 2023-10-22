@@ -579,6 +579,9 @@ macro_rules! redis_json_module_export_shared_api {
             )
         }
 
+        // The apiname argument of export_shared_api should be a string literal with static lifetime
+        static mut VEC_EXPORT_SHARED_API_NAME : Vec<CString> = Vec::new();
+
         pub fn export_shared_api(ctx: &Context) {
             unsafe {
                 LLAPI_CTX = Some(rawmod::RedisModule_GetThreadSafeContext.unwrap()(
@@ -587,12 +590,12 @@ macro_rules! redis_json_module_export_shared_api {
 
                 for v in 1..6 {
                     let version = format!("RedisJSON_V{}", v);
-                    let version = CString::new(version.as_str()).unwrap();
+                    VEC_EXPORT_SHARED_API_NAME.push(CString::new(version.as_str()).unwrap());
                     ctx.export_shared_api(
                         (&JSONAPI_CURRENT as *const RedisJSONAPI_CURRENT).cast::<c_void>(),
-                        version.as_ptr().cast::<c_char>(),
+                        VEC_EXPORT_SHARED_API_NAME[v-1].as_ptr().cast::<c_char>(),
                     );
-                    ctx.log_notice(&format!("Exported {} API", version.to_str().unwrap()));
+                    ctx.log_notice(&format!("Exported {} API", version));
                 }
             };
         }
