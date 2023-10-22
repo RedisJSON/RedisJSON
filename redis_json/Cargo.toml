@@ -25,7 +25,8 @@ ijson.workspace = true
 serde_json.workspace = true
 serde.workspace = true
 libc = "0.2"
-redis-module = "2.0"
+redis-module = { git="https://github.com/RedisLabsModules/redismodule-rs", branch="master"}
+#redis-module = "2.0"
 redis-module-macros = "2.0"
 itertools = "0.10"
 json_path = {path="../json_path"}
