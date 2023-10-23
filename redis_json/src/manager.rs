@@ -5,6 +5,7 @@
  */
 
 use json_path::select_value::SelectValue;
+use redis_module::key::KeyFlags;
 use serde_json::Number;
 
 use redis_module::raw::RedisModuleKey;
@@ -79,6 +80,12 @@ pub trait Manager {
         &self,
         ctx: &Context,
         key: &RedisString,
+    ) -> Result<Self::ReadHolder, RedisError>;
+    fn open_key_read_with_flags(
+        &self,
+        ctx: &Context,
+        key: &RedisString,
+        flags: KeyFlags,
     ) -> Result<Self::ReadHolder, RedisError>;
     fn open_key_write(
         &self,

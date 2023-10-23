@@ -33,3 +33,5 @@
 .settings/
 
 wordlist.dic
+
+venv/
