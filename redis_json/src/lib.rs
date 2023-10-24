@@ -19,6 +19,11 @@ use redis_module::Status;
 use redis_module::{Context, RedisResult};
 
 #[cfg(not(feature = "as-library"))]
+use redis_module::logging::RedisLogLevel;
+#[cfg(not(feature = "as-library"))]
+use std::ffi::{CStr, CString};
+
+#[cfg(not(feature = "as-library"))]
 use redis_module::key::KeyFlags;
 
 #[cfg(not(feature = "as-library"))]
@@ -118,12 +123,10 @@ macro_rules! redis_json_module_create {(
         use std::marker::PhantomData;
         use std::os::raw::{c_double, c_int, c_longlong};
         use redis_module::raw as rawmod;
-        use redis_module::logging::RedisLogLevel;
         use rawmod::ModuleOptions;
         use redis_module::redis_module;
 
         use std::{
-            ffi::CStr,
             os::raw::{c_char, c_void},
         };
         use libc::size_t;
