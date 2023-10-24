@@ -156,6 +156,7 @@ setup_rltest() {
 	if [[ $RLTEST_CONSOLE == 1 ]]; then
 		RLTEST_ARGS+=" -i"
 	fi
+	RLTEST_ARGS+=" --enable-debug-command --enable-protected-configs"
 }
 
 #----------------------------------------------------------------------------------------------
