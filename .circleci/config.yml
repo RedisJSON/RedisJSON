@@ -4,6 +4,9 @@ parameters:
   run_default_flow:
     default: true
     type: boolean
+  run_nightly_twice_a_week_flow_label:
+    default: false
+    type: boolean
 
 commands:
   early-returns:
@@ -524,11 +527,13 @@ workflows:
             parameters:
               platform: [jammy, focal, bionic]
       - build-macos-x64:
-          <<: *on-version-tags
+          #<<: *on-version-tags
+          <<: *always
           context: common
       - build-macos-m1:
           context: common
-          <<: *on-version-tags
+          #<<: *on-version-tags
+          <<: *always
       - coverage:
           <<: *always
       - sanitize:
@@ -574,6 +579,17 @@ workflows:
           matrix:
             parameters:
               redis_version: ["7", "unstable"]  
+
+  nightly-twice-a-week-by-param:
+    when:
+      << pipeline.parameters.run_nightly_twice_a_week_flow_label >>
+    jobs:
+      - build-macos-x64:
+          context: common
+          upload: "yes"
+      - build-macos-m1:
+          context: common
+          upload: "yes"
 
   nightly-twice-a-week:
     triggers:
