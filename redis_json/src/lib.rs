@@ -118,12 +118,12 @@ macro_rules! redis_json_module_create {(
         use std::marker::PhantomData;
         use std::os::raw::{c_double, c_int, c_longlong};
         use redis_module::raw as rawmod;
-        use redis_module::logging::RedisLogLevel;
         use rawmod::ModuleOptions;
         use redis_module::redis_module;
+        use redis_module::logging::RedisLogLevel;
 
         use std::{
-            ffi::CStr,
+            ffi::{CStr, CString},
             os::raw::{c_char, c_void},
         };
         use libc::size_t;

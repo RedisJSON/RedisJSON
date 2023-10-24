@@ -328,7 +328,6 @@ macro_rules! redis_json_module_export_shared_api {
         pre_command_function: $pre_command_function_expr:expr,
     ) => {
         use std::ptr::NonNull;
-        use std::ffi::CString;
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_openKey(
