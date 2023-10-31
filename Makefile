@@ -194,6 +194,9 @@ pytest:
 	$(SHOW)MODULE=$(abspath $(TARGET)) $(realpath ./tests/pytest/tests.sh)
 
 cargo_test:
+	$(SHOW)cargo install cargo-deny
+	$(SHOW)cargo deny check licenses
+	$(SHOW)cargo deny check bans
 	$(SHOW)cargo $(CARGO_TOOLCHAIN) test --all
 
 .PHONY: pytest cargo_test

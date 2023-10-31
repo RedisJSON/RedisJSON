@@ -21,7 +21,10 @@ jobs:
         copyback: false
         prepare: pkg install -y bash curl lang/rust devel/llvm-devel
         run: |
-          cargo build --all --all-targets --verbose 
+          cargo build --all --all-targets --verbose
+          cargo install cargo-deny
+          cargo deny check licenses
+          cargo deny check bans
           curl https://sh.rustup.rs -sSf > rustup.sh
           sh rustup.sh -y
           . $HOME/.cargo/env
