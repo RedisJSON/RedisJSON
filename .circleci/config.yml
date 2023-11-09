@@ -334,7 +334,9 @@ jobs:
           name: Upload artifacts to S3
           command: |
             if [[ -n $CIRCLE_BRANCH && "<<parameters.upload>>" == "yes" ]]; then
-                make upload-artifacts SHOW=1
+                make upload-release SHOW=1
+            else
+                make upload-release SHOW=1 STAGING=1
             fi
       - persist-artifacts
 
@@ -355,6 +357,8 @@ jobs:
           command: |
             if [[ -n $CIRCLE_BRANCH && "<<parameters.upload>>" == "yes" ]]; then
                 make upload-artifacts SHOW=1 VERBOSE=1
+            else
+                make upload-artifacts SHOW=1 SNAPSHOTS=1
             fi
       - persist-artifacts
 
@@ -413,7 +417,7 @@ jobs:
             if [[ -n $CIRCLE_TAG && "<<parameters.staging-lab>>" != 1 ]]; then
                 make upload-release SHOW=1
             else
-                make upload-release SHOW=1 STAGING=1
+                make upload-release SHOW=1 SNAPSHOTS=1
             fi
 
   release-qa-tests:
@@ -515,23 +519,23 @@ workflows:
           name: build
           <<: *not-on-integ-branch
       - build-platforms:
-          <<: *on-integ-and-version-tags
+          <<: *always
           context: common
           matrix:
             parameters:
               platform: [jammy, focal, bionic, centos7, rocky8, rocky9, bullseye, amzn2]
       - build-arm-platforms:
-          <<: *on-integ-and-version-tags
+          <<: *always
           context: common
           matrix:
             parameters:
               platform: [jammy, focal, bionic]
       - build-macos-x64:
-          <<: *on-version-tags
+          <<: *always
           context: common
       - build-macos-m1:
           context: common
-          <<: *on-version-tags
+          <<: *always
       - coverage:
           <<: *always
       - sanitize:
@@ -542,7 +546,7 @@ workflows:
               san-type: [address]
       - upload-artifacts:
           name: upload-artifacts-to-staging-lab
-          <<: *on-integ-branch
+          <<: *always
           staging-lab: "1"
           context: common
           requires:
