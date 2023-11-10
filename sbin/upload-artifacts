@@ -79,7 +79,7 @@ else
 	MAYBE_SNAP=
 fi
 
-cd artifacts
+cd artifacts${MAYBE_SNAP}
 [[ $VERBOSE == 1 ]] && du -ah --apparent-size *
 
 #----------------------------------------------------------------------------------------------
