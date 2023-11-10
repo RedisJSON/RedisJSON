@@ -255,10 +255,6 @@ commands:
       - save-tests-logs
       - early-return-for-forked-pull-requests
       - run:
-          name: Upload artifacts to S3
-          command: |
-              make upload-artifacts OSNICK=<<parameters.platform>> SHOW=1
-      - run:
           name: Publish container
           command: |
             docker login -u redisfab -p $DOCKER_REDISFAB_PWD
@@ -331,7 +327,7 @@ jobs:
       - run:
           name: Upload artifacts to S3
           command: |
-            if [[ -n $CIRCLE_BRANCH && "<<parameters.upload>>" == "yes" ]]; then
+            if [[ -n $CIRCLE_BRANCH ]]; then
                 make upload-artifacts SHOW=1
             else
                 make upload-release SHOW=1
@@ -353,7 +349,7 @@ jobs:
       - run:
           name: Upload artifacts to S3
           command: |
-            if [[ -n $CIRCLE_BRANCH && "<<parameters.upload>>" == "yes" ]]; then
+            if [[ -n $CIRCLE_BRANCH ]]; then
                 make upload-artifacts SHOW=1 VERBOSE=1
             else
                 make upload-release SHOW=1
