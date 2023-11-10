@@ -256,6 +256,12 @@ commands:
       - save-tests-logs
       - early-return-for-forked-pull-requests
       - run:
+          name: Upload artifacts to S3
+          command: |
+            if [[ -n $CIRCLE_BRANCH ]]; then
+                make upload-artifacts OSNICK=<<parameters.platform>> SHOW=1
+            fi
+      - run:
           name: Publish container
           command: |
             docker login -u redisfab -p $DOCKER_REDISFAB_PWD
@@ -325,6 +331,7 @@ jobs:
       - early-returns
       - build-steps
       - test-steps
+      - persist-artifacts
       - run:
           name: Upload artifacts to S3
           command: |
@@ -333,7 +340,6 @@ jobs:
             else
                 make upload-release SHOW=1
             fi
-      - persist-artifacts
 
   build-macos-m1:
     macos:
@@ -347,6 +353,7 @@ jobs:
       - early-returns
       - build-steps
       - test-steps
+      - persist-artifacts
       - run:
           name: Upload artifacts to S3
           command: |
@@ -355,7 +362,6 @@ jobs:
             else
                 make upload-release SHOW=1
             fi
-      - persist-artifacts
 
   coverage:
     docker:
