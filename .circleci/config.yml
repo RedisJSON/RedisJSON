@@ -132,7 +132,6 @@ commands:
             - artifacts/*.zip
             - artifacts/*.tgz
             - artifacts/*.tar
-            - artifacts/snapshots/*
 
   build-steps:
     parameters:
@@ -520,23 +519,23 @@ workflows:
           name: build
           <<: *not-on-integ-branch
       - build-platforms:
-          <<: *always
+          <<: *on-integ-and-version-tags
           context: common
           matrix:
             parameters:
               platform: [jammy, focal, bionic, centos7, rocky8, rocky9, bullseye, amzn2]
       - build-arm-platforms:
-          <<: *always
+          <<: *on-integ-and-version-tags
           context: common
           matrix:
             parameters:
               platform: [jammy, focal, bionic]
       - build-macos-x64:
-          <<: *always
+          <<: *on-integ-and-version-tags
           context: common
       - build-macos-m1:
           context: common
-          <<: *always
+          <<: *on-integ-and-version-tags
       - coverage:
           <<: *always
       - sanitize:
@@ -547,7 +546,7 @@ workflows:
               san-type: [address]
       - upload-artifacts:
           name: upload-artifacts-to-staging-lab
-          <<: *always
+          <<: *on-integ-branch
           staging-lab: "1"
           context: common
           requires:
