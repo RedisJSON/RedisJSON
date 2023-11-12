@@ -600,23 +600,23 @@ workflows:
           name: build
           <<: *not-on-integ-branch
       - build-platforms:
-          <<: *always
+          <<: *on-integ-and-version-tags
           context: common
           matrix:
             parameters:
               platform: [jammy, focal, bionic, xenial, amzn2, rocky8, centos7, bullseye]
       - build-arm-platforms:
-          <<: *always
+          <<: *on-integ-and-version-tags
           context: common
           matrix:
             parameters:
               platform: [jammy, focal, bionic]
       - build-macos-x64:
-          <<: *always
+          <<: *on-integ-and-version-tags
           context: common
       - build-macos-m1:
           context: common
-          <<: *always
+          <<: *on-integ-and-version-tags
       - coverage:
           <<: *on-any-branch
       - sanitize:
@@ -627,7 +627,7 @@ workflows:
               san-type: [address] # [memory]
       - upload-artifacts:
           name: upload-artifacts-to-staging-lab
-          <<: *always
+          <<: *on-integ-branch
           staging-lab: "1"
           context: common
           requires:
