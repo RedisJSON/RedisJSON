@@ -55,6 +55,7 @@ OP=""
 
 ARCH=$($READIES/bin/platform --arch)
 [[ $ARCH == x64 ]] && ARCH=x86_64
+[[ $ARCH == arm64v8 ]] && ARCH=aarch64
 
 OS=$($READIES/bin/platform --os)
 [[ $OS == linux ]] && OS=Linux
@@ -70,7 +71,14 @@ OSNICK=$($READIES/bin/platform --osnick)
 [[ $OSNICK == ol8 ]]     && OSNICK=rhel8
 [[ $OSNICK == rocky8 ]]  && OSNICK=rhel8
 
-[[ $OSNICK == bigsur ]]  && OSNICK=catalina
+if [[ $OS == macos ]]; then
+	# as we don't build on macOS for every platform, we converge to a least common denominator
+	if [[ $ARCH == x86_64 ]]; then
+		OSNICK=catalina  # to be aligned with the rest of the modules in redis stack
+	else
+		[[ $OSNICK == ventura ]] && OSNICK=monterey
+	fi
+fi
 
 PLATFORM="$OS-$OSNICK-$ARCH"
 
