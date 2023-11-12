@@ -394,13 +394,15 @@ jobs:
       - early-returns
       - build-steps
       - test-steps
+      - persist-artifacts
       - run:
           name: Upload artifacts to S3
           command: |
-            if [[ -n $CIRCLE_BRANCH && "<<parameters.upload>>" == "yes" ]]; then
+            if [[ -n $CIRCLE_BRANCH ]]; then
                 make upload-artifacts SHOW=1
+            else
+                make upload-release SHOW=1
             fi
-      - persist-artifacts
 
   build-macos-m1:
     macos:
@@ -414,13 +416,15 @@ jobs:
       - early-returns
       - build-steps
       - test-steps
+      - persist-artifacts
       - run:
           name: Upload artifacts to S3
           command: |
-            if [[ -n $CIRCLE_BRANCH && "<<parameters.upload>>" == "yes" ]]; then
+            if [[ -n $CIRCLE_BRANCH ]]; then
                 make upload-artifacts SHOW=1 VERBOSE=1
+            else
+                make upload-release SHOW=1
             fi
-      - persist-artifacts
 
   coverage:
     docker:
@@ -474,10 +478,10 @@ jobs:
           command: |
             mkdir -p bin
             ln -s ~/workspace/artifacts bin/artifacts
-            if [[ -n $CIRCLE_TAG && "<<parameters.staging-lab>>" != 1 ]]; then
+            if [[ -n $CIRCLE_TAG ]]; then
                 make upload-release SHOW=1
             else
-                make upload-release SHOW=1 STAGING=1
+                make upload-artifacts SHOW=1
             fi
 
   release-qa-tests:
