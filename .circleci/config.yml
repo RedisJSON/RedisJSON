@@ -132,6 +132,7 @@ commands:
             - artifacts/*.zip
             - artifacts/*.tgz
             - artifacts/*.tar
+            - artifacts/snapshots/*
 
   build-steps:
     parameters:
