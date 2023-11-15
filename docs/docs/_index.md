@@ -37,7 +37,7 @@ The first JSON command to try is `JSON.SET`, which sets a Redis key with a JSON 
 "[\"Hyperion\"]"
 > JSON.TYPE bike $
 1) "string"
-{{ /clients-example }}
+{{< /clients-example >}}
 
 Note how the commands include the dollar sign character `$`. This is the [path](/redisjson/path) to the value in the JSON document (in this case it just means the root).
 
@@ -50,7 +50,7 @@ Here are a few more string operations. `JSON.STRLEN` tells you the length of the
 1) (integer) 27
 > JSON.GET bike $
 "[\"Hyperion (Enduro bikes)\"]"
-{{ /clients-example }}
+{{< /clients-example >}}
 
 Numbers can be [incremented](/commands/json.numincrby):
 
@@ -63,7 +63,7 @@ OK
 "[2.5]"
 > JSON.NUMINCRBY crashes $ -0.75
 "[1.75]"
-{{ /clients-example }}
+{{< /clients-example >}}
 
 Here's a more interesting example that includes JSON arrays and objects:
 
@@ -78,7 +78,7 @@ OK
 (integer) 1
 > JSON.GET newbike $
 "[[\"Deimos\",{\"crashes\":0}]]"
-{{ /clients-example }}
+{{< /clients-example >}}
 
 The `JSON.DEL` command deletes any JSON value you specify with the `path` parameter.
 
@@ -103,7 +103,7 @@ OK
 1) "\"Prickett\""
 > JSON.ARRPOP riders $
 1) (nil)
-{{ /clients-example }}
+{{< /clients-example >}}
 
 JSON objects also have their own commands:
 
@@ -116,7 +116,7 @@ OK
 1) 1) "model"
    2) "brand"
    3) "price"
-{{ /clients-example }}
+{{< /clients-example >}}
 
 To return a JSON response in a more human-readable format, run `redis-cli` in raw output mode and include formatting keywords such as `INDENT`, `NEWLINE`, and `SPACE` with the `JSON.GET` command:
 
