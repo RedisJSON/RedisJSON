@@ -222,7 +222,7 @@ RedisJSON v1 had the following path implementation. JSON v2 still supports this 
 
 Paths always begin at the root of a Redis JSON value. The root is denoted by a period character (`.`). For paths that reference the root's children, it is optional to prefix the path with the root.
 
-Redis JSON supports both dot notation and bracket notation for object key access. The following paths refer to _mountain bikes_, which is a child of _inventory_ under the root:
+Redis JSON supports both dot notation and bracket notation for object key access. The following paths refer to 'mountain bikes', which is a child of 'inventory' under the root:
 
 *   `.inventory.mountain_bikes`
 *   `inventory["mountain_bikes"]`
