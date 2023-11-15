@@ -121,7 +121,7 @@ First, create the JSON document in your database:
 
 {{< clients-example json_tutorial set_bikes >}}
 > JSON.SET "bikes:inventory" "$" "{\"mountain_bikes\": [{\"id\": \"bike:1\", \"model\": \"Phoebe\", \"description\": \"This is a mid-travel trail slayer that is a fantastic daily driver or one bike quiver. The Shimano Claris 8-speed groupset gives plenty of gear range to tackle hills and there\\u2019s room for mudguards and a rack too.  This is the bike for the rider who wants trail manners with low fuss ownership.\", \"price\": 1920, \"specs\": {\"material\": \"carbon\", \"weight\": 13.1}, \"colors\": [\"black\", \"silver\"]}, {\"id\": \"bike:2\", \"model\": \"Quaoar\", \"description\": \"Redesigned for the 2020 model year, this bike impressed our testers and is the best all-around trail bike we've ever tested. The Shimano gear system effectively does away with an external cassette, so is super low maintenance in terms of wear and tear. All in all it's an impressive package for the price, making it very competitive.\", \"price\": 2072, \"specs\": {\"material\": \"aluminium\", \"weight\": 7.9}, \"colors\": [\"black\", \"white\"]}, {\"id\": \"bike:3\", \"model\": \"Weywot\", \"description\": \"This bike gives kids aged six years and older a durable and uberlight mountain bike for their first experience on tracks and easy cruising through forests and fields. A set of powerful Shimano hydraulic disc brakes provide ample stopping ability. If you're after a budget option, this is one of the best bikes you could get.\", \"price\": 3264, \"specs\": {\"material\": \"alloy\", \"weight\": 13.8}}], \"commuter_bikes\": [{\"id\": \"bike:4\", \"model\": \"Salacia\", \"description\": \"This bike is a great option for anyone who just wants a bike to get about on With a slick-shifting Claris gears from Shimano\\u2019s, this is a bike which doesn\\u2019t break the bank and delivers craved performance.  It\\u2019s for the rider who wants both efficiency and capability.\", \"price\": 1475, \"specs\": {\"material\": \"aluminium\", \"weight\": 16.6}, \"colors\": [\"black\", \"silver\"]}, {\"id\": \"bike:5\", \"model\": \"Mimas\", \"description\": \"A real joy to ride, this bike got very high scores in last years Bike of the year report. The carefully crafted 50-34 tooth chainset and 11-32 tooth cassette give an easy-on-the-legs bottom gear for climbing, and the high-quality Vittoria Zaffiro tires give balance and grip.It includes a low-step frame , our memory foam seat, bump-resistant shocks and conveniently placed thumb throttle. Put it all together and you get a bike that helps redefine what can be done for this price.\", \"price\": 3941, \"specs\": {\"material\": \"alloy\", \"weight\": 11.6}}]}"
-{{ /clients-example }}
+{{< /clients-example >}}
 
 #### Access JSON examples
 
@@ -132,7 +132,7 @@ You can use the wildcard operator `*` to return a list of all items in the inven
 {{< clients-example json_tutorial get_bikes >}}
 > JSON.GET "bikes:inventory" $.inventory.*
 "[[{\"id\":\"bike:1\",\"model\":\"Phoebe\",\"description\":\"This is a mid-travel trail slayer that is a fantastic daily driver or one bike quiver. The Shimano Claris 8-speed groupset gives plenty of gear range to tackle hills and there\xe2\x80\x99s room for mudguards and a rack too.  This is the bike for the rider who wants trail manners with low fuss ownership.\",\"price\":1920,\"specs\":{\"material\":\"carbon\",\"weight\":13.1},\"colors\":[\"black\",\"silver\"]},{\"id\":\"bike:2\",\"model\":\"Quaoar\",\"description\":\"Redesigned for the 2020 model year, this bike impressed our testers and is the best all-around trail bike we've ever tested. The Shimano gear system effectively does away with an external cassette, so is super low maintenance in terms of wear and tear. All in all it's an impressive package for the price, making it very competitive.\",\"price\":2072,\"specs\":{\"material\":\"aluminium\",\"weight\":7.9},\"colors\":[\"black\",\"white\"]},{\"id\":\"bike:3\",\"model\":\"Weywot\",\"description\":\"This bike gives kids aged six years and older a durable and uberlight mountain bike for their first experience on tracks and easy cruising through forests and fields. A set of powerful Shimano hydraulic disc brakes provide ample stopping ability. If you're after a budget option, this is one of the best bikes you could get.\",\"price\":3264,\"specs\":{\"material\":\"alloy\",\"weight\":13.8}}],[{\"id\":\"bike:4\",\"model\":\"Salacia\",\"description\":\"This bike is a great option for anyone who just wants a bike to get about on With a slick-shifting Claris gears from Shimano\xe2\x80\x99s, this is a bike which doesn\xe2\x80\x99t break the bank and delivers craved performance.  It\xe2\x80\x99s for the rider who wants both efficiency and capability.\",\"price\":1475,\"specs\":{\"material\":\"aluminium\",\"weight\":16.6},\"colors\":[\"black\",\"silver\"]},{\"id\":\"bike:5\",\"model\":\"Mimas\",\"description\":\"A real joy to ride, this bike got very high scores in last years Bike of the year report. The carefully crafted 50-34 tooth chainset and 11-32 tooth cassette give an easy-on-the-legs bottom gear for climbing, and the high-quality Vittoria Zaffiro tires give balance and grip.It includes a low-step frame , our memory foam seat, bump-resistant shocks and conveniently placed thumb throttle. Put it all together and you get a bike that helps redefine what can be done for this price.\",\"price\":3941,\"specs\":{\"material\":\"alloy\",\"weight\":11.6}}]]"
-{{ /clients-example }}
+{{< /clients-example >}}
 
 For some queries, multiple paths can produce the same results. For example, the following paths return the models of mountain bikes:
 
@@ -143,21 +143,21 @@ For some queries, multiple paths can produce the same results. For example, the 
 "[\"Phoebe\",\"Quaoar\",\"Weywot\"]"
 > JSON.GET "bikes:inventory" $..mountain_bikes[*].model
 "[\"Phoebe\",\"Quaoar\",\"Weywot\"]"
-{{ /clients-example }}
+{{< /clients-example >}}
 
 The recursive descent operator `..` can retrieve a field from multiple sections of a JSON document. The following example returns the model of all inventory items:
 
 {{< clients-example json_tutorial get_models >}}
 > JSON.GET "bikes:inventory" $..model
 "[\"Phoebe\",\"Quaoar\",\"Weywot\",\"Salacia\",\"Mimas\"]"
-{{ /clients-example }}
+{{< /clients-example >}}
 
 You can use an array slice to select a range of elements from an array. This example returns the models of the first two mountain bikes:
 
 {{< clients-example json_tutorial get2mtnbikes >}}
 > JSON.GET "bikes:inventory" $..mountain_bikes[0:2].model
 "[\"Phoebe\",\"Quaoar\"]"
-{{ /clients-example }}
+{{< /clients-example >}}
 
 Filter expressions `?()` let you select JSON elements based on certain conditions. You can use comparison operators (`==`, `!=`, `<`, `<=`, `>`, `>=`, and starting with version v2.4.2, also `=~`), logical operators (`&&`, `||`), and parenthesis (`(`, `)`) within these expressions. A filter expression can be applied on an array or on an object, iterating over all the **elements** in the array or all the **values** in the object, retrieving only the ones that match the filter condition. 
 
@@ -189,7 +189,7 @@ In the following examples, the filter only returns
 
 > JSON.GET "bikes:inventory" "$..[?(@.description =~ '(?i)easy')].model"
 "[\"Quaoar\",\"Weywot\",\"Salacia\",\"Mimas\"]"
-{{ /clients-example }}
+{{< /clients-example >}}
 
 #### Update JSON examples
 
@@ -204,7 +204,7 @@ For example, you can pass a JSONPath to the `JSON.NUMINCRBY` command to update a
 "[1820,1972,3164,1375,3841]"
 > JSON.NUMINCRBY "bikes:inventory" $..price 100
 "[1920,2072,3264,1475,3941]"
-{{ /clients-example }}
+{{< /clients-example >}}
 
 You can use filter expressions to update only JSON elements that match certain conditions. JSONPath queries also work with other JSON commands that accept a path as an argument. The following example adds a new color option for bikes that cost less thatn 2,000. Note that it will also only apply to bikes that already have a color list as `JSON.ARRAPPEND` will not create the colors field for the other entries.
 
@@ -214,7 +214,7 @@ You can use filter expressions to update only JSON elements that match certain c
 2) (integer) 3
 > JSON.GET "bikes:inventory" $..[*].colors
 "[[\"black\",\"silver\",\"pink\"],[\"black\",\"white\"],[\"black\",\"silver\",\"pink\"]]"
-{{ /clients-example }}
+{{< /clients-example >}}
 
 ## Legacy path syntax
 
