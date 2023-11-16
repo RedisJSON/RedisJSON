@@ -105,12 +105,6 @@ ifeq ($(PROFILE),1)
 RUST_FLAGS += -g -C force-frame-pointers=yes
 endif
 
-ifeq ($(OS),macos)
-ifeq ($(ARCH),x64)
-	CARGO_TOOLCHAIN = +1.66.1
-endif
-endif
-
 ifeq ($(NIGHTLY),1)
 	TARGET_DIR=$(BINDIR)/target/$(RUST_TARGET)/debug
 
