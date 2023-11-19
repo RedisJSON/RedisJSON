@@ -1,8 +1,6 @@
 version: 0.2
 name: "json_set_fulldoc_yahoo2"
-remote:
- - type: oss-standalone
- - setup: redisearch-m5d
+
 clientconfig:
   - tool: redis-benchmark
   - min-tool-version: "6.2.0"
