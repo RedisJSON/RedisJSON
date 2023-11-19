@@ -34,22 +34,32 @@ fi
 
 ARCH=$($READIES/bin/platform --arch)
 [[ $ARCH == x64 ]] && ARCH="x86_64"
+[[ $ARCH == arm64v8 ]] && ARCH="aarch64"
 
 OS=$($READIES/bin/platform --os)
 [[ $OS == linux ]] && OS="Linux"
 
 [[ -z $OSNICK ]] && OSNICK=$($READIES/bin/platform --osnick)
-[[ $OSNICK == trusty ]] && OSNICK=ubuntu14.04
-[[ $OSNICK == xenial ]] && OSNICK=ubuntu16.04
-[[ $OSNICK == bionic ]] && OSNICK=ubuntu18.04
-[[ $OSNICK == focal ]] && OSNICK=ubuntu20.04
-[[ $OSNICK == jammy ]] && OSNICK=ubuntu22.04
+[[ $OSNICK == trusty ]]  && OSNICK=ubuntu14.04
+[[ $OSNICK == xenial ]]  && OSNICK=ubuntu16.04
+[[ $OSNICK == bionic ]]  && OSNICK=ubuntu18.04
+[[ $OSNICK == focal ]]   && OSNICK=ubuntu20.04
+[[ $OSNICK == jammy ]]   && OSNICK=ubuntu22.04
 [[ $OSNICK == centos7 ]] && OSNICK=rhel7
 [[ $OSNICK == centos8 ]] && OSNICK=rhel8
-[[ $OSNICK == ol8 ]] && OSNICK=rhel8
-[[ $OSNICK == rocky8 ]] && OSNICK=rhel8
+[[ $OSNICK == centos9 ]] && OSNICK=rhel9
+[[ $OSNICK == ol8 ]]     && OSNICK=rhel8
+[[ $OSNICK == rocky8 ]]  && OSNICK=rhel8
+[[ $OSNICK == rocky9 ]]  && OSNICK=rhel9
 
-[[ $OSNICK == bigsur ]]  && OSNICK=catalina
+if [[ $OS == macos ]]; then
+	# as we don't build on macOS for every platform, we converge to a least common denominator
+	if [[ $ARCH == x86_64 ]]; then
+		OSNICK=catalina  # to be aligned with the rest of the modules in redis stack
+	else
+		[[ $OSNICK == ventura ]] && OSNICK=monterey
+	fi
+fi
 
 PLATFORM="$OS-$OSNICK-$ARCH"
 
@@ -64,16 +74,9 @@ else
 	S3_URL=s3://redismodules
 fi
 
-if [[ $FORCE != 1 ]]; then
-	if [[ -z $CIRCLECI ]]; then
-		eprint "Cannot upload outside of CircleCI. Override with FORCE=1."
-		exit 1
-	fi
-
-	if [[ -z $AWS_ACCESS_KEY_ID || -z $AWS_SECRET_ACCESS_KEY ]]; then
-		eprint "No credentials for S3 upload."
-		exit 1
-	fi
+if [[ -z $AWS_ACCESS_KEY_ID || -z $AWS_SECRET_ACCESS_KEY ]]; then
+	eprint "No credentials for S3 upload."
+	exit 1
 fi
 
 cd $ROOT/bin
@@ -94,7 +97,7 @@ s3_upload_file() {
 	local s3_dir="$2"
 	[[ $s3_dir != */ ]] && s3_dir="${s3_dir}/"
 	
-	$OP aws s3 cp $file $s3_dir --acl public-read --no-progress
+	$OP aws --debug s3 cp $file $s3_dir --acl public-read --no-progress
 }
 
 s3_ls() {

@@ -13,12 +13,12 @@ use std::{
     os::raw::{c_char, c_void},
 };
 
-use crate::formatter::FormatOptions;
+use crate::formatter::ReplyFormatOptions;
 use crate::key_value::KeyValue;
 use json_path::select_value::{SelectValue, SelectValueType};
 use json_path::{compile, create};
 use redis_module::raw as rawmod;
-use redis_module::{Context, RedisString, Status};
+use redis_module::{key::KeyFlags, Context, RedisString, Status};
 
 use crate::manager::{Manager, ReadHolder};
 
@@ -71,6 +71,21 @@ pub fn json_api_open_key_internal<M: Manager>(
 ) -> *const M::V {
     let ctx = Context::new(ctx);
     if let Ok(h) = manager.open_key_read(&ctx, &key) {
+        if let Ok(Some(v)) = h.get_value() {
+            return v;
+        }
+    }
+    null()
+}
+
+pub fn json_api_open_key_with_flags_internal<M: Manager>(
+    manager: M,
+    ctx: *mut rawmod::RedisModuleCtx,
+    key: RedisString,
+    flags: KeyFlags,
+) -> *const M::V {
+    let ctx: Context = Context::new(ctx);
+    if let Ok(h) = manager.open_key_read_with_flags(&ctx, &key, flags) {
         if let Ok(Some(v)) = h.get_value() {
             return v;
         }
@@ -133,7 +148,7 @@ pub fn json_api_get_json<M: Manager>(
     str: *mut *mut rawmod::RedisModuleString,
 ) -> c_int {
     let json = unsafe { &*(json.cast::<M::V>()) };
-    let res = KeyValue::<M::V>::serialize_object(json, &FormatOptions::default());
+    let res = KeyValue::<M::V>::serialize_object(json, &ReplyFormatOptions::default());
     create_rmstring(ctx, &res, str)
 }
 
@@ -147,7 +162,7 @@ pub fn json_api_get_json_from_iter<M: Manager>(
     if iter.pos >= iter.results.len() {
         Status::Err as c_int
     } else {
-        let res = KeyValue::<M::V>::serialize_object(&iter.results, &FormatOptions::default());
+        let res = KeyValue::<M::V>::serialize_object(&iter.results, &ReplyFormatOptions::default());
         create_rmstring(ctx, &res, str);
         Status::Ok as c_int
     }
@@ -267,6 +282,41 @@ pub fn json_api_is_json<M: Manager>(m: M, key: *mut rawmod::RedisModuleKey) -> c
     m.is_json(key).map_or(0, |res| res as c_int)
 }
 
+pub fn json_api_get_key_value<M: Manager>(_: M, val: *const c_void) -> *const c_void {
+    let json = unsafe { &*(val.cast::<M::V>()) };
+    match json.get_type() {
+        SelectValueType::Object => Box::into_raw(Box::new(json.items().unwrap())).cast::<c_void>(),
+        _ => null(),
+    }
+}
+
+pub fn json_api_next_key_value<'a, M: Manager>(
+    _: M,
+    iter: *mut c_void,
+    str: *mut *mut rawmod::RedisModuleString,
+) -> *const c_void
+where
+    M::V: 'a,
+{
+    let iter = unsafe { &mut *(iter.cast::<Box<dyn Iterator<Item = (&'a str, &'a M::V)> + 'a>>()) };
+    if let Some((k, v)) = iter.next() {
+        create_rmstring(null_mut(), k, str);
+        (v as *const M::V).cast::<c_void>()
+    } else {
+        null()
+    }
+}
+
+pub fn json_api_free_key_values_iter<'a, M: Manager>(_: M, iter: *mut c_void)
+where
+    M::V: 'a,
+{
+    let iter = unsafe { &mut *(iter.cast::<Box<dyn Iterator<Item = (&'a str, &'a M::V)> + 'a>>()) };
+    unsafe {
+        drop(Box::from_raw(iter));
+    }
+}
+
 pub fn get_llapi_ctx() -> Context {
     Context::new(unsafe { LLAPI_CTX.unwrap() })
 }
@@ -288,6 +338,26 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_mngr: $get_manager_expr,
                 run: |mngr|{json_api_open_key_internal(mngr, ctx, RedisString::new(NonNull::new(ctx), key_str))as *mut c_void},
+            )
+        }
+
+        #[no_mangle]
+        pub extern "C" fn JSONAPI_openKey_withFlags(
+            ctx: *mut rawmod::RedisModuleCtx,
+            key_str: *mut rawmod::RedisModuleString,
+            flags: c_int,
+        ) -> *mut c_void {
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr| {
+                    json_api_open_key_with_flags_internal(
+                        mngr,
+                        ctx,
+                        RedisString::new(NonNull::new(ctx), key_str),
+                        KeyFlags::from_bits_truncate(flags as i32),
+                    ) as *mut c_void
+                },
             )
         }
 
@@ -424,7 +494,7 @@ macro_rules! redis_json_module_export_shared_api {
         #[no_mangle]
         pub extern "C" fn JSONAPI_getJSONFromIter(iter: *mut c_void,
             ctx: *mut rawmod::RedisModuleCtx,
-            str: *mut *mut rawmod::RedisModuleString,) -> c_int {
+            str: *mut *mut rawmod::RedisModuleString) -> c_int {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_mngr: $get_manager_expr,
@@ -480,32 +550,52 @@ macro_rules! redis_json_module_export_shared_api {
             )
         }
 
-        static REDISJSON_GETAPI_V1: &str = concat!("RedisJSON_V1", "\0");
-        static REDISJSON_GETAPI_V2: &str = concat!("RedisJSON_V2", "\0");
-        static REDISJSON_GETAPI_V3: &str = concat!("RedisJSON_V3", "\0");
+        #[no_mangle]
+        pub extern "C" fn JSONAPI_getKeyValues(json: *const c_void) -> *const c_void {
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_get_key_value(mngr, json)},
+            )
+        }
+
+        #[no_mangle]
+        pub extern "C" fn JSONAPI_nextKeyValue(iter: *mut c_void,
+            str: *mut *mut rawmod::RedisModuleString) -> *const c_void {
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_next_key_value(mngr, iter, str)},
+            )
+        }
+
+        #[no_mangle]
+        pub extern "C" fn JSONAPI_freeKeyValuesIter(iter: *mut c_void) {
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_free_key_values_iter(mngr, iter)},
+            )
+        }
+
+        // The apiname argument of export_shared_api should be a string literal with static lifetime
+        static mut VEC_EXPORT_SHARED_API_NAME : Vec<CString> = Vec::new();
 
         pub fn export_shared_api(ctx: &Context) {
             unsafe {
                 LLAPI_CTX = Some(rawmod::RedisModule_GetThreadSafeContext.unwrap()(
                     std::ptr::null_mut(),
                 ));
-                ctx.export_shared_api(
-                    (&JSONAPI_CURRENT as *const RedisJSONAPI_CURRENT).cast::<c_void>(),
-                    REDISJSON_GETAPI_V1.as_ptr().cast::<c_char>(),
-                );
-                ctx.log_notice("Exported RedisJSON_V1 API");
 
-                ctx.export_shared_api(
-                    (&JSONAPI_CURRENT as *const RedisJSONAPI_CURRENT).cast::<c_void>(),
-                    REDISJSON_GETAPI_V2.as_ptr().cast::<c_char>(),
-                );
-                ctx.log_notice("Exported RedisJSON_V2 API");
-
-                ctx.export_shared_api(
-                    (&JSONAPI_CURRENT as *const RedisJSONAPI_CURRENT).cast::<c_void>(),
-                    REDISJSON_GETAPI_V3.as_ptr().cast::<c_char>(),
-                );
-                ctx.log_notice("Exported RedisJSON_V3 API");
+                for v in 1..6 {
+                    let version = format!("RedisJSON_V{}", v);
+                    VEC_EXPORT_SHARED_API_NAME.push(CString::new(version.as_str()).unwrap());
+                    ctx.export_shared_api(
+                        (&JSONAPI_CURRENT as *const RedisJSONAPI_CURRENT).cast::<c_void>(),
+                        VEC_EXPORT_SHARED_API_NAME[v-1].as_ptr().cast::<c_char>(),
+                    );
+                    ctx.log_notice(&format!("Exported {} API", version));
+                }
             };
         }
 
@@ -534,6 +624,12 @@ macro_rules! redis_json_module_export_shared_api {
             // V3 entries
             getJSONFromIter: JSONAPI_getJSONFromIter,
             resetIter: JSONAPI_resetIter,
+            // V4 entries
+            getKeyValues: JSONAPI_getKeyValues,
+            nextKeyValue: JSONAPI_nextKeyValue,
+            freeKeyValuesIter: JSONAPI_freeKeyValuesIter,
+            // V5 entries
+            openKeyWithFlags: JSONAPI_openKey_withFlags,
         };
 
         #[repr(C)]
@@ -574,8 +670,22 @@ macro_rules! redis_json_module_export_shared_api {
             pub pathIsSingle: extern "C" fn(json_path: *mut c_void) -> c_int,
             pub pathHasDefinedOrder: extern "C" fn(json_path: *mut c_void) -> c_int,
             // V3 entries
-            pub getJSONFromIter: extern "C" fn(iter: *mut c_void, ctx: *mut rawmod::RedisModuleCtx, str: *mut *mut rawmod::RedisModuleString,) -> c_int,
+            pub getJSONFromIter: extern "C" fn(iter: *mut c_void, ctx: *mut rawmod::RedisModuleCtx, str: *mut *mut rawmod::RedisModuleString) -> c_int,
             pub resetIter: extern "C" fn(iter: *mut c_void),
+            // V4 entries
+            pub getKeyValues: extern "C" fn(json: *const c_void) -> *const c_void,
+            pub nextKeyValue: extern "C" fn(
+                iter: *mut c_void,
+                str: *mut *mut rawmod::RedisModuleString
+            ) -> *const c_void,
+            pub freeKeyValuesIter: extern "C" fn(iter: *mut c_void),
+            // V5
+            pub openKeyWithFlags: extern "C" fn(
+                ctx: *mut rawmod::RedisModuleCtx,
+                key_str: *mut rawmod::RedisModuleString,
+                flags: c_int,
+            ) -> *mut c_void,
+
         }
     };
 }

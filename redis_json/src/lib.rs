@@ -19,11 +19,16 @@ use redis_module::Status;
 use redis_module::{Context, RedisResult};
 
 #[cfg(not(feature = "as-library"))]
+use redis_module::key::KeyFlags;
+
+#[cfg(not(feature = "as-library"))]
 use crate::c_api::{
-    get_llapi_ctx, json_api_free_iter, json_api_get, json_api_get_at, json_api_get_boolean,
-    json_api_get_double, json_api_get_int, json_api_get_json, json_api_get_json_from_iter,
-    json_api_get_len, json_api_get_string, json_api_get_type, json_api_is_json, json_api_len,
-    json_api_next, json_api_open_key_internal, json_api_reset_iter, LLAPI_CTX,
+    get_llapi_ctx, json_api_free_iter, json_api_free_key_values_iter, json_api_get,
+    json_api_get_at, json_api_get_boolean, json_api_get_double, json_api_get_int,
+    json_api_get_json, json_api_get_json_from_iter, json_api_get_key_value, json_api_get_len,
+    json_api_get_string, json_api_get_type, json_api_is_json, json_api_len, json_api_next,
+    json_api_next_key_value, json_api_open_key_internal, json_api_open_key_with_flags_internal,
+    json_api_reset_iter, LLAPI_CTX,
 };
 use crate::redisjson::Format;
 
@@ -74,6 +79,7 @@ pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
         unlink2: None,
         copy2: None,
         mem_usage2: None,
+        aux_save2: None,
     },
 );
 /////////////////////////////////////////////////////
@@ -108,14 +114,16 @@ macro_rules! redis_json_module_create {(
         info: $info_func:ident,
     ) => {
 
-        use redis_module::{redis_module, RedisString};
+        use redis_module::RedisString;
         use std::marker::PhantomData;
         use std::os::raw::{c_double, c_int, c_longlong};
-        use redis_module::{raw as rawmod, LogLevel};
+        use redis_module::raw as rawmod;
         use rawmod::ModuleOptions;
+        use redis_module::redis_module;
+        use redis_module::logging::RedisLogLevel;
 
         use std::{
-            ffi::CStr,
+            ffi::{CStr, CString},
             os::raw::{c_char, c_void},
         };
         use libc::size_t;
@@ -167,7 +175,7 @@ macro_rules! redis_json_module_create {(
 
         fn json_init_config(ctx: &Context, args: &[RedisString]) -> Status{
             if args.len() % 2 != 0 {
-                ctx.log(LogLevel::Warning, "RedisJson arguments must be key:value pairs");
+                ctx.log(RedisLogLevel::Warning, "RedisJson arguments must be key:value pairs");
                 return Status::Err;
             }
             let mut args_map = HashMap::<String, String>::new();

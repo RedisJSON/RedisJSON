@@ -3,13 +3,15 @@ title: "Path"
 linkTitle: "Path"
 weight: 3
 description: Access specific elements within a JSON document
+aliases:
+    - /docs/stack/json/path
 ---
 
-Paths help you access specific elements within a JSON document. Since no standard for JSON path syntax exists, RedisJSON implements its own. RedisJSON's syntax is based on common best practices and intentionally resembles [JSONPath](http://goessner.net/articles/JsonPath/).
+Paths help you access specific elements within a JSON document. Since no standard for JSON path syntax exists, Redis JSON implements its own. JSON's syntax is based on common best practices and intentionally resembles [JSONPath](http://goessner.net/articles/JsonPath/).
 
-RedisJSON supports two query syntaxes: [JSONPath syntax](#jsonpath-syntax) and the [legacy path syntax](#legacy-path-syntax) from the first version of RedisJSON.
+JSON supports two query syntaxes: [JSONPath syntax](#jsonpath-syntax) and the [legacy path syntax](#legacy-path-syntax) from the first version of JSON.
 
-RedisJSON knows which syntax to use depending on the first character of the path query. If the query starts with the character `$`, it uses JSONPath syntax. Otherwise, it defaults to the legacy path syntax.
+JSON knows which syntax to use depending on the first character of the path query. If the query starts with the character `$`, it uses JSONPath syntax. Otherwise, it defaults to the legacy path syntax.
 
 The returned value is a JSON string with a top-level array of JSON serialized strings. 
 And if multi-paths are used, the return value is a JSON string with a top-level object with values that are arrays of serialized JSON values.
@@ -200,7 +202,7 @@ For example, let's add each keybaord object with a string value named `regex_pat
 ```sh
 127.0.0.1:6379> JSON.SET store '$.inventory.keyboards[0].regex_pat' '"(?i)bluetooth"'
 OK
-127.0.0.1:6379> JSON.SET store '$.inventory.keyboards[1].regex' '"usb"'
+127.0.0.1:6379> JSON.SET store '$.inventory.keyboards[1].regex_pat' '"usb"'
 OK
 ```
 
@@ -248,11 +250,11 @@ JSONPath queries also work with other JSON commands that accept a path as an arg
 
 ## Legacy path syntax
 
-RedisJSON v1 had the following path implementation. RedisJSON v2 still supports this legacy path in addition to JSONPath.
+RedisJSON v1 had the following path implementation. JSON v2 still supports this legacy path in addition to JSONPath.
 
-Paths always begin at the root of a RedisJSON value. The root is denoted by a period character (`.`). For paths that reference the root's children, it is optional to prefix the path with the root.
+Paths always begin at the root of a Redis JSON value. The root is denoted by a period character (`.`). For paths that reference the root's children, it is optional to prefix the path with the root.
 
-RedisJSON supports both dot notation and bracket notation for object key access. The following paths refer to _headphones_, which is a child of _inventory_ under the root:
+Redis JSON supports both dot notation and bracket notation for object key access. The following paths refer to _headphones_, which is a child of _inventory_ under the root:
 
 *   `.inventory.headphones`
 *   `inventory["headphones"]`
@@ -264,7 +266,7 @@ To access an array element, enclose its index within a pair of square brackets. 
 
 By definition, a JSON key can be any valid JSON string. Paths, on the other hand, are traditionally based on JavaScript's (and Java's) variable naming conventions.
 
-Although RedisJSON can store objects that contain arbitrary key names, you can only use a legacy path to access these keys if they conform to these naming syntax rules:
+Although JSON can store objects that contain arbitrary key names, you can only use a legacy path to access these keys if they conform to these naming syntax rules:
 
 1.  Names must begin with a letter, a dollar sign (`$`), or an underscore (`_`) character
 2.  Names can contain letters, digits, dollar signs, and underscores
