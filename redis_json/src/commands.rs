@@ -27,8 +27,8 @@ use itertools::FoldWhile::{Continue, Done};
 use itertools::{EitherOrBoth, Itertools};
 use serde::{Serialize, Serializer};
 
-const JSON_ROOT_PATH: &str = "$";
 const JSON_ROOT_PATH_LEGACY: &str = ".";
+const JSON_ROOT_PATH: &str = JSON_ROOT_PATH_LEGACY; // revert change to update default path to "$";
 const CMD_ARG_NOESCAPE: &str = "NOESCAPE";
 const CMD_ARG_INDENT: &str = "INDENT";
 const CMD_ARG_NEWLINE: &str = "NEWLINE";
@@ -86,8 +86,8 @@ fn is_resp3(ctx: &Context) -> bool {
 }
 
 /// Returns the deault path for the given RESP version
-fn default_path(ctx: &Context) -> &str {
-    if is_resp3(ctx) {
+fn default_path(ctx: &Context) -> &'static str {
+    if is_resp3(ctx){
         JSON_ROOT_PATH
     } else {
         JSON_ROOT_PATH_LEGACY
@@ -193,7 +193,7 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
 
     match (current, set_option) {
         (Some(doc), op) => {
-            if path.get_path() == JSON_ROOT_PATH {
+            if path.get_path() == default_path(ctx) {
                 if op != SetOptions::NotExists {
                     redis_key.set_value(Vec::new(), val)?;
                     redis_key.apply_changes(ctx, "json.set")?;
@@ -218,7 +218,7 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
         }
         (None, SetOptions::AlreadyExists) => Ok(RedisValue::Null),
         (None, _) => {
-            if path.get_path() == JSON_ROOT_PATH {
+            if path.get_path() == default_path(ctx) {
                 redis_key.set_value(Vec::new(), val)?;
                 redis_key.apply_changes(ctx, "json.set")?;
                 REDIS_OK
@@ -259,7 +259,7 @@ pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
 
     match current {
         Some(doc) => {
-            if path.get_path() == JSON_ROOT_PATH {
+            if path.get_path() == default_path(ctx) {
                 redis_key.merge_value(Vec::new(), val)?;
                 redis_key.apply_changes(ctx, "json.merge")?;
                 REDIS_OK
@@ -297,7 +297,7 @@ pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
             }
         }
         None => {
-            if path.get_path() == JSON_ROOT_PATH {
+            if path.get_path() == default_path(ctx) {
                 // Nothing to merge with it's a new doc
                 redis_key.set_value(Vec::new(), val)?;
                 redis_key.apply_changes(ctx, "json.merge")?;
@@ -331,7 +331,7 @@ pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
 
         // Verify the path is valid and get all the update info
         let path = Path::new(args.next_str()?);
-        let update_info = if path.get_path() == JSON_ROOT_PATH {
+        let update_info = if path.get_path() == default_path(ctx) {
             None
         } else if let Some(value) = key_value {
             Some(KeyValue::new(value).find_paths(path.get_path(), &SetOptions::None)?)
@@ -570,7 +570,7 @@ pub fn json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
     let mut redis_key = manager.open_key_write(ctx, key)?;
     let deleted = match redis_key.get_value()? {
         Some(doc) => {
-            let res = if path.get_path() == JSON_ROOT_PATH {
+            let res = if path.get_path() == default_path(ctx) {
                 redis_key.delete()?;
                 1
             } else {
@@ -1418,12 +1418,7 @@ pub fn json_arr_pop<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString
     // Try to retrieve the optional arguments [path [index]]
     let (path, index) = match path {
         None => {
-            if format_options.is_resp3_reply() {
-                (Path::new(JSON_ROOT_PATH), i64::MAX)
-            } else {
-                // Legacy behavior for backward compatibility
-                (Path::new(JSON_ROOT_PATH_LEGACY), i64::MAX)
-            }
+            (Path::new(default_path(ctx)), i64::MAX)
         }
         Some(s) => {
             let path = Path::new(s.try_as_str()?);
@@ -1724,7 +1719,7 @@ pub fn json_clear<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
     )?;
 
     let paths = if paths.is_empty() {
-        vec![Path::new(JSON_ROOT_PATH)]
+        vec![Path::new(default_path(ctx))]
     } else {
         paths
     };
