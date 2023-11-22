@@ -87,7 +87,7 @@ fn is_resp3(ctx: &Context) -> bool {
 
 /// Returns the deault path for the given RESP version
 fn default_path(ctx: &Context) -> &'static str {
-    if is_resp3(ctx){
+    if is_resp3(ctx) {
         JSON_ROOT_PATH
     } else {
         JSON_ROOT_PATH_LEGACY
@@ -1417,9 +1417,7 @@ pub fn json_arr_pop<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString
 
     // Try to retrieve the optional arguments [path [index]]
     let (path, index) = match path {
-        None => {
-            (Path::new(default_path(ctx)), i64::MAX)
-        }
+        None => (Path::new(default_path(ctx)), i64::MAX)
         Some(s) => {
             let path = Path::new(s.try_as_str()?);
             let index = args.next_i64().unwrap_or(-1);
