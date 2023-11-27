@@ -1413,14 +1413,7 @@ pub fn json_arr_pop<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString
 
     // Try to retrieve the optional arguments [path [index]]
     let (path, index) = match path {
-        None => {
-            if format_options.is_resp3_reply() {
-                (Path::new(JSON_ROOT_PATH), i64::MAX)
-            } else {
-                // Legacy behavior for backward compatibility
-                (Path::new(JSON_ROOT_PATH_LEGACY), i64::MAX)
-            }
-        }
+        None => (Path::new(default_path()), i64::MAX),
         Some(s) => {
             let path = Path::new(s.try_as_str()?);
             let index = args.next_i64().unwrap_or(-1);
