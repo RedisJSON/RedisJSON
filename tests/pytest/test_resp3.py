@@ -321,20 +321,20 @@ class testResp3():
         # Test JSON.X commands on object type when default path is used
         r.assertTrue(r.execute_command('JSON.SET', 'test_resp3', '$', '{"a":[{"b":2},{"g":[1,2]},3]}'))
         r.assertEqual(r.execute_command('JSON.GET', 'test_resp3', 'FORMAT', 'EXPAND'), [[{"a":[{"b":2},{"g":[1,2]},3]}]])
-        r.assertEqual(json.loads(r.execute_command('JSON.GET', 'test_resp3')), [{"a":[{"b":2},{"g":[1,2]},3]}])
-        r.assertEqual(r.execute_command('JSON.OBJKEYS', 'test_resp3'), [['a']])
-        r.assertEqual(r.execute_command('JSON.OBJLEN', 'test_resp3'), [1])
-        r.assertEqual(r.execute_command('JSON.TYPE', 'test_resp3'), [['object']])
-        r.assertEqual(r.execute_command('JSON.DEBUG', 'MEMORY', 'test_resp3'), [507])
+        r.assertEqual(json.loads(r.execute_command('JSON.GET', 'test_resp3')), {"a":[{"b":2},{"g":[1,2]},3]})
+        r.assertEqual(r.execute_command('JSON.OBJKEYS', 'test_resp3'), ['a'])
+        r.assertEqual(r.execute_command('JSON.OBJLEN', 'test_resp3'), 1)
+        r.assertEqual(r.execute_command('JSON.TYPE', 'test_resp3'), ['object'])
+        r.assertEqual(r.execute_command('JSON.DEBUG', 'MEMORY', 'test_resp3'), 507)
         r.assertEqual(r.execute_command('JSON.DEL', 'test_resp3'), 1)
 
         # Test JSON.strX commands on object type when default path is used
         r.assertTrue(r.execute_command('JSON.SET', 'test_resp3_str', '$', '"test_resp3_str"'))
-        r.assertEqual(r.execute_command('JSON.STRLEN', 'test_resp3_str'), [14])
+        r.assertEqual(r.execute_command('JSON.STRLEN', 'test_resp3_str'), 14)
 
         # Test JSON.arrX commands on object type when default path is used
         r.assertTrue(r.execute_command('JSON.SET', 'test_resp3_arr', '$', '[true, 1, "dud"]'))
-        r.assertEqual(r.execute_command('JSON.ARRLEN', 'test_resp3_arr'), [3])
+        r.assertEqual(r.execute_command('JSON.ARRLEN', 'test_resp3_arr'), 3)
         
 def test_fail_with_resp2():
     r = Env(protocol=2)
