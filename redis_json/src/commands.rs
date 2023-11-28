@@ -28,7 +28,7 @@ use itertools::{EitherOrBoth, Itertools};
 use serde::{Serialize, Serializer};
 
 const JSON_ROOT_PATH: &str = "$";
-const JSON_ROOT_PATH_LEGACY: &str = ".";
+const JSON_ROOT_PATH_DOT: &str = ".";
 const CMD_ARG_NOESCAPE: &str = "NOESCAPE";
 const CMD_ARG_INDENT: &str = "INDENT";
 const CMD_ARG_NEWLINE: &str = "NEWLINE";
@@ -85,13 +85,9 @@ fn is_resp3(ctx: &Context) -> bool {
         .contains(redis_module::ContextFlags::FLAGS_RESP3)
 }
 
-/// Returns the deault path for the given RESP version
-fn default_path(ctx: &Context) -> &str {
-    if is_resp3(ctx) {
-        JSON_ROOT_PATH
-    } else {
-        JSON_ROOT_PATH_LEGACY
-    }
+/// Returns the default path
+fn default_path(_ctx: &Context) -> &str {
+    JSON_ROOT_PATH_DOT
 }
 
 ///
@@ -1422,7 +1418,7 @@ pub fn json_arr_pop<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString
                 (Path::new(JSON_ROOT_PATH), i64::MAX)
             } else {
                 // Legacy behavior for backward compatibility
-                (Path::new(JSON_ROOT_PATH_LEGACY), i64::MAX)
+                (Path::new(JSON_ROOT_PATH_DOT), i64::MAX)
             }
         }
         Some(s) => {
