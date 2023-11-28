@@ -13,7 +13,7 @@ is key to parse. Returns `null` for nonexistent keys.
 
 <details open><summary><code>path</code></summary> 
 
-is JSONPath to specify. Default is root `$`. Returns `null` for nonexistent paths.
+is JSONPath to specify. Returns `null` for nonexistent paths.
 
 </details>
 
