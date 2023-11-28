@@ -86,7 +86,7 @@ fn is_resp3(ctx: &Context) -> bool {
 }
 
 /// Returns the deault path for the given RESP version
-fn default_path() -> &'static str {
+const fn default_path() -> &'static str {
     JSON_ROOT_PATH_LEGACY
 }
 
