@@ -609,8 +609,6 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
             return Err(RedisError::WrongArity);
         }
 
-        let is_legacy = path.is_legacy();
-
         let results: Result<Vec<RedisValue>, RedisError> = keys
             .iter()
             .map(|key| {
@@ -620,16 +618,12 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
                         json_key.get_value().map_or(Ok(RedisValue::Null), |value| {
                             value.map_or(Ok(RedisValue::Null), |doc| {
                                 let key_value = KeyValue::new(doc);
-                                if format_options.is_resp3_reply() {
-                                    Ok(key_value.to_resp3_path(&path, &format_options))
+                                let res = if !path.is_legacy() {
+                                    key_value.to_string_multi(path.get_path(), &format_options)
                                 } else {
-                                    let res = if !is_legacy {
-                                        key_value.to_string_multi(path.get_path(), &format_options)
-                                    } else {
-                                        key_value.to_string_single(path.get_path(), &format_options)
-                                    };
-                                    Ok(res.map_or(RedisValue::Null, |v| v.into()))
-                                }
+                                    key_value.to_string_single(path.get_path(), &format_options)
+                                };
+                                Ok(res.map_or(RedisValue::Null, |v| v.into()))
                             })
                         })
                     })
