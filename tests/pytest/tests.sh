@@ -23,16 +23,16 @@ help() {
 		MODULE=path      Path to redisjson.so
 		TEST=test        Run specific test (e.g. test.py:test_name)
 		REDIS=addr       Use redis-server at addr
-		
+
 		GEN=1            General tests
 		AOF=1            Tests with --test-aof
 		SLAVES=1         Tests with --test-slaves
 		CLUSTER=1        Test with OSS cluster, one shard
 		QUICK=1          Run general tests only
 		SERDE=0          Skip serde_json tests
-		
+
 		VALGRIND|VG=1    Run with Valgrind
-		SAN=type         Use LLVM sanitizer (type=address|memory|leak|thread) 
+		SAN=type         Use LLVM sanitizer (type=address|memory|leak|thread)
 
 		EXT=1|run        Test on existing env (1=running; run=start redis-server)
 		EXT_HOST=addr    Address if existing env (default: 127.0.0.1)
@@ -70,6 +70,20 @@ setup_rltest() {
 			echo "PYTHONPATH=$PYTHONPATH"
 		fi
 	fi
+	
+	if [[ $RLTEST_VERBOSE == 1 ]]; then
+		RLTEST_ARGS+=" -v"
+	fi
+	if [[ $RLTEST_DEBUG == 1 ]]; then
+		RLTEST_ARGS+=" --debug-print"
+	fi
+	if [[ -n $RLTEST_LOG && $RLTEST_LOG != 1 ]]; then
+		RLTEST_ARGS+=" -s"
+	fi
+	if [[ $RLTEST_CONSOLE == 1 ]]; then
+		RLTEST_ARGS+=" -i"
+	fi
+	RLTEST_ARGS+=" --enable-debug-command --enable-protected-configs"
 }
 
 #----------------------------------------------------------------------------------------------
@@ -163,10 +177,10 @@ run_tests() {
 
 	cd $ROOT/tests/pytest
 
-	if [[ $SERDE_JSON == 1 ]]; then 
+	if [[ $SERDE_JSON == 1 ]]; then
 		MODARGS+=" JSON_BACKEND SERDE_JSON"
 	fi
-	
+
 	if [[ $EXISTING_ENV != 1 ]]; then
 		rltest_config=$(mktemp "${TMPDIR:-/tmp}/rltest.XXXXXXX")
 		cat <<-EOF > $rltest_config
@@ -264,7 +278,7 @@ setup_rltest
 
 GDB=${GDB:-0}
 
-#---------------------------------------------------------------------------------------------- 
+#----------------------------------------------------------------------------------------------
 
 OP=""
 [[ $NOP == 1 ]] && OP="echo"
