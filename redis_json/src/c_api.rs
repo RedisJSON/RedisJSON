@@ -526,7 +526,7 @@ macro_rules! redis_json_module_export_shared_api {
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_pathFree(json_path: *mut c_void) {
-            unsafe { Box::from_raw(json_path.cast::<json_path::json_path::Query>()) };
+            unsafe { drop(Box::from_raw(json_path.cast::<json_path::json_path::Query>())) };
         }
 
         #[no_mangle]
