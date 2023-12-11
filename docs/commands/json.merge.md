@@ -70,7 +70,7 @@ redis> JSON.GET doc $
 {{< highlight bash >}}
 redis> JSON.SET doc $ '{"a":2}'
 OK
-redis> JSON.MERGE doc $.a 'null'
+redis> JSON.MERGE doc $ '{"a":null}'
 OK
 redis> JSON.GET doc $
 "[{}]"
