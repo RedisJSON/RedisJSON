@@ -1,14 +1,18 @@
 #!/bin/sh
 ''''[ ! -z $VIRTUAL_ENV ] && exec python -u -- "$0" ${1+"$@"}; command -v python3 > /dev/null && exec python3 -u -- "$0" ${1+"$@"}; exec python2 -u -- "$0" ${1+"$@"} # '''
 
-import sys
-import os
-import click
-import re
 import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from zipfile import ZipFile
+
+import click
 import requests
 import urllib3
-from zipfile import ZipFile
 
 HERE = os.path.dirname(__file__)
 ROOT = os.path.abspath(os.path.join(HERE, "../.."))
@@ -22,6 +26,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 VERBOSE = 0
 NOP = False
 OPERETO3_URL = "opereto.qa.redislabs.com"
+MODULE_NAME = "json"
 
 RLEC_PLATFORMS = {
     'xenial': { 
@@ -211,8 +216,53 @@ class Test:
         return f"https://{OPERETO3_URL}/ui#dashboard/flow/{self.id}"
 
 
+class ModuleTestsClient:
+    def __init__(self, modver: str, module_tests_dir: str, snapshot: str, nop: bool) -> None:
+        self.modver = re.sub(r"^v(.*)", r"\1", modver)
+        self.module_tests_dir = module_tests_dir
+        self.snapshot = snapshot
+        self.nop = nop
+        snapshots = "snapshots/" if snapshot else ""
+        mod_name = "rejson"
+        self.mod_s3_url = f"s3://redismodules/{mod_name}/{snapshots}{mod_name}.@OS.{modver}.zip"
+
+    def trigger_release_workflow(self) -> bool:
+        run_command = [
+            "gh",
+            "workflow",
+            "run",
+            "release_process.yml",
+            "-f",
+            f"module_name={MODULE_NAME}",
+            "-f",
+            f"module_version={self.modver}",
+            "-f",
+            f'modules_urls="REDISJSON_URL={self.mod_s3_url}"',
+        ]
+        if self.nop:
+            print(run_command)
+            return True
+        try:
+            # check if the gh tool is installed
+            if shutil.which("gh") is None:
+                raise Exception("Error: gh CLI tool is missing")
+
+            # change the working directory to module-tests repo
+            os.chdir(self.module_tests_dir)
+            result = subprocess.run(run_command)
+            if result.returncode != 0:
+                raise Exception("Failed to run the GitHub Action")
+
+            return True
+        except Exception as e:
+            print(f"Error: {e}")
+            return False
+        
+
 @click.command(help='Invoke QA Automation tests', cls=Command1)
 @click.option('--token', default=None, help='QA automation (Opereto) token (also: QA_AUTOMATION_TOKEN env var)')
+@click.option('--gh_user', default=None, help='Github user for accessing module-tests repo')
+@click.option('--gh_token', default=None, help='Github access token for accessing module-tests repo')
 @click.option('--test', '-t', default='common', help='Name of .json parameters file')
 @click.option('--modver', '-m', default='master', help='Module version to test. Default: master')
 @click.option('--snapshot', '-s', is_flag=True, default=False, help='Test a snapshoy module version')
@@ -222,7 +272,7 @@ class Test:
 @click.option('--nop', is_flag=True, default=False, help='Dry run')
 @click.option('--verbose', '-v', is_flag=True, default=False, help='Be verbose')
 @click.option('--verbosity', type=int, default=0, help='Verbosity level')
-def main(token, test, modver, snapshot, rlecver, osnick, quick, nop, verbose, verbosity, *args, **kwargs):
+def main(token, gh_user, gh_token, test, modver, snapshot, rlecver, osnick, quick, nop, verbose, verbosity, *args, **kwargs):
     global NOP, VERBOSE
     VERBOSE = 1 if verbose else verbosity
     NOP = nop
@@ -231,10 +281,17 @@ def main(token, test, modver, snapshot, rlecver, osnick, quick, nop, verbose, ve
         token = os.getenv('QA_AUTOMATION_TOKEN')
     if token is None and not nop:
         raise click.ClickException('QA automation token is missing.')
+    if gh_user is None:
+        gh_user = os.getenv('GH_USER')
+    if gh_user is None:
+        raise click.ClickException('Github user name is missing.')
+    if gh_token is None:
+        gh_token = os.getenv('GH_ACCESS_TOKEN')
+    if gh_token is None:
+        raise click.ClickException('Github access token is missing.')
     test_fname = os.path.join(HERE, f'{test}.json')
     if not os.path.exists(test_fname):
         raise click.ClickException(f"Invalid test name: {test}")
-
     if modver == 'master':
         snapshot = True
     if rlecver is not None:
@@ -252,6 +309,19 @@ def main(token, test, modver, snapshot, rlecver, osnick, quick, nop, verbose, ve
         for rlecver in rs_versions:
             Test(token, test_fname, modver, snapshot, rlecver, osnick).run()
 
+    # clone the module-tests repository and trigger release workflow
+    with tempfile.TemporaryDirectory() as tempdir:
+        repo_url = f"https://{gh_user}:{gh_token}@github.com/RedisLabs/module-tests.git"
+        if nop:
+            print(f"git clone https://github.com/RedisLabs/module-tests")
+        else:
+            result = subprocess.run(['git', 'clone', repo_url, tempdir])
+            if result.returncode != 0:
+                raise click.ClickException('Failed to clone the module-tests repository')
+
+        ok = ModuleTestsClient(modver, tempdir, snapshot, nop).trigger_release_workflow()
+        if not ok:
+            raise click.ClickException('Error: failed to trigger the module tests pipeline')
 
 if __name__ == '__main__':
     main()
