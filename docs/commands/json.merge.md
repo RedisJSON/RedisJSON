@@ -101,7 +101,7 @@ redis> JSON.SET doc $ '{"f1": {"a":1}, "f2":{"a":2}}'
 OK
 redis> JSON.GET doc
 "{\"f1\":{\"a\":1},\"f2\":{\"a\":2}}"
-redis> JSON.MERGE doc $ '{"f1": 'null', "f2":{"a":3, "b":4}, "f3":'[2,4,6]'}' 
+redis> JSON.MERGE doc $ '{"f1": null, "f2":{"a":3, "b":4}, "f3":[2,4,6]}'
 OK
 redis> JSON.GET doc
 "{\"f2\":{\"a\":3,\"b\":4},\"f3\":[2,4,6]}"
