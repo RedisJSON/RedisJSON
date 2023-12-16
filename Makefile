@@ -196,7 +196,7 @@ run:
 test: cargo_test pytest
 
 pytest:
-	$(SHOW)MODULE=$(abspath $(TARGET)) $(realpath ./tests/pytest/tests.sh)
+	$(SHOW)MODULE=$(abspath $(TARGET)) RLTEST_ARGS='--no-progress' $(realpath ./tests/pytest/tests.sh)
 
 cargo_test:
 	$(SHOW)cargo $(CARGO_TOOLCHAIN) test --features test --all
