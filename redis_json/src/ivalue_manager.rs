@@ -10,7 +10,7 @@ use crate::manager::{Manager, ReadHolder, WriteHolder};
 use crate::redisjson::normalize_arr_start_index;
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
-use bson::decode_document;
+use bson::{from_document, Document};
 use ijson::object::Entry;
 use ijson::{DestructuredMut, INumber, IObject, IString, IValue, ValueType};
 use redis_module::key::{verify_type, KeyFlags, RedisKey, RedisKeyWritable};
@@ -618,9 +618,13 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                 }
                 IValue::deserialize(&mut deserializer).map_err(|e| e.into())
             }
-            Format::BSON => decode_document(&mut Cursor::new(val.as_bytes())).map_or_else(
+            Format::BSON => from_document(
+                Document::from_reader(&mut Cursor::new(val.as_bytes()))
+                    .map_err(|e| e.to_string())?,
+            )
+            .map_or_else(
                 |e| Err(e.to_string().into()),
-                |docs| {
+                |docs: Document| {
                     let v = if docs.is_empty() {
                         IValue::NULL
                     } else {
@@ -718,11 +722,11 @@ mod tests {
             phantom: PhantomData,
         };
         let json = r#"{
-                            "a": 100.12, 
-                            "b": "foo", 
-                            "c": true, 
-                            "d": 126, 
-                            "e": -112, 
+                            "a": 100.12,
+                            "b": "foo",
+                            "c": true,
+                            "d": 126,
+                            "e": -112,
                             "f": 7388608,
                             "g": -6388608,
                             "h": 9388608,
