@@ -33,6 +33,7 @@ redis> JSON.TYPE doc $..a
 1) "integer"
 2) "boolean"
 redis> JSON.TYPE doc $..dummy
+(empty array)
 {{< / highlight >}}
 
 ## See also
