@@ -37,14 +37,20 @@ For more information about replies, see [Redis serialization protocol specificat
 <summary><b>Add a new values in multiple keys</b></summary>
 
 {{< highlight bash >}}
+redis> JSON.SET doc1 $ '{"a":1}'
+OK
+redis> JSON.SET doc2 $ '{"f":{"a":2}}'
+OK
+redis> JSON.SET doc3 $ '{"f1": {"a":0}, "f2":{"a":0}}'
+OK
 redis> JSON.MSET doc1 $ '{"a":2}' doc2 $.f.a '3' doc3 $ '{"f1": {"a":1}, "f2":{"a":2}}'
 OK
 redis> JSON.GET doc1 $
 "[{\"a\":2}]"
 redis> JSON.GET doc2 $
-"[{\"f\":{\"a\":3]"
+"[{\"f\":{\"a\":3}}]"
 redis> JSON.GET doc3
-"{\"f1\":{\"a\":3},\"f2\":{\"a\":3}}"
+"{\"f1\":{\"a\":1},\"f2\":{\"a\":2}}"
 {{< / highlight >}}
 </details>
 
