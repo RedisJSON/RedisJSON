@@ -25,7 +25,7 @@ use crate::redisjson::RedisJSON;
 
 use crate::array_index::ArrayIndex;
 
-use bson::decode_document;
+use bson::{from_document, Document};
 use std::io::Cursor;
 
 pub struct IValueKeyHolderWrite<'a> {
@@ -610,9 +610,9 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                 }
                 IValue::deserialize(&mut deserializer).map_err(|e| e.into())
             }
-            Format::BSON => decode_document(&mut Cursor::new(val.as_bytes())).map_or_else(
+            Format::BSON => from_document(Document::from_reader(&mut Cursor::new(val.as_bytes())).map_err(|e| e.to_string())?).map_or_else(
                 |e| Err(e.to_string().into()),
-                |docs| {
+                |docs: Document| {
                     let v = if docs.is_empty() {
                         IValue::NULL
                     } else {
