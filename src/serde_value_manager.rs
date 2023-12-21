@@ -23,7 +23,7 @@ use crate::Format;
 use crate::REDIS_JSON_TYPE;
 
 use crate::error::Error;
-use bson::decode_document;
+use bson::{from_document, Document};
 use std::io::Cursor;
 
 use crate::array_index::ArrayIndex;
@@ -488,18 +488,21 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
                 }
                 Value::deserialize(&mut deserializer).map_err(|e| e.into())
             }
-            Format::BSON => decode_document(&mut Cursor::new(val.as_bytes()))
-                .map(|docs| {
-                    let v = if docs.is_empty() {
-                        Value::Null
-                    } else {
-                        docs.iter()
-                            .next()
-                            .map_or_else(|| Value::Null, |(_, b)| b.clone().into())
-                    };
-                    Ok(v)
-                })
-                .unwrap_or_else(|e| Err(e.to_string().into())),
+            Format::BSON => from_document(
+                Document::from_reader(&mut Cursor::new(val.as_bytes()))
+                    .map_err(|e| e.to_string())?,
+            )
+            .map(|docs: Document| {
+                let v = if docs.is_empty() {
+                    Value::Null
+                } else {
+                    docs.iter()
+                        .next()
+                        .map_or_else(|| Value::Null, |(_, b)| b.clone().into())
+                };
+                Ok(v)
+            })
+            .unwrap_or_else(|e| Err(e.to_string().into())),
         }
     }
 
