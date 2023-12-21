@@ -14,12 +14,12 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: build
-      uses: vmactions/freebsd-vm@v0.3.0
+      uses: vmactions/freebsd-vm@v1
       with:
         usesh: true
         sync: rsync
         copyback: false
-        prepare: pkg install -y bash curl lang/rust devel/llvm-devel
+          #prepare: pkg install -y bash curl lang/rust devel/llvm-devel
         run: |
           cargo build --all --all-targets --verbose 
           curl https://sh.rustup.rs -sSf > rustup.sh
