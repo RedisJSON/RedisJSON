@@ -57,7 +57,7 @@ redis> JSON.ARRAPPEND item:1 $.colors '"blue"'
 Return the new length of the `colors` array.
 
 {{< highlight bash >}}
-JSON.GET item:1
+redis> JSON.GET item:1
 "{\"name\":\"Noise-cancelling Bluetooth headphones\",\"description\":\"Wireless Bluetooth headphones with noise-cancelling technology\",\"connection\":{\"wireless\":true,\"type\":\"Bluetooth\"},\"price\":99.98,\"stock\":25,\"colors\":[\"black\",\"silver\",\"blue\"]}"
 {{< / highlight >}}
 
