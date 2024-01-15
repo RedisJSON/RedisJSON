@@ -5,7 +5,6 @@ import random
 import subprocess
 import tempfile
 import zipfile
-from itertools import chain
 
 import gevent.queue
 import gevent.server
@@ -466,8 +465,7 @@ def sendShortReads(env, rdb_file):
     env.assertGreater(total_len, SHORT_READ_BYTES_DELTA)
     r = range(0, total_len + 1, SHORT_READ_BYTES_DELTA)
     if (total_len % SHORT_READ_BYTES_DELTA) != 0:
-        r = chain(r,range(total_len, total_len + 1))
-
+        r = r + range(total_len, total_len + 1)
     try:
         for b in r:
             rdb = full_rdb[0:b]

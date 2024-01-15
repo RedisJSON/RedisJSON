@@ -18,45 +18,45 @@ class RedisJSONSetup(paella.Setup):
 
     def common_first(self):
         self.install_downloaders()
-        self.run(f"{READIES}/bin/enable-utf8", sudo=self.os != 'macos')
+        self.run("%s/bin/enable-utf8" % READIES, sudo=self.os != 'macos')
         self.install("git unzip rsync")
 
         if self.osnick == 'ol8':
             self.install("tar")
-        self.run(f"{READIES}/bin/getclang --modern")
-        self.run(f"{READIES}/bin/getrust")
-        self.run(f"{READIES}/bin/getcmake --usr")
+        self.run("%s/bin/getclang --modern" % READIES)
+        self.run("%s/bin/getrust" % READIES)
+        self.run("%s/bin/getcmake --usr" % READIES)
 
     def debian_compat(self):
         self.install("python3-dev")
-        self.run(f"{READIES}/bin/getgcc")
+        self.run("%s/bin/getgcc" % READIES)
 
     def redhat_compat(self):
         self.install("redhat-lsb-core")
         self.install("which")
-        self.run(f"{READIES}/bin/getgcc --modern")
+        self.run("%s/bin/getgcc --modern" % READIES)
 
         if not self.platform.is_arm():
             self.install_linux_gnu_tar()
 
     def fedora(self):
-        self.run(f"{READIES}/bin/getgcc")
+        self.run("%s/bin/getgcc" % READIES)
 
     def macos(self):
         self.install_gnu_utils()
         self.install("binutils")
-        # self.run(f"{READIES}/bin/getgcc")
-        self.run(f"{READIES}/bin/getclang --modern")
+        # self.run("%s/bin/getgcc" % READIES)
+        self.run("%s/bin/getclang --modern" % READIES)
 
     def common_last(self):
         if self.dist != "arch":
             self.install("lcov")
         else:
             self.install("lcov-git", aur=True)
-        self.run(f"{self.python} {READIES}/bin/getrmpytools --reinstall --modern")
-        self.pip_install(f"-r {ROOT}/tests/pytest/requirements.txt")
-        self.run(f"{READIES}/bin/getaws")
-        self.run(f"NO_PY2=1 {READIES}/bin/getpudb")
+        self.run("{PYTHON} {READIES}/bin/getrmpytools --reinstall --modern".format(PYTHON=self.python, READIES=READIES))
+        self.pip_install("-r %s/tests/pytest/requirements.txt" % ROOT)
+        self.run("%s/bin/getaws" % READIES)
+        self.run("NO_PY2=1 %s/bin/getpudb" % READIES)
 
 #----------------------------------------------------------------------------------------------
 
