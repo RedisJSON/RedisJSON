@@ -28,8 +28,9 @@ make pytest        # run flow tests using RLTest
   AOF=1              # run AOF persistency tests on a standalone Redis topology
   SLAVES=1           # run replication tests on standalone Redis topology
   CLUSTER=1          # run general tests on a OSS Redis Cluster topology
-  VALGRIND|VG=1      # run specified tests with Valgrind
   VERBOSE=1          # display more RLTest-related information
+  SAN=type           # use LLVM sanitizer (type=address|memory|leak|thread) 
+  VG=1               # run specified tests with Valgrind
 
 make bench   # run benchmarks
 
@@ -262,7 +263,7 @@ endif
 
 sanbox:
 	@docker run -it -v $(PWD):/rejson -w /rejson --cap-add=SYS_PTRACE --security-opt seccomp=unconfined \
-		$(SANBOX_ARGS) redisfab/clang:13-x64-bullseye bash
+		$(SANBOX_ARGS) redisfab/clang:16-x64-focal bash
 
 .PHONY: sanbox
 
