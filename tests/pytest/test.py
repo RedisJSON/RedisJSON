@@ -10,6 +10,7 @@ from RLTest import Env
 from includes import *
 from redis.client import NEVER_DECODE
 from RLTest import Defaults
+from packaging import version
 
 Defaults.decode_responses = True
 
@@ -379,6 +380,12 @@ def testSetBSON(env):
 def testMgetCommand(env):
     """Test REJSON.MGET command"""
     r = env
+
+    # Skip on Redis Unstable
+    _version = "99"
+    res = r.con.execute_command('INFO')
+    if(version.parse(res['redis_version']) >= version.parse(_version)):
+        env.skipOnCluster()
 
     # Set up a few keys
     for d in range(0, 5):
