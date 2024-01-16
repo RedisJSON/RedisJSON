@@ -12,6 +12,7 @@ from includes import *
 from RLTest import Defaults
 
 from functools import reduce
+from packaging import version
 
 Defaults.decode_responses = True
 
@@ -232,6 +233,13 @@ def testSetAndGetCommands(env):
 def testMGetCommand(env):
     """Test REJSON.MGET command"""
     r = env
+
+    # Skip on Redis Unstable
+    _version = "99"
+    res = r.con.execute_command('INFO')
+    if(version.parse(res['redis_version']) >= version.parse(_version)):
+        env.skipOnCluster()
+
     # Test mget with multi paths
     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', '{"a":1, "b": 2, "nested1": {"a": 3}, "c": null, "nested2": {"a": null}}'))
     r.assertOk(r.execute_command('JSON.SET', 'doc2', '$', '{"a":4, "b": 5, "nested3": {"a": 6}, "c": null, "nested4": {"a": [null]}}'))
