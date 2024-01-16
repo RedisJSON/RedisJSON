@@ -4,6 +4,9 @@ parameters:
   run_default_flow:
     default: true
     type: boolean
+  run_nightly_twice_a_week_flow_label:
+    default: false
+    type: boolean
   run_benchmark_flow_label:
     default: false
     type: boolean
@@ -388,7 +391,7 @@ jobs:
 
   build-macos-x64:
     macos:
-      xcode: 12.5.1
+      xcode: 13.4.1
     resource_class: macos.x86.medium.gen2
     parameters:
       upload:
@@ -706,6 +709,17 @@ workflows:
       - benchmark-json-oss-standalone-profiler:
           context: common
 
+  nightly-twice-a-week-by-param:
+    when:
+      << pipeline.parameters.run_nightly_twice_a_week_flow_label >>
+    jobs:
+      - build-macos-x64:
+          context: common
+          upload: "yes"
+      - build-macos-m1:
+          context: common
+          upload: "yes"
+
   nightly-twice-a-week:
     triggers:
       - schedule:
@@ -713,6 +727,8 @@ workflows:
           <<: *on-integ-branch-cron
     jobs:
       - build-macos-x64:
-          upload: "no"
+          context: common
+          upload: "yes"
       - build-macos-m1:
-          upload: "no"
+          context: common
+          upload: "yes"

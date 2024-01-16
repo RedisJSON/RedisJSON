@@ -335,13 +335,13 @@ if [[ $GEN == 1 ]]; then
 	{ (run_tests "general"); (( E |= $? )); } || true
 fi
 if [[ $VALGRIND != 1 && $SLAVES == 1 ]]; then
-	{ (RLTEST_ARGS+=" --use-slaves" run_tests "--use-slaves"); (( E |= $? )); } || true
+	{ (RLTEST_ARGS="${RLTEST_ARGS} --use-slaves" run_tests "--use-slaves"); (( E |= $? )); } || true
 fi
 if [[ $AOF == 1 ]]; then
-	{ (RLTEST_ARGS+=" --use-aof" run_tests "--use-aof"); (( E |= $? )); } || true
+	{ (RLTEST_ARGS="${RLTEST_ARGS} --use-aof" run_tests "--use-aof"); (( E |= $? )); } || true
 fi
 if [[ $CLUSTER == 1 ]]; then
-	{ (RLTEST_ARGS+=" --env oss-cluster --shards-count 1" run_tests "--env oss-cluster"); (( E |= $? )); } || true
+	{ (RLTEST_ARGS="${RLTEST_ARGS} --env oss-cluster --shards-count 1" run_tests "--env oss-cluster"); (( E |= $? )); } || true
 fi
 
 [[ $VALGRIND == 1 ]] && valgrind_summary
