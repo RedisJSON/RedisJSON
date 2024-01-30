@@ -10,7 +10,6 @@ from RLTest import Env
 from includes import *
 from redis.client import NEVER_DECODE
 from RLTest import Defaults
-from packaging import version
 
 Defaults.decode_responses = True
 
