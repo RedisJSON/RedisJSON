@@ -10,7 +10,6 @@ from RLTest import Env
 from includes import *
 from redis.client import NEVER_DECODE
 from RLTest import Defaults
-from packaging import version
 
 Defaults.decode_responses = True
 
@@ -381,36 +380,30 @@ def testMgetCommand(env):
     """Test REJSON.MGET command"""
     r = env
 
-    # Skip on Redis Unstable
-    _version = "99"
-    res = r.con.execute_command('INFO')
-    if(version.parse(res['redis_version']) >= version.parse(_version)):
-        env.skipOnCluster()
-
     # Set up a few keys
     for d in range(0, 5):
-        key = 'doc:{}'.format(d)
+        key = '{{doc}}:{}'.format(d)
         r.cmd('DEL', key)
         r.expect('JSON.SET', key, '.', json.dumps(docs['basic'])).ok()
 
     # Test an MGET that succeeds on all keys
-    raw = r.execute_command('JSON.MGET', *['doc:{}'.format(d) for d in range(0, 5)] + ['.'])
+    raw = r.execute_command('JSON.MGET', *['{{doc}}:{}'.format(d) for d in range(0, 5)] + ['.'])
     r.assertEqual(len(raw), 5)
     for d in range(0, 5):
-        key = 'doc:{}'.format(d)
+        key = '{{doc}}:{}'.format(d)
         r.assertEqual(json.loads(raw[d]), docs['basic'], d)
 
     # Test an MGET that fails for one key
     r.cmd('DEL', 'test')
-    r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"bool":false}'))
-    raw = r.execute_command('JSON.MGET', 'test', 'doc:0', 'foo', '.bool')
+    r.assertOk(r.execute_command('JSON.SET', '{doc}:test', '.', '{"bool":false}'))
+    raw = r.execute_command('JSON.MGET', '{doc}:test', '{doc}:0', '{doc}:foo', '.bool')
     r.assertEqual(len(raw), 3)
     r.assertFalse(json.loads(raw[0]))
     r.assertTrue(json.loads(raw[1]))
     r.assertEqual(raw[2], None)
 
     # Test that MGET on missing path
-    raw = r.execute_command('JSON.MGET', 'doc:0', 'doc:1', '42isnotapath')
+    raw = r.execute_command('JSON.MGET', '{doc}:0', '{doc}:1', '42isnotapath')
     r.assertEqual(len(raw), 2)
     r.assertEqual(raw[0], None)
     r.assertEqual(raw[1], None)
@@ -418,7 +411,7 @@ def testMgetCommand(env):
     # Test that MGET fails on path errors
     r.cmd('DEL', 'test')
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"bull":4.2}'))
-    raw = r.execute_command('JSON.MGET', 'doc:0', 'test', 'doc:1', '.bool')
+    raw = r.execute_command('JSON.MGET', '{doc}:0', 'test', '{doc}:1', '.bool')
     r.assertEqual(len(raw), 3)
     r.assertTrue(json.loads(raw[0]))
     r.assertEqual(raw[1], None)
