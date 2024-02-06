@@ -7,7 +7,7 @@
 use crate::error::Error;
 use crate::manager::{err_json, err_msg_json_expected, err_msg_json_path_doesnt_exist};
 use crate::manager::{Manager, ReadHolder, WriteHolder};
-use crate::redisjson::normalize_arr_start_index;
+use crate::redisjson::{normalize_arr_start_index, RedisJSONData};
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
 use bson::{from_document, Document};
@@ -30,7 +30,7 @@ use crate::array_index::ArrayIndex;
 pub struct IValueKeyHolderWrite<'a> {
     key: RedisKeyWritable,
     key_name: RedisString,
-    val: Option<&'a mut RedisJSON<IValue>>,
+    val: Option<&'a mut RedisJSONData>,
 }
 
 ///
@@ -253,7 +253,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
 
     fn get_json_holder(&mut self) -> Result<(), RedisError> {
         if self.val.is_none() {
-            self.val = self.key.get_value::<RedisJSON<IValue>>(&REDIS_JSON_TYPE)?;
+            self.val = self.key.get_value::<RedisJSONData>(&REDIS_JSON_TYPE)?;
         }
         Ok(())
     }
@@ -263,10 +263,10 @@ impl<'a> IValueKeyHolderWrite<'a> {
             Some(inner) => {
                 self.get_json_holder()?;
                 match &mut self.val {
-                    Some(v) => v.data = inner,
+                    Some(v) => *v.as_mut() = inner,
                     None => self
                         .key
-                        .set_value(&REDIS_JSON_TYPE, RedisJSON { data: inner })?,
+                        .set_value(&REDIS_JSON_TYPE, RedisJSONData::from(inner))?,
                 }
             }
             None => {
@@ -297,7 +297,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         self.get_json_holder()?;
 
         match &mut self.val {
-            Some(v) => Ok(Some(&mut v.data)),
+            Some(v) => Ok(Some(v.as_mut())),
             None => Ok(None),
         }
     }
@@ -543,8 +543,8 @@ pub struct IValueKeyHolderRead {
 
 impl ReadHolder<IValue> for IValueKeyHolderRead {
     fn get_value(&self) -> Result<Option<&IValue>, RedisError> {
-        let key_value = self.key.get_value::<RedisJSON<IValue>>(&REDIS_JSON_TYPE)?;
-        key_value.map_or(Ok(None), |v| Ok(Some(&v.data)))
+        let key_value = self.key.get_value::<RedisJSONData>(&REDIS_JSON_TYPE)?;
+        key_value.map_or(Ok(None), |v| Ok(Some(v)))
     }
 }
 

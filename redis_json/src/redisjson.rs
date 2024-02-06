@@ -162,13 +162,25 @@ pub struct RedisJSON<T>
 where
     T: RedisJSONValueTraits,
 {
-    //FIXME: make private and expose array/object Values without requiring a path
-    pub data: T,
+    //FIXME: expose array/object Values without requiring a path
+    data: T,
+}
+
+impl<T: RedisJSONValueTraits> From<T> for RedisJSON<T> {
+    fn from(data: T) -> Self {
+        Self { data }
+    }
 }
 
 impl<T: RedisJSONValueTraits> AsRef<T> for RedisJSON<T> {
     fn as_ref(&self) -> &T {
         &self.data
+    }
+}
+
+impl<T: RedisJSONValueTraits> AsMut<T> for RedisJSON<T> {
+    fn as_mut(&mut self) -> &mut T {
+        &mut self.data
     }
 }
 
@@ -185,6 +197,10 @@ impl<T: RedisJSONValueTraits> std::ops::DerefMut for RedisJSON<T> {
         &mut self.data
     }
 }
+
+/// An alias for the RedisJSON implementation using the `ijson::IValue`
+/// type.
+pub type RedisJSONData = RedisJSON<ijson::IValue>;
 
 pub mod type_methods {
     use super::*;
