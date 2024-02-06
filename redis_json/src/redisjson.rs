@@ -151,10 +151,39 @@ impl Display for Path<'_> {
     }
 }
 
-#[derive(Debug)]
-pub struct RedisJSON<T> {
+/// Trait for the types that can be used as a value in RedisJSON.
+pub trait RedisJSONValueTraits: Clone + std::fmt::Debug + Serialize {}
+// Auto-implementation for all types which are suitable.
+impl<T> RedisJSONValueTraits for T where T: Clone + std::fmt::Debug + Serialize {}
+
+#[repr(transparent)]
+#[derive(Debug, Clone)]
+pub struct RedisJSON<T>
+where
+    T: RedisJSONValueTraits,
+{
     //FIXME: make private and expose array/object Values without requiring a path
     pub data: T,
+}
+
+impl<T: RedisJSONValueTraits> AsRef<T> for RedisJSON<T> {
+    fn as_ref(&self) -> &T {
+        &self.data
+    }
+}
+
+impl<T: RedisJSONValueTraits> std::ops::Deref for RedisJSON<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+
+impl<T: RedisJSONValueTraits> std::ops::DerefMut for RedisJSON<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.data
+    }
 }
 
 pub mod type_methods {

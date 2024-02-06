@@ -1,0 +1,13 @@
+[package]
+name = "json_parser"
+version = "0.1.0"
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+fxhash = "0.2"
+serde.workspace = true
+serde_json.workspace = true

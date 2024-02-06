@@ -2,6 +2,7 @@
 resolver = "2"
 
 members = [
+    "json_parser",
     "json_path",
     "redis_json"
 ]

@@ -25,11 +25,12 @@ ijson.workspace = true
 serde_json.workspace = true
 serde.workspace = true
 libc = "0.2"
-redis-module ={ version = "^2.0.7", default-features = false, features = ["min-redis-compatibility-version-7-2"] }
+redis-module = { version = "^2.0.7", default-features = false, features = ["min-redis-compatibility-version-7-2"] }
 redis-module-macros = "^2.0.7"
 itertools = "0.12"
-json_path = {path="../json_path"}
+json_path = { path = "../json_path" }
 linkme = "0.3"
+json_parser = { "path" = "../json_parser" }
 
 [features]
 as-library = []
