@@ -9,7 +9,11 @@ use std::hash::{Hash, Hasher};
 /// be slower for keys shorter than that. Let's try to win some
 /// performance here.
 use fxhash::FxHashMap as Map;
-use serde::Deserialize;
+use serde::{
+    de::{MapAccess, SeqAccess, Visitor},
+    ser::{SerializeMap, SerializeSeq},
+    Deserialize, Serialize,
+};
 // TODO: consider `indexmap`, `hashbrown`.
 
 /* serde_json::Value:
@@ -94,6 +98,19 @@ impl From<serde_json::Number> for Number {
     }
 }
 
+impl Serialize for Number {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: ::serde::Serializer,
+    {
+        match self {
+            Number::Unsigned(u) => serializer.serialize_u64(*u),
+            Number::Signed(i) => serializer.serialize_i64(*i),
+            Number::Double(f) => serializer.serialize_f64(*f),
+        }
+    }
+}
+
 /// A destructured representation of a JSON value.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub enum Value {
@@ -137,6 +154,173 @@ impl From<serde_json::Value> for Value {
         }
     }
 }
+
+// impl<'de> Deserialize<'de> for Value {
+//     #[inline]
+//     fn deserialize<D>(deserializer: D) -> Result<Value, D::Error>
+//     where
+//         D: serde::Deserializer<'de>,
+//     {
+//         struct ValueVisitor;
+
+//         impl<'de> Visitor<'de> for ValueVisitor {
+//             type Value = Value;
+
+//             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+//                 formatter.write_str("any valid JSON value")
+//             }
+
+//             #[inline]
+//             fn visit_bool<E>(self, value: bool) -> Result<Value, E> {
+//                 Ok(Value::Bool(value))
+//             }
+
+//             #[inline]
+//             fn visit_i64<E>(self, value: i64) -> Result<Value, E> {
+//                 Ok(Value::Number(value.into()))
+//             }
+
+//             #[inline]
+//             fn visit_u64<E>(self, value: u64) -> Result<Value, E> {
+//                 Ok(Value::Number(value.into()))
+//             }
+
+//             #[inline]
+//             fn visit_f64<E>(self, value: f64) -> Result<Value, E> {
+//                 Ok(Number::from_f64(value).map_or(Value::Null, Value::Number))
+//             }
+
+//             #[inline]
+//             fn visit_str<E>(self, value: &str) -> Result<Value, E>
+//             where
+//                 E: serde::de::Error,
+//             {
+//                 self.visit_string(String::from(value))
+//             }
+
+//             #[inline]
+//             fn visit_string<E>(self, value: String) -> Result<Value, E> {
+//                 Ok(Value::String(value))
+//             }
+
+//             #[inline]
+//             fn visit_none<E>(self) -> Result<Value, E> {
+//                 Ok(Value::Null)
+//             }
+
+//             #[inline]
+//             fn visit_some<D>(self, deserializer: D) -> Result<Value, D::Error>
+//             where
+//                 D: serde::Deserializer<'de>,
+//             {
+//                 Deserialize::deserialize(deserializer)
+//             }
+
+//             #[inline]
+//             fn visit_unit<E>(self) -> Result<Value, E> {
+//                 Ok(Value::Null)
+//             }
+
+//             #[inline]
+//             fn visit_seq<V>(self, mut visitor: V) -> Result<Value, V::Error>
+//             where
+//                 V: SeqAccess<'de>,
+//             {
+//                 let mut vec = Vec::new();
+
+//                 while let Some(elem) = visitor.next_element()? {
+//                     vec.push(elem);
+//                 }
+
+//                 Ok(Value::Array(vec))
+//             }
+
+//             // fn visit_map<V>(self, mut visitor: V) -> Result<Value, V::Error>
+//             // where
+//             //     V: MapAccess<'de>,
+//             // {
+//             //     match visitor.next_key_seed(KeyClassifier)? {
+//             //         #[cfg(feature = "arbitrary_precision")]
+//             //         Some(KeyClass::Number) => {
+//             //             let number: NumberFromString = tri!(visitor.next_value());
+//             //             Ok(Value::Number(number.value))
+//             //         }
+//             //         #[cfg(feature = "raw_value")]
+//             //         Some(KeyClass::RawValue) => {
+//             //             let value = tri!(visitor.next_value_seed(crate::raw::BoxedFromString));
+//             //             crate::from_str(value.get()).map_err(de::Error::custom)
+//             //         }
+//             //         Some(KeyClass::Map(first_key)) => {
+//             //             let mut values = Map::new();
+
+//             //             values.insert(first_key, tri!(visitor.next_value()));
+//             //             while let Some((key, value)) = tri!(visitor.next_entry()) {
+//             //                 values.insert(key, value);
+//             //             }
+
+//             //             Ok(Value::Object(values))
+//             //         }
+//             //         None => Ok(Value::Object(Map::new())),
+//             //     }
+//             // }
+//         }
+
+//         deserializer.deserialize_any(ValueVisitor)
+//     }
+// }
+
+impl Serialize for Value {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Self::Null => serializer.serialize_unit(),
+            Self::Bool(b) => serializer.serialize_bool(*b),
+            Self::Number(n) => n.serialize(serializer),
+            Self::String(s) => serializer.serialize_str(s),
+            Self::Array(vec) => {
+                let mut seq = serializer.serialize_seq(Some(vec.len()))?;
+                for e in vec {
+                    seq.serialize_element(e)?;
+                }
+                seq.end()
+            }
+            Self::Object(map) => {
+                let mut map_ser = serializer.serialize_map(Some(map.len()))?;
+                for (k, v) in map {
+                    map_ser.serialize_entry(k, v)?;
+                }
+                map_ser.end()
+            }
+        }
+    }
+}
+
+// impl Serialize for Value {
+//     #[inline]
+//     fn serialize<S>(&self, serializer: S) -> result::Result<S::Ok, S::Error>
+//     where
+//         S: ::serde::Serializer,
+//     {
+//         match self {
+//             Value::Null => serializer.serialize_unit(),
+//             Value::Bool(b) => serializer.serialize_bool(*b),
+//             Value::Number(n) => n.serialize(serializer),
+//             Value::String(s) => serializer.serialize_str(s),
+//             Value::Array(v) => v.serialize(serializer),
+//             #[cfg(any(feature = "std", feature = "alloc"))]
+//             Value::Object(m) => {
+//                 use serde::ser::SerializeMap;
+//                 let mut map = tri!(serializer.serialize_map(Some(m.len())));
+//                 for (k, v) in m {
+//                     tri!(map.serialize_entry(k, v));
+//                 }
+//                 map.end()
+//             }
+//         }
+//     }
+// }
 
 impl<'de> Deserialize<'de> for Value {
     fn deserialize<D>(deserializer: D) -> Result<Value, D::Error>

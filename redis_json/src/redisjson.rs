@@ -10,6 +10,7 @@
 // User-provided JSON is converted to a tree. This tree is stored transparently in Redis.
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
+use json_parser::Value;
 use redis_module::raw;
 
 use std::os::raw::{c_int, c_void};
@@ -201,6 +202,8 @@ impl<T: RedisJSONValueTraits> std::ops::DerefMut for RedisJSON<T> {
 /// An alias for the RedisJSON implementation using the `ijson::IValue`
 /// type.
 pub type RedisJSONData = RedisJSON<ijson::IValue>;
+// TODO: our, better type.
+// pub type RedisJSONData = RedisJSON<Value>;
 
 pub mod type_methods {
     use super::*;
