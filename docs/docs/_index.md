@@ -170,7 +170,7 @@ To download and run the RedisJSON module that provides the JSON data structure f
 
 1. Download a precompiled version from the [Redis download center](https://redis.com/download-center/modules/).
 
-2. Load the module it in Redis
+2. Load the module into Redis
 
     ```sh
     $ redis-server --loadmodule /path/to/module/src/rejson.so
