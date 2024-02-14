@@ -152,10 +152,33 @@ impl Display for Path<'_> {
     }
 }
 
+/// A trait for the types that can be used as a value in RedisJSON.
+///
+/// Contains helpful abstractions for easier change of the underlying
+/// JSON implementation.
+pub trait JsonValueImpl {
+    const NULL: Self;
+}
+
+impl JsonValueImpl for json_parser::Value {
+    const NULL: Self = json_parser::Value::Null;
+}
+
+impl JsonValueImpl for ijson::IValue {
+    const NULL: Self = ijson::IValue::NULL;
+}
+
+/// A trait for the types that can be used as a value in RedisJSON.
+pub trait RedisJSONTypeInfo {
+    type Value;
+    type Number;
+    type String;
+}
+
 /// Trait for the types that can be used as a value in RedisJSON.
-pub trait RedisJSONValueTraits: Clone + std::fmt::Debug + Serialize {}
+pub trait RedisJSONValueTraits: Clone + std::fmt::Debug + Serialize + JsonValueImpl {}
 // Auto-implementation for all types which are suitable.
-impl<T> RedisJSONValueTraits for T where T: Clone + std::fmt::Debug + Serialize {}
+impl<T> RedisJSONValueTraits for T where T: Clone + std::fmt::Debug + Serialize + JsonValueImpl {}
 
 #[repr(transparent)]
 #[derive(Debug, Clone)]
@@ -165,6 +188,19 @@ where
 {
     //FIXME: expose array/object Values without requiring a path
     data: T,
+}
+
+impl RedisJSONTypeInfo for RedisJSON<json_parser::Value> {
+    /// The type this RedisJSON holds.
+    type Value = json_parser::Value;
+    type Number = json_parser::JsonNumber;
+    type String = json_parser::JsonString;
+}
+
+impl RedisJSONTypeInfo for RedisJSON<ijson::IValue> {
+    type Value = ijson::IValue;
+    type Number = ijson::INumber;
+    type String = ijson::IString;
 }
 
 impl<T: RedisJSONValueTraits> From<T> for RedisJSON<T> {
@@ -264,7 +300,7 @@ pub mod type_methods {
             // on Redis 6.0 we might get a NULL value here, so we need to handle it.
             return;
         }
-        let v = value.cast::<RedisJSON<ijson::IValue>>();
+        let v = value.cast::<RedisJSONData>();
         // Take ownership of the data from Redis (causing it to be dropped when we return)
         Box::from_raw(v);
     }
@@ -274,7 +310,7 @@ pub mod type_methods {
     pub unsafe extern "C" fn rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
         let mut out = serde_json::Serializer::new(Vec::new());
 
-        let v = unsafe { &*value.cast::<RedisJSON<ijson::IValue>>() };
+        let v = unsafe { &*value.cast::<RedisJSONData>() };
         v.data.serialize(&mut out).unwrap();
         let json = String::from_utf8(out.into_inner()).unwrap();
 
@@ -289,7 +325,7 @@ pub mod type_methods {
         tokey: *mut raw::RedisModuleString,
         value: *const c_void,
     ) -> *mut c_void {
-        let v = unsafe { &*value.cast::<RedisJSON<ijson::IValue>>() };
+        let v = unsafe { &*value.cast::<RedisJSONData>() };
         let value = v.data.clone();
         Box::into_raw(Box::new(value)).cast::<c_void>()
     }
@@ -297,7 +333,7 @@ pub mod type_methods {
     /// # Safety
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn mem_usage(value: *const c_void) -> usize {
-        let json = unsafe { &*(value as *mut RedisJSON<ijson::IValue>) };
+        let json = unsafe { &*(value as *mut RedisJSONData) };
         let manager = RedisIValueJsonKeyManager {
             phantom: PhantomData,
         };

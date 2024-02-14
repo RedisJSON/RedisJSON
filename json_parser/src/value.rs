@@ -32,7 +32,7 @@ pub enum Value {
 /// double.
 /// See <https://www.w3schools.com/js/js_json_datatypes.asp>.
 #[derive(Debug, Copy, Clone)]
-pub enum Number {
+pub enum JsonNumber {
     /// An unsigned integer value.
     Unsigned(u64),
     /// A signed integer value.
@@ -41,12 +41,12 @@ pub enum Number {
     Double(f64),
 }
 
-impl Hash for Number {
+impl Hash for JsonNumber {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
-            Number::Unsigned(n) => n.hash(state),
-            Number::Signed(n) => n.hash(state),
-            Number::Double(n) => {
+            JsonNumber::Unsigned(n) => n.hash(state),
+            JsonNumber::Signed(n) => n.hash(state),
+            JsonNumber::Double(n) => {
                 // Borrowed from serde.
                 if *n == 0.0f64 {
                     // There are 2 zero representations, +0 and -0, which
@@ -61,55 +61,85 @@ impl Hash for Number {
     }
 }
 
-impl PartialEq for Number {
+impl PartialEq for JsonNumber {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Number::Unsigned(a), Number::Unsigned(b)) => a == b,
-            (Number::Signed(a), Number::Signed(b)) => a == b,
-            (Number::Double(a), Number::Double(b)) => a == b,
+            (JsonNumber::Unsigned(a), JsonNumber::Unsigned(b)) => a == b,
+            (JsonNumber::Signed(a), JsonNumber::Signed(b)) => a == b,
+            (JsonNumber::Double(a), JsonNumber::Double(b)) => a == b,
 
-            (Number::Unsigned(a), Number::Signed(b)) => (*a as i64) == *b,
-            (Number::Unsigned(a), Number::Double(b)) => (*a as f64) == *b,
+            (JsonNumber::Unsigned(a), JsonNumber::Signed(b)) => (*a as i64) == *b,
+            (JsonNumber::Unsigned(a), JsonNumber::Double(b)) => (*a as f64) == *b,
 
-            (Number::Signed(a), Number::Unsigned(b)) => *a == (*b as i64),
-            (Number::Signed(a), Number::Double(b)) => (*a as f64) == *b,
+            (JsonNumber::Signed(a), JsonNumber::Unsigned(b)) => *a == (*b as i64),
+            (JsonNumber::Signed(a), JsonNumber::Double(b)) => (*a as f64) == *b,
 
-            (Number::Double(a), Number::Unsigned(b)) => *a == (*b as f64),
-            (Number::Double(a), Number::Signed(b)) => *a == (*b as f64),
+            (JsonNumber::Double(a), JsonNumber::Unsigned(b)) => *a == (*b as f64),
+            (JsonNumber::Double(a), JsonNumber::Signed(b)) => *a == (*b as f64),
         }
     }
 }
 
-impl Eq for Number {}
+impl Eq for JsonNumber {}
 
-impl From<serde_json::Number> for Number {
+impl From<serde_json::Number> for JsonNumber {
     fn from(n: serde_json::Number) -> Self {
         if let Some(u) = n.as_u64() {
-            return Number::Unsigned(u);
+            return JsonNumber::Unsigned(u);
         }
         if let Some(i) = n.as_i64() {
-            return Number::Signed(i);
+            return JsonNumber::Signed(i);
         }
         if let Some(f) = n.as_f64() {
-            return Number::Double(f);
+            return JsonNumber::Double(f);
         }
 
         unreachable!("serde_json::Number is not a valid JSON number.")
     }
 }
 
-impl Serialize for Number {
+impl Serialize for JsonNumber {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: ::serde::Serializer,
     {
         match self {
-            Number::Unsigned(u) => serializer.serialize_u64(*u),
-            Number::Signed(i) => serializer.serialize_i64(*i),
-            Number::Double(f) => serializer.serialize_f64(*f),
+            JsonNumber::Unsigned(u) => serializer.serialize_u64(*u),
+            JsonNumber::Signed(i) => serializer.serialize_i64(*i),
+            JsonNumber::Double(f) => serializer.serialize_f64(*f),
         }
     }
 }
+
+impl JsonNumber {
+    /// Returns the value as an unsigned integer, if possible.
+    pub fn get_unsigned(&self) -> Option<u64> {
+        match self {
+            JsonNumber::Unsigned(n) => Some(*n),
+            _ => None,
+        }
+    }
+
+    /// Returns the value as a signed integer, if possible.
+    pub fn get_signed(&self) -> Option<i64> {
+        match self {
+            JsonNumber::Signed(n) => Some(*n),
+            _ => None,
+        }
+    }
+
+    /// Returns the value as a double, if possible.
+    pub fn get_double(&self) -> Option<f64> {
+        match self {
+            JsonNumber::Double(n) => Some(*n),
+            _ => None,
+        }
+    }
+}
+
+/// The JsonString type is an alias for the `String` type, and is used
+/// to represent JSON strings.
+pub type JsonString = String;
 
 /// A destructured representation of a JSON value.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -120,9 +150,9 @@ pub enum Value {
     /// Boolean.
     Bool(bool),
     /// Number.
-    Number(Number),
+    Number(JsonNumber),
     /// String.
-    String(String),
+    String(JsonString),
     /// Array.
     Array(Vec<Self>),
     /// Object.
