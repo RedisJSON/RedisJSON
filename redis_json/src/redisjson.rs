@@ -235,6 +235,34 @@ impl<T: RedisJSONValueTraits> std::ops::DerefMut for RedisJSON<T> {
     }
 }
 
+pub trait MutableJsonValue: Clone {
+    /// Replaces a value at a given `path`, starting from `root`
+    ///
+    /// The new value is the value returned from `func`, which is called on the current value.
+    ///
+    /// If the returned value from `func` is [`None`], the current value is removed.
+    /// If the returned value from `func` is [`Err`], the current value remains (although it could be modified by `func`)
+    fn replace<F: FnMut(&mut Self) -> Result<Option<Self>, Error>>(
+        &mut self,
+        path: &[String],
+        func: F,
+    ) -> Result<(), Error>;
+
+    /// Updates a value at a given `path`, starting from `root`
+    ///
+    /// The value is modified by `func`, which is called on the current value.
+    /// If the returned value from `func` is [`None`], the current value is removed.
+    /// If the returned value from `func` is [`Err`], the current value remains (although it could be modified by `func`)
+    fn update<F: FnMut(&mut Self) -> Result<Option<()>, Error>>(
+        &mut self,
+        path: &[String],
+        func: F,
+    ) -> Result<(), Error>;
+
+    /// Merges two values.
+    fn merge(&mut self, patch: &Self);
+}
+
 /// An alias for the RedisJSON implementation using the `ijson::IValue`
 /// type.
 pub type RedisJSONData = RedisJSON<ijson::IValue>;

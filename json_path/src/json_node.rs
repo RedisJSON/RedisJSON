@@ -184,18 +184,11 @@ impl SelectValue for IValue {
     }
 
     fn keys(&self) -> Option<impl Iterator<Item = &str>> {
-        // self.as_object()
-        //     .map_or(None, |o| Some(Box::new(o.keys().map(|k| &k[..]))))
-        self.as_object().map(|o| Box::new(o.keys().map(|k| &k[..])))
+        self.as_object().map(|o| o.keys().map(|k| &k[..]))
     }
 
     fn items(&self) -> Option<impl Iterator<Item = (&str, &Self)>> {
-        self.as_object()
-            .map(|o| Box::new(o.iter().map(|(k, v)| (&k[..], v))))
-        // match self.as_object() {
-        //     Some(o) => Some(Box::new(o.iter().map(|(k, v)| (&k[..], v)))),
-        //     _ => None,
-        // }
+        self.as_object().map(|o| o.iter().map(|(k, v)| (&k[..], v)))
     }
 
     fn len(&self) -> Option<usize> {

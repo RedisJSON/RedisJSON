@@ -9,7 +9,9 @@ use crate::manager::{
     err_json, err_msg_json_expected, err_msg_json_path_doesnt_exist, JsonPath, StorageBackend,
 };
 use crate::manager::{Manager, ReadHolder, WriteHolder};
-use crate::redisjson::{normalize_arr_start_index, RedisJSONData, RedisJSONTypeInfo};
+use crate::redisjson::{
+    normalize_arr_start_index, MutableJsonValue, RedisJSONData, RedisJSONTypeInfo,
+};
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
 use bson::{from_document, Document};
@@ -43,120 +45,89 @@ pub struct IValueKeyHolderWrite<'a> {
     val: Option<&'a mut RedisJSONData>,
 }
 
-///
-/// Replaces a value at a given `path`, starting from `root`
-///
-/// The new value is the value returned from `func`, which is called on the current value.
-///
-/// If the returned value from `func` is [`None`], the current value is removed.
-/// If the returned value from `func` is [`Err`], the current value remains (although it could be modified by `func`)
-///
-fn replace<F: FnMut(&mut JsonValueType) -> Result<Option<JsonValueType>, Error>>(
-    path: &[String],
-    root: &mut JsonValueType,
-    mut func: F,
-) -> Result<(), Error> {
-    let mut target = root;
+impl MutableJsonValue for ijson::IValue {
+    fn replace<F: FnMut(&mut Self) -> Result<Option<Self>, Error>>(
+        &mut self,
+        path: &[String],
+        mut func: F,
+    ) -> Result<(), Error> {
+        let mut target = self;
 
-    let last_index = path.len().saturating_sub(1);
-    for (i, token) in path.iter().enumerate() {
-        let target_once = target;
-        let is_last = i == last_index;
-        let target_opt = match target_once.type_() {
-            ValueType::Object => {
-                let obj = target_once.as_object_mut().unwrap();
-                if is_last {
-                    if let Entry::Occupied(mut e) = obj.entry(token) {
-                        let v = e.get_mut();
-                        if let Some(res) = (func)(v)? {
-                            *v = res;
-                        } else {
-                            e.remove();
-                        }
-                    }
-                    return Ok(());
-                }
-                obj.get_mut(token.as_str())
-            }
-            ValueType::Array => {
-                let arr = target_once.as_array_mut().unwrap();
-                if let Ok(x) = token.parse::<usize>() {
+        let last_index = path.len().saturating_sub(1);
+        for (i, token) in path.iter().enumerate() {
+            let target_once = target;
+            let is_last = i == last_index;
+            let target_opt = match target_once.type_() {
+                ijson::ValueType::Object => {
+                    let obj = target_once.as_object_mut().unwrap();
                     if is_last {
-                        if x < arr.len() {
-                            let v = &mut arr.as_mut_slice()[x];
+                        if let ijson::object::Entry::Occupied(mut e) = obj.entry(token) {
+                            let v = e.get_mut();
                             if let Some(res) = (func)(v)? {
                                 *v = res;
                             } else {
-                                arr.remove(x);
+                                e.remove();
                             }
                         }
                         return Ok(());
                     }
-                    arr.get_mut(x)
-                } else {
-                    panic!("Array index should have been parsed successfully before reaching here")
+                    obj.get_mut(token.as_str())
                 }
-            }
-            _ => None,
-        };
-
-        if let Some(t) = target_opt {
-            target = t;
-        } else {
-            break;
-        }
-    }
-
-    Ok(())
-}
-
-///
-/// Updates a value at a given `path`, starting from `root`
-///
-/// The value is modified by `func`, which is called on the current value.
-/// If the returned value from `func` is [`None`], the current value is removed.
-/// If the returned value from `func` is [`Err`], the current value remains (although it could be modified by `func`)
-///
-fn update<F: FnMut(&mut JsonValueType) -> Result<Option<()>, Error>>(
-    path: &[String],
-    root: &mut JsonValueType,
-    mut func: F,
-) -> Result<(), Error> {
-    let mut target = root;
-
-    let last_index = path.len().saturating_sub(1);
-    for (i, token) in path.iter().enumerate() {
-        let target_once = target;
-        let is_last = i == last_index;
-        let target_opt = match target_once.type_() {
-            ValueType::Object => {
-                let obj = target_once.as_object_mut().unwrap();
-                if is_last {
-                    if let Entry::Occupied(mut e) = obj.entry(token) {
-                        let v = e.get_mut();
-                        match (func)(v) {
-                            Ok(res) => {
-                                if res.is_none() {
-                                    e.remove();
+                ijson::ValueType::Array => {
+                    let arr = target_once.as_array_mut().unwrap();
+                    if let Ok(x) = token.parse::<usize>() {
+                        if is_last {
+                            if x < arr.len() {
+                                let v = &mut arr.as_mut_slice()[x];
+                                if let Some(res) = (func)(v)? {
+                                    *v = res;
+                                } else {
+                                    arr.remove(x);
                                 }
                             }
-                            Err(err) => return Err(err),
+                            return Ok(());
                         }
+                        arr.get_mut(x)
+                    } else {
+                        panic!(
+                            "Array index should have been parsed successfully before reaching here"
+                        )
                     }
-                    return Ok(());
                 }
-                obj.get_mut(token.as_str())
+                _ => None,
+            };
+
+            if let Some(t) = target_opt {
+                target = t;
+            } else {
+                break;
             }
-            ValueType::Array => {
-                let arr = target_once.as_array_mut().unwrap();
-                if let Ok(x) = token.parse::<usize>() {
+        }
+
+        Ok(())
+    }
+
+    fn update<F: FnMut(&mut Self) -> Result<Option<()>, Error>>(
+        &mut self,
+        path: &[String],
+        mut func: F,
+    ) -> Result<(), Error> {
+        let mut target = self;
+
+        let last_index = path.len().saturating_sub(1);
+        for (i, token) in path.iter().enumerate() {
+            let target_once = target;
+            let is_last = i == last_index;
+            let target_opt = match target_once.type_() {
+                ijson::ValueType::Object => {
+                    let obj = target_once.as_object_mut().unwrap();
                     if is_last {
-                        if x < arr.len() {
-                            let v = &mut arr.as_mut_slice()[x];
+                        if let ijson::object::Entry::Occupied(mut e) = obj.entry(token) {
+                            let v = e.get_mut();
                             match (func)(v) {
                                 Ok(res) => {
                                     if res.is_none() {
-                                        arr.remove(x);
+                                        e.remove();
                                     }
                                 }
                                 Err(err) => return Err(err),
@@ -164,22 +135,63 @@ fn update<F: FnMut(&mut JsonValueType) -> Result<Option<()>, Error>>(
                         }
                         return Ok(());
                     }
-                    arr.get_mut(x)
-                } else {
-                    panic!("Array index should have been parsed successfully before reaching here")
+                    obj.get_mut(token.as_str())
                 }
-            }
-            _ => None,
-        };
+                ijson::ValueType::Array => {
+                    let arr = target_once.as_array_mut().unwrap();
+                    if let Ok(x) = token.parse::<usize>() {
+                        if is_last {
+                            if x < arr.len() {
+                                let v = &mut arr.as_mut_slice()[x];
+                                match (func)(v) {
+                                    Ok(res) => {
+                                        if res.is_none() {
+                                            arr.remove(x);
+                                        }
+                                    }
+                                    Err(err) => return Err(err),
+                                }
+                            }
+                            return Ok(());
+                        }
+                        arr.get_mut(x)
+                    } else {
+                        panic!(
+                            "Array index should have been parsed successfully before reaching here"
+                        )
+                    }
+                }
+                _ => None,
+            };
 
-        if let Some(t) = target_opt {
-            target = t;
-        } else {
-            break;
+            if let Some(t) = target_opt {
+                target = t;
+            } else {
+                break;
+            }
         }
+
+        Ok(())
     }
 
-    Ok(())
+    fn merge(&mut self, patch: &Self) {
+        if !patch.is_object() {
+            *self = patch.clone();
+            return;
+        }
+
+        if !self.is_object() {
+            *self = ijson::IObject::new().into();
+        }
+        let map = self.as_object_mut().unwrap();
+        for (key, value) in patch.as_object().unwrap() {
+            if value.is_null() {
+                map.remove(key.as_str());
+            } else {
+                map.entry(key.as_str()).or_insert(Self::NULL).merge(value);
+            }
+        }
+    }
 }
 
 fn do_op<F>(root: &mut JsonValueType, paths: &[String], mut op_fun: F) -> Result<(), RedisError>
@@ -200,7 +212,7 @@ where
             }
         }
     } else {
-        update(paths, root, op_fun)?;
+        root.update(paths, op_fun)?;
     }
 
     Ok(())
@@ -317,7 +329,7 @@ impl<'a> WriteHolder<JsonValueType, JsonValueType> for IValueKeyHolderWrite<'a> 
             self.set_root(Some(v))?;
             updated = true;
         } else {
-            replace(path, self.get_value_mut()?.unwrap(), |_v| {
+            self.get_value_mut()?.unwrap().replace(path, |_v| {
                 updated = true;
                 Ok(Some(v.take()))
             })?;
@@ -327,26 +339,22 @@ impl<'a> WriteHolder<JsonValueType, JsonValueType> for IValueKeyHolderWrite<'a> 
 
     fn merge_value(&mut self, path: JsonPath, v: JsonValueType) -> Result<bool, RedisError> {
         let mut updated = false;
+        let root = self.get_value_mut()?.unwrap();
+
         if path.is_empty() {
-            merge(self.get_value_mut()?.unwrap(), &v);
+            root.merge(&v);
             // update the root
             updated = true;
         } else {
-            replace(path, self.get_value_mut()?.unwrap(), |current| {
+            root.replace(path, |current| {
                 updated = true;
-                merge(current, &v);
+                current.merge(&v);
                 Ok(Some(current.take()))
             })?;
         }
         Ok(updated)
     }
 }
-
-// macro_rules! get_value_mut {
-//     ($path: path) => {
-//         $path.get_value_mut()?.ok_or("No value found")?
-//     };
-// }
 
 macro_rules! delegate {
     ($self: ident, $method: ident ($($args:expr),*)) => {{
@@ -464,7 +472,7 @@ impl StorageBackend for RedisJSONData {
                 }
             }
         } else {
-            update(path, self.as_mut(), |val| {
+            self.update(path, |val| {
                 if val.is_object() {
                     let o = val.as_object_mut().unwrap();
                     if !o.contains_key(key) {
@@ -480,7 +488,7 @@ impl StorageBackend for RedisJSONData {
 
     fn delete_path(&mut self, path: JsonPath) -> Result<bool, RedisError> {
         let mut deleted = false;
-        update(path, self.as_mut(), |_v| {
+        self.update(path, |_v| {
             deleted = true; // might delete more than a single value
             Ok(None)
         })?;
@@ -671,28 +679,6 @@ impl ReadHolder<JsonValueType> for IValueKeyHolderRead {
     fn get_value(&self) -> Result<Option<&JsonValueType>, RedisError> {
         let key_value = self.key.get_value::<RedisJSONData>(&REDIS_JSON_TYPE)?;
         key_value.map_or(Ok(None), |v| Ok(Some(v)))
-    }
-}
-
-fn merge(doc: &mut JsonValueType, patch: &JsonValueType) {
-    if !patch.is_object() {
-        *doc = patch.clone();
-        return;
-    }
-
-    if !doc.is_object() {
-        *doc = IObject::new().into();
-    }
-    let map = doc.as_object_mut().unwrap();
-    for (key, value) in patch.as_object().unwrap() {
-        if value.is_null() {
-            map.remove(key.as_str());
-        } else {
-            merge(
-                map.entry(key.as_str()).or_insert(JsonValueType::NULL),
-                value,
-            );
-        }
     }
 }
 
