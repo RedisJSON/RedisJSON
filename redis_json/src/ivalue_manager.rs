@@ -10,13 +10,14 @@ use crate::manager::{
 };
 use crate::manager::{Manager, ReadHolder, WriteHolder};
 use crate::redisjson::{
-    normalize_arr_start_index, MutableJsonValue, RedisJSONData, RedisJSONTypeInfo,
+    normalize_arr_start_index, Clearable, MemoryConsumption, MutableJsonValue, RedisJSONData,
+    RedisJSONTypeInfo, TakeOutByIndex,
 };
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
 use bson::{from_document, Document};
 use ijson::object::Entry;
-use ijson::{DestructuredMut, IObject, IValue, ValueType};
+use ijson::{DestructuredMut, IArray, INumber, IObject, IValue, ValueType};
 // use ijson::object::Entry;
 // use ijson::{DestructuredMut, INumber, IObject, IString, IValue, ValueType};
 use redis_module::key::{verify_type, KeyFlags, RedisKey, RedisKeyWritable};
@@ -45,6 +46,7 @@ pub struct IValueKeyHolderWrite<'a> {
     val: Option<&'a mut RedisJSONData>,
 }
 
+/// [`ijson::IValue`] implementation of the [`MutableJsonValue`] trait.
 impl MutableJsonValue for ijson::IValue {
     fn replace<F: FnMut(&mut Self) -> Result<Option<Self>, Error>>(
         &mut self,
@@ -194,6 +196,156 @@ impl MutableJsonValue for ijson::IValue {
     }
 }
 
+/// [`ijson::IValue`] implementation of the [`MutableJsonValue`] trait.
+impl MutableJsonValue for json_parser::Value {
+    fn replace<F: FnMut(&mut Self) -> Result<Option<Self>, Error>>(
+        &mut self,
+        path: &[String],
+        mut func: F,
+    ) -> Result<(), Error> {
+        let mut target = self;
+
+        let last_index = path.len().saturating_sub(1);
+        for (i, token) in path.iter().enumerate() {
+            let target_once = target;
+            let is_last = i == last_index;
+            let target_opt = match target_once {
+                json_parser::Value::Object(obj) => {
+                    if is_last {
+                        if let json_parser::MapEntry::Occupied(mut e) = obj.entry(token.to_owned())
+                        {
+                            let v = e.get_mut();
+                            if let Some(res) = (func)(v)? {
+                                *v = res;
+                            } else {
+                                e.remove();
+                            }
+                        }
+                        return Ok(());
+                    }
+                    obj.get_mut(token.as_str())
+                }
+                json_parser::Value::Array(arr) => {
+                    if let Ok(x) = token.parse::<usize>() {
+                        if is_last {
+                            if x < arr.len() {
+                                let v = &mut arr.as_mut_slice()[x];
+                                if let Some(res) = (func)(v)? {
+                                    *v = res;
+                                } else {
+                                    arr.remove(x);
+                                }
+                            }
+                            return Ok(());
+                        }
+                        arr.get_mut(x)
+                    } else {
+                        panic!(
+                            "Array index should have been parsed successfully before reaching here"
+                        )
+                    }
+                }
+                _ => None,
+            };
+
+            if let Some(t) = target_opt {
+                target = t;
+            } else {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn update<F: FnMut(&mut Self) -> Result<Option<()>, Error>>(
+        &mut self,
+        path: &[String],
+        mut func: F,
+    ) -> Result<(), Error> {
+        let mut target = self;
+
+        let last_index = path.len().saturating_sub(1);
+        for (i, token) in path.iter().enumerate() {
+            let target_once = target;
+            let is_last = i == last_index;
+            let target_opt = match target_once {
+                json_parser::Value::Object(obj) => {
+                    if is_last {
+                        if let json_parser::MapEntry::Occupied(mut e) = obj.entry(token.to_owned())
+                        {
+                            let v = e.get_mut();
+                            match (func)(v) {
+                                Ok(res) => {
+                                    if res.is_none() {
+                                        e.remove();
+                                    }
+                                }
+                                Err(err) => return Err(err),
+                            }
+                        }
+                        return Ok(());
+                    }
+                    obj.get_mut(token.as_str())
+                }
+                json_parser::Value::Array(arr) => {
+                    if let Ok(x) = token.parse::<usize>() {
+                        if is_last {
+                            if x < arr.len() {
+                                let v = &mut arr.as_mut_slice()[x];
+                                match (func)(v) {
+                                    Ok(res) => {
+                                        if res.is_none() {
+                                            arr.remove(x);
+                                        }
+                                    }
+                                    Err(err) => return Err(err),
+                                }
+                            }
+                            return Ok(());
+                        }
+                        arr.get_mut(x)
+                    } else {
+                        return Err(
+                            "Array index should have been parsed successfully before reaching here"
+                                .into(),
+                        );
+                    }
+                }
+                _ => None,
+            };
+
+            if let Some(t) = target_opt {
+                target = t;
+            } else {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn merge(&mut self, patch: &Self) {
+        if !patch.is_object() {
+            *self = patch.clone();
+            return;
+        }
+
+        if !self.is_object() {
+            *self = json_parser::Value::Object(Default::default());
+        }
+
+        let map = self.as_object_mut().unwrap();
+        for (key, value) in patch.as_object().unwrap() {
+            if value.is_null() {
+                map.remove(key);
+            } else {
+                map.insert(key.to_owned(), value.clone());
+            }
+        }
+    }
+}
+
 fn do_op<F>(root: &mut JsonValueType, paths: &[String], mut op_fun: F) -> Result<(), RedisError>
 where
     F: FnMut(&mut JsonValueType) -> Result<Option<()>, Error>,
@@ -245,8 +397,7 @@ where
                         .map_err(|_| RedisError::Str("result is not a number"))
                 }
             };
-            // let new_val: JsonValueType = JsonValueType::from(num_res?);
-            let new_val = IValue::from(num_res?);
+            let new_val = JsonValueType::from(num_res?);
             *v = new_val.clone();
             res = Some(new_val);
             Ok(Some(()))
@@ -377,37 +528,30 @@ impl<'a> StorageBackend for IValueKeyHolderWrite<'a> {
         key: &str,
         v: Self::StorageData,
     ) -> Result<bool, RedisError> {
-        // get_value_mut!(self).dict_add(path, key, v)
         delegate!(self, dict_add(path, key, v))
     }
 
     fn delete_path(&mut self, path: JsonPath) -> Result<bool, RedisError> {
-        // get_value_mut!(self).delete_path(path)
         delegate!(self, delete_path(path))
     }
 
     fn incr_by(&mut self, path: JsonPath, num: &str) -> Result<Number, RedisError> {
-        // get_value_mut!(self).incr_by(path, num)
         delegate!(self, incr_by(path, num))
     }
 
     fn mult_by(&mut self, path: JsonPath, num: &str) -> Result<Number, RedisError> {
-        // self.val.mult_by(path, num)
         delegate!(self, mult_by(path, num))
     }
 
     fn pow_by(&mut self, path: JsonPath, num: &str) -> Result<Number, RedisError> {
-        // self.val.pow_by(path, num)
         delegate!(self, pow_by(path, num))
     }
 
     fn bool_toggle(&mut self, path: JsonPath) -> Result<bool, RedisError> {
-        // self.val.bool_toggle(path)
         delegate!(self, bool_toggle(path))
     }
 
     fn str_append(&mut self, path: JsonPath, val: String) -> Result<usize, RedisError> {
-        // self.val.str_append(path, val)
         delegate!(self, str_append(path, val))
     }
 
@@ -416,7 +560,6 @@ impl<'a> StorageBackend for IValueKeyHolderWrite<'a> {
         path: JsonPath,
         args: Vec<Self::StorageData>,
     ) -> Result<usize, RedisError> {
-        // self.val.arr_append(path, args)
         delegate!(self, arr_append(path, args))
     }
 
@@ -426,7 +569,6 @@ impl<'a> StorageBackend for IValueKeyHolderWrite<'a> {
         args: &[Self::StorageData],
         index: i64,
     ) -> Result<usize, RedisError> {
-        // self.val.arr_insert(paths, args, index)
         delegate!(self, arr_insert(paths, args, index))
     }
 
@@ -436,17 +578,14 @@ impl<'a> StorageBackend for IValueKeyHolderWrite<'a> {
         index: i64,
         serialize_callback: C,
     ) -> RedisResult {
-        // self.val.arr_pop(path, index, serialize_callback)
         delegate!(self, arr_pop(path, index, serialize_callback))
     }
 
     fn arr_trim(&mut self, path: JsonPath, start: i64, stop: i64) -> Result<usize, RedisError> {
-        // self.val.arr_trim(path, start, stop)
         delegate!(self, arr_trim(path, start, stop))
     }
 
     fn clear(&mut self, path: JsonPath) -> Result<usize, RedisError> {
-        // self.val.clear(path)
         delegate!(self, clear(path))
     }
 }
@@ -516,18 +655,26 @@ impl StorageBackend for RedisJSONData {
     fn bool_toggle(&mut self, path: JsonPath) -> Result<bool, RedisError> {
         let mut res = None;
         do_op(self.as_mut(), path, |v| {
-            if let DestructuredMut::Bool(mut bool_mut) = v.destructure_mut() {
-                //Using DestructuredMut in order to modify a `Bool` variant
-                let val = bool_mut.get() ^ true;
-                bool_mut.set(val);
+            if v.is_bool() {
+                let val = v.to_bool().unwrap() ^ true;
+                *v = val.into();
                 res = Some(val);
             }
             Ok(Some(()))
+            // if let DestructuredMut::Bool(mut bool_mut) = v.destructure_mut() {
+            //     //Using DestructuredMut in order to modify a `Bool` variant
+            //     let val = bool_mut.get() ^ true;
+            //     bool_mut.set(val);
+            //     res = Some(val);
+            // }
+            // Ok(Some(()))
         })?;
         res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
     }
 
     fn str_append(&mut self, path: JsonPath, val: String) -> Result<usize, RedisError> {
+        use crate::redisjson::Internable;
+
         let json = serde_json::from_str(&val)?;
         if let serde_json::Value::String(s) = json {
             let mut res = None;
@@ -571,6 +718,8 @@ impl StorageBackend for RedisJSONData {
         args: &[JsonValueType],
         index: i64,
     ) -> Result<usize, RedisError> {
+        use json_path::select_value::SelectValue;
+
         let mut res = None;
         do_op(self.as_mut(), paths, |v: &mut JsonValueType| {
             // Verify legal index in bounds
@@ -608,7 +757,8 @@ impl StorageBackend for RedisJSONData {
                 // Verify legal index in bounds
                 let len = array.len() as i64;
                 let index = normalize_arr_start_index(index, len) as usize;
-                res = Some(array.remove(index).unwrap());
+                // res = Some(array.remove(index).unwrap());
+                res = Some(array.take_out(index).unwrap());
                 Ok(Some(()))
             } else {
                 Err(err_json(v, "array"))
@@ -647,27 +797,150 @@ impl StorageBackend for RedisJSONData {
 
     fn clear(&mut self, path: JsonPath) -> Result<usize, RedisError> {
         let mut cleared = 0;
-        do_op(self.as_mut(), path, |v| match v.type_() {
-            ValueType::Object => {
-                let obj = v.as_object_mut().unwrap();
-                obj.clear();
+        do_op(self.as_mut(), path, |v| {
+            if v.clear() {
                 cleared += 1;
-                Ok(Some(()))
+            }
+            Ok(Some(()))
+        })?;
+
+        Ok(cleared)
+    }
+}
+
+impl Clearable for IValue {
+    fn clear(&mut self) -> bool {
+        match self.type_() {
+            ValueType::Object => {
+                self.as_object_mut().unwrap().clear();
             }
             ValueType::Array => {
-                let arr = v.as_array_mut().unwrap();
-                arr.clear();
-                cleared += 1;
-                Ok(Some(()))
+                self.as_array_mut().unwrap().clear();
             }
             ValueType::Number => {
-                *v = IValue::from(0);
-                cleared += 1;
-                Ok(Some(()))
+                *self = Self::from(0);
             }
-            _ => Ok(Some(())),
-        })?;
-        Ok(cleared)
+            _ => return false,
+        }
+
+        true
+    }
+}
+
+impl Clearable for json_parser::Value {
+    fn clear(&mut self) -> bool {
+        match self {
+            Self::Array(vec) => vec.clear(),
+            Self::Object(map) => map.clear(),
+            Self::Number(v) => *v = 0.into(),
+            _ => return false,
+        }
+
+        true
+    }
+}
+
+impl MemoryConsumption for IValue {
+    fn get_memory_occupied(&self) -> usize {
+        let res = size_of::<Self>()
+            + match self.type_() {
+                ValueType::Null | ValueType::Bool => 0,
+                ValueType::Number => {
+                    let num = self.as_number().unwrap();
+                    if num.has_decimal_point() {
+                        // 64bit float
+                        16
+                    } else if num >= &INumber::from(-128) && num <= &INumber::from(383) {
+                        // 8bit
+                        0
+                    } else if num > &INumber::from(-8_388_608) && num <= &INumber::from(8_388_607) {
+                        // 24bit
+                        4
+                    } else {
+                        // 64bit
+                        16
+                    }
+                }
+                ValueType::String => self.as_string().unwrap().len(),
+                ValueType::Array => {
+                    let arr = self.as_array().unwrap();
+                    let capacity = arr.capacity();
+                    if capacity == 0 {
+                        0
+                    } else {
+                        size_of::<usize>() * (capacity + 2)
+                            + arr
+                                .into_iter()
+                                .map(|v| v.get_memory_occupied())
+                                .sum::<usize>()
+                    }
+                }
+                ValueType::Object => {
+                    let val = self.as_object().unwrap();
+                    let capacity = val.capacity();
+                    if capacity == 0 {
+                        0
+                    } else {
+                        size_of::<usize>() * (capacity * 3 + 2)
+                            + val
+                                .into_iter()
+                                .map(|(s, v)| s.len() + v.get_memory_occupied())
+                                .sum::<usize>()
+                    }
+                }
+            };
+        res
+    }
+}
+
+impl MemoryConsumption for json_parser::Value {
+    fn get_memory_occupied(&self) -> usize {
+        match self {
+            Self::Null => 0,
+            Self::Bool(_) => 1,
+            Self::Number(_) => 8,
+            Self::String(s) => s.len(),
+            Self::Array(arr) => {
+                let capacity = arr.capacity();
+                if capacity == 0 {
+                    0
+                } else {
+                    size_of::<usize>() * (capacity + 2)
+                        + arr
+                            .into_iter()
+                            .map(|v| v.get_memory_occupied())
+                            .sum::<usize>()
+                }
+            }
+            Self::Object(val) => {
+                let capacity = val.capacity();
+                if capacity == 0 {
+                    0
+                } else {
+                    size_of::<usize>() * (capacity * 3 + 2)
+                        + val
+                            .into_iter()
+                            .map(|(s, v)| s.len() + v.get_memory_occupied())
+                            .sum::<usize>()
+                }
+            }
+        }
+    }
+}
+
+impl TakeOutByIndex<IValue> for IArray {
+    fn take_out(&mut self, index: usize) -> Option<IValue> {
+        self.remove(index)
+    }
+}
+
+impl<T> TakeOutByIndex<T> for json_parser::Array<T> {
+    fn take_out(&mut self, index: usize) -> Option<T> {
+        if index < self.len() {
+            Some(self.remove(index))
+        } else {
+            None
+        }
     }
 }
 
@@ -725,6 +998,8 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     }
 
     fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> Result<Self::O, Error> {
+        use crate::redisjson::JsonValueImpl;
+
         match format {
             Format::JSON | Format::STRING => {
                 let mut deserializer = serde_json::Deserializer::from_str(val);
@@ -768,58 +1043,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     /// following https://github.com/Diggsey/ijson/issues/23#issuecomment-1377270111
     ///
     fn get_memory(&self, v: &Self::V) -> Result<usize, RedisError> {
-        let res = size_of::<JsonValueType>()
-            + match v.type_() {
-                ValueType::Null | ValueType::Bool => 0,
-                ValueType::Number => {
-                    let num = v.as_number().unwrap();
-                    if num.has_decimal_point() {
-                        // 64bit float
-                        16
-                    } else if num >= &JsonNumberType::from(-128)
-                        && num <= &JsonNumberType::from(383)
-                    {
-                        // 8bit
-                        0
-                    } else if num > &JsonNumberType::from(-8_388_608)
-                        && num <= &JsonNumberType::from(8_388_607)
-                    {
-                        // 24bit
-                        4
-                    } else {
-                        // 64bit
-                        16
-                    }
-                }
-                ValueType::String => v.as_string().unwrap().len(),
-                ValueType::Array => {
-                    let arr = v.as_array().unwrap();
-                    let capacity = arr.capacity();
-                    if capacity == 0 {
-                        0
-                    } else {
-                        size_of::<usize>() * (capacity + 2)
-                            + arr
-                                .into_iter()
-                                .map(|v| self.get_memory(v).unwrap())
-                                .sum::<usize>()
-                    }
-                }
-                ValueType::Object => {
-                    let val = v.as_object().unwrap();
-                    let capacity = val.capacity();
-                    if capacity == 0 {
-                        0
-                    } else {
-                        size_of::<usize>() * (capacity * 3 + 2)
-                            + val
-                                .into_iter()
-                                .map(|(s, v)| s.len() + self.get_memory(v).unwrap())
-                                .sum::<usize>()
-                    }
-                }
-            };
-        Ok(res)
+        Ok(v.get_memory_occupied())
     }
 
     fn is_json(&self, key: *mut RedisModuleKey) -> Result<bool, RedisError> {

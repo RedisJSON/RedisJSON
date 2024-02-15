@@ -8,13 +8,16 @@ use std::hash::{Hash, Hasher};
 /// `HashMap` for keys of length longer than five bytes, and shouldn't
 /// be slower for keys shorter than that. Let's try to win some
 /// performance here.
-use fxhash::FxHashMap as Map;
+// TODO: consider `indexmap`, `hashbrown`.
+pub use fxhash::FxHashMap as Map;
 use serde::{
     de::{MapAccess, SeqAccess, Visitor},
     ser::{SerializeMap, SerializeSeq},
     Deserialize, Serialize,
 };
-// TODO: consider `indexmap`, `hashbrown`.
+/// The entry API for `FxHashMap`.
+pub use std::collections::hash_map::Entry as MapEntry;
+pub use Vec as Array;
 
 /* serde_json::Value:
 
@@ -135,7 +138,101 @@ impl JsonNumber {
             _ => None,
         }
     }
+
+    /// Returns `true` if the value can hold a decimal point.
+    pub fn has_decimal_point(&self) -> bool {
+        matches!(self, JsonNumber::Double(_))
+    }
 }
+
+macro_rules! impl_number_from_unsigned {
+    ($($t:ty),*) => {
+        $(
+            impl From<$t> for JsonNumber {
+                fn from(n: $t) -> Self {
+                    JsonNumber::Unsigned(n as u64)
+                }
+            }
+
+            impl TryFrom<JsonNumber> for $t {
+                type Error = ();
+
+                fn try_from(n: JsonNumber) -> Result<Self, Self::Error> {
+                    match n {
+                        JsonNumber::Unsigned(u) => Ok(u as $t),
+                        _ => Err(()),
+                    }
+                }
+            }
+        )*
+    };
+}
+
+macro_rules! impl_number_from_signed {
+    ($($t:ty),*) => {
+        $(
+            impl From<$t> for JsonNumber {
+                fn from(n: $t) -> Self {
+                    JsonNumber::Signed(n as i64)
+                }
+            }
+
+            impl TryFrom<JsonNumber> for $t {
+                type Error = ();
+
+                fn try_from(n: JsonNumber) -> Result<Self, Self::Error> {
+                    match n {
+                        JsonNumber::Signed(u) => Ok(u as $t),
+                        _ => Err(()),
+                    }
+                }
+            }
+        )*
+    };
+}
+
+macro_rules! impl_number_from_double {
+    ($($t:ty),*) => {
+        $(
+            impl From<$t> for JsonNumber {
+                fn from(n: $t) -> Self {
+                    JsonNumber::Double(n as f64)
+                }
+            }
+
+            impl TryFrom<JsonNumber> for $t {
+                type Error = ();
+
+                fn try_from(n: JsonNumber) -> Result<Self, Self::Error> {
+                    match n {
+                        JsonNumber::Double(u) => Ok(u as $t),
+                        _ => Err(()),
+                    }
+                }
+            }
+        )*
+    };
+}
+
+macro_rules! impl_number_numeric_methods {
+    ($($t:ty),*) => {
+        /// Numeric methods.
+        impl JsonNumber {
+            $(
+                concat_idents::concat_idents!(fn_name = to_, $t {
+                    pub fn fn_name(&self) -> Option<$t> {
+                        $t::try_from(*self).ok()
+                    }
+                });
+            )*
+        }
+    };
+}
+
+impl_number_from_unsigned!(usize, u64, u32, u16, u8);
+impl_number_from_signed!(isize, i64, i32, i16, i8);
+impl_number_from_double!(f64, f32);
+impl_number_numeric_methods!(usize, u64, u32, u16, u8, isize, i64, i32, i16, i8, f64, f32);
 
 /// The JsonString type is an alias for the `String` type, and is used
 /// to represent JSON strings.
@@ -157,6 +254,193 @@ pub enum Value {
     Array(Vec<Self>),
     /// Object.
     Object(Map<String, Self>),
+}
+
+/// Basic enum methods.
+impl Value {
+    /// Returns `true` if the value holds a JSON null.
+    pub fn is_null(&self) -> bool {
+        matches!(self, Self::Null)
+    }
+
+    /// Returns the boolean value of this json value, if it is a
+    /// boolean.
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Self::Bool(b) => Some(*b),
+            _ => None,
+        }
+    }
+
+    /// An alias for [`Self::as_bool`].
+    pub fn to_bool(&self) -> Option<bool> {
+        self.as_bool()
+    }
+
+    /// Returns `true` if the value holds a JSON boolean.
+    pub fn is_bool(&self) -> bool {
+        matches!(self, Self::Bool(_))
+    }
+
+    /// Returns the JSON number as a reference, if this [`Value`] is a
+    /// number.
+    pub fn as_number(&self) -> Option<&JsonNumber> {
+        match self {
+            Self::Number(n) => Some(n),
+            _ => None,
+        }
+    }
+
+    /// Returns the JSON number as a mutable reference, if this
+    /// [`Value`] is a number.
+    pub fn as_number_mut(&mut self) -> Option<&mut JsonNumber> {
+        match self {
+            Self::Number(n) => Some(n),
+            _ => None,
+        }
+    }
+
+    /// Returns `true` if the value holds a JSON number.
+    pub fn is_number(&self) -> bool {
+        matches!(self, Self::Number(_))
+    }
+
+    /// Returns the JSON string as a reference, if this [`Value`] is a
+    /// string.
+    pub fn as_string(&self) -> Option<&JsonString> {
+        match self {
+            Self::String(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// Returns the JSON string as a mutable reference, if this
+    /// [`Value`] is a string.
+    pub fn as_string_mut(&mut self) -> Option<&mut JsonString> {
+        match self {
+            Self::String(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// Returns `true` if the value holds a JSON string.
+    pub fn is_string(&self) -> bool {
+        matches!(self, Self::String(_))
+    }
+
+    /// Returns the JSON array as a reference, if this [`Value`] is an
+    /// array.
+    pub fn as_array(&self) -> Option<&Vec<Self>> {
+        match self {
+            Self::Array(vec) => Some(vec),
+            _ => None,
+        }
+    }
+
+    /// Returns the JSON array as a mutable reference, if this
+    /// [`Value`] is an array.
+    pub fn as_array_mut(&mut self) -> Option<&mut Vec<Self>> {
+        match self {
+            Self::Array(vec) => Some(vec),
+            _ => None,
+        }
+    }
+
+    /// Returns `true` if the value holds a JSON array.
+    pub fn is_array(&self) -> bool {
+        matches!(self, Self::Array(_))
+    }
+
+    /// Returns `true` if the value holds a JSON object.
+    pub fn is_object(&self) -> bool {
+        matches!(self, Self::Object(_))
+    }
+
+    /// Returns the JSON object as a map, if this [`Value`] is an
+    /// object.
+    pub fn as_object(&self) -> Option<&Map<String, Self>> {
+        match self {
+            Self::Object(map) => Some(map),
+            _ => None,
+        }
+    }
+
+    /// Returns the JSON object as a map, if this [`Value`] is an
+    /// object.
+    pub fn as_object_mut(&mut self) -> Option<&mut Map<String, Self>> {
+        match self {
+            Self::Object(map) => Some(map),
+            _ => None,
+        }
+    }
+}
+
+macro_rules! impl_value_numeric_methods {
+    ($($t:ty),*) => {
+        /// Numeric methods.
+        impl Value {
+            $(
+                concat_idents::concat_idents!(fn_name = to_, $t {
+                    pub fn fn_name(&self) -> Option<$t> {
+                        match self {
+                            Self::Number(n) => $t::try_from(*n).ok(),
+                            _ => None,
+                        }
+                    }
+                });
+            )*
+        }
+    };
+}
+
+impl_value_numeric_methods!(usize, u64, u32, u16, u8, isize, i64, i32, i16, i8, f64, f32);
+
+/// Additional useful methods.
+impl Value {
+    /// Takes the value out of this object, leaving a [`Self::Null`] in
+    /// its place.
+    pub fn take(&mut self) -> Self {
+        std::mem::replace(self, Self::Null)
+    }
+}
+
+impl From<()> for Value {
+    fn from(_: ()) -> Self {
+        Self::Null
+    }
+}
+
+impl From<bool> for Value {
+    fn from(b: bool) -> Self {
+        Self::Bool(b)
+    }
+}
+
+impl From<JsonString> for Value {
+    fn from(s: JsonString) -> Self {
+        Self::String(s)
+    }
+}
+
+impl From<Vec<Value>> for Value {
+    fn from(vec: Vec<Value>) -> Self {
+        Self::Array(vec)
+    }
+}
+
+impl From<Map<String, Value>> for Value {
+    fn from(map: Map<String, Value>) -> Self {
+        Self::Object(map)
+    }
+}
+
+impl<T> From<T> for Value
+where
+    JsonNumber: From<T>,
+{
+    fn from(n: T) -> Self {
+        Self::Number(n.into())
+    }
 }
 
 impl From<serde_json::Value> for Value {

@@ -152,6 +152,62 @@ impl Display for Path<'_> {
     }
 }
 
+/// A trait for the types that can be interned.
+/// Only the sized types can be interned.
+///
+/// The `Interned` type is a type of the interned value. For example,
+/// `String` is interned not as `String`, but as some other type, that
+/// references the same string data and to which a string reference can
+/// be converted.
+pub trait Internable<Interned>: Sized {
+    /// Interns the passed object and returns the interned value.
+    fn intern<T: Into<Self>>(value: T) -> Interned;
+}
+
+impl Internable<ijson::IString> for String {
+    fn intern<T: Into<Self>>(value: T) -> ijson::IString {
+        ijson::IString::intern(&value.into())
+    }
+}
+
+impl Internable<ijson::IString> for &str {
+    fn intern<T: Into<Self>>(value: T) -> ijson::IString {
+        ijson::IString::intern(value.into())
+    }
+}
+
+impl Internable<json_parser::JsonString> for String {
+    fn intern<T: Into<Self>>(value: T) -> json_parser::JsonString {
+        value.into()
+    }
+}
+
+impl Internable<json_parser::JsonString> for &str {
+    fn intern<T: Into<Self>>(value: T) -> json_parser::JsonString {
+        value.into().into()
+    }
+}
+
+/// Allows the object to be cleared, meaning the object is considered
+/// "empty".
+pub trait Clearable {
+    fn clear(&mut self) -> bool;
+}
+
+/// Allows to provide with all sorts of memory consumption information.
+pub trait MemoryConsumption {
+    /// Returns the number of bytes an object which implements thits
+    /// trait occupies in memory (RAM).
+    fn get_memory_occupied(&self) -> usize;
+}
+
+/// Allows to take out an element from the object by index, returning it
+/// while removing it from the object.
+pub trait TakeOutByIndex<T> {
+    /// Takes out an element from the object by index.
+    fn take_out(&mut self, index: usize) -> Option<T>;
+}
+
 /// A trait for the types that can be used as a value in RedisJSON.
 ///
 /// Contains helpful abstractions for easier change of the underlying
@@ -235,6 +291,7 @@ impl<T: RedisJSONValueTraits> std::ops::DerefMut for RedisJSON<T> {
     }
 }
 
+/// A trait for the JSON types that can be mutated.
 pub trait MutableJsonValue: Clone {
     /// Replaces a value at a given `path`, starting from `root`
     ///

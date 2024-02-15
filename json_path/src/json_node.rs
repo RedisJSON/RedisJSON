@@ -277,16 +277,16 @@ impl SelectValue for json_parser::Value {
         }
     }
 
-    fn keys<'a>(&'a self) -> std::option::Option<impl std::iter::Iterator<Item = &'a str> + 'a> {
+    fn keys(&self) -> std::option::Option<impl std::iter::Iterator<Item = &str>> {
         match self {
-            Self::Object(o) => Some(Box::new(o.keys().map(|k| &k[..]))),
+            Self::Object(o) => Some(o.keys().map(|k| &k[..])),
             _ => None,
         }
     }
 
-    fn items<'a>(&'a self) -> Option<Box<dyn Iterator<Item = (&'a str, &'a Self)> + 'a>> {
+    fn items(&self) -> Option<impl Iterator<Item = (&str, &Self)>> {
         match self {
-            Self::Object(o) => Some(Box::new(o.iter().map(|(k, v)| (&k[..], v)))),
+            Self::Object(o) => Some(o.iter().map(|(k, v)| (&k[..], v))),
             _ => None,
         }
     }
