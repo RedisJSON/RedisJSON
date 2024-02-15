@@ -757,7 +757,6 @@ impl StorageBackend for RedisJSONData {
                 // Verify legal index in bounds
                 let len = array.len() as i64;
                 let index = normalize_arr_start_index(index, len) as usize;
-                // res = Some(array.remove(index).unwrap());
                 res = Some(array.take_out(index).unwrap());
                 Ok(Some(()))
             } else {
@@ -1081,6 +1080,9 @@ mod tests {
                         }"#;
         let value = serde_json::from_str(json).unwrap();
         let res = manager.get_memory(&value).unwrap();
+        #[cfg(feature = "ijson_parser")]
         assert_eq!(res, 903);
+        #[cfg(feature = "custom_parser")]
+        assert_eq!(res, 696);
     }
 }
