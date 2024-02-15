@@ -322,9 +322,10 @@ pub trait MutableJsonValue: Clone {
 
 /// An alias for the RedisJSON implementation using the `ijson::IValue`
 /// type.
+#[cfg(feature = "ijson_parser")]
 pub type RedisJSONData = RedisJSON<ijson::IValue>;
-// TODO: our, better type.
-// pub type RedisJSONData = RedisJSON<Value>;
+#[cfg(feature = "custom_parser")]
+pub type RedisJSONData = RedisJSON<Value>;
 
 pub mod type_methods {
     use super::*;
