@@ -3,20 +3,26 @@
 
 use std::hash::{Hash, Hasher};
 
+// use hashbrown::hash_map as hash_map_impl;
+use std::collections::hash_map as hash_map_impl;
 /// We use `FxHashMap` from the `fxhash` crate to store the key-value
 /// pairs of JSON objects. This is because `FxHashMap` is faster than
 /// `HashMap` for keys of length longer than five bytes, and shouldn't
 /// be slower for keys shorter than that. Let's try to win some
 /// performance here.
-// TODO: consider `indexmap`, `hashbrown`.
-pub use fxhash::FxHashMap as Map;
+// TODO: consider `indexmap` if this use-case is needed.
+// pub type Map<K = JsonString, V = Value> = fxhash::FxHashMap<K, V>;
+// pub type Map<K = JsonString, V = Value> =
+//     hashbrown::HashMap<K, V, core::hash::BuildHasherDefault<fxhash::FxHasher>>;
+pub type Map<K = JsonString, V = Value> = std::collections::HashMap<K, V>;
+/// The entry API for `FxHashMap`.
+// pub use std::collections::hash_map::Entry as MapEntry;
+pub use hash_map_impl::Entry as MapEntry;
 use serde::{
     de::{MapAccess, SeqAccess, Visitor},
     ser::{SerializeMap, SerializeSeq},
     Deserialize, Serialize,
 };
-/// The entry API for `FxHashMap`.
-pub use std::collections::hash_map::Entry as MapEntry;
 pub use Vec as Array;
 
 /* serde_json::Value:

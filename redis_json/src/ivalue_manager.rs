@@ -893,37 +893,38 @@ impl MemoryConsumption for IValue {
 }
 
 impl MemoryConsumption for json_parser::Value {
+    /// The total memory of the value object and its children is
+    /// calculated recursively, by accounting for each [`Self`] object
+    /// memory isolated and for the memory occupied by the children
+    /// objects if it has those.
     fn get_memory_occupied(&self) -> usize {
-        match self {
-            Self::Null => 0,
-            Self::Bool(_) => 1,
-            Self::Number(_) => 8,
-            Self::String(s) => s.len(),
-            Self::Array(arr) => {
-                let capacity = arr.capacity();
-                if capacity == 0 {
-                    0
-                } else {
-                    size_of::<usize>() * (capacity + 2)
-                        + arr
-                            .into_iter()
-                            .map(|v| v.get_memory_occupied())
-                            .sum::<usize>()
+        // As of now, this is an enum, and it occupies as much space
+        // as the largest variant.
+        let value_object_size = std::mem::size_of::<Self>();
+
+        value_object_size
+        // Calculate the additional memory to store the variants which
+        // are not inlined within the enum itself (heap allocations).
+            + match self {
+                Self::String(s) => s.len(),
+                Self::Array(vec) => {
+                    let initialised_memory = vec.iter().map(|v| v.get_memory_occupied()).sum::<usize>();
+                    let uninitialised_memory = (vec.capacity() - vec.len()) * value_object_size;
+                    initialised_memory + uninitialised_memory
                 }
-            }
-            Self::Object(val) => {
-                let capacity = val.capacity();
-                if capacity == 0 {
-                    0
-                } else {
-                    size_of::<usize>() * (capacity * 3 + 2)
-                        + val
-                            .into_iter()
-                            .map(|(s, v)| s.len() + v.get_memory_occupied())
-                            .sum::<usize>()
+                Self::Object(map) => {
+                    let initialised_memory = map.iter().map(|v|
+                        // String capacity in bytes.
+                        v.0.capacity() +
+                        v.1.get_memory_occupied()
+                    ).sum::<usize>();
+                    let uninitialised_memory = (map.capacity() - map.len()) * size_of::<(json_parser::JsonString, Self)>();
+                    initialised_memory + uninitialised_memory
                 }
+                // The rest of the variants are inlined within the enum
+                // itself.
+                _ => 0,
             }
-        }
     }
 }
 
@@ -1063,6 +1064,7 @@ mod tests {
         let manager = RedisIValueJsonKeyManager {
             phantom: PhantomData,
         };
+
         let json = r#"{
                             "a": 100.12,
                             "b": "foo",
@@ -1083,6 +1085,130 @@ mod tests {
         #[cfg(feature = "ijson_parser")]
         assert_eq!(res, 903);
         #[cfg(feature = "custom_parser")]
-        assert_eq!(res, 696);
+        assert_eq!(res, 1263);
+    }
+
+    #[cfg(feature = "custom_parser")]
+    mod custom_parser {
+        use std::marker::PhantomData;
+
+        use crate::manager::Manager;
+
+        use super::RedisIValueJsonKeyManager;
+
+        #[test]
+        fn memory_consumption_simple() {
+            let manager = RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            };
+
+            [
+                ("null", 40),
+                ("1", 40),
+                ("1.0", 40),
+                ("-1.0", 40),
+                ("-1", 40),
+                ("\"string\"", 46),
+                ("[]", 40),
+                ("{}", 40),
+                ("{}", 40),
+            ]
+            .into_iter()
+            .for_each(|(json, expected)| {
+                let value = serde_json::from_str(json).unwrap();
+                let res = manager.get_memory(&value).unwrap();
+                assert_eq!(res, expected, "json: {}", json);
+            });
+        }
+
+        #[test]
+        fn memory_consumption_complex() {
+            let manager = RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            };
+
+            [
+                // Variable-length encoding (1 + 1 + 2) + object size (40).
+                ("\"Olá\"", 44),
+                // Due to the capacity of (7), but the length of one,
+                // this array could have occupied just 40 + 40 bytes, but
+                // occupies 40 (Value size) + 40 * capacity bytes for the
+                // array.
+                ("[1]", 320),
+                // Due the the capacity of (7), we still have the same
+                // amount of bytes allocated.
+                ("[1, 2]", 320),
+                // Due the the capacity of (7), we still have the same
+                // amount of bytes allocated.
+                ("[1, 2, 3]", 320),
+                ("[1, \"string\", {}]", 320 + 6),
+                // TODO: how to get the size of the hash map?
+                ("{}", 40),
+            ]
+            .into_iter()
+            .for_each(|(json, expected)| {
+                let value = serde_json::from_str(json).unwrap();
+                let res = manager.get_memory(&value).unwrap();
+                assert_eq!(res, expected, "json: {}", json);
+            });
+        }
+    }
+
+    #[cfg(feature = "ijson_parser")]
+    mod ijson_parser {
+        use std::marker::PhantomData;
+
+        use crate::manager::Manager;
+
+        use super::RedisIValueJsonKeyManager;
+
+        #[test]
+        fn memory_consumption_simple() {
+            let manager = RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            };
+
+            [
+                ("null", 8),
+                ("1", 8),
+                ("1.0", 24),
+                ("-1.0", 24),
+                ("-1", 8),
+                ("\"string\"", 14),
+                ("[]", 8),
+                ("{}", 8),
+                ("{}", 8),
+            ]
+            .into_iter()
+            .for_each(|(json, expected)| {
+                let value = serde_json::from_str(json).unwrap();
+                let res = manager.get_memory(&value).unwrap();
+                assert_eq!(res, expected, "json: {}", json);
+            });
+        }
+
+        #[test]
+        fn memory_consumption_complex() {
+            let manager = RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            };
+
+            [
+                // Variable-length encoding (1 + 1 + 2).
+                ("\"Olá\"", 12),
+                ("[1]", 64),
+                ("[1, 2]", 72),
+                ("[1, 2, 3]", 80),
+                ("[1, \"string\", {}]", 80 + 6),
+                // TODO: how to get the size of the hash map?
+                ("{}", 8),
+            ]
+            .into_iter()
+            .for_each(|(json, expected)| {
+                let value = serde_json::from_str(json).unwrap();
+                let res = manager.get_memory(&value).unwrap();
+                assert_eq!(res, expected, "json: {}", json);
+            });
+        }
     }
 }
