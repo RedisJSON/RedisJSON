@@ -4,3 +4,7 @@
 datasets/*.rdb
 *.rdb
 binaries
+*.rdb
+*.log
+*.zip
+
