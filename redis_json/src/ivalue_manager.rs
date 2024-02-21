@@ -16,10 +16,7 @@ use crate::redisjson::{
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
 use bson::{from_document, Document};
-use ijson::object::Entry;
-use ijson::{DestructuredMut, IArray, INumber, IObject, IValue, ValueType};
-// use ijson::object::Entry;
-// use ijson::{DestructuredMut, INumber, IObject, IString, IValue, ValueType};
+use ijson::{IArray, INumber, IValue, ValueType};
 use redis_module::key::{verify_type, KeyFlags, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::rediserror::RedisError;
@@ -661,13 +658,6 @@ impl StorageBackend for RedisJSONData {
                 res = Some(val);
             }
             Ok(Some(()))
-            // if let DestructuredMut::Bool(mut bool_mut) = v.destructure_mut() {
-            //     //Using DestructuredMut in order to modify a `Bool` variant
-            //     let val = bool_mut.get() ^ true;
-            //     bool_mut.set(val);
-            //     res = Some(val);
-            // }
-            // Ok(Some(()))
         })?;
         res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
     }
@@ -841,7 +831,7 @@ impl Clearable for json_parser::Value {
 
 impl MemoryConsumption for IValue {
     fn get_memory_occupied(&self) -> usize {
-        let res = size_of::<Self>()
+        size_of::<Self>()
             + match self.type_() {
                 ValueType::Null | ValueType::Bool => 0,
                 ValueType::Number => {
@@ -887,8 +877,7 @@ impl MemoryConsumption for IValue {
                                 .sum::<usize>()
                     }
                 }
-            };
-        res
+            }
     }
 }
 

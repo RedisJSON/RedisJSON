@@ -25,7 +25,6 @@ pub type Map<K = JsonString, V = Value> = std::collections::HashMap<K, V>;
 // pub use std::collections::hash_map::Entry as MapEntry;
 pub use hash_map_impl::Entry as MapEntry;
 use serde::{
-    de::{MapAccess, SeqAccess, Visitor},
     ser::{SerializeMap, SerializeSeq},
     Deserialize, Serialize,
 };

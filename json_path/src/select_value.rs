@@ -23,7 +23,6 @@ pub trait SelectValue: Debug + Eq + PartialEq + Default + Clone + Serialize {
     fn contains_key(&self, key: &str) -> bool;
     fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a Self> + 'a>>;
     fn keys(&self) -> Option<impl Iterator<Item = &str>>;
-    // fn items<'a>(&'a self) -> Option<Box<dyn Iterator<Item = (&'a str, &'a Self)> + 'a>>;
     fn items(&self) -> Option<impl Iterator<Item = (&str, &Self)>>;
     fn len(&self) -> Option<usize>;
     fn is_empty(&self) -> Option<bool>;
