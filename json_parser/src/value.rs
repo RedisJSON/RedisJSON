@@ -1,3 +1,9 @@
+/*
+ * Copyright Redis Ltd. 2016 - present
+ * Licensed under your choice of the Redis Source Available License 2.0 (RSALv2) or
+ * the Server Side Public License v1 (SSPLv1).
+ */
+
 //! The value module contains the `Value` enum, which is used to
 //! represent JSON values.
 
@@ -29,18 +35,6 @@ pub use Vec as Array;
 fn float_eq(a: f64, b: f64) -> bool {
     (a - b).abs() < f64::EPSILON
 }
-
-/* serde_json::Value:
-
-pub enum Value {
-    Null,
-    Bool(bool),
-    Number(Number),
-    String(String),
-    Array(Vec<Value>),
-    Object(Map<String, Value>),
-}
-*/
 
 /// Represents a JSON number, which can be unsigned, signed, or a
 /// double.
