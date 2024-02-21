@@ -25,6 +25,11 @@ use serde::{
 };
 pub use Vec as Array;
 
+/// Compare two [`f64`] for equality using [`f64::EPSILON`].
+fn float_eq(a: f64, b: f64) -> bool {
+    (a - b).abs() < f64::EPSILON
+}
+
 /* serde_json::Value:
 
 pub enum Value {
@@ -75,7 +80,7 @@ impl PartialEq for JsonNumber {
         match (self, other) {
             (JsonNumber::Unsigned(a), JsonNumber::Unsigned(b)) => a == b,
             (JsonNumber::Signed(a), JsonNumber::Signed(b)) => a == b,
-            (JsonNumber::Double(a), JsonNumber::Double(b)) => a == b,
+            (JsonNumber::Double(a), JsonNumber::Double(b)) => float_eq(*a, *b),
 
             (JsonNumber::Unsigned(a), JsonNumber::Signed(b)) => (*a as i64) == *b,
             (JsonNumber::Unsigned(a), JsonNumber::Double(b)) => (*a as f64) == *b,
