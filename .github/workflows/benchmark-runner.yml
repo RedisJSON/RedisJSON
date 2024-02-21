@@ -17,7 +17,7 @@ jobs:
   benchmark-json-oss-standalone:
     strategy:
       matrix:
-        member_id: [1, 2, 3]
+        member_id: [1, 2, 3, 4, 5]
     uses: ./.github/workflows/benchmark-flow.yml
     secrets: inherit
     with:
@@ -27,7 +27,7 @@ jobs:
   benchmark-json-oss-standalone-profiler:
     strategy:
       matrix:
-        member_id: [1, 2, 3]
+        member_id: [1, 2, 3, 4, 5]
     uses: ./.github/workflows/benchmark-flow.yml
     secrets: inherit
     with:
