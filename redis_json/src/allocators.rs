@@ -80,6 +80,10 @@ unsafe impl GlobalAlloc for JsonValueAllocator {
     }
 }
 
+/// A drop-in replacement for the [`std::alloc::AllocError`] type. This
+/// type is used to represent memory allocation errors in the
+/// [`CustomAllocator`] trait. While the [`std::alloc::AllocError`] is
+/// not a stable type, this type is used by the [`CustomAllocator`].
 #[derive(Debug)]
 pub struct CustomAllocError;
 
