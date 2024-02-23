@@ -18,6 +18,9 @@ use std::{
     sync::atomic::AtomicUsize,
 };
 
+/// A specific allocator for the JSON values (objects) used by RedisJSON.
+///
+/// Helps to keep track of the memory allocated by the JSON values.
 pub struct JsonValueAllocator<A: GlobalAlloc = redis_module::alloc::RedisAlloc> {
     allocated: AtomicUsize,
     allocator: A,
@@ -29,6 +32,18 @@ impl JsonValueAllocator {
     #[allow(unused)]
     pub fn get_allocated(&self) -> usize {
         self.allocated.load(std::sync::atomic::Ordering::Relaxed)
+    }
+}
+
+impl<T> Clone for JsonValueAllocator<T>
+where
+    T: GlobalAlloc + Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            allocated: AtomicUsize::new(self.allocated.load(std::sync::atomic::Ordering::Relaxed)),
+            allocator: self.allocator.clone(),
+        }
     }
 }
 
