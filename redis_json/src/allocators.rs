@@ -403,12 +403,19 @@ where
 
 impl CustomAllocator for JsonValueAllocator {
     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, CustomAllocError> {
-        // TODO: support zero-sized allocations.
-        let ptr = unsafe { self.alloc(layout) };
-        if let Some(ptr) = NonNull::new(ptr) {
-            Ok(NonNull::slice_from_raw_parts(ptr, layout.size()))
-        } else {
-            Err(CustomAllocError)
+        match layout.size() {
+            0 => Ok(NonNull::slice_from_raw_parts(
+                std::ptr::NonNull::dangling(),
+                0,
+            )),
+            _ => {
+                let ptr = unsafe { self.alloc(layout) };
+                if let Some(ptr) = NonNull::new(ptr) {
+                    Ok(NonNull::slice_from_raw_parts(ptr, layout.size()))
+                } else {
+                    Err(CustomAllocError)
+                }
+            }
         }
     }
 
