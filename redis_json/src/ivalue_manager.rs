@@ -224,13 +224,14 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         } else {
                             INumber::try_from(op2_fun(num1 as _, num2 as _))
                         }
-                    },
+                    }
                     _ => {
                         let num1 = v.to_f64().unwrap();
                         let num2 = in_value.as_f64().unwrap();
                         INumber::try_from(op2_fun(num1, num2))
                     }
-                }.map_err(|_| RedisError::Str("result is not a number"));
+                }
+                .map_err(|_| RedisError::Str("result is not a number"));
                 let new_val = IValue::from(num_res?);
                 *v = new_val.clone();
                 res = Some(new_val);
@@ -622,15 +623,16 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                 if !limit_depth {
                     deserializer.disable_recursion_limit();
                 }
-                IValue::deserialize(&mut deserializer).map(|val| {
-                    if let Some(num) = val.as_number() {
-                        if num.to_i64().is_none() {
-                            return IValue::from(num.to_f64_lossy());
+                IValue::deserialize(&mut deserializer)
+                    .map(|val| {
+                        if let Some(num) = val.as_number() {
+                            if num.to_i64().is_none() {
+                                return IValue::from(num.to_f64_lossy());
+                            }
                         }
-                    }
-                    val
-                })
-                .map_err(|e| e.into())
+                        val
+                    })
+                    .map_err(|e| e.into())
             }
             Format::BSON => from_document(
                 Document::from_reader(&mut Cursor::new(val.as_bytes()))
