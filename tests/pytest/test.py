@@ -1443,7 +1443,7 @@ def test_promote_u64_to_f64(env):
 
     # set u64 is promoted to f64
     # must be true of all numbers in the range (i64max, u64max]
-    # except those that are exactly representable as f64
+    # it is easy to check for all such numbers except those that are exactly representable as f64
     # the likelihood of such an occurrence in this range is 1:2048
     nn = random.randint(i64max + 1, u64max)
     while nn == float(nn):
