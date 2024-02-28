@@ -1420,6 +1420,36 @@ def testRDBUnboundedDepth(env):
     r.expect('RESTORE', 'doc1', 0, dump).ok()
     r.expect('JSON.GET', 'doc1', '$..__leaf..__deep_leaf').equal('[420]')
 
+def test_promote_u64_to_f64(env):
+    r = env
+    i64max = 2 ** 63 - 1
+    u64max = 2 ** 64 - 1
+    
+    # i64 behaves normally
+    r.expect('JSON.SET', 'num', '$', i64max).ok()
+    res = r.execute_command('JSON.GET', 'num', '$')
+    val = json.loads(res)[0]
+    r.assertEqual(val, i64max)
+    r.assertNotEqual(val, float(i64max)) # i64max is not representable as f64
+
+    # i64 + i64 == u64 is promoted to f64
+    nn = random.randint(1, i64max)
+    res = r.execute_command('JSON.NUMINCRBY', 'num', '$', nn)
+    val = json.loads(res)[0]
+    r.assertNotEqual(val, -i64max + nn - 2)        # i64
+    r.assertNotEqual(val, i64max + nn)             # u64
+    r.assertEqual(val, float(i64max) + float(nn))  # f64
+
+    # set u64 is promoted to f64
+    nn = random.randint(i64max + 1, u64max)
+    while nn == float(nn):
+        nn = random.randint(i64max + 1, u64max)
+    r.expect('JSON.SET', 'num', '$', nn).ok()
+    res = r.execute_command('JSON.GET', 'num', '$')
+    val = json.loads(res)[0]
+    r.assertNotEqual(val, nn)     # u64
+    r.assertEqual(val, float(nn)) # f64
+
 # class CacheTestCase(BaseReJSONTest):
 #     @property
 #     def module_args(env):

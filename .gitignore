@@ -33,5 +33,6 @@
 .settings/
 
 wordlist.dic
+config.txt
 
 venv/

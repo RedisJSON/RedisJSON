@@ -206,7 +206,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
         mut op2_fun: F2,
     ) -> Result<Number, RedisError>
     where
-        F1: FnMut(i64, i64) -> i64,
+        F1: FnMut(i64, i64) -> Option<i64>,
         F2: FnMut(f64, f64) -> f64,
     {
         let in_value = &serde_json::from_str(num)?;
@@ -217,14 +217,20 @@ impl<'a> IValueKeyHolderWrite<'a> {
                     v.as_number().unwrap().has_decimal_point(),
                     in_value.as_i64(),
                 ) {
-                    (false, Some(num2)) => Ok(((op1_fun)(v.to_i64().unwrap(), num2)).into()),
+                    (false, Some(num2)) => {
+                        let num1 = v.to_i64().unwrap();
+                        if let Some(res) = op1_fun(num1, num2) {
+                            Ok(res.into())
+                        } else {
+                            INumber::try_from(op2_fun(num1 as _, num2 as _))
+                        }
+                    },
                     _ => {
                         let num1 = v.to_f64().unwrap();
                         let num2 = in_value.as_f64().unwrap();
-                        INumber::try_from((op2_fun)(num1, num2))
-                            .map_err(|_| RedisError::Str("result is not a number"))
+                        INumber::try_from(op2_fun(num1, num2))
                     }
-                };
+                }.map_err(|_| RedisError::Str("result is not a number"));
                 let new_val = IValue::from(num_res?);
                 *v = new_val.clone();
                 res = Some(new_val);
@@ -374,15 +380,15 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn incr_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError> {
-        self.do_num_op(path, num, |i1, i2| i1 + i2, |f1, f2| f1 + f2)
+        self.do_num_op(path, num, |i1, i2| i1.checked_add(i2), |f1, f2| f1 + f2)
     }
 
     fn mult_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError> {
-        self.do_num_op(path, num, |i1, i2| i1 * i2, |f1, f2| f1 * f2)
+        self.do_num_op(path, num, |i1, i2| i1.checked_mul(i2), |f1, f2| f1 * f2)
     }
 
     fn pow_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError> {
-        self.do_num_op(path, num, |i1, i2| i1.pow(i2 as u32), f64::powf)
+        self.do_num_op(path, num, |i1, i2| i1.checked_pow(i2 as u32), f64::powf)
     }
 
     fn bool_toggle(&mut self, path: Vec<String>) -> Result<bool, RedisError> {
@@ -616,7 +622,15 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                 if !limit_depth {
                     deserializer.disable_recursion_limit();
                 }
-                IValue::deserialize(&mut deserializer).map_err(|e| e.into())
+                IValue::deserialize(&mut deserializer).map(|val| {
+                    if let Some(num) = val.as_number() {
+                        if num.to_i64().is_none() {
+                            return IValue::from(num.to_f64_lossy());
+                        }
+                    }
+                    val
+                })
+                .map_err(|e| e.into())
             }
             Format::BSON => from_document(
                 Document::from_reader(&mut Cursor::new(val.as_bytes()))
