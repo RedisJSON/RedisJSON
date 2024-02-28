@@ -1433,6 +1433,7 @@ def test_promote_u64_to_f64(env):
     r.assertNotEqual(val, float(i64max)) # i64max is not representable as f64
 
     # i64 + i64 == u64 is promoted to f64
+    # must be true of all numbers in the range [1, i64max]
     nn = random.randint(1, i64max)
     res = r.execute_command('JSON.NUMINCRBY', 'num', '$', nn)
     val = json.loads(res)[0]
@@ -1441,6 +1442,9 @@ def test_promote_u64_to_f64(env):
     r.assertEqual(val, float(i64max) + float(nn))  # f64
 
     # set u64 is promoted to f64
+    # must be true of all numbers in the range (i64max, u64max]
+    # except those that are exactly representable as f64
+    # the likelihood of such an occurrence in this range is 1:2048
     nn = random.randint(i64max + 1, u64max)
     while nn == float(nn):
         nn = random.randint(i64max + 1, u64max)
