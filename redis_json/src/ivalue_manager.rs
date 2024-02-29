@@ -226,7 +226,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         }
                     }
                     _ => {
-                        let num1 = v.to_f64().unwrap();
+                        let num1 = v.to_f64_lossy().unwrap();
                         let num2 = in_value.as_f64().unwrap();
                         INumber::try_from(op2_fun(num1, num2))
                     }
