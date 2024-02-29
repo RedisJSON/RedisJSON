@@ -35,3 +35,7 @@ json_parser = { "path" = "../json_parser" }
 [features]
 as-library = []
 thread_safe = ["ijson/thread_safe"]
+custom_parser = []
+ijson_parser = []
+default = ["custom_parser"]
+# default = ["ijson_parser"]
