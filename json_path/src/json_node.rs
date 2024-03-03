@@ -160,10 +160,10 @@ impl SelectValue for IValue {
             ValueType::Object => SelectValueType::Object,
             ValueType::Number => {
                 let num = self.as_number().unwrap();
-                if num.has_decimal_point() {
-                    SelectValueType::Double
-                } else {
+                if num.to_i64().is_some() {
                     SelectValueType::Long
+                } else {
+                    SelectValueType::Double
                 }
             }
         }
@@ -231,20 +231,17 @@ impl SelectValue for IValue {
     }
 
     fn get_long(&self) -> i64 {
-        let n = self.as_number().expect("not a number");
-        if n.has_decimal_point() {
-            panic!("not a long");
-        } else {
-            n.to_i64().unwrap()
-        }
+        self
+            .as_number()
+            .expect("not a number")
+            .to_i64()
+            .expect("not a long")
     }
 
     fn get_double(&self) -> f64 {
-        let n = self.as_number().expect("not a number");
-        if n.has_decimal_point() {
-            n.to_f64().unwrap()
-        } else {
-            panic!("not a double");
-        }
+        self
+            .as_number()
+            .expect("not a number")
+            .to_f64_lossy()
     }
 }
