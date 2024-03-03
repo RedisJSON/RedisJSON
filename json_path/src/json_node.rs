@@ -160,10 +160,10 @@ impl SelectValue for IValue {
             ValueType::Object => SelectValueType::Object,
             ValueType::Number => {
                 let num = self.as_number().unwrap();
-                if num.to_i64().is_some() {
-                    SelectValueType::Long
-                } else {
+                if num.has_decimal_point() | num.to_i64().is_none() {
                     SelectValueType::Double
+                } else {
+                    SelectValueType::Long
                 }
             }
         }
