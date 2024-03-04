@@ -380,7 +380,11 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             SelectValueType::Null => "null",
             SelectValueType::Bool => "boolean",
             SelectValueType::Long => "integer",
-            SelectValueType::Double => "number",
+            SelectValueType::Double => match value.is_double() {
+                Some(true) => "number",
+                Some(false) => "integer",
+                _ => unreachable!(),
+            },
             SelectValueType::String => "string",
             SelectValueType::Array => "array",
             SelectValueType::Object => "object",

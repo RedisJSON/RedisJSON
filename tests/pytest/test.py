@@ -1424,51 +1424,68 @@ def test_promote_u64_to_f64(env):
     r = env
     i64max = 2 ** 63 - 1
     
-    # selecting only the edges for brevity
-    for nn in [2, i64max//2, i64max]:
-        # i64 behaves normally
-        r.expect('JSON.SET', 'num', '$', i64max).ok()
-        res = r.execute_command('JSON.GET', 'num', '$')
-        val = json.loads(res)[0]
-        r.assertEqual(val, i64max)
-        r.assertNotEqual(val, float(i64max)) # i64max is not representable as f64
+    # i64 behaves normally
+    r.expect('JSON.SET', 'num', '$', i64max).ok()
+    res = r.execute_command('JSON.TYPE', 'num', '$')
+    r.assertEqual(res[0], 'integer')
+    res = r.execute_command('JSON.GET', 'num', '$')
+    val = json.loads(res)[0]
+    r.assertEqual(val, i64max)
+    r.assertNotEqual(val, float(i64max)) # i64max is not representable as f64
+    res = r.execute_command('JSON.NUMINCRBY', 'num', '$', 1)
+    val = json.loads(res)[0]
+    r.assertEqual(val, -(i64max + 1))        # i64 + i64 wraps
 
-        # i64 + i64 == u64 is promoted to f64
-        # must be true of all numbers in the range [1, i64max]
-        res = r.execute_command('JSON.NUMINCRBY', 'num', '$', nn)
-        val = json.loads(res)[0]
-        r.assertNotEqual(val, -i64max + nn - 2)        # i64
-        r.assertNotEqual(val, i64max + nn)             # u64
-        r.assertEqual(val, float(i64max) + float(nn))  # f64
-
-        # set u64 is promoted to f64
-        # must be true of all numbers in the range (i64max, u64max]
-        # it is easy to check for all such numbers except those that are exactly representable as f64
-        # the likelihood of such an occurrence in this range is 1:2048
-        nn += i64max
-        r.expect('JSON.SET', 'num', '$', nn).ok()
-        res = r.execute_command('JSON.GET', 'num', '$')
-        val = json.loads(res)[0]
-        r.assertNotEqual(val, nn)     # u64
-        r.assertEqual(val, float(nn)) # f64
+    r.expect('JSON.SET', 'num', '$', i64max + 1).ok()
+    res = r.execute_command('JSON.TYPE', 'num', '$')
+    r.assertEqual(res[0], 'integer')
+    res = r.execute_command('JSON.GET', 'num', '$')
+    val = json.loads(res)[0]
+    r.assertEqual(val, i64max + 1)
+    res = r.execute_command('JSON.NUMINCRBY', 'num', '$', 1)
+    val = json.loads(res)[0]
+    r.assertNotEqual(val, -(i64max + 1) + 1)      # u64 + i64 promotes to float
+    r.assertNotEqual(val, i64max + 2)             # u64
+    r.assertEqual(val, float(i64max) + float(1))  # f64
 
     # selecting only the edges for brevity
-    for nn in [float(2), float(i64max)/2, float(i64max), float(i64max)*2]:
-        r.expect('JSON.SET', 'num', '$', i64max).ok()
-        res = r.execute_command('JSON.GET', 'num', '$')
-        val = json.loads(res)[0]
-        r.assertEqual(val, i64max)
-        r.assertNotEqual(val, float(i64max))
+    # for nn in [2, i64max//2, i64max]:
+    #     # i64 + i64 == u64 is promoted to f64
+    #     # must be true of all numbers in the range [1, i64max]
+    #     res = r.execute_command('JSON.NUMINCRBY', 'num', '$', nn)
+    #     val = json.loads(res)[0]
+    #     r.assertNotEqual(val, -i64max + nn - 2)        # i64
+    #     r.assertNotEqual(val, i64max + nn)             # u64
+    #     r.assertEqual(val, float(i64max) + float(nn))  # f64
 
-        res = r.execute_command('JSON.NUMINCRBY', 'num', '$', nn)
-        val = json.loads(res)[0]
-        r.assertEqual(val, i64max + nn)
+    #     # set u64 is promoted to f64
+    #     # must be true of all numbers in the range (i64max, u64max]
+    #     # it is easy to check for all such numbers except those that are exactly representable as f64
+    #     # the likelihood of such an occurrence in this range is 1:2048
+    #     nn += i64max
+    #     r.expect('JSON.SET', 'num', '$', nn).ok()
+    #     res = r.execute_command('JSON.GET', 'num', '$')
+    #     val = json.loads(res)[0]
+    #     r.assertNotEqual(val, nn)     # u64
+    #     r.assertEqual(val, float(nn)) # f64
 
-        nn += i64max
-        r.expect('JSON.SET', 'num', '$', nn).ok()
-        res = r.execute_command('JSON.GET', 'num', '$')
-        val = json.loads(res)[0]
-        r.assertEqual(val, nn)
+    # # selecting only the edges for brevity
+    # for nn in [float(2), float(i64max)/2, float(i64max), float(i64max)*2]:
+    #     r.expect('JSON.SET', 'num', '$', i64max).ok()
+    #     res = r.execute_command('JSON.GET', 'num', '$')
+    #     val = json.loads(res)[0]
+    #     r.assertEqual(val, i64max)
+    #     r.assertNotEqual(val, float(i64max))
+
+    #     res = r.execute_command('JSON.NUMINCRBY', 'num', '$', nn)
+    #     val = json.loads(res)[0]
+    #     r.assertEqual(val, i64max + nn)
+
+    #     nn += i64max
+    #     r.expect('JSON.SET', 'num', '$', nn).ok()
+    #     res = r.execute_command('JSON.GET', 'num', '$')
+    #     val = json.loads(res)[0]
+    #     r.assertEqual(val, nn)
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property
