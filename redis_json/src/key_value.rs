@@ -380,6 +380,10 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             SelectValueType::Null => "null",
             SelectValueType::Bool => "boolean",
             SelectValueType::Long => "integer",
+            // For dealing with u64 values over i64::MAX, get_type() replies
+            // that they are SelectValueType::Double to prevent panics from
+            // incorrect casts. However when querying the type of such a value,
+            // any response other than 'integer' is a breaking change
             SelectValueType::Double => match value.is_double() {
                 Some(true) => "number",
                 Some(false) => "integer",
