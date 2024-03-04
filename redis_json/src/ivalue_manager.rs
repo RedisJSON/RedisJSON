@@ -214,10 +214,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
         if let serde_json::Value::Number(in_value) = in_value {
             let mut res = None;
             self.do_op(&path, |v| {
-                let num_res = match (
-                    v.get_type(),
-                    in_value.as_i64(),
-                ) {
+                let num_res = match (v.get_type(), in_value.as_i64()) {
                     (SelectValueType::Long, Some(num2)) => {
                         let num1 = v.get_long();
                         let res = op1_fun(num1, num2);
@@ -621,8 +618,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                 if !limit_depth {
                     deserializer.disable_recursion_limit();
                 }
-                IValue::deserialize(&mut deserializer)
-                    .map_err(|e| e.into())
+                IValue::deserialize(&mut deserializer).map_err(|e| e.into())
             }
             Format::BSON => from_document(
                 Document::from_reader(&mut Cursor::new(val.as_bytes()))
