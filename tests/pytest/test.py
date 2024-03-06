@@ -1420,6 +1420,62 @@ def testRDBUnboundedDepth(env):
     r.expect('RESTORE', 'doc1', 0, dump).ok()
     r.expect('JSON.GET', 'doc1', '$..__leaf..__deep_leaf').equal('[420]')
 
+def test_promote_u64_to_f64(env):
+    r = env
+    i64max = 2 ** 63 - 1
+    
+    # i64 + i64 behaves normally
+    r.expect('JSON.SET', 'num', '$', 0).ok()
+    r.expect('JSON.TYPE', 'num', '$').equal(['integer'])
+    res = r.execute_command('JSON.GET', 'num', '$')
+    val = json.loads(res)[0]
+    r.assertEqual(val, 0)
+    res = r.execute_command('JSON.NUMINCRBY', 'num', '$', i64max)
+    val = json.loads(res)[0]
+    r.assertEqual(val, i64max)                            # i64 + i64 no overflow
+    r.assertNotEqual(val, float(i64max))                  # i64max is not representable as f64
+    r.expect('JSON.TYPE', 'num', '$').equal(['integer'])  # no promotion
+    res = r.execute_command('JSON.NUMINCRBY', 'num', '$', 1)
+    val = json.loads(res)[0]
+    r.assertEqual(val, -(i64max + 1))                     # i64 + i64 overflow wraps. as prior, not breaking
+    r.assertNotEqual(val, i64max + 1)                     # i64 + i64 is not promoted to u64
+    r.assertNotEqual(val, float(i64max) + float(1))       # i64 + i64 is not promoted to f64
+    r.expect('JSON.TYPE', 'num', '$').equal(['integer'])  # no promotion
+
+    # i64 + u64 used to have inconsistent behavior
+    r.expect('JSON.SET', 'num', '$', 0).ok()
+    res = r.execute_command('JSON.NUMINCRBY', 'num', '$', i64max + 2)
+    val = json.loads(res)[0]
+    r.assertNotEqual(val, -(i64max + 1) + 1)             # i64 + u64 is not i64
+    r.assertNotEqual(val, i64max + 2)                    # i64 + u64 is not u64
+    r.assertEqual(val, float(i64max + 2))                # i64 + u64 promotes to f64. as prior, not breaking
+    r.expect('JSON.TYPE', 'num', '$').equal(['number'])  # promoted
+
+    # u64 + i64 used to crash
+    r.expect('JSON.SET', 'num', '$', i64max + 1).ok()
+    r.expect('JSON.TYPE', 'num', '$').equal(['integer']) # as prior, not breaking
+    res = r.execute_command('JSON.GET', 'num', '$')
+    val = json.loads(res)[0]
+    r.assertNotEqual(val, -(i64max + 1))                 # not i64
+    r.assertEqual(val, i64max + 1)                       # as prior, not breaking
+    res = r.execute_command('JSON.NUMINCRBY', 'num', '$', 1)
+    val = json.loads(res)[0]
+    r.assertNotEqual(val, -(i64max + 1) + 1)             # u64 + i64 is not i64
+    r.assertNotEqual(val, i64max + 2)                    # u64 + i64 is not u64
+    r.assertEqual(val, float(i64max + 2))                # u64 + i64 promotes to f64. used to crash
+    r.expect('JSON.TYPE', 'num', '$').equal(['number'])  # promoted
+
+    # u64 + u64 used to have inconsistent behavior
+    r.expect('JSON.SET', 'num', '$', i64max + 1).ok()
+    r.expect('JSON.CLEAR', 'num', '$').equal(1)          # clear u64 used to crash
+    r.expect('JSON.SET', 'num', '$', i64max + 1).ok()
+    res = r.execute_command('JSON.NUMINCRBY', 'num', '$', i64max + 2)
+    val = json.loads(res)[0]
+    r.assertNotEqual(val, -(i64max + 1) + i64max + 2)    # u64 + u64 is not i64
+    r.assertNotEqual(val, 2)                             # u64 + u64 is not u64
+    r.assertEqual(val, float(2 * i64max + 3))            # u64 + u64 promotes to f64. as prior, not breaking
+    r.expect('JSON.TYPE', 'num', '$').equal(['number'])  # promoted
+
 # class CacheTestCase(BaseReJSONTest):
 #     @property
 #     def module_args(env):
