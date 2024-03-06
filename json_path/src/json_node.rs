@@ -17,15 +17,9 @@ impl SelectValue for Value {
             Self::Null => SelectValueType::Null,
             Self::Array(_) => SelectValueType::Array,
             Self::Object(_) => SelectValueType::Object,
-            Self::Number(n) => {
-                if n.is_i64() || n.is_u64() {
-                    SelectValueType::Long
-                } else if n.is_f64() {
-                    SelectValueType::Double
-                } else {
-                    panic!("bad type for Number value");
-                }
-            }
+            Self::Number(n) if n.is_i64() => SelectValueType::Long,
+            Self::Number(n) if n.is_f64() | n.is_u64() => SelectValueType::Double,
+            _ => panic!("bad type for Number value"),
         }
     }
 
@@ -90,6 +84,13 @@ impl SelectValue for Value {
 
     fn is_array(&self) -> bool {
         matches!(self, Self::Array(_))
+    }
+
+    fn is_double(&self) -> Option<bool> {
+        match self {
+            Self::Number(num) => Some(num.is_f64()),
+            _ => None,
+        }
     }
 
     fn get_str(&self) -> String {
@@ -160,7 +161,7 @@ impl SelectValue for IValue {
             ValueType::Object => SelectValueType::Object,
             ValueType::Number => {
                 let num = self.as_number().unwrap();
-                if num.has_decimal_point() {
+                if num.has_decimal_point() | num.to_i64().is_none() {
                     SelectValueType::Double
                 } else {
                     SelectValueType::Long
@@ -218,6 +219,10 @@ impl SelectValue for IValue {
         self.is_array()
     }
 
+    fn is_double(&self) -> Option<bool> {
+        Some(self.as_number()?.has_decimal_point())
+    }
+
     fn get_str(&self) -> String {
         self.as_string().expect("not a string").to_string()
     }
@@ -231,20 +236,13 @@ impl SelectValue for IValue {
     }
 
     fn get_long(&self) -> i64 {
-        let n = self.as_number().expect("not a number");
-        if n.has_decimal_point() {
-            panic!("not a long");
-        } else {
-            n.to_i64().unwrap()
-        }
+        self.as_number()
+            .expect("not a number")
+            .to_i64()
+            .expect("not a long")
     }
 
     fn get_double(&self) -> f64 {
-        let n = self.as_number().expect("not a number");
-        if n.has_decimal_point() {
-            n.to_f64().unwrap()
-        } else {
-            panic!("not a double");
-        }
+        self.as_number().expect("not a number").to_f64_lossy()
     }
 }
