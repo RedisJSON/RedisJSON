@@ -32,4 +32,8 @@
 .settings/
 
 wordlist.dic
+
+# RLTest
 config.txt
+
+venv/
