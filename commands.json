@@ -67,7 +67,10 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "json",
+    "command_flags": [
+      "readonly"
+    ]
   },
   "JSON.TOGGLE": {
     "summary": "Toggles a boolean value",
@@ -201,7 +204,10 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "json",
+    "command_flags": [
+      "readonly"
+    ]
   },
   "JSON.NUMINCRBY": {
     "summary": "Increments the numeric value at path by a value",
@@ -280,7 +286,10 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "json",
+    "command_flags": [
+      "readonly"
+    ]
   },
   "JSON.ARRAPPEND": {
     "summary": "Append one or more json values into the array at path after the last element in it.",
@@ -338,7 +347,10 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "json",
+    "command_flags": [
+      "readonly"
+    ]
   },
   "JSON.ARRINSERT": {
     "summary": "Inserts the JSON scalar(s) value at the specified index in the array at path",
@@ -380,7 +392,10 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "json",
+    "command_flags": [
+      "readonly"
+    ]
   },
   "JSON.ARRPOP": {
     "summary": "Removes and returns the element at the specified index in the array at path",
@@ -449,7 +464,10 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "json",
+    "command_flags": [
+      "readonly"
+    ]
   },
   "JSON.OBJLEN": {
     "summary": "Returns the number of keys of the object at path",
@@ -466,7 +484,10 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "json",
+    "command_flags": [
+      "readonly"
+    ]
   },
   "JSON.TYPE": {
     "summary": "Returns the type of the JSON value at path",
@@ -483,7 +504,10 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "json",
+    "command_flags": [
+      "readonly"
+    ]
   },
   "JSON.RESP": {
     "summary": "Returns the JSON value at path in Redis Serialization Protocol (RESP)",
@@ -501,7 +525,10 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "json",
+    "command_flags": [
+      "readonly"
+    ]
   },
   "JSON.DEBUG": {
     "summary": "Debugging container command",
@@ -513,7 +540,10 @@
     "summary": "Shows helpful information",
     "complexity": "N/A",
     "since": "1.0.0",
-    "group": "json"
+    "group": "json",
+    "command_flags": [
+      "readonly"
+    ]
   },
   "JSON.DEBUG MEMORY": {
     "summary": "Reports the size in bytes of a key",
@@ -530,6 +560,9 @@
       }
     ],
     "since": "1.0.0",
-    "group": "json"
+    "group": "json",
+    "command_flags": [
+      "readonly"
+    ]
   }
 }
