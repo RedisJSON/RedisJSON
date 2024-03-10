@@ -13,6 +13,7 @@ use crate::REDIS_JSON_TYPE;
 use bson::decode_document;
 use ijson::object::Entry;
 use ijson::{DestructuredMut, INumber, IObject, IString, IValue, ValueType};
+use json_path::select_value::{SelectValue, SelectValueType};
 use redis_module::key::{verify_type, KeyFlags, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::rediserror::RedisError;
@@ -213,15 +214,16 @@ impl<'a> IValueKeyHolderWrite<'a> {
         if let serde_json::Value::Number(in_value) = in_value {
             let mut res = None;
             self.do_op(&path, |v| {
-                let num_res = match (
-                    v.as_number().unwrap().has_decimal_point(),
-                    in_value.as_i64(),
-                ) {
-                    (false, Some(num2)) => Ok(((op1_fun)(v.to_i64().unwrap(), num2)).into()),
+                let num_res = match (v.get_type(), in_value.as_i64()) {
+                    (SelectValueType::Long, Some(num2)) => {
+                        let num1 = v.get_long();
+                        let res = op1_fun(num1, num2);
+                        Ok(res.into())
+                    }
                     _ => {
-                        let num1 = v.to_f64().unwrap();
+                        let num1 = v.get_double();
                         let num2 = in_value.as_f64().unwrap();
-                        INumber::try_from((op2_fun)(num1, num2))
+                        INumber::try_from(op2_fun(num1, num2))
                             .map_err(|_| RedisError::Str("result is not a number"))
                     }
                 };
@@ -374,11 +376,11 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn incr_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError> {
-        self.do_num_op(path, num, |i1, i2| i1 + i2, |f1, f2| f1 + f2)
+        self.do_num_op(path, num, i64::wrapping_add, |f1, f2| f1 + f2)
     }
 
     fn mult_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError> {
-        self.do_num_op(path, num, |i1, i2| i1 * i2, |f1, f2| f1 * f2)
+        self.do_num_op(path, num, i64::wrapping_mul, |f1, f2| f1 * f2)
     }
 
     fn pow_by(&mut self, path: Vec<String>, num: &str) -> Result<Number, RedisError> {
