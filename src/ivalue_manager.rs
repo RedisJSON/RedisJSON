@@ -5,6 +5,7 @@
  */
 
 use crate::error::Error;
+use crate::jsonpath::select_value::{SelectValue, SelectValueType};
 use crate::manager::{err_json, err_msg_json_expected, err_msg_json_path_doesnt_exist};
 use crate::manager::{Manager, ReadHolder, WriteHolder};
 use crate::redisjson::normalize_arr_start_index;
@@ -12,7 +13,6 @@ use crate::Format;
 use crate::REDIS_JSON_TYPE;
 use ijson::object::Entry;
 use ijson::{DestructuredMut, INumber, IString, IValue, ValueType};
-use crate::jsonpath::select_value::{SelectValue, SelectValueType};
 use redis_module::key::{verify_type, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::rediserror::RedisError;
