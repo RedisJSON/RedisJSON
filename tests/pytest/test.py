@@ -136,8 +136,8 @@ def testSetRootWithJSONValuesShouldSucceed(env):
         r.assertEqual(v, s)
 
 def testSetAddNewImmediateChild(env):
-    
-    r = env    
+
+    r = env
     r.assertOk(r.execute_command('JSON.SET', 'test', '$', json.dumps(docs)))
     # Make sure children are initially missing
     r.assertEqual(r.execute_command('JSON.GET', 'test', '$.basic.dict.new_child_1'), '[]')
@@ -183,7 +183,7 @@ def testSetGetWholeBasicDocumentShouldBeEqual(env):
 def testSetBehaviorModifyingSubcommands(env):
     """Test JSON.SET's NX and XX subcommands"""
     r = env
-    
+
     # test against the root
     r.assertIsNone(r.execute_command('JSON.SET', 'test', '.', '{}', 'XX'))
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{}', 'NX'))
@@ -239,7 +239,7 @@ def testSetGetWithSpecialKey(env):
         "$a": "$a",
         "$a[": "$a["
     }
-    
+
     # Set doc using individual keys using legacy syntax (with implicit `$` root)
     r.assertOk(r.execute_command('JSON.SET', 'x', '$', '{"$":"$"}'))
     r.assertOk(r.execute_command('JSON.SET', 'x', 'a', '"a"'))
@@ -254,7 +254,7 @@ def testSetGetWithSpecialKey(env):
     # Get key "$"
     r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$.$')), ["$"])         # dot notation
     r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$["$"]')), ["$"])      # bracket notation
-    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$')), [doc])           
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$')), [doc])
     # Get key "a"
     r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$.a')), ["a"])         # dot notation
     r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$["a"]')), ["a"])      # bracket notation
@@ -265,7 +265,7 @@ def testSetGetWithSpecialKey(env):
     r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$a')), "$a")           # legacy
     # Get key "$a["
     r.assertEqual(json.loads(r.execute_command('JSON.GET', 'x', '$["$a["]')), ["$a["])  # bracket notation (cannot use dot notation)
-    
+
 
 def testSetWithPathErrors(env):
     r = env
@@ -348,7 +348,7 @@ def testGetFormatting(env):
                     r.assertEqual(res, f.format(newline=newline, space=space, indent=indent))
 
 def testBackwardRDB(env):
-    env.skipOnCluster() 
+    env.skipOnCluster()
     if env.useAof:
         env.skip()
     dbFileName = env.cmd('config', 'get', 'dbfilename')[1]
@@ -425,7 +425,7 @@ def testToggleCommand(env):
     # Test Toggeling Empty Path
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"foo":"bar"}'))
     r.expect('JSON.TOGGLE', 'test', '.bar').raiseError()
-    
+
     # Test Toggeling Non Boolean
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"foo":"bar"}'))
     r.expect('JSON.TOGGLE','test','.foo').raiseError()
@@ -591,7 +591,7 @@ def testClear(env):
     r.expect('JSON.CLEAR', 'test', '$.b..a').equal(0)
     r.expect('JSON.GET', 'test', '$').equal('[{"a":[1,2],"b":{"c":"d"}}]')
 
-    # Key doesn't exist 
+    # Key doesn't exist
     r.expect('JSON.CLEAR', 'not_test_key', '$').raiseError()
 
 def testClearScalar(env):
@@ -613,7 +613,7 @@ def testClearScalar(env):
     r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.*'), 2)
     res = r.execute_command('JSON.GET', 'test', '$.*')
     r.assertEqual(json.loads(res), ['string value', None, True, 0, 0])
-    
+
     # Do not clear already cleared values
     r.assertEqual(r.execute_command('JSON.CLEAR', 'test', '$.*'), 0)
 
@@ -730,9 +730,9 @@ def testArrInsertCommand(env):
         r.assertEqual(r.execute_command('JSON.GET', 'test', jpath), "[3,2,1,4]")
 
         r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', jpath, 1, '5'), 5)
-        r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', jpath, -2, '6'), 6)    
+        r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', jpath, -2, '6'), 6)
         r.assertEqual(r.execute_command('JSON.GET', 'test', jpath), "[3,5,2,6,1,4]")
-        
+
         r.assertEqual(r.execute_command('JSON.ARRINSERT', 'test', jpath, -3, '7', '{"A":"Z"}', '9'), 9)
         r.assertEqual(r.execute_command('JSON.GET', 'test', jpath), '[3,5,2,7,{"A":"Z"},9,6,1,4]')
 
@@ -925,14 +925,14 @@ def testNumIncrCommand(env):
 def testNumCommandOverflow(env):
     """Test JSON.NUMINCRBY and JSON.NUMMULTBY commands overflow """
     r = env
-            
+
     # test overflow on root
     r.assertOk(r.execute_command('JSON.SET', 'big_num', '.', '1.6350000000001313e+308'))
     r.expect('JSON.NUMINCRBY', 'big_num', '.', '1.6350000000001313e+308').raiseError()
     r.expect('JSON.NUMMULTBY', 'big_num', '.', '2').raiseError()
     # (value remains)
     r.assertEqual(r.execute_command('JSON.GET', 'big_num', '.'), '1.6350000000001313e308')
-    
+
     # test overflow on nested object value
     r.assertOk(r.execute_command('JSON.SET', 'nested_obj_big_num', '$', '{"l1":{"l2_a":1.6350000000001313e+308,"l2_b":2}}'))
     r.expect('JSON.NUMINCRBY', 'nested_obj_big_num', '$.l1.l2_a', '1.6350000000001313e+308').raiseError()
@@ -1081,7 +1081,7 @@ def testMSET(env):
 
 
 def testMSET_Partial(env):
-    # Make sure MSET doesn't stop on the first update that can't be updated 
+    # Make sure MSET doesn't stop on the first update that can't be updated
     env.expect("JSON.SET", "a{s}", '$', '{"x": {"y":[10,20], "z":[30,40]}}').ok()
     env.expect("JSON.SET", "b{s}", '$', '{"x": 60}').ok()
     env.expect("JSON.MSET", "a{s}", '$.x', '{}', "a{s}", '$.x.z[1]', '50', 'b{s}', '$.x', '70').ok()
@@ -1121,13 +1121,13 @@ def testCrashInParserMOD2099(env):
 
     r = env
     r.assertOk(r.execute_command('JSON.SET', 'test', '$', '{"a":{"x":{"i":10}}, "b":{"x":{"i":20, "j":5}}}'))
-    
+
     res = r.execute_command('JSON.GET', 'test', '$..x[?(@>10)]')
     r.assertEqual(res, '[20]')
-    
+
     res = r.execute_command('JSON.GET', 'test', '$..x[?($>10)]')
     r.assertEqual(res, '[]')
-    
+
 
 def testInfoEverything(env):
 
@@ -1138,12 +1138,12 @@ def testInfoEverything(env):
 def testCopyCommand(env):
     """Test COPY command and make sure behavior of json keys is similar to hash keys"""
 
-    env.skipOnCluster() 
+    env.skipOnCluster()
     env.skipOnVersionSmaller('6.2')
     r = env
-    
+
     values = {"foo": "bar", "fu": "wunderbar"}
-    
+
     ### Copy json to a new key (from json1 to json2)
     r.assertOk(r.execute_command('JSON.SET', 'json1', '$', json.dumps(values)))
     r.assertTrue(r.execute_command('COPY', 'json1', 'json2'))
@@ -1160,16 +1160,16 @@ def testCopyCommand(env):
     # Check new values
     r.assertEqual(r.execute_command('HGETALL', 'hash1'), values)
     r.assertEqual(r.execute_command('HGETALL', 'hash2'), values)
-    
+
     new_values = {"ganz": "neue"}
-    
+
     ### Copy hash to an existing key
-    hash_values = list(reduce(lambda acc, v: acc + v, new_values.items()))    
+    hash_values = list(reduce(lambda acc, v: acc + v, new_values.items()))
     r.assertEqual(r.execute_command('HSET', 'hash3', *hash_values), int(len(hash_values) / 2))
     # Do not overwrite without REPLACE (from hash to hash)
     r.assertFalse(r.execute_command('COPY', 'hash3', 'hash2'))
     # Do not overwrite without REPLACE (from hash to json)
-    r.assertFalse(r.execute_command('COPY', 'hash3', 'json2'))    
+    r.assertFalse(r.execute_command('COPY', 'hash3', 'json2'))
     # Overwrite with REPLACE (from hash to hash)
     r.assertTrue(r.execute_command('COPY', 'hash3', 'hash2', 'REPLACE'))
     # Overwrite with REPLACE (from hash to json)
@@ -1268,13 +1268,13 @@ def testFilter(env):
         "pat_not_str5": [".*foo"],
     }
     r.expect('JSON.SET', 'doc', '$', json.dumps(doc)).ok()
-    
+
     # regex match using a static regex pattern
     r.expect('JSON.GET', 'doc', '$.arr[?(@ =~ ".*foo")]').equal('["kafoosh","foolish","ffool"]')
-    
+
     # regex match using a field
     r.expect('JSON.GET', 'doc', '$.arr[?(@ =~ $.pat_regex)]').equal('["kafoosh","foolish","ffool"]')
-    
+
     # regex case-insensitive match using a field (notice the `.*` before the filter)
     r.expect('JSON.GET', 'doc', '$.arr.*[?(@ =~ $.pat_plain)]').equal('["foo","FoO"]')
 
@@ -1295,7 +1295,7 @@ def testFilter(env):
 
     # plain string match
     r.expect('JSON.GET', 'doc', '$.arr[?(@ == $.pat_plain)]').equal('["(?i)^[f][o][o]$"]')
-    
+
 def testFilterExpression(env):
     # Test JSONPath filter with 3 or more operands
     r = env
@@ -1337,14 +1337,14 @@ def testMerge(env):
     # Test merge error - invalid JSON
     r.expect('JSON.MERGE', 'test_merge', '$.a', '{"b":{"h":"i" "bye"}}').error().contains("expected")
 
-    # Test with none existing key with path $.a   
+    # Test with none existing key with path $.a
     r.expect('JSON.MERGE', 'test_merge_new', '$.a', '{"a":"i"}').raiseError()
 
     # Test with none existing key -> create key
     r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_new', '$', '{"h":"i"}'))
     r.expect('JSON.GET', 'test_merge_new').equal('{"h":"i"}')
-    
-    
+
+
 def testMergeArray(env):
     # Test JSON.MERGE with arrays
     r = env
@@ -1414,11 +1414,22 @@ def testRDBUnboundedDepth(env):
     # concat the string_126 at the end of itself
     json_value = nest_object(3, 5, "__deep_leaf", 420)
     r.expect('JSON.SET', 'doc', '$..__leaf', json_value).ok()
-    
+
     # RDB dump and restore the key 'doc' and check that the key is still valid
     dump = env.execute_command('dump', 'doc', **{NEVER_DECODE: []})
     r.expect('RESTORE', 'doc1', 0, dump).ok()
     r.expect('JSON.GET', 'doc1', '$..__leaf..__deep_leaf').equal('[420]')
+
+def testUnicodeCharacters(env):
+    # Test unicode strings parsing and processing.
+
+    r = env
+
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$', '{"\u00a0": "⍢∪⇰"}'))
+    r.expect('JSON.GET', 'test', '$').equal('[{"\u00a0":"⍢∪⇰"}]')
+
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$', '{"\u00a0": { "name": "\u00a0\u00a0" } }'))
+    r.expect('JSON.GET', 'test', '$').equal('[{"\u00a0":{"name":"\u00a0\u00a0"}}]')
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property
