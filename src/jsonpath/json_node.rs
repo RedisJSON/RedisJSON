@@ -17,7 +17,7 @@ impl SelectValue for Value {
             Self::Array(_) => SelectValueType::Array,
             Self::Object(_) => SelectValueType::Object,
             Self::Number(n) if n.is_i64() => SelectValueType::Long,
-            Self::Number(n) if n.is_f64() | n.is_u64() => SelectValueType::Double,
+            Self::Number(n) if n.is_f64() || n.is_u64() => SelectValueType::Double,
             _ => panic!("bad type for Number value"),
         }
     }
