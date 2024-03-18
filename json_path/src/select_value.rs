@@ -29,6 +29,7 @@ pub trait SelectValue: Debug + Eq + PartialEq + Default + Clone + Serialize {
     fn get_key<'a>(&'a self, key: &str) -> Option<&'a Self>;
     fn get_index(&self, index: usize) -> Option<&Self>;
     fn is_array(&self) -> bool;
+    fn is_double(&self) -> Option<bool>;
 
     fn get_str(&self) -> String;
     fn as_str(&self) -> &str;
