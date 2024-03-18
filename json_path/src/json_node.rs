@@ -122,31 +122,16 @@ impl SelectValue for Value {
 
     fn get_long(&self) -> i64 {
         match self {
-            Self::Number(n) => {
-                if let Some(n) = n.as_i64() {
-                    n
-                } else {
-                    panic!("not a long");
-                }
-            }
-            _ => {
-                panic!("not a long");
-            }
+            Self::Number(n) if n.is_i64() => n.as_i64().unwrap(),
+            _ => panic!("not a long"),
         }
     }
 
     fn get_double(&self) -> f64 {
         match self {
-            Self::Number(n) => {
-                if n.is_f64() {
-                    n.as_f64().unwrap()
-                } else {
-                    panic!("not a double");
-                }
-            }
-            _ => {
-                panic!("not a double");
-            }
+            Self::Number(n) if n.is_f64() => n.as_f64().unwrap(),
+            Self::Number(n) if n.is_u64() => n.as_u64().unwrap() as _,
+            _ => panic!("not a double"),
         }
     }
 }
