@@ -32,6 +32,7 @@ use crate::c_api::{
 };
 use crate::redisjson::Format;
 
+mod allocators;
 mod array_index;
 mod backward;
 pub mod c_api;
