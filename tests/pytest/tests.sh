@@ -665,6 +665,7 @@ fi
 
 if [[ -n $STATFILE ]]; then
 	mkdir -p "$(dirname "$STATFILE")"
+        touch $STATFILE
 	if [[ -f $STATFILE ]]; then
 		(( E |= $(cat $STATFILE || echo 1) )) || true
 	fi
