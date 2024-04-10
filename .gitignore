@@ -34,4 +34,7 @@
 
 wordlist.dic
 
+# RLTest
+config.txt
+
 venv/

@@ -228,7 +228,6 @@ def testSetAndGetCommands(env):
     r.assertEqual(res, '"inizio"')
 
 
-
 def testMGetCommand(env):
     """Test REJSON.MGET command"""
     r = env
@@ -271,7 +270,7 @@ def testMGetCommand(env):
     res = r.execute_command('JSON.MGET', '{doc}:1', '{doc}:2', '..a')
     r.assertEqual(res, [json.dumps(json.loads(res1)[0]), json.dumps(json.loads(res2)[0])])
 
-    # Test wrong key    
+    # Test wrong key
     res = r.execute_command('JSON.MGET', '{doc}:1', '{doc}:wrong_key_type', '{doc}:2', '..a')
     r.assertEqual(res, [json.dumps(json.loads(res1)[0]), None, json.dumps(json.loads(res2)[0])])
 
@@ -821,7 +820,7 @@ def testToggleCommand(env):
 #     Test MEMORY USAGE key
 #     """
 #     r = env
-#     jdata, jtypes = load_types_data('a')    
+#     jdata, jtypes = load_types_data('a')
 #     r.assertOk(r.execute_command('JSON.SET', 'doc1', '$', json.dumps(jdata)))
 #     res = r.execute_command('MEMORY', 'USAGE', 'doc1')
 #     r.assertEqual(res, 211)
@@ -1072,7 +1071,7 @@ def testErrorMessage(env):
     json.arrpop doc1 .bzzz 1
     (error) ERR key 'bzzz' does not exist at level 0 in path
     json.arrpop doc1zzz .b 1
-    (error) WRONGTYPE Operation against a key holding the wrong kind of value    
+    (error) WRONGTYPE Operation against a key holding the wrong kind of value
     """
 
     # ARRINDEX
@@ -1269,11 +1268,11 @@ def testErrorMessage(env):
     """ Legacy 1.0.8:
     json.set doc1 .  '{"a":[0, 1, 2, 3, 4, 5], "b":{"x":100}}'
     OK
-    json.strlen doc1 .b 
+    json.strlen doc1 .b
     (error) ERR wrong type of path value - expected string but found object
-    json.strlen doc1 .bzzz 
+    json.strlen doc1 .bzzz
     (error) ERR key 'bzzz' does not exist at level 0 in path
-    json.strlen doc1zzz .b 
+    json.strlen doc1zzz .b
     (nil)
     """
 
@@ -1345,7 +1344,7 @@ def testErrorMessage(env):
 def testFilterDup_issue667(env):
     """Test issue #667 """
     r = env
-     
+
     r.assertOk(r.execute_command('JSON.SET',
                                  'test',
                                  '$',
