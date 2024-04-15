@@ -21,7 +21,7 @@ RedisJSON is a [Redis](https://redis.io/) module that implements [ECMA-404 The J
 * [JSONPath](https://goessner.net/articles/JsonPath/) syntax for selecting elements inside documents
 * Documents are stored as binary data in a tree structure, allowing fast access to sub-elements
 * Typed atomic operations for all JSON values types
-* Secondary index support when combined with [RediSearch](https://redisearch.io)
+* Secondary index support when combined with [RediSearch](https://redis.io/docs/latest/develop/interact/search-and-query/)
 
 ## Quick start
 
@@ -31,7 +31,7 @@ docker run -p 6379:6379 --name redis-stack redis/redis-stack:latest
 
 ## Documentation
 
-Read the docs at <http://redisjson.io>
+Read the docs at <https://redis.io/docs/latest/develop/data-types/json/>
 
 ### How do I Redis?
 
