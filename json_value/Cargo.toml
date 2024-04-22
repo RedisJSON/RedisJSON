@@ -1,5 +1,5 @@
 [package]
-name = "json_parser"
+name = "json_value"
 version = "0.1.0"
 edition.workspace = true
 repository.workspace = true
@@ -13,3 +13,6 @@ serde.workspace = true
 serde_json.workspace = true
 concat-idents = "1"
 hashbrown = "0.14"
+listpack-redis = { path = "../../listpack-redis" }
+json_path = { path = "../json_path" }
+redis-custom-allocator.workspace = true

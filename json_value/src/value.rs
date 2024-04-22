@@ -20,15 +20,18 @@ use std::collections::hash_map as hash_map_impl;
 // pub type Map<K = JsonString, V = Value> = fxhash::FxHashMap<K, V>;
 // pub type Map<K = JsonString, V = Value> =
 //     hashbrown::HashMap<K, V, core::hash::BuildHasherDefault<fxhash::FxHasher>>;
-pub type Map<K = JsonString, V = Value> = std::collections::HashMap<K, V>;
+pub type Map<K, V> = std::collections::HashMap<K, V>;
+pub use crate::array::Array;
 /// The entry API for `FxHashMap`.
 // pub use std::collections::hash_map::Entry as MapEntry;
 pub use hash_map_impl::Entry as MapEntry;
+use listpack_redis::allocator::ListpackAllocator;
+use listpack_redis::{ListpackEntry, ListpackEntryEncodingType, ListpackEntryInsert};
+use redis_custom_allocator::CustomAllocator;
 use serde::{
     ser::{SerializeMap, SerializeSeq},
     Deserialize, Serialize,
 };
-pub use Vec as Array;
 
 /// Compare two [`f64`] for equality using [`f64::EPSILON`].
 fn float_eq(a: f64, b: f64) -> bool {
@@ -243,8 +246,11 @@ impl_number_numeric_methods!(usize, u64, u32, u16, u8, isize, i64, i32, i16, i8,
 pub type JsonString = String;
 
 /// A destructured representation of a JSON value.
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub enum Value {
+#[derive(Debug, Default, PartialEq, Eq)]
+pub enum Value<Allocator>
+where
+    Allocator: CustomAllocator,
+{
     /// Null.
     #[default]
     Null,
@@ -255,13 +261,33 @@ pub enum Value {
     /// String.
     String(JsonString),
     /// Array.
-    Array(Vec<Self>),
+    Array(Array<Allocator>),
     /// Object.
     Object(Map<String, Self>),
 }
 
+impl<Allocator> Clone for Value<Allocator>
+where
+    Allocator: ListpackAllocator,
+    <Allocator as redis_custom_allocator::CustomAllocator>::Error: std::fmt::Debug,
+{
+    fn clone(&self) -> Self {
+        match self {
+            Self::Null => Self::Null,
+            Self::Bool(b) => Self::Bool(*b),
+            Self::Number(n) => Self::Number(*n),
+            Self::String(s) => Self::String(s.clone()),
+            Self::Array(a) => Self::Array(a.clone()),
+            Self::Object(o) => Self::Object(o.clone()),
+        }
+    }
+}
+
 /// Basic enum methods.
-impl Value {
+impl<Allocator> Value<Allocator>
+where
+    Allocator: CustomAllocator,
+{
     /// Returns `true` if the value holds a JSON null.
     pub fn is_null(&self) -> bool {
         matches!(self, Self::Null)
@@ -334,18 +360,18 @@ impl Value {
 
     /// Returns the JSON array as a reference, if this [`Value`] is an
     /// array.
-    pub fn as_array(&self) -> Option<&Vec<Self>> {
+    pub fn as_array(&self) -> Option<&Array<Allocator>> {
         match self {
-            Self::Array(vec) => Some(vec),
+            Self::Array(array) => Some(array),
             _ => None,
         }
     }
 
     /// Returns the JSON array as a mutable reference, if this
     /// [`Value`] is an array.
-    pub fn as_array_mut(&mut self) -> Option<&mut Vec<Self>> {
+    pub fn as_array_mut(&mut self) -> Option<&mut Array<Allocator>> {
         match self {
-            Self::Array(vec) => Some(vec),
+            Self::Array(array) => Some(array),
             _ => None,
         }
     }
@@ -382,7 +408,7 @@ impl Value {
 macro_rules! impl_value_numeric_methods {
     ($($t:ty),*) => {
         /// Numeric methods.
-        impl Value {
+        impl<A> Value<A> where A: CustomAllocator {
             $(
                 concat_idents::concat_idents!(fn_name = to_, $t {
                     pub fn fn_name(&self) -> Option<$t> {
@@ -400,7 +426,10 @@ macro_rules! impl_value_numeric_methods {
 impl_value_numeric_methods!(usize, u64, u32, u16, u8, isize, i64, i32, i16, i8, f64, f32);
 
 /// Additional useful methods.
-impl Value {
+impl<A> Value<A>
+where
+    A: CustomAllocator,
+{
     /// Takes the value out of this object, leaving a [`Self::Null`] in
     /// its place.
     pub fn take(&mut self) -> Self {
@@ -408,46 +437,67 @@ impl Value {
     }
 }
 
-impl From<()> for Value {
+impl<A> From<()> for Value<A>
+where
+    A: CustomAllocator,
+{
     fn from(_: ()) -> Self {
         Self::Null
     }
 }
 
-impl From<bool> for Value {
+impl<A> From<bool> for Value<A>
+where
+    A: CustomAllocator,
+{
     fn from(b: bool) -> Self {
         Self::Bool(b)
     }
 }
 
-impl From<JsonString> for Value {
+impl<A> From<JsonString> for Value<A>
+where
+    A: CustomAllocator,
+{
     fn from(s: JsonString) -> Self {
         Self::String(s)
     }
 }
 
-impl From<Vec<Value>> for Value {
-    fn from(vec: Vec<Value>) -> Self {
-        Self::Array(vec)
+impl<A> From<Vec<Value<A>>> for Value<A>
+where
+    A: ListpackAllocator,
+    <A as redis_custom_allocator::CustomAllocator>::Error: std::fmt::Debug,
+{
+    fn from(vec: Vec<Self>) -> Self {
+        Self::Array(Array::from(vec.as_slice()))
     }
 }
 
-impl From<Map<String, Value>> for Value {
-    fn from(map: Map<String, Value>) -> Self {
+impl<A> From<Map<String, Value<A>>> for Value<A>
+where
+    A: CustomAllocator,
+{
+    fn from(map: Map<String, Self>) -> Self {
         Self::Object(map)
     }
 }
 
-impl<T> From<T> for Value
+impl<A, T> From<T> for Value<A>
 where
     JsonNumber: From<T>,
+    A: CustomAllocator,
 {
     fn from(n: T) -> Self {
         Self::Number(n.into())
     }
 }
 
-impl From<serde_json::Value> for Value {
+impl<A> From<serde_json::Value> for Value<A>
+where
+    A: ListpackAllocator,
+    <A as redis_custom_allocator::CustomAllocator>::Error: std::fmt::Debug,
+{
     fn from(value: serde_json::Value) -> Self {
         match value {
             serde_json::Value::Null => Self::Null,
@@ -455,20 +505,81 @@ impl From<serde_json::Value> for Value {
             serde_json::Value::Number(n) => Self::Number(n.into()),
             serde_json::Value::String(s) => Self::String(s),
             serde_json::Value::Array(vec) => {
-                // let mut vec = Vec::with_capacity(a.len());
-                // for v in a {
-                //     vec.push(v.into());
-                // }
-                Self::Array(vec.into_iter().map(|v| v.into()).collect())
+                let values: Vec<_> = vec.into_iter().map(Self::from).collect();
+                Self::Array(Array::from(values.as_slice()))
             }
             serde_json::Value::Object(map) => {
-                // let mut map = Map::default();
-                // for (k, v) in o {
-                //     map.insert(k, v.into());
-                // }
-                // Self::Object(map)
                 Self::Object(map.into_iter().map(|(k, v)| (k, v.into())).collect())
             }
+        }
+    }
+}
+
+impl<'a, A> From<&'a Value<A>> for ListpackEntryInsert<'a>
+where
+    A: CustomAllocator,
+{
+    fn from(v: &'a Value<A>) -> Self {
+        match v {
+            Value::String(s) => s.into(),
+            Value::Number(n) => match n {
+                JsonNumber::Double(f) => ListpackEntryInsert::Float(*f as _),
+                JsonNumber::Signed(i) => ListpackEntryInsert::Integer(*i),
+                JsonNumber::Unsigned(u) => ListpackEntryInsert::Integer(*u as _),
+            },
+            Value::Bool(b) => (*b).into(),
+            Value::Null => ListpackEntryInsert::CustomEmbeddedValue(0),
+            Value::Array(a) => unimplemented!("Array is not implemented."),
+            Value::Object(o) => unimplemented!("Object is not implemented."),
+        }
+    }
+}
+
+// impl<Allocator> From<Value<Allocator>> for ListpackEntryInsert<'_>
+// where
+//     Allocator: ListpackAllocator,
+//     <Allocator as redis_custom_allocator::CustomAllocator>::Error: std::fmt::Debug,
+// {
+//     fn from(v: Value<Allocator>) -> Self {
+//         match v {
+//             Value::String(s) => s.into(),
+//             Value::Number(n) => match n {
+//                 JsonNumber::Double(f) => ListpackEntryInsert::Float(*f as _),
+//                 JsonNumber::Signed(i) => ListpackEntryInsert::Integer(*i),
+//                 JsonNumber::Unsigned(u) => ListpackEntryInsert::Integer(*u as _),
+//             },
+//             Value::Bool(b) => (*b).into(),
+//             Value::Null => ListpackEntryInsert::CustomEmbeddedValue(0),
+//             Value::Array(a) => unimplemented!("Array is not implemented."),
+//             Value::Object(o) => unimplemented!("Object is not implemented."),
+//         }
+//     }
+// }
+
+impl<A> From<&ListpackEntry> for Value<A>
+where
+    A: CustomAllocator,
+{
+    fn from(e: &ListpackEntry) -> Self {
+        let encoding_type = e.encoding_type().expect("Valid encoding type.");
+        let data = e.data().expect("Valid data.");
+
+        if let Some(number) = data.get_integer() {
+            return Self::Number(JsonNumber::Signed(number));
+        } else if let Some(string) = data.get_str() {
+            return Self::String(string.to_string());
+        } else if let Some(float) = data.get_f64() {
+            return Self::Number(JsonNumber::Double(float));
+        } else if let Some(bool) = data.get_bool() {
+            return Self::Bool(bool);
+        // We use the custom embedded value to represent JSON null.
+        } else if let Some(_) = data.get_custom_embedded() {
+            return Self::Null;
+        // TODO: find a way to represent arrays and objects.
+        } else if let Some(subvalue) = data.get_custom_extended_raw() {
+            unimplemented!("Custom extended value: {:?}", subvalue);
+        } else {
+            unreachable!("Invalid data type: {:?}", encoding_type);
         }
     }
 }
@@ -587,7 +698,10 @@ impl From<serde_json::Value> for Value {
 //     }
 // }
 
-impl Serialize for Value {
+impl<A> Serialize for Value<A>
+where
+    A: CustomAllocator,
+{
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -599,8 +713,8 @@ impl Serialize for Value {
             Self::String(s) => serializer.serialize_str(s),
             Self::Array(vec) => {
                 let mut seq = serializer.serialize_seq(Some(vec.len()))?;
-                for e in vec {
-                    seq.serialize_element(e)?;
+                for e in vec.iter() {
+                    seq.serialize_element(&Self::from(e))?;
                 }
                 seq.end()
             }
@@ -640,8 +754,12 @@ impl Serialize for Value {
 //     }
 // }
 
-impl<'de> Deserialize<'de> for Value {
-    fn deserialize<D>(deserializer: D) -> Result<Value, D::Error>
+impl<'de, A> Deserialize<'de> for Value<A>
+where
+    A: ListpackAllocator,
+    <A as redis_custom_allocator::CustomAllocator>::Error: std::fmt::Debug,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Value<A>, D::Error>
     where
         D: serde::Deserializer<'de>,
     {

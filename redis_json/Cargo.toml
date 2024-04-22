@@ -24,18 +24,19 @@ bson.workspace = true
 ijson.workspace = true
 serde_json.workspace = true
 serde.workspace = true
+redis-custom-allocator.workspace = true
 libc = "0.2"
 redis-module = { version = "^2.0.7", default-features = false, features = ["min-redis-compatibility-version-7-2"] }
 redis-module-macros = "^2.0.7"
 itertools = "0.12"
 json_path = { path = "../json_path" }
 linkme = "0.3"
-json_parser = { "path" = "../json_parser" }
+json_value = { "path" = "../json_value" }
 
 [features]
 as-library = []
 thread_safe = ["ijson/thread_safe"]
-custom_parser = []
-ijson_parser = []
-default = ["custom_parser"]
-# default = ["ijson_parser"]
+custom_value = []
+ijson_value = []
+default = ["custom_value"]
+# default = ["ijson_value"]

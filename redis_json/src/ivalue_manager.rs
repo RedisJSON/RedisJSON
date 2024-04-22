@@ -10,13 +10,14 @@ use crate::manager::{
 };
 use crate::manager::{Manager, ReadHolder, WriteHolder};
 use crate::redisjson::{
-    normalize_arr_start_index, Clearable, MemoryConsumption, MutableJsonValue, RedisJSONData,
-    RedisJSONTypeInfo, TakeOutByIndex,
+    normalize_arr_start_index, Clearable, MutableJsonValue, RedisJSONData, RedisJSONTypeInfo,
+    TakeOutByIndex,
 };
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
 use bson::{from_document, Document};
 use ijson::{IArray, INumber, IValue, ValueType};
+use redis_custom_allocator::MemoryConsumption;
 use redis_module::key::{verify_type, KeyFlags, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::rediserror::RedisError;
@@ -194,7 +195,7 @@ impl MutableJsonValue for ijson::IValue {
 }
 
 /// [`ijson::IValue`] implementation of the [`MutableJsonValue`] trait.
-impl MutableJsonValue for json_parser::Value {
+impl<T> MutableJsonValue for json_value::Value<T> {
     fn replace<F: FnMut(&mut Self) -> Result<Option<Self>, Error>>(
         &mut self,
         path: &[String],
@@ -207,10 +208,9 @@ impl MutableJsonValue for json_parser::Value {
             let target_once = target;
             let is_last = i == last_index;
             let target_opt = match target_once {
-                json_parser::Value::Object(obj) => {
+                json_value::Value::Object(obj) => {
                     if is_last {
-                        if let json_parser::MapEntry::Occupied(mut e) = obj.entry(token.to_owned())
-                        {
+                        if let json_value::MapEntry::Occupied(mut e) = obj.entry(token.to_owned()) {
                             let v = e.get_mut();
                             if let Some(res) = (func)(v)? {
                                 *v = res;
@@ -222,7 +222,7 @@ impl MutableJsonValue for json_parser::Value {
                     }
                     obj.get_mut(token.as_str())
                 }
-                json_parser::Value::Array(arr) => {
+                json_value::Value::Array(arr) => {
                     if let Ok(x) = token.parse::<usize>() {
                         if is_last {
                             if x < arr.len() {
@@ -267,10 +267,9 @@ impl MutableJsonValue for json_parser::Value {
             let target_once = target;
             let is_last = i == last_index;
             let target_opt = match target_once {
-                json_parser::Value::Object(obj) => {
+                json_value::Value::Object(obj) => {
                     if is_last {
-                        if let json_parser::MapEntry::Occupied(mut e) = obj.entry(token.to_owned())
-                        {
+                        if let json_value::MapEntry::Occupied(mut e) = obj.entry(token.to_owned()) {
                             let v = e.get_mut();
                             match (func)(v) {
                                 Ok(res) => {
@@ -285,7 +284,7 @@ impl MutableJsonValue for json_parser::Value {
                     }
                     obj.get_mut(token.as_str())
                 }
-                json_parser::Value::Array(arr) => {
+                json_value::Value::Array(arr) => {
                     if let Ok(x) = token.parse::<usize>() {
                         if is_last {
                             if x < arr.len() {
@@ -329,7 +328,7 @@ impl MutableJsonValue for json_parser::Value {
         }
 
         if !self.is_object() {
-            *self = json_parser::Value::Object(Default::default());
+            *self = json_value::Value::Object(Default::default());
         }
 
         let map = self.as_object_mut().unwrap();
@@ -816,7 +815,7 @@ impl Clearable for IValue {
     }
 }
 
-impl Clearable for json_parser::Value {
+impl<T> Clearable for json_value::Value<T> {
     fn clear(&mut self) -> bool {
         match self {
             Self::Array(vec) => vec.clear(),
@@ -830,7 +829,7 @@ impl Clearable for json_parser::Value {
 }
 
 impl MemoryConsumption for IValue {
-    fn get_memory_occupied(&self) -> usize {
+    fn memory_consumption(&self) -> usize {
         size_of::<Self>()
             + match self.type_() {
                 ValueType::Null | ValueType::Bool => 0,
@@ -881,12 +880,8 @@ impl MemoryConsumption for IValue {
     }
 }
 
-impl MemoryConsumption for json_parser::Value {
-    /// The total memory of the value object and its children is
-    /// calculated recursively, by accounting for each [`Self`] object
-    /// memory isolated and for the memory occupied by the children
-    /// objects if it has those.
-    fn get_memory_occupied(&self) -> usize {
+impl<T> MemoryConsumption for json_value::Value<T> {
+    fn memory_consumption(&self) -> usize {
         // As of now, this is an enum, and it occupies as much space
         // as the largest variant.
         let value_object_size = std::mem::size_of::<Self>();
@@ -897,9 +892,7 @@ impl MemoryConsumption for json_parser::Value {
             + match self {
                 Self::String(s) => s.len(),
                 Self::Array(vec) => {
-                    let initialised_memory = vec.iter().map(|v| v.get_memory_occupied()).sum::<usize>();
-                    let uninitialised_memory = (vec.capacity() - vec.len()) * value_object_size;
-                    initialised_memory + uninitialised_memory
+                    vec.memory_consumption()
                 }
                 Self::Object(map) => {
                     let initialised_memory = map.iter().map(|v|
@@ -907,7 +900,7 @@ impl MemoryConsumption for json_parser::Value {
                         v.0.capacity() +
                         v.1.get_memory_occupied()
                     ).sum::<usize>();
-                    let uninitialised_memory = (map.capacity() - map.len()) * size_of::<(json_parser::JsonString, Self)>();
+                    let uninitialised_memory = (map.capacity() - map.len()) * size_of::<(json_value::JsonString, Self)>();
                     initialised_memory + uninitialised_memory
                 }
                 // The rest of the variants are inlined within the enum
@@ -923,7 +916,7 @@ impl TakeOutByIndex<IValue> for IArray {
     }
 }
 
-impl<T> TakeOutByIndex<T> for json_parser::Array<T> {
+impl<T> TakeOutByIndex<T> for json_value::Array<T> {
     fn take_out(&mut self, index: usize) -> Option<T> {
         if index < self.len() {
             Some(self.remove(index))

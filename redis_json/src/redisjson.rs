@@ -10,7 +10,7 @@
 // User-provided JSON is converted to a tree. This tree is stored transparently in Redis.
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
-use json_parser::Value;
+use json_value::Value;
 use redis_module::raw;
 
 use std::os::raw::{c_int, c_void};
@@ -176,14 +176,14 @@ impl Internable<ijson::IString> for &str {
     }
 }
 
-impl Internable<json_parser::JsonString> for String {
-    fn intern<T: Into<Self>>(value: T) -> json_parser::JsonString {
+impl Internable<json_value::JsonString> for String {
+    fn intern<T: Into<Self>>(value: T) -> json_value::JsonString {
         value.into()
     }
 }
 
-impl Internable<json_parser::JsonString> for &str {
-    fn intern<T: Into<Self>>(value: T) -> json_parser::JsonString {
+impl Internable<json_value::JsonString> for &str {
+    fn intern<T: Into<Self>>(value: T) -> json_value::JsonString {
         value.into().into()
     }
 }
@@ -192,13 +192,6 @@ impl Internable<json_parser::JsonString> for &str {
 /// "empty".
 pub trait Clearable {
     fn clear(&mut self) -> bool;
-}
-
-/// Allows to provide with all sorts of memory consumption information.
-pub trait MemoryConsumption {
-    /// Returns the number of bytes an object which implements thits
-    /// trait occupies in memory (RAM).
-    fn get_memory_occupied(&self) -> usize;
 }
 
 /// Allows to take out an element from the object by index, returning it
@@ -216,8 +209,8 @@ pub trait JsonValueImpl {
     const NULL: Self;
 }
 
-impl JsonValueImpl for json_parser::Value {
-    const NULL: Self = json_parser::Value::Null;
+impl JsonValueImpl for json_value::Value {
+    const NULL: Self = json_value::Value::Null;
 }
 
 impl JsonValueImpl for ijson::IValue {
@@ -246,11 +239,11 @@ where
     data: T,
 }
 
-impl RedisJSONTypeInfo for RedisJSON<json_parser::Value> {
+impl RedisJSONTypeInfo for RedisJSON<json_value::Value> {
     /// The type this RedisJSON holds.
-    type Value = json_parser::Value;
-    type Number = json_parser::JsonNumber;
-    type String = json_parser::JsonString;
+    type Value = json_value::Value;
+    type Number = json_value::JsonNumber;
+    type String = json_value::JsonString;
 }
 
 impl RedisJSONTypeInfo for RedisJSON<ijson::IValue> {
@@ -322,9 +315,9 @@ pub trait MutableJsonValue: Clone {
 
 /// An alias for the RedisJSON implementation using the `ijson::IValue`
 /// type.
-#[cfg(feature = "ijson_parser")]
+#[cfg(feature = "ijson_value")]
 pub type RedisJSONData = RedisJSON<ijson::IValue>;
-#[cfg(feature = "custom_parser")]
+#[cfg(feature = "custom_value")]
 pub type RedisJSONData = RedisJSON<Value>;
 
 pub mod type_methods {

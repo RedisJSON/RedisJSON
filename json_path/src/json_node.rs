@@ -1,15 +1,14 @@
-/*
- * Copyright Redis Ltd. 2016 - present
- * Licensed under your choice of the Redis Source Available License 2.0 (RSALv2) or
- * the Server Side Public License v1 (SSPLv1).
- */
-
-/// Use `SelectValue`
+// /*
+//  * Copyright Redis Ltd. 2016 - present
+//  * Licensed under your choice of the Redis Source Available License 2.0 (RSALv2) or
+//  * the Server Side Public License v1 (SSPLv1).
+//  */
 use crate::select_value::{SelectValue, SelectValueType};
-use ijson::{IValue, ValueType};
 use serde_json::Value;
 
 impl SelectValue for Value {
+    type Item = Self;
+
     fn get_type(&self) -> SelectValueType {
         match self {
             Self::Bool(_) => SelectValueType::Bool,
@@ -36,24 +35,24 @@ impl SelectValue for Value {
         }
     }
 
-    fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a Self> + 'a>> {
+    fn values(&self) -> Option<Box<dyn Iterator<Item = Self>>> {
         match self {
-            Self::Array(arr) => Some(Box::new(arr.iter())),
-            Self::Object(o) => Some(Box::new(o.values())),
+            Self::Array(arr) => Some(Box::new(arr.iter().cloned())),
+            Self::Object(o) => Some(Box::new(o.values().cloned())),
             _ => None,
         }
     }
 
-    fn keys<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a str> + 'a>> {
+    fn keys(&self) -> std::option::Option<impl std::iter::Iterator<Item = &str>> {
         match self {
-            Self::Object(o) => Some(Box::new(o.keys().map(|k| &k[..]))),
+            Self::Object(o) => Some(o.keys().map(|k| &k[..])),
             _ => None,
         }
     }
 
-    fn items<'a>(&'a self) -> Option<Box<dyn Iterator<Item = (&'a str, &'a Self)> + 'a>> {
+    fn items(&self) -> std::option::Option<impl std::iter::Iterator<Item = (&str, Self)>> {
         match self {
-            Self::Object(o) => Some(Box::new(o.iter().map(|(k, v)| (&k[..], v)))),
+            Self::Object(o) => Some(o.iter().map(|(k, v)| (&k[..], v.to_owned()))),
             _ => None,
         }
     }
@@ -74,16 +73,16 @@ impl SelectValue for Value {
         }
     }
 
-    fn get_key<'a>(&'a self, key: &str) -> Option<&'a Self> {
+    fn get_key(&self, key: &str) -> Option<Self> {
         match self {
-            Self::Object(o) => o.get(key),
+            Self::Object(o) => o.get(key).cloned(),
             _ => None,
         }
     }
 
-    fn get_index(&self, index: usize) -> Option<&Self> {
+    fn get_index(&self, index: usize) -> Option<Self> {
         match self {
-            Self::Array(arr) => arr.get(index),
+            Self::Array(arr) => arr.get(index).cloned(),
             _ => None,
         }
     }
@@ -92,7 +91,7 @@ impl SelectValue for Value {
         matches!(self, Self::Array(_))
     }
 
-    fn get_str(&self) -> String {
+    unsafe fn get_str(&self) -> String {
         match self {
             Self::String(s) => s.to_string(),
             _ => {
@@ -101,7 +100,7 @@ impl SelectValue for Value {
         }
     }
 
-    fn as_str(&self) -> &str {
+    unsafe fn as_str(&self) -> &str {
         match self {
             Self::String(s) => s.as_str(),
             _ => {
@@ -110,7 +109,7 @@ impl SelectValue for Value {
         }
     }
 
-    fn get_bool(&self) -> bool {
+    unsafe fn get_bool(&self) -> bool {
         match self {
             Self::Bool(b) => *b,
             _ => {
@@ -119,7 +118,7 @@ impl SelectValue for Value {
         }
     }
 
-    fn get_long(&self) -> i64 {
+    unsafe fn get_long(&self) -> i64 {
         match self {
             Self::Number(n) => {
                 if let Some(n) = n.as_i64() {
@@ -134,7 +133,7 @@ impl SelectValue for Value {
         }
     }
 
-    fn get_double(&self) -> f64 {
+    unsafe fn get_double(&self) -> f64 {
         match self {
             Self::Number(n) => {
                 if n.is_f64() {
@@ -150,219 +149,225 @@ impl SelectValue for Value {
     }
 }
 
-impl SelectValue for IValue {
-    fn get_type(&self) -> SelectValueType {
-        match self.type_() {
-            ValueType::Bool => SelectValueType::Bool,
-            ValueType::String => SelectValueType::String,
-            ValueType::Null => SelectValueType::Null,
-            ValueType::Array => SelectValueType::Array,
-            ValueType::Object => SelectValueType::Object,
-            ValueType::Number => {
-                let num = self.as_number().unwrap();
-                if num.has_decimal_point() {
-                    SelectValueType::Double
-                } else {
-                    SelectValueType::Long
-                }
-            }
-        }
-    }
+// impl SelectValue for IValue {
+//     fn get_type(&self) -> SelectValueType {
+//         match self.type_() {
+//             ValueType::Bool => SelectValueType::Bool,
+//             ValueType::String => SelectValueType::String,
+//             ValueType::Null => SelectValueType::Null,
+//             ValueType::Array => SelectValueType::Array,
+//             ValueType::Object => SelectValueType::Object,
+//             ValueType::Number => {
+//                 let num = self.as_number().unwrap();
+//                 if num.has_decimal_point() {
+//                     SelectValueType::Double
+//                 } else {
+//                     SelectValueType::Long
+//                 }
+//             }
+//         }
+//     }
 
-    fn contains_key(&self, key: &str) -> bool {
-        self.as_object().map_or(false, |o| o.contains_key(key))
-    }
+//     fn contains_key(&self, key: &str) -> bool {
+//         self.as_object().map_or(false, |o| o.contains_key(key))
+//     }
 
-    fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a Self> + 'a>> {
-        if let Some(arr) = self.as_array() {
-            Some(Box::new(arr.iter()))
-        } else if let Some(o) = self.as_object() {
-            Some(Box::new(o.values()))
-        } else {
-            None
-        }
-    }
+//     fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a Self> + 'a>> {
+//         if let Some(arr) = self.as_array() {
+//             Some(Box::new(arr.iter()))
+//         } else if let Some(o) = self.as_object() {
+//             Some(Box::new(o.values()))
+//         } else {
+//             None
+//         }
+//     }
 
-    fn keys(&self) -> Option<impl Iterator<Item = &str>> {
-        self.as_object().map(|o| o.keys().map(|k| &k[..]))
-    }
+//     fn keys(&self) -> Option<impl Iterator<Item = &str>> {
+//         self.as_object().map(|o| o.keys().map(|k| &k[..]))
+//     }
 
-    fn items(&self) -> Option<impl Iterator<Item = (&str, &Self)>> {
-        self.as_object().map(|o| o.iter().map(|(k, v)| (&k[..], v)))
-    }
+//     fn items(&self) -> Option<impl Iterator<Item = (&str, &Self)>> {
+//         self.as_object().map(|o| o.iter().map(|(k, v)| (&k[..], v)))
+//     }
 
-    fn len(&self) -> Option<usize> {
-        self.as_array().map_or_else(
-            || self.as_object().map(ijson::IObject::len),
-            |arr| Some(arr.len()),
-        )
-    }
+//     fn len(&self) -> Option<usize> {
+//         self.as_array().map_or_else(
+//             || self.as_object().map(ijson::IObject::len),
+//             |arr| Some(arr.len()),
+//         )
+//     }
 
-    fn is_empty(&self) -> Option<bool> {
-        self.is_empty()
-    }
+//     fn is_empty(&self) -> Option<bool> {
+//         self.is_empty()
+//     }
 
-    fn get_key<'a>(&'a self, key: &str) -> Option<&'a Self> {
-        self.as_object().and_then(|o| o.get(key))
-    }
+//     fn get_key<'a>(&'a self, key: &str) -> Option<&'a Self> {
+//         self.as_object().and_then(|o| o.get(key))
+//     }
 
-    fn get_index(&self, index: usize) -> Option<&Self> {
-        self.as_array().and_then(|arr| arr.get(index))
-    }
+//     fn get_index(&self, index: usize) -> Option<&Self> {
+//         self.as_array().and_then(|arr| arr.get(index))
+//     }
 
-    fn is_array(&self) -> bool {
-        self.is_array()
-    }
+//     fn is_array(&self) -> bool {
+//         self.is_array()
+//     }
 
-    fn get_str(&self) -> String {
-        self.as_string().expect("not a string").to_string()
-    }
+//     fn get_str(&self) -> String {
+//         self.as_string().expect("not a string").to_string()
+//     }
 
-    fn as_str(&self) -> &str {
-        self.as_string().expect("not a string").as_str()
-    }
+//     fn as_str(&self) -> &str {
+//         self.as_string().expect("not a string").as_str()
+//     }
 
-    fn get_bool(&self) -> bool {
-        self.to_bool().expect("not a bool")
-    }
+//     fn get_bool(&self) -> bool {
+//         self.to_bool().expect("not a bool")
+//     }
 
-    fn get_long(&self) -> i64 {
-        let n = self.as_number().expect("not a number");
-        if n.has_decimal_point() {
-            panic!("not a long");
-        } else {
-            n.to_i64().unwrap()
-        }
-    }
+//     fn get_long(&self) -> i64 {
+//         let n = self.as_number().expect("not a number");
+//         if n.has_decimal_point() {
+//             panic!("not a long");
+//         } else {
+//             n.to_i64().unwrap()
+//         }
+//     }
 
-    fn get_double(&self) -> f64 {
-        let n = self.as_number().expect("not a number");
-        if n.has_decimal_point() {
-            n.to_f64().unwrap()
-        } else {
-            panic!("not a double");
-        }
-    }
-}
+//     fn get_double(&self) -> f64 {
+//         let n = self.as_number().expect("not a number");
+//         if n.has_decimal_point() {
+//             n.to_f64().unwrap()
+//         } else {
+//             panic!("not a double");
+//         }
+//     }
+// }
 
-impl SelectValue for json_parser::Value {
-    fn get_type(&self) -> SelectValueType {
-        match self {
-            Self::Bool(_) => SelectValueType::Bool,
-            Self::String(_) => SelectValueType::String,
-            Self::Null => SelectValueType::Null,
-            Self::Array(_) => SelectValueType::Array,
-            Self::Object(_) => SelectValueType::Object,
-            Self::Number(n) => match n {
-                json_parser::JsonNumber::Unsigned(_) | json_parser::JsonNumber::Signed(_) => {
-                    SelectValueType::Long
-                }
-                json_parser::JsonNumber::Double(_) => SelectValueType::Double,
-            },
-        }
-    }
+// impl<Allocator> SelectValue for json_value::Value<Allocator>
+// where
+//     Allocator: redis_custom_allocator::CustomAllocator,
+//     <Allocator as redis_custom_allocator::CustomAllocator>::Error: std::fmt::Debug,
+// {
+//     type Item = Self;
 
-    fn contains_key(&self, key: &str) -> bool {
-        match self {
-            Self::Object(o) => o.contains_key(key),
-            _ => false,
-        }
-    }
+//     fn get_type(&self) -> SelectValueType {
+//         match self {
+//             Self::Bool(_) => SelectValueType::Bool,
+//             Self::String(_) => SelectValueType::String,
+//             Self::Null => SelectValueType::Null,
+//             Self::Array(_) => SelectValueType::Array,
+//             Self::Object(_) => SelectValueType::Object,
+//             Self::Number(n) => match n {
+//                 json_value::JsonNumber::Unsigned(_) | json_value::JsonNumber::Signed(_) => {
+//                     SelectValueType::Long
+//                 }
+//                 json_value::JsonNumber::Double(_) => SelectValueType::Double,
+//             },
+//         }
+//     }
 
-    fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a Self> + 'a>> {
-        match self {
-            Self::Array(arr) => Some(Box::new(arr.iter())),
-            Self::Object(o) => Some(Box::new(o.values())),
-            _ => None,
-        }
-    }
+//     fn contains_key(&self, key: &str) -> bool {
+//         match self {
+//             Self::Object(o) => o.contains_key(key),
+//             _ => false,
+//         }
+//     }
 
-    fn keys(&self) -> std::option::Option<impl std::iter::Iterator<Item = &str>> {
-        match self {
-            Self::Object(o) => Some(o.keys().map(|k| &k[..])),
-            _ => None,
-        }
-    }
+//     fn values(&self) -> Option<Box<dyn Iterator<Item = Self>>> {
+//         match self {
+//             Self::Array(arr) => Some(Box::new(arr.iter().map(|v| json_value::Value::from(v)))),
+//             Self::Object(o) => Some(Box::new(o.values())),
+//             _ => None,
+//         }
+//     }
 
-    fn items(&self) -> Option<impl Iterator<Item = (&str, &Self)>> {
-        match self {
-            Self::Object(o) => Some(o.iter().map(|(k, v)| (&k[..], v))),
-            _ => None,
-        }
-    }
+//     fn keys(&self) -> std::option::Option<impl std::iter::Iterator<Item = &str>> {
+//         match self {
+//             Self::Object(o) => Some(o.keys().map(|k| &k[..])),
+//             _ => None,
+//         }
+//     }
 
-    fn len(&self) -> Option<usize> {
-        match self {
-            Self::Array(arr) => Some(arr.len()),
-            Self::Object(obj) => Some(obj.len()),
-            _ => None,
-        }
-    }
+//     fn items(&self) -> Option<impl Iterator<Item = (&str, &Self)>> {
+//         match self {
+//             Self::Object(o) => Some(o.iter().map(|(k, v)| (&k[..], v))),
+//             _ => None,
+//         }
+//     }
 
-    fn is_empty(&self) -> Option<bool> {
-        match self {
-            Self::Array(arr) => Some(arr.is_empty()),
-            Self::Object(obj) => Some(obj.is_empty()),
-            _ => None,
-        }
-    }
+//     fn len(&self) -> Option<usize> {
+//         match self {
+//             Self::Array(arr) => Some(arr.len()),
+//             Self::Object(obj) => Some(obj.len()),
+//             _ => None,
+//         }
+//     }
 
-    fn get_key<'a>(&'a self, key: &str) -> Option<&'a Self> {
-        match self {
-            Self::Object(o) => o.get(key),
-            _ => None,
-        }
-    }
+//     fn is_empty(&self) -> Option<bool> {
+//         match self {
+//             Self::Array(arr) => Some(arr.is_empty()),
+//             Self::Object(obj) => Some(obj.is_empty()),
+//             _ => None,
+//         }
+//     }
 
-    fn get_index(&self, index: usize) -> Option<&Self> {
-        match self {
-            Self::Array(arr) => arr.get(index),
-            _ => None,
-        }
-    }
+//     fn get_key<'a>(&'a self, key: &str) -> Option<&'a Self> {
+//         match self {
+//             Self::Object(o) => o.get(key),
+//             _ => None,
+//         }
+//     }
 
-    fn is_array(&self) -> bool {
-        matches!(self, Self::Array(_))
-    }
+//     fn get_index(&self, index: usize) -> Option<&Self> {
+//         match self {
+//             Self::Array(arr) => arr.get(index),
+//             _ => None,
+//         }
+//     }
 
-    fn get_str(&self) -> String {
-        match self {
-            Self::String(s) => s.to_string(),
-            _ => {
-                panic!("not a string");
-            }
-        }
-    }
+//     fn is_array(&self) -> bool {
+//         matches!(self, Self::Array(_))
+//     }
 
-    fn as_str(&self) -> &str {
-        match self {
-            Self::String(s) => s.as_str(),
-            _ => {
-                panic!("not a string");
-            }
-        }
-    }
+//     fn get_str(&self) -> String {
+//         match self {
+//             Self::String(s) => s.to_string(),
+//             _ => {
+//                 panic!("not a string");
+//             }
+//         }
+//     }
 
-    fn get_bool(&self) -> bool {
-        match self {
-            Self::Bool(b) => *b,
-            _ => {
-                panic!("not a bool");
-            }
-        }
-    }
+//     fn as_str(&self) -> &str {
+//         match self {
+//             Self::String(s) => s.as_str(),
+//             _ => {
+//                 panic!("not a string");
+//             }
+//         }
+//     }
 
-    fn get_long(&self) -> i64 {
-        match self {
-            Self::Number(n) => n.get_signed().expect("A signed number"),
-            _ => panic!("not a long"),
-        }
-    }
+//     fn get_bool(&self) -> bool {
+//         match self {
+//             Self::Bool(b) => *b,
+//             _ => {
+//                 panic!("not a bool");
+//             }
+//         }
+//     }
 
-    fn get_double(&self) -> f64 {
-        match self {
-            Self::Number(n) => n.get_double().expect("A signed number"),
-            _ => panic!("not a double"),
-        }
-    }
-}
+//     fn get_long(&self) -> i64 {
+//         match self {
+//             Self::Number(n) => n.get_signed().expect("A signed number"),
+//             _ => panic!("not a long"),
+//         }
+//     }
+
+//     fn get_double(&self) -> f64 {
+//         match self {
+//             Self::Number(n) => n.get_double().expect("A signed number"),
+//             _ => panic!("not a double"),
+//         }
+//     }
+// }
