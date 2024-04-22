@@ -70,7 +70,7 @@ pub fn compile(s: &str) -> Result<Query, QueryCompilationError> {
 /// The query ownership is taken so it can not be used after. This allows
 /// the get a better performance if there is a need to calculate the query
 /// only once.
-pub fn calc_once<'j, 'p, S: SelectValue>(q: Query<'j>, json: &'p S) -> Vec<&'p S> {
+pub fn calc_once<'j, 'p, S: SelectValue>(q: Query<'j>, json: &'p S) -> Vec<S> {
     let root = q.root;
     PathCalculator::<'p, DummyTrackerGenerator> {
         query: None,
@@ -78,7 +78,7 @@ pub fn calc_once<'j, 'p, S: SelectValue>(q: Query<'j>, json: &'p S) -> Vec<&'p S
     }
     .calc_with_paths_on_root(json, root)
     .into_iter()
-    .map(|e: CalculationResult<'p, S, DummyTracker>| e.res)
+    .map(|e: CalculationResult<S, DummyTracker>| e.res)
     .collect()
 }
 
@@ -86,7 +86,7 @@ pub fn calc_once<'j, 'p, S: SelectValue>(q: Query<'j>, json: &'p S) -> Vec<&'p S
 pub fn calc_once_with_paths<'p, S: SelectValue>(
     q: Query<'_>,
     json: &'p S,
-) -> Vec<CalculationResult<'p, S, PTracker>> {
+) -> Vec<CalculationResult<S, PTracker>> {
     let root = q.root;
     PathCalculator {
         query: None,
@@ -549,7 +549,7 @@ mod json_path_tests {
     #[test]
     fn test_expend_all() {
         setup();
-        verify_json!(path:"$.foo.*.val", 
+        verify_json!(path:"$.foo.*.val",
                            json:{"foo":{"bar1":{"val":[1,2,3]}, "bar2":{"val":[1,2,3]}}},
                            results:[[1,2,3], [1,2,3]]);
     }
@@ -557,7 +557,7 @@ mod json_path_tests {
     #[test]
     fn test_full_scan() {
         setup();
-        verify_json!(path:"$..val", 
+        verify_json!(path:"$..val",
                            json:{"foo":{"bar1":{"val":[1,2,3]}, "bar2":{"val":[1,2,3]}}, "val":[1,2,3]},
                            results:[[1,2,3], [1,2,3], [1,2,3]]);
     }
