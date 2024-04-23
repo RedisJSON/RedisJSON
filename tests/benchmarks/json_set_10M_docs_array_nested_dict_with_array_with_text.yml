@@ -1,0 +1,11 @@
+version: 0.2
+name: "json_set_10M_docs_array_nested_dict_with_array_with_text"
+description: "JSON.SET of 10M docs with a single nested array with a dict with an array with a text field within it"
+
+
+clientconfig:
+  - tool: ftsb_redisearch
+  - parameters:
+    - workers: 64
+    - reporting-period: 1s
+    - input: "https://s3.amazonaws.com/benchmarks.redislabs/redisearch/datasets/10M-json-array-nested-dict-with-array-with-text/10M-json-array-nested-dict-with-array-with-text.redisjson.commands.SETUP.csv"
