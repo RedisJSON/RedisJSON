@@ -7,7 +7,7 @@
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use pest_derive::Parser;
-use std::borrow::Cow;
+use std::borrow::{Borrow, Cow};
 use std::cmp::Ordering;
 
 use crate::select_value::{SelectValue, SelectValueType};
@@ -530,14 +530,14 @@ pub struct QueryProcessor<'a, UPTG: UserPathTrackerGenerator> {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct SelectionResultSingle<S: SelectValue, UPT: UserPathTracker> {
-    pub value: S,
+pub struct SelectionResultSingle<'a, S: SelectValue, UPT: UserPathTracker> {
+    pub value: Cow<'a, S>,
     pub node: Option<UPT>,
 }
 
 #[derive(Debug, PartialEq)]
 struct SelectionResult<'a, S: SelectValue + AsRef<S>, UPT: UserPathTracker> {
-    selected_nodes: Vec<SelectionResultSingle<S::Item, UPT>>,
+    selected_nodes: Vec<SelectionResultSingle<'a, S, UPT>>,
     // The root json object can and should always be able to be a
     // reference.
     root: &'a S,
@@ -1139,7 +1139,7 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
         &self,
         json: &'j S,
         root: Pairs<'a, Rule>,
-    ) -> Vec<SelectionResultSingle<S::Item, UPTG::PT>> {
+    ) -> Vec<SelectionResultSingle<'j, S, UPTG::PT>> {
         let mut calc_data = SelectionResult {
             selected_nodes: Vec::new(),
             root: json,
@@ -1162,7 +1162,7 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
         self.calc_with_paths_on_root(json, self.query.unwrap().root.clone())
             .into_iter()
             .map(|e| SelectionResultSingle {
-                value: e.value.into_owned(),
+                value: e.value,
                 node: e.node,
             })
             .collect()
@@ -1171,7 +1171,7 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
     pub fn calc<'j: 'a, S: SelectValue + AsRef<S>>(&self, json: &'j S) -> Vec<S> {
         self.calc_with_paths(json)
             .into_iter()
-            .map(|e| e.value)
+            .map(|e| e.value.into_owned())
             .collect()
     }
 

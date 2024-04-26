@@ -4,7 +4,7 @@
 
 use crate::select_value::{SelectValue, SelectValueType};
 use serde_json::Value;
-use std::borrow::Cow;
+use std::borrow::{Borrow, Cow};
 
 impl<'a, T> SelectValue for &'a T
 where
@@ -77,14 +77,16 @@ where
 
 // impl<'a, T> SelectValue for Cow<'a, T>
 // where
-//     T: SelectValue + AsRef<T>,
-//     <T as SelectValue>::Item: AsRef<T>,
+//     // T: SelectValue + Borrow<T>,
+//     // <T as SelectValue>::Item: Borrow<T>,
+//     T: SelectValue,
+//     // <T as SelectValue>::Item,
 // {
-//     // type Item = T::Item;
-//     type Item = T;
+//     type Item = T::Item;
+//     // type Item = T;
 
 //     fn get_type(&self) -> SelectValueType {
-//         self.get_type()
+//         self.as_ref().get_type()
 //     }
 
 //     fn contains_key(&self, key: &str) -> bool {

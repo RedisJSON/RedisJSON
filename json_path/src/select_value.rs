@@ -5,7 +5,10 @@
  */
 
 use serde::Serialize;
-use std::{borrow::Cow, fmt::Debug};
+use std::{
+    borrow::{Borrow, Cow},
+    fmt::Debug,
+};
 
 /// The types a JSON value can have.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -71,7 +74,8 @@ pub trait SelectValue: Debug + Eq + PartialEq + Clone + Serialize {
     /// return values not of the same type, but to any type implementing
     /// this trait recursively, to be able to walk through the
     /// hierarchy.
-    type Item: SelectValue + AsRef<Self> + From<Self>;
+    type Item: SelectValue + AsRef<Self>;
+    // type Item: SelectValue + AsRef<Self> + From<Self>;
     // type Item<'a>
     // where
     //     Self: 'a + SelectValue;
