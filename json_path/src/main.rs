@@ -4,7 +4,7 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 mod json_node;
-mod json_path;
+mod parser;
 mod select_value;
 
 use serde_json::Value;
@@ -34,7 +34,7 @@ fn main() {
     }
     let v: Value = v.unwrap();
     let path_calculator =
-        json_path::PathCalculator::<json_path::DummyTrackerGenerator>::create(&query);
+        json_path::QueryProcessor::<json_path::DummyTrackerGenerator>::new(&query);
     let res = path_calculator.calc(&v);
     for r in res {
         println!("{}", r);

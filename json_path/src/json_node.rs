@@ -1,10 +1,150 @@
-// /*
-//  * Copyright Redis Ltd. 2016 - present
-//  * Licensed under your choice of the Redis Source Available License 2.0 (RSALv2) or
-//  * the Server Side Public License v1 (SSPLv1).
-//  */
+// Copyright Redis Ltd. 2016 - present
+// Licensed under your choice of the Redis Source Available License 2.0 (RSALv2) or
+// the Server Side Public License v1 (SSPLv1).
+
 use crate::select_value::{SelectValue, SelectValueType};
 use serde_json::Value;
+use std::borrow::Cow;
+
+impl<'a, T> SelectValue for &'a T
+where
+    T: SelectValue,
+    <T as SelectValue>::Item: AsRef<Self>,
+    // &'a T: std::default::Default,
+{
+    type Item = T::Item;
+
+    fn get_type(&self) -> SelectValueType {
+        (*self).get_type()
+    }
+
+    fn contains_key(&self, key: &str) -> bool {
+        (*self).contains_key(key)
+    }
+
+    fn values(&self) -> Option<Box<dyn Iterator<Item = Cow<Self::Item>>>> {
+        (*self).values()
+    }
+
+    fn keys(&self) -> Option<impl Iterator<Item = &str>> {
+        (*self).keys()
+    }
+
+    fn items(&self) -> Option<impl Iterator<Item = (&str, Cow<Self::Item>)>> {
+        (*self).items()
+    }
+
+    fn len(&self) -> Option<usize> {
+        (*self).len()
+    }
+
+    fn get_key(&self, key: &str) -> Option<Cow<Self::Item>> {
+        (*self).get_key(key)
+    }
+
+    fn get_index(&self, index: usize) -> Option<Cow<Self::Item>> {
+        (*self).get_index(index)
+    }
+
+    fn is_empty(&self) -> Option<bool> {
+        (*self).is_empty()
+    }
+
+    fn is_array(&self) -> bool {
+        (*self).is_array()
+    }
+
+    unsafe fn get_bool(&self) -> bool {
+        (*self).get_bool()
+    }
+
+    unsafe fn get_long(&self) -> i64 {
+        (*self).get_long()
+    }
+
+    unsafe fn get_double(&self) -> f64 {
+        (*self).get_double()
+    }
+
+    unsafe fn get_str(&self) -> String {
+        (*self).get_str()
+    }
+
+    unsafe fn as_str(&self) -> &str {
+        (*self).as_str()
+    }
+}
+
+// impl<'a, T> SelectValue for Cow<'a, T>
+// where
+//     T: SelectValue + AsRef<T>,
+//     <T as SelectValue>::Item: AsRef<T>,
+// {
+//     // type Item = T::Item;
+//     type Item = T;
+
+//     fn get_type(&self) -> SelectValueType {
+//         self.get_type()
+//     }
+
+//     fn contains_key(&self, key: &str) -> bool {
+//         self.contains_key(key)
+//     }
+
+//     fn values(&self) -> Option<Box<dyn Iterator<Item = Cow<Self::Item>>>> {
+//         None
+//         // self.as_ref().values().map(|i| i.map(|e| Cow::Borrowed(e.as_ref())))
+//     }
+
+//     unsafe fn as_str(&self) -> &str {
+//         self.as_ref().as_str()
+//     }
+
+//     unsafe fn get_bool(&self) -> bool {
+//         self.as_ref().get_bool()
+//     }
+
+//     unsafe fn get_long(&self) -> i64 {
+//         self.as_ref().get_long()
+//     }
+
+//     unsafe fn get_double(&self) -> f64 {
+//         self.as_ref().get_double()
+//     }
+
+//     fn keys(&self) -> Option<impl Iterator<Item = &str>> {
+//         self.as_ref().keys()
+//     }
+
+//     fn items(&self) -> Option<impl Iterator<Item = (&str, Cow<Self::Item>)>> {
+//         None
+//         // self.as_ref().items()
+//     }
+
+//     fn len(&self) -> Option<usize> {
+//         self.as_ref().len()
+//     }
+
+//     fn get_index(&self, index: usize) -> Option<Cow<Self::Item>> {
+//         self.as_ref().get_index(index)
+//     }
+
+//     fn get_key(&self, key: &str) -> Option<Cow<Self::Item>> {
+//         self.as_ref().get_key(key)
+//     }
+
+//     fn is_empty(&self) -> Option<bool> {
+//         self.as_ref().is_empty()
+//     }
+
+//     fn is_array(&self) -> bool {
+//         self.as_ref().is_array()
+//     }
+
+//     unsafe fn get_str(&self) -> String {
+//         self.as_ref().get_str()
+//     }
+// }
 
 impl SelectValue for Value {
     type Item = Self;
@@ -35,10 +175,10 @@ impl SelectValue for Value {
         }
     }
 
-    fn values(&self) -> Option<Box<dyn Iterator<Item = Self>>> {
+    fn values(&self) -> Option<Box<dyn Iterator<Item = Cow<Self::Item>>>> {
         match self {
-            Self::Array(arr) => Some(Box::new(arr.iter().cloned())),
-            Self::Object(o) => Some(Box::new(o.values().cloned())),
+            Self::Array(arr) => Some(Box::new(arr.iter().map(Cow::Borrowed))),
+            Self::Object(o) => Some(Box::new(o.values().map(Cow::Borrowed))),
             _ => None,
         }
     }
@@ -50,9 +190,11 @@ impl SelectValue for Value {
         }
     }
 
-    fn items(&self) -> std::option::Option<impl std::iter::Iterator<Item = (&str, Self)>> {
+    fn items(
+        &self,
+    ) -> std::option::Option<impl std::iter::Iterator<Item = (&str, Cow<Self::Item>)>> {
         match self {
-            Self::Object(o) => Some(o.iter().map(|(k, v)| (&k[..], v.to_owned()))),
+            Self::Object(o) => Some(o.iter().map(|(k, v)| (&k[..], Cow::Borrowed(v)))),
             _ => None,
         }
     }
@@ -73,16 +215,16 @@ impl SelectValue for Value {
         }
     }
 
-    fn get_key(&self, key: &str) -> Option<Self> {
+    fn get_key(&self, key: &str) -> Option<Cow<Self::Item>> {
         match self {
-            Self::Object(o) => o.get(key).cloned(),
+            Self::Object(o) => o.get(key).map(Cow::Borrowed),
             _ => None,
         }
     }
 
-    fn get_index(&self, index: usize) -> Option<Self> {
+    fn get_index(&self, index: usize) -> Option<Cow<Self::Item>> {
         match self {
-            Self::Array(arr) => arr.get(index).cloned(),
+            Self::Array(arr) => arr.get(index).map(Cow::Borrowed),
             _ => None,
         }
     }

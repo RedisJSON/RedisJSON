@@ -7,6 +7,7 @@
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use pest_derive::Parser;
+use std::borrow::Cow;
 use std::cmp::Ordering;
 
 use crate::select_value::{SelectValue, SelectValueType};
@@ -16,7 +17,7 @@ use std::fmt::Debug;
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
-pub struct JsonPathParser;
+pub struct JsonPathQueryParser;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum JsonPathToken {
@@ -26,9 +27,8 @@ pub enum JsonPathToken {
 
 /* Struct that represent a compiled json path query. */
 #[derive(Debug)]
-pub struct Query<'i> {
-    // query: QueryElement<'i>
-    pub root: Pairs<'i, Rule>,
+pub struct Query<'a> {
+    pub root: Pairs<'a, Rule>,
     is_static: Option<bool>,
     size: Option<usize>,
 }
@@ -38,6 +38,18 @@ pub struct QueryCompilationError {
     location: usize,
     message: String,
 }
+
+impl std::fmt::Display for QueryCompilationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        write!(
+            f,
+            "Error occurred on position {}, {}",
+            self.location, self.message
+        )
+    }
+}
+
+impl std::error::Error for QueryCompilationError {}
 
 impl<'i> Query<'i> {
     /// Pop the last element from the compiled json path.
@@ -102,15 +114,79 @@ impl<'i> Query<'i> {
         self.is_static = Some(is_static);
         self.is_static()
     }
-}
 
-impl std::fmt::Display for QueryCompilationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-        write!(
-            f,
-            "Error occurred on position {}, {}",
-            self.location, self.message
-        )
+    /// Compile the given string query into a query object.
+    /// Returns error on compilation error.
+    pub(crate) fn compile(path: &str) -> Result<Self, QueryCompilationError> {
+        let query = JsonPathQueryParser::parse(Rule::query, path);
+
+        match query {
+            Ok(mut q) => {
+                let root = q.next().unwrap();
+                Ok(Query {
+                    root: root.into_inner(),
+                    is_static: None,
+                    size: None,
+                })
+            }
+            // pest::error::Error
+            Err(e) => {
+                let pos = match e.location {
+                    pest::error::InputLocation::Pos(pos) => pos,
+                    pest::error::InputLocation::Span((pos, _end)) => pos,
+                };
+                let msg = match e.variant {
+                    pest::error::ErrorVariant::ParsingError {
+                        ref positives,
+                        ref negatives,
+                    } => {
+                        let positives = if positives.is_empty() {
+                            None
+                        } else {
+                            Some(
+                                positives
+                                    .iter()
+                                    .map(|v| format!("{v}"))
+                                    .collect::<Vec<_>>()
+                                    .join(", "),
+                            )
+                        };
+                        let negatives = if negatives.is_empty() {
+                            None
+                        } else {
+                            Some(
+                                negatives
+                                    .iter()
+                                    .map(|v| format!("{v}"))
+                                    .collect::<Vec<_>>()
+                                    .join(", "),
+                            )
+                        };
+
+                        match (positives, negatives) {
+                            (None, None) => "parsing error".to_string(),
+                            (Some(p), None) => format!("expected one of the following: {p}"),
+                            (None, Some(n)) => format!("unexpected tokens found: {n}"),
+                            (Some(p), Some(n)) => format!(
+                                "expected one of the following: {p}, unexpected tokens found: {n}"
+                            ),
+                        }
+                    }
+                    pest::error::ErrorVariant::CustomError { ref message } => message.clone(),
+                };
+
+                let final_msg = if pos == path.len() {
+                    format!("\"{path} <<<<----\", {msg}.")
+                } else {
+                    format!("\"{} ---->>>> {}\", {}.", &path[..pos], &path[pos..], msg)
+                };
+
+                Err(QueryCompilationError {
+                    location: pos,
+                    message: final_msg,
+                })
+            }
+        }
     }
 }
 
@@ -130,91 +206,24 @@ impl std::fmt::Display for Rule {
     }
 }
 
-/// Compile the given string query into a query object.
-/// Returns error on compilation error.
-pub(crate) fn compile(path: &str) -> Result<Query, QueryCompilationError> {
-    let query = JsonPathParser::parse(Rule::query, path);
-    match query {
-        Ok(mut q) => {
-            let root = q.next().unwrap();
-            Ok(Query {
-                root: root.into_inner(),
-                is_static: None,
-                size: None,
-            })
-        }
-        // pest::error::Error
-        Err(e) => {
-            let pos = match e.location {
-                pest::error::InputLocation::Pos(pos) => pos,
-                pest::error::InputLocation::Span((pos, _end)) => pos,
-            };
-            let msg = match e.variant {
-                pest::error::ErrorVariant::ParsingError {
-                    ref positives,
-                    ref negatives,
-                } => {
-                    let positives = if positives.is_empty() {
-                        None
-                    } else {
-                        Some(
-                            positives
-                                .iter()
-                                .map(|v| format!("{v}"))
-                                .collect::<Vec<_>>()
-                                .join(", "),
-                        )
-                    };
-                    let negatives = if negatives.is_empty() {
-                        None
-                    } else {
-                        Some(
-                            negatives
-                                .iter()
-                                .map(|v| format!("{v}"))
-                                .collect::<Vec<_>>()
-                                .join(", "),
-                        )
-                    };
-
-                    match (positives, negatives) {
-                        (None, None) => "parsing error".to_string(),
-                        (Some(p), None) => format!("expected one of the following: {p}"),
-                        (None, Some(n)) => format!("unexpected tokens found: {n}"),
-                        (Some(p), Some(n)) => format!(
-                            "expected one of the following: {p}, unexpected tokens found: {n}"
-                        ),
-                    }
-                }
-                pest::error::ErrorVariant::CustomError { ref message } => message.clone(),
-            };
-
-            let final_msg = if pos == path.len() {
-                format!("\"{path} <<<<----\", {msg}.")
-            } else {
-                format!("\"{} ---->>>> {}\", {}.", &path[..pos], &path[pos..], msg)
-            };
-            Err(QueryCompilationError {
-                location: pos,
-                message: final_msg,
-            })
-        }
-    }
-}
-
+/// TODO: what is this?
 pub trait UserPathTracker {
     fn add_str(&mut self, s: &str);
     fn add_index(&mut self, i: usize);
     fn to_string_path(self) -> Vec<String>;
 }
 
+/// TODO: what is this?
 pub trait UserPathTrackerGenerator {
     type PT: UserPathTracker;
+
     fn generate(&self) -> Self::PT;
 }
 
 /* Dummy path tracker, indicating that there is no need to track results paths. */
+/// TODO: what is this?
 pub struct DummyTracker;
+
 impl UserPathTracker for DummyTracker {
     fn add_str(&mut self, _s: &str) {}
     fn add_index(&mut self, _i: usize) {}
@@ -224,14 +233,18 @@ impl UserPathTracker for DummyTracker {
 }
 
 /* A dummy path tracker generator, indicating that there is no need to track results paths. */
+/// TODO: what is this?
 pub struct DummyTrackerGenerator;
+
 impl UserPathTrackerGenerator for DummyTrackerGenerator {
     type PT = DummyTracker;
+
     fn generate(&self) -> Self::PT {
         DummyTracker
     }
 }
 
+/// TODO: what is this?
 #[derive(Debug, PartialEq, Eq)]
 pub enum PTrackerElement {
     Key(String),
@@ -239,10 +252,12 @@ pub enum PTrackerElement {
 }
 
 /* An actual representation of a path that the user gets as a result. */
+/// TODO: what is this?
 #[derive(Debug, PartialEq, Eq)]
 pub struct PTracker {
     pub elements: Vec<PTrackerElement>,
 }
+
 impl UserPathTracker for PTracker {
     fn add_str(&mut self, s: &str) {
         self.elements.push(PTrackerElement::Key(s.to_string()));
@@ -263,10 +278,13 @@ impl UserPathTracker for PTracker {
     }
 }
 
-/* Used to generate paths trackers. */
+// Used to generate paths trackers.
+/// TODO: what is this?
 pub struct PTrackerGenerator;
+
 impl UserPathTrackerGenerator for PTrackerGenerator {
     type PT = PTracker;
+
     fn generate(&self) -> Self::PT {
         PTracker {
             elements: Vec::new(),
@@ -274,10 +292,12 @@ impl UserPathTrackerGenerator for PTrackerGenerator {
     }
 }
 
-#[derive(Clone, Debug)]
-enum PathTrackerElement<'i> {
+/// TODO: what is this?
+#[derive(Copy, Clone, Debug, Default)]
+enum VisitedNodeType<'i> {
     Index(usize),
     Key(&'i str),
+    #[default]
     Root,
 }
 
@@ -287,36 +307,61 @@ enum PathTrackerElement<'i> {
  * Once we have a match we can run (in a reverse order)
  * on the path tracker and add the path to the result as
  * a PTracker object. */
-#[derive(Clone, Debug)]
-struct PathTracker<'i, 'j> {
-    parent: Option<&'j PathTracker<'i, 'j>>,
-    element: PathTrackerElement<'i>,
+#[derive(Copy, Clone, Debug)]
+pub(crate) struct VisitedNode<'typ, 'parent> {
+    /// The tree of parent nodes.
+    parent: Option<&'parent VisitedNode<'typ, 'parent>>,
+    /// The current node type.
+    typ: VisitedNodeType<'typ>,
 }
 
-const fn create_empty_tracker<'i, 'j>() -> PathTracker<'i, 'j> {
-    PathTracker {
-        parent: None,
-        element: PathTrackerElement::Root,
+impl<'typ, 'parent> VisitedNode<'typ, 'parent> {
+    #[deprecated = "Use [`PathTracker::new()`] or [`PathTracker::default()`]."]
+    const fn create_empty_tracker() -> Self {
+        Self {
+            parent: None,
+            typ: VisitedNodeType::Root,
+        }
     }
-}
 
-const fn create_str_tracker<'i, 'j>(
-    s: &'i str,
-    parent: &'j PathTracker<'i, 'j>,
-) -> PathTracker<'i, 'j> {
-    PathTracker {
-        parent: Some(parent),
-        element: PathTrackerElement::Key(s),
+    /// Creates a new path tracker with no parent.
+    const fn new() -> Self {
+        Self {
+            parent: None,
+            typ: VisitedNodeType::Root,
+        }
     }
-}
 
-const fn create_index_tracker<'i, 'j>(
-    index: usize,
-    parent: &'j PathTracker<'i, 'j>,
-) -> PathTracker<'i, 'j> {
-    PathTracker {
-        parent: Some(parent),
-        element: PathTrackerElement::Index(index),
+    /// Returns a new [`VisitedNode`] with the given string pushed to
+    /// the path.
+    const fn push_string(&self, s: &'typ str) -> Self {
+        Self {
+            parent: Some(self),
+            typ: VisitedNodeType::Key(s),
+        }
+    }
+
+    /// Returns a new [`VisitedNode`] with the given index pushed to
+    /// the path.
+    const fn push_index(&self, index: usize) -> Self {
+        Self {
+            parent: Some(self),
+            typ: VisitedNodeType::Index(index),
+        }
+    }
+
+    /// Populates the provided path tracker with the path that this
+    /// node represents, all the way up to the parent.
+    const fn populate_user_path_tracker<UPTG: UserPathTrackerGenerator>(&self, upt: &mut UPTG::PT) {
+        if let Some(node) = self.parent {
+            node.populate_user_path_tracker::<UPTG>(upt);
+        }
+
+        match self.typ {
+            VisitedNodeType::Index(i) => upt.add_index(i),
+            VisitedNodeType::Key(k) => upt.add_str(k),
+            VisitedNodeType::Root => {}
+        }
     }
 }
 
@@ -408,6 +453,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, S> {
             (_, _) => CmpResult::NotComparable,
         }
     }
+
     fn gt(&self, s: &Self) -> bool {
         match self.cmp(s) {
             CmpResult::Ord(o) => o.is_gt(),
@@ -474,210 +520,228 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, S> {
     }
 }
 
-/* This struct is used to calculate a json path on a json object.
- * The struct contains the query and the tracker generator that allows to create
- * path tracker to tracker paths that lead to different results. */
+/// This struct is used to calculate a json path on a json object. The
+/// struct contains the query and the tracker generator that allows to
+/// create path tracker to track paths that lead to different results.
 #[derive(Debug)]
-pub struct PathCalculator<'i, UPTG: UserPathTrackerGenerator> {
-    pub query: Option<&'i Query<'i>>,
+pub struct QueryProcessor<'a, UPTG: UserPathTrackerGenerator> {
+    pub query: Option<&'a Query<'a>>,
     pub tracker_generator: Option<UPTG>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct CalculationResult<S: SelectValue, UPT: UserPathTracker> {
-    pub res: S,
-    pub path_tracker: Option<UPT>,
+pub struct SelectionResultSingle<S: SelectValue, UPT: UserPathTracker> {
+    pub value: S,
+    pub node: Option<UPT>,
 }
 
 #[derive(Debug, PartialEq)]
-struct PathCalculatorData<S: SelectValue, UPT: UserPathTracker> {
-    results: Vec<CalculationResult<S, UPT>>,
-    root: S,
+struct SelectionResult<'a, S: SelectValue + AsRef<S>, UPT: UserPathTracker> {
+    selected_nodes: Vec<SelectionResultSingle<S::Item, UPT>>,
+    // The root json object can and should always be able to be a
+    // reference.
+    root: &'a S,
 }
 
-impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
-    #[must_use]
-    pub const fn create(query: &'i Query<'i>) -> PathCalculator<'i, UPTG> {
-        PathCalculator {
+impl<'a, S, UPT> SelectionResult<'a, S, UPT>
+where
+    S: SelectValue + AsRef<S>,
+    UPT: UserPathTracker,
+{
+    /// Creates a new traversal result with the given root.
+    const fn new(root: &'a S) -> Self {
+        Self {
+            selected_nodes: Vec::new(),
+            root,
+        }
+    }
+
+    /// Adds a new value to the traversal result.
+    fn add(&mut self, value: S, node: Option<UPT>) {
+        self.selected_nodes.push(SelectionResultSingle {
+            value: Cow::Owned(value),
+            node,
+        });
+    }
+
+    /// Adds a reference to the traversal result.
+    fn add_ref(&mut self, value: &'a S, node: Option<UPT>) {
+        self.selected_nodes.push(SelectionResultSingle {
+            value: Cow::Borrowed(value),
+            node,
+        });
+    }
+}
+
+impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
+    /// Creates a new query processor from a query.
+    pub const fn new(query: &'a Query<'a>) -> QueryProcessor<'a, UPTG> {
+        QueryProcessor {
             query: Some(query),
             tracker_generator: None,
         }
     }
 
     #[allow(dead_code)]
-    pub const fn create_with_generator(
-        query: &'i Query<'i>,
+    pub const fn new_with_generator(
+        query: &'a Query<'a>,
         tracker_generator: UPTG,
-    ) -> PathCalculator<'i, UPTG> {
-        PathCalculator {
+    ) -> QueryProcessor<'a, UPTG> {
+        QueryProcessor {
             query: Some(query),
             tracker_generator: Some(tracker_generator),
         }
     }
 
-    fn calc_full_scan<'j: 'i, 'k, 'l, S: SelectValue>(
+    fn calc_full_scan<'j: 'a, 'k, 'l, S: SelectValue + AsRef<S>>(
         &self,
-        pairs: Pairs<'i, Rule>,
+        pairs: Pairs<'a, Rule>,
         json: &'j S,
-        path_tracker: Option<PathTracker<'l, 'k>>,
-        calc_data: &mut PathCalculatorData<impl SelectValue, UPTG::PT>,
-    ) where
-        <S as SelectValue>::Item: SelectValue,
-    {
+        parent_node: Option<VisitedNode<'l, 'k>>,
+        calc_data: &mut SelectionResult<'j, S, UPTG::PT>,
+    ) {
         match json.get_type() {
             SelectValueType::Object => {
-                if let Some(pt) = path_tracker {
+                if let Some(pt) = parent_node {
                     let items = json.items().unwrap();
                     for (key, val) in items {
                         self.calc_internal(
                             pairs.clone(),
-                            &val,
-                            Some(create_str_tracker(key, &pt)),
+                            val.as_ref().as_ref(),
+                            Some(pt.push_string(key)),
                             calc_data,
                         );
                         self.calc_full_scan(
                             pairs.clone(),
-                            &val,
-                            Some(create_str_tracker(key, &pt)),
+                            val.as_ref().as_ref(),
+                            Some(pt.push_string(key)),
                             calc_data,
                         );
                     }
                 } else {
                     let values = json.values().unwrap();
                     for v in values {
-                        self.calc_internal(pairs.clone(), &v, None, calc_data);
-                        self.calc_full_scan(pairs.clone(), &v, None, calc_data);
+                        self.calc_internal(pairs.clone(), v.as_ref().as_ref(), None, calc_data);
+                        self.calc_full_scan(pairs.clone(), v.as_ref().as_ref(), None, calc_data);
                     }
                 }
             }
             SelectValueType::Array => {
-                let values = json.values().unwrap();
-                if let Some(pt) = path_tracker {
-                    for (i, v) in values.enumerate() {
+                json.values()
+                    .expect("Array should have values")
+                    .enumerate()
+                    .for_each(|(i, v)| {
+                        let parent_node = parent_node.map(|pt| pt.push_index(i));
                         self.calc_internal(
                             pairs.clone(),
-                            &v,
-                            Some(create_index_tracker(i, &pt)),
+                            v.as_ref().as_ref(),
+                            parent_node,
                             calc_data,
                         );
                         self.calc_full_scan(
                             pairs.clone(),
-                            &v,
-                            Some(create_index_tracker(i, &pt)),
+                            v.as_ref().as_ref(),
+                            parent_node,
+                            calc_data,
+                        );
+                    });
+            }
+            _ => {}
+        }
+    }
+
+    fn calc_all<'j: 'a, 'k, 'l, S: SelectValue + AsRef<S>>(
+        &self,
+        pairs: Pairs<'a, Rule>,
+        json: &'j S,
+        parent_node: Option<VisitedNode<'l, 'k>>,
+        calc_data: &mut SelectionResult<S, UPTG::PT>,
+    ) {
+        match json.get_type() {
+            SelectValueType::Object => {
+                if let Some(pt) = parent_node {
+                    let items = json.items().unwrap();
+                    for (key, val) in items {
+                        let parent_node = Some(pt.push_string(key));
+                        self.calc_internal(
+                            pairs.clone(),
+                            val.as_ref().as_ref(),
+                            parent_node,
                             calc_data,
                         );
                     }
                 } else {
-                    for v in values {
-                        self.calc_internal(pairs.clone(), &v, None, calc_data);
-                        self.calc_full_scan(pairs.clone(), &v, None, calc_data);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn calc_all<'j: 'i, 'k, 'l, S: SelectValue>(
-        &self,
-        pairs: Pairs<'i, Rule>,
-        json: &'j S,
-        path_tracker: Option<PathTracker<'l, 'k>>,
-        calc_data: &mut PathCalculatorData<impl SelectValue, UPTG::PT>,
-    ) {
-        match json.get_type() {
-            SelectValueType::Object => {
-                if let Some(pt) = path_tracker {
-                    let items = json.items().unwrap();
-                    for (key, val) in items {
-                        let new_tracker = Some(create_str_tracker(key, &pt));
-                        self.calc_internal(pairs.clone(), &val, new_tracker, calc_data);
-                    }
-                } else {
                     let values = json.values().unwrap();
                     for v in values {
-                        self.calc_internal(pairs.clone(), &v, None, calc_data);
+                        self.calc_internal(pairs.clone(), v.as_ref().as_ref(), None, calc_data);
                     }
                 }
             }
             SelectValueType::Array => {
-                let values = json.values().unwrap();
-                if let Some(pt) = path_tracker {
-                    for (i, v) in values.enumerate() {
-                        let new_tracker = Some(create_index_tracker(i, &pt));
-                        self.calc_internal(pairs.clone(), &v, new_tracker, calc_data);
-                    }
-                } else {
-                    for v in values {
-                        self.calc_internal(pairs.clone(), &v, None, calc_data);
-                    }
-                }
+                json.values()
+                    .expect("Array should have values")
+                    .enumerate()
+                    .for_each(|(i, v)| {
+                        let parent_node = parent_node.map(|pt| pt.push_index(i));
+                        self.calc_internal(
+                            pairs.clone(),
+                            v.as_ref().as_ref(),
+                            parent_node,
+                            calc_data,
+                        );
+                    });
+                // let values = json.values().unwrap();
+                // for (i, v) in values.enumerate() {
+                //     let path_tracker = path_tracker.map(|pt| pt.create_index_tracker(i));
+                //     self.calc_internal(pairs.clone(), v.as_ref(), path_tracker, calc_data);
+                // }
             }
             _ => {}
         }
     }
 
-    fn calc_literal<'j: 'i, 'k, 'l, S: SelectValue>(
+    fn calc_literal<'j: 'a, 'k, 'l, S: SelectValue + AsRef<S>>(
         &self,
-        pairs: Pairs<'i, Rule>,
-        curr: Pair<'i, Rule>,
+        pairs: Pairs<'a, Rule>,
+        current_rule: Pair<'a, Rule>,
         json: &'j S,
-        path_tracker: Option<PathTracker<'l, 'k>>,
-        calc_data: &mut PathCalculatorData<impl SelectValue, UPTG::PT>,
+        parent_node: Option<VisitedNode<'l, 'k>>,
+        calc_data: &mut SelectionResult<S, UPTG::PT>,
     ) {
-        let curr_val = json.get_key(curr.as_str());
-        if let Some(e) = curr_val {
-            if let Some(pt) = path_tracker {
-                let new_tracker = Some(create_str_tracker(curr.as_str(), &pt));
-                self.calc_internal(pairs, &e, new_tracker, calc_data);
-            } else {
-                self.calc_internal(pairs, &e, None, calc_data);
-            }
-        }
+        // if let Some(e) = json.get_key(current_rule.as_str()) {
+        //     let path_tracker = path_tracker.map(|pt| pt.create_str_tracker(current_rule.as_str()));
+        //     self.calc_internal(pairs, &e, path_tracker, calc_data);
+        // }
+        json.get_key(current_rule.as_str()).map(|e| {
+            let parent_node = parent_node.map(|pt| pt.push_string(current_rule.as_str()));
+            self.calc_internal(pairs, e.as_ref().as_ref(), parent_node, calc_data)
+        });
     }
 
-    fn calc_strings<'j: 'i, 'k, 'l, S: SelectValue>(
+    fn calc_strings<'j: 'a, 'k, 'l, S: SelectValue + AsRef<S>>(
         &self,
-        pairs: Pairs<'i, Rule>,
-        curr: Pair<'i, Rule>,
+        pairs: Pairs<'a, Rule>,
+        curr: Pair<'a, Rule>,
         json: &'j S,
-        path_tracker: Option<PathTracker<'l, 'k>>,
-        calc_data: &mut PathCalculatorData<impl SelectValue, UPTG::PT>,
+        parent_node: Option<VisitedNode<'l, 'k>>,
+        calc_data: &mut SelectionResult<S, UPTG::PT>,
     ) {
-        if let Some(pt) = path_tracker {
-            for c in curr.into_inner() {
-                let s = c.as_str();
-                let curr_val = match c.as_rule() {
-                    Rule::string_value => json.get_key(s),
-                    Rule::string_value_escape_1 => {
-                        json.get_key(&(s.replace("\\\\", "\\").replace("\\'", "'")))
-                    }
-                    Rule::string_value_escape_2 => {
-                        json.get_key(&(s.replace("\\\\", "\\").replace("\\\"", "\"")))
-                    }
-                    _ => panic!("{c:?}"),
-                };
-                if let Some(e) = curr_val {
-                    let new_tracker = Some(create_str_tracker(s, &pt));
-                    self.calc_internal(pairs.clone(), &e, new_tracker, calc_data);
+        for current_rule in curr.into_inner() {
+            let rule_as_string = current_rule.as_str();
+            let curr_val = match current_rule.as_rule() {
+                Rule::string_value => json.get_key(rule_as_string),
+                Rule::string_value_escape_1 => {
+                    json.get_key(&(rule_as_string.replace("\\\\", "\\").replace("\\'", "'")))
                 }
-            }
-        } else {
-            for c in curr.into_inner() {
-                let s = c.as_str();
-                let curr_val = match c.as_rule() {
-                    Rule::string_value => json.get_key(s),
-                    Rule::string_value_escape_1 => {
-                        json.get_key(&(s.replace("\\\\", "\\").replace("\\\"", "\"")))
-                    }
-                    Rule::string_value_escape_2 => {
-                        json.get_key(&(s.replace("\\\\", "\\").replace("\\'", "'")))
-                    }
-                    _ => panic!("{c:?}"),
-                };
-                if let Some(e) = curr_val {
-                    self.calc_internal(pairs.clone(), &e, None, calc_data);
+                Rule::string_value_escape_2 => {
+                    json.get_key(&(rule_as_string.replace("\\\\", "\\").replace("\\\"", "\"")))
                 }
+                _ => panic!("Unexpected string match rule: {current_rule:?}"),
+            };
+
+            if let Some(e) = curr_val {
+                let parent_node = parent_node.map(|pt| pt.push_string(rule_as_string));
+                self.calc_internal(pairs.clone(), e.as_ref().as_ref(), parent_node, calc_data);
             }
         }
     }
@@ -690,25 +754,25 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         }
     }
 
-    fn calc_indexes<'j: 'i, 'k, 'l, S: SelectValue>(
+    fn calc_indexes<'j: 'a, 'k, 'l, S: SelectValue + AsRef<S>>(
         &self,
-        pairs: Pairs<'i, Rule>,
-        curr: Pair<'i, Rule>,
+        pairs: Pairs<'a, Rule>,
+        curr: Pair<'a, Rule>,
         json: &'j S,
-        path_tracker: Option<PathTracker<'l, 'k>>,
-        calc_data: &mut PathCalculatorData<impl SelectValue, UPTG::PT>,
+        parent_node: Option<VisitedNode<'l, 'k>>,
+        calc_data: &mut SelectionResult<S, UPTG::PT>,
     ) {
         if json.get_type() != SelectValueType::Array {
             return;
         }
         let n = json.len().unwrap();
-        if let Some(pt) = path_tracker {
+        if let Some(pt) = parent_node {
             for c in curr.into_inner() {
                 let i = Self::calc_abs_index(c.as_str().parse::<i64>().unwrap(), n);
                 let curr_val = json.get_index(i);
                 if let Some(e) = curr_val {
-                    let new_tracker = Some(create_index_tracker(i, &pt));
-                    self.calc_internal(pairs.clone(), &e, new_tracker, calc_data);
+                    let parent_node = Some(pt.push_index(i));
+                    self.calc_internal(pairs.clone(), e.as_ref().as_ref(), parent_node, calc_data);
                 }
             }
         } else {
@@ -716,19 +780,19 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 let i = Self::calc_abs_index(c.as_str().parse::<i64>().unwrap(), n);
                 let curr_val = json.get_index(i);
                 if let Some(e) = curr_val {
-                    self.calc_internal(pairs.clone(), &e, None, calc_data);
+                    self.calc_internal(pairs.clone(), e.as_ref().as_ref(), None, calc_data);
                 }
             }
         }
     }
 
-    fn calc_range<'j: 'i, 'k, 'l, S: SelectValue>(
+    fn calc_range<'j: 'a, 'k, 'l, S: SelectValue + AsRef<S>>(
         &self,
-        pairs: Pairs<'i, Rule>,
-        curr: Pair<'i, Rule>,
+        pairs: Pairs<'a, Rule>,
+        curr: Pair<'a, Rule>,
         json: &'j S,
-        path_tracker: Option<PathTracker<'l, 'k>>,
-        calc_data: &mut PathCalculatorData<impl SelectValue, UPTG::PT>,
+        path_tracker: Option<VisitedNode<'l, 'k>>,
+        calc_data: &mut SelectionResult<S, UPTG::PT>,
     ) {
         if json.get_type() != SelectValueType::Array {
             return;
@@ -777,30 +841,45 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             _ => panic!("{curr:?}"),
         };
 
-        if let Some(pt) = path_tracker {
-            for i in (start..end).step_by(step) {
-                let curr_val = json.get_index(i);
-                if let Some(e) = curr_val {
-                    let new_tracker = Some(create_index_tracker(i, &pt));
-                    self.calc_internal(pairs.clone(), &e, new_tracker, calc_data);
-                }
-            }
-        } else {
-            for i in (start..end).step_by(step) {
-                let curr_val = json.get_index(i);
-                if let Some(e) = curr_val {
-                    self.calc_internal(pairs.clone(), &e, None, calc_data);
-                }
-            }
-        }
+        // if let Some(pt) = path_tracker {
+        //     for i in (start..end).step_by(step) {
+        //         let curr_val = json.get_index(i);
+        //         if let Some(e) = curr_val {
+        //             // let new_tracker = Some(create_index_tracker(i, &pt));
+        //             let parent_node = pt.push_index(i);
+        //             self.calc_internal(pairs.clone(), &e, parent_node, calc_data);
+        //         }
+        //     }
+        // } else {
+        //     for i in (start..end).step_by(step) {
+        //         let curr_val = json.get_index(i);
+        //         if let Some(e) = curr_val {
+        //             self.calc_internal(pairs.clone(), &e, None, calc_data);
+        //         }
+        //     }
+        // }
+        (start..end)
+            .step_by(step)
+            .filter_map(|i| {
+                json.get_index(i)
+                    .map(|e| (path_tracker.map(|pt| pt.push_index(i)), e))
+            })
+            .for_each(|(parent_node, value)| {
+                self.calc_internal(
+                    pairs.clone(),
+                    value.as_ref().as_ref(),
+                    parent_node,
+                    calc_data,
+                );
+            })
     }
 
-    fn evaluate_single_term<'j: 'i, S: SelectValue>(
+    fn evaluate_single_term<'j: 'a, S: SelectValue + AsRef<S>>(
         &self,
-        term: Pair<'i, Rule>,
+        term: Pair<'a, Rule>,
         json: &'j S,
-        calc_data: &mut PathCalculatorData<impl SelectValue, UPTG::PT>,
-    ) -> TermEvaluationResult<'i, S> {
+        calc_data: &mut SelectionResult<'j, S, UPTG::PT>,
+    ) -> TermEvaluationResult<'a, S> {
         match term.as_rule() {
             Rule::decimal => {
                 if let Ok(i) = term.as_str().parse::<i64>() {
@@ -821,13 +900,15 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             ),
             Rule::from_current => match term.into_inner().next() {
                 Some(term) => {
-                    let mut calc_data = PathCalculatorData {
-                        results: Vec::new(),
-                        root: *json,
+                    let mut calc_data = SelectionResult {
+                        selected_nodes: Vec::new(),
+                        root: json,
                     };
                     self.calc_internal(term.into_inner(), json, None, &mut calc_data);
-                    if calc_data.results.len() == 1 {
-                        TermEvaluationResult::Value(calc_data.results.pop().unwrap().res)
+                    if calc_data.selected_nodes.len() == 1 {
+                        TermEvaluationResult::Value(
+                            calc_data.selected_nodes.pop().unwrap().value.into_owned(),
+                        )
                     } else {
                         TermEvaluationResult::Invalid
                     }
@@ -836,23 +917,23 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             },
             Rule::from_root => match term.into_inner().next() {
                 Some(term) => {
-                    let mut new_calc_data = PathCalculatorData {
-                        results: Vec::new(),
-                        root: calc_data.root,
-                    };
-                    self.calc_internal(
-                        term.into_inner(),
-                        &calc_data.root,
-                        None,
-                        &mut new_calc_data,
-                    );
-                    if new_calc_data.results.len() == 1 {
-                        TermEvaluationResult::Value(new_calc_data.results.pop().unwrap().res)
+                    let mut new_calc_data = SelectionResult::<'j, S, UPTG::PT>::new(calc_data.root);
+                    // let mut new_calc_data = SelectionResult::new(calc_data.root);
+                    self.calc_internal(term.into_inner(), calc_data.root, None, &mut new_calc_data);
+                    if new_calc_data.selected_nodes.len() == 1 {
+                        TermEvaluationResult::Value(
+                            new_calc_data
+                                .selected_nodes
+                                .pop()
+                                .unwrap()
+                                .value
+                                .into_owned(),
+                        )
                     } else {
                         TermEvaluationResult::Invalid
                     }
                 }
-                None => TermEvaluationResult::Value(calc_data.root),
+                None => TermEvaluationResult::Value(*calc_data.root),
             },
             _ => {
                 panic!("{term:?}")
@@ -860,11 +941,11 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         }
     }
 
-    fn evaluate_single_filter<'j: 'i, S: SelectValue>(
+    fn evaluate_single_filter<'j: 'a, S: SelectValue + AsRef<S>>(
         &self,
-        curr: Pair<'i, Rule>,
+        curr: Pair<'a, Rule>,
         json: &'j S,
-        calc_data: &mut PathCalculatorData<impl SelectValue, UPTG::PT>,
+        calc_data: &mut SelectionResult<S, UPTG::PT>,
     ) -> bool {
         let mut curr = curr.into_inner();
         let term1 = curr.next().unwrap();
@@ -892,11 +973,11 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         }
     }
 
-    fn evaluate_filter<'j: 'i, S: SelectValue>(
+    fn evaluate_filter<'j: 'a, S: SelectValue + AsRef<S>>(
         &self,
-        mut curr: Pairs<'i, Rule>,
+        mut curr: Pairs<'a, Rule>,
         json: &'j S,
-        calc_data: &mut PathCalculatorData<impl SelectValue, UPTG::PT>,
+        calc_data: &mut SelectionResult<'j, S, UPTG::PT>,
     ) -> bool {
         let first_filter = curr.next().unwrap();
         trace!("evaluate_filter first_filter {:?}", &first_filter);
@@ -949,170 +1030,167 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         first_result
     }
 
-    fn populate_path_tracker(pt: &PathTracker<'_, '_>, upt: &mut UPTG::PT) {
-        if let Some(f) = pt.parent {
-            Self::populate_path_tracker(f, upt);
-        }
-        match pt.element {
-            PathTrackerElement::Index(i) => upt.add_index(i),
-            PathTrackerElement::Key(k) => upt.add_str(k),
-            PathTrackerElement::Root => {}
-        }
-    }
-
-    fn generate_path(&self, pt: PathTracker) -> UPTG::PT {
+    fn generate_path(&self, pt: VisitedNode) -> UPTG::PT {
         let mut upt = self.tracker_generator.as_ref().unwrap().generate();
-        Self::populate_path_tracker(&pt, &mut upt);
+        pt.populate_user_path_tracker::<UPTG>(&mut upt);
         upt
     }
 
-    fn calc_internal<'j: 'i, 'k, 'l, S: SelectValue>(
+    fn calc_internal<'j: 'a, 'k, 'l, S: SelectValue + AsRef<S>>(
         &self,
-        mut pairs: Pairs<'i, Rule>,
+        mut pairs: Pairs<'a, Rule>,
         json: &'j S,
-        path_tracker: Option<PathTracker<'l, 'k>>,
-        calc_data: &mut PathCalculatorData<impl SelectValue, UPTG::PT>,
-    ) {
-        let curr = pairs.next();
-        match curr {
-            Some(curr) => {
-                trace!("calc_internal curr {:?}", &curr.as_rule());
-                match curr.as_rule() {
-                    Rule::full_scan => {
-                        self.calc_internal(pairs.clone(), json, path_tracker.clone(), calc_data);
-                        self.calc_full_scan(pairs, json, path_tracker, calc_data);
-                    }
-                    Rule::all => self.calc_all(pairs, json, path_tracker, calc_data),
-                    Rule::literal => self.calc_literal(pairs, curr, json, path_tracker, calc_data),
-                    Rule::string_list => {
-                        self.calc_strings(pairs, curr, json, path_tracker, calc_data);
-                    }
-                    Rule::numbers_list => {
-                        self.calc_indexes(pairs, curr, json, path_tracker, calc_data);
-                    }
-                    Rule::numbers_range => {
-                        self.calc_range(pairs, curr, json, path_tracker, calc_data);
-                    }
-                    Rule::filter => {
-                        if json.get_type() == SelectValueType::Array
-                            || json.get_type() == SelectValueType::Object
-                        {
-                            /* lets expend the array, this is how most json path engines work.
-                             * Personally, I think this if should not exists. */
-                            let values = json.values().unwrap();
-                            if let Some(pt) = path_tracker {
-                                trace!(
-                                    "calc_internal type {:?} path_tracker {:?}",
-                                    json.get_type(),
-                                    &pt
-                                );
-                                for (i, v) in values.enumerate() {
-                                    trace!("calc_internal v {:?}", &v);
-                                    if self.evaluate_filter(
-                                        curr.clone().into_inner(),
-                                        &v,
-                                        calc_data,
-                                    ) {
-                                        let new_tracker = Some(create_index_tracker(i, &pt));
-                                        self.calc_internal(
-                                            pairs.clone(),
-                                            &v,
-                                            new_tracker,
-                                            calc_data,
-                                        );
-                                    }
-                                }
-                            } else {
-                                trace!(
-                                    "calc_internal type {:?} path_tracker None",
-                                    json.get_type()
-                                );
-                                for v in values {
-                                    trace!("calc_internal v {:?}", &v);
-                                    if self.evaluate_filter(
-                                        curr.clone().into_inner(),
-                                        &v,
-                                        calc_data,
-                                    ) {
-                                        self.calc_internal(pairs.clone(), &v, None, calc_data);
-                                    }
-                                }
-                            }
-                        } else if self.evaluate_filter(curr.into_inner(), json, calc_data) {
+        path_tracker: Option<VisitedNode<'l, 'k>>,
+        calc_data: &mut SelectionResult<'j, S, UPTG::PT>,
+    ) where
+        <S as SelectValue>::Item: AsRef<S>,
+    {
+        while let Some(curr) = pairs.next() {
+            trace!("calc_internal curr {:?}", &curr.as_rule());
+            match curr.as_rule() {
+                Rule::full_scan => {
+                    self.calc_internal(pairs.clone(), json, path_tracker.clone(), calc_data);
+                    self.calc_full_scan(pairs, json, path_tracker, calc_data);
+                }
+                Rule::all => self.calc_all(pairs, json, path_tracker, calc_data),
+                Rule::literal => self.calc_literal(pairs, curr, json, path_tracker, calc_data),
+                Rule::string_list => {
+                    self.calc_strings(pairs, curr, json, path_tracker, calc_data);
+                }
+                Rule::numbers_list => {
+                    self.calc_indexes(pairs, curr, json, path_tracker, calc_data);
+                }
+                Rule::numbers_range => {
+                    self.calc_range(pairs, curr, json, path_tracker, calc_data);
+                }
+                Rule::filter => {
+                    if json.get_type() == SelectValueType::Array
+                        || json.get_type() == SelectValueType::Object
+                    {
+                        /* lets expend the array, this is how most json path engines work.
+                         * Personally, I think this if should not exists. */
+                        let values = json.values().unwrap();
+                        if let Some(pt) = path_tracker {
                             trace!(
                                 "calc_internal type {:?} path_tracker {:?}",
                                 json.get_type(),
-                                &path_tracker
+                                &pt
                             );
-                            self.calc_internal(pairs, json, path_tracker, calc_data);
+                            for (i, v) in values.enumerate() {
+                                trace!("calc_internal v {:?}", &v);
+                                if self.evaluate_filter::<S>(
+                                    curr.clone().into_inner(),
+                                    v.as_ref().as_ref(),
+                                    calc_data,
+                                ) {
+                                    let new_tracker = Some(pt.push_index(i));
+                                    self.calc_internal(
+                                        pairs.clone(),
+                                        v.as_ref().as_ref(),
+                                        new_tracker,
+                                        calc_data,
+                                    );
+                                }
+                            }
+                        } else {
+                            trace!("calc_internal type {:?} path_tracker None", json.get_type());
+                            for v in values {
+                                trace!("calc_internal v {:?}", &v);
+                                if self.evaluate_filter(
+                                    curr.clone().into_inner(),
+                                    v.as_ref().as_ref(),
+                                    calc_data,
+                                ) {
+                                    self.calc_internal(
+                                        pairs.clone(),
+                                        v.as_ref().as_ref(),
+                                        None,
+                                        calc_data,
+                                    );
+                                }
+                            }
                         }
+                    } else if self.evaluate_filter(curr.into_inner(), json, calc_data) {
+                        trace!(
+                            "calc_internal type {:?} path_tracker {:?}",
+                            json.get_type(),
+                            &path_tracker
+                        );
+                        self.calc_internal(pairs, json, path_tracker, calc_data);
                     }
-                    Rule::EOI => {
-                        calc_data.results.push(CalculationResult {
-                            res: *json,
-                            path_tracker: path_tracker.map(|pt| self.generate_path(pt)),
-                        });
-                    }
-                    _ => panic!("{curr:?}"),
                 }
-            }
-            None => {
-                calc_data.results.push(CalculationResult {
-                    res: *json,
-                    path_tracker: path_tracker.map(|pt| self.generate_path(pt)),
-                });
+                Rule::EOI => {
+                    calc_data.selected_nodes.push(SelectionResultSingle {
+                        value: std::borrow::Cow::Borrowed(json),
+                        node: path_tracker.map(|pt| self.generate_path(pt)),
+                    });
+                }
+                _ => panic!("{curr:?}"),
             }
         }
+
+        calc_data.selected_nodes.push(SelectionResultSingle {
+            value: std::borrow::Cow::Borrowed(json),
+            node: path_tracker.map(|pt| self.generate_path(pt)),
+        });
     }
 
-    pub fn calc_with_paths_on_root<'j: 'i, S: SelectValue>(
+    pub fn calc_with_paths_on_root<'j: 'a, S: SelectValue + AsRef<S>>(
         &self,
         json: &'j S,
-        root: Pairs<'i, Rule>,
-    ) -> Vec<CalculationResult<S, UPTG::PT>> {
-        let mut calc_data = PathCalculatorData {
-            results: Vec::new(),
-            root: *json,
+        root: Pairs<'a, Rule>,
+    ) -> Vec<SelectionResultSingle<S::Item, UPTG::PT>> {
+        let mut calc_data = SelectionResult {
+            selected_nodes: Vec::new(),
+            root: json,
         };
         if self.tracker_generator.is_some() {
-            self.calc_internal(root, json, Some(create_empty_tracker()), &mut calc_data);
+            // FIXME: shouldn't we use the `self.tracker_generator` here
+            // to create (generate) a path tracker?
+            self.calc_internal(root, json, Some(VisitedNode::new()), &mut calc_data);
         } else {
             self.calc_internal(root, json, None, &mut calc_data);
         }
-        calc_data.results.drain(..).collect()
+        calc_data.selected_nodes
     }
 
-    pub fn calc_with_paths<'j: 'i, S: SelectValue>(
+    pub fn calc_with_paths<'j: 'a, S: SelectValue + AsRef<S>>(
         &self,
         json: &'j S,
-    ) -> Vec<CalculationResult<S, UPTG::PT>> {
+    ) -> Vec<SelectionResultSingle<S, UPTG::PT>> {
+        // TODO: Cow?
         self.calc_with_paths_on_root(json, self.query.unwrap().root.clone())
+            .into_iter()
+            .map(|e| SelectionResultSingle {
+                value: e.value.into_owned(),
+                node: e.node,
+            })
+            .collect()
     }
 
-    pub fn calc<'j: 'i, S: SelectValue>(&self, json: &'j S) -> Vec<S> {
+    pub fn calc<'j: 'a, S: SelectValue + AsRef<S>>(&self, json: &'j S) -> Vec<S> {
         self.calc_with_paths(json)
             .into_iter()
-            .map(|e| e.res)
+            .map(|e| e.value)
             .collect()
     }
 
     #[allow(dead_code)]
-    pub fn calc_paths<'j: 'i, S: SelectValue>(&self, json: &'j S) -> Vec<Vec<String>> {
+    pub fn calc_paths<'j: 'a, S: SelectValue + AsRef<S>>(&self, json: &'j S) -> Vec<Vec<String>> {
         self.calc_with_paths(json)
             .into_iter()
-            .map(|e| e.path_tracker.unwrap().to_string_path())
+            .map(|e| e.node.unwrap().to_string_path())
             .collect()
     }
 }
 
 #[cfg(test)]
 mod json_path_compiler_tests {
-    use crate::json_path::compile;
-    use crate::json_path::JsonPathToken;
+    use super::*;
 
     #[test]
     fn test_compiler_pop_last() {
-        let query = compile("$.foo");
+        let query = Query::compile("$.foo");
         assert_eq!(
             query.unwrap().pop_last().unwrap(),
             ("foo".to_string(), JsonPathToken::String)
@@ -1121,7 +1199,7 @@ mod json_path_compiler_tests {
 
     #[test]
     fn test_compiler_pop_last_number() {
-        let query = compile("$.[1]");
+        let query = Query::compile("$.[1]");
         assert_eq!(
             query.unwrap().pop_last().unwrap(),
             ("1".to_string(), JsonPathToken::Number)
@@ -1130,7 +1208,7 @@ mod json_path_compiler_tests {
 
     #[test]
     fn test_compiler_pop_last_string_bracket_notation() {
-        let query = compile("$.[\"foo\"]");
+        let query = Query::compile("$.[\"foo\"]");
         assert_eq!(
             query.unwrap().pop_last().unwrap(),
             ("foo".to_string(), JsonPathToken::String)
@@ -1139,22 +1217,22 @@ mod json_path_compiler_tests {
 
     #[test]
     fn test_compiler_is_static() {
-        let query = compile("$.[\"foo\"]");
+        let query = Query::compile("$.[\"foo\"]");
         assert!(query.unwrap().is_static());
 
-        let query = compile("$.[\"foo\", \"bar\"]");
+        let query = Query::compile("$.[\"foo\", \"bar\"]");
         assert!(!query.unwrap().is_static());
     }
 
     #[test]
     fn test_compiler_size() {
-        let query = compile("$.[\"foo\"]");
+        let query = Query::compile("$.[\"foo\"]");
         assert_eq!(query.unwrap().size(), 1);
 
-        let query = compile("$.[\"foo\"].bar");
+        let query = Query::compile("$.[\"foo\"].bar");
         assert_eq!(query.unwrap().size(), 2);
 
-        let query = compile("$.[\"foo\"].bar[1]");
+        let query = Query::compile("$.[\"foo\"].bar[1]");
         assert_eq!(query.unwrap().size(), 3);
     }
 }

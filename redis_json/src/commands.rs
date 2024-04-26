@@ -18,7 +18,7 @@ use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use std::cmp::Ordering;
 use std::str::FromStr;
 
-use json_path::{calc_once_with_paths, compile, json_path::UserPathTracker};
+use json_path::{calc_once_with_paths, compile, parser::UserPathTracker};
 
 use crate::redisjson::SetOptions;
 
@@ -402,8 +402,8 @@ fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
     let res = calc_once_with_paths(query, doc);
     Ok(res
         .into_iter()
-        .filter(|e| f(e.res))
-        .map(|e| e.path_tracker.unwrap().to_string_path())
+        .filter(|e| f(e.value))
+        .map(|e| e.node.unwrap().to_string_path())
         .collect())
 }
 
@@ -419,7 +419,7 @@ fn get_all_values_and_paths<'a, T: SelectValue>(
     let res = calc_once_with_paths(query, doc);
     Ok(res
         .into_iter()
-        .map(|e| (e.res, e.path_tracker.unwrap().to_string_path()))
+        .map(|e| (e.value, e.node.unwrap().to_string_path()))
         .collect())
 }
 

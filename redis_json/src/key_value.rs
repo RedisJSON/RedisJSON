@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use json_path::{
     calc_once, calc_once_paths, compile,
-    json_path::JsonPathToken,
+    parser::JsonPathToken,
     select_value::{SelectValue, SelectValueType},
 };
 use redis_module::{redisvalue::RedisValueKey, RedisResult, RedisValue};

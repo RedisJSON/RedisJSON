@@ -5,12 +5,12 @@
  */
 
 pub mod json_node;
-pub mod json_path;
+pub mod parser;
 pub mod select_value;
 
-use crate::json_path::{
-    CalculationResult, DummyTracker, DummyTrackerGenerator, PTracker, PTrackerGenerator,
-    PathCalculator, Query, QueryCompilationError, UserPathTracker,
+use crate::parser::{
+    DummyTracker, DummyTrackerGenerator, PTracker, PTrackerGenerator, Query, QueryCompilationError,
+    QueryProcessor, SelectionResultSingle, UserPathTracker,
 };
 use crate::select_value::SelectValue;
 
@@ -45,8 +45,8 @@ use crate::select_value::SelectValue;
 /// ]);
 /// ```
 #[must_use]
-pub const fn create<'i>(query: &'i Query<'i>) -> PathCalculator<'i, DummyTrackerGenerator> {
-    PathCalculator::create(query)
+pub const fn create<'i>(query: &'i Query<'i>) -> QueryProcessor<'i, DummyTrackerGenerator> {
+    QueryProcessor::new(query)
 }
 
 /// Create a `PathCalculator` object. The path calculator can be re-used
@@ -56,14 +56,14 @@ pub const fn create<'i>(query: &'i Query<'i>) -> PathCalculator<'i, DummyTracker
 #[must_use]
 pub const fn create_with_generator<'i>(
     query: &'i Query<'i>,
-) -> PathCalculator<'i, PTrackerGenerator> {
-    PathCalculator::create_with_generator(query, PTrackerGenerator)
+) -> QueryProcessor<'i, PTrackerGenerator> {
+    QueryProcessor::new_with_generator(query, PTrackerGenerator)
 }
 
 /// Compile the given json path, compilation results can after be used
 /// to create `PathCalculator` calculator object to calculate json paths
 pub fn compile(s: &str) -> Result<Query, QueryCompilationError> {
-    json_path::compile(s)
+    Query::compile(s)
 }
 
 /// Calc once allows to perform a one time calculation on the give query.
@@ -72,13 +72,13 @@ pub fn compile(s: &str) -> Result<Query, QueryCompilationError> {
 /// only once.
 pub fn calc_once<'j, 'p, S: SelectValue>(q: Query<'j>, json: &'p S) -> Vec<S> {
     let root = q.root;
-    PathCalculator::<'p, DummyTrackerGenerator> {
+    QueryProcessor::<'p, DummyTrackerGenerator> {
         query: None,
         tracker_generator: None,
     }
     .calc_with_paths_on_root(json, root)
     .into_iter()
-    .map(|e: CalculationResult<S, DummyTracker>| e.res)
+    .map(|e: SelectionResultSingle<S, DummyTracker>| e.value)
     .collect()
 }
 
@@ -86,9 +86,9 @@ pub fn calc_once<'j, 'p, S: SelectValue>(q: Query<'j>, json: &'p S) -> Vec<S> {
 pub fn calc_once_with_paths<'p, S: SelectValue>(
     q: Query<'_>,
     json: &'p S,
-) -> Vec<CalculationResult<S, PTracker>> {
+) -> Vec<SelectionResultSingle<S, PTracker>> {
     let root = q.root;
-    PathCalculator {
+    QueryProcessor {
         query: None,
         tracker_generator: Some(PTrackerGenerator),
     }
@@ -98,19 +98,20 @@ pub fn calc_once_with_paths<'p, S: SelectValue>(
 /// A version of `calc_once` that returns only paths as Vec<Vec<String>>.
 pub fn calc_once_paths<S: SelectValue>(q: Query, json: &S) -> Vec<Vec<String>> {
     let root = q.root;
-    PathCalculator {
+    QueryProcessor {
         query: None,
         tracker_generator: Some(PTrackerGenerator),
     }
     .calc_with_paths_on_root(json, root)
     .into_iter()
-    .map(|e| e.path_tracker.unwrap().to_string_path())
+    .map(|e| e.node.unwrap().to_string_path())
     .collect()
 }
 
 #[cfg(test)]
 mod json_path_tests {
-    use crate::json_path;
+    use super::*;
+    use crate::parser;
     use crate::{create, create_with_generator};
     use serde_json::json;
     use serde_json::Value;
@@ -121,13 +122,13 @@ mod json_path_tests {
     }
 
     fn perform_search<'a>(path: &str, json: &'a Value) -> Vec<&'a Value> {
-        let query = json_path::compile(path).unwrap();
+        let query = Query::compile(path).unwrap();
         let path_calculator = create(&query);
         path_calculator.calc(json)
     }
 
     fn perform_path_search(path: &str, json: &Value) -> Vec<Vec<String>> {
-        let query = json_path::compile(path).unwrap();
+        let query = Query::compile(path).unwrap();
         let path_calculator = create_with_generator(&query);
         path_calculator.calc_paths(json)
     }
@@ -208,7 +209,7 @@ mod json_path_tests {
         setup();
         verify_json!(path:"$.foo.[\"boo\"][0:2:1]", json:{"foo":{"boo":[1,2,3]}}, results:[1,2]);
         verify_json!(path:"$.foo.[\"boo\"][0:3:2]", json:{"foo":{"boo":[1,2,3]}}, results:[1,3]);
-        assert!(json_path::compile("$.foo.[\"boo\"][0:3:0]").is_err());
+        assert!(parser::compile("$.foo.[\"boo\"][0:3:0]").is_err());
     }
 
     #[test]
