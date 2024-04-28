@@ -4,77 +4,82 @@
 
 use crate::select_value::{SelectValue, SelectValueType};
 use serde_json::Value;
-use std::borrow::{Borrow, Cow};
+use std::borrow::Cow;
 
-impl<'t, T> SelectValue for &'t T
-where
-    T: SelectValue,
-    <T as SelectValue>::Item: SelectValue + Borrow<Self>,
-    // &'a T: std::default::Default,
-{
-    type Item = T::Item;
+// impl<'t, T> SelectValue for &'t T
+// where
+//     T: SelectValue,
+//     <T as SelectValue>::Item: SelectValue,
+//     T: From<<T as SelectValue>::Item>,
+//     // &'a T: std::default::Default,
+// {
+//     type Item = T::Item;
 
-    fn get_type(&self) -> SelectValueType {
-        (*self).get_type()
-    }
+//     fn get_type(&self) -> SelectValueType {
+//         (*self).get_type()
+//     }
 
-    fn contains_key(&self, key: &str) -> bool {
-        (*self).contains_key(key)
-    }
+//     fn contains_key(&self, key: &str) -> bool {
+//         (*self).contains_key(key)
+//     }
 
-    // fn values(&self) -> Option<Box<dyn Iterator<Item = Cow<Self::Item>>>> {
-    fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = Cow<'a, Self::Item>> + 'a>> {
-        (*self).values()
-    }
+//     // fn values(&self) -> Option<Box<dyn Iterator<Item = Cow<Self::Item>>>> {
+//     fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = Cow<'a, Self::Item>> + 'a>> {
+//         (*self).values()
+//     }
 
-    fn keys(&self) -> Option<impl Iterator<Item = &str>> {
-        (*self).keys()
-    }
+//     fn keys(&self) -> Option<impl Iterator<Item = &str>> {
+//         (*self).keys()
+//     }
 
-    fn items(&self) -> Option<impl Iterator<Item = (&str, Cow<Self::Item>)>> {
-        (*self).items()
-    }
+//     // fn items(&self) -> Option<impl Iterator<Item = (&str, Cow<Self::Item>)>> {
+//     fn items<'a>(
+//         &'a self,
+//     ) -> Option<Box<dyn Iterator<Item = (&'a str, Cow<'a, Self::Item>)> + 'a>> {
+//         None
+//         // (*self).items()
+//     }
 
-    fn len(&self) -> Option<usize> {
-        (*self).len()
-    }
+//     fn len(&self) -> Option<usize> {
+//         (*self).len()
+//     }
 
-    fn get_key(&self, key: &str) -> Option<Cow<Self::Item>> {
-        (*self).get_key(key)
-    }
+//     fn get_key(&self, key: &str) -> Option<Cow<Self::Item>> {
+//         (*self).get_key(key)
+//     }
 
-    fn get_index(&self, index: usize) -> Option<Cow<Self::Item>> {
-        (*self).get_index(index)
-    }
+//     fn get_index(&self, index: usize) -> Option<Cow<Self::Item>> {
+//         (*self).get_index(index)
+//     }
 
-    fn is_empty(&self) -> Option<bool> {
-        (*self).is_empty()
-    }
+//     fn is_empty(&self) -> Option<bool> {
+//         (*self).is_empty()
+//     }
 
-    fn is_array(&self) -> bool {
-        (*self).is_array()
-    }
+//     fn is_array(&self) -> bool {
+//         (*self).is_array()
+//     }
 
-    unsafe fn get_bool(&self) -> bool {
-        (*self).get_bool()
-    }
+//     unsafe fn get_bool(&self) -> bool {
+//         (*self).get_bool()
+//     }
 
-    unsafe fn get_long(&self) -> i64 {
-        (*self).get_long()
-    }
+//     unsafe fn get_long(&self) -> i64 {
+//         (*self).get_long()
+//     }
 
-    unsafe fn get_double(&self) -> f64 {
-        (*self).get_double()
-    }
+//     unsafe fn get_double(&self) -> f64 {
+//         (*self).get_double()
+//     }
 
-    unsafe fn get_str(&self) -> String {
-        (*self).get_str()
-    }
+//     unsafe fn get_str(&self) -> String {
+//         (*self).get_str()
+//     }
 
-    unsafe fn as_str(&self) -> &str {
-        (*self).as_str()
-    }
-}
+//     unsafe fn as_str(&self) -> &str {
+//         (*self).as_str()
+//     }
+// }
 
 // impl<'a, T> SelectValue for Cow<'a, T>
 // where
@@ -196,6 +201,9 @@ impl SelectValue for Value {
     fn items(
         &self,
     ) -> std::option::Option<impl std::iter::Iterator<Item = (&str, Cow<Self::Item>)>> {
+        // fn items<'a>(
+        //     &'a self,
+        // ) -> Option<Box<dyn Iterator<Item = (&'a str, Cow<'a, Self::Item>)> + 'a>> {
         match self {
             Self::Object(o) => Some(o.iter().map(|(k, v)| (&k[..], Cow::Borrowed(v)))),
             _ => None,

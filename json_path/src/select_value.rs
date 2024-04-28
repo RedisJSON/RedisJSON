@@ -5,10 +5,7 @@
  */
 
 use serde::Serialize;
-use std::{
-    borrow::{Borrow, Cow},
-    fmt::Debug,
-};
+use std::{borrow::Cow, fmt::Debug};
 
 /// The types a JSON value can have.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -29,21 +26,6 @@ pub enum SelectValueType {
     /// key-value pairs.
     Object,
 }
-
-/// An error that can occur when producing a value.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub enum ProduceError {
-    /// A reserved error.
-    Reserved,
-}
-
-impl std::fmt::Display for ProduceError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Reserved error")
-    }
-}
-
-impl std::error::Error for ProduceError {}
 
 /// The trait that should be implemented by all the types that can be
 /// traversed as JSON objects.
@@ -75,7 +57,10 @@ pub trait SelectValue: Debug + Eq + PartialEq + Clone + Serialize {
     /// this trait recursively, to be able to walk through the
     /// hierarchy.
     // type Item: SelectValue + AsRef<Self>;
-    type Item: SelectValue + Borrow<Self>;
+    // type Item: SelectValue + Borrow<Self>;
+    type Item: SelectValue + Into<Self>;
+    // where
+    //     Self: From<Self::Item>;
     // type Item: SelectValue + AsRef<Self> + From<Self>;
     // type Item<'a>
     // where
@@ -109,6 +94,8 @@ pub trait SelectValue: Debug + Eq + PartialEq + Clone + Serialize {
     // with the key being its index? For sure, this would greatly
     // simplify the code, at the very least.
     fn items(&self) -> Option<impl Iterator<Item = (&str, Cow<Self::Item>)>>;
+    // fn items<'a>(&'a self)
+    //     -> Option<Box<dyn Iterator<Item = (&'a str, Cow<'a, Self::Item>)> + 'a>>;
 
     /// Returns the length of the JSON array or an object, if it is an
     /// array or an object (dictionary).

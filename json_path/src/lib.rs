@@ -8,7 +8,9 @@ pub mod json_node;
 pub mod parser;
 pub mod select_value;
 
-use crate::parser::{
+use std::borrow::Cow;
+
+pub use crate::parser::{
     DummyTracker, DummyTrackerGenerator, PTracker, PTrackerGenerator, Query, QueryCompilationError,
     QueryProcessor, SelectionResultSingle, UserPathTracker,
 };
@@ -76,7 +78,7 @@ pub fn calc_once<'j, 'p, S: SelectValue>(q: Query<'j>, json: &'p S) -> Vec<S> {
         query: None,
         tracker_generator: None,
     }
-    .calc_with_paths_on_root(json, root)
+    .calc_with_paths_on_root(Cow::Borrowed(json), root)
     .into_iter()
     .map(|e: SelectionResultSingle<S, DummyTracker>| e.value.into_owned())
     .collect()
@@ -92,7 +94,7 @@ pub fn calc_once_with_paths<'p, S: SelectValue>(
         query: None,
         tracker_generator: Some(PTrackerGenerator),
     }
-    .calc_with_paths_on_root(json, root)
+    .calc_with_paths_on_root(Cow::Borrowed(json), root)
 }
 
 /// A version of `calc_once` that returns only paths as Vec<Vec<String>>.
@@ -102,7 +104,7 @@ pub fn calc_once_paths<S: SelectValue>(q: Query, json: &S) -> Vec<Vec<String>> {
         query: None,
         tracker_generator: Some(PTrackerGenerator),
     }
-    .calc_with_paths_on_root(json, root)
+    .calc_with_paths_on_root(Cow::Borrowed(json), root)
     .into_iter()
     .map(|e| e.node.unwrap().to_string_path())
     .collect()
@@ -110,6 +112,8 @@ pub fn calc_once_paths<S: SelectValue>(q: Query, json: &S) -> Vec<Vec<String>> {
 
 #[cfg(test)]
 mod json_path_tests {
+    use std::borrow::Cow;
+
     use super::*;
     use crate::{create, create_with_generator};
     use serde_json::json;
@@ -123,13 +127,13 @@ mod json_path_tests {
     fn perform_search<'a>(path: &str, json: &'a Value) -> Vec<Value> {
         let query = Query::compile(path).unwrap();
         let path_calculator = create(&query);
-        path_calculator.calc(json)
+        path_calculator.calc(Cow::Borrowed(json))
     }
 
     fn perform_path_search(path: &str, json: &Value) -> Vec<Vec<String>> {
         let query = Query::compile(path).unwrap();
         let path_calculator = create_with_generator(&query);
-        path_calculator.calc_paths(json)
+        path_calculator.calc_paths(Cow::Borrowed(json))
     }
 
     macro_rules! verify_json {(

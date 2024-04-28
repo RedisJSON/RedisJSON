@@ -8,6 +8,7 @@ mod parser;
 mod select_value;
 
 use serde_json::Value;
+use std::borrow::Cow;
 use std::env;
 use std::process;
 
@@ -35,7 +36,7 @@ fn main() {
     let v: Value = v.unwrap();
     let path_calculator =
         json_path::QueryProcessor::<json_path::DummyTrackerGenerator>::new(&query);
-    let res = path_calculator.calc(&v);
+    let res = path_calculator.calc(Cow::Borrowed(&v));
     for r in res {
         println!("{}", r);
     }

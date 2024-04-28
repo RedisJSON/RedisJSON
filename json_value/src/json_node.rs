@@ -1,3 +1,5 @@
+use std::{alloc::Layout, borrow::Cow};
+
 // /*
 //  * Copyright Redis Ltd. 2016 - present
 //  * Licensed under your choice of the Redis Source Available License 2.0 (RSALv2) or
@@ -6,6 +8,8 @@
 use crate::value::Value;
 use crate::JsonNumber;
 use json_path::select_value::{SelectValue, SelectValueType};
+use listpack_redis::{allocator::ListpackAllocator, ListpackEntry};
+use serde::de::value;
 // use ijson::{IValue, ValueType};
 
 // impl SelectValue for IValue {
@@ -103,11 +107,144 @@ use json_path::select_value::{SelectValue, SelectValueType};
 //     }
 // }
 
-impl<Allocator> SelectValue for Value<Allocator>
+#[derive(Debug)]
+pub enum LazyValueProducer<Allocator: ListpackAllocator>
 where
-    Allocator: redis_custom_allocator::CustomAllocator + std::fmt::Debug + Default + Eq + Clone,
     <Allocator as redis_custom_allocator::CustomAllocator>::Error: std::fmt::Debug,
 {
+    /// Creates a new `Value` from a `ListpackEntry`.
+    ArrayEntry(ListpackEntry),
+    /// Does not create a new `Value`, but returns the object as-is.
+    Value(Value<Allocator>),
+}
+
+impl<Allocator> LazyValueProducer<Allocator>
+where
+    Allocator: ListpackAllocator,
+    <Allocator as redis_custom_allocator::CustomAllocator>::Error: std::fmt::Debug,
+{
+    pub fn produce(&self) -> Value<Allocator> {
+        match self {
+            Self::ArrayEntry(entry) => Value::from(*entry),
+            Self::Value(value) => value.clone(),
+        }
+    }
+}
+
+impl<Allocator> From<LazyValueProducer<Allocator>> for Value<Allocator>
+where
+    Allocator: ListpackAllocator,
+    <Allocator as redis_custom_allocator::CustomAllocator>::Error: std::fmt::Debug,
+{
+    fn from(producer: LazyValueProducer<Allocator>) -> Self {
+        producer.produce()
+    }
+}
+
+impl<Allocator> From<ListpackEntry> for LazyValueProducer<Allocator>
+where
+    Allocator: ListpackAllocator,
+    <Allocator as redis_custom_allocator::CustomAllocator>::Error: std::fmt::Debug,
+{
+    fn from(entry: ListpackEntry) -> Self {
+        Self::ArrayEntry(entry)
+    }
+}
+
+impl<'a, Allocator> From<Cow<'a, Value<Allocator>>> for LazyValueProducer<Allocator>
+where
+    Allocator: ListpackAllocator,
+    <Allocator as redis_custom_allocator::CustomAllocator>::Error: std::fmt::Debug,
+{
+    fn from(value: Cow<'a, Value<Allocator>>) -> Self {
+        Self::Value(value.into_owned())
+    }
+}
+
+impl<Allocator> From<Value<Allocator>> for LazyValueProducer<Allocator>
+where
+    Allocator: ListpackAllocator,
+    <Allocator as redis_custom_allocator::CustomAllocator>::Error: std::fmt::Debug,
+{
+    fn from(value: Value<Allocator>) -> Self {
+        Self::Value(value)
+    }
+}
+
+// impl<Allocator> SelectValue for LazyValueProducer<Allocator>
+// where
+//     Allocator: ListpackAllocator + Eq,
+//     <Allocator as redis_custom_allocator::CustomAllocator>::Error: std::fmt::Debug,
+// {
+//     type Item = Value<Allocator>;
+
+//     fn get_type(&self) -> SelectValueType {
+//         match self {
+//             Self::ArrayEntry(_) => SelectValueType::Array,
+//             Self::Value(value) => value.get_type(),
+//         }
+//     }
+
+//     fn contains_key(&self, key: &str) -> bool {
+//         match self {
+//             Self::ArrayEntry(_) => false,
+//             Self::Value(value) => value.contains_key(key),
+//         }
+//     }
+
+//     fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = Cow<'a, Self::Item>> + 'a>> {
+//         match self {
+//             Self::ArrayEntry(e) => {
+//                 let value = Value::from(e);
+//                 if let Value::Array(array) = value {
+//                     Some(Box::new(
+//                         array.iter().map(|v| Cow::Owned(LazyValueProducer::from(v))),
+//                     ))
+//                 } else {
+//                     None
+//                 }
+//             }
+//             Self::Value(value) => value.values(),
+//         }
+//     }
+
+//     fn keys(&self) -> Option<impl Iterator<Item = &str>> {
+//         match self {
+//             Self::ArrayEntry(_) => None,
+//             Self::Value(value) => value.keys(),
+//         }
+//     }
+
+//     fn items(&self) -> Option<impl Iterator<Item = (&str, &Self::Item)>> {
+//         match self {
+//             Self::ArrayEntry(_) => None,
+//             Self::Value(value) => value.items(),
+//         }
+//     }
+
+//     fn len(&self) -> Option<usize> {
+//         match self {
+//             Self::ArrayEntry(e) => {
+//                 let value = Value::from(e);
+//                 if let Value::Array(array) = value {
+//                     Some(array.len())
+//                 } else {
+//                     None
+//                 }
+//             }
+//             Self::Value(value) => value.len(),
+//         }
+//     }
+// }
+
+impl<Allocator> SelectValue for Value<Allocator>
+where
+    Allocator: listpack_redis::allocator::ListpackAllocator + Eq,
+    <Allocator as redis_custom_allocator::CustomAllocator>::Error: std::fmt::Debug,
+{
+    type Item = LazyValueProducer<Allocator>;
+    // type Item = Self;
+
     fn get_type(&self) -> SelectValueType {
         match self {
             Self::Bool(_) => SelectValueType::Bool,
@@ -129,9 +266,11 @@ where
         }
     }
 
-    fn values(&self) -> Option<Box<dyn Iterator<Item = Self>>> {
+    fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = Cow<'a, Self::Item>> + 'a>> {
         match self {
-            Self::Array(arr) => Some(Box::new(arr.iter().map(|v| Value::from(v)))),
+            Self::Array(arr) => Some(Box::new(
+                arr.iter().map(|v| Cow::Owned(LazyValueProducer::from(v))),
+            )),
             Self::Object(o) => Some(Box::new(o.values())),
             _ => None,
         }
@@ -185,7 +324,7 @@ where
         matches!(self, Self::Array(_))
     }
 
-    fn get_str(&self) -> String {
+    unsafe fn get_str(&self) -> String {
         match self {
             Self::String(s) => s.to_string(),
             _ => {
@@ -194,7 +333,7 @@ where
         }
     }
 
-    fn as_str(&self) -> &str {
+    unsafe fn as_str(&self) -> &str {
         match self {
             Self::String(s) => s.as_str(),
             _ => {
@@ -203,7 +342,7 @@ where
         }
     }
 
-    fn get_bool(&self) -> bool {
+    unsafe fn get_bool(&self) -> bool {
         match self {
             Self::Bool(b) => *b,
             _ => {
@@ -212,14 +351,14 @@ where
         }
     }
 
-    fn get_long(&self) -> i64 {
+    unsafe fn get_long(&self) -> i64 {
         match self {
             Self::Number(n) => n.get_signed().expect("A signed number"),
             _ => panic!("not a long"),
         }
     }
 
-    fn get_double(&self) -> f64 {
+    unsafe fn get_double(&self) -> f64 {
         match self {
             Self::Number(n) => n.get_double().expect("A signed number"),
             _ => panic!("not a double"),
