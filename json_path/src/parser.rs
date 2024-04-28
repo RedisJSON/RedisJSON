@@ -536,7 +536,7 @@ pub struct SelectionResultSingle<'a, S: SelectValue, UPT: UserPathTracker> {
 }
 
 #[derive(Debug, PartialEq)]
-struct SelectionResult<'a, S: SelectValue + AsRef<S>, UPT: UserPathTracker> {
+struct SelectionResult<'a, S: SelectValue + Borrow<S>, UPT: UserPathTracker> {
     selected_nodes: Vec<SelectionResultSingle<'a, S, UPT>>,
     // The root json object can and should always be able to be a
     // reference.
@@ -545,7 +545,7 @@ struct SelectionResult<'a, S: SelectValue + AsRef<S>, UPT: UserPathTracker> {
 
 impl<'a, S, UPT> SelectionResult<'a, S, UPT>
 where
-    S: SelectValue + AsRef<S>,
+    S: SelectValue + Borrow<S>,
     UPT: UserPathTracker,
 {
     /// Creates a new traversal result with the given root.
@@ -593,7 +593,7 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
         }
     }
 
-    fn calc_full_scan<'j: 'a, 'k, 'l, S: SelectValue + AsRef<S>>(
+    fn calc_full_scan<'j: 'a, 'k, 'l, S: SelectValue + Borrow<S>>(
         &self,
         pairs: Pairs<'a, Rule>,
         json: &'j S,
@@ -607,13 +607,13 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
                     for (key, val) in items {
                         self.calc_internal(
                             pairs.clone(),
-                            val.as_ref().as_ref(),
+                            val.as_ref().borrow(),
                             Some(pt.push_string(key)),
                             calc_data,
                         );
                         self.calc_full_scan(
                             pairs.clone(),
-                            val.as_ref().as_ref(),
+                            val.as_ref().borrow(),
                             Some(pt.push_string(key)),
                             calc_data,
                         );
@@ -621,8 +621,8 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
                 } else {
                     let values = json.values().unwrap();
                     for v in values {
-                        self.calc_internal(pairs.clone(), v.as_ref().as_ref(), None, calc_data);
-                        self.calc_full_scan(pairs.clone(), v.as_ref().as_ref(), None, calc_data);
+                        self.calc_internal(pairs.clone(), v.as_ref().borrow(), None, calc_data);
+                        self.calc_full_scan(pairs.clone(), v.as_ref().borrow(), None, calc_data);
                     }
                 }
             }
@@ -634,13 +634,13 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
                         let parent_node = parent_node.map(|pt| pt.push_index(i));
                         self.calc_internal(
                             pairs.clone(),
-                            v.as_ref().as_ref(),
+                            v.as_ref().borrow(),
                             parent_node,
                             calc_data,
                         );
                         self.calc_full_scan(
                             pairs.clone(),
-                            v.as_ref().as_ref(),
+                            v.as_ref().borrow(),
                             parent_node,
                             calc_data,
                         );
@@ -650,7 +650,7 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
         }
     }
 
-    fn calc_all<'j: 'a, 'k, 'l, S: SelectValue + AsRef<S>>(
+    fn calc_all<'j: 'a, 'k, 'l, S: SelectValue + Borrow<S>>(
         &self,
         pairs: Pairs<'a, Rule>,
         json: &'j S,
@@ -665,7 +665,7 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
                         let parent_node = Some(pt.push_string(key));
                         self.calc_internal(
                             pairs.clone(),
-                            val.as_ref().as_ref(),
+                            val.as_ref().borrow(),
                             parent_node,
                             calc_data,
                         );
@@ -673,7 +673,7 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
                 } else {
                     let values = json.values().unwrap();
                     for v in values {
-                        self.calc_internal(pairs.clone(), v.as_ref().as_ref(), None, calc_data);
+                        self.calc_internal(pairs.clone(), v.as_ref().borrow(), None, calc_data);
                     }
                 }
             }
@@ -685,7 +685,7 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
                         let parent_node = parent_node.map(|pt| pt.push_index(i));
                         self.calc_internal(
                             pairs.clone(),
-                            v.as_ref().as_ref(),
+                            v.as_ref().borrow(),
                             parent_node,
                             calc_data,
                         );
@@ -700,7 +700,7 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
         }
     }
 
-    fn calc_literal<'j: 'a, 'k, 'l, S: SelectValue + AsRef<S>>(
+    fn calc_literal<'j: 'a, 'k, 'l, S: SelectValue + Borrow<S>>(
         &self,
         pairs: Pairs<'a, Rule>,
         current_rule: Pair<'a, Rule>,
@@ -714,11 +714,11 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
         // }
         json.get_key(current_rule.as_str()).map(|e| {
             let parent_node = parent_node.map(|pt| pt.push_string(current_rule.as_str()));
-            self.calc_internal(pairs, e.as_ref().as_ref(), parent_node, calc_data)
+            self.calc_internal(pairs, e.as_ref().borrow(), parent_node, calc_data)
         });
     }
 
-    fn calc_strings<'j: 'a, 'k, 'l, S: SelectValue + AsRef<S>>(
+    fn calc_strings<'j: 'a, 'k, 'l, S: SelectValue + Borrow<S>>(
         &self,
         pairs: Pairs<'a, Rule>,
         curr: Pair<'a, Rule>,
@@ -741,7 +741,7 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
 
             if let Some(e) = curr_val {
                 let parent_node = parent_node.map(|pt| pt.push_string(rule_as_string));
-                self.calc_internal(pairs.clone(), e.as_ref().as_ref(), parent_node, calc_data);
+                self.calc_internal(pairs.clone(), e.as_ref().borrow(), parent_node, calc_data);
             }
         }
     }
@@ -754,7 +754,7 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
         }
     }
 
-    fn calc_indexes<'j: 'a, 'k, 'l, S: SelectValue + AsRef<S>>(
+    fn calc_indexes<'j: 'a, 'k, 'l, S: SelectValue + Borrow<S>>(
         &self,
         pairs: Pairs<'a, Rule>,
         curr: Pair<'a, Rule>,
@@ -772,7 +772,7 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
                 let curr_val = json.get_index(i);
                 if let Some(e) = curr_val {
                     let parent_node = Some(pt.push_index(i));
-                    self.calc_internal(pairs.clone(), e.as_ref().as_ref(), parent_node, calc_data);
+                    self.calc_internal(pairs.clone(), e.as_ref().borrow(), parent_node, calc_data);
                 }
             }
         } else {
@@ -780,13 +780,13 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
                 let i = Self::calc_abs_index(c.as_str().parse::<i64>().unwrap(), n);
                 let curr_val = json.get_index(i);
                 if let Some(e) = curr_val {
-                    self.calc_internal(pairs.clone(), e.as_ref().as_ref(), None, calc_data);
+                    self.calc_internal(pairs.clone(), e.as_ref().borrow(), None, calc_data);
                 }
             }
         }
     }
 
-    fn calc_range<'j: 'a, 'k, 'l, S: SelectValue + AsRef<S>>(
+    fn calc_range<'j: 'a, 'k, 'l, S: SelectValue + Borrow<S>>(
         &self,
         pairs: Pairs<'a, Rule>,
         curr: Pair<'a, Rule>,
@@ -867,14 +867,14 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
             .for_each(|(parent_node, value)| {
                 self.calc_internal(
                     pairs.clone(),
-                    value.as_ref().as_ref(),
+                    value.as_ref().borrow(),
                     parent_node,
                     calc_data,
                 );
             })
     }
 
-    fn evaluate_single_term<'j: 'a, S: SelectValue + AsRef<S>>(
+    fn evaluate_single_term<'j: 'a, S: SelectValue + Borrow<S>>(
         &self,
         term: Pair<'a, Rule>,
         json: &'j S,
@@ -941,7 +941,7 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
         }
     }
 
-    fn evaluate_single_filter<'j: 'a, S: SelectValue + AsRef<S>>(
+    fn evaluate_single_filter<'j: 'a, S: SelectValue + Borrow<S>>(
         &self,
         curr: Pair<'a, Rule>,
         json: &'j S,
@@ -973,7 +973,7 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
         }
     }
 
-    fn evaluate_filter<'j: 'a, S: SelectValue + AsRef<S>>(
+    fn evaluate_filter<'j: 'a, S: SelectValue + Borrow<S>>(
         &self,
         mut curr: Pairs<'a, Rule>,
         json: &'j S,
@@ -1036,32 +1036,32 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
         upt
     }
 
-    fn calc_internal<'j: 'a, 'k, 'l, S: SelectValue + AsRef<S>>(
+    fn calc_internal<'j: 'a, 'k, 'l, S: SelectValue + Borrow<S>>(
         &self,
         mut pairs: Pairs<'a, Rule>,
         json: &'j S,
-        path_tracker: Option<VisitedNode<'l, 'k>>,
+        parent_node: Option<VisitedNode<'l, 'k>>,
         calc_data: &mut SelectionResult<'j, S, UPTG::PT>,
     ) where
-        <S as SelectValue>::Item: AsRef<S>,
+        <S as SelectValue>::Item: Borrow<S>,
     {
-        while let Some(curr) = pairs.next() {
+        if let Some(curr) = pairs.next() {
             trace!("calc_internal curr {:?}", &curr.as_rule());
             match curr.as_rule() {
                 Rule::full_scan => {
-                    self.calc_internal(pairs.clone(), json, path_tracker.clone(), calc_data);
-                    self.calc_full_scan(pairs, json, path_tracker, calc_data);
+                    self.calc_internal(pairs.clone(), json, parent_node.clone(), calc_data);
+                    self.calc_full_scan(pairs, json, parent_node, calc_data);
                 }
-                Rule::all => self.calc_all(pairs, json, path_tracker, calc_data),
-                Rule::literal => self.calc_literal(pairs, curr, json, path_tracker, calc_data),
+                Rule::all => self.calc_all(pairs, json, parent_node, calc_data),
+                Rule::literal => self.calc_literal(pairs, curr, json, parent_node, calc_data),
                 Rule::string_list => {
-                    self.calc_strings(pairs, curr, json, path_tracker, calc_data);
+                    self.calc_strings(pairs, curr, json, parent_node, calc_data);
                 }
                 Rule::numbers_list => {
-                    self.calc_indexes(pairs, curr, json, path_tracker, calc_data);
+                    self.calc_indexes(pairs, curr, json, parent_node, calc_data);
                 }
                 Rule::numbers_range => {
-                    self.calc_range(pairs, curr, json, path_tracker, calc_data);
+                    self.calc_range(pairs, curr, json, parent_node, calc_data);
                 }
                 Rule::filter => {
                     if json.get_type() == SelectValueType::Array
@@ -1070,7 +1070,7 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
                         /* lets expend the array, this is how most json path engines work.
                          * Personally, I think this if should not exists. */
                         let values = json.values().unwrap();
-                        if let Some(pt) = path_tracker {
+                        if let Some(pt) = parent_node {
                             trace!(
                                 "calc_internal type {:?} path_tracker {:?}",
                                 json.get_type(),
@@ -1080,13 +1080,13 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
                                 trace!("calc_internal v {:?}", &v);
                                 if self.evaluate_filter::<S>(
                                     curr.clone().into_inner(),
-                                    v.as_ref().as_ref(),
+                                    v.as_ref().borrow(),
                                     calc_data,
                                 ) {
                                     let new_tracker = Some(pt.push_index(i));
                                     self.calc_internal(
                                         pairs.clone(),
-                                        v.as_ref().as_ref(),
+                                        v.as_ref().borrow(),
                                         new_tracker,
                                         calc_data,
                                     );
@@ -1098,12 +1098,12 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
                                 trace!("calc_internal v {:?}", &v);
                                 if self.evaluate_filter(
                                     curr.clone().into_inner(),
-                                    v.as_ref().as_ref(),
+                                    v.as_ref().borrow(),
                                     calc_data,
                                 ) {
                                     self.calc_internal(
                                         pairs.clone(),
-                                        v.as_ref().as_ref(),
+                                        v.as_ref().borrow(),
                                         None,
                                         calc_data,
                                     );
@@ -1114,15 +1114,15 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
                         trace!(
                             "calc_internal type {:?} path_tracker {:?}",
                             json.get_type(),
-                            &path_tracker
+                            &parent_node
                         );
-                        self.calc_internal(pairs, json, path_tracker, calc_data);
+                        self.calc_internal(pairs, json, parent_node, calc_data);
                     }
                 }
                 Rule::EOI => {
                     calc_data.selected_nodes.push(SelectionResultSingle {
                         value: std::borrow::Cow::Borrowed(json),
-                        node: path_tracker.map(|pt| self.generate_path(pt)),
+                        node: parent_node.map(|pt| self.generate_path(pt)),
                     });
                 }
                 _ => panic!("{curr:?}"),
@@ -1131,11 +1131,11 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
 
         calc_data.selected_nodes.push(SelectionResultSingle {
             value: std::borrow::Cow::Borrowed(json),
-            node: path_tracker.map(|pt| self.generate_path(pt)),
+            node: parent_node.map(|pt| self.generate_path(pt)),
         });
     }
 
-    pub fn calc_with_paths_on_root<'j: 'a, S: SelectValue + AsRef<S>>(
+    pub fn calc_with_paths_on_root<'j: 'a, S: SelectValue + Borrow<S>>(
         &self,
         json: &'j S,
         root: Pairs<'a, Rule>,
@@ -1154,7 +1154,7 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
         calc_data.selected_nodes
     }
 
-    pub fn calc_with_paths<'j: 'a, S: SelectValue + AsRef<S>>(
+    pub fn calc_with_paths<'j: 'a, S: SelectValue + Borrow<S>>(
         &self,
         json: &'j S,
     ) -> Vec<SelectionResultSingle<S, UPTG::PT>> {
@@ -1168,7 +1168,7 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
             .collect()
     }
 
-    pub fn calc<'j: 'a, S: SelectValue + AsRef<S>>(&self, json: &'j S) -> Vec<S> {
+    pub fn calc<'j: 'a, S: SelectValue + Borrow<S>>(&self, json: &'j S) -> Vec<S> {
         self.calc_with_paths(json)
             .into_iter()
             .map(|e| e.value.into_owned())
@@ -1176,7 +1176,7 @@ impl<'a, UPTG: UserPathTrackerGenerator> QueryProcessor<'a, UPTG> {
     }
 
     #[allow(dead_code)]
-    pub fn calc_paths<'j: 'a, S: SelectValue + AsRef<S>>(&self, json: &'j S) -> Vec<Vec<String>> {
+    pub fn calc_paths<'j: 'a, S: SelectValue + Borrow<S>>(&self, json: &'j S) -> Vec<Vec<String>> {
         self.calc_with_paths(json)
             .into_iter()
             .map(|e| e.node.unwrap().to_string_path())

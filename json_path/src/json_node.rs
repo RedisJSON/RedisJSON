@@ -6,10 +6,10 @@ use crate::select_value::{SelectValue, SelectValueType};
 use serde_json::Value;
 use std::borrow::{Borrow, Cow};
 
-impl<'a, T> SelectValue for &'a T
+impl<'t, T> SelectValue for &'t T
 where
     T: SelectValue,
-    <T as SelectValue>::Item: AsRef<Self>,
+    <T as SelectValue>::Item: SelectValue + Borrow<Self>,
     // &'a T: std::default::Default,
 {
     type Item = T::Item;
@@ -22,7 +22,8 @@ where
         (*self).contains_key(key)
     }
 
-    fn values(&self) -> Option<Box<dyn Iterator<Item = Cow<Self::Item>>>> {
+    // fn values(&self) -> Option<Box<dyn Iterator<Item = Cow<Self::Item>>>> {
+    fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = Cow<'a, Self::Item>> + 'a>> {
         (*self).values()
     }
 
@@ -177,7 +178,7 @@ impl SelectValue for Value {
         }
     }
 
-    fn values(&self) -> Option<Box<dyn Iterator<Item = Cow<Self::Item>>>> {
+    fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = Cow<'a, Self::Item>> + 'a>> {
         match self {
             Self::Array(arr) => Some(Box::new(arr.iter().map(Cow::Borrowed))),
             Self::Object(o) => Some(Box::new(o.values().map(Cow::Borrowed))),

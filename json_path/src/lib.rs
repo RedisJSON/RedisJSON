@@ -78,7 +78,7 @@ pub fn calc_once<'j, 'p, S: SelectValue>(q: Query<'j>, json: &'p S) -> Vec<S> {
     }
     .calc_with_paths_on_root(json, root)
     .into_iter()
-    .map(|e: SelectionResultSingle<S, DummyTracker>| e.value)
+    .map(|e: SelectionResultSingle<S, DummyTracker>| e.value.into_owned())
     .collect()
 }
 
@@ -86,7 +86,7 @@ pub fn calc_once<'j, 'p, S: SelectValue>(q: Query<'j>, json: &'p S) -> Vec<S> {
 pub fn calc_once_with_paths<'p, S: SelectValue>(
     q: Query<'_>,
     json: &'p S,
-) -> Vec<SelectionResultSingle<S, PTracker>> {
+) -> Vec<SelectionResultSingle<'p, S, PTracker>> {
     let root = q.root;
     QueryProcessor {
         query: None,
@@ -111,7 +111,6 @@ pub fn calc_once_paths<S: SelectValue>(q: Query, json: &S) -> Vec<Vec<String>> {
 #[cfg(test)]
 mod json_path_tests {
     use super::*;
-    use crate::parser;
     use crate::{create, create_with_generator};
     use serde_json::json;
     use serde_json::Value;
@@ -121,7 +120,7 @@ mod json_path_tests {
         let _ = env_logger::try_init();
     }
 
-    fn perform_search<'a>(path: &str, json: &'a Value) -> Vec<&'a Value> {
+    fn perform_search<'a>(path: &str, json: &'a Value) -> Vec<Value> {
         let query = Query::compile(path).unwrap();
         let path_calculator = create(&query);
         path_calculator.calc(json)
@@ -141,7 +140,7 @@ mod json_path_tests {
          let j = json!($json);
          let res = perform_search($path, &j);
          let v = vec![$(json!($result)),*];
-         assert_eq!(res, v.iter().collect::<Vec<&Value>>());
+         assert_eq!(res, v.into_iter().collect::<Vec<Value>>());
      }}
 
     macro_rules! verify_json_path {(
@@ -209,7 +208,7 @@ mod json_path_tests {
         setup();
         verify_json!(path:"$.foo.[\"boo\"][0:2:1]", json:{"foo":{"boo":[1,2,3]}}, results:[1,2]);
         verify_json!(path:"$.foo.[\"boo\"][0:3:2]", json:{"foo":{"boo":[1,2,3]}}, results:[1,3]);
-        assert!(parser::compile("$.foo.[\"boo\"][0:3:0]").is_err());
+        assert!(crate::compile("$.foo.[\"boo\"][0:3:0]").is_err());
     }
 
     #[test]

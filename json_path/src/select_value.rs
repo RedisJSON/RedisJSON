@@ -74,7 +74,8 @@ pub trait SelectValue: Debug + Eq + PartialEq + Clone + Serialize {
     /// return values not of the same type, but to any type implementing
     /// this trait recursively, to be able to walk through the
     /// hierarchy.
-    type Item: SelectValue + AsRef<Self>;
+    // type Item: SelectValue + AsRef<Self>;
+    type Item: SelectValue + Borrow<Self>;
     // type Item: SelectValue + AsRef<Self> + From<Self>;
     // type Item<'a>
     // where
@@ -95,7 +96,8 @@ pub trait SelectValue: Debug + Eq + PartialEq + Clone + Serialize {
     ///
     /// If it is possible to return the values as references, it is
     /// recommended to do so, to avoid unnecessary cloning.
-    fn values(&self) -> Option<Box<dyn Iterator<Item = Cow<Self::Item>>>>;
+    // fn values(&self) -> Option<Box<dyn Iterator<Item = Cow<Self::Item>>>>;
+    fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = Cow<'a, Self::Item>> + 'a>>;
 
     /// Returns an iterator over the keys of the JSON object, in case
     /// it is an object (dictionary).
