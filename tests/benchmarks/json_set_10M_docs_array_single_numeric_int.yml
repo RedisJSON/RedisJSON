@@ -9,4 +9,3 @@ clientconfig:
     - workers: 64
     - reporting-period: 1s
     - input: "https://s3.amazonaws.com/benchmarks.redislabs/redisearch/datasets/10M-json-array-singlevalue-numeric-int/10M-json-array-singlevalue-numeric-int.redisjson.commands.SETUP.csv"
-https://s3.amazonaws.com/benchmarks.redislabs/redisearch/datasets/10M-json-array-nested-array-text/10M-json-array-nested-array-text.redisjson.commands.SETUP.csv
