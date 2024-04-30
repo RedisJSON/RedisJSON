@@ -4,7 +4,7 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
-use std::io::Read;
+use std::{borrow::Cow, io::Read};
 
 use serde_json::Value;
 
@@ -36,7 +36,7 @@ pub fn read_contents(path: &str) -> String {
 pub fn select_and_then_compare(path: &str, json: Value, target: Value) {
     let json_path = compile(path).unwrap();
     let calculator = create(&json_path);
-    let result = calculator.calc(&json);
+    let result = calculator.calc(Cow::Borrowed(&json));
 
     assert_eq!(
         result.iter().map(|v| (*v).clone()).collect::<Vec<Value>>(),

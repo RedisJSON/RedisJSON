@@ -1,15 +1,15 @@
-use std::{alloc::Layout, borrow::Cow};
+use std::borrow::Cow;
 
 // /*
 //  * Copyright Redis Ltd. 2016 - present
 //  * Licensed under your choice of the Redis Source Available License 2.0 (RSALv2) or
 //  * the Server Side Public License v1 (SSPLv1).
 //  */
-use crate::value::Value;
 use crate::JsonNumber;
+use crate::{value::Value, JsonString};
 use json_path::select_value::{SelectValue, SelectValueType};
-use listpack_redis::{allocator::ListpackAllocator, ListpackEntry};
-use serde::de::value;
+use listpack_redis::{allocator::ListpackAllocator, ListpackEntry, ListpackEntryRef};
+use redis_custom_allocator::MemoryConsumption;
 // use ijson::{IValue, ValueType};
 
 // impl SelectValue for IValue {
@@ -107,7 +107,7 @@ use serde::de::value;
 //     }
 // }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LazyValueProducer<Allocator: ListpackAllocator>
 where
     <Allocator as redis_custom_allocator::CustomAllocator>::Error: std::fmt::Debug,
@@ -118,6 +118,27 @@ where
     Value(Value<Allocator>),
 }
 
+impl<Allocator> PartialEq for LazyValueProducer<Allocator>
+where
+    Allocator: ListpackAllocator,
+    <Allocator as redis_custom_allocator::CustomAllocator>::Error: std::fmt::Debug,
+{
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::ArrayEntry(a), Self::ArrayEntry(b)) => a == b,
+            (Self::Value(a), Self::Value(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl<Allocator> Eq for LazyValueProducer<Allocator>
+where
+    Allocator: ListpackAllocator,
+    <Allocator as redis_custom_allocator::CustomAllocator>::Error: std::fmt::Debug,
+{
+}
+
 impl<Allocator> LazyValueProducer<Allocator>
 where
     Allocator: ListpackAllocator,
@@ -125,7 +146,7 @@ where
 {
     pub fn produce(&self) -> Value<Allocator> {
         match self {
-            Self::ArrayEntry(entry) => Value::from(*entry),
+            Self::ArrayEntry(entry) => Value::from(entry.as_ref()),
             Self::Value(value) => value.clone(),
         }
     }
@@ -141,13 +162,23 @@ where
     }
 }
 
-impl<Allocator> From<ListpackEntry> for LazyValueProducer<Allocator>
+impl<Allocator> From<ListpackEntryRef> for LazyValueProducer<Allocator>
 where
     Allocator: ListpackAllocator,
     <Allocator as redis_custom_allocator::CustomAllocator>::Error: std::fmt::Debug,
 {
-    fn from(entry: ListpackEntry) -> Self {
-        Self::ArrayEntry(entry)
+    fn from(entry: ListpackEntryRef) -> Self {
+        Self::ArrayEntry(entry.to_owned())
+    }
+}
+
+impl<'a, Allocator> From<&'a ListpackEntryRef> for LazyValueProducer<Allocator>
+where
+    Allocator: ListpackAllocator,
+    <Allocator as redis_custom_allocator::CustomAllocator>::Error: std::fmt::Debug,
+{
+    fn from(entry: &'a ListpackEntryRef) -> Self {
+        Self::ArrayEntry(entry.to_owned())
     }
 }
 
@@ -168,6 +199,16 @@ where
 {
     fn from(value: Value<Allocator>) -> Self {
         Self::Value(value)
+    }
+}
+
+impl<Allocator> From<&Value<Allocator>> for LazyValueProducer<Allocator>
+where
+    Allocator: ListpackAllocator,
+    <Allocator as redis_custom_allocator::CustomAllocator>::Error: std::fmt::Debug,
+{
+    fn from(value: &Value<Allocator>) -> Self {
+        Self::Value(value.to_owned())
     }
 }
 
@@ -239,7 +280,7 @@ where
 
 impl<Allocator> SelectValue for Value<Allocator>
 where
-    Allocator: listpack_redis::allocator::ListpackAllocator + Eq,
+    Allocator: listpack_redis::allocator::ListpackAllocator,
     <Allocator as redis_custom_allocator::CustomAllocator>::Error: std::fmt::Debug,
 {
     type Item = LazyValueProducer<Allocator>;
@@ -271,7 +312,7 @@ where
             Self::Array(arr) => Some(Box::new(
                 arr.iter().map(|v| Cow::Owned(LazyValueProducer::from(v))),
             )),
-            Self::Object(o) => Some(Box::new(o.values())),
+            Self::Object(o) => Some(Box::new(o.values().map(|v| Cow::Owned(v.into())))),
             _ => None,
         }
     }
@@ -283,9 +324,9 @@ where
         }
     }
 
-    fn items(&self) -> Option<impl Iterator<Item = (&str, &Self)>> {
+    fn items(&self) -> Option<impl Iterator<Item = (&str, Cow<Self::Item>)>> {
         match self {
-            Self::Object(o) => Some(o.iter().map(|(k, v)| (&k[..], v))),
+            Self::Object(o) => Some(o.iter().map(|(k, v)| (&k[..], Cow::Owned(v.into())))),
             _ => None,
         }
     }
@@ -306,16 +347,16 @@ where
         }
     }
 
-    fn get_key<'a>(&'a self, key: &str) -> Option<&'a Self> {
+    fn get_key<'a>(&'a self, key: &str) -> Option<Cow<'a, Self::Item>> {
         match self {
-            Self::Object(o) => o.get(key),
+            Self::Object(o) => o.get(key).map(|v| Cow::Owned(v.into())),
             _ => None,
         }
     }
 
-    fn get_index(&self, index: usize) -> Option<&Self> {
+    fn get_index(&self, index: usize) -> Option<Cow<Self::Item>> {
         match self {
-            Self::Array(arr) => arr.get(index),
+            Self::Array(arr) => arr.get(index).map(|v| Cow::Owned(v.into())),
             _ => None,
         }
     }
@@ -363,5 +404,41 @@ where
             Self::Number(n) => n.get_double().expect("A signed number"),
             _ => panic!("not a double"),
         }
+    }
+}
+
+impl<Allocator> MemoryConsumption for Value<Allocator>
+where
+    Allocator: ListpackAllocator,
+    <Allocator as redis_custom_allocator::CustomAllocator>::Error: std::fmt::Debug,
+{
+    fn memory_consumption(&self) -> usize {
+        // As of now, this is an enum, and it occupies as much space
+        // as the largest variant.
+        let value_object_size = std::mem::size_of::<Self>();
+
+        value_object_size
+        // Calculate the additional memory to store the variants which
+        // are not inlined within the enum itself (heap allocations).
+            + match self {
+                Self::String(s) => s.len(),
+                Self::Array(vec) => {
+                    vec.memory_consumption()
+                }
+                Self::Object(map) => {
+                    let initialised_memory = map.iter().map(|v|
+                        // String capacity in bytes.
+                        v.0.capacity() +
+                        0
+                        // FIXME: calculate properly
+                        // v.1.get_memory_occupied()
+                    ).sum::<usize>();
+                    let uninitialised_memory = (map.capacity() - map.len()) * std::mem::size_of::<(JsonString, Self)>();
+                    initialised_memory + uninitialised_memory
+                }
+                // The rest of the variants are inlined within the enum
+                // itself.
+                _ => 0,
+            }
     }
 }

@@ -58,7 +58,7 @@ pub trait SelectValue: Debug + Eq + PartialEq + Clone + Serialize {
     /// hierarchy.
     // type Item: SelectValue + AsRef<Self>;
     // type Item: SelectValue + Borrow<Self>;
-    type Item: SelectValue + Into<Self>;
+    type Item: Debug + Clone + Into<Self> + Eq;
     // where
     //     Self: From<Self::Item>;
     // type Item: SelectValue + AsRef<Self> + From<Self>;

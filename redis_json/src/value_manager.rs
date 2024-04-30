@@ -4,6 +4,7 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
+use crate::allocator::JsonAllocator;
 use crate::error::Error;
 use crate::manager::{
     err_json, err_msg_json_expected, err_msg_json_path_doesnt_exist, JsonPath, StorageBackend,
@@ -26,7 +27,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Number;
 use std::io::Cursor;
 use std::marker::PhantomData;
-use std::mem::size_of;
 
 use crate::array_index::ArrayIndex;
 
@@ -195,7 +195,7 @@ impl MutableJsonValue for ijson::IValue {
 }
 
 /// [`ijson::IValue`] implementation of the [`MutableJsonValue`] trait.
-impl<T> MutableJsonValue for json_value::Value<T> {
+impl MutableJsonValue for json_value::Value<JsonAllocator> {
     fn replace<F: FnMut(&mut Self) -> Result<Option<Self>, Error>>(
         &mut self,
         path: &[String],
@@ -226,16 +226,20 @@ impl<T> MutableJsonValue for json_value::Value<T> {
                     if let Ok(x) = token.parse::<usize>() {
                         if is_last {
                             if x < arr.len() {
-                                let v = &mut arr.as_mut_slice()[x];
-                                if let Some(res) = (func)(v)? {
-                                    *v = res;
+                                let mut v = Self::from(arr.get(x).unwrap());
+                                if let Some(res) = (func)(&mut v)? {
+                                    arr.replace(x, &res);
+                                    // *v = res;
                                 } else {
                                     arr.remove(x);
                                 }
                             }
                             return Ok(());
                         }
-                        arr.get_mut(x)
+
+                        return Ok(());
+                        // TODO: what is this?
+                        // arr.get_mut(x).into()
                     } else {
                         panic!(
                             "Array index should have been parsed successfully before reaching here"
@@ -288,8 +292,8 @@ impl<T> MutableJsonValue for json_value::Value<T> {
                     if let Ok(x) = token.parse::<usize>() {
                         if is_last {
                             if x < arr.len() {
-                                let v = &mut arr.as_mut_slice()[x];
-                                match (func)(v) {
+                                let mut v = Self::from(arr.get(x).unwrap());
+                                match (func)(&mut v) {
                                     Ok(res) => {
                                         if res.is_none() {
                                             arr.remove(x);
@@ -300,7 +304,9 @@ impl<T> MutableJsonValue for json_value::Value<T> {
                             }
                             return Ok(());
                         }
-                        arr.get_mut(x)
+                        return Ok(());
+                        // TODO: what is this?
+                        // arr.get_mut(x)
                     } else {
                         return Err(
                             "Array index should have been parsed successfully before reaching here"
@@ -692,7 +698,7 @@ impl StorageBackend for RedisJSONData {
         do_op(self.as_mut(), path, |v| {
             let arr = v.as_array_mut().unwrap();
             for a in &args {
-                arr.push(a.clone());
+                arr.push(a);
             }
             res = Some(arr.len());
             Ok(Some(()))
@@ -719,9 +725,9 @@ impl StorageBackend for RedisJSONData {
             }
             let mut index = index as usize;
             let curr = v.as_array_mut().unwrap();
-            curr.reserve(args.len());
+            // curr.reserve(args.len());
             for a in args {
-                curr.insert(index, a.clone());
+                curr.insert(index, a);
                 index += 1;
             }
             res = Some(curr.len());
@@ -772,8 +778,9 @@ impl StorageBackend for RedisJSONData {
                     start..(stop + 1)
                 };
 
-                array.rotate_left(range.start);
-                array.truncate(range.end - range.start);
+                array.keep_range(range);
+                // array.rotate_left(range.start);
+                // array.truncate(range.end - range.start);
                 res = Some(array.len());
                 Ok(Some(()))
             } else {
@@ -815,7 +822,7 @@ impl Clearable for IValue {
     }
 }
 
-impl<T> Clearable for json_value::Value<T> {
+impl Clearable for json_value::Value<JsonAllocator> {
     fn clear(&mut self) -> bool {
         match self {
             Self::Array(vec) => vec.clear(),
@@ -828,87 +835,57 @@ impl<T> Clearable for json_value::Value<T> {
     }
 }
 
-impl MemoryConsumption for IValue {
-    fn memory_consumption(&self) -> usize {
-        size_of::<Self>()
-            + match self.type_() {
-                ValueType::Null | ValueType::Bool => 0,
-                ValueType::Number => {
-                    let num = self.as_number().unwrap();
-                    if num.has_decimal_point() {
-                        // 64bit float
-                        16
-                    } else if num >= &INumber::from(-128) && num <= &INumber::from(383) {
-                        // 8bit
-                        0
-                    } else if num > &INumber::from(-8_388_608) && num <= &INumber::from(8_388_607) {
-                        // 24bit
-                        4
-                    } else {
-                        // 64bit
-                        16
-                    }
-                }
-                ValueType::String => self.as_string().unwrap().len(),
-                ValueType::Array => {
-                    let arr = self.as_array().unwrap();
-                    let capacity = arr.capacity();
-                    if capacity == 0 {
-                        0
-                    } else {
-                        size_of::<usize>() * (capacity + 2)
-                            + arr
-                                .into_iter()
-                                .map(|v| v.get_memory_occupied())
-                                .sum::<usize>()
-                    }
-                }
-                ValueType::Object => {
-                    let val = self.as_object().unwrap();
-                    let capacity = val.capacity();
-                    if capacity == 0 {
-                        0
-                    } else {
-                        size_of::<usize>() * (capacity * 3 + 2)
-                            + val
-                                .into_iter()
-                                .map(|(s, v)| s.len() + v.get_memory_occupied())
-                                .sum::<usize>()
-                    }
-                }
-            }
-    }
-}
-
-impl<T> MemoryConsumption for json_value::Value<T> {
-    fn memory_consumption(&self) -> usize {
-        // As of now, this is an enum, and it occupies as much space
-        // as the largest variant.
-        let value_object_size = std::mem::size_of::<Self>();
-
-        value_object_size
-        // Calculate the additional memory to store the variants which
-        // are not inlined within the enum itself (heap allocations).
-            + match self {
-                Self::String(s) => s.len(),
-                Self::Array(vec) => {
-                    vec.memory_consumption()
-                }
-                Self::Object(map) => {
-                    let initialised_memory = map.iter().map(|v|
-                        // String capacity in bytes.
-                        v.0.capacity() +
-                        v.1.get_memory_occupied()
-                    ).sum::<usize>();
-                    let uninitialised_memory = (map.capacity() - map.len()) * size_of::<(json_value::JsonString, Self)>();
-                    initialised_memory + uninitialised_memory
-                }
-                // The rest of the variants are inlined within the enum
-                // itself.
-                _ => 0,
-            }
-    }
-}
+// impl MemoryConsumption for IValue {
+//     fn memory_consumption(&self) -> usize {
+//         size_of::<Self>()
+//             + match self.type_() {
+//                 ValueType::Null | ValueType::Bool => 0,
+//                 ValueType::Number => {
+//                     let num = self.as_number().unwrap();
+//                     if num.has_decimal_point() {
+//                         // 64bit float
+//                         16
+//                     } else if num >= &INumber::from(-128) && num <= &INumber::from(383) {
+//                         // 8bit
+//                         0
+//                     } else if num > &INumber::from(-8_388_608) && num <= &INumber::from(8_388_607) {
+//                         // 24bit
+//                         4
+//                     } else {
+//                         // 64bit
+//                         16
+//                     }
+//                 }
+//                 ValueType::String => self.as_string().unwrap().len(),
+//                 ValueType::Array => {
+//                     let arr = self.as_array().unwrap();
+//                     let capacity = arr.capacity();
+//                     if capacity == 0 {
+//                         0
+//                     } else {
+//                         size_of::<usize>() * (capacity + 2)
+//                             + arr
+//                                 .into_iter()
+//                                 .map(|v| v.get_memory_occupied())
+//                                 .sum::<usize>()
+//                     }
+//                 }
+//                 ValueType::Object => {
+//                     let val = self.as_object().unwrap();
+//                     let capacity = val.capacity();
+//                     if capacity == 0 {
+//                         0
+//                     } else {
+//                         size_of::<usize>() * (capacity * 3 + 2)
+//                             + val
+//                                 .into_iter()
+//                                 .map(|(s, v)| s.len() + v.get_memory_occupied())
+//                                 .sum::<usize>()
+//                     }
+//                 }
+//             }
+//     }
+// }
 
 impl TakeOutByIndex<IValue> for IArray {
     fn take_out(&mut self, index: usize) -> Option<IValue> {
@@ -916,10 +893,13 @@ impl TakeOutByIndex<IValue> for IArray {
     }
 }
 
-impl<T> TakeOutByIndex<T> for json_value::Array<T> {
+impl<T> TakeOutByIndex<T> for json_value::Array<JsonAllocator>
+where
+    T: From<json_value::Value<JsonAllocator>>,
+{
     fn take_out(&mut self, index: usize) -> Option<T> {
         if index < self.len() {
-            Some(self.remove(index))
+            Some(T::from(json_value::Value::from(self.remove(index))))
         } else {
             None
         }
@@ -1021,11 +1001,8 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         }
     }
 
-    ///
-    /// following https://github.com/Diggsey/ijson/issues/23#issuecomment-1377270111
-    ///
     fn get_memory(&self, v: &Self::V) -> Result<usize, RedisError> {
-        Ok(v.get_memory_occupied())
+        Ok(v.memory_consumption())
     }
 
     fn is_json(&self, key: *mut RedisModuleKey) -> Result<bool, RedisError> {

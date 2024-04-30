@@ -15,6 +15,7 @@ use crate::redisjson::{Format, Path, ReplyFormat};
 use json_path::select_value::{SelectValue, SelectValueType};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::str::FromStr;
 
@@ -65,8 +66,8 @@ const JSONGET_SUBCOMMANDS_MAXSTRLEN: usize = max_strlen(&[
 ]);
 
 pub enum Values<'a, V: SelectValue> {
-    Single(&'a V),
-    Multi(Vec<&'a V>),
+    Single(Cow<'a, V>),
+    Multi(Vec<Cow<'a, V>>),
 }
 
 impl<'a, V: SelectValue> Serialize for Values<'a, V> {
@@ -402,7 +403,7 @@ fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
     let res = calc_once_with_paths(query, doc);
     Ok(res
         .into_iter()
-        .filter(|e| f(e.value))
+        .filter(|e| f(&e.value))
         .map(|e| e.node.unwrap().to_string_path())
         .collect())
 }
@@ -411,7 +412,7 @@ fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
 fn get_all_values_and_paths<'a, T: SelectValue>(
     path: &str,
     doc: &'a T,
-) -> Result<Vec<(&'a T, Vec<String>)>, RedisError> {
+) -> Result<Vec<(Cow<'a, T>, Vec<String>)>, RedisError> {
     let query = match compile(path) {
         Ok(q) => q,
         Err(e) => return Err(RedisError::String(e.to_string())),
@@ -424,13 +425,17 @@ fn get_all_values_and_paths<'a, T: SelectValue>(
 }
 
 /// Returns a Vec of paths with `None` for Values that do not match the filter
-fn filter_paths<T, F>(values_and_paths: Vec<(&T, Vec<String>)>, f: F) -> Vec<Option<Vec<String>>>
+fn filter_paths<T, F>(
+    values_and_paths: Vec<(Cow<'_, T>, Vec<String>)>,
+    f: F,
+) -> Vec<Option<Vec<String>>>
 where
     F: Fn(&T) -> bool,
+    T: Clone,
 {
     values_and_paths
         .into_iter()
-        .map(|(v, p)| match f(v) {
+        .map(|(v, p)| match f(v.as_ref()) {
             true => Some(p),
             _ => None,
         })
@@ -438,17 +443,21 @@ where
 }
 
 /// Returns a Vec of Values with `None` for Values that do not match the filter
-fn filter_values<T, F>(values_and_paths: Vec<(&T, Vec<String>)>, f: F) -> Vec<Option<&T>>
+fn filter_values<T, F>(
+    values_and_paths: Vec<(Cow<'_, T>, Vec<String>)>,
+    f: F,
+) -> Vec<Option<Cow<T>>>
 where
     F: Fn(&T) -> bool,
+    T: Clone,
 {
     values_and_paths
         .into_iter()
-        .map(|(v, _)| match f(v) {
+        .map(|(v, _)| match f(v.as_ref()) {
             true => Some(v),
             _ => None,
         })
-        .collect::<Vec<Option<&T>>>()
+        .collect::<Vec<Option<Cow<T>>>>()
 }
 
 fn find_all_paths<T: SelectValue, F>(
@@ -470,7 +479,7 @@ fn find_all_values<'a, T: SelectValue, F>(
     path: &str,
     doc: &'a T,
     f: F,
-) -> Result<Vec<Option<&'a T>>, RedisError>
+) -> Result<Vec<Option<Cow<'a, T>>>, RedisError>
 where
     F: Fn(&T) -> bool,
 {
@@ -667,7 +676,7 @@ where
         Some(root) => KeyValue::new(root)
             .get_values(path)?
             .iter()
-            .map(|v| (KeyValue::value_name(*v)).into())
+            .map(|v| (KeyValue::<M::V>::value_name(&v)).into())
             .collect::<Vec<RedisValue>>()
             .into(),
         None => RedisValue::Null,
@@ -1047,7 +1056,9 @@ where
     let values = find_all_values(path, root, |v| v.get_type() == SelectValueType::String)?;
     let mut res: Vec<RedisValue> = vec![];
     for v in values {
-        res.push(v.map_or(RedisValue::Null, |v| (v.get_str().len() as i64).into()));
+        res.push(v.map_or(RedisValue::Null, |v| {
+            (unsafe { v.get_str() }.len() as i64).into()
+        }));
     }
     Ok(res.into())
 }
@@ -1454,7 +1465,7 @@ where
                 v.map_or(Ok(RedisValue::Null), |v| {
                     need_notify = true;
                     if format_options.is_resp3_reply() {
-                        Ok(KeyValue::value_to_resp3(v, format_options))
+                        Ok(KeyValue::value_to_resp3(Cow::Borrowed(v), format_options))
                     } else {
                         Ok(serde_json::to_string(&v)?.into())
                     }
@@ -1664,7 +1675,7 @@ where
         Some(root) => find_all_values(path, root, |v| v.get_type() == SelectValueType::Object)?
             .iter()
             .map(|v| {
-                v.map_or(RedisValue::Null, |v| {
+                v.as_ref().map_or(RedisValue::Null, |v| {
                     RedisValue::Integer(v.len().unwrap() as i64)
                 })
             })
@@ -1723,8 +1734,8 @@ pub fn json_clear<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
 
     let paths = find_paths(path, root, |v| match v.get_type() {
         SelectValueType::Array | SelectValueType::Object => v.len().unwrap() > 0,
-        SelectValueType::Long => v.get_long() != 0,
-        SelectValueType::Double => v.get_double() != 0.0,
+        SelectValueType::Long => unsafe { v.get_long() != 0 },
+        SelectValueType::Double => unsafe { v.get_double() != 0.0 },
         _ => false,
     })?;
     let mut cleared = 0;
@@ -1756,9 +1767,8 @@ pub fn json_debug<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
             let key = manager.open_key_read(ctx, &key)?;
             if path.is_legacy() {
                 Ok(match key.get_value()? {
-                    Some(doc) => {
-                        manager.get_memory(KeyValue::new(doc).get_first(path.get_path())?)?
-                    }
+                    Some(doc) => manager
+                        .get_memory(KeyValue::new(doc).get_first(path.get_path())?.as_ref())?,
                     None => 0,
                 }
                 .into())

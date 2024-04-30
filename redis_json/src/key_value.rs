@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
 use json_path::{
     calc_once, calc_once_paths, compile,
@@ -29,17 +29,17 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         KeyValue { val: v }
     }
 
-    pub fn get_first<'b>(&'a self, path: &'b str) -> Result<&'a V, Error> {
+    pub fn get_first<'b>(&'a self, path: &'b str) -> Result<Cow<'a, V>, Error> {
         let results = self.get_values(path)?;
         match results.first() {
-            Some(s) => Ok(s),
+            Some(s) => Ok(s.clone()),
             None => Err(err_msg_json_path_doesnt_exist_with_param(path)
                 .as_str()
                 .into()),
         }
     }
 
-    pub fn resp_serialize(&self, path: Path) -> RedisResult {
+    pub fn resp_serialize(&'a self, path: Path) -> RedisResult {
         if path.is_legacy() {
             let v = self.get_first(path.get_path())?;
             Ok(Self::resp_serialize_inner(v))
@@ -47,36 +47,38 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             Ok(self
                 .get_values(path.get_path())?
                 .iter()
-                .map(|v| Self::resp_serialize_inner(v))
+                .map(|v| Self::resp_serialize_inner(v.clone()))
                 .collect::<Vec<RedisValue>>()
                 .into())
         }
     }
 
-    fn resp_serialize_inner(v: &V) -> RedisValue {
+    fn resp_serialize_inner(v: Cow<'a, V>) -> RedisValue {
         match v.get_type() {
             SelectValueType::Null => RedisValue::Null,
 
             SelectValueType::Bool => {
-                let bool_val = v.get_bool();
+                let bool_val = unsafe { v.get_bool() };
                 match bool_val {
                     true => RedisValue::SimpleString("true".to_string()),
                     false => RedisValue::SimpleString("false".to_string()),
                 }
             }
 
-            SelectValueType::Long => RedisValue::Integer(v.get_long()),
+            SelectValueType::Long => RedisValue::Integer(unsafe { v.get_long() }),
 
-            SelectValueType::Double => RedisValue::Float(v.get_double()),
+            SelectValueType::Double => RedisValue::Float(unsafe { v.get_double() }),
 
-            SelectValueType::String => RedisValue::BulkString(v.get_str()),
+            SelectValueType::String => RedisValue::BulkString(unsafe { v.get_str() }),
 
             SelectValueType::Array => {
                 let mut res: Vec<RedisValue> = Vec::with_capacity(v.len().unwrap() + 1);
                 res.push(RedisValue::SimpleStringStatic("["));
-                v.values()
-                    .unwrap()
-                    .for_each(|v| res.push(Self::resp_serialize_inner(v)));
+                v.values().unwrap().for_each(|v| {
+                    res.push(Self::resp_serialize_inner(Cow::Owned(
+                        v.into_owned().into(),
+                    )))
+                });
                 RedisValue::Array(res)
             }
 
@@ -85,17 +87,17 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 res.push(RedisValue::SimpleStringStatic("{"));
                 for (k, v) in v.items().unwrap() {
                     res.push(RedisValue::BulkString(k.to_string()));
-                    res.push(Self::resp_serialize_inner(v));
+                    res.push(Self::resp_serialize_inner(Cow::Owned(
+                        v.into_owned().into(),
+                    )));
                 }
                 RedisValue::Array(res)
             }
         }
     }
 
-    pub fn get_values<'b>(&'a self, path: &'b str) -> Result<Vec<&'a V>, Error> {
-        let query = compile(path)?;
-        let results = calc_once(query, self.val);
-        Ok(results)
+    pub fn get_values<'b>(&'a self, path: &'b str) -> Result<Vec<Cow<'a, V>>, Error> {
+        Ok(calc_once(compile(path)?, self.val))
     }
 
     pub fn serialize_object<O: Serialize>(o: &O, format: &ReplyFormatOptions) -> String {
@@ -137,10 +139,10 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                     let results = calc_once(query, self.val);
 
                     let value = if is_legacy {
-                        if results.is_empty() {
-                            None
+                        if let Some(result) = results.first() {
+                            Some(Values::Single(result.clone()))
                         } else {
-                            Some(Values::Single(results[0]))
+                            None
                         }
                     } else {
                         Some(Values::Multi(results))
@@ -163,7 +165,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 .map(|(k, v)| {
                     let key = RedisValueKey::String(k.to_string());
                     let value = match v {
-                        Some(Values::Single(value)) => Self::value_to_resp3(value, format),
+                        Some(Values::Single(value)) => Self::value_to_resp3(value.clone(), format),
                         Some(Values::Multi(values)) => Self::values_to_resp3(values, format),
                         None => RedisValue::Null,
                     };
@@ -214,27 +216,27 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         Ok(res)
     }
 
-    fn values_to_resp3(values: &[&V], format: &ReplyFormatOptions) -> RedisValue {
+    fn values_to_resp3(values: &[Cow<'_, V>], format: &ReplyFormatOptions) -> RedisValue {
         values
             .iter()
-            .map(|v| Self::value_to_resp3(v, format))
+            .map(|v| Self::value_to_resp3(v.clone(), format))
             .collect::<Vec<RedisValue>>()
             .into()
     }
 
-    pub fn value_to_resp3(value: &V, format: &ReplyFormatOptions) -> RedisValue {
+    pub fn value_to_resp3(value: Cow<'_, V>, format: &ReplyFormatOptions) -> RedisValue {
         if format.format == ReplyFormat::EXPAND {
             match value.get_type() {
                 SelectValueType::Null => RedisValue::Null,
-                SelectValueType::Bool => RedisValue::Bool(value.get_bool()),
-                SelectValueType::Long => RedisValue::Integer(value.get_long()),
-                SelectValueType::Double => RedisValue::Float(value.get_double()),
-                SelectValueType::String => RedisValue::BulkString(value.get_str()),
+                SelectValueType::Bool => RedisValue::Bool(unsafe { value.get_bool() }),
+                SelectValueType::Long => RedisValue::Integer(unsafe { value.get_long() }),
+                SelectValueType::Double => RedisValue::Float(unsafe { value.get_double() }),
+                SelectValueType::String => RedisValue::BulkString(unsafe { value.get_str() }),
                 SelectValueType::Array => RedisValue::Array(
                     value
                         .values()
                         .unwrap()
-                        .map(|v| Self::value_to_resp3(v, format))
+                        .map(|v| Self::value_to_resp3(Cow::Owned(v.into_owned().into()), format))
                         .collect::<Vec<RedisValue>>(),
                 ),
                 SelectValueType::Object => RedisValue::Map(
@@ -244,7 +246,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                         .map(|(k, v)| {
                             (
                                 RedisValueKey::String(k.to_string()),
-                                Self::value_to_resp3(v, format),
+                                Self::value_to_resp3(Cow::Owned(v.into_owned().into()), format),
                             )
                         })
                         .collect::<HashMap<RedisValueKey, RedisValue>>(),
@@ -253,10 +255,10 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         } else {
             match value.get_type() {
                 SelectValueType::Null => RedisValue::Null,
-                SelectValueType::Bool => RedisValue::Bool(value.get_bool()),
-                SelectValueType::Long => RedisValue::Integer(value.get_long()),
-                SelectValueType::Double => RedisValue::Float(value.get_double()),
-                _ => RedisValue::BulkString(Self::serialize_object(value, format)),
+                SelectValueType::Bool => RedisValue::Bool(unsafe { value.get_bool() }),
+                SelectValueType::Long => RedisValue::Integer(unsafe { value.get_long() }),
+                SelectValueType::Double => RedisValue::Float(unsafe { value.get_double() }),
+                _ => RedisValue::BulkString(Self::serialize_object(&value, format)),
             }
         }
     }
@@ -371,7 +373,8 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     pub fn get_type(&self, path: &str) -> Result<String, Error> {
-        let s = Self::value_name(self.get_first(path)?);
+        let value = self.get_first(path)?;
+        let s = Self::value_name(value.as_ref());
         Ok(s.to_string())
     }
 
@@ -390,7 +393,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     pub fn str_len(&self, path: &str) -> Result<usize, Error> {
         let first = self.get_first(path)?;
         match first.get_type() {
-            SelectValueType::String => Ok(first.get_str().len()),
+            SelectValueType::String => Ok(unsafe { first.get_str() }.len()),
             _ => Err(
                 err_msg_json_expected("string", self.get_type(path).unwrap().as_str())
                     .as_str()
@@ -416,14 +419,23 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     pub fn is_equal<T1: SelectValue, T2: SelectValue>(a: &T1, b: &T2) -> bool {
         match (a.get_type(), b.get_type()) {
             (SelectValueType::Null, SelectValueType::Null) => true,
-            (SelectValueType::Bool, SelectValueType::Bool) => a.get_bool() == b.get_bool(),
-            (SelectValueType::Long, SelectValueType::Long) => a.get_long() == b.get_long(),
-            (SelectValueType::Double, SelectValueType::Double) => a.get_double() == b.get_double(),
-            (SelectValueType::String, SelectValueType::String) => a.get_str() == b.get_str(),
+            (SelectValueType::Bool, SelectValueType::Bool) => unsafe {
+                a.get_bool() == b.get_bool()
+            },
+            (SelectValueType::Long, SelectValueType::Long) => unsafe {
+                a.get_long() == b.get_long()
+            },
+            (SelectValueType::Double, SelectValueType::Double) => unsafe {
+                a.get_double() == b.get_double()
+            },
+            (SelectValueType::String, SelectValueType::String) => unsafe {
+                a.get_str() == b.get_str()
+            },
             (SelectValueType::Array, SelectValueType::Array) => {
                 if a.len().unwrap() == b.len().unwrap() {
-                    for (i, e) in a.values().unwrap().enumerate() {
-                        if !Self::is_equal(e, b.get_index(i).unwrap()) {
+                    for (i, lhs) in a.values().unwrap().enumerate() {
+                        let rhs = b.get_index(i).unwrap();
+                        if !Self::is_equal(&lhs.into_owned().into(), &rhs.into_owned().into()) {
                             return false;
                         }
                     }
@@ -438,8 +450,11 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                         let temp1 = a.get_key(k);
                         let temp2 = b.get_key(k);
                         match (temp1, temp2) {
-                            (Some(a1), Some(b1)) => {
-                                if !Self::is_equal(a1, b1) {
+                            (Some(lhs), Some(rhs)) => {
+                                if !Self::is_equal(
+                                    &lhs.into_owned().into(),
+                                    &rhs.into_owned().into(),
+                                ) {
                                     return false;
                                 }
                             }
@@ -478,7 +493,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         end: i64,
     ) -> Result<RedisValue, Error> {
         let arr = self.get_first(path)?;
-        match Self::arr_first_index_single(arr, &json_value, start, end) {
+        match Self::arr_first_index_single(arr.as_ref(), &json_value, start, end) {
             FoundIndex::NotArray => Err(Error::from(err_msg_json_expected(
                 "array",
                 self.get_type(path).unwrap().as_str(),
@@ -506,7 +521,10 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
 
         for index in start..end {
-            if Self::is_equal(arr.get_index(index as usize).unwrap(), v) {
+            if Self::is_equal(
+                &arr.get_index(index as usize).unwrap().into_owned().into(),
+                v,
+            ) {
                 return FoundIndex::Index(index);
             }
         }

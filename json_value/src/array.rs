@@ -10,7 +10,7 @@ use crate::Value;
 
 /// The array implementation.
 #[repr(transparent)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct Array<Allocator>(Listpack<Allocator>)
 where
     Allocator: CustomAllocator;
@@ -32,6 +32,26 @@ where
 {
     fn clone(&self) -> Self {
         Self(self.0.clone())
+    }
+}
+
+impl<Allocator> PartialEq for Array<Allocator>
+where
+    Allocator: CustomAllocator,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<Allocator> Eq for Array<Allocator> where Allocator: CustomAllocator {}
+
+impl<Allocator> PartialEq<&Array<Allocator>> for Listpack<Allocator>
+where
+    Allocator: CustomAllocator,
+{
+    fn eq(&self, other: &&Array<Allocator>) -> bool {
+        self == &other.0
     }
 }
 

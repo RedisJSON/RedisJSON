@@ -23,7 +23,7 @@ use redis_module::key::KeyFlags;
 
 #[cfg(not(feature = "as-library"))]
 use crate::c_api::{
-    get_llapi_ctx, json_api_free_iter, json_api_free_key_values_iter, json_api_get,
+    get_llapi_ctx, json_api_free, json_api_free_iter, json_api_free_key_values_iter, json_api_get,
     json_api_get_at, json_api_get_boolean, json_api_get_double, json_api_get_int,
     json_api_get_json, json_api_get_json_from_iter, json_api_get_key_value, json_api_get_len,
     json_api_get_string, json_api_get_type, json_api_is_json, json_api_len, json_api_next,
@@ -39,10 +39,10 @@ pub mod c_api;
 pub mod commands;
 pub mod error;
 mod formatter;
-pub mod ivalue_manager;
 mod key_value;
 pub mod manager;
 pub mod redisjson;
+pub mod value_manager;
 
 pub const GIT_SHA: Option<&str> = std::option_env!("GIT_SHA");
 pub const GIT_BRANCH: Option<&str> = std::option_env!("GIT_BRANCH");
@@ -96,7 +96,7 @@ macro_rules! run_on_manager {
         let m = $get_mngr_expr;
         match m {
             Some(mngr) => $run_expr(mngr),
-            None => $run_expr($crate::ivalue_manager::RedisIValueJsonKeyManager {
+            None => $run_expr($crate::value_manager::RedisIValueJsonKeyManager {
                 phantom: PhantomData,
             }),
         }
@@ -241,7 +241,7 @@ const fn dummy_info(_ctx: &InfoContext, _for_crash_report: bool) {}
 redis_json_module_create! {
     data_types: [REDIS_JSON_TYPE],
     pre_command_function: pre_command,
-    get_manage: Some(ivalue_manager::RedisIValueJsonKeyManager{phantom:PhantomData}),
+    get_manage: Some(value_manager::RedisIValueJsonKeyManager{phantom:PhantomData}),
     version: 99_99_99,
     init: dummy_init,
     info: dummy_info,

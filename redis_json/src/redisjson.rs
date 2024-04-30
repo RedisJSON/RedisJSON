@@ -11,14 +11,16 @@
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
 use json_value::Value;
+use redis_custom_allocator::CustomAllocator;
 use redis_module::raw;
 
 use std::os::raw::{c_int, c_void};
 
+use crate::allocator::JsonAllocator;
 use crate::backward;
 use crate::error::Error;
-use crate::ivalue_manager::RedisIValueJsonKeyManager;
 use crate::manager::Manager;
+use crate::value_manager::RedisIValueJsonKeyManager;
 use serde::Serialize;
 use std::fmt;
 use std::fmt::Display;
@@ -209,7 +211,10 @@ pub trait JsonValueImpl {
     const NULL: Self;
 }
 
-impl JsonValueImpl for json_value::Value {
+impl<A> JsonValueImpl for json_value::Value<A>
+where
+    A: CustomAllocator,
+{
     const NULL: Self = json_value::Value::Null;
 }
 
@@ -230,7 +235,7 @@ pub trait RedisJSONValueTraits: Clone + std::fmt::Debug + Serialize + JsonValueI
 impl<T> RedisJSONValueTraits for T where T: Clone + std::fmt::Debug + Serialize + JsonValueImpl {}
 
 #[repr(transparent)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct RedisJSON<T>
 where
     T: RedisJSONValueTraits,
@@ -239,9 +244,8 @@ where
     data: T,
 }
 
-impl RedisJSONTypeInfo for RedisJSON<json_value::Value> {
-    /// The type this RedisJSON holds.
-    type Value = json_value::Value;
+impl RedisJSONTypeInfo for RedisJSON<json_value::Value<JsonAllocator>> {
+    type Value = json_value::Value<JsonAllocator>;
     type Number = json_value::JsonNumber;
     type String = json_value::JsonString;
 }
@@ -318,7 +322,7 @@ pub trait MutableJsonValue: Clone {
 #[cfg(feature = "ijson_value")]
 pub type RedisJSONData = RedisJSON<ijson::IValue>;
 #[cfg(feature = "custom_value")]
-pub type RedisJSONData = RedisJSON<Value>;
+pub type RedisJSONData = RedisJSON<Value<JsonAllocator>>;
 
 pub mod type_methods {
     use super::*;

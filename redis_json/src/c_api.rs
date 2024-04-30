@@ -5,6 +5,7 @@
  */
 
 use libc::size_t;
+use std::borrow::Cow;
 use std::ffi::CString;
 use std::os::raw::{c_double, c_int, c_longlong};
 use std::ptr::{null, null_mut};
@@ -41,7 +42,7 @@ pub enum JSONType {
 }
 
 struct ResultsIterator<'a, V: SelectValue> {
-    results: Vec<&'a V>,
+    results: Vec<Cow<'a, V>>,
     pos: usize,
 }
 
@@ -96,9 +97,9 @@ pub fn json_api_open_key_with_flags_internal<M: Manager>(
 pub fn json_api_get_at<M: Manager>(_: M, json: *const c_void, index: size_t) -> *const c_void {
     let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
-        SelectValueType::Array => json
-            .get_index(index)
-            .map_or_else(null, |v| (v as *const M::V).cast::<c_void>()),
+        SelectValueType::Array => json.get_index(index).map_or_else(null, |v| {
+            (Box::into_raw(Box::new(v.into_owned().into())) as *const M::V).cast::<c_void>()
+        }),
         _ => null(),
     }
 }
@@ -107,7 +108,7 @@ pub fn json_api_get_at<M: Manager>(_: M, json: *const c_void, index: size_t) -> 
 pub fn json_api_get_len<M: Manager>(_: M, json: *const c_void, count: *mut libc::size_t) -> c_int {
     let json = unsafe { &*(json.cast::<M::V>()) };
     let len = match json.get_type() {
-        SelectValueType::String => Some(json.get_str().len()),
+        SelectValueType::String => Some(unsafe { json.get_str() }.len()),
         SelectValueType::Array | SelectValueType::Object => Some(json.len().unwrap()),
         _ => None,
     };
@@ -133,7 +134,7 @@ pub fn json_api_get_string<M: Manager>(
     let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
         SelectValueType::String => {
-            let s = json.as_str();
+            let s = unsafe { json.as_str() };
             set_string(s, str, len);
             Status::Ok as c_int
         }
@@ -239,7 +240,7 @@ pub fn json_api_next<M: Manager>(_: M, iter: *mut c_void) -> *const c_void {
     if iter.pos >= iter.results.len() {
         null_mut()
     } else {
-        let res = (iter.results[iter.pos] as *const M::V).cast::<c_void>();
+        let res = (iter.results[iter.pos].as_ref() as *const M::V).cast::<c_void>();
         iter.pos += 1;
         res
     }
@@ -270,7 +271,11 @@ pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -
         Err(_) => return null(),
     };
     let path_calculator = create(&query);
-    let res = path_calculator.calc(v);
+    let res = path_calculator
+        .calc(std::borrow::Cow::Borrowed(v))
+        .into_iter()
+        .map(|v| Cow::Owned::<'_, M::V>(v))
+        .collect();
     Box::into_raw(Box::new(ResultsIterator {
         results: res,
         pos: 0,
@@ -304,6 +309,16 @@ where
         (v as *const M::V).cast::<c_void>()
     } else {
         null()
+    }
+}
+
+pub fn json_api_free<'a, M: Manager>(_: M, json: *mut c_void)
+where
+    M::V: 'a,
+{
+    let json = unsafe { &mut *(json.cast::<Box<M::V>>()) };
+    unsafe {
+        drop(Box::from_raw(json));
     }
 }
 
@@ -526,18 +541,18 @@ macro_rules! redis_json_module_export_shared_api {
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_pathFree(json_path: *mut c_void) {
-            unsafe { drop(Box::from_raw(json_path.cast::<json_path::json_path::Query>())) };
+            unsafe { drop(Box::from_raw(json_path.cast::<json_path::parser::Query>())) };
         }
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_pathIsSingle(json_path: *mut c_void) -> c_int {
-            let q = unsafe { &mut *(json_path.cast::<json_path::json_path::Query>()) };
+            let q = unsafe { &mut *(json_path.cast::<json_path::parser::Query>()) };
             q.is_static() as c_int
         }
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_pathHasDefinedOrder(json_path: *mut c_void) -> c_int {
-            let q = unsafe { &mut *(json_path.cast::<json_path::json_path::Query>()) };
+            let q = unsafe { &mut *(json_path.cast::<json_path::parser::Query>()) };
             q.is_static() as c_int
         }
 
@@ -575,6 +590,15 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_mngr: $get_manager_expr,
                 run: |mngr|{json_api_free_key_values_iter(mngr, iter)},
+            )
+        }
+
+        #[no_mangle]
+        pub extern "C" fn JSONAPI_free(json: *mut c_void) {
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_mngr: $get_manager_expr,
+                run: |mngr|{json_api_free(mngr, json)},
             )
         }
 
@@ -630,6 +654,7 @@ macro_rules! redis_json_module_export_shared_api {
             freeKeyValuesIter: JSONAPI_freeKeyValuesIter,
             // V5 entries
             openKeyWithFlags: JSONAPI_openKey_withFlags,
+            freeJson: JSONAPI_free,
         };
 
         #[repr(C)]
@@ -685,7 +710,7 @@ macro_rules! redis_json_module_export_shared_api {
                 key_str: *mut rawmod::RedisModuleString,
                 flags: c_int,
             ) -> *mut c_void,
-
+            pub freeJson: extern "C" fn(json: *mut c_void),
         }
     };
 }

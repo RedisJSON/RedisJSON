@@ -26,7 +26,7 @@ pub use crate::array::Array;
 // pub use std::collections::hash_map::Entry as MapEntry;
 pub use hash_map_impl::Entry as MapEntry;
 use listpack_redis::allocator::ListpackAllocator;
-use listpack_redis::{ListpackEntry, ListpackEntryEncodingType, ListpackEntryInsert};
+use listpack_redis::{ListpackEntryInsert, ListpackEntryRef, ListpackEntryRemoved};
 use redis_custom_allocator::CustomAllocator;
 use serde::{
     ser::{SerializeMap, SerializeSeq},
@@ -246,7 +246,8 @@ impl_number_numeric_methods!(usize, u64, u32, u16, u8, isize, i64, i32, i16, i8,
 pub type JsonString = String;
 
 /// A destructured representation of a JSON value.
-#[derive(Debug, Default, PartialEq, Eq)]
+// #[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub enum Value<Allocator>
 where
     Allocator: CustomAllocator,
@@ -265,6 +266,25 @@ where
     /// Object.
     Object(Map<String, Self>),
 }
+
+impl<Allocator> PartialEq for Value<Allocator>
+where
+    Allocator: CustomAllocator,
+{
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Null, Self::Null) => true,
+            (Self::Bool(a), Self::Bool(b)) => a == b,
+            (Self::Number(a), Self::Number(b)) => a == b,
+            (Self::String(a), Self::String(b)) => a == b,
+            (Self::Array(a), Self::Array(b)) => a.eq(&b),
+            (Self::Object(a), Self::Object(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl<Allocator> Eq for Value<Allocator> where Allocator: CustomAllocator {}
 
 impl<Allocator> Clone for Value<Allocator>
 where
@@ -535,6 +555,24 @@ where
     }
 }
 
+impl<A> From<ListpackEntryRemoved> for Value<A>
+where
+    A: CustomAllocator,
+{
+    fn from(value: ListpackEntryRemoved) -> Self {
+        match value {
+            ListpackEntryRemoved::String(s) => Self::String(s.to_string()),
+            ListpackEntryRemoved::Integer(i) => Self::Number(JsonNumber::Signed(i)),
+            ListpackEntryRemoved::Float(f) => Self::Number(JsonNumber::Double(f)),
+            ListpackEntryRemoved::Boolean(b) => Self::Bool(b),
+            ListpackEntryRemoved::CustomEmbeddedValue(_) => Self::Null,
+            ListpackEntryRemoved::CustomExtendedValue(_) => {
+                unimplemented!("Custom extended value.")
+            }
+        }
+    }
+}
+
 // impl<Allocator> From<Value<Allocator>> for ListpackEntryInsert<'_>
 // where
 //     Allocator: ListpackAllocator,
@@ -556,25 +594,25 @@ where
 //     }
 // }
 
-impl<A> From<&ListpackEntry> for Value<A>
+impl<A> From<&ListpackEntryRef> for Value<A>
 where
     A: CustomAllocator,
 {
-    fn from(e: &ListpackEntry) -> Self {
+    fn from(e: &ListpackEntryRef) -> Self {
         let encoding_type = e.encoding_type().expect("Valid encoding type.");
         let data = e.data().expect("Valid data.");
 
         if let Some(number) = data.get_integer() {
-            return Self::Number(JsonNumber::Signed(number));
+            Self::Number(JsonNumber::Signed(number))
         } else if let Some(string) = data.get_str() {
-            return Self::String(string.to_string());
+            Self::String(string.to_string())
         } else if let Some(float) = data.get_f64() {
-            return Self::Number(JsonNumber::Double(float));
+            Self::Number(JsonNumber::Double(float))
         } else if let Some(bool) = data.get_bool() {
-            return Self::Bool(bool);
+            Self::Bool(bool)
         // We use the custom embedded value to represent JSON null.
-        } else if let Some(_) = data.get_custom_embedded() {
-            return Self::Null;
+        } else if data.get_custom_embedded().is_some() {
+            Self::Null
         // TODO: find a way to represent arrays and objects.
         } else if let Some(subvalue) = data.get_custom_extended_raw() {
             unimplemented!("Custom extended value: {:?}", subvalue);

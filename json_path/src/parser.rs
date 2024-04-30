@@ -7,7 +7,7 @@
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use pest_derive::Parser;
-use std::borrow::{Borrow, Cow};
+use std::borrow::Cow;
 use std::cmp::Ordering;
 
 use crate::select_value::{SelectValue, SelectValueType};

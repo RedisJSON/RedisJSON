@@ -252,7 +252,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "978747c1d849a7d2ee5e8adc0159961c48fb7e5db2f06af6723b80123bb53856"
 dependencies = [
  "cfg-if",
- "hashbrown 0.14.3",
+ "hashbrown 0.14.5",
  "lock_api",
  "once_cell",
  "parking_lot_core",
@@ -379,9 +379,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.14.3"
+version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "290f1a1d9242c78d09ce40a5e87e7554ee637af1351968159f4952f028f75604"
+checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
 dependencies = [
  "ahash",
  "allocator-api2",
@@ -439,7 +439,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "168fb715dda47215e360912c096649d23d58bf392ac62f73919e831745e40f26"
 dependencies = [
  "equivalent",
- "hashbrown 0.14.3",
+ "hashbrown 0.14.5",
 ]
 
 [[package]]
@@ -499,7 +499,7 @@ version = "0.1.0"
 dependencies = [
  "concat-idents",
  "fxhash",
- "hashbrown 0.14.3",
+ "hashbrown 0.14.5",
  "json_path",
  "listpack-redis",
  "redis-custom-allocator",
@@ -825,9 +825,8 @@ source = "git+https://github.com/iddm/redis-custom-allocator#0f0f8ca089af41dc9fe
 
 [[package]]
 name = "redis-module"
-version = "2.0.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d3b95d9fe5b8681bacea6532bbc7632590ae4499cecc8e019685b515fddda71"
+version = "99.99.99"
+source = "git+https://github.com/RedisLabsModules/redismodule-rs#713c930bd60893e39fddbad1e6f3101c2177f4d9"
 dependencies = [
  "backtrace",
  "bindgen 0.66.1",
@@ -861,9 +860,8 @@ dependencies = [
 
 [[package]]
 name = "redis-module-macros-internals"
-version = "2.0.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd1ba5724bf8bfd0c9d6f1169e45255957175b7d81944b325909024a159bc74c"
+version = "99.99.99"
+source = "git+https://github.com/RedisLabsModules/redismodule-rs#713c930bd60893e39fddbad1e6f3101c2177f4d9"
 dependencies = [
  "lazy_static",
  "proc-macro2",

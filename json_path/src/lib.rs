@@ -72,7 +72,7 @@ pub fn compile(s: &str) -> Result<Query, QueryCompilationError> {
 /// The query ownership is taken so it can not be used after. This allows
 /// the get a better performance if there is a need to calculate the query
 /// only once.
-pub fn calc_once<'j, 'p, S: SelectValue>(q: Query<'j>, json: &'p S) -> Vec<S> {
+pub fn calc_once<'j, 'p, S: SelectValue>(q: Query<'j>, json: &'p S) -> Vec<Cow<'p, S>> {
     let root = q.root;
     QueryProcessor::<'p, DummyTrackerGenerator> {
         query: None,
@@ -80,7 +80,7 @@ pub fn calc_once<'j, 'p, S: SelectValue>(q: Query<'j>, json: &'p S) -> Vec<S> {
     }
     .calc_with_paths_on_root(Cow::Borrowed(json), root)
     .into_iter()
-    .map(|e: SelectionResultSingle<S, DummyTracker>| e.value.into_owned())
+    .map(|e: SelectionResultSingle<S, DummyTracker>| e.value)
     .collect()
 }
 
