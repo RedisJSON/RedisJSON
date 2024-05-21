@@ -23,9 +23,9 @@ cd $HERE
 help() {
 	cat <<-'END'
 		Run Python tests using RLTest
-	
+
 		[ARGVARS...] tests.sh [--help|help] [<module-so-path>]
-		
+
 		Argument variables:
 		MODULE=path           Path to redisjson.so
 		MODARGS=args          RediSearch module arguments
@@ -57,7 +57,7 @@ help() {
 		COV=1                 Run with coverage analysis
 		VG=1                  Run with Valgrind
 		VG_LEAKS=0            Do not detect leaks
-		SAN=type              Use LLVM sanitizer (type=address|memory|leak|thread) 
+		SAN=type              Use LLVM sanitizer (type=address|memory|leak|thread)
 		BB=1                  Enable Python debugger (break using BB() in tests)
 		GDB=1                 Enable interactive gdb debugging (in single-test mode)
 
@@ -87,7 +87,7 @@ help() {
 	END
 }
 
-#---------------------------------------------------------------------------------------------- 
+#----------------------------------------------------------------------------------------------
 
 traps() {
 	local func="$1"
@@ -120,7 +120,7 @@ stop() {
 
 traps 'stop' SIGINT
 
-#---------------------------------------------------------------------------------------------- 
+#----------------------------------------------------------------------------------------------
 
 setup_rltest() {
 	if [[ $RLTEST == view ]]; then
@@ -143,7 +143,7 @@ setup_rltest() {
 			echo "PYTHONPATH=$PYTHONPATH"
 		fi
 	fi
-	
+
 	if [[ $RLTEST_VERBOSE == 1 ]]; then
 		RLTEST_ARGS+=" -v"
 	fi
@@ -178,7 +178,7 @@ setup_clang_sanitizer() {
 	# for RLTest
 	export SANITIZER="$SAN"
 	export SHORT_READ_BYTES_DELTA=512
-	
+
 	# --no-output-catch --exit-on-failure --check-exitcode
 	RLTEST_SAN_ARGS="--sanitizer $SAN"
 
@@ -402,7 +402,7 @@ run_tests() {
 	fi
 
 	[[ $RLEC == 1 ]] && export RLEC_CLUSTER=1
-	
+
 	local E=0
 	if [[ $NOP != 1 ]]; then
 		{ $OP python3 -m RLTest @$rltest_config; (( E |= $? )); } || true
@@ -416,7 +416,7 @@ run_tests() {
 		echo "killing external redis-server: $XREDIS_PID"
 		kill -TERM $XREDIS_PID
 	fi
-	
+
 	if [[ -n $GITHUB_ACTIONS ]]; then
 		echo "::endgroup::"
 	fi
@@ -552,7 +552,7 @@ if [[ $LIST == 1 ]]; then
 	RLTEST_ARGS+=" --collect-only"
 fi
 
-#---------------------------------------------------------------------------------------------- 
+#----------------------------------------------------------------------------------------------
 
 if [[ $QUICK == 1 ]]; then
 	GEN=${GEN:-1}
@@ -665,9 +665,9 @@ fi
 
 if [[ -n $STATFILE ]]; then
 	mkdir -p "$(dirname "$STATFILE")"
-        touch $STATFILE
 	if [[ -f $STATFILE ]]; then
-		(( E |= $(cat $STATFILE || echo 1) )) || true
+		VALUE=$(cat $STATFILE 2>/dev/null || echo 1)
+		(( E |= VALUE )) || true
 	fi
 	echo $E > $STATFILE
 fi
