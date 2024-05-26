@@ -241,7 +241,7 @@ redis_json_module_create! {
     data_types: [REDIS_JSON_TYPE],
     pre_command_function: pre_command,
     get_manage: Some(ivalue_manager::RedisIValueJsonKeyManager{phantom:PhantomData}),
-    version: 02_08_01,
+    version: 02_08_02,
     init: dummy_init,
     info: dummy_info,
 }
