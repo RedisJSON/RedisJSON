@@ -55,6 +55,9 @@ commands:
     steps:
       - checkout
       - run:
+          name: get git
+          command: ./deps/readies/bin/getgit
+      - run:
           name: Checkout submodules
           command: git submodule update --init --recursive
 
