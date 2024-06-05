@@ -55,10 +55,6 @@ commands:
     steps:
       - checkout
       - run:
-          name: get git
-          command: |
-            ./deps/readies/bin/getgit
-      - run:
           name: Checkout submodules
           command: git submodule update --init --recursive
 
@@ -391,6 +387,9 @@ jobs:
         type: string
     steps:
       - early-returns
+      -run:
+          name: install git
+          command: apt-get update && apt-get install -y git
       - checkout-all
       - install-prerequisites
       - run:
