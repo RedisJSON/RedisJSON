@@ -291,3 +291,4 @@ info:
 	$(SHOW)python3 --version
 	$(SHOW)python3 -m pip list -v
 
+.PHONY: info

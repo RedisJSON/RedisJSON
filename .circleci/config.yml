@@ -387,9 +387,6 @@ jobs:
         type: string
     steps:
       - early-returns
-      - run:
-          name: install git
-          command: apt-get update && apt-get install -y git
       - checkout-all
       - install-prerequisites
       - run:
