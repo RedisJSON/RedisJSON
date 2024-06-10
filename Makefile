@@ -75,7 +75,17 @@ include $(MK)/rules
 
 MODULE_NAME=rejson.so
 
-RUST_TARGET:=$(shell eval $$(rustc --print cfg | grep =); echo $$target_arch-$$target_vendor-$$target_os-$$target_env)	
+RUST_TARGET_ENV:=$(shell eval $$(rustc --print cfg | grep =); echo $$target_env)
+RUST_TARGET_OS:=$(shell eval $$(rustc --print cfg | grep =); echo $$target_os)
+ #if the target_env is empty, we should not use it in the target triple
+ ifeq ($(RUST_TARGET_ENV),)
+ 	ifeq ($(RUST_TARGET_OS),macos)
+ 		RUST_TARGET_OS=darwin
+ 	endif
+ 	RUST_TARGET:=$(shell eval $$(rustc --print cfg | grep =); echo $$target_arch-$$target_vendor-)$(RUST_TARGET_OS)
+ else
+ 	RUST_TARGET:=$(shell eval $$(rustc --print cfg | grep =); echo $$target_arch-$$target_vendor-$$target_os-$$target_env)
+ endif
 CARGO_TOOLCHAIN=
 CARGO_FLAGS=
 RUST_FLAGS=
