@@ -381,7 +381,7 @@ jobs:
 
   sanitize:
     docker:
-      - image: ubuntu:jammy
+      - image: redisfab/clang:16-x64-focal
     parameters:
       san-type:
         type: string
