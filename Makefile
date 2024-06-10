@@ -75,6 +75,7 @@ include $(MK)/rules
 
 MODULE_NAME=rejson.so
 
+RUST_TARGET:=$(shell eval $$(rustc --print cfg | grep =); echo $$target_arch-$$target_vendor-$$target_os-$$target_env)	
 CARGO_TOOLCHAIN=
 CARGO_FLAGS=
 RUST_FLAGS=
