@@ -21,6 +21,10 @@ exporter:
       - "$.Tests.Overall.min_latency_ms"
       - '$."ALL STATS".*."Ops/sec"'
       - '$."ALL STATS".*."Latency"'
+      - "$.OverallRates.overallOpsRate"
+      - "$.OverallQuantiles.allCommands.q50"
+      - "$.OverallQuantiles.allCommands.q95"
+      - "$.OverallQuantiles.allCommands.q99"
   comparison:
     metrics:
       - "Ops/sec"
