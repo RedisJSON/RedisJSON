@@ -14,10 +14,10 @@ on:
         type: string
       get-redis:
         type: string
-      test-config:
-        description: 'Test configuration environment variable (e.g. "CONFIG=tls" or "QUICK=1")'
-        required: true
-        type: string
+      # test-config:
+      #   description: 'Test configuration environment variable (e.g. "CONFIG=tls" or "QUICK=1")'
+      #   required: true
+      #   type: string
       pre-steps-script:
         type: string
         description: 'Script to run before any other steps (extremely basic dependency needs only)'
