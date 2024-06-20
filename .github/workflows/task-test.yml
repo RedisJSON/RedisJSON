@@ -44,14 +44,14 @@ jobs:
         id: mode
         run: |
           [[ -z "${{ inputs.container }}" ]] && echo "mode=sudo" >> $GITHUB_OUTPUT || echo "mode=" >> $GITHUB_OUTPUT
-      - name: Deps checkout
-        uses: actions/checkout@v3
-        with:
-          path: setup
-          sparse-checkout-cone-mode: false
-          sparse-checkout: |
-            .install
-            tests/pytests/requirements.*
+      # - name: Deps checkout
+      #   uses: actions/checkout@v3
+      #   with:
+      #     path: setup
+      #     sparse-checkout-cone-mode: false
+      #     sparse-checkout: |
+      #       .install
+      #       tests/pytests/requirements.*
       # - name: Setup specific
       #   working-directory: setup/.install
       #   run: ./install_script.sh ${{ steps.mode.outputs.mode }}
