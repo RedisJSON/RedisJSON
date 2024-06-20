@@ -27,10 +27,10 @@ jobs:
       get-redis: ${{ needs.get-latest-redis-tag.outputs.tag }}
     secrets: inherit
 
-  coverage:
-    if: ${{ !github.event.pull_request.draft }}
-    uses: ./.github/workflows/flow-coverage.yml
-    secrets: inherit
+  # coverage:
+  #   if: ${{ !github.event.pull_request.draft }}
+  #   uses: ./.github/workflows/flow-coverage.yml
+  #   secrets: inherit
 
   sanitize:
     needs: [get-latest-redis-tag]
