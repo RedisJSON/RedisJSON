@@ -1,0 +1,103 @@
+name: Common Flow for Tests
+
+# Documentation: https://redislabs.atlassian.net/wiki/spaces/DX/pages/3967844669/RediSearch+CI+refactor
+
+on:
+  workflow_call:
+    inputs:
+      env:
+        default: "ubuntu-latest"
+        type: string
+      container:
+        type: string
+      san:
+        type: string
+      get-redis:
+        type: string
+      test-config:
+        description: 'Test configuration environment variable (e.g. "CONFIG=tls" or "QUICK=1")'
+        required: true
+        type: string
+      pre-steps-script:
+        type: string
+        description: 'Script to run before any other steps (extremely basic dependency needs only)'
+      llvm_version:
+        type: string
+        description: 'Version of llvm to install'
+        default: '17'
+
+
+jobs:
+  common-flow:
+    name: Test ${{ inputs.container || inputs.env }}, Redis ${{ inputs.get-redis || 'unstable' }}
+    runs-on: ${{ inputs.env }}
+    container: ${{ inputs.container || null }}
+    # Nothing to do if both are `false`, skip
+    defaults:
+      run:
+        shell: bash -l -eo pipefail {0}
+    steps:
+      - name: Pre-steps Dependencies
+        if: inputs.pre-steps-script
+        run: ${{ inputs.pre-steps-script }}
+      - name: Get Installation Mode
+        id: mode
+        run: |
+          [[ -z "${{ inputs.container }}" ]] && echo "mode=sudo" >> $GITHUB_OUTPUT || echo "mode=" >> $GITHUB_OUTPUT
+      - name: Deps checkout
+        uses: actions/checkout@v3
+        with:
+          path: setup
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            .install
+            tests/pytests/requirements.*
+      # - name: Setup specific
+      #   working-directory: setup/.install
+      #   run: ./install_script.sh ${{ steps.mode.outputs.mode }}
+      - name: Full checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      # - name: Setup common
+      #   run: .install/common_installations.sh ${{ steps.mode.outputs.mode }}
+
+
+      - name: Install llvm & rust
+        if: inputs.san == 'address'
+        run: |
+          .install/install_llvm.sh ${{ steps.mode.outputs.mode }} ${{ inputs.llvm_version }}
+          .install/install_rust.sh 
+          echo "PATH=$HOME/.cargo/bin:$PATH" >> $GITHUB_ENV
+          echo "CC=$(which clang-${{inputs.llvm_version}})" >> $GITHUB_ENV
+          echo "CXX=$(which clang++-${{inputs.llvm_version}})" >> $GITHUB_ENV
+      
+      - name: verify CC and CXX
+        run: |
+          echo "CC=$CC"
+          echo "CXX=$CXX"
+
+      - name: Get Redis
+        uses: actions/checkout@v3
+        with:
+          repository: redis/redis
+          ref: ${{ inputs.get-redis }}
+          path: redis
+      - name: Build Redis
+        working-directory: redis
+        run: ${{ steps.mode.outputs.mode }} make install BUILD_TLS=yes SANIIZER=${{ inputs.san }}
+
+      - name: Build
+        if: ${{ inputs.standalone }}
+        run: make SAN=${{ inputs.san }}
+
+
+      - name: Tests
+        id: test1
+        if: ${{ inputs.standalone }}
+        continue-on-error: true
+        run: make test LOG=1 CLEAR_LOGS=0 SAN=${{ inputs.san }}
+
+      - name: Fail flow if tests failed
+        if: steps.test1.outcome == 'failure'
+        run: exit 1
