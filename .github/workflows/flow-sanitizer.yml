@@ -5,9 +5,9 @@ name: CLang Sanitizer
 on:
   workflow_call:
     inputs:
-      flow-config:
-        type: string
-        required: true
+      # flow-config:
+      #   type: string
+      #   required: true
       get-redis:
         type: string
 
@@ -17,7 +17,7 @@ jobs:
   clang-sanitizer:
     uses: ./.github/workflows/task-test.yml
     with:
-      test-config: ${{ inputs.flow-config }}
+      # test-config: ${{ inputs.flow-config }}
       san: address
       env: ubuntu-latest
     secrets: inherit
