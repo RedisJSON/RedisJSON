@@ -88,13 +88,11 @@ jobs:
         run: ${{ steps.mode.outputs.mode }} make install BUILD_TLS=yes SANIIZER=${{ inputs.san }}
 
       - name: Build
-        if: ${{ inputs.standalone }}
         run: make SAN=${{ inputs.san }}
 
 
       - name: Tests
         id: test1
-        if: ${{ inputs.standalone }}
         continue-on-error: true
         run: make test LOG=1 CLEAR_LOGS=0 SAN=${{ inputs.san }}
 
