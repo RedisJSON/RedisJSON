@@ -44,7 +44,7 @@ jobs:
     needs:
       - get-latest-redis-tag
       - basic-test
-      - coverage
+      # - coverage
       - sanitize
     runs-on: ubuntu-latest
     if: ${{ !cancelled() }}
