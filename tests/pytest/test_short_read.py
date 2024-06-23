@@ -49,7 +49,7 @@ def downloadFiles(target_dir):
         if not os.path.exists(path_dir):
             os.makedirs(path_dir)
         if not os.path.exists(path):
-            subprocess.call(['wget', '-q', BASE_RDBS_URL + f, '-O', path])
+            subprocess.call(['wget', '--no-check-certificate', '-q', BASE_RDBS_URL + f, '-O', path])
             _, ext = os.path.splitext(f)
             if ext == '.zip':
                 if not unzip(path, path_dir):
