@@ -344,7 +344,7 @@ pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
         actions.push((redis_key, update_info, value));
     }
 
-    actions
+    let res = actions
         .into_iter()
         .fold(REDIS_OK, |res, (mut redis_key, update_info, value)| {
             let updated = if let Some(update_info) = update_info {
@@ -354,10 +354,13 @@ pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
                 redis_key.set_value(Vec::new(), value)?
             };
             if updated {
-                redis_key.apply_changes(ctx, "json.mset")?
+                redis_key.notify_keyspace_event(ctx, "json.mset")?
             }
             res
-        })
+        });
+
+    ctx.replicate_verbatim();
+    res
 }
 
 fn apply_updates<M: Manager>(

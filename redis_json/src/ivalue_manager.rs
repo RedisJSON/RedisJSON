@@ -290,6 +290,14 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         }
     }
 
+    fn notify_keyspace_event(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError> {
+        if ctx.notify_keyspace_event(NotifyEvent::MODULE, command, &self.key_name) != Status::Ok {
+            Err(RedisError::Str("failed notify key space event"))
+        } else {
+            Ok(())
+        }
+    }
+
     fn delete(&mut self) -> Result<(), RedisError> {
         self.key.delete()?;
         Ok(())
