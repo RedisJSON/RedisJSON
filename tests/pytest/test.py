@@ -1490,8 +1490,8 @@ def test_promote_u64_to_f64(env):
 
 
 def test_mset_replication_in_aof(env):
-    if not env.useAof:
-        env.skip()
+    env.skipOnCluster()
+    env = Env(useAof=True)
     with env.getClusterConnectionIfNeeded() as r:
         r.execute_command('config', 'set', 'notify-keyspace-events', 'KEA')
 
