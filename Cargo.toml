@@ -13,9 +13,10 @@ serde_json = { version="1.0", features = ["unbounded_depth"]}
 # specification is required for the second level dependencies
 # to use exactly this version too, so that the dependencies of
 # this project will not be able to compromise it.
-serde = { version = "=1.0.171", features = ["derive"] }
-serde_derive = "=1.0.171"
+serde = { version = "=1.0.203", features = ["derive"] }
+serde_derive = "=1.0.203"
 bson = "2"
+time = "0.3.36"
 
 [workspace.package]
 edition = "2021"
