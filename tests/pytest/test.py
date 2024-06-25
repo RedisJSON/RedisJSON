@@ -6,6 +6,7 @@ import sys
 import os
 import redis
 import json
+import time
 from RLTest import Env
 from includes import *
 from redis.client import NEVER_DECODE
@@ -1486,6 +1487,48 @@ def test_promote_u64_to_f64(env):
     r.assertNotEqual(val, 2)                             # u64 + u64 is not u64
     r.assertEqual(val, float(2 * i64max + 3))            # u64 + u64 promotes to f64. as prior, not breaking
     r.expect('JSON.TYPE', 'num', '$').equal(['number'])  # promoted
+
+
+def test_mset_replication_in_aof(env):
+    env.skipOnCluster()
+    env = Env(useAof=True)
+    with env.getClusterConnectionIfNeeded() as r:
+        r.execute_command('config', 'set', 'notify-keyspace-events', 'KEA')
+
+        pubsub = r.pubsub()
+        pubsub.psubscribe('__key*')
+
+        time.sleep(1)
+        env.assertEqual('psubscribe', pubsub.get_message(timeout=1)['type'])
+
+        command = [b'JSON.MSET']
+        data = 'a' * 100
+        num_params = 5
+        for i in range(0, num_params):
+            key = f'k:{i}'
+            value = json.dumps({"data": data})
+            command.append(key.encode())
+            command.append(b'$')
+            command.append(value.encode())
+        env.expect(*command).ok()
+
+        for i in range(0, num_params):
+            msg = pubsub.get_message(timeout=1)
+            env.assertEqual(msg['data'], 'json.mset')
+            env.assertEqual(msg['type'], 'pmessage')
+            msg = pubsub.get_message(timeout=1)
+            env.assertEqual(msg['data'], f'k:{i}')
+            env.assertEqual(msg['type'], 'pmessage')
+
+    # verify JSON.MSET is appearing in the AOF once only
+    role = 'master'
+    aof_fn = env.envRunner._getFileName(role, '.aof.1.incr.aof')
+    with open(f'{env.logDir}/appendonlydir/{aof_fn}', 'r') as fd:
+        aof_content = [l for l in fd.readlines() if 'JSON.MSET' in l]
+        assert(len(aof_content) == 1)
+
+
+
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property

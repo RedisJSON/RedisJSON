@@ -193,6 +193,7 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
                 if op != SetOptions::NotExists {
                     redis_key.set_value(Vec::new(), val)?;
                     redis_key.apply_changes(ctx, "json.set")?;
+                    ctx.replicate_verbatim();
                     REDIS_OK
                 } else {
                     Ok(RedisValue::Null)
@@ -203,6 +204,7 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
                     let updated = apply_updates::<M>(&mut redis_key, val, update_info);
                     if updated {
                         redis_key.apply_changes(ctx, "json.set")?;
+                        ctx.replicate_verbatim();
                         REDIS_OK
                     } else {
                         Ok(RedisValue::Null)
@@ -217,6 +219,7 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
             if path.get_path() == JSON_ROOT_PATH {
                 redis_key.set_value(Vec::new(), val)?;
                 redis_key.apply_changes(ctx, "json.set")?;
+                ctx.replicate_verbatim();
                 REDIS_OK
             } else {
                 Err(RedisError::Str(
@@ -258,6 +261,7 @@ pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
             if path.get_path() == JSON_ROOT_PATH {
                 redis_key.merge_value(Vec::new(), val)?;
                 redis_key.apply_changes(ctx, "json.merge")?;
+                ctx.replicate_verbatim();
                 REDIS_OK
             } else {
                 let mut update_info =
@@ -283,6 +287,7 @@ pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
                     }
                     if res {
                         redis_key.apply_changes(ctx, "json.merge")?;
+                        ctx.replicate_verbatim();
                         REDIS_OK
                     } else {
                         Ok(RedisValue::Null)
@@ -297,6 +302,7 @@ pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
                 // Nothing to merge with it's a new doc
                 redis_key.set_value(Vec::new(), val)?;
                 redis_key.apply_changes(ctx, "json.merge")?;
+                ctx.replicate_verbatim();
                 REDIS_OK
             } else {
                 Err(RedisError::Str(
@@ -344,7 +350,7 @@ pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
         actions.push((redis_key, update_info, value));
     }
 
-    actions
+    let res = actions
         .into_iter()
         .fold(REDIS_OK, |res, (mut redis_key, update_info, value)| {
             let updated = if let Some(update_info) = update_info {
@@ -354,10 +360,13 @@ pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
                 redis_key.set_value(Vec::new(), value)?
             };
             if updated {
-                redis_key.apply_changes(ctx, "json.mset")?
+                redis_key.notify_keyspace_event(ctx, "json.mset")?
             }
             res
-        })
+        });
+
+    ctx.replicate_verbatim();
+    res
 }
 
 fn apply_updates<M: Manager>(
@@ -582,6 +591,7 @@ pub fn json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
             };
             if res > 0 {
                 redis_key.apply_changes(ctx, "json.del")?;
+                ctx.replicate_verbatim();
             }
             res
         }
@@ -778,6 +788,7 @@ where
     }
     if need_notify {
         redis_key.apply_changes(ctx, cmd)?;
+        ctx.replicate_verbatim();
     }
     Ok(res)
 }
@@ -809,6 +820,7 @@ where
             });
         }
         redis_key.apply_changes(ctx, cmd)?;
+        ctx.replicate_verbatim();
         Ok(res.unwrap().to_string().into())
     } else {
         Err(RedisError::String(
@@ -895,6 +907,7 @@ where
     }
     if need_notify {
         redis_key.apply_changes(ctx, "json.toggle")?;
+        ctx.replicate_verbatim();
     }
     Ok(res.into())
 }
@@ -917,6 +930,7 @@ where
             res = redis_key.bool_toggle(p)?;
         }
         redis_key.apply_changes(ctx, "json.toggle")?;
+        ctx.replicate_verbatim();
         Ok(res.to_string().into())
     } else {
         Err(RedisError::String(
@@ -987,6 +1001,7 @@ where
     }
     if need_notify {
         redis_key.apply_changes(ctx, "json.strappend")?;
+        ctx.replicate_verbatim();
     }
     Ok(res.into())
 }
@@ -1011,6 +1026,7 @@ where
             res = Some(redis_key.str_append(p, json.to_string())?);
         }
         redis_key.apply_changes(ctx, "json.strappend")?;
+        ctx.replicate_verbatim();
         Ok(res.unwrap().into())
     } else {
         Err(RedisError::String(
@@ -1117,6 +1133,7 @@ where
     } else if paths.len() == 1 {
         let res = redis_key.arr_append(paths.pop().unwrap(), args)?;
         redis_key.apply_changes(ctx, "json.arrappend")?;
+        ctx.replicate_verbatim();
         Ok(res.into())
     } else {
         let mut res = 0;
@@ -1124,6 +1141,7 @@ where
             res = redis_key.arr_append(p, args.clone())?;
         }
         redis_key.apply_changes(ctx, "json.arrappend")?;
+        ctx.replicate_verbatim();
         Ok(res.into())
     }
 }
@@ -1155,6 +1173,7 @@ where
     }
     if need_notify {
         redis_key.apply_changes(ctx, "json.arrappend")?;
+        ctx.replicate_verbatim();
     }
     Ok(res.into())
 }
@@ -1283,6 +1302,7 @@ where
 
     if need_notify {
         redis_key.apply_changes(ctx, "json.arrinsert")?;
+        ctx.replicate_verbatim();
     }
     Ok(res.into())
 }
@@ -1312,6 +1332,7 @@ where
             res = Some(redis_key.arr_insert(p, &args, index)?);
         }
         redis_key.apply_changes(ctx, "json.arrinsert")?;
+        ctx.replicate_verbatim();
         Ok(res.unwrap().into())
     }
 }
@@ -1464,6 +1485,7 @@ where
     }
     if need_notify {
         redis_key.apply_changes(ctx, "json.arrpop")?;
+        ctx.replicate_verbatim();
     }
     Ok(res.into())
 }
@@ -1491,6 +1513,7 @@ where
             })?);
         }
         redis_key.apply_changes(ctx, "json.arrpop")?;
+        ctx.replicate_verbatim();
         res
     } else {
         Err(RedisError::String(
@@ -1546,6 +1569,7 @@ where
     }
     if need_notify {
         redis_key.apply_changes(ctx, "json.arrtrim")?;
+        ctx.replicate_verbatim();
     }
     Ok(res.into())
 }
@@ -1575,6 +1599,7 @@ where
             res = Some(redis_key.arr_trim(p, start, stop)?);
         }
         redis_key.apply_changes(ctx, "json.arrtrim")?;
+        ctx.replicate_verbatim();
         Ok(res.unwrap().into())
     }
 }
@@ -1734,6 +1759,7 @@ pub fn json_clear<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
     }
     if cleared > 0 {
         redis_key.apply_changes(ctx, "json.clear")?;
+        ctx.replicate_verbatim();
     }
     Ok(cleared.into())
 }
