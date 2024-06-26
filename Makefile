@@ -87,7 +87,7 @@ ifeq ($(DEBUG),1)
 	else
 		NIGHTLY=1
 		CARGO_FLAGS += -Zbuild-std
-		RUST_FLAGS += -Zsanitizer=$(SAN)
+		RUST_FLAGS += -Zsanitizer=$(SAN) -C link-args=-znostart-stop-gc
 		ifeq ($(SAN),memory)
 			RUST_FLAGS += -Zsanitizer-memory-track-origins
 		endif
