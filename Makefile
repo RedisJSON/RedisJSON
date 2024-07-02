@@ -234,6 +234,13 @@ upload-artifacts:
 
 #----------------------------------------------------------------------------------------------
 
+clang-install:
+	./sbin/install_clang.sh
+
+.PHONY: clang-install
+
+#----------------------------------------------------------------------------------------------
+
 COV_EXCLUDE_DIRS += bin deps tests
 COV_EXCLUDE.llvm += $(foreach D,$(COV_EXCLUDE_DIRS),'$(realpath $(ROOT))/$(D)/*')
 
