@@ -183,12 +183,12 @@ setup_clang_sanitizer() {
 	RLTEST_SAN_ARGS="--sanitizer $SAN"
 
 	if [[ $SAN == addr || $SAN == address ]]; then
-		REDIS_SERVER=${REDIS_SERVER:-redis-server-asan-$SAN_REDIS_SUFFIX}
-		if ! command -v $REDIS_SERVER > /dev/null; then
-			echo "Building Redis $SAN_REDIS_VER for clang-asan ..."
-			runn $READIES/bin/getredis --force -v $SAN_REDIS_VER --own-openssl --no-run \
-				--suffix asan-${SAN_REDIS_SUFFIX} --clang-asan --clang-san-blacklist $ignorelist
-		fi
+		# REDIS_SERVER=${REDIS_SERVER:-redis-server-asan-$SAN_REDIS_SUFFIX}
+		# if ! command -v $REDIS_SERVER > /dev/null; then
+		# 	echo "Building Redis $SAN_REDIS_VER for clang-asan ..."
+		# 	runn $READIES/bin/getredis --force -v $SAN_REDIS_VER --own-openssl --no-run \
+		# 		--suffix asan-${SAN_REDIS_SUFFIX} --clang-asan --clang-san-blacklist $ignorelist
+		# fi
 
 		# RLTest places log file details in ASAN_OPTIONS
 		export ASAN_OPTIONS="detect_odr_violation=0:halt_on_error=0:detect_leaks=1"

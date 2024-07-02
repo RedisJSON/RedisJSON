@@ -20,7 +20,7 @@ Defaults.decode_responses = True
 Defaults.no_log = True
 
 CREATE_INDICES_TARGET_DIR = '/tmp/test'
-BASE_RDBS_URL = 'https://s3.amazonaws.com/redismodules/redisearch-oss/rdbs/'
+BASE_RDBS_URL = 'https://dev.cto.redis.s3.amazonaws.com/RediSearch/rdbs/'
 
 SHORT_READ_BYTES_DELTA = int(os.getenv('SHORT_READ_BYTES_DELTA', '1'))
 OS = os.getenv('OS')
