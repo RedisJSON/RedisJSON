@@ -283,6 +283,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
 impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     fn apply_changes(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError> {
         self.notify_keyspace_event(ctx, command)
+            .inspect(|_| ctx.replicate_verbatim())
     }
 
     fn notify_keyspace_event(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError> {
@@ -612,6 +613,13 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
             key_name: key,
             val: None,
         })
+    }
+    /**
+        * This function is used to apply changes to the slave and AOF.
+        * It is called after the command is executed.
+        */
+    fn apply_changes(&self, ctx: &Context) {
+        ctx.replicate_verbatim();
     }
 
     fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> Result<Self::O, Error> {

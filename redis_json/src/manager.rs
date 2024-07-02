@@ -93,6 +93,10 @@ pub trait Manager {
         ctx: &Context,
         key: RedisString,
     ) -> Result<Self::WriteHolder, RedisError>;
+    fn apply_changes(
+        &self,
+        ctx: &Context
+    );
     #[allow(clippy::wrong_self_convention)]
     fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> Result<Self::O, Error>;
     fn get_memory(&self, v: &Self::V) -> Result<usize, RedisError>;
