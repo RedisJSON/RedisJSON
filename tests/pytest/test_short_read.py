@@ -20,7 +20,7 @@ Defaults.decode_responses = True
 Defaults.no_log = True
 
 CREATE_INDICES_TARGET_DIR = '/tmp/test'
-BASE_RDBS_URL = 'https://s3.amazonaws.com/redismodules/redisearch-oss/rdbs/'
+BASE_RDBS_URL = 'https://dev.cto.redis.s3.amazonaws.com/RediSearch/rdbs/'
 
 SHORT_READ_BYTES_DELTA = int(os.getenv('SHORT_READ_BYTES_DELTA', '1'))
 OS = os.getenv('OS')
@@ -49,7 +49,7 @@ def downloadFiles(target_dir):
         if not os.path.exists(path_dir):
             os.makedirs(path_dir)
         if not os.path.exists(path):
-            subprocess.call(['wget', '-q', BASE_RDBS_URL + f, '-O', path])
+            subprocess.call(['wget', '--no-check-certificate', '-q', BASE_RDBS_URL + f, '-O', path])
             _, ext = os.path.splitext(f)
             if ext == '.zip':
                 if not unzip(path, path_dir):

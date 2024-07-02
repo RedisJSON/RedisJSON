@@ -186,6 +186,7 @@ setup_clang_sanitizer() {
 		REDIS_SERVER=${REDIS_SERVER:-redis-server-asan-$SAN_REDIS_SUFFIX}
 		if ! command -v $REDIS_SERVER > /dev/null; then
 			echo "Building Redis $SAN_REDIS_VER for clang-asan ..."
+			runn sudo apt -qq update -y
 			runn $READIES/bin/getredis --force -v $SAN_REDIS_VER --own-openssl --no-run \
 				--suffix asan-${SAN_REDIS_SUFFIX} --clang-asan --clang-san-blacklist $ignorelist
 		fi
