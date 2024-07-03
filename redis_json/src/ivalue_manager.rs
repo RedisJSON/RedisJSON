@@ -281,11 +281,6 @@ impl<'a> IValueKeyHolderWrite<'a> {
 }
 
 impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
-    fn apply_changes(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError> {
-        self.notify_keyspace_event(ctx, command)
-            .inspect(|_| ctx.replicate_verbatim())
-    }
-
     fn notify_keyspace_event(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError> {
         if ctx.notify_keyspace_event(NotifyEvent::MODULE, command, &self.key_name) != Status::Ok {
             Err(RedisError::Str("failed notify key space event"))

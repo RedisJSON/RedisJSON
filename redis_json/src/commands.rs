@@ -192,7 +192,8 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
             if path.get_path() == JSON_ROOT_PATH {
                 if op != SetOptions::NotExists {
                     redis_key.set_value(Vec::new(), val)?;
-                    redis_key.apply_changes(ctx, "json.set")?;
+                    redis_key.notify_keyspace_event(ctx, "json.set")?;
+                    manager.apply_changes(ctx);
                     REDIS_OK
                 } else {
                     Ok(RedisValue::Null)
@@ -202,7 +203,8 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
                 if !update_info.is_empty() {
                     let updated = apply_updates::<M>(&mut redis_key, val, update_info);
                     if updated {
-                        redis_key.apply_changes(ctx, "json.set")?;
+                        redis_key.notify_keyspace_event(ctx, "json.set")?;
+                        manager.apply_changes(ctx);
                         REDIS_OK
                     } else {
                         Ok(RedisValue::Null)
@@ -216,7 +218,8 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
         (None, _) => {
             if path.get_path() == JSON_ROOT_PATH {
                 redis_key.set_value(Vec::new(), val)?;
-                redis_key.apply_changes(ctx, "json.set")?;
+                redis_key.notify_keyspace_event(ctx, "json.set")?;
+                manager.apply_changes(ctx);
                 REDIS_OK
             } else {
                 Err(RedisError::Str(
@@ -257,7 +260,8 @@ pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
         Some(doc) => {
             if path.get_path() == JSON_ROOT_PATH {
                 redis_key.merge_value(Vec::new(), val)?;
-                redis_key.apply_changes(ctx, "json.merge")?;
+                redis_key.notify_keyspace_event(ctx, "json.merge")?;
+                manager.apply_changes(ctx);
                 REDIS_OK
             } else {
                 let mut update_info =
@@ -282,7 +286,8 @@ pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
                         }
                     }
                     if res {
-                        redis_key.apply_changes(ctx, "json.merge")?;
+                        redis_key.notify_keyspace_event(ctx, "json.merge")?;
+                        manager.apply_changes(ctx);
                         REDIS_OK
                     } else {
                         Ok(RedisValue::Null)
@@ -296,7 +301,8 @@ pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
             if path.get_path() == JSON_ROOT_PATH {
                 // Nothing to merge with it's a new doc
                 redis_key.set_value(Vec::new(), val)?;
-                redis_key.apply_changes(ctx, "json.merge")?;
+                redis_key.notify_keyspace_event(ctx, "json.merge")?;
+                manager.apply_changes(ctx);
                 REDIS_OK
             } else {
                 Err(RedisError::Str(
@@ -584,7 +590,8 @@ pub fn json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
                 changed
             };
             if res > 0 {
-                redis_key.apply_changes(ctx, "json.del")?;
+                redis_key.notify_keyspace_event(ctx, "json.del")?;
+                manager.apply_changes(ctx);
             }
             res
         }
@@ -718,7 +725,7 @@ where
 
     // check context flags to see if RESP3 is enabled
     if is_resp3(ctx) {
-        let res = json_num_op_impl::<M>(&mut redis_key, ctx, path.get_path(), number, op, cmd)?
+        let res = json_num_op_impl::<M>(manager, &mut redis_key, ctx, path.get_path(), number, op, cmd)?
             .drain(..)
             .map(|v| {
                 v.map_or(RedisValue::Null, |v| {
@@ -733,9 +740,9 @@ where
             .into();
         Ok(res)
     } else if path.is_legacy() {
-        json_num_op_legacy::<M>(&mut redis_key, ctx, path.get_path(), number, op, cmd)
+        json_num_op_legacy::<M>(manager, &mut redis_key, ctx, path.get_path(), number, op, cmd)
     } else {
-        let results = json_num_op_impl::<M>(&mut redis_key, ctx, path.get_path(), number, op, cmd)?;
+        let results = json_num_op_impl::<M>(manager, &mut redis_key, ctx, path.get_path(), number, op, cmd)?;
 
         // Convert to RESP2 format return as one JSON array
         let values = to_json_value::<Number>(results, Value::Null);
@@ -744,6 +751,7 @@ where
 }
 
 fn json_num_op_impl<M>(
+    manager: M,
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &str,
@@ -780,12 +788,14 @@ where
         });
     }
     if need_notify {
-        redis_key.apply_changes(ctx, cmd)?;
+        redis_key.notify_keyspace_event(ctx, cmd)?;
+        manager.apply_changes(ctx);
     }
     Ok(res)
 }
 
 fn json_num_op_legacy<M>(
+    manager: M,
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &str,
@@ -811,7 +821,8 @@ where
                 NumOp::Pow => redis_key.pow_by(p, number)?,
             });
         }
-        redis_key.apply_changes(ctx, cmd)?;
+        redis_key.notify_keyspace_event(ctx, cmd)?;
+        manager.apply_changes(ctx);
         Ok(res.unwrap().to_string().into())
     } else {
         Err(RedisError::String(
@@ -867,13 +878,14 @@ pub fn json_bool_toggle<M: Manager>(
     let mut redis_key = manager.open_key_write(ctx, key)?;
 
     if path.is_legacy() {
-        json_bool_toggle_legacy::<M>(&mut redis_key, ctx, path.get_path())
+        json_bool_toggle_legacy::<M>(manager, &mut redis_key, ctx, path.get_path())
     } else {
-        json_bool_toggle_impl::<M>(&mut redis_key, ctx, path.get_path())
+        json_bool_toggle_impl::<M>(manager, &mut redis_key, ctx, path.get_path())
     }
 }
 
 fn json_bool_toggle_impl<M>(
+    manager: M,
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &str,
@@ -897,12 +909,14 @@ where
         });
     }
     if need_notify {
-        redis_key.apply_changes(ctx, "json.toggle")?;
+        redis_key.notify_keyspace_event(ctx, "json.toggle")?;
+        manager.apply_changes(ctx);
     }
     Ok(res.into())
 }
 
 fn json_bool_toggle_legacy<M>(
+    manager: M,
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &str,
@@ -919,7 +933,8 @@ where
         for p in paths {
             res = redis_key.bool_toggle(p)?;
         }
-        redis_key.apply_changes(ctx, "json.toggle")?;
+        redis_key.notify_keyspace_event(ctx, "json.toggle")?;
+        manager.apply_changes(ctx);
         Ok(res.to_string().into())
     } else {
         Err(RedisError::String(
@@ -956,13 +971,14 @@ pub fn json_str_append<M: Manager>(
     let mut redis_key = manager.open_key_write(ctx, key)?;
 
     if path.is_legacy() {
-        json_str_append_legacy::<M>(&mut redis_key, ctx, path.get_path(), json)
+        json_str_append_legacy::<M>(manager, &mut redis_key, ctx, path.get_path(), json)
     } else {
-        json_str_append_impl::<M>(&mut redis_key, ctx, path.get_path(), json)
+        json_str_append_impl::<M>(manager, &mut redis_key, ctx, path.get_path(), json)
     }
 }
 
 fn json_str_append_impl<M>(
+    manager: M,
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &str,
@@ -989,12 +1005,14 @@ where
         });
     }
     if need_notify {
-        redis_key.apply_changes(ctx, "json.strappend")?;
+        redis_key.notify_keyspace_event(ctx, "json.strappend")?;
+        manager.apply_changes(ctx);
     }
     Ok(res.into())
 }
 
 fn json_str_append_legacy<M>(
+    manager: M,
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &str,
@@ -1013,7 +1031,8 @@ where
         for p in paths {
             res = Some(redis_key.str_append(p, json.to_string())?);
         }
-        redis_key.apply_changes(ctx, "json.strappend")?;
+        redis_key.notify_keyspace_event(ctx, "json.strappend")?;
+        manager.apply_changes(ctx);
         Ok(res.unwrap().into())
     } else {
         Err(RedisError::String(
@@ -1092,13 +1111,14 @@ pub fn json_arr_append<M: Manager>(
     let mut redis_key = manager.open_key_write(ctx, key)?;
 
     if path.is_legacy() {
-        json_arr_append_legacy::<M>(&mut redis_key, ctx, &path, args)
+        json_arr_append_legacy::<M>(manager, &mut redis_key, ctx, &path, args)
     } else {
-        json_arr_append_impl::<M>(&mut redis_key, ctx, path.get_path(), args)
+        json_arr_append_impl::<M>(manager, &mut redis_key, ctx, path.get_path(), args)
     }
 }
 
 fn json_arr_append_legacy<M>(
+    manager: M,
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &Path,
@@ -1119,19 +1139,22 @@ where
         ))
     } else if paths.len() == 1 {
         let res = redis_key.arr_append(paths.pop().unwrap(), args)?;
-        redis_key.apply_changes(ctx, "json.arrappend")?;
+        redis_key.notify_keyspace_event(ctx, "json.arrappend")?;
+        manager.apply_changes(ctx);
         Ok(res.into())
     } else {
         let mut res = 0;
         for p in paths {
             res = redis_key.arr_append(p, args.clone())?;
         }
-        redis_key.apply_changes(ctx, "json.arrappend")?;
+        redis_key.notify_keyspace_event(ctx, "json.arrappend")?;
+        manager.apply_changes(ctx);
         Ok(res.into())
     }
 }
 
 fn json_arr_append_impl<M>(
+    manager: M,
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &str,
@@ -1157,7 +1180,8 @@ where
         });
     }
     if need_notify {
-        redis_key.apply_changes(ctx, "json.arrappend")?;
+        redis_key.notify_keyspace_event(ctx, "json.arrappend")?;
+        manager.apply_changes(ctx);
     }
     Ok(res.into())
 }
@@ -1250,13 +1274,14 @@ pub fn json_arr_insert<M: Manager>(
     )?;
     let mut redis_key = manager.open_key_write(ctx, key)?;
     if path.is_legacy() {
-        json_arr_insert_legacy::<M>(&mut redis_key, ctx, path.get_path(), index, args)
+        json_arr_insert_legacy::<M>(manager, &mut redis_key, ctx, path.get_path(), index, args)
     } else {
-        json_arr_insert_impl::<M>(&mut redis_key, ctx, path.get_path(), index, args)
+        json_arr_insert_impl::<M>(manager, &mut redis_key, ctx, path.get_path(), index, args)
     }
 }
 
 fn json_arr_insert_impl<M>(
+    manager: M,
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &str,
@@ -1285,12 +1310,14 @@ where
     }
 
     if need_notify {
-        redis_key.apply_changes(ctx, "json.arrinsert")?;
+        redis_key.notify_keyspace_event(ctx, "json.arrinsert")?;
+        manager.apply_changes(ctx);
     }
     Ok(res.into())
 }
 
 fn json_arr_insert_legacy<M>(
+    manager: M,
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &str,
@@ -1314,7 +1341,8 @@ where
         for p in paths {
             res = Some(redis_key.arr_insert(p, &args, index)?);
         }
-        redis_key.apply_changes(ctx, "json.arrinsert")?;
+        redis_key.notify_keyspace_event(ctx, "json.arrinsert")?;
+        manager.apply_changes(ctx);
         Ok(res.unwrap().into())
     }
 }
@@ -1427,13 +1455,14 @@ pub fn json_arr_pop<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString
             ));
         }
 
-        json_arr_pop_legacy::<M>(&mut redis_key, ctx, path.get_path(), index)
+        json_arr_pop_legacy::<M>(manager, &mut redis_key, ctx, path.get_path(), index)
     } else {
-        json_arr_pop_impl::<M>(&mut redis_key, ctx, path.get_path(), index, &format_options)
+        json_arr_pop_impl::<M>(manager, &mut redis_key, ctx, path.get_path(), index, &format_options)
     }
 }
 
 fn json_arr_pop_impl<M>(
+    manager: M,
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &str,
@@ -1466,12 +1495,14 @@ where
         });
     }
     if need_notify {
-        redis_key.apply_changes(ctx, "json.arrpop")?;
+        redis_key.notify_keyspace_event(ctx, "json.arrpop")?;
+        manager.apply_changes(ctx);
     }
     Ok(res.into())
 }
 
 fn json_arr_pop_legacy<M>(
+    manager: M,
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &str,
@@ -1493,7 +1524,8 @@ where
                 None => Ok(().into()),
             })?);
         }
-        redis_key.apply_changes(ctx, "json.arrpop")?;
+        redis_key.notify_keyspace_event(ctx, "json.arrpop")?;
+        manager.apply_changes(ctx);
         res
     } else {
         Err(RedisError::String(
@@ -1516,12 +1548,13 @@ pub fn json_arr_trim<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisStrin
     let mut redis_key = manager.open_key_write(ctx, key)?;
 
     if path.is_legacy() {
-        json_arr_trim_legacy::<M>(&mut redis_key, ctx, path.get_path(), start, stop)
+        json_arr_trim_legacy::<M>(manager, &mut redis_key, ctx, path.get_path(), start, stop)
     } else {
-        json_arr_trim_impl::<M>(&mut redis_key, ctx, path.get_path(), start, stop)
+        json_arr_trim_impl::<M>(manager, &mut redis_key, ctx, path.get_path(), start, stop)
     }
 }
 fn json_arr_trim_impl<M>(
+    manager: M,
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &str,
@@ -1548,12 +1581,14 @@ where
         });
     }
     if need_notify {
-        redis_key.apply_changes(ctx, "json.arrtrim")?;
+        redis_key.notify_keyspace_event(ctx, "json.arrtrim")?;
+        manager.apply_changes(ctx);
     }
     Ok(res.into())
 }
 
 fn json_arr_trim_legacy<M>(
+    manager: M,
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &str,
@@ -1577,7 +1612,8 @@ where
         for p in paths {
             res = Some(redis_key.arr_trim(p, start, stop)?);
         }
-        redis_key.apply_changes(ctx, "json.arrtrim")?;
+        redis_key.notify_keyspace_event(ctx, "json.arrtrim")?;
+        manager.apply_changes(ctx);
         Ok(res.unwrap().into())
     }
 }
@@ -1736,7 +1772,8 @@ pub fn json_clear<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
         }
     }
     if cleared > 0 {
-        redis_key.apply_changes(ctx, "json.clear")?;
+        redis_key.notify_keyspace_event(ctx, "json.clear")?;
+        manager.apply_changes(ctx);
     }
     Ok(cleared.into())
 }
