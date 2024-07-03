@@ -729,11 +729,11 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
 mod tests {
     use super::*;
 
-    static single_thread_test_mutex: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    static SINGLE_THREAD_TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
     fn test_get_memory() {
-        let _guard = single_thread_test_mutex.lock();
+        let _guard = SINGLE_THREAD_TEST_MUTEX.lock();
 
         let manager = RedisIValueJsonKeyManager {
             phantom: PhantomData,
@@ -763,7 +763,7 @@ mod tests {
     /// unicode characters well.
     #[test]
     fn test_unicode_characters() {
-        let _guard = single_thread_test_mutex.lock();
+        let _guard = SINGLE_THREAD_TEST_MUTEX.lock();
 
         let json = r#""\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0""#;
         let value: IValue = serde_json::from_str(json).expect("IValue parses fine.");
