@@ -615,9 +615,9 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         })
     }
     /**
-        * This function is used to apply changes to the slave and AOF.
-        * It is called after the command is executed.
-        */
+     * This function is used to apply changes to the slave and AOF.
+     * It is called after the command is executed.
+     */
     fn apply_changes(&self, ctx: &Context) {
         ctx.replicate_verbatim();
     }
