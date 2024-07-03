@@ -10,7 +10,7 @@ use crate::manager::{Manager, ReadHolder, WriteHolder};
 use crate::redisjson::normalize_arr_start_index;
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
-use bson::decode_document;
+use bson::{from_document, Document};
 use ijson::object::Entry;
 use ijson::{DestructuredMut, INumber, IObject, IString, IValue, ValueType};
 use json_path::select_value::{SelectValue, SelectValueType};
@@ -620,9 +620,13 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                 }
                 IValue::deserialize(&mut deserializer).map_err(|e| e.into())
             }
-            Format::BSON => decode_document(&mut Cursor::new(val.as_bytes())).map_or_else(
+            Format::BSON => from_document(
+                Document::from_reader(&mut Cursor::new(val.as_bytes()))
+                    .map_err(|e| e.to_string())?,
+            )
+            .map_or_else(
                 |e| Err(e.to_string().into()),
-                |docs| {
+                |docs: Document| {
                     let v = if docs.is_empty() {
                         IValue::NULL
                     } else {
@@ -714,17 +718,21 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
 mod tests {
     use super::*;
 
+    static SINGLE_THREAD_TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn test_get_memory() {
+        let _guard = SINGLE_THREAD_TEST_MUTEX.lock();
+
         let manager = RedisIValueJsonKeyManager {
             phantom: PhantomData,
         };
         let json = r#"{
-                            "a": 100.12, 
-                            "b": "foo", 
-                            "c": true, 
-                            "d": 126, 
-                            "e": -112, 
+                            "a": 100.12,
+                            "b": "foo",
+                            "c": true,
+                            "d": 126,
+                            "e": -112,
                             "f": 7388608,
                             "g": -6388608,
                             "h": 9388608,
@@ -737,5 +745,33 @@ mod tests {
         let value = serde_json::from_str(json).unwrap();
         let res = manager.get_memory(&value).unwrap();
         assert_eq!(res, 903);
+    }
+
+    /// Tests the deserialiser of IValue for a string with unicode
+    /// characters, to ensure that the deserialiser can handle
+    /// unicode characters well.
+    #[test]
+    fn test_unicode_characters() {
+        let _guard = SINGLE_THREAD_TEST_MUTEX.lock();
+
+        let json = r#""\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0""#;
+        let value: IValue = serde_json::from_str(json).expect("IValue parses fine.");
+        assert_eq!(
+            value.as_string().unwrap(),
+            "\u{a0}\u{a0}\u{a0}\u{a0}\u{a0}\u{a0}\u{a0}"
+        );
+
+        let json = r#"{"\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0":"\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0"}"#;
+        let value: IValue = serde_json::from_str(json).expect("IValue parses fine.");
+        assert_eq!(
+            value
+                .as_object()
+                .unwrap()
+                .get("\u{a0}\u{a0}\u{a0}\u{a0}\u{a0}\u{a0}\u{a0}")
+                .unwrap()
+                .as_string()
+                .unwrap(),
+            "\u{a0}\u{a0}\u{a0}\u{a0}\u{a0}\u{a0}\u{a0}"
+        );
     }
 }
