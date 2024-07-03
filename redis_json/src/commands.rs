@@ -725,24 +725,48 @@ where
 
     // check context flags to see if RESP3 is enabled
     if is_resp3(ctx) {
-        let res = json_num_op_impl::<M>(manager, &mut redis_key, ctx, path.get_path(), number, op, cmd)?
-            .drain(..)
-            .map(|v| {
-                v.map_or(RedisValue::Null, |v| {
-                    if let Some(i) = v.as_i64() {
-                        RedisValue::Integer(i)
-                    } else {
-                        RedisValue::Float(v.as_f64().unwrap_or_default())
-                    }
-                })
+        let res = json_num_op_impl::<M>(
+            manager,
+            &mut redis_key,
+            ctx,
+            path.get_path(),
+            number,
+            op,
+            cmd,
+        )?
+        .drain(..)
+        .map(|v| {
+            v.map_or(RedisValue::Null, |v| {
+                if let Some(i) = v.as_i64() {
+                    RedisValue::Integer(i)
+                } else {
+                    RedisValue::Float(v.as_f64().unwrap_or_default())
+                }
             })
-            .collect::<Vec<RedisValue>>()
-            .into();
+        })
+        .collect::<Vec<RedisValue>>()
+        .into();
         Ok(res)
     } else if path.is_legacy() {
-        json_num_op_legacy::<M>(manager, &mut redis_key, ctx, path.get_path(), number, op, cmd)
+        json_num_op_legacy::<M>(
+            manager,
+            &mut redis_key,
+            ctx,
+            path.get_path(),
+            number,
+            op,
+            cmd,
+        )
     } else {
-        let results = json_num_op_impl::<M>(manager, &mut redis_key, ctx, path.get_path(), number, op, cmd)?;
+        let results = json_num_op_impl::<M>(
+            manager,
+            &mut redis_key,
+            ctx,
+            path.get_path(),
+            number,
+            op,
+            cmd,
+        )?;
 
         // Convert to RESP2 format return as one JSON array
         let values = to_json_value::<Number>(results, Value::Null);
@@ -1457,7 +1481,14 @@ pub fn json_arr_pop<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString
 
         json_arr_pop_legacy::<M>(manager, &mut redis_key, ctx, path.get_path(), index)
     } else {
-        json_arr_pop_impl::<M>(manager, &mut redis_key, ctx, path.get_path(), index, &format_options)
+        json_arr_pop_impl::<M>(
+            manager,
+            &mut redis_key,
+            ctx,
+            path.get_path(),
+            index,
+            &format_options,
+        )
     }
 }
 
