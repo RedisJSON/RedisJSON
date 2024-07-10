@@ -63,7 +63,7 @@ pub trait WriteHolder<O: Clone, V: SelectValue> {
     ) -> RedisResult;
     fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> Result<usize, RedisError>;
     fn clear(&mut self, path: Vec<String>) -> Result<usize, RedisError>;
-    fn apply_changes(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError>;
+    fn notify_keyspace_event(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError>;
 }
 
 pub trait Manager {
@@ -92,6 +92,7 @@ pub trait Manager {
         ctx: &Context,
         key: RedisString,
     ) -> Result<Self::WriteHolder, RedisError>;
+    fn apply_changes(&self, ctx: &Context);
     #[allow(clippy::wrong_self_convention)]
     fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> Result<Self::O, Error>;
     fn get_memory(&self, v: &Self::V) -> Result<usize, RedisError>;

@@ -35,7 +35,7 @@ DEALINGS IN THE SOFTWARE.
 use serde_json::ser::Formatter;
 use std::io;
 
-pub use crate::redisjson::{Format, ReplyFormat};
+pub use crate::redisjson::ReplyFormat;
 
 pub struct ReplyFormatOptions<'a> {
     pub format: ReplyFormat,

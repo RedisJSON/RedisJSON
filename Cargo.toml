@@ -1,4 +1,5 @@
 [workspace]
+resolver = "2"
 
 members = [
     "json_path",
@@ -7,14 +8,10 @@ members = [
 
 [workspace.dependencies]
 ijson = { git="https://github.com/RedisJSON/ijson", rev="e0119ac74f6c4ee918718ee122c3948b74ebeba8", default_features=false}
-serde_json = { version="1.0", features = ["unbounded_depth"]}
-# DO NOT CHANGE to avoid security issues. This exact version
-# specification is required for the second level dependencies
-# to use exactly this version too, so that the dependencies of
-# this project will not be able to compromise it.
-serde = { version = "=1.0.171", features = ["derive"] }
-serde_derive = "=1.0.171"
-bson = "0.14"
+serde_json = { version="1", features = ["unbounded_depth"]}
+serde = { version = "1", features = ["derive"] }
+serde_derive = "1"
+bson = "2"
 
 [workspace.package]
 edition = "2021"
