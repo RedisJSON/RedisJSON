@@ -128,6 +128,7 @@ macro_rules! redis_json_module_create {(
         };
         use libc::size_t;
         use std::collections::HashMap;
+        use $crate::c_api::create_rmstring;
 
         macro_rules! json_command {
             ($cmd:ident) => {

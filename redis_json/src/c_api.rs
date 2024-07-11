@@ -47,7 +47,7 @@ struct ResultsIterator<'a, V: SelectValue> {
 pub static mut LLAPI_CTX: Option<*mut rawmod::RedisModuleCtx> = None;
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub(crate) fn create_rmstring(
+pub fn create_rmstring(
     ctx: *mut rawmod::RedisModuleCtx,
     from_str: &str,
     str: *mut *mut rawmod::RedisModuleString,
@@ -61,7 +61,7 @@ pub(crate) fn create_rmstring(
     Status::Err as c_int
 }
 
-pub(crate) fn json_api_open_key_internal<M: Manager>(
+pub fn json_api_open_key_internal<M: Manager>(
     manager: M,
     ctx: *mut rawmod::RedisModuleCtx,
     key: RedisString,
@@ -75,7 +75,7 @@ pub(crate) fn json_api_open_key_internal<M: Manager>(
     null()
 }
 
-pub(crate) fn json_api_open_key_with_flags_internal<M: Manager>(
+pub fn json_api_open_key_with_flags_internal<M: Manager>(
     manager: M,
     ctx: *mut rawmod::RedisModuleCtx,
     key: RedisString,
@@ -90,11 +90,7 @@ pub(crate) fn json_api_open_key_with_flags_internal<M: Manager>(
     null()
 }
 
-pub(crate) fn json_api_get_at<M: Manager>(
-    _: M,
-    json: *const c_void,
-    index: size_t,
-) -> *const c_void {
+pub fn json_api_get_at<M: Manager>(_: M, json: *const c_void, index: size_t) -> *const c_void {
     let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
         SelectValueType::Array => json
@@ -105,11 +101,7 @@ pub(crate) fn json_api_get_at<M: Manager>(
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub(crate) fn json_api_get_len<M: Manager>(
-    _: M,
-    json: *const c_void,
-    count: *mut libc::size_t,
-) -> c_int {
+pub fn json_api_get_len<M: Manager>(_: M, json: *const c_void, count: *mut libc::size_t) -> c_int {
     let json = unsafe { &*(json.cast::<M::V>()) };
     let len = match json.get_type() {
         SelectValueType::String => Some(json.get_str().len()),
@@ -125,11 +117,11 @@ pub(crate) fn json_api_get_len<M: Manager>(
     }
 }
 
-pub(crate) fn json_api_get_type<M: Manager>(_: M, json: *const c_void) -> c_int {
+pub fn json_api_get_type<M: Manager>(_: M, json: *const c_void) -> c_int {
     json_api_get_type_internal(unsafe { &*(json.cast::<M::V>()) }) as c_int
 }
 
-pub(crate) fn json_api_get_string<M: Manager>(
+pub fn json_api_get_string<M: Manager>(
     _: M,
     json: *const c_void,
     str: *mut *const c_char,
@@ -146,7 +138,7 @@ pub(crate) fn json_api_get_string<M: Manager>(
     }
 }
 
-pub(crate) fn json_api_get_json<M: Manager>(
+pub fn json_api_get_json<M: Manager>(
     _: M,
     json: *const c_void,
     ctx: *mut rawmod::RedisModuleCtx,
@@ -157,7 +149,7 @@ pub(crate) fn json_api_get_json<M: Manager>(
     create_rmstring(ctx, &res, str)
 }
 
-pub(crate) fn json_api_get_json_from_iter<M: Manager>(
+pub fn json_api_get_json_from_iter<M: Manager>(
     _: M,
     iter: *mut c_void,
     ctx: *mut rawmod::RedisModuleCtx,
@@ -174,11 +166,7 @@ pub(crate) fn json_api_get_json_from_iter<M: Manager>(
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub(crate) fn json_api_get_int<M: Manager>(
-    _: M,
-    json: *const c_void,
-    val: *mut c_longlong,
-) -> c_int {
+pub fn json_api_get_int<M: Manager>(_: M, json: *const c_void, val: *mut c_longlong) -> c_int {
     let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
         SelectValueType::Long => {
@@ -190,11 +178,7 @@ pub(crate) fn json_api_get_int<M: Manager>(
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub(crate) fn json_api_get_double<M: Manager>(
-    _: M,
-    json: *const c_void,
-    val: *mut c_double,
-) -> c_int {
+pub fn json_api_get_double<M: Manager>(_: M, json: *const c_void, val: *mut c_double) -> c_int {
     let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
         SelectValueType::Double => {
@@ -210,11 +194,7 @@ pub(crate) fn json_api_get_double<M: Manager>(
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub(crate) fn json_api_get_boolean<M: Manager>(
-    _: M,
-    json: *const c_void,
-    val: *mut c_int,
-) -> c_int {
+pub fn json_api_get_boolean<M: Manager>(_: M, json: *const c_void, val: *mut c_int) -> c_int {
     let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
         SelectValueType::Bool => {
@@ -228,7 +208,7 @@ pub(crate) fn json_api_get_boolean<M: Manager>(
 //---------------------------------------------------------------------------------------------
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub(crate) fn set_string(from_str: &str, str: *mut *const c_char, len: *mut size_t) -> c_int {
+pub fn set_string(from_str: &str, str: *mut *const c_char, len: *mut size_t) -> c_int {
     if !str.is_null() {
         unsafe {
             *str = from_str.as_ptr().cast::<c_char>();
@@ -251,7 +231,7 @@ fn json_api_get_type_internal<V: SelectValue>(v: &V) -> JSONType {
     }
 }
 
-pub(crate) fn json_api_next<M: Manager>(_: M, iter: *mut c_void) -> *const c_void {
+pub fn json_api_next<M: Manager>(_: M, iter: *mut c_void) -> *const c_void {
     let iter = unsafe { &mut *(iter.cast::<ResultsIterator<M::V>>()) };
     if iter.pos >= iter.results.len() {
         null_mut()
@@ -262,28 +242,24 @@ pub(crate) fn json_api_next<M: Manager>(_: M, iter: *mut c_void) -> *const c_voi
     }
 }
 
-pub(crate) fn json_api_len<M: Manager>(_: M, iter: *const c_void) -> size_t {
+pub fn json_api_len<M: Manager>(_: M, iter: *const c_void) -> size_t {
     let iter = unsafe { &*(iter.cast::<ResultsIterator<M::V>>()) };
     iter.results.len() as size_t
 }
 
-pub(crate) fn json_api_free_iter<M: Manager>(_: M, iter: *mut c_void) {
+pub fn json_api_free_iter<M: Manager>(_: M, iter: *mut c_void) {
     unsafe {
         drop(Box::from_raw(iter.cast::<ResultsIterator<M::V>>()));
     }
 }
 
-pub(crate) fn json_api_reset_iter<M: Manager>(_: M, iter: *mut c_void) {
+pub fn json_api_reset_iter<M: Manager>(_: M, iter: *mut c_void) {
     let iter = unsafe { &mut *(iter.cast::<ResultsIterator<M::V>>()) };
     iter.pos = 0;
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub(crate) fn json_api_get<M: Manager>(
-    _: M,
-    val: *const c_void,
-    path: *const c_char,
-) -> *const c_void {
+pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -> *const c_void {
     let v = unsafe { &*(val.cast::<M::V>()) };
     let path = unsafe { CStr::from_ptr(path).to_str().unwrap() };
     let query = match compile(path) {
@@ -299,11 +275,11 @@ pub(crate) fn json_api_get<M: Manager>(
     .cast::<c_void>()
 }
 
-pub(crate) fn json_api_is_json<M: Manager>(m: M, key: *mut rawmod::RedisModuleKey) -> c_int {
+pub fn json_api_is_json<M: Manager>(m: M, key: *mut rawmod::RedisModuleKey) -> c_int {
     m.is_json(key).map_or(0, |res| res as c_int)
 }
 
-pub(crate) fn json_api_get_key_value<M: Manager>(_: M, val: *const c_void) -> *const c_void {
+pub fn json_api_get_key_value<M: Manager>(_: M, val: *const c_void) -> *const c_void {
     let json = unsafe { &*(val.cast::<M::V>()) };
     match json.get_type() {
         SelectValueType::Object => Box::into_raw(Box::new(json.items().unwrap())).cast::<c_void>(),
@@ -311,7 +287,7 @@ pub(crate) fn json_api_get_key_value<M: Manager>(_: M, val: *const c_void) -> *c
     }
 }
 
-pub(crate) fn json_api_next_key_value<'a, M: Manager>(
+pub fn json_api_next_key_value<'a, M: Manager>(
     _: M,
     iter: *mut c_void,
     str: *mut *mut rawmod::RedisModuleString,
@@ -328,7 +304,7 @@ where
     }
 }
 
-pub(crate) fn json_api_free_key_values_iter<'a, M: Manager>(_: M, iter: *mut c_void)
+pub fn json_api_free_key_values_iter<'a, M: Manager>(_: M, iter: *mut c_void)
 where
     M::V: 'a,
 {
@@ -338,7 +314,7 @@ where
     }
 }
 
-pub(crate) fn get_llapi_ctx() -> Context {
+pub fn get_llapi_ctx() -> Context {
     Context::new(unsafe { LLAPI_CTX.unwrap() })
 }
 
@@ -539,7 +515,7 @@ macro_rules! redis_json_module_export_shared_api {
             match json_path::compile(path) {
                 Ok(q) => Box::into_raw(Box::new(q)).cast::<c_void>(),
                 Err(e) => {
-                    crate::c_api::create_rmstring(ctx, &format!("{}", e), err_msg);
+                    create_rmstring(ctx, &format!("{}", e), err_msg);
                     std::ptr::null()
                 }
             }
