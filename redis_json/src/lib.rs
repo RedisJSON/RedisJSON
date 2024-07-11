@@ -128,6 +128,7 @@ macro_rules! redis_json_module_create {(
         };
         use libc::size_t;
         use std::collections::HashMap;
+        use $crate::c_api::create_rmstring;
 
         macro_rules! json_command {
             ($cmd:ident) => {
@@ -240,7 +241,7 @@ redis_json_module_create! {
     data_types: [REDIS_JSON_TYPE],
     pre_command_function: pre_command,
     get_manage: Some(ivalue_manager::RedisIValueJsonKeyManager{phantom:PhantomData}),
-    version: 02_06_10,
+    version: 02_06_11,
     init: dummy_init,
     info: dummy_info,
 }
