@@ -281,11 +281,10 @@ impl<'a> IValueKeyHolderWrite<'a> {
 }
 
 impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
-    fn apply_changes(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError> {
+    fn notify_keyspace_event(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError> {
         if ctx.notify_keyspace_event(NotifyEvent::MODULE, command, &self.key_name) != Status::Ok {
             Err(RedisError::Str("failed notify key space event"))
         } else {
-            ctx.replicate_verbatim();
             Ok(())
         }
     }
@@ -610,6 +609,13 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
             val: None,
         })
     }
+    /**
+     * This function is used to apply changes to the slave and AOF.
+     * It is called after the command is executed.
+     */
+    fn apply_changes(&self, ctx: &Context) {
+        ctx.replicate_verbatim();
+    }
 
     fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> Result<Self::O, Error> {
         match format {
@@ -718,11 +724,11 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
 mod tests {
     use super::*;
 
-    static single_thread_test_mutex: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    static SINGLE_THREAD_TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
     fn test_get_memory() {
-        let _guard = single_thread_test_mutex.lock();
+        let _guard = SINGLE_THREAD_TEST_MUTEX.lock();
 
         let manager = RedisIValueJsonKeyManager {
             phantom: PhantomData,
@@ -752,7 +758,7 @@ mod tests {
     /// unicode characters well.
     #[test]
     fn test_unicode_characters() {
-        let _guard = single_thread_test_mutex.lock();
+        let _guard = SINGLE_THREAD_TEST_MUTEX.lock();
 
         let json = r#""\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0""#;
         let value: IValue = serde_json::from_str(json).expect("IValue parses fine.");
