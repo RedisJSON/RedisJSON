@@ -54,14 +54,15 @@ OS=$($READIES/bin/platform --os)
 
 if [[ $OS == macos ]]; then
 	# as we don't build on macOS for every platform, we converge to a least common denominator
-	if [[ $ARCH == x86_64 ]]; then
-		OSNICK=catalina  # to be aligned with the rest of the modules in redis stack
-	else
-		[[ $OSNICK == ventura ]] && OSNICK=monterey
-	fi
+	# if [[ $ARCH == x86_64 ]]; then
+	# 	OSNICK=catalina  # to be aligned with the rest of the modules in redis stack
+	# else
+	# 	[[ $OSNICK == ventura ]] && OSNICK=monterey
+	# fi
+	PLATFORMS=("$OS-catalina-x86_64" "$OS-monterey-aarch64")
+else
+	PLATFORMS=("$OS-$OSNICK-$ARCH")
 fi
-
-PLATFORM="$OS-$OSNICK-$ARCH"
 
 #----------------------------------------------------------------------------------------------
 
@@ -113,8 +114,10 @@ s3_upload() {
 	local upload_dir="${S3_URL}/${prod_subdir}${MAYBE_SNAP}"
 	local file
 	if [[ $SNAPSHOT == 1 ]]; then
-		for file in `ls ${prefix}.*${PLATFORM}*.zip ${prefix}.*${PLATFORM}*.tgz 2> /dev/null`; do
-			s3_upload_file $file $upload_dir
+		for platform in ${PLATFORMS[@]}; do
+			for file in `ls ${prefix}.*${platform}*.zip ${prefix}.*${platform}*.tgz 2> /dev/null`; do
+				s3_upload_file $file $upload_dir
+			done
 		done
 	else
 		for file in `ls ${prefix}.*.zip ${prefix}.*.tgz 2> /dev/null`; do
