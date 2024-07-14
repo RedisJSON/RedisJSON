@@ -551,7 +551,8 @@ workflows:
               san-type: [address]
       - upload-artifacts:
           name: upload-artifacts-to-staging-lab
-          <<: *on-integ-branch
+          <<: *not-on-integ-branch
+          # <<: *on-integ-branch
           staging-lab: "1"
           context: common
           requires:
