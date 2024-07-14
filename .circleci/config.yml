@@ -319,27 +319,27 @@ jobs:
       - vm-build-platforms-steps:
           platform: <<parameters.platform>>
 
-  build-macos-x64:
-    macos:
-      xcode: 13.4.1
-    resource_class: macos.x86.medium.gen2
-    parameters:
-      upload:
-        type: string
-        default: "yes"
-    steps:
-      - early-returns
-      - build-steps
-      - test-steps
-      - persist-artifacts
-      - run:
-          name: Upload artifacts to S3
-          command: |
-            if [[ -n $CIRCLE_BRANCH ]]; then
-                make upload-artifacts SHOW=1
-            else
-                make upload-release SHOW=1
-            fi
+  # build-macos-x64:
+  #   macos:
+  #     xcode: 13.4.1
+  #   resource_class: macos.x86.medium.gen2
+  #   parameters:
+  #     upload:
+  #       type: string
+  #       default: "yes"
+  #   steps:
+  #     - early-returns
+  #     - build-steps
+  #     - test-steps
+  #     - persist-artifacts
+  #     - run:
+  #         name: Upload artifacts to S3
+  #         command: |
+  #           if [[ -n $CIRCLE_BRANCH ]]; then
+  #               make upload-artifacts SHOW=1
+  #           else
+  #               make upload-release SHOW=1
+  #           fi
 
   build-macos-m1:
     macos:
@@ -532,9 +532,9 @@ workflows:
           matrix:
             parameters:
               platform: [jammy, focal, bionic]
-      - build-macos-x64:
-          <<: *on-integ-and-version-tags
-          context: common
+      # - build-macos-x64:
+      #     <<: *on-integ-and-version-tags
+      #     context: common
       - build-macos-m1:
           context: common
           <<: *on-integ-and-version-tags
@@ -554,7 +554,7 @@ workflows:
           requires:
             - build-platforms
             - build-arm-platforms
-            - build-macos-x64
+            # - build-macos-x64
             - build-macos-m1
       - upload-artifacts:
           name: upload-release-artifacts
@@ -563,7 +563,7 @@ workflows:
           requires:
             - build-platforms
             - build-arm-platforms
-            - build-macos-x64
+            # - build-macos-x64
             - build-macos-m1
       - release-qa-tests:
           <<: *on-version-tags
@@ -588,9 +588,9 @@ workflows:
     when:
       << pipeline.parameters.run_nightly_twice_a_week_flow_label >>
     jobs:
-      - build-macos-x64:
-          context: common
-          upload: "yes"
+      # - build-macos-x64:
+      #     context: common
+      #     upload: "yes"
       - build-macos-m1:
           context: common
           upload: "yes"
@@ -601,9 +601,9 @@ workflows:
           cron: "20 17 * * 0,3"
           <<: *on-integ-branch-cron
     jobs:
-      - build-macos-x64:
-          context: common
-          upload: "yes"
+      # - build-macos-x64:
+      #     context: common
+      #     upload: "yes"
       - build-macos-m1:
           context: common
           upload: "yes"
