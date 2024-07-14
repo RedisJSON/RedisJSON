@@ -517,17 +517,19 @@ workflows:
     when:
       << pipeline.parameters.run_default_flow >>
     jobs:
-      - build-linux-debian:
-          name: build
-          <<: *not-on-integ-branch
+      # - build-linux-debian:
+      #     name: build
+      #     <<: *not-on-integ-branch
       - build-platforms:
-          <<: *on-integ-and-version-tags
+          <<: *not-on-integ-branch
+          # <<: *on-integ-and-version-tags
           context: common
           matrix:
             parameters:
               platform: [jammy, focal, bionic, centos7, rocky8, rocky9, bullseye, amzn2]
       - build-arm-platforms:
-          <<: *on-integ-and-version-tags
+          <<: *not-on-integ-branch
+          # <<: *on-integ-and-version-tags
           context: common
           matrix:
             parameters:
@@ -537,7 +539,8 @@ workflows:
       #     context: common
       - build-macos-m1:
           context: common
-          <<: *on-integ-and-version-tags
+          <<: *not-on-integ-branch
+          # <<: *on-integ-and-version-tags
       - coverage:
           <<: *always
       - sanitize:
