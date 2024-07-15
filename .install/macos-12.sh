@@ -1,8 +1,7 @@
 #!/bin/bash
 
-echo "::error make --version"
+echo "::error $(make --version)"
 
-#!/bin/bash
 version=3.25.1
 processor=$(uname -m)
 OS_TYPE=$(uname -s)
@@ -25,4 +24,4 @@ else
     cmake --version
 fi
 
-echo "::error make --version"
+echo "::error $(make --version)"
