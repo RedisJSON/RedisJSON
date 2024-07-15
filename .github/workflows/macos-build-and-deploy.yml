@@ -26,7 +26,7 @@ jobs:
           sparse-checkout-cone-mode: false
           sparse-checkout: |
             .install
-            tests/pytests/requirements.*
+            tests/pytest/requirements.*
       - name: Setup specific
         working-directory: setup/.install
         run: ./install_script.sh ${{ steps.mode.outputs.mode }}
@@ -36,7 +36,7 @@ jobs:
           submodules: recursive
       - name: Setup common
         run: .install/common_installations.sh ${{ steps.mode.outputs.mode }}
-        
+
       - name: Get Redis
         uses: actions/checkout@v4
         with:
