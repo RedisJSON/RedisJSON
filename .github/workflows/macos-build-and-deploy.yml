@@ -36,9 +36,7 @@ jobs:
           submodules: recursive
       - name: Setup common
         run: .install/common_installations.sh ${{ steps.mode.outputs.mode }}
-      # - name: Install dependencies
-      #   run: |
-      #     bash .install/macos-12.sh
+        
       - name: Get Redis
         uses: actions/checkout@v4
         with:
