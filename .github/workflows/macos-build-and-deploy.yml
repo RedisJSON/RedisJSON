@@ -34,6 +34,17 @@ jobs:
       - name: Build module
         run: |
           make build
+      - name: Deps checkout
+        uses: actions/checkout@v3
+        with:
+          path: setup
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            .install
+            tests/pytests/requirements.*
+      - name: Setup specific
+        working-directory: setup/.install
+        run: ./install_script.sh ${{ steps.mode.outputs.mode }}
       - name: Test
         run: |
           make test
