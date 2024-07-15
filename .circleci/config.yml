@@ -432,7 +432,10 @@ jobs:
       - setup-automation
       - run:
           name: Run QA Automation
-          command: ./tests/qa/qatests -m "$CIRCLE_TAG"
+          command: |
+            ./deps/readies/bin/getgit --github
+            echo $GH_ACCESS_TOKEN | gh auth login --with-token
+            ./tests/qa/qatests -m "$CIRCLE_TAG"
 
 #----------------------------------------------------------------------------------------------------------------------------------
 
