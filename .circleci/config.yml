@@ -319,28 +319,6 @@ jobs:
       - vm-build-platforms-steps:
           platform: <<parameters.platform>>
 
-  # build-macos-x64:
-  #   macos:
-  #     xcode: 13.4.1
-  #   resource_class: macos.x86.medium.gen2
-  #   parameters:
-  #     upload:
-  #       type: string
-  #       default: "yes"
-  #   steps:
-  #     - early-returns
-  #     - build-steps
-  #     - test-steps
-  #     - persist-artifacts
-  #     - run:
-  #         name: Upload artifacts to S3
-  #         command: |
-  #           if [[ -n $CIRCLE_BRANCH ]]; then
-  #               make upload-artifacts SHOW=1
-  #           else
-  #               make upload-release SHOW=1
-  #           fi
-
   build-macos-m1:
     macos:
       xcode: 14.2.0
@@ -517,30 +495,24 @@ workflows:
     when:
       << pipeline.parameters.run_default_flow >>
     jobs:
-      # - build-linux-debian:
-      #     name: build
-      #     <<: *not-on-integ-branch
-      - build-platforms:
+      - build-linux-debian:
+          name: build
           <<: *not-on-integ-branch
-          # <<: *on-integ-and-version-tags
+      - build-platforms:
+          <<: *on-integ-and-version-tags
           context: common
           matrix:
             parameters:
               platform: [jammy, focal, bionic, centos7, rocky8, rocky9, bullseye, amzn2]
       - build-arm-platforms:
-          <<: *not-on-integ-branch
-          # <<: *on-integ-and-version-tags
+          <<: *on-integ-and-version-tags
           context: common
           matrix:
             parameters:
               platform: [jammy, focal, bionic]
-      # - build-macos-x64:
-      #     <<: *on-integ-and-version-tags
-      #     context: common
       - build-macos-m1:
           context: common
-          <<: *not-on-integ-branch
-          # <<: *on-integ-and-version-tags
+          <<: *on-integ-and-version-tags
       - coverage:
           <<: *always
       - sanitize:
@@ -551,14 +523,12 @@ workflows:
               san-type: [address]
       - upload-artifacts:
           name: upload-artifacts-to-staging-lab
-          <<: *not-on-integ-branch
-          # <<: *on-integ-branch
+          <<: *on-integ-branch
           staging-lab: "1"
           context: common
           requires:
             - build-platforms
             - build-arm-platforms
-            # - build-macos-x64
             - build-macos-m1
       - upload-artifacts:
           name: upload-release-artifacts
@@ -567,7 +537,6 @@ workflows:
           requires:
             - build-platforms
             - build-arm-platforms
-            # - build-macos-x64
             - build-macos-m1
       - release-qa-tests:
           <<: *on-version-tags
@@ -592,9 +561,6 @@ workflows:
     when:
       << pipeline.parameters.run_nightly_twice_a_week_flow_label >>
     jobs:
-      # - build-macos-x64:
-      #     context: common
-      #     upload: "yes"
       - build-macos-m1:
           context: common
           upload: "yes"
@@ -605,9 +571,6 @@ workflows:
           cron: "20 17 * * 0,3"
           <<: *on-integ-branch-cron
     jobs:
-      # - build-macos-x64:
-      #     context: common
-      #     upload: "yes"
       - build-macos-m1:
           context: common
           upload: "yes"
