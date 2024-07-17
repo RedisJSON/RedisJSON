@@ -1,0 +1,69 @@
+name: Build for macos
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  build:
+    runs-on: macos-12
+    defaults:
+      run:
+        shell: bash -l -eo pipefail {0}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+      - name: Deps checkout
+        uses: actions/checkout@v3
+        with:
+          path: setup
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            .install
+            tests/pytest/requirements.*
+      - name: Setup specific
+        working-directory: setup/.install
+        run: ./install_script.sh ${{ steps.mode.outputs.mode }}
+      - name: Full checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - name: Setup common
+        run: .install/common_installations.sh ${{ steps.mode.outputs.mode }}
+
+      - name: Get Redis
+        uses: actions/checkout@v4
+        with:
+          repository: redis/redis
+          ref: 'unstable' # todo change per version/tag
+          path: redis
+      - name: Build Redis
+        working-directory: redis
+        run: make install
+      - name: Build module
+        run: |
+          make build
+      - name: Test
+        run: |
+          make test
+      - name: Pack module
+        run: |
+          make pack BRANCH=${{ github.ref_name }}
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: "us-east-1"
+      - name: Upload artifacts to S3 - staging
+        run: |
+          make upload-artifacts SHOW=1 VERBOSE=1
+          make upload-release SHOW=1 STAGING=1 VERBOSE=1
+      - name: Upload artifacts to S3 - release  # todo: trigger this manually instead
+        if: ${{ github.ref != 'refs/heads/master' }}
+        run: make upload-release SHOW=1 VERBOSE=1
