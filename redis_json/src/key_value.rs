@@ -10,7 +10,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
-    commands::{FoundIndex, ObjectLen, Values},
+    commands::{FoundIndex, ObjectLen, Values, prepare_paths_for_updating},
     error::Error,
     formatter::{RedisJsonFormatter, ReplyFormatOptions},
     manager::{
@@ -332,12 +332,12 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     pub fn find_paths(
         &mut self,
         path: &str,
-        option: &SetOptions,
+        option: SetOptions,
     ) -> Result<Vec<UpdateInfo>, Error> {
-        if SetOptions::NotExists != *option {
+        if SetOptions::NotExists != option {
             let query = compile(path)?;
-            let res = calc_once_paths(query, self.val);
-
+            let mut res = calc_once_paths(query, self.val);
+            prepare_paths_for_updating(&mut res);
             if !res.is_empty() {
                 return Ok(res
                     .into_iter()
@@ -345,7 +345,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                     .collect());
             }
         }
-        if SetOptions::AlreadyExists == *option {
+        if SetOptions::AlreadyExists == option {
             Ok(Vec::new()) // empty vector means no updates
         } else {
             self.find_add_paths(path)

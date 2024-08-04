@@ -199,7 +199,7 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
                     Ok(RedisValue::Null)
                 }
             } else {
-                let update_info = KeyValue::new(doc).find_paths(path.get_path(), &op)?;
+                let update_info = KeyValue::new(doc).find_paths(path.get_path(), op)?;
                 if !update_info.is_empty() {
                     let updated = apply_updates::<M>(&mut redis_key, val, update_info);
                     if updated {
@@ -265,7 +265,7 @@ pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
                 REDIS_OK
             } else {
                 let mut update_info =
-                    KeyValue::new(doc).find_paths(path.get_path(), &SetOptions::None)?;
+                    KeyValue::new(doc).find_paths(path.get_path(), SetOptions::None)?;
                 if !update_info.is_empty() {
                     let mut res = false;
                     if update_info.len() == 1 {
@@ -336,7 +336,7 @@ pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
         let update_info = if path.get_path() == JSON_ROOT_PATH {
             None
         } else if let Some(value) = key_value {
-            Some(KeyValue::new(value).find_paths(path.get_path(), &SetOptions::None)?)
+            Some(KeyValue::new(value).find_paths(path.get_path(), SetOptions::None)?)
         } else {
             return Err(RedisError::Str(
                 "ERR new objects must be created at the root",
@@ -383,18 +383,16 @@ fn apply_updates<M: Manager>(
                 .unwrap_or(false),
         }
     } else {
-        let mut updated = false;
-        for ui in update_info {
-            updated = match ui {
+        update_info.into_iter().fold(false, |updated, ui| {
+            updated || match ui {
                 UpdateInfo::SUI(sui) => redis_key
                     .set_value(sui.path, value.clone())
                     .unwrap_or(false),
                 UpdateInfo::AUI(aui) => redis_key
                     .dict_add(aui.path, &aui.key, value.clone())
                     .unwrap_or(false),
-            } || updated
-        }
-        updated
+            }
+        })
     }
 }
 
@@ -502,7 +500,7 @@ where
 /// Sort the paths so higher indices precede lower indices on the same array,
 /// And longer paths precede shorter paths
 /// And if a path is a sub-path of the other, then only paths with shallower hierarchy (closer to the top-level) remain
-fn prepare_paths_for_deletion(paths: &mut Vec<Vec<String>>) {
+pub fn prepare_paths_for_updating(paths: &mut Vec<Vec<String>>) {
     if paths.len() < 2 {
         // No need to reorder when there are less than 2 paths
         return;
@@ -580,7 +578,7 @@ pub fn json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
                 1
             } else {
                 let mut paths = find_paths(path.get_path(), doc, |_| true)?;
-                prepare_paths_for_deletion(&mut paths);
+                prepare_paths_for_updating(&mut paths);
                 let mut changed = 0;
                 for p in paths {
                     if redis_key.delete_path(p)? {
