@@ -329,15 +329,11 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    pub fn find_paths(
-        &mut self,
-        path: &str,
-        option: SetOptions,
-    ) -> Result<Vec<UpdateInfo>, Error> {
+    pub fn find_paths(&mut self, path: &str, option: SetOptions) -> Result<Vec<UpdateInfo>, Error> {
         if SetOptions::NotExists != option {
             let query = compile(path)?;
             let res = calc_once_paths(query, self.val);
-            
+
             if !res.is_empty() {
                 return Ok(res
                     .into_iter()
@@ -430,22 +426,27 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             (SelectValueType::String, SelectValueType::String) => a.get_str() == b.get_str(),
             (SelectValueType::Array, SelectValueType::Array) => {
                 if a.len().unwrap() == b.len().unwrap() {
-                    a.values().unwrap().zip(b.values().unwrap()).try_for_each(|(a, b)| {
-                        Self::is_equal(a, b).then_some(())
-                    }).is_some()
+                    a.values()
+                        .unwrap()
+                        .zip(b.values().unwrap())
+                        .try_for_each(|(a, b)| Self::is_equal(a, b).then_some(()))
+                        .is_some()
                 } else {
                     false
                 }
             }
             (SelectValueType::Object, SelectValueType::Object) => {
                 if a.len().unwrap() == b.len().unwrap() {
-                    a.keys().unwrap().try_for_each(|k| {
-                        if let (Some(a), Some(b)) = (a.get_key(k), b.get_key(k)) {
-                            Self::is_equal(a, b).then_some(())
-                        } else {
-                            None
-                        }
-                    }).is_some()
+                    a.keys()
+                        .unwrap()
+                        .try_for_each(|k| {
+                            if let (Some(a), Some(b)) = (a.get_key(k), b.get_key(k)) {
+                                Self::is_equal(a, b).then_some(())
+                            } else {
+                                None
+                            }
+                        })
+                        .is_some()
                 } else {
                     false
                 }
