@@ -140,18 +140,13 @@ fn update<F: FnMut(&mut IValue) -> Result<Option<()>, Error>>(
                 if is_last {
                     if idx < arr.len() {
                         let v = &mut arr.as_mut_slice()[idx];
-                        match func(v) {
-                            Ok(res) => {
-                                if res.is_none() {
-                                    arr.remove(idx);
-                                }
-                            }
-                            Err(err) => return Err(err),
+                        if let None = func(v)? {
+                            arr.remove(idx);
                         }
                     }
                     return Ok(());
                 }
-                arr.get_mut(x)
+                arr.get_mut(idx)
             }
             _ => None,
         };
