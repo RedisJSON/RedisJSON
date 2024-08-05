@@ -1532,7 +1532,7 @@ def test_recursive_descent(env):
     r = env
     r.expect('JSON.SET', 'k', '$', '[{"a":1}]').ok()
     r.expect('JSON.SET', 'k', '$..*', '[{"a":1}]').ok()
-    r.expect('JSON.GET', 'k', '$').equal('[[{"a":1}]]')
+    r.expect('JSON.GET', 'k', '$').equal('[[[{"a":1}]]]')
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property

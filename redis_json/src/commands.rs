@@ -384,14 +384,15 @@ fn apply_updates<M: Manager>(
         }
     } else {
         update_info.into_iter().fold(false, |updated, ui| {
-            updated || match ui {
-                UpdateInfo::SUI(sui) => redis_key
-                    .set_value(sui.path, value.clone())
-                    .unwrap_or(false),
-                UpdateInfo::AUI(aui) => redis_key
-                    .dict_add(aui.path, &aui.key, value.clone())
-                    .unwrap_or(false),
-            }
+            updated
+                || match ui {
+                    UpdateInfo::SUI(sui) => redis_key
+                        .set_value(sui.path, value.clone())
+                        .unwrap_or(false),
+                    UpdateInfo::AUI(aui) => redis_key
+                        .dict_add(aui.path, &aui.key, value.clone())
+                        .unwrap_or(false),
+                }
         })
     }
 }
@@ -540,21 +541,17 @@ pub fn prepare_paths_for_updating(paths: &mut Vec<Vec<String>>) {
     });
     // Remove paths which are nested by others (on each sub-tree only top most ancestor should be deleted)
     // (TODO: Add a mode in which the jsonpath selector will already skip nested paths)
-    let mut string_paths = Vec::new();
-    paths.iter().for_each(|v| {
-        string_paths.push(v.join(","));
-    });
+    let mut string_paths = paths.iter().map(|v| v.join(",")).collect::<Vec<_>>();
     string_paths.sort();
 
     paths.retain(|v| {
         let path = v.join(",");
-        let found = string_paths.binary_search(&path).unwrap();
-        for p in string_paths.iter().take(found) {
-            if path.starts_with(p.as_str()) {
-                return false;
-            }
-        }
-        true
+        let found = string_paths
+            .iter()
+            .skip_while(|p| !path.starts_with(*p))
+            .next()
+            .unwrap();
+        path == *found
     });
 }
 
