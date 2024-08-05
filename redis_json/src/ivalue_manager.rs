@@ -85,7 +85,7 @@ fn replace<F: FnMut(&mut IValue) -> Result<Option<IValue>, Error>>(
                     }
                     return Ok(());
                 }
-                arr.get_mut(x)
+                arr.get_mut(idx)
             }
             _ => None,
         };
