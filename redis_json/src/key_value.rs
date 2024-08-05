@@ -10,7 +10,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
-    commands::{FoundIndex, ObjectLen, Values, prepare_paths_for_updating},
+    commands::{FoundIndex, ObjectLen, Values},
     error::Error,
     formatter::{RedisJsonFormatter, ReplyFormatOptions},
     manager::{
@@ -336,8 +336,8 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     ) -> Result<Vec<UpdateInfo>, Error> {
         if SetOptions::NotExists != option {
             let query = compile(path)?;
-            let mut res = calc_once_paths(query, self.val);
-            prepare_paths_for_updating(&mut res);
+            let res = calc_once_paths(query, self.val);
+            
             if !res.is_empty() {
                 return Ok(res
                     .into_iter()
@@ -430,31 +430,22 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             (SelectValueType::String, SelectValueType::String) => a.get_str() == b.get_str(),
             (SelectValueType::Array, SelectValueType::Array) => {
                 if a.len().unwrap() == b.len().unwrap() {
-                    for (i, e) in a.values().unwrap().enumerate() {
-                        if !Self::is_equal(e, b.get_index(i).unwrap()) {
-                            return false;
-                        }
-                    }
-                    true
+                    a.values().unwrap().zip(b.values().unwrap()).try_for_each(|(a, b)| {
+                        Self::is_equal(a, b).then_some(())
+                    }).is_some()
                 } else {
                     false
                 }
             }
             (SelectValueType::Object, SelectValueType::Object) => {
                 if a.len().unwrap() == b.len().unwrap() {
-                    for k in a.keys().unwrap() {
-                        let temp1 = a.get_key(k);
-                        let temp2 = b.get_key(k);
-                        match (temp1, temp2) {
-                            (Some(a1), Some(b1)) => {
-                                if !Self::is_equal(a1, b1) {
-                                    return false;
-                                }
-                            }
-                            (_, _) => return false,
+                    a.keys().unwrap().try_for_each(|k| {
+                        if let (Some(a), Some(b)) = (a.get_key(k), b.get_key(k)) {
+                            Self::is_equal(a, b).then_some(())
+                        } else {
+                            None
                         }
-                    }
-                    true
+                    }).is_some()
                 } else {
                     false
                 }

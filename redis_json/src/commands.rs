@@ -437,11 +437,8 @@ where
 {
     values_and_paths
         .into_iter()
-        .map(|(v, p)| match f(v) {
-            true => Some(p),
-            _ => None,
-        })
-        .collect::<Vec<Option<Vec<String>>>>()
+        .map(|(v, p)| f(v).then_some(p))
+        .collect()
 }
 
 /// Returns a Vec of Values with `None` for Values that do not match the filter
@@ -451,11 +448,8 @@ where
 {
     values_and_paths
         .into_iter()
-        .map(|(v, _)| match f(v) {
-            true => Some(v),
-            _ => None,
-        })
-        .collect::<Vec<Option<&T>>>()
+        .map(|(v, _)| f(v).then_some(v))
+        .collect()
 }
 
 fn find_all_paths<T: SelectValue, F>(
