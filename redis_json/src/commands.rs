@@ -377,22 +377,18 @@ fn apply_updates<M: Manager>(
     // If there is only one update info, we can avoid cloning the value
     if update_info.len() == 1 {
         match update_info.pop().unwrap() {
-            UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value).unwrap_or(false),
-            UpdateInfo::AUI(aui) => redis_key
-                .dict_add(aui.path, &aui.key, value)
-                .unwrap_or(false),
+            UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value),
+            UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, value),
         }
+        .unwrap_or(false)
     } else {
         update_info.into_iter().fold(false, |updated, ui| {
-            updated
-                || match ui {
-                    UpdateInfo::SUI(sui) => redis_key
-                        .set_value(sui.path, value.clone())
-                        .unwrap_or(false),
-                    UpdateInfo::AUI(aui) => redis_key
-                        .dict_add(aui.path, &aui.key, value.clone())
-                        .unwrap_or(false),
-                }
+            match ui {
+                UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value.clone()),
+                UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, value.clone()),
+            }
+            .unwrap_or(false)
+                || updated
         })
     }
 }
@@ -723,7 +719,7 @@ where
             op,
             cmd,
         )?
-        .drain(..)
+        .into_iter()
         .map(|v| {
             v.map_or(RedisValue::Null, |v| {
                 if let Some(i) = v.as_i64() {
@@ -733,7 +729,7 @@ where
                 }
             })
         })
-        .collect::<Vec<RedisValue>>()
+        .collect::<Vec<_>>()
         .into();
         Ok(res)
     } else if path.is_legacy() {
@@ -785,20 +781,20 @@ where
         )
     })?;
 
-    let mut res = vec![];
+    let mut res = Vec::with_capacity(paths.capacity());
     let mut need_notify = false;
     for p in paths {
-        res.push(match p {
-            Some(p) => {
+        res.push(
+            p.map(|p| {
                 need_notify = true;
-                Some(match op {
-                    NumOp::Incr => redis_key.incr_by(p, number)?,
-                    NumOp::Mult => redis_key.mult_by(p, number)?,
-                    NumOp::Pow => redis_key.pow_by(p, number)?,
-                })
-            }
-            _ => None,
-        });
+                match op {
+                    NumOp::Incr => redis_key.incr_by(p, number),
+                    NumOp::Mult => redis_key.mult_by(p, number),
+                    NumOp::Pow => redis_key.pow_by(p, number),
+                }
+            })
+            .transpose()?,
+        );
     }
     if need_notify {
         redis_key.notify_keyspace_event(ctx, cmd)?;

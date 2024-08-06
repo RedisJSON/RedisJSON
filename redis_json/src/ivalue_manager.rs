@@ -169,7 +169,10 @@ impl<'a> IValueKeyHolderWrite<'a> {
         if paths.is_empty() {
             // updating the root require special treatment
             let root = self.get_value().unwrap().unwrap();
-            if op_fun(root).map_err(|err| RedisError::String(err.msg))?.is_none() {
+            if op_fun(root)
+                .map_err(|err| RedisError::String(err.msg))?
+                .is_none()
+            {
                 root.take();
             }
         } else {
