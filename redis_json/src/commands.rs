@@ -781,10 +781,10 @@ where
         )
     })?;
 
-    let mut res = Vec::with_capacity(paths.capacity());
     let mut need_notify = false;
-    for p in paths {
-        res.push(
+    let res = paths
+        .into_iter()
+        .map(|p| {
             p.map(|p| {
                 need_notify = true;
                 match op {
@@ -793,9 +793,9 @@ where
                     NumOp::Pow => redis_key.pow_by(p, number),
                 }
             })
-            .transpose()?,
-        );
-    }
+            .transpose()
+        })
+        .collect::<Result<_, _>>()?;
     if need_notify {
         redis_key.notify_keyspace_event(ctx, cmd)?;
         manager.apply_changes(ctx);
