@@ -13,6 +13,7 @@ use crate::{
     commands::{FoundIndex, ObjectLen, Values},
     error::Error,
     formatter::{RedisJsonFormatter, ReplyFormatOptions},
+    iterator_exts::IteratorExts,
     manager::{
         err_msg_json_expected, err_msg_json_path_doesnt_exist_with_param, AddUpdateInfo,
         SetUpdateInfo, UpdateInfo,
@@ -46,9 +47,9 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         } else {
             Ok(self
                 .get_values(path.get_path())?
-                .iter()
+                .into_iter()
                 .map(|v| Self::resp_serialize_inner(v))
-                .collect::<Vec<RedisValue>>()
+                .to_vec()
                 .into())
         }
     }
@@ -206,7 +207,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         values
             .iter()
             .map(|v| Self::value_to_resp3(v, format))
-            .collect::<Vec<_>>()
+            .to_vec()
             .into()
     }
 
@@ -223,7 +224,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                         .values()
                         .unwrap()
                         .map(|v| Self::value_to_resp3(v, format))
-                        .collect::<Vec<RedisValue>>(),
+                        .to_vec(),
                 ),
                 SelectValueType::Object => RedisValue::Map(
                     value
@@ -235,7 +236,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                                 Self::value_to_resp3(v, format),
                             )
                         })
-                        .collect::<HashMap<RedisValueKey, RedisValue>>(),
+                        .to_hashmap(),
                 ),
             }
         } else {
@@ -441,12 +442,12 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         start: i64,
         end: i64,
     ) -> Result<RedisValue, Error> {
-        let res = self
+        Ok(self
             .get_values(path)?
-            .iter()
+            .into_iter()
             .map(|value| Self::arr_first_index_single(value, &json_value, start, end).into())
-            .collect::<Vec<RedisValue>>();
-        Ok(res.into())
+            .collect::<Vec<RedisValue>>()
+            .into())
     }
 
     pub fn arr_index_legacy(

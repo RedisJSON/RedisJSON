@@ -6,11 +6,13 @@
 
 use crate::error::Error;
 use crate::formatter::ReplyFormatOptions;
+use crate::iterator_exts::IteratorExts;
 use crate::key_value::KeyValue;
-use crate::manager::err_msg_json_path_doesnt_exist_with_param;
-use crate::manager::err_msg_json_path_doesnt_exist_with_param_or;
-use crate::manager::{Manager, ReadHolder, UpdateInfo, WriteHolder};
-use crate::redisjson::{Format, Path, ReplyFormat};
+use crate::manager::{
+    err_msg_json_path_doesnt_exist_with_param, err_msg_json_path_doesnt_exist_with_param_or,
+    Manager, ReadHolder, UpdateInfo, WriteHolder,
+};
+use crate::redisjson::{Format, Path, ReplyFormat, SetOptions};
 use json_path::select_value::{SelectValue, SelectValueType};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
@@ -18,8 +20,6 @@ use std::cmp::Ordering;
 use std::str::FromStr;
 
 use json_path::{calc_once_with_paths, compile, json_path::UserPathTracker};
-
-use crate::redisjson::SetOptions;
 
 use serde_json::{Number, Value};
 
@@ -485,7 +485,7 @@ where
     values
         .into_iter()
         .map(|n| n.map_or_else(|| none_value.clone(), |t| t.into()))
-        .collect::<Vec<Value>>()
+        .to_vec()
 }
 
 /// Sort the paths so higher indices precede lower indices on the same array,
@@ -531,7 +531,7 @@ pub fn prepare_paths_for_updating(paths: &mut Vec<Vec<String>>) {
     });
     // Remove paths which are nested by others (on each sub-tree only top most ancestor should be deleted)
     // (TODO: Add a mode in which the jsonpath selector will already skip nested paths)
-    let mut string_paths = paths.iter().map(|v| v.join(",")).collect::<Vec<_>>();
+    let mut string_paths = paths.iter().map(|v| v.join(",")).to_vec();
     string_paths.sort();
 
     paths.retain(|v| {
@@ -729,7 +729,7 @@ where
                 }
             })
         })
-        .collect::<Vec<_>>()
+        .to_vec()
         .into();
         Ok(res)
     } else if path.is_legacy() {
@@ -795,7 +795,7 @@ where
             })
             .transpose()
         })
-        .collect::<Result<_, _>>()?;
+        .try_vec()?;
     if need_notify {
         redis_key.notify_keyspace_event(ctx, cmd)?;
         manager.apply_changes(ctx);
@@ -1661,9 +1661,7 @@ where
         let values = find_all_values(path, root, |v| v.get_type() == SelectValueType::Object)?;
         let mut res: Vec<RedisValue> = vec![];
         for v in values {
-            res.push(v.map_or(RedisValue::Null, |v| {
-                v.keys().unwrap().collect::<Vec<&str>>().into()
-            }));
+            res.push(v.map_or(RedisValue::Null, |v| v.keys().unwrap().to_vec().into()));
         }
         res.into()
     };
@@ -1680,7 +1678,7 @@ where
     };
     let value = match KeyValue::new(root).get_first(path) {
         Ok(v) => match v.get_type() {
-            SelectValueType::Object => v.keys().unwrap().collect::<Vec<&str>>().into(),
+            SelectValueType::Object => v.keys().unwrap().to_vec().into(),
             _ => {
                 return Err(RedisError::String(
                     err_msg_json_path_doesnt_exist_with_param_or(path, "not an object"),
@@ -1722,7 +1720,7 @@ where
                     RedisValue::Integer(v.len().unwrap() as i64)
                 })
             })
-            .collect::<Vec<RedisValue>>()
+            .to_vec()
             .into(),
         None => {
             return Err(RedisError::String(
@@ -1823,7 +1821,7 @@ pub fn json_debug<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
                         .get_values(path.get_path())?
                         .iter()
                         .map(|v| manager.get_memory(v).unwrap())
-                        .collect::<Vec<usize>>(),
+                        .to_vec(),
                     None => vec![],
                 }
                 .into())

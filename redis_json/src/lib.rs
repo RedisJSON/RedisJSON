@@ -38,6 +38,7 @@ pub mod c_api;
 pub mod commands;
 pub mod error;
 mod formatter;
+mod iterator_exts;
 pub mod ivalue_manager;
 mod key_value;
 pub mod manager;
