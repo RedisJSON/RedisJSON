@@ -112,7 +112,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
 
     fn to_json_multi(
         &self,
-        paths: &mut Vec<Path>,
+        paths: Vec<Path>,
         format: &ReplyFormatOptions,
         is_legacy: bool,
     ) -> Result<RedisValue, Error> {
@@ -124,32 +124,23 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         let path_len = paths.len();
         let temp_doc =
             paths
-                .drain(..)
+                .into_iter()
                 .fold(HashMap::with_capacity(path_len), |mut acc, path: Path| {
-                    let query = compile(path.get_path());
-
                     // If we can't compile the path, we can't continue
-                    if query.is_err() {
-                        return acc;
-                    }
+                    if let Ok(query) = compile(path.get_path()) {
+                        let results = calc_once(query, self.val);
 
-                    let query = query.unwrap();
-                    let results = calc_once(query, self.val);
-
-                    let value = if is_legacy {
-                        if results.is_empty() {
-                            None
+                        let value = if is_legacy {
+                            (!results.is_empty()).then_some(Values::Single(results[0]))
                         } else {
-                            Some(Values::Single(results[0]))
-                        }
-                    } else {
-                        Some(Values::Multi(results))
-                    };
+                            Some(Values::Multi(results))
+                        };
 
-                    if value.is_none() && missing_path.is_none() {
-                        missing_path = Some(path.get_original().to_string());
+                        if value.is_none() && missing_path.is_none() {
+                            missing_path = Some(path.get_original().to_string());
+                        }
+                        acc.insert(path.get_original(), value);
                     }
-                    acc.insert(path.get_original(), value);
                     acc
                 });
         if let Some(p) = missing_path {
@@ -158,36 +149,33 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
 
         // If we're using RESP3, we need to convert the HashMap to a RedisValue::Map unless we're using the legacy format
         let res = if format.is_resp3_reply() {
-            let map = temp_doc
-                .iter()
-                .map(|(k, v)| {
-                    let key = RedisValueKey::String(k.to_string());
-                    let value = match v {
-                        Some(Values::Single(value)) => Self::value_to_resp3(value, format),
-                        Some(Values::Multi(values)) => Self::values_to_resp3(values, format),
-                        None => RedisValue::Null,
-                    };
-                    (key, value)
-                })
-                .collect::<HashMap<RedisValueKey, RedisValue>>();
-            RedisValue::Map(map)
+            RedisValue::Map(
+                temp_doc
+                    .into_iter()
+                    .map(|(k, v)| {
+                        let key = RedisValueKey::String(k.to_string());
+                        let value = match v {
+                            Some(Values::Single(value)) => Self::value_to_resp3(value, format),
+                            Some(Values::Multi(values)) => Self::values_to_resp3(&values, format),
+                            None => RedisValue::Null,
+                        };
+                        (key, value)
+                    })
+                    .collect(),
+            )
         } else {
             Self::serialize_object(&temp_doc, format).into()
         };
         Ok(res)
     }
 
-    fn to_resp3(
-        &self,
-        paths: &mut Vec<Path>,
-        format: &ReplyFormatOptions,
-    ) -> Result<RedisValue, Error> {
-        let results = paths
-            .drain(..)
-            .map(|path: Path| self.to_resp3_path(&path, format))
-            .collect::<Vec<RedisValue>>();
-
-        Ok(RedisValue::Array(results))
+    fn to_resp3(&self, paths: Vec<Path>, format: &ReplyFormatOptions) -> Result<RedisValue, Error> {
+        Ok(RedisValue::Array(
+            paths
+                .into_iter()
+                .map(|path: Path| self.to_resp3_path(&path, format))
+                .collect(),
+        ))
     }
 
     pub fn to_resp3_path(&self, path: &Path, format: &ReplyFormatOptions) -> RedisValue {
@@ -218,7 +206,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         values
             .iter()
             .map(|v| Self::value_to_resp3(v, format))
-            .collect::<Vec<RedisValue>>()
+            .collect::<Vec<_>>()
             .into()
     }
 
@@ -263,7 +251,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
 
     pub fn to_json(
         &self,
-        paths: &mut Vec<Path>,
+        paths: Vec<Path>,
         format: &ReplyFormatOptions,
     ) -> Result<RedisValue, Error> {
         let is_legacy = !paths.iter().any(|p| !p.is_legacy());

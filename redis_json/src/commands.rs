@@ -147,7 +147,7 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
 
     let key = manager.open_key_read(ctx, &key)?;
     let value = match key.get_value()? {
-        Some(doc) => KeyValue::new(doc).to_json(&mut paths, &format_options)?,
+        Some(doc) => KeyValue::new(doc).to_json(paths, &format_options)?,
         None => RedisValue::Null,
     };
 
