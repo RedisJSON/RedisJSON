@@ -124,7 +124,7 @@ fn update<F: FnMut(&mut IValue) -> Result<Option<()>, Error>>(
                 if is_last {
                     if let Entry::Occupied(mut e) = obj.entry(token) {
                         let v = e.get_mut();
-                        if let None = func(v)? {
+                        if func(v)?.is_none() {
                             e.remove();
                         }
                     }
@@ -140,7 +140,7 @@ fn update<F: FnMut(&mut IValue) -> Result<Option<()>, Error>>(
                 if is_last {
                     if idx < arr.len() {
                         let v = &mut arr.as_mut_slice()[idx];
-                        if let None = func(v)? {
+                        if func(v)?.is_none() {
                             arr.remove(idx);
                         }
                     }
@@ -169,16 +169,8 @@ impl<'a> IValueKeyHolderWrite<'a> {
         if paths.is_empty() {
             // updating the root require special treatment
             let root = self.get_value().unwrap().unwrap();
-            let res = op_fun(root);
-            match res {
-                Ok(res) => {
-                    if res.is_none() {
-                        root.take();
-                    }
-                }
-                Err(err) => {
-                    return Err(RedisError::String(err.msg));
-                }
+            if op_fun(root).map_err(|err| RedisError::String(err.msg))?.is_none() {
+                root.take();
             }
         } else {
             update(paths, self.get_value().unwrap().unwrap(), op_fun)?;
