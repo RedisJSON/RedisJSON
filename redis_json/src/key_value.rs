@@ -406,41 +406,32 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     pub fn is_equal<T1: SelectValue, T2: SelectValue>(a: &T1, b: &T2) -> bool {
-        match (a.get_type(), b.get_type()) {
-            (SelectValueType::Null, SelectValueType::Null) => true,
-            (SelectValueType::Bool, SelectValueType::Bool) => a.get_bool() == b.get_bool(),
-            (SelectValueType::Long, SelectValueType::Long) => a.get_long() == b.get_long(),
-            (SelectValueType::Double, SelectValueType::Double) => a.get_double() == b.get_double(),
-            (SelectValueType::String, SelectValueType::String) => a.get_str() == b.get_str(),
-            (SelectValueType::Array, SelectValueType::Array) => {
-                if a.len().unwrap() == b.len().unwrap() {
-                    a.values()
-                        .unwrap()
-                        .zip(b.values().unwrap())
-                        .try_for_each(|(a, b)| Self::is_equal(a, b).then_some(()))
-                        .is_some()
-                } else {
-                    false
+        a.get_type() == b.get_type()
+            && match a.get_type() {
+                SelectValueType::Null => true,
+                SelectValueType::Bool => a.get_bool() == b.get_bool(),
+                SelectValueType::Long => a.get_long() == b.get_long(),
+                SelectValueType::Double => a.get_double() == b.get_double(),
+                SelectValueType::String => a.get_str() == b.get_str(),
+                SelectValueType::Array => {
+                    a.len().unwrap() == b.len().unwrap()
+                        && a.values()
+                            .unwrap()
+                            .zip(b.values().unwrap())
+                            .try_for_each(|(a, b)| Self::is_equal(a, b).then_some(()))
+                            .is_some()
+                }
+                SelectValueType::Object => {
+                    a.len().unwrap() == b.len().unwrap()
+                        && a.keys()
+                            .unwrap()
+                            .try_for_each(|k| match (a.get_key(k), b.get_key(k)) {
+                                (Some(a), Some(b)) => Self::is_equal(a, b).then_some(()),
+                                _ => None,
+                            })
+                            .is_some()
                 }
             }
-            (SelectValueType::Object, SelectValueType::Object) => {
-                if a.len().unwrap() == b.len().unwrap() {
-                    a.keys()
-                        .unwrap()
-                        .try_for_each(|k| {
-                            if let (Some(a), Some(b)) = (a.get_key(k), b.get_key(k)) {
-                                Self::is_equal(a, b).then_some(())
-                            } else {
-                                None
-                            }
-                        })
-                        .is_some()
-                } else {
-                    false
-                }
-            }
-            (_, _) => false,
-        }
     }
 
     pub fn arr_index(
