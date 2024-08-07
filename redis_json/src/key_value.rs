@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use std::collections::HashMap;
 
 use json_path::{
@@ -13,7 +14,6 @@ use crate::{
     commands::{prepare_paths_for_updating, FoundIndex, ObjectLen, Values},
     error::Error,
     formatter::{RedisJsonFormatter, ReplyFormatOptions},
-    iterator_exts::IteratorExts,
     manager::{
         err_msg_json_expected, err_msg_json_path_doesnt_exist_with_param, AddUpdateInfo,
         SetUpdateInfo, UpdateInfo,
@@ -49,7 +49,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 .get_values(path.get_path())?
                 .into_iter()
                 .map(|v| Self::resp_serialize_inner(v))
-                .to_vec()
+                .collect_vec()
                 .into())
         }
     }
@@ -204,7 +204,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         values
             .iter()
             .map(|v| Self::value_to_resp3(v, format))
-            .to_vec()
+            .collect_vec()
             .into()
     }
 
@@ -221,7 +221,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                         .values()
                         .unwrap()
                         .map(|v| Self::value_to_resp3(v, format))
-                        .to_vec(),
+                        .collect(),
                 ),
                 SelectValueType::Object => RedisValue::Map(
                     value
@@ -233,7 +233,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                                 Self::value_to_resp3(v, format),
                             )
                         })
-                        .to_hashmap(),
+                        .collect(),
                 ),
             }
         } else {
@@ -316,7 +316,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     pub fn find_paths(&mut self, path: &str, option: SetOptions) -> Result<Vec<UpdateInfo>, Error> {
-        if SetOptions::NotExists != option {
+        if option != SetOptions::NotExists {
             let query = compile(path)?;
             let mut res = calc_once_paths(query, self.val);
             if option != SetOptions::MergeExisting {
@@ -329,7 +329,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                     .collect());
             }
         }
-        if SetOptions::AlreadyExists == option {
+        if option == SetOptions::AlreadyExists {
             Ok(Vec::new()) // empty vector means no updates
         } else {
             self.find_add_paths(path)
@@ -418,18 +418,16 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                         && a.values()
                             .unwrap()
                             .zip(b.values().unwrap())
-                            .try_for_each(|(a, b)| Self::is_equal(a, b).then_some(()))
-                            .is_some()
+                            .all(|(a, b)| Self::is_equal(a, b))
                 }
                 SelectValueType::Object => {
                     a.len().unwrap() == b.len().unwrap()
                         && a.keys()
                             .unwrap()
-                            .try_for_each(|k| match (a.get_key(k), b.get_key(k)) {
-                                (Some(a), Some(b)) => Self::is_equal(a, b).then_some(()),
-                                _ => None,
+                            .all(|k| match (a.get_key(k), b.get_key(k)) {
+                                (Some(a), Some(b)) => Self::is_equal(a, b),
+                                _ => false,
                             })
-                            .is_some()
                 }
             }
     }

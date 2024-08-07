@@ -382,8 +382,7 @@ fn apply_updates<M: Manager>(
                 UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value.clone()),
                 UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, value.clone()),
             }
-            .unwrap_or(false)
-                || updated
+            .unwrap_or(updated)
         })
     }
 }
@@ -480,7 +479,7 @@ where
     values
         .into_iter()
         .map(|n| n.map_or_else(|| none_value.clone(), |t| t.into()))
-        .to_vec()
+        .collect()
 }
 
 /// Sort the paths so higher indices precede lower indices on the same array,
@@ -526,17 +525,17 @@ pub fn prepare_paths_for_updating(paths: &mut Vec<Vec<String>>) {
     });
     // Remove paths which are nested by others (on each sub-tree only top most ancestor should be deleted)
     // (TODO: Add a mode in which the jsonpath selector will already skip nested paths)
-    let mut string_paths = paths.iter().map(|v| v.join(",")).to_vec();
+    let mut string_paths = paths.iter().map(|v| v.join(",")).collect_vec();
     string_paths.sort();
 
     paths.retain(|v| {
         let path = v.join(",");
-        let found = string_paths
+        string_paths
             .iter()
             .skip_while(|p| !path.starts_with(*p))
             .next()
-            .unwrap(); // There is guaranteed to be at least one path that matches (itself)
-        path == *found
+            .map(|found| path == *found)
+            .unwrap_or(false)
     });
 }
 
@@ -721,7 +720,7 @@ where
                 }
             })
         })
-        .to_vec()
+        .collect_vec()
         .into();
         Ok(res)
     } else if path.is_legacy() {
@@ -787,7 +786,7 @@ where
             })
             .transpose()
         })
-        .try_vec()?;
+        .try_collect()?;
     if need_notify {
         redis_key.notify_keyspace_event(ctx, cmd)?;
         manager.apply_changes(ctx);
@@ -1653,7 +1652,7 @@ where
         let values = find_all_values(path, root, |v| v.get_type() == SelectValueType::Object)?;
         let mut res: Vec<RedisValue> = vec![];
         for v in values {
-            res.push(v.map_or(RedisValue::Null, |v| v.keys().unwrap().to_vec().into()));
+            res.push(v.map_or(RedisValue::Null, |v| v.keys().unwrap().collect_vec().into()));
         }
         res.into()
     };
@@ -1670,7 +1669,7 @@ where
     };
     let value = match KeyValue::new(root).get_first(path) {
         Ok(v) => match v.get_type() {
-            SelectValueType::Object => v.keys().unwrap().to_vec().into(),
+            SelectValueType::Object => v.keys().unwrap().collect_vec().into(),
             _ => {
                 return Err(RedisError::String(
                     err_msg_json_path_doesnt_exist_with_param_or(path, "not an object"),
@@ -1712,7 +1711,7 @@ where
                     RedisValue::Integer(v.len().unwrap() as i64)
                 })
             })
-            .to_vec()
+            .collect_vec()
             .into(),
         None => {
             return Err(RedisError::String(
@@ -1813,7 +1812,7 @@ pub fn json_debug<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
                         .get_values(path.get_path())?
                         .iter()
                         .map(|v| manager.get_memory(v).unwrap())
-                        .to_vec(),
+                        .collect(),
                     None => vec![],
                 }
                 .into())
