@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use std::collections::HashMap;
 
 use json_path::{
@@ -10,7 +11,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
-    commands::{FoundIndex, ObjectLen, Values},
+    commands::{prepare_paths_for_updating, FoundIndex, ObjectLen, Values},
     error::Error,
     formatter::{RedisJsonFormatter, ReplyFormatOptions},
     manager::{
@@ -46,9 +47,9 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         } else {
             Ok(self
                 .get_values(path.get_path())?
-                .iter()
+                .into_iter()
                 .map(|v| Self::resp_serialize_inner(v))
-                .collect::<Vec<RedisValue>>()
+                .collect_vec()
                 .into())
         }
     }
@@ -112,7 +113,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
 
     fn to_json_multi(
         &self,
-        paths: &mut Vec<Path>,
+        paths: Vec<Path>,
         format: &ReplyFormatOptions,
         is_legacy: bool,
     ) -> Result<RedisValue, Error> {
@@ -124,32 +125,23 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         let path_len = paths.len();
         let temp_doc =
             paths
-                .drain(..)
+                .into_iter()
                 .fold(HashMap::with_capacity(path_len), |mut acc, path: Path| {
-                    let query = compile(path.get_path());
-
                     // If we can't compile the path, we can't continue
-                    if query.is_err() {
-                        return acc;
-                    }
+                    if let Ok(query) = compile(path.get_path()) {
+                        let results = calc_once(query, self.val);
 
-                    let query = query.unwrap();
-                    let results = calc_once(query, self.val);
-
-                    let value = if is_legacy {
-                        if results.is_empty() {
-                            None
+                        let value = if is_legacy {
+                            (!results.is_empty()).then(|| Values::Single(results[0]))
                         } else {
-                            Some(Values::Single(results[0]))
-                        }
-                    } else {
-                        Some(Values::Multi(results))
-                    };
+                            Some(Values::Multi(results))
+                        };
 
-                    if value.is_none() && missing_path.is_none() {
-                        missing_path = Some(path.get_original().to_string());
+                        if value.is_none() && missing_path.is_none() {
+                            missing_path = Some(path.get_original().to_string());
+                        }
+                        acc.insert(path.get_original(), value);
                     }
-                    acc.insert(path.get_original(), value);
                     acc
                 });
         if let Some(p) = missing_path {
@@ -159,17 +151,17 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         // If we're using RESP3, we need to convert the HashMap to a RedisValue::Map unless we're using the legacy format
         let res = if format.is_resp3_reply() {
             let map = temp_doc
-                .iter()
+                .into_iter()
                 .map(|(k, v)| {
                     let key = RedisValueKey::String(k.to_string());
                     let value = match v {
                         Some(Values::Single(value)) => Self::value_to_resp3(value, format),
-                        Some(Values::Multi(values)) => Self::values_to_resp3(values, format),
+                        Some(Values::Multi(values)) => Self::values_to_resp3(&values, format),
                         None => RedisValue::Null,
                     };
                     (key, value)
                 })
-                .collect::<HashMap<RedisValueKey, RedisValue>>();
+                .collect();
             RedisValue::Map(map)
         } else {
             Self::serialize_object(&temp_doc, format).into()
@@ -177,24 +169,18 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         Ok(res)
     }
 
-    fn to_resp3(
-        &self,
-        paths: &mut Vec<Path>,
-        format: &ReplyFormatOptions,
-    ) -> Result<RedisValue, Error> {
+    fn to_resp3(&self, paths: Vec<Path>, format: &ReplyFormatOptions) -> Result<RedisValue, Error> {
         let results = paths
-            .drain(..)
+            .into_iter()
             .map(|path: Path| self.to_resp3_path(&path, format))
-            .collect::<Vec<RedisValue>>();
-
+            .collect();
         Ok(RedisValue::Array(results))
     }
 
     pub fn to_resp3_path(&self, path: &Path, format: &ReplyFormatOptions) -> RedisValue {
-        compile(path.get_path()).map_or_else(
-            |_| RedisValue::Array(vec![]),
-            |q| Self::values_to_resp3(&calc_once(q, self.val), format),
-        )
+        compile(path.get_path()).map_or(RedisValue::Array(vec![]), |q| {
+            Self::values_to_resp3(&calc_once(q, self.val), format)
+        })
     }
 
     fn to_json_single(
@@ -218,7 +204,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         values
             .iter()
             .map(|v| Self::value_to_resp3(v, format))
-            .collect::<Vec<RedisValue>>()
+            .collect_vec()
             .into()
     }
 
@@ -235,7 +221,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                         .values()
                         .unwrap()
                         .map(|v| Self::value_to_resp3(v, format))
-                        .collect::<Vec<RedisValue>>(),
+                        .collect(),
                 ),
                 SelectValueType::Object => RedisValue::Map(
                     value
@@ -247,7 +233,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                                 Self::value_to_resp3(v, format),
                             )
                         })
-                        .collect::<HashMap<RedisValueKey, RedisValue>>(),
+                        .collect(),
                 ),
             }
         } else {
@@ -263,7 +249,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
 
     pub fn to_json(
         &self,
-        paths: &mut Vec<Path>,
+        paths: Vec<Path>,
         format: &ReplyFormatOptions,
     ) -> Result<RedisValue, Error> {
         let is_legacy = !paths.iter().any(|p| !p.is_legacy());
@@ -329,15 +315,13 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    pub fn find_paths(
-        &mut self,
-        path: &str,
-        option: &SetOptions,
-    ) -> Result<Vec<UpdateInfo>, Error> {
-        if SetOptions::NotExists != *option {
+    pub fn find_paths(&mut self, path: &str, option: SetOptions) -> Result<Vec<UpdateInfo>, Error> {
+        if option != SetOptions::NotExists {
             let query = compile(path)?;
-            let res = calc_once_paths(query, self.val);
-
+            let mut res = calc_once_paths(query, self.val);
+            if option != SetOptions::MergeExisting {
+                prepare_paths_for_updating(&mut res);
+            }
             if !res.is_empty() {
                 return Ok(res
                     .into_iter()
@@ -345,7 +329,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                     .collect());
             }
         }
-        if SetOptions::AlreadyExists == *option {
+        if option == SetOptions::AlreadyExists {
             Ok(Vec::new()) // empty vector means no updates
         } else {
             self.find_add_paths(path)
@@ -422,45 +406,30 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     pub fn is_equal<T1: SelectValue, T2: SelectValue>(a: &T1, b: &T2) -> bool {
-        match (a.get_type(), b.get_type()) {
-            (SelectValueType::Null, SelectValueType::Null) => true,
-            (SelectValueType::Bool, SelectValueType::Bool) => a.get_bool() == b.get_bool(),
-            (SelectValueType::Long, SelectValueType::Long) => a.get_long() == b.get_long(),
-            (SelectValueType::Double, SelectValueType::Double) => a.get_double() == b.get_double(),
-            (SelectValueType::String, SelectValueType::String) => a.get_str() == b.get_str(),
-            (SelectValueType::Array, SelectValueType::Array) => {
-                if a.len().unwrap() == b.len().unwrap() {
-                    for (i, e) in a.values().unwrap().enumerate() {
-                        if !Self::is_equal(e, b.get_index(i).unwrap()) {
-                            return false;
-                        }
-                    }
-                    true
-                } else {
-                    false
+        a.get_type() == b.get_type()
+            && match a.get_type() {
+                SelectValueType::Null => true,
+                SelectValueType::Bool => a.get_bool() == b.get_bool(),
+                SelectValueType::Long => a.get_long() == b.get_long(),
+                SelectValueType::Double => a.get_double() == b.get_double(),
+                SelectValueType::String => a.get_str() == b.get_str(),
+                SelectValueType::Array => {
+                    a.len().unwrap() == b.len().unwrap()
+                        && a.values()
+                            .unwrap()
+                            .zip(b.values().unwrap())
+                            .all(|(a, b)| Self::is_equal(a, b))
+                }
+                SelectValueType::Object => {
+                    a.len().unwrap() == b.len().unwrap()
+                        && a.keys()
+                            .unwrap()
+                            .all(|k| match (a.get_key(k), b.get_key(k)) {
+                                (Some(a), Some(b)) => Self::is_equal(a, b),
+                                _ => false,
+                            })
                 }
             }
-            (SelectValueType::Object, SelectValueType::Object) => {
-                if a.len().unwrap() == b.len().unwrap() {
-                    for k in a.keys().unwrap() {
-                        let temp1 = a.get_key(k);
-                        let temp2 = b.get_key(k);
-                        match (temp1, temp2) {
-                            (Some(a1), Some(b1)) => {
-                                if !Self::is_equal(a1, b1) {
-                                    return false;
-                                }
-                            }
-                            (_, _) => return false,
-                        }
-                    }
-                    true
-                } else {
-                    false
-                }
-            }
-            (_, _) => false,
-        }
     }
 
     pub fn arr_index(
@@ -472,9 +441,11 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     ) -> Result<RedisValue, Error> {
         let res = self
             .get_values(path)?
-            .iter()
-            .map(|value| Self::arr_first_index_single(value, &json_value, start, end).into())
-            .collect::<Vec<RedisValue>>();
+            .into_iter()
+            .map(|value| {
+                RedisValue::from(Self::arr_first_index_single(value, &json_value, start, end))
+            })
+            .collect_vec();
         Ok(res.into())
     }
 

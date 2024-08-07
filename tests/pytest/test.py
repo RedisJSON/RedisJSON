@@ -1517,7 +1517,11 @@ def test_mset_replication_in_aof(env):
         assert(len(aof_content) == 1)
 
 
-
+def test_recursive_descent(env):
+    r = env
+    r.expect('JSON.SET', 'k', '$', '[{"a":1}]').ok()
+    r.expect('JSON.SET', 'k', '$..*', '[{"a":1}]').ok()
+    r.expect('JSON.GET', 'k', '$').equal('[[[{"a":1}]]]')
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property
