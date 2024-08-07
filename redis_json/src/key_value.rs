@@ -132,7 +132,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                         let results = calc_once(query, self.val);
 
                         let value = if is_legacy {
-                            (!results.is_empty()).then_some(Values::Single(results[0]))
+                            (!results.is_empty()).then(|| Values::Single(results[0]))
                         } else {
                             Some(Values::Multi(results))
                         };
@@ -150,20 +150,19 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
 
         // If we're using RESP3, we need to convert the HashMap to a RedisValue::Map unless we're using the legacy format
         let res = if format.is_resp3_reply() {
-            RedisValue::Map(
-                temp_doc
-                    .into_iter()
-                    .map(|(k, v)| {
-                        let key = RedisValueKey::String(k.to_string());
-                        let value = match v {
-                            Some(Values::Single(value)) => Self::value_to_resp3(value, format),
-                            Some(Values::Multi(values)) => Self::values_to_resp3(&values, format),
-                            None => RedisValue::Null,
-                        };
-                        (key, value)
-                    })
-                    .collect(),
-            )
+            let map = temp_doc
+                .into_iter()
+                .map(|(k, v)| {
+                    let key = RedisValueKey::String(k.to_string());
+                    let value = match v {
+                        Some(Values::Single(value)) => Self::value_to_resp3(value, format),
+                        Some(Values::Multi(values)) => Self::values_to_resp3(&values, format),
+                        None => RedisValue::Null,
+                    };
+                    (key, value)
+                })
+                .collect();
+            RedisValue::Map(map)
         } else {
             Self::serialize_object(&temp_doc, format).into()
         };
@@ -171,19 +170,17 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     fn to_resp3(&self, paths: Vec<Path>, format: &ReplyFormatOptions) -> Result<RedisValue, Error> {
-        Ok(RedisValue::Array(
-            paths
-                .into_iter()
-                .map(|path: Path| self.to_resp3_path(&path, format))
-                .collect(),
-        ))
+        let results = paths
+            .into_iter()
+            .map(|path: Path| self.to_resp3_path(&path, format))
+            .collect();
+        Ok(RedisValue::Array(results))
     }
 
     pub fn to_resp3_path(&self, path: &Path, format: &ReplyFormatOptions) -> RedisValue {
-        compile(path.get_path()).map_or_else(
-            |_| RedisValue::Array(vec![]),
-            |q| Self::values_to_resp3(&calc_once(q, self.val), format),
-        )
+        compile(path.get_path()).map_or(RedisValue::Array(vec![]), |q| {
+            Self::values_to_resp3(&calc_once(q, self.val), format)
+        })
     }
 
     fn to_json_single(
@@ -442,12 +439,12 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         start: i64,
         end: i64,
     ) -> Result<RedisValue, Error> {
-        Ok(self
+        let res = self
             .get_values(path)?
             .into_iter()
             .map(|value| Self::arr_first_index_single(value, &json_value, start, end).into())
-            .collect::<Vec<RedisValue>>()
-            .into())
+            .collect::<Vec<RedisValue>>();
+        Ok(res.into())
     }
 
     pub fn arr_index_legacy(

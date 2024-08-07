@@ -616,24 +616,17 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
             .map_or_else(
                 |e| Err(e.to_string().into()),
                 |docs: Document| {
-                    let v = if docs.is_empty() {
-                        IValue::NULL
-                    } else {
-                        docs.iter().next().map_or_else(
-                            || IValue::NULL,
-                            |(_, b)| {
-                                let v: serde_json::Value = b.clone().into();
-                                let mut out = serde_json::Serializer::new(Vec::new());
-                                v.serialize(&mut out).unwrap();
-                                self.from_str(
-                                    &String::from_utf8(out.into_inner()).unwrap(),
-                                    Format::JSON,
-                                    limit_depth,
-                                )
-                                .unwrap()
-                            },
+                    let v = docs.iter().next().map_or(IValue::NULL, |(_, b)| {
+                        let v: serde_json::Value = b.clone().into();
+                        let mut out = serde_json::Serializer::new(Vec::new());
+                        v.serialize(&mut out).unwrap();
+                        self.from_str(
+                            &String::from_utf8(out.into_inner()).unwrap(),
+                            Format::JSON,
+                            limit_depth,
                         )
-                    };
+                        .unwrap()
+                    });
                     Ok(v)
                 },
             ),

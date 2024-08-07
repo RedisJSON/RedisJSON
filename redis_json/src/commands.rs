@@ -540,7 +540,7 @@ pub fn prepare_paths_for_updating(paths: &mut Vec<Vec<String>>) {
             .iter()
             .skip_while(|p| !path.starts_with(*p))
             .next()
-            .unwrap();
+            .unwrap(); // There is guaranteed to be at least one path that matches (itself)
         path == *found
     });
 }
@@ -673,14 +673,11 @@ fn json_type_legacy<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
 where
     M: Manager,
 {
-    let value = redis_key.get_value()?.map_or_else(
-        || RedisValue::Null,
-        |doc| {
-            KeyValue::new(doc)
-                .get_type(path)
-                .map_or(RedisValue::Null, |s| s.into())
-        },
-    );
+    let value = redis_key.get_value()?.map_or(RedisValue::Null, |doc| {
+        KeyValue::new(doc)
+            .get_type(path)
+            .map_or(RedisValue::Null, |s| s.into())
+    });
     Ok(value)
 }
 
@@ -1853,8 +1850,7 @@ pub fn json_resp<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
     };
 
     let key = manager.open_key_read(ctx, &key)?;
-    key.get_value()?.map_or_else(
-        || Ok(RedisValue::Null),
-        |doc| KeyValue::new(doc).resp_serialize(path),
-    )
+    key.get_value()?.map_or(Ok(RedisValue::Null), |doc| {
+        KeyValue::new(doc).resp_serialize(path)
+    })
 }
