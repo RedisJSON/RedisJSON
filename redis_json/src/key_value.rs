@@ -10,7 +10,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
-    commands::{FoundIndex, ObjectLen, Values, prepare_paths_for_updating},
+    commands::{prepare_paths_for_updating, FoundIndex, ObjectLen, Values},
     error::Error,
     formatter::{RedisJsonFormatter, ReplyFormatOptions},
     iterator_exts::IteratorExts,
