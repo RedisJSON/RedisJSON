@@ -4,6 +4,7 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
+use itertools::Itertools;
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use pest_derive::Parser;
@@ -161,7 +162,7 @@ pub(crate) fn compile(path: &str) -> Result<Query, QueryCompilationError> {
                             positives
                                 .iter()
                                 .map(|v| format!("{v}"))
-                                .collect::<Vec<_>>()
+                                .collect_vec()
                                 .join(", "),
                         )
                     };
@@ -172,7 +173,7 @@ pub(crate) fn compile(path: &str) -> Result<Query, QueryCompilationError> {
                             negatives
                                 .iter()
                                 .map(|v| format!("{v}"))
-                                .collect::<Vec<_>>()
+                                .collect_vec()
                                 .join(", "),
                         )
                     };

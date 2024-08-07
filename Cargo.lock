@@ -483,6 +483,7 @@ dependencies = [
  "bson",
  "env_logger",
  "ijson",
+ "itertools",
  "log",
  "pest",
  "pest_derive",
