@@ -200,22 +200,17 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
                 }
             } else {
                 let update_info = KeyValue::new(doc).find_paths(path.get_path(), op)?;
-                if !update_info.is_empty() {
-                    let updated = apply_updates::<M>(&mut redis_key, val, update_info);
-                    if updated {
-                        redis_key.notify_keyspace_event(ctx, "json.set")?;
-                        manager.apply_changes(ctx);
-                        REDIS_OK
-                    } else {
-                        Ok(RedisValue::Null)
-                    }
+                if !update_info.is_empty() && apply_updates::<M>(&mut redis_key, val, update_info) {
+                    redis_key.notify_keyspace_event(ctx, "json.set")?;
+                    manager.apply_changes(ctx);
+                    REDIS_OK
                 } else {
                     Ok(RedisValue::Null)
                 }
             }
         }
         (None, SetOptions::AlreadyExists) => Ok(RedisValue::Null),
-        (None, _) => {
+        _ => {
             if path.get_path() == JSON_ROOT_PATH {
                 redis_key.set_value(Vec::new(), val)?;
                 redis_key.notify_keyspace_event(ctx, "json.set")?;
@@ -265,7 +260,7 @@ pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
                 REDIS_OK
             } else {
                 let mut update_info =
-                    KeyValue::new(doc).find_paths(path.get_path(), SetOptions::None)?;
+                    KeyValue::new(doc).find_paths(path.get_path(), SetOptions::MergeExisting)?;
                 if !update_info.is_empty() {
                     let mut res = false;
                     if update_info.len() == 1 {
