@@ -6,7 +6,6 @@
 
 use crate::error::Error;
 use crate::formatter::ReplyFormatOptions;
-use crate::iterator_exts::IteratorExts;
 use crate::key_value::KeyValue;
 use crate::manager::{
     err_msg_json_path_doesnt_exist_with_param, err_msg_json_path_doesnt_exist_with_param_or,
