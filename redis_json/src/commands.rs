@@ -654,8 +654,8 @@ where
         Some(root) => KeyValue::new(root)
             .get_values(path)?
             .iter()
-            .map(|v| (KeyValue::value_name(*v)).into())
-            .collect::<Vec<RedisValue>>()
+            .map(|v| RedisValue::from(KeyValue::value_name(*v)))
+            .collect_vec()
             .into(),
         None => RedisValue::Null,
     };
