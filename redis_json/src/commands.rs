@@ -146,7 +146,7 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
 
     let key = manager.open_key_read(ctx, &key)?;
     let value = match key.get_value()? {
-        Some(doc) => KeyValue::new(doc).to_json(paths, &format_options)?,
+        Some(doc) => KeyValue::new(doc).to_json(paths, format_options)?,
         None => RedisValue::Null,
     };
 
@@ -391,16 +391,13 @@ fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
     doc: &T,
     mut f: F,
 ) -> Result<Vec<Vec<String>>, RedisError> {
-    let query = match compile(path) {
-        Ok(q) => q,
-        Err(e) => return Err(RedisError::String(e.to_string())),
-    };
-    let res = calc_once_with_paths(query, doc);
-    Ok(res
+    let query = compile(path).map_err(|e| RedisError::String(e.to_string()))?;
+    let res = calc_once_with_paths(query, doc)
         .into_iter()
         .filter(|e| f(e.res))
         .map(|e| e.path_tracker.unwrap().to_string_path())
-        .collect())
+        .collect();
+    Ok(res)
 }
 
 /// Returns tuples of Value and its concrete path which match the given `path`
@@ -408,15 +405,12 @@ fn get_all_values_and_paths<'a, T: SelectValue>(
     path: &str,
     doc: &'a T,
 ) -> Result<Vec<(&'a T, Vec<String>)>, RedisError> {
-    let query = match compile(path) {
-        Ok(q) => q,
-        Err(e) => return Err(RedisError::String(e.to_string())),
-    };
-    let res = calc_once_with_paths(query, doc);
-    Ok(res
+    let query = compile(path).map_err(|e| RedisError::String(e.to_string()))?;
+    let res = calc_once_with_paths(query, doc)
         .into_iter()
         .map(|e| (e.res, e.path_tracker.unwrap().to_string_path()))
-        .collect())
+        .collect();
+    Ok(res)
 }
 
 /// Returns a Vec of paths with `None` for Values that do not match the filter
@@ -450,10 +444,7 @@ where
     F: Fn(&T) -> bool,
 {
     let res = get_all_values_and_paths(path, doc)?;
-    match res.is_empty() {
-        false => Ok(filter_paths(res, f)),
-        _ => Ok(vec![]),
-    }
+    Ok(filter_paths(res, f))
 }
 
 fn find_all_values<'a, T: SelectValue, F>(
@@ -465,10 +456,7 @@ where
     F: Fn(&T) -> bool,
 {
     let res = get_all_values_and_paths(path, doc)?;
-    match res.is_empty() {
-        false => Ok(filter_values(res, f)),
-        _ => Ok(vec![]),
-    }
+    Ok(filter_values(res, f))
 }
 
 fn to_json_value<T>(values: Vec<Option<T>>, none_value: Value) -> Vec<Value>
@@ -524,8 +512,7 @@ pub fn prepare_paths_for_updating(paths: &mut Vec<Vec<String>>) {
     });
     // Remove paths which are nested by others (on each sub-tree only top most ancestor should be deleted)
     // (TODO: Add a mode in which the jsonpath selector will already skip nested paths)
-    let mut string_paths = paths.iter().map(|v| v.join(",")).collect_vec();
-    string_paths.sort();
+    let string_paths = paths.iter().map(|v| v.join(",")).sorted().collect_vec();
 
     paths.retain(|v| {
         let path = v.join(",");
@@ -559,13 +546,9 @@ pub fn json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
             } else {
                 let mut paths = find_paths(path.get_path(), doc, |_| true)?;
                 prepare_paths_for_updating(&mut paths);
-                let mut changed = 0;
-                for p in paths {
-                    if redis_key.delete_path(p)? {
-                        changed += 1;
-                    }
-                }
-                changed
+                paths
+                    .into_iter()
+                    .try_fold(0, |acc, p| redis_key.delete_path(p).and(Ok(acc + 1)))?
             };
             if res > 0 {
                 redis_key.notify_keyspace_event(ctx, "json.del")?;
@@ -590,35 +573,37 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
         let path = Path::new(path.try_as_str()?);
         let keys = &args[1..args.len() - 1];
 
-        let format_options = ReplyFormatOptions::new(is_resp3(ctx), ReplyFormat::STRING);
-
         // Verify that at least one key exists
         if keys.is_empty() {
             return Err(RedisError::WrongArity);
         }
 
-        let results: Result<Vec<RedisValue>, RedisError> = keys
-            .iter()
+        let results = keys
+            .into_iter()
             .map(|key| {
                 manager
                     .open_key_read(ctx, key)
-                    .map_or(Ok(RedisValue::Null), |json_key| {
-                        json_key.get_value().map_or(Ok(RedisValue::Null), |value| {
-                            value.map_or(Ok(RedisValue::Null), |doc| {
+                    .map_or(RedisValue::Null, |json_key| {
+                        json_key
+                            .get_value()
+                            .ok()
+                            .flatten()
+                            .map_or(RedisValue::Null, |doc| {
                                 let key_value = KeyValue::new(doc);
-                                let res = if !path.is_legacy() {
-                                    key_value.to_string_multi(path.get_path(), &format_options)
+                                let format_options =
+                                    ReplyFormatOptions::new(is_resp3(ctx), ReplyFormat::STRING);
+                                if !path.is_legacy() {
+                                    key_value.to_string_multi(path.get_path(), format_options)
                                 } else {
-                                    key_value.to_string_single(path.get_path(), &format_options)
-                                };
-                                Ok(res.map_or(RedisValue::Null, |v| v.into()))
+                                    key_value.to_string_single(path.get_path(), format_options)
+                                }
+                                .map_or(RedisValue::Null, |v| v.into())
                             })
-                        })
                     })
             })
-            .collect();
+            .collect_vec();
 
-        Ok(results?.into())
+        Ok(results.into())
     })
 }
 ///
@@ -745,7 +730,7 @@ where
 
         // Convert to RESP2 format return as one JSON array
         let values = to_json_value::<Number>(results, Value::Null);
-        Ok(KeyValue::<M::V>::serialize_object(&values, &ReplyFormatOptions::default()).into())
+        Ok(KeyValue::<M::V>::serialize_object(&values, ReplyFormatOptions::default()).into())
     }
 }
 
@@ -1351,49 +1336,51 @@ where
 ///
 pub fn json_arr_len<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_arg()?;
+    let key = manager.open_key_read(ctx, &args.next_arg()?)?;
     let path = Path::new(args.next_str().unwrap_or(default_path()));
-    let is_legacy = path.is_legacy();
-    let key = manager.open_key_read(ctx, &key)?;
+    if path.is_legacy() {
+        json_arr_len_legacy::<M>(key, path)
+    } else {
+        json_arr_len_impl::<M>(key, path)
+    }
+}
+
+fn json_arr_len_impl<M>(key: M::ReadHolder, path: Path) -> RedisResult
+where
+    M: Manager,
+{
+    let root = key.get_value()?.ok_or(RedisError::nonexistent_key())?;
+    let values = find_all_values(path.get_path(), root, |v| {
+        v.get_type() == SelectValueType::Array
+    })?;
+    let res = values
+        .into_iter()
+        .map(|v| v.map_or(RedisValue::Null, |v| v.len().unwrap().into()))
+        .collect_vec();
+    Ok(res.into())
+}
+
+fn json_arr_len_legacy<M>(key: M::ReadHolder, path: Path) -> RedisResult
+where
+    M: Manager,
+{
     let root = match key.get_value()? {
         Some(k) => k,
-        None if is_legacy => {
-            return Ok(RedisValue::Null);
-        }
         None => {
-            return Err(RedisError::nonexistent_key());
+            return Ok(RedisValue::Null);
         }
     };
     let values = find_all_values(path.get_path(), root, |v| {
         v.get_type() == SelectValueType::Array
     })?;
-    if is_legacy && values.is_empty() {
-        return Err(RedisError::String(
-            err_msg_json_path_doesnt_exist_with_param(path.get_original()),
-        ));
-    }
-    let mut res = vec![];
-    for v in values {
-        let cur_val: RedisValue = match v {
-            Some(v) => (v.len().unwrap() as i64).into(),
-            _ => {
-                if is_legacy {
-                    return Err(RedisError::String(
-                        err_msg_json_path_doesnt_exist_with_param_or(
-                            path.get_original(),
-                            "not an array",
-                        ),
-                    ));
-                }
-                RedisValue::Null
-            }
-        };
-        if is_legacy {
-            return Ok(cur_val);
-        }
-        res.push(cur_val);
-    }
-    Ok(res.into())
+    values.into_iter().next().flatten().map_or_else(
+        || {
+            Err(RedisError::String(
+                err_msg_json_path_doesnt_exist_with_param_or(path.get_original(), "not an array"),
+            ))
+        },
+        |v| Ok(v.len().unwrap().into()),
+    )
 }
 
 ///
@@ -1462,7 +1449,7 @@ pub fn json_arr_pop<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString
             ctx,
             path.get_path(),
             index,
-            &format_options,
+            format_options,
         )
     }
 }
@@ -1473,7 +1460,7 @@ fn json_arr_pop_impl<M>(
     ctx: &Context,
     path: &str,
     index: i64,
-    format_options: &ReplyFormatOptions,
+    format_options: ReplyFormatOptions,
 ) -> RedisResult
 where
     M: Manager,
