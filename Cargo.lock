@@ -866,6 +866,7 @@ dependencies = [
  "json_path",
  "libc",
  "linkme",
+ "once_cell",
  "redis-module",
  "redis-module-macros",
  "serde",

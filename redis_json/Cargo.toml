@@ -30,6 +30,7 @@ redis-module-macros = "^2.0.7"
 itertools = "0.13"
 json_path = {path="../json_path"}
 linkme = "0.3"
+once_cell = "1.19"
 
 [features]
 as-library = []
