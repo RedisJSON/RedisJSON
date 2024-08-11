@@ -1479,21 +1479,21 @@ where
         .ok_or_else(RedisError::nonexistent_key)?;
 
     let paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
-    if !paths.is_empty() {
-        let mut res = Ok(().into());
-        for p in paths {
-            res = Ok(redis_key.arr_pop(p, index, |v| match v {
-                Some(r) => Ok(serde_json::to_string(&r)?.into()),
-                None => Ok(().into()),
-            })?);
-        }
-        redis_key.notify_keyspace_event(ctx, "json.arrpop")?;
-        manager.apply_changes(ctx);
-        res
-    } else {
+    if paths.is_empty() {
         Err(RedisError::String(
             err_msg_json_path_doesnt_exist_with_param_or(path, "not an array"),
         ))
+    } else {
+        let res = paths.into_iter().try_fold(RedisValue::Null, |_, p| {
+            redis_key.arr_pop(p, index, |v| {
+                v.map_or(Ok(RedisValue::Null), |r| {
+                    Ok(serde_json::to_string(&r)?.into())
+                })
+            })
+        });
+        redis_key.notify_keyspace_event(ctx, "json.arrpop")?;
+        manager.apply_changes(ctx);
+        res
     }
 }
 
@@ -1531,18 +1531,19 @@ where
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
-    let mut res: Vec<RedisValue> = vec![];
     let mut need_notify = false;
-    for p in paths {
-        res.push(match p {
-            Some(p) => {
-                need_notify = true;
-                (redis_key.arr_trim(p, start, stop)?).into()
-            }
-            _ => RedisValue::Null,
-        });
-    }
+    let res: Vec<_> = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)
+        .and_then(|paths| {
+            paths
+                .into_iter()
+                .map(|p| {
+                    p.map_or(Ok(RedisValue::Null), |p| {
+                        need_notify = true;
+                        redis_key.arr_trim(p, start, stop).map(Into::into)
+                    })
+                })
+                .try_collect()
+        })?;
     if need_notify {
         redis_key.notify_keyspace_event(ctx, "json.arrtrim")?;
         manager.apply_changes(ctx);
@@ -1571,13 +1572,14 @@ where
             err_msg_json_path_doesnt_exist_with_param_or(path, "not an array"),
         ))
     } else {
-        let mut res = None;
-        for p in paths {
-            res = Some(redis_key.arr_trim(p, start, stop)?);
-        }
-        redis_key.notify_keyspace_event(ctx, "json.arrtrim")?;
-        manager.apply_changes(ctx);
-        Ok(res.unwrap().into())
+        paths
+            .into_iter()
+            .try_fold(0, |_, p| redis_key.arr_trim(p, start, stop))
+            .and_then(|res| {
+                redis_key.notify_keyspace_event(ctx, "json.arrtrim")?;
+                manager.apply_changes(ctx);
+                Ok(res.into())
+            })
     }
 }
 
@@ -1604,15 +1606,13 @@ where
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
-    let res: RedisValue = {
-        let values = find_all_values(path, root, |v| v.get_type() == SelectValueType::Object)?;
-        let mut res: Vec<RedisValue> = vec![];
-        for v in values {
-            res.push(v.map_or(RedisValue::Null, |v| v.keys().unwrap().collect_vec().into()));
-        }
-        res.into()
-    };
-    Ok(res)
+
+    find_all_values(path, root, |v| v.get_type() == SelectValueType::Object).map(|v| {
+        v.into_iter()
+            .map(|v| v.map_or(RedisValue::Null, |v| v.keys().unwrap().collect_vec().into()))
+            .collect_vec()
+            .into()
+    })
 }
 
 fn json_obj_keys_legacy<M>(redis_key: M::ReadHolder, path: &str) -> RedisResult
@@ -1623,18 +1623,14 @@ where
         Some(v) => v,
         _ => return Ok(RedisValue::Null),
     };
-    let value = match KeyValue::new(root).get_first(path) {
-        Ok(v) => match v.get_type() {
-            SelectValueType::Object => v.keys().unwrap().collect_vec().into(),
-            _ => {
-                return Err(RedisError::String(
-                    err_msg_json_path_doesnt_exist_with_param_or(path, "not an object"),
-                ))
-            }
-        },
-        _ => RedisValue::Null,
-    };
-    Ok(value)
+    KeyValue::new(root)
+        .get_first(path)
+        .map_or(Ok(RedisValue::Null), |v| match v.get_type() {
+            SelectValueType::Object => Ok(v.keys().unwrap().collect_vec().into()),
+            _ => Err(RedisError::String(
+                err_msg_json_path_doesnt_exist_with_param_or(path, "not an object"),
+            )),
+        })
 }
 
 ///
@@ -1647,37 +1643,38 @@ pub fn json_obj_len<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString
 
     let key = manager.open_key_read(ctx, &key)?;
     if path.is_legacy() {
-        json_obj_len_legacy::<M>(&key, path.get_path())
+        json_obj_len_legacy::<M>(key, path.get_path())
     } else {
-        json_obj_len_impl::<M>(&key, path.get_path())
+        json_obj_len_impl::<M>(key, path.get_path())
     }
 }
 
-fn json_obj_len_impl<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
+fn json_obj_len_impl<M>(redis_key: M::ReadHolder, path: &str) -> RedisResult
 where
     M: Manager,
 {
-    let root = redis_key.get_value()?;
-    let res = match root {
-        Some(root) => find_all_values(path, root, |v| v.get_type() == SelectValueType::Object)?
-            .iter()
-            .map(|v| {
-                v.map_or(RedisValue::Null, |v| {
-                    RedisValue::Integer(v.len().unwrap() as i64)
-                })
-            })
-            .collect_vec()
-            .into(),
-        None => {
-            return Err(RedisError::String(
+    redis_key.get_value()?.map_or_else(
+        || {
+            Err(RedisError::String(
                 err_msg_json_path_doesnt_exist_with_param_or(path, "not an object"),
             ))
-        }
-    };
-    Ok(res)
+        },
+        |root| {
+            find_all_values(path, root, |v| v.get_type() == SelectValueType::Object).map(|v| {
+                v.into_iter()
+                    .map(|v| {
+                        v.map_or(RedisValue::Null, |v| {
+                            RedisValue::Integer(v.len().unwrap() as _)
+                        })
+                    })
+                    .collect_vec()
+                    .into()
+            })
+        },
+    )
 }
 
-fn json_obj_len_legacy<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
+fn json_obj_len_legacy<M>(redis_key: M::ReadHolder, path: &str) -> RedisResult
 where
     M: Manager,
 {
@@ -1714,14 +1711,16 @@ pub fn json_clear<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
         SelectValueType::Double => v.get_double() != 0.0,
         _ => false,
     })?;
-    let cleared = paths
+    paths
         .into_iter()
-        .try_fold(0, |acc, p| redis_key.clear(p).map(|cleared| acc + cleared))?;
-    if cleared > 0 {
-        redis_key.notify_keyspace_event(ctx, "json.clear")?;
-        manager.apply_changes(ctx);
-    }
-    Ok(cleared.into())
+        .try_fold(0, |acc, p| redis_key.clear(p).map(|cleared| acc + cleared))
+        .and_then(|cleared| {
+            if cleared > 0 {
+                redis_key.notify_keyspace_event(ctx, "json.clear")?;
+                manager.apply_changes(ctx);
+            }
+            Ok(cleared.into())
+        })
 }
 
 ///
@@ -1737,26 +1736,26 @@ pub fn json_debug<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
         "MEMORY" => {
             let key = args.next_arg()?;
             let path = args.next_str().map(Path::new).unwrap_or_default();
-
             let key = manager.open_key_read(ctx, &key)?;
+
             if path.is_legacy() {
-                Ok(match key.get_value()? {
-                    Some(doc) => {
-                        manager.get_memory(KeyValue::new(doc).get_first(path.get_path())?)?
-                    }
-                    None => 0,
-                }
-                .into())
+                key.get_value()
+                    .transpose()
+                    .map_or(Ok(0), |doc| {
+                        manager.get_memory(KeyValue::new(doc?).get_first(path.get_path())?)
+                    })
+                    .map(Into::into)
             } else {
-                Ok(match key.get_value()? {
-                    Some(doc) => KeyValue::new(doc)
-                        .get_values(path.get_path())?
-                        .iter()
-                        .map(|v| manager.get_memory(v).unwrap())
-                        .collect(),
-                    None => vec![],
-                }
-                .into())
+                key.get_value()
+                    .transpose()
+                    .map_or(Ok(vec![]), |doc| {
+                        KeyValue::new(doc?)
+                            .get_values(path.get_path())?
+                            .into_iter()
+                            .map(|v| manager.get_memory(v))
+                            .try_collect()
+                    })
+                    .map(Into::into)
             }
         }
         "HELP" => {

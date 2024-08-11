@@ -168,17 +168,16 @@ impl<'a> IValueKeyHolderWrite<'a> {
     where
         F: FnMut(&mut IValue) -> Result<Option<()>, Error>,
     {
+        let root = self.get_value().unwrap().unwrap();
         if paths.is_empty() {
             // updating the root require special treatment
-            let root = self.get_value().unwrap().unwrap();
-            if op_fun(root)
+            op_fun(root)
                 .map_err(|err| RedisError::String(err.msg))?
-                .is_none()
-            {
-                root.take();
-            }
+                .unwrap_or_else(|| {
+                    root.take();
+                });
         } else {
-            update(paths, self.get_value().unwrap().unwrap(), op_fun)?;
+            update(paths, root, op_fun)?;
         }
 
         Ok(())
@@ -267,25 +266,20 @@ impl<'a> IValueKeyHolderWrite<'a> {
 
 impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     fn notify_keyspace_event(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError> {
-        if ctx.notify_keyspace_event(NotifyEvent::MODULE, command, &self.key_name) != Status::Ok {
-            Err(RedisError::Str("failed notify key space event"))
-        } else {
-            Ok(())
+        match ctx.notify_keyspace_event(NotifyEvent::MODULE, command, &self.key_name) {
+            Status::Ok => Ok(()),
+            Status::Err => Err(RedisError::Str("failed notify key space event")),
         }
     }
 
     fn delete(&mut self) -> Result<(), RedisError> {
-        self.key.delete()?;
-        Ok(())
+        self.key.delete().and(Ok(()))
     }
 
     fn get_value(&mut self) -> Result<Option<&mut IValue>, RedisError> {
         self.get_json_holder()?;
-
-        match &mut self.val {
-            Some(v) => Ok(Some(&mut v.data)),
-            None => Ok(None),
-        }
+        let val = self.val.as_mut().map(|v| &mut v.data);
+        Ok(val)
     }
 
     fn set_value(&mut self, path: Vec<String>, mut v: IValue) -> Result<bool, RedisError> {
@@ -529,8 +523,11 @@ pub struct IValueKeyHolderRead {
 
 impl ReadHolder<IValue> for IValueKeyHolderRead {
     fn get_value(&self) -> Result<Option<&IValue>, RedisError> {
-        let key_value = self.key.get_value::<RedisJSON<IValue>>(&REDIS_JSON_TYPE)?;
-        key_value.map_or(Ok(None), |v| Ok(Some(&v.data)))
+        let data = self
+            .key
+            .get_value::<RedisJSON<IValue>>(&REDIS_JSON_TYPE)?
+            .map(|v| &v.data);
+        Ok(data)
     }
 }
 
@@ -615,23 +612,19 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                 Document::from_reader(&mut Cursor::new(val.as_bytes()))
                     .map_err(|e| e.to_string())?,
             )
-            .map_or_else(
-                |e| Err(e.to_string().into()),
-                |docs: Document| {
-                    let v = docs.iter().next().map_or(IValue::NULL, |(_, b)| {
-                        let v: serde_json::Value = b.clone().into();
-                        let mut out = serde_json::Serializer::new(Vec::new());
-                        v.serialize(&mut out).unwrap();
-                        self.from_str(
-                            &String::from_utf8(out.into_inner()).unwrap(),
-                            Format::JSON,
-                            limit_depth,
-                        )
-                        .unwrap()
-                    });
-                    Ok(v)
-                },
-            ),
+            .map_err(|e| e.to_string().into())
+            .and_then(|docs: Document| {
+                docs.iter().next().map_or(Ok(IValue::NULL), |(_, b)| {
+                    let v: serde_json::Value = b.clone().into();
+                    let mut out = serde_json::Serializer::new(Vec::new());
+                    v.serialize(&mut out).unwrap();
+                    self.from_str(
+                        &String::from_utf8(out.into_inner()).unwrap(),
+                        Format::JSON,
+                        limit_depth,
+                    )
+                })
+            }),
         }
     }
 
@@ -690,10 +683,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     }
 
     fn is_json(&self, key: *mut RedisModuleKey) -> Result<bool, RedisError> {
-        match verify_type(key, &REDIS_JSON_TYPE) {
-            Ok(_) => Ok(true),
-            Err(_) => Ok(false),
-        }
+        Ok(verify_type(key, &REDIS_JSON_TYPE).is_ok())
     }
 }
 
