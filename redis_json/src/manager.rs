@@ -63,7 +63,7 @@ pub trait WriteHolder<O: Clone, V: SelectValue> {
     ) -> RedisResult;
     fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> Result<usize, RedisError>;
     fn clear(&mut self, path: Vec<String>) -> Result<usize, RedisError>;
-    fn notify_keyspace_event(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError>;
+    fn notify_keyspace_event(self, ctx: &Context, command: &str) -> Result<(), RedisError>;
 }
 
 pub trait Manager {

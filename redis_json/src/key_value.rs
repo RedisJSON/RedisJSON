@@ -18,7 +18,7 @@ use crate::{
         err_msg_json_expected, err_msg_json_path_doesnt_exist_with_param, AddUpdateInfo,
         SetUpdateInfo, UpdateInfo,
     },
-    redisjson::{normalize_arr_indices, Path, ReplyFormat, SetOptions},
+    redisjson::{normalize_arr_indices, Path, ReplyFormat, ResultInto, SetOptions},
 };
 
 pub struct KeyValue<'a, V: SelectValue> {
@@ -179,15 +179,14 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         format: ReplyFormatOptions,
         is_legacy: bool,
     ) -> Result<RedisValue, Error> {
-        let res = if is_legacy {
-            self.to_string_single(path, format)?.into()
+        if is_legacy {
+            self.to_string_single(path, format).into_both()
         } else if format.is_resp3_reply() {
             let values = self.get_values(path)?;
-            Self::values_to_resp3(values, format)
+            Ok(Self::values_to_resp3(values, format))
         } else {
-            self.to_string_multi(path, format)?.into()
-        };
-        Ok(res)
+            self.to_string_multi(path, format).into_both()
+        }
     }
 
     fn values_to_resp3(values: Vec<&V>, format: ReplyFormatOptions) -> RedisValue {

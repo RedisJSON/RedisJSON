@@ -11,7 +11,7 @@ use crate::manager::{
     err_msg_json_path_doesnt_exist_with_param, err_msg_json_path_doesnt_exist_with_param_or,
     Manager, ReadHolder, UpdateInfo, WriteHolder,
 };
-use crate::redisjson::{Format, Path, ReplyFormat, SetOptions, JSON_ROOT_PATH};
+use crate::redisjson::{Format, Path, ReplyFormat, ResultInto, SetOptions, JSON_ROOT_PATH};
 use json_path::select_value::{SelectValue, SelectValueType};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
@@ -632,8 +632,8 @@ where
     let value = match root {
         Some(root) => KeyValue::new(root)
             .get_values(path)?
-            .iter()
-            .map(|v| RedisValue::from(KeyValue::value_name(*v)))
+            .into_iter()
+            .map(|v| RedisValue::from(KeyValue::value_name(v)))
             .collect_vec()
             .into(),
         None => RedisValue::Null,
@@ -645,11 +645,11 @@ fn json_type_legacy<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
 where
     M: Manager,
 {
-    let value = redis_key.get_value()?.map_or(RedisValue::Null, |doc| {
-        KeyValue::new(doc)
-            .get_type(path)
-            .map_or(RedisValue::Null, |s| s.into())
-    });
+    let value = redis_key
+        .get_value()?
+        .map(|doc| KeyValue::new(doc).get_type(path).map(|s| s.into()).ok())
+        .flatten()
+        .unwrap_or(RedisValue::Null);
     Ok(value)
 }
 
@@ -1450,7 +1450,7 @@ where
                     if format_options.is_resp3_reply() {
                         Ok(KeyValue::value_to_resp3(v, format_options))
                     } else {
-                        Ok(serde_json::to_string(&v)?.into())
+                        serde_json::to_string(&v).into_both()
                     }
                 })
             })?,
@@ -1487,7 +1487,7 @@ where
         let res = paths.into_iter().try_fold(RedisValue::Null, |_, p| {
             redis_key.arr_pop(p, index, |v| {
                 v.map_or(Ok(RedisValue::Null), |r| {
-                    Ok(serde_json::to_string(&r)?.into())
+                    serde_json::to_string(&r).into_both()
                 })
             })
         });

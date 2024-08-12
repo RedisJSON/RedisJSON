@@ -4,14 +4,13 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
-use std::vec::Vec;
-
+use itertools::Itertools;
 use redis_module::raw;
-use serde_json::map::Map;
 use serde_json::Number;
 use serde_json::Value;
 
 use crate::error::Error;
+use crate::redisjson::ResultInto;
 
 #[derive(Debug, PartialEq)]
 enum NodeType {
@@ -58,34 +57,30 @@ pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> Result<Value, Error> {
         }
         NodeType::Number => {
             let n = raw::load_double(rdb)?;
-            Ok(Value::Number(
-                Number::from_f64(n).ok_or_else(|| Error::from("Can't load as float"))?,
-            ))
+            Number::from_f64(n)
+                .ok_or_else(|| Error::from("Can't load as float"))
+                .into_both()
         }
         NodeType::String => {
             let buffer = raw::load_string_buffer(rdb)?;
-            Ok(Value::String(buffer.to_string()?))
+            buffer.to_string().into_both()
         }
         NodeType::Dict => {
             let len = raw::load_unsigned(rdb)?;
-            let mut m = Map::with_capacity(len as usize);
-            for _ in 0..len {
-                let t: NodeType = raw::load_unsigned(rdb)?.into();
-                if t != NodeType::KeyVal {
-                    return Err(Error::from("Can't load old RedisJSON RDB"));
-                }
-                let buffer = raw::load_string_buffer(rdb)?;
-                m.insert(buffer.to_string()?, json_rdb_load(rdb)?);
-            }
+            let m = (0..len)
+                .map(|_| match raw::load_unsigned(rdb)?.into() {
+                    NodeType::KeyVal => {
+                        let buffer = raw::load_string_buffer(rdb)?;
+                        Ok((buffer.to_string()?, json_rdb_load(rdb)?))
+                    }
+                    _ => Err(Error::from("Can't load old RedisJSON RDB")),
+                })
+                .try_collect()?;
             Ok(Value::Object(m))
         }
         NodeType::Array => {
             let len = raw::load_unsigned(rdb)?;
-            let mut v = Vec::with_capacity(len as usize);
-            for _ in 0..len {
-                let nested = json_rdb_load(rdb)?;
-                v.push(nested);
-            }
+            let v = (0..len).map(|_| json_rdb_load(rdb)).try_collect()?;
             Ok(Value::Array(v))
         }
         NodeType::KeyVal => Err(Error::from("Can't load old RedisJSON RDB")),

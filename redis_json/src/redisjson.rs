@@ -177,6 +177,23 @@ pub struct RedisJSON<T> {
     pub data: T,
 }
 
+pub(crate) trait ResultInto<S, F> {
+    fn into_both(self) -> Result<S, F>;
+}
+
+impl<T, E, S, F> ResultInto<S, F> for Result<T, E>
+where
+    S: From<T>,
+    F: From<E>,
+{
+    fn into_both(self) -> Result<S, F> {
+        match self {
+            Ok(ok) => Ok(ok.into()),
+            Err(e) => Err(e.into()),
+        }
+    }
+}
+
 pub mod type_methods {
     use super::*;
     use std::{ffi::CString, ptr::null_mut};
