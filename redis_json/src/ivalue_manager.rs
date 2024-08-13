@@ -443,21 +443,21 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         index: i64,
         serialize_callback: C,
     ) -> RedisResult {
-        let mut res = None;
-        self.do_op(&path, |v| {
-            if let Some(array) = v.as_array_mut() {
-                if array.is_empty() {
-                    return Ok(Some(()));
+        let res = self
+            .do_op(&path, |v| {
+                if let Some(array) = v.as_array_mut() {
+                    if array.is_empty() {
+                        return Ok(Some(None));
+                    }
+                    // Verify legal index in bounds
+                    let len = array.len() as i64;
+                    let index = normalize_arr_start_index(index, len) as usize;
+                    Ok(Some(array.remove(index)))
+                } else {
+                    Err(err_json(v, "array"))
                 }
-                // Verify legal index in bounds
-                let len = array.len() as i64;
-                let index = normalize_arr_start_index(index, len) as usize;
-                res = Some(array.remove(index).unwrap());
-                Ok(Some(()))
-            } else {
-                Err(err_json(v, "array"))
-            }
-        })?;
+            })?
+            .flatten();
         serialize_callback(res.as_ref())
     }
 
