@@ -95,7 +95,7 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
     let key = args.next_arg()?;
 
     // Set Capacity to 1 assuming the common case has one path
-    let mut paths: Vec<Path> = Vec::with_capacity(1);
+    let mut paths = Vec::with_capacity(1);
 
     let mut format_options = ReplyFormatOptions::new(is_resp3(ctx), ReplyFormat::STRING);
 
@@ -628,17 +628,15 @@ fn json_type_impl<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
 where
     M: Manager,
 {
-    let root = redis_key.get_value()?;
-    let value = match root {
-        Some(root) => KeyValue::new(root)
+    redis_key.get_value()?.map_or(Ok(RedisValue::Null), |root| {
+        let value = KeyValue::new(root)
             .get_values(path)?
             .into_iter()
             .map(|v| RedisValue::from(KeyValue::value_name(v)))
             .collect_vec()
-            .into(),
-        None => RedisValue::Null,
-    };
-    Ok(value)
+            .into();
+        Ok(value)
+    })
 }
 
 fn json_type_legacy<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
@@ -1572,14 +1570,12 @@ where
             err_msg_json_path_doesnt_exist_with_param_or(path, "not an array"),
         ))
     } else {
-        paths
+        let res = paths
             .into_iter()
-            .try_fold(0, |_, p| redis_key.arr_trim(p, start, stop))
-            .and_then(|res| {
-                redis_key.notify_keyspace_event(ctx, "json.arrtrim")?;
-                manager.apply_changes(ctx);
-                Ok(res.into())
-            })
+            .try_fold(0, |_, p| redis_key.arr_trim(p, start, stop))?;
+        redis_key.notify_keyspace_event(ctx, "json.arrtrim")?;
+        manager.apply_changes(ctx);
+        Ok(res.into())
     }
 }
 
@@ -1711,16 +1707,14 @@ pub fn json_clear<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
         SelectValueType::Double => v.get_double() != 0.0,
         _ => false,
     })?;
-    paths
+    let cleared = paths
         .into_iter()
-        .try_fold(0, |acc, p| redis_key.clear(p).map(|cleared| acc + cleared))
-        .and_then(|cleared| {
-            if cleared > 0 {
-                redis_key.notify_keyspace_event(ctx, "json.clear")?;
-                manager.apply_changes(ctx);
-            }
-            Ok(cleared.into())
-        })
+        .try_fold(0, |acc, p| redis_key.clear(p).map(|cleared| acc + cleared))?;
+    if cleared > 0 {
+        redis_key.notify_keyspace_event(ctx, "json.clear")?;
+        manager.apply_changes(ctx);
+    }
+    Ok(cleared.into())
 }
 
 ///

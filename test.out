@@ -1,0 +1,526 @@
+929534:C 12 Aug 2024 17:51:28.325 # WARNING: Changing databases number from 16 to 1 since we are in cluster mode
+929534:C 12 Aug 2024 17:51:28.325 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+929534:C 12 Aug 2024 17:51:28.325 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+929534:C 12 Aug 2024 17:51:28.325 * Redis version=7.2.3, bits=64, commit=7f4bae81, modified=0, pid=929534, just started
+929534:C 12 Aug 2024 17:51:28.325 * Configuration loaded
+929534:M 12 Aug 2024 17:51:28.326 * monotonic clock: POSIX clock_gettime
+929534:M 12 Aug 2024 17:51:28.327 * Running mode=cluster, port=6379.
+929534:M 12 Aug 2024 17:51:28.333 * No cluster configuration found, I'm 75dbf2b0fbe9a363151daa6280bb9679b5a845d3
+929534:M 12 Aug 2024 17:51:28.336 * <ReJSON> Created new data type 'ReJSON-RL'
+929534:M 12 Aug 2024 17:51:28.336 * <ReJSON> version: 999999 git sha: unknown branch: unknown
+929534:M 12 Aug 2024 17:51:28.336 * <ReJSON> Exported RedisJSON_V1 API
+929534:M 12 Aug 2024 17:51:28.336 * <ReJSON> Exported RedisJSON_V2 API
+929534:M 12 Aug 2024 17:51:28.336 * <ReJSON> Exported RedisJSON_V3 API
+929534:M 12 Aug 2024 17:51:28.336 * <ReJSON> Exported RedisJSON_V4 API
+929534:M 12 Aug 2024 17:51:28.336 * <ReJSON> Exported RedisJSON_V5 API
+929534:M 12 Aug 2024 17:51:28.336 * <ReJSON> Enabled diskless replication
+929534:M 12 Aug 2024 17:51:28.336 * Module 'ReJSON' loaded from /home/ephraim_feldblum/git/RedisJSON/bin/linux-x64-release/rejson.so
+929534:M 12 Aug 2024 17:51:28.336 * Server initialized
+929534:M 12 Aug 2024 17:51:28.336 * Ready to accept connections tcp
+929534:M 12 Aug 2024 17:51:28.437 * IP address for this node updated to 127.0.0.1
+929534:M 12 Aug 2024 17:51:30.353 * Cluster state changed: ok
+thread '<unnamed>' panicked at redis_json/src/key_value.rs:182:9:
+Path: $..[?@>0], Format: ReplyFormatOptions { format: STRING, indent: None, space: None, newline: None, resp3: false }, is_legacy: false
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+fatal runtime error: failed to initiate panic, error 5
+
+
+=== REDIS BUG REPORT START: Cut & paste starting from here ===
+929534:M 12 Aug 2024 17:51:30.382 # Redis 7.2.3 crashed by signal: 6, si_code: -6
+929534:M 12 Aug 2024 17:51:30.382 # Crashed running the instruction at: 0x7fca65c239fc
+
+------ STACK TRACE ------
+EIP:
+/lib/x86_64-linux-gnu/libc.so.6(pthread_kill+0x12c)[0x7fca65c239fc]
+
+Backtrace:
+/lib/x86_64-linux-gnu/libc.so.6(+0x42520)[0x7fca65bcf520]
+/lib/x86_64-linux-gnu/libc.so.6(pthread_kill+0x12c)[0x7fca65c239fc]
+/lib/x86_64-linux-gnu/libc.so.6(raise+0x16)[0x7fca65bcf476]
+/lib/x86_64-linux-gnu/libc.so.6(abort+0xd3)[0x7fca65bb57f3]
+/home/ephraim_feldblum/git/RedisJSON/bin/linux-x64-release/rejson.so(+0x299aba)[0x7fca656efaba]
+/home/ephraim_feldblum/git/RedisJSON/bin/linux-x64-release/rejson.so(+0x297faf)[0x7fca656edfaf]
+/home/ephraim_feldblum/git/RedisJSON/bin/linux-x64-release/rejson.so(+0x297d2d)[0x7fca656edd2d]
+/home/ephraim_feldblum/git/RedisJSON/bin/linux-x64-release/rejson.so(+0x297a94)[0x7fca656eda94]
+/home/ephraim_feldblum/git/RedisJSON/bin/linux-x64-release/rejson.so(+0x296d89)[0x7fca656ecd89]
+/home/ephraim_feldblum/git/RedisJSON/bin/linux-x64-release/rejson.so(+0x2977c7)[0x7fca656ed7c7]
+/home/ephraim_feldblum/git/RedisJSON/bin/linux-x64-release/rejson.so(+0x5f933)[0x7fca654b5933]
+/home/ephraim_feldblum/git/RedisJSON/bin/linux-x64-release/rejson.so(+0xff485)[0x7fca65555485]
+/home/ephraim_feldblum/git/RedisJSON/bin/linux-x64-release/rejson.so(+0xc14f0)[0x7fca655174f0]
+/home/ephraim_feldblum/git/RedisJSON/bin/linux-x64-release/rejson.so(+0x1126e5)[0x7fca655686e5]
+redis-server *:6379 [cluster](RedisModuleCommandDispatcher+0xa8)[0x560f0fb65be8]
+redis-server *:6379 [cluster](call+0x169)[0x560f0fa7d989]
+redis-server *:6379 [cluster](processCommand+0xdaf)[0x560f0fa7f69f]
+redis-server *:6379 [cluster](processInputBuffer+0x158)[0x560f0fa98b78]
+redis-server *:6379 [cluster](readQueryFromClient+0x58e)[0x560f0fa9819e]
+redis-server *:6379 [cluster](+0x1c24be)[0x560f0fbbb4be]
+redis-server *:6379 [cluster](aeProcessEvents+0x331)[0x560f0fa6d041]
+redis-server *:6379 [cluster](main+0xc6d)[0x560f0fa89c1d]
+/lib/x86_64-linux-gnu/libc.so.6(+0x29d90)[0x7fca65bb6d90]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x80)[0x7fca65bb6e40]
+redis-server *:6379 [cluster](_start+0x25)[0x560f0fa681d5]
+
+------ REGISTERS ------
+929534:M 12 Aug 2024 17:51:30.383 # 
+RAX:0000000000000000 RBX:00007fca65b8c180
+RCX:00007fca65c239fc RDX:0000000000000006
+RDI:00000000000e2efe RSI:00000000000e2efe
+RBP:00000000000e2efe RSP:00007ffc4f102f60
+R8 :00007ffc4f103030 R9 :0000000000000000
+R10:0000000000000008 R11:0000000000000246
+R12:0000000000000006 R13:0000000000000016
+R14:00007fca65820280 R15:0000560f1045dc40
+RIP:00007fca65c239fc EFL:0000000000000246
+CSGSFS:002b000000000033
+929534:M 12 Aug 2024 17:51:30.383 # (00007ffc4f102f6f) -> 0000000000000000
+929534:M 12 Aug 2024 17:51:30.383 # (00007ffc4f102f6e) -> 00007ffc4f103bf8
+929534:M 12 Aug 2024 17:51:30.383 # (00007ffc4f102f6d) -> 0000000000000000
+929534:M 12 Aug 2024 17:51:30.383 # (00007ffc4f102f6c) -> 00007ffc4f103be8
+929534:M 12 Aug 2024 17:51:30.383 # (00007ffc4f102f6b) -> 00007ffc4f103be0
+929534:M 12 Aug 2024 17:51:30.383 # (00007ffc4f102f6a) -> 00007ffc4f103bd8
+929534:M 12 Aug 2024 17:51:30.383 # (00007ffc4f102f69) -> 00007ffc4f103bd0
+929534:M 12 Aug 2024 17:51:30.383 # (00007ffc4f102f68) -> 00007ffc4f103bc8
+929534:M 12 Aug 2024 17:51:30.383 # (00007ffc4f102f67) -> 0000000000000000
+929534:M 12 Aug 2024 17:51:30.383 # (00007ffc4f102f66) -> 0000000000000000
+929534:M 12 Aug 2024 17:51:30.383 # (00007ffc4f102f65) -> 0000000000000000
+929534:M 12 Aug 2024 17:51:30.383 # (00007ffc4f102f64) -> 0000000000000000
+929534:M 12 Aug 2024 17:51:30.383 # (00007ffc4f102f63) -> 0000000000000000
+929534:M 12 Aug 2024 17:51:30.383 # (00007ffc4f102f62) -> 00007ffc4f103bc0
+929534:M 12 Aug 2024 17:51:30.383 # (00007ffc4f102f61) -> 0000000000000000
+929534:M 12 Aug 2024 17:51:30.383 # (00007ffc4f102f60) -> 0000000000000000
+
+------ INFO OUTPUT ------
+# Server
+redis_version:7.2.3
+redis_git_sha1:7f4bae81
+redis_git_dirty:0
+redis_build_id:aafa0da75adb3896
+redis_mode:cluster
+os:Linux 5.14.0-1054-oem x86_64
+arch_bits:64
+monotonic_clock:POSIX clock_gettime
+multiplexing_api:epoll
+atomicvar_api:c11-builtin
+gcc_version:4.2.1
+process_id:929534
+process_supervised:no
+run_id:19dbe36dcd88d3c58cc70ed2f978ff2fb7722b58
+tcp_port:6379
+server_time_usec:1723474290382665
+uptime_in_seconds:2
+uptime_in_days:0
+hz:10
+configured_hz:10
+lru_clock:12198258
+executable:/home/ephraim_feldblum/git/RedisJSON/logs/redis-server
+config_file:
+io_threads_active:0
+listener0:name=tcp,bind=*,bind=-::*,port=6379
+
+# Clients
+connected_clients:1
+cluster_connections:0
+maxclients:10000
+client_recent_max_input_buffer:32792
+client_recent_max_output_buffer:0
+blocked_clients:0
+tracking_clients:0
+clients_in_timeout_table:0
+total_blocking_keys:0
+total_blocking_keys_on_nokey:0
+
+# Memory
+used_memory:1903024
+used_memory_human:1.81M
+used_memory_rss:11616256
+used_memory_rss_human:11.08M
+used_memory_peak:2497864
+used_memory_peak_human:2.38M
+used_memory_peak_perc:76.19%
+used_memory_overhead:1693384
+used_memory_startup:1693072
+used_memory_dataset:209640
+used_memory_dataset_perc:99.85%
+allocator_allocated:1877704
+allocator_active:11584512
+allocator_resident:11584512
+total_system_memory:33378541568
+total_system_memory_human:31.09G
+used_memory_lua:31744
+used_memory_vm_eval:31744
+used_memory_lua_human:31.00K
+used_memory_scripts_eval:0
+number_of_cached_scripts:0
+number_of_functions:0
+number_of_libraries:0
+used_memory_vm_functions:32768
+used_memory_vm_total:64512
+used_memory_vm_total_human:63.00K
+used_memory_functions:216
+used_memory_scripts:216
+used_memory_scripts_human:216B
+maxmemory:0
+maxmemory_human:0B
+maxmemory_policy:noeviction
+allocator_frag_ratio:6.17
+allocator_frag_bytes:9706808
+allocator_rss_ratio:1.00
+allocator_rss_bytes:0
+rss_overhead_ratio:1.00
+rss_overhead_bytes:31744
+mem_fragmentation_ratio:6.19
+mem_fragmentation_bytes:9738552
+mem_not_counted_for_evict:0
+mem_replication_backlog:0
+mem_total_replication_buffers:0
+mem_clients_slaves:0
+mem_clients_normal:0
+mem_cluster_links:0
+mem_aof_buffer:0
+mem_allocator:libc
+active_defrag_running:0
+lazyfree_pending_objects:0
+lazyfreed_objects:0
+
+# Persistence
+loading:0
+async_loading:0
+current_cow_peak:0
+current_cow_size:0
+current_cow_size_age:0
+current_fork_perc:0.00
+current_save_keys_processed:0
+current_save_keys_total:0
+rdb_changes_since_last_save:3
+rdb_bgsave_in_progress:0
+rdb_last_save_time:1723474288
+rdb_last_bgsave_status:ok
+rdb_last_bgsave_time_sec:-1
+rdb_current_bgsave_time_sec:-1
+rdb_saves:0
+rdb_last_cow_size:0
+rdb_last_load_keys_expired:0
+rdb_last_load_keys_loaded:0
+aof_enabled:0
+aof_rewrite_in_progress:0
+aof_rewrite_scheduled:0
+aof_last_rewrite_time_sec:-1
+aof_current_rewrite_time_sec:-1
+aof_last_bgrewrite_status:ok
+aof_rewrites:0
+aof_rewrites_consecutive_failures:0
+aof_last_write_status:ok
+aof_last_cow_size:0
+module_fork_in_progress:0
+module_fork_last_cow_size:0
+
+# Stats
+total_connections_received:25
+total_commands_processed:77
+instantaneous_ops_per_sec:29
+total_net_input_bytes:172775
+total_net_output_bytes:10686
+total_net_repl_input_bytes:0
+total_net_repl_output_bytes:0
+instantaneous_input_kbps:1.33
+instantaneous_output_kbps:4.69
+instantaneous_input_repl_kbps:0.00
+instantaneous_output_repl_kbps:0.00
+rejected_connections:0
+sync_full:0
+sync_partial_ok:0
+sync_partial_err:0
+expired_keys:0
+expired_stale_perc:0.00
+expired_time_cap_reached_count:0
+expire_cycle_cpu_milliseconds:0
+evicted_keys:0
+evicted_clients:0
+total_eviction_exceeded_time:0
+current_eviction_exceeded_time:0
+keyspace_hits:1
+keyspace_misses:0
+pubsub_channels:0
+pubsub_patterns:0
+pubsubshard_channels:0
+latest_fork_usec:0
+total_forks:0
+migrate_cached_sockets:0
+slave_expires_tracked_keys:0
+active_defrag_hits:0
+active_defrag_misses:0
+active_defrag_key_hits:0
+active_defrag_key_misses:0
+total_active_defrag_time:0
+current_active_defrag_time:0
+tracking_total_keys:0
+tracking_total_items:0
+tracking_total_prefixes:0
+unexpected_error_replies:0
+total_error_replies:2
+dump_payload_sanitizations:0
+total_reads_processed:111
+total_writes_processed:79
+io_threaded_reads_processed:0
+io_threaded_writes_processed:0
+reply_buffer_shrinks:1
+reply_buffer_expands:0
+eventloop_cycles:161
+eventloop_duration_sum:13216
+eventloop_duration_cmd_sum:1423
+instantaneous_eventloop_cycles_per_sec:59
+instantaneous_eventloop_duration_usec:82
+acl_access_denied_auth:0
+acl_access_denied_cmd:0
+acl_access_denied_key:0
+acl_access_denied_channel:0
+
+# Replication
+role:master
+connected_slaves:0
+master_failover_state:no-failover
+master_replid:470fb44f23bf3f61b2af16d17bc14e5fa542c5b2
+master_replid2:0000000000000000000000000000000000000000
+master_repl_offset:0
+second_repl_offset:-1
+repl_backlog_active:0
+repl_backlog_size:1048576
+repl_backlog_first_byte_offset:0
+repl_backlog_histlen:0
+
+# CPU
+used_cpu_sys:0.021820
+used_cpu_user:0.005455
+used_cpu_sys_children:0.000000
+used_cpu_user_children:0.000000
+used_cpu_sys_main_thread:0.021775
+used_cpu_user_main_thread:0.005443
+
+# Modules
+module:name=ReJSON,ver=999999,api=1,filters=0,usedby=[],using=[],options=[handle-io-errors]
+
+# Commandstats
+cmdstat_json.set:calls=3,usec=67,usec_per_call=22.33,rejected_calls=0,failed_calls=0
+cmdstat_client|setinfo:calls=50,usec=57,usec_per_call=1.14,rejected_calls=0,failed_calls=0
+cmdstat_info:calls=1,usec=27,usec_per_call=27.00,rejected_calls=0,failed_calls=0
+cmdstat_cluster|addslots:calls=1,usec=308,usec_per_call=308.00,rejected_calls=0,failed_calls=0
+cmdstat_cluster|info:calls=20,usec=921,usec_per_call=46.05,rejected_calls=0,failed_calls=0
+cmdstat_cluster|meet:calls=1,usec=43,usec_per_call=43.00,rejected_calls=0,failed_calls=0
+cmdstat_ping:calls=1,usec=0,usec_per_call=0.00,rejected_calls=0,failed_calls=0
+
+# Errorstats
+errorstat_ERR:count=2
+
+# Latencystats
+latency_percentiles_usec_json.set:p50=28.031,p99=38.143,p99.9=38.143
+latency_percentiles_usec_client|setinfo:p50=1.003,p99=5.023,p99.9=5.023
+latency_percentiles_usec_info:p50=27.007,p99=27.007,p99.9=27.007
+latency_percentiles_usec_cluster|addslots:p50=309.247,p99=309.247,p99.9=309.247
+latency_percentiles_usec_cluster|info:p50=46.079,p99=99.327,p99.9=99.327
+latency_percentiles_usec_cluster|meet:p50=43.007,p99=43.007,p99.9=43.007
+latency_percentiles_usec_ping:p50=0.001,p99=0.001,p99.9=0.001
+
+# Cluster
+cluster_enabled:1
+
+# Keyspace
+db0:keys=1,expires=0,avg_ttl=0
+
+# Cluster info
+cluster_state:ok
+cluster_slots_assigned:16384
+cluster_slots_ok:16384
+cluster_slots_pfail:0
+cluster_slots_fail:0
+cluster_known_nodes:1
+cluster_size:1
+cluster_current_epoch:0
+cluster_my_epoch:0
+cluster_stats_messages_pong_sent:1
+cluster_stats_messages_meet_sent:1
+cluster_stats_messages_sent:2
+cluster_stats_messages_pong_received:1
+cluster_stats_messages_meet_received:1
+cluster_stats_messages_received:2
+total_cluster_links_buffer_limit_exceeded:0
+
+------ CLUSTER NODES OUTPUT ------
+75dbf2b0fbe9a363151daa6280bb9679b5a845d3 127.0.0.1:6379@16379,,tls-port=0,shard-id=28351096806fb67929f04318dace2f99aaab441e myself,master - 0 0 0 connected 0-16383
+
+------ CLIENT LIST OUTPUT ------
+id=30 addr=127.0.0.1:38544 laddr=127.0.0.1:6379 fd=11 name= age=0 idle=0 flags=N db=0 sub=0 psub=0 ssub=0 multi=-1 qbuf=40 qbuf-free=16346 argv-mem=18 multi-mem=0 rbs=16392 rbp=16392 obl=0 oll=0 omem=0 tot-mem=33602 events=r cmd=json.get user=default redir=-1 resp=2 lib-name=redis-py lib-ver=5.0.7
+
+------ CURRENT CLIENT INFO ------
+id=30 addr=127.0.0.1:38544 laddr=127.0.0.1:6379 fd=11 name= age=0 idle=0 flags=N db=0 sub=0 psub=0 ssub=0 multi=-1 qbuf=40 qbuf-free=16346 argv-mem=18 multi-mem=0 rbs=16392 rbp=16392 obl=0 oll=0 omem=0 tot-mem=33602 events=r cmd=json.get user=default redir=-1 resp=2 lib-name=redis-py lib-ver=5.0.7
+argc: '3'
+argv[0]: '"JSON.GET"'
+argv[1]: '"k"'
+argv[2]: '"$..[?@>0]"'
+929534:M 12 Aug 2024 17:51:30.383 # key 'k' found in DB containing the following object:
+929534:M 12 Aug 2024 17:51:30.383 # Object type: 5
+929534:M 12 Aug 2024 17:51:30.383 # Object encoding: 0
+929534:M 12 Aug 2024 17:51:30.383 # Object refcount: 1
+
+------ EXECUTING CLIENT INFO ------
+id=30 addr=127.0.0.1:38544 laddr=127.0.0.1:6379 fd=11 name= age=0 idle=0 flags=N db=0 sub=0 psub=0 ssub=0 multi=-1 qbuf=40 qbuf-free=16346 argv-mem=18 multi-mem=0 rbs=16392 rbp=16392 obl=0 oll=0 omem=0 tot-mem=33602 events=r cmd=json.get user=default redir=-1 resp=2 lib-name=redis-py lib-ver=5.0.7
+argc: '3'
+argv[0]: '"JSON.GET"'
+argv[1]: '"k"'
+argv[2]: '"$..[?@>0]"'
+929534:M 12 Aug 2024 17:51:30.383 # key 'k' found in DB containing the following object:
+929534:M 12 Aug 2024 17:51:30.383 # Object type: 5
+929534:M 12 Aug 2024 17:51:30.383 # Object encoding: 0
+929534:M 12 Aug 2024 17:51:30.383 # Object refcount: 1
+
+------ MODULES INFO OUTPUT ------
+# ReJSON_trace
+ReJSON_backtrace:   0: redis_module::add_trace_info
+             at /home/ephraim_feldblum/.cargo/registry/src/index.crates.io-6f17d22bba15001f/redis-module-2.0.7/src/lib.rs:70:29
+      redis_module::basic_info_command_handler
+             at /home/ephraim_feldblum/.cargo/registry/src/index.crates.io-6f17d22bba15001f/redis-module-2.0.7/src/lib.rs:94:25
+   1: rejson::__info_func
+             at /home/ephraim_feldblum/.cargo/registry/src/index.crates.io-6f17d22bba15001f/redis-module-2.0.7/src/macros.rs:174:13
+   2: modulesCollectInfo
+             at /home/ephraim_feldblum/git/redis/src/module.c:10293:9
+   3: logModulesInfo
+             at /home/ephraim_feldblum/git/redis/src/debug.c:1900:22
+      printCrashReport
+             at /home/ephraim_feldblum/git/redis/src/debug.c:2183:5
+   4: sigsegvHandler
+             at /home/ephraim_feldblum/git/redis/src/debug.c:2164:5
+   5: <unknown>
+   6: __pthread_kill_implementation
+             at ./nptl/pthread_kill.c:43:17
+      __pthread_kill_internal
+             at ./nptl/pthread_kill.c:78:10
+      __GI___pthread_kill
+             at ./nptl/pthread_kill.c:89:10
+   7: __GI_raise
+             at ./signal/../sysdeps/posix/raise.c:26:13
+   8: __GI_abort
+             at ./stdlib/abort.c:79:7
+   9: std::sys::pal::unix::abort_internal
+             at /rustc/129f3b9964af4d4a709d1383930ade12dfe7c081/library/std/src/sys/pal/unix/mod.rs:370:14
+  10: rust_panic
+             at /rustc/129f3b9964af4d4a709d1383930ade12dfe7c081/library/std/src/rt.rs:43:13
+  11: std::panicking::rust_panic_with_hook
+             at /rustc/129f3b9964af4d4a709d1383930ade12dfe7c081/library/std/src/panicking.rs:817:5
+  12: std::panicking::begin_panic_handler::{{closure}}
+             at /rustc/129f3b9964af4d4a709d1383930ade12dfe7c081/library/std/src/panicking.rs:664:13
+  13: std::sys_common::backtrace::__rust_end_short_backtrace
+             at /rustc/129f3b9964af4d4a709d1383930ade12dfe7c081/library/std/src/sys_common/backtrace.rs:171:18
+  14: rust_begin_unwind
+             at /rustc/129f3b9964af4d4a709d1383930ade12dfe7c081/library/std/src/panicking.rs:652:5
+  15: core::panicking::panic_fmt
+             at /rustc/129f3b9964af4d4a709d1383930ade12dfe7c081/library/core/src/panicking.rs:72:14
+  16: rejson::key_value::KeyValue<V>::to_json_single
+             at /home/ephraim_feldblum/git/RedisJSON/redis_json/src/key_value.rs:182:9
+      rejson::key_value::KeyValue<V>::to_json
+             at /home/ephraim_feldblum/git/RedisJSON/redis_json/src/key_value.rs:253:13
+  17: rejson::commands::json_get
+             at /home/ephraim_feldblum/git/RedisJSON/redis_json/src/commands.rs:142:22
+  18: rejson::RedisModule_OnLoad::__do_command::{{closure}}::{{closure}}
+             at /home/ephraim_feldblum/git/RedisJSON/redis_json/src/lib.rs:139:36
+      rejson::RedisModule_OnLoad::__do_command::{{closure}}
+             at /home/ephraim_feldblum/git/RedisJSON/redis_json/src/lib.rs:97:27
+      rejson::RedisModule_OnLoad::__do_command
+             at /home/ephraim_feldblum/.cargo/registry/src/index.crates.io-6f17d22bba15001f/redis-module-2.0.7/src/macros.rs:22:28
+  19: RedisModuleCommandDispatcher
+             at /home/ephraim_feldblum/git/redis/src/module.c:917:5
+  20: call
+             at /home/ephraim_feldblum/git/redis/src/server.c:3519:5
+  21: processCommand
+             at /home/ephraim_feldblum/git/redis/src/server.c:4160:9
+  22: processCommandAndResetClient
+             at /home/ephraim_feldblum/git/redis/src/networking.c:2466:9
+      processInputBuffer
+             at /home/ephraim_feldblum/git/redis/src/networking.c:2574:17
+  23: readQueryFromClient
+             at /home/ephraim_feldblum/git/redis/src/networking.c:2713:9
+  24: callHandler
+             at /home/ephraim_feldblum/git/redis/src/./connhelpers.h:79:18
+      connSocketEventHandler
+             at /home/ephraim_feldblum/git/redis/src/socket.c:298:14
+  25: aeProcessEvents
+             at /home/ephraim_feldblum/git/redis/src/ae.c:436:17
+  26: aeMain
+             at /home/ephraim_feldblum/git/redis/src/ae.c:496:9
+      main
+             at /home/ephraim_feldblum/git/redis/src/server.c:7360:5
+  27: __libc_start_call_main
+             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+  28: __libc_start_main_impl
+             at ./csu/../csu/libc-start.c:392:3
+  29: _start
+
+
+------ CONFIG DEBUG OUTPUT ------
+lazyfree-lazy-server-del no
+sanitize-dump-payload no
+io-threads-do-reads no
+list-compress-depth 0
+repl-diskless-load disabled
+replica-read-only yes
+repl-diskless-sync yes
+client-query-buffer-limit 1gb
+lazyfree-lazy-expire no
+slave-read-only yes
+io-threads 1
+lazyfree-lazy-eviction no
+proto-max-bulk-len 512mb
+activedefrag no
+lazyfree-lazy-user-del no
+lazyfree-lazy-user-flush no
+
+------ FAST MEMORY TEST ------
+929534:M 12 Aug 2024 17:51:30.458 # Bio worker thread #0 terminated
+929534:M 12 Aug 2024 17:51:30.458 # Bio worker thread #1 terminated
+929534:M 12 Aug 2024 17:51:30.458 # Bio worker thread #2 terminated
+*** Preparing to test memory region 560f0fcbf000 (135168 bytes)
+*** Preparing to test memory region 560f1036b000 (49389568 bytes)
+*** Preparing to test memory region 7fca60d47000 (6115328 bytes)
+*** Preparing to test memory region 7fca61ec0000 (1110016 bytes)
+*** Preparing to test memory region 7fca63710000 (3047424 bytes)
+*** Preparing to test memory region 7fca63c18000 (8388608 bytes)
+*** Preparing to test memory region 7fca64419000 (8388608 bytes)
+*** Preparing to test memory region 7fca64c1a000 (8388608 bytes)
+*** Preparing to test memory region 7fca65821000 (991232 bytes)
+*** Preparing to test memory region 7fca65b8b000 (8192 bytes)
+*** Preparing to test memory region 7fca65da9000 (53248 bytes)
+*** Preparing to test memory region 7fca661f7000 (12288 bytes)
+*** Preparing to test memory region 7fca6639d000 (8192 bytes)
+.O.O.O.O.O.O.O.O.O.O.O.O.O
+Fast memory test PASSED, however your memory can still be broken. Please run a memory test for several hours if possible.
+
+------ DUMPING CODE AROUND EIP ------
+Symbol: pthread_kill (base: 0x7fca65c238d0)
+Module: /lib/x86_64-linux-gnu/libc.so.6 (base 0x7fca65b8d000)
+$ xxd -r -p /tmp/dump.hex /tmp/dump.bin
+$ objdump --adjust-vma=0x7fca65c238d0 -D -b binary -m i386:x86-64 /tmp/dump.bin
+------
+929534:M 12 Aug 2024 17:51:30.584 # dump of function (hexdump of 428 bytes):
+f30f1efa41568d56e0415541bd16000000415455534881ec9000000064488b042528000000488984248800000031c083fa01767e4889fb4189f464483b3c25100000000f84c70000004989e641ba0800000031ffb80e0000004c89f2488d352dc113000f0531c0488dab74090000ba01000000f00fb155000f85ca00000080bb730900000074594531ed31d287937409000083fa010f8fbd00000041ba0800000031d24c89f6bf02000000b80e0000000f05488b84248800000064482b0425280000000f859c0000004881c4900000004489e85b5d415c415d415ec30f1f4000448babd0020000e8845605004489e289c74489eeb8ea0000000f053d00f0ffff76854189c541f7ddeb80660f1f440000b8ba0000000f0589c5e8525605004489e289ee89c7b8ea0000000f054189c541f7dd3d00f0ffffb800000000440f46e8e96dffffff0f1f004889efe810a8ffffe929ffffff0f1f004889efe8d0a8ffffe936ffffffe816fb0900660f1f440000f30f1efac3662e0f1f840000000000904157415641554154554889fd534883ec2864488b042528000000488944241831c0648b0425d0020000894424
+Function at 0x7fca65c79040 is getpid
+Function at 0x7fca65cc3550 is __stack_chk_fail
+
+=== REDIS BUG REPORT END. Make sure to include from START to END. ===
+
+       Please report the crash by opening an issue on github:
+
+           http://github.com/redis/redis/issues
+
+  If a Redis module was involved, please open in the module's repo instead.
+
+  Suspect RAM error? Use redis-server --test-memory to verify it.
+
+  Some other issues could be detected by redis-server --check-system
+	[31;1m❌  (FAIL):	[0m[33m'Connection closed by server.' == '[1]'[0m	[90;1mtest.py:1538[0m
+[36mtest:test_recursive_descent[0m:
+	[31;1m[FAIL][0m
+	[31;1mprocess is not alive, might have crash durring test execution, check this out. server id : 1[0m
+[1m
+Test Took: 2 sec[0m
+[1mTotal Tests Run: 1, Total Tests Failed: 1, Total Tests Passed: 0[0m
+[1mFailed Tests Summary:[0m
+	[1mtest:test_recursive_descent[0m
+		[31;1m❌  (FAIL):	[0m[33m'Connection closed by server.' == '[1]'[0m	[90;1mtest.py:1538[0m

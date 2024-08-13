@@ -241,7 +241,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         paths: Vec<Path>,
         format: ReplyFormatOptions,
     ) -> Result<RedisValue, Error> {
-        let is_legacy = !paths.iter().any(|p| !p.is_legacy());
+        let is_legacy = paths.iter().all(Path::is_legacy);
 
         // If we're using RESP3, we need to reply with an array of values
         if format.is_resp3_reply() {

@@ -9,8 +9,8 @@ pub mod json_path;
 pub mod select_value;
 
 use crate::json_path::{
-    CalculationResult, DummyTracker, DummyTrackerGenerator, PTracker, PTrackerGenerator,
-    PathCalculator, Query, QueryCompilationError, UserPathTracker,
+    CalculationResult, DummyTrackerGenerator, PTracker, PTrackerGenerator, PathCalculator, Query,
+    QueryCompilationError, UserPathTracker,
 };
 use crate::select_value::SelectValue;
 
@@ -78,7 +78,7 @@ pub fn calc_once<'j, 'p, S: SelectValue>(q: Query<'j>, json: &'p S) -> Vec<&'p S
     }
     .calc_with_paths_on_root(json, root)
     .into_iter()
-    .map(|e: CalculationResult<'p, S, DummyTracker>| e.res)
+    .map(|e| e.res)
     .collect()
 }
 

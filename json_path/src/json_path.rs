@@ -440,7 +440,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
     }
 
     fn re_is_match(regex: &str, s: &str) -> bool {
-        Regex::new(regex).map_or_else(|_| false, |re| Regex::is_match(&re, s))
+        Regex::new(regex).map_or(false, |re| Regex::is_match(&re, s))
     }
 
     fn re_match(&self, s: &Self) -> bool {
@@ -1060,7 +1060,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         } else {
             self.calc_internal(root, json, None, &mut calc_data);
         }
-        calc_data.results.drain(..).collect()
+        calc_data.results
     }
 
     pub fn calc_with_paths<'j: 'i, S: SelectValue>(

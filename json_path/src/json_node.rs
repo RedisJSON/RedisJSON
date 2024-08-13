@@ -38,16 +38,16 @@ impl SelectValue for Value {
         }
     }
 
-    fn keys<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a str> + 'a>> {
+    fn keys(&self) -> Option<impl Iterator<Item = &str>> {
         match self {
-            Self::Object(o) => Some(Box::new(o.keys().map(|k| &k[..]))),
+            Self::Object(o) => Some(o.keys().map(|k| &k[..])),
             _ => None,
         }
     }
 
-    fn items<'a>(&'a self) -> Option<Box<dyn Iterator<Item = (&'a str, &'a Self)> + 'a>> {
+    fn items(&self) -> Option<impl Iterator<Item = (&str, &Self)>> {
         match self {
-            Self::Object(o) => Some(Box::new(o.iter().map(|(k, v)| (&k[..], v)))),
+            Self::Object(o) => Some(o.iter().map(|(k, v)| (&k[..], v))),
             _ => None,
         }
     }
@@ -169,16 +169,12 @@ impl SelectValue for IValue {
         }
     }
 
-    fn keys<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a str> + 'a>> {
-        self.as_object()
-            .map_or(None, |o| Some(Box::new(o.keys().map(|k| &k[..]))))
+    fn keys(&self) -> Option<impl Iterator<Item = &str>> {
+        self.as_object().map(|o| o.keys().map(|k| &k[..]))
     }
 
-    fn items<'a>(&'a self) -> Option<Box<dyn Iterator<Item = (&'a str, &'a Self)> + 'a>> {
-        match self.as_object() {
-            Some(o) => Some(Box::new(o.iter().map(|(k, v)| (&k[..], v)))),
-            _ => None,
-        }
+    fn items(&self) -> Option<impl Iterator<Item = (&str, &Self)>> {
+        self.as_object().map(|o| o.iter().map(|(k, v)| (&k[..], v)))
     }
 
     fn len(&self) -> Option<usize> {
