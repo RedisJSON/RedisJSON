@@ -254,24 +254,26 @@ pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
                 let mut update_info =
                     KeyValue::new(doc).find_paths(path.get_path(), SetOptions::MergeExisting)?;
                 if !update_info.is_empty() {
-                    let mut res = false;
-                    if update_info.len() == 1 {
-                        res = match update_info.pop().unwrap() {
+                    let res = if update_info.len() == 1 {
+                        match update_info.pop().unwrap() {
                             UpdateInfo::SUI(sui) => redis_key.merge_value(sui.path, val)?,
                             UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, val)?,
                         }
                     } else {
-                        for ui in update_info {
-                            res = match ui {
-                                UpdateInfo::SUI(sui) => {
-                                    redis_key.merge_value(sui.path, val.clone())?
-                                }
-                                UpdateInfo::AUI(aui) => {
-                                    redis_key.dict_add(aui.path, &aui.key, val.clone())?
-                                }
-                            } || res; // If any of the updates succeed, return true
-                        }
-                    }
+                        update_info
+                            .into_iter()
+                            .try_fold(false, |res, ui| -> RedisResult<_> {
+                                let updated = match ui {
+                                    UpdateInfo::SUI(sui) => {
+                                        redis_key.merge_value(sui.path, val.clone())?
+                                    }
+                                    UpdateInfo::AUI(aui) => {
+                                        redis_key.dict_add(aui.path, &aui.key, val.clone())?
+                                    }
+                                };
+                                Ok(updated || res) // If any of the updates succeed, return true
+                            })?
+                    };
                     if res {
                         redis_key.notify_keyspace_event(ctx, "json.merge")?;
                         manager.apply_changes(ctx);
@@ -383,7 +385,7 @@ fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
     path: &str,
     doc: &T,
     mut f: F,
-) -> Result<Vec<Vec<String>>, RedisError> {
+) -> RedisResult<Vec<Vec<String>>> {
     let query = compile(path).map_err(|e| RedisError::String(e.to_string()))?;
     let res = calc_once_with_paths(query, doc)
         .into_iter()
@@ -397,7 +399,7 @@ fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
 fn get_all_values_and_paths<'a, T: SelectValue>(
     path: &str,
     doc: &'a T,
-) -> Result<Vec<(&'a T, Vec<String>)>, RedisError> {
+) -> RedisResult<Vec<(&'a T, Vec<String>)>> {
     let query = compile(path).map_err(|e| RedisError::String(e.to_string()))?;
     let res = calc_once_with_paths(query, doc)
         .into_iter()
@@ -432,7 +434,7 @@ fn find_all_paths<T: SelectValue, F>(
     path: &str,
     doc: &T,
     f: F,
-) -> Result<Vec<Option<Vec<String>>>, RedisError>
+) -> RedisResult<Vec<Option<Vec<String>>>>
 where
     F: Fn(&T) -> bool,
 {
@@ -444,7 +446,7 @@ fn find_all_values<'a, T: SelectValue, F>(
     path: &str,
     doc: &'a T,
     f: F,
-) -> Result<Vec<Option<&'a T>>, RedisError>
+) -> RedisResult<Vec<Option<&'a T>>>
 where
     F: Fn(&T) -> bool,
 {
@@ -711,7 +713,7 @@ fn json_num_op_impl<M>(
     number: &str,
     op: NumOp,
     cmd: &str,
-) -> Result<Vec<Option<Number>>, RedisError>
+) -> RedisResult<Vec<Option<Number>>>
 where
     M: Manager,
 {
@@ -763,25 +765,30 @@ where
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
     let paths = find_paths(path, root, |v| {
-        v.get_type() == SelectValueType::Double || v.get_type() == SelectValueType::Long
+        matches!(
+            v.get_type(),
+            SelectValueType::Double | SelectValueType::Long,
+        )
     })?;
-    if !paths.is_empty() {
-        let mut res = None;
-        for p in paths {
-            res = Some(match op {
-                NumOp::Incr => redis_key.incr_by(p, number)?,
-                NumOp::Mult => redis_key.mult_by(p, number)?,
-                NumOp::Pow => redis_key.pow_by(p, number)?,
-            });
-        }
-        redis_key.notify_keyspace_event(ctx, cmd)?;
-        manager.apply_changes(ctx);
-        Ok(res.unwrap().to_string().into())
-    } else {
-        Err(RedisError::String(
-            err_msg_json_path_doesnt_exist_with_param_or(path, "does not contains a number"),
-        ))
-    }
+    let res = paths
+        .into_iter()
+        .try_fold(None, |_, p| {
+            match op {
+                NumOp::Incr => redis_key.incr_by(p, number),
+                NumOp::Mult => redis_key.mult_by(p, number),
+                NumOp::Pow => redis_key.pow_by(p, number),
+            }
+            .into_both()
+        })
+        .transpose()
+        .unwrap_or_else(|| {
+            Err(RedisError::String(
+                err_msg_json_path_doesnt_exist_with_param_or(path, "does not contains a number"),
+            ))
+        })?;
+    redis_key.notify_keyspace_event(ctx, cmd)?;
+    manager.apply_changes(ctx);
+    Ok(res.to_string().into())
 }
 
 ///
@@ -1053,7 +1060,7 @@ pub fn json_arr_append<M: Manager>(
     args.peek().ok_or(RedisError::WrongArity)?;
 
     let args = args
-        .map(|arg| -> Result<_, RedisError> {
+        .map(|arg| -> RedisResult<_> {
             let json = arg.try_as_str()?;
             let sv_holder = manager.from_str(json, Format::JSON, true)?;
             Ok(sv_holder)
@@ -1217,7 +1224,7 @@ pub fn json_arr_insert<M: Manager>(
     // We require at least one JSON item to insert
     args.peek().ok_or(RedisError::WrongArity)?;
     let args = args
-        .map(|arg| -> Result<_, RedisError> {
+        .map(|arg| -> RedisResult<_> {
             let json = arg.try_as_str()?;
             let sv_holder = manager.from_str(json, Format::JSON, true)?;
             Ok(sv_holder)
