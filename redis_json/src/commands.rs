@@ -251,29 +251,29 @@ pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
                 manager.apply_changes(ctx);
                 REDIS_OK
             } else {
-                let mut update_info =
+                let update_info =
                     KeyValue::new(doc).find_paths(path.get_path(), SetOptions::MergeExisting)?;
                 if !update_info.is_empty() {
                     let res = if update_info.len() == 1 {
-                        match update_info.pop().unwrap() {
-                            UpdateInfo::SUI(sui) => redis_key.merge_value(sui.path, val)?,
-                            UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, val)?,
+                        match update_info.into_iter().next().unwrap() {
+                            UpdateInfo::SUI(sui) => redis_key.merge_value(sui.path, val),
+                            UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, val),
                         }
                     } else {
                         update_info
                             .into_iter()
                             .try_fold(false, |res, ui| -> RedisResult<_> {
-                                let updated = match ui {
+                                match ui {
                                     UpdateInfo::SUI(sui) => {
-                                        redis_key.merge_value(sui.path, val.clone())?
+                                        redis_key.merge_value(sui.path, val.clone())
                                     }
                                     UpdateInfo::AUI(aui) => {
-                                        redis_key.dict_add(aui.path, &aui.key, val.clone())?
+                                        redis_key.dict_add(aui.path, &aui.key, val.clone())
                                     }
-                                };
-                                Ok(updated || res) // If any of the updates succeed, return true
-                            })?
-                    };
+                                }
+                                .and_then(|updated| Ok(updated || res)) // If any of the updates succeed, return true
+                            })
+                    }?;
                     if res {
                         redis_key.notify_keyspace_event(ctx, "json.merge")?;
                         manager.apply_changes(ctx);
@@ -358,20 +358,19 @@ pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
     res
 }
 
-fn apply_updates<M: Manager>(
-    redis_key: &mut M::WriteHolder,
-    value: M::O,
-    mut update_info: Vec<UpdateInfo>,
-) -> bool {
+fn apply_updates<M>(redis_key: &mut M::WriteHolder, value: M::O, ui: Vec<UpdateInfo>) -> bool
+where
+    M: Manager,
+{
     // If there is only one update info, we can avoid cloning the value
-    if update_info.len() == 1 {
-        match update_info.pop().unwrap() {
+    if ui.len() == 1 {
+        match ui.into_iter().next().unwrap() {
             UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value),
             UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, value),
         }
         .unwrap_or(false)
     } else {
-        update_info.into_iter().fold(false, |updated, ui| {
+        ui.into_iter().fold(false, |updated, ui| {
             match ui {
                 UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value.clone()),
                 UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, value.clone()),
@@ -381,16 +380,19 @@ fn apply_updates<M: Manager>(
     }
 }
 
-fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
-    path: &str,
-    doc: &T,
-    mut f: F,
-) -> RedisResult<Vec<Vec<String>>> {
+fn find_paths<T, F>(path: &str, doc: &T, mut f: F) -> RedisResult<Vec<Vec<String>>>
+where
+    T: SelectValue,
+    F: FnMut(&T) -> bool,
+{
     let query = compile(path).map_err(|e| RedisError::String(e.to_string()))?;
     let res = calc_once_with_paths(query, doc)
         .into_iter()
-        .filter(|e| f(e.res))
-        .map(|e| e.path_tracker.unwrap().to_string_path())
+        .filter_map(|e| {
+            f(e.res)
+                .then(|| e.path_tracker.map(UserPathTracker::to_string_path))
+                .flatten()
+        })
         .collect();
     Ok(res)
 }
@@ -857,17 +859,16 @@ where
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
     let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Bool)?;
-    let mut res: Vec<RedisValue> = vec![];
     let mut need_notify = false;
-    for p in paths {
-        res.push(match p {
-            Some(p) => {
+    let res: Vec<_> = paths
+        .into_iter()
+        .map(|p| {
+            p.map_or(Ok(RedisValue::Null), |p| -> RedisResult {
                 need_notify = true;
-                RedisValue::Integer((redis_key.bool_toggle(p)?).into())
-            }
-            None => RedisValue::Null,
-        });
-    }
+                redis_key.bool_toggle(p).map(Into::into)
+            })
+        })
+        .try_collect()?;
     if need_notify {
         redis_key.notify_keyspace_event(ctx, "json.toggle")?;
         manager.apply_changes(ctx);
@@ -953,17 +954,16 @@ where
 
     let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::String)?;
 
-    let mut res: Vec<RedisValue> = vec![];
     let mut need_notify = false;
-    for p in paths {
-        res.push(match p {
-            Some(p) => {
+    let res: Vec<_> = paths
+        .into_iter()
+        .map(|p| -> RedisResult {
+            p.map_or(Ok(RedisValue::Null), |p| {
                 need_notify = true;
-                (redis_key.str_append(p, json.to_string())?).into()
-            }
-            _ => RedisValue::Null,
-        });
-    }
+                redis_key.str_append(p, json.to_string()).map(Into::into)
+            })
+        })
+        .try_collect()?;
     if need_notify {
         redis_key.notify_keyspace_event(ctx, "json.strappend")?;
         manager.apply_changes(ctx);
@@ -1026,10 +1026,10 @@ where
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
     let values = find_all_values(path, root, |v| v.get_type() == SelectValueType::String)?;
-    let mut res: Vec<RedisValue> = vec![];
-    for v in values {
-        res.push(v.map_or(RedisValue::Null, |v| (v.get_str().len() as i64).into()));
-    }
+    let res: Vec<_> = values
+        .into_iter()
+        .map(|v| v.map_or(RedisValue::Null, |v| v.get_str().len().into()))
+        .collect();
     Ok(res.into())
 }
 
