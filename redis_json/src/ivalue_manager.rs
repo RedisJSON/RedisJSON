@@ -11,7 +11,6 @@ use crate::redisjson::{normalize_arr_start_index, ResultInto};
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
 use bson::{from_document, Document};
-use ijson::object::Entry;
 use ijson::{DestructuredMut, INumber, IObject, IString, IValue, ValueType};
 use json_path::select_value::{SelectValue, SelectValueType};
 use redis_module::key::{verify_type, KeyFlags, RedisKey, RedisKeyWritable};
@@ -40,9 +39,9 @@ pub struct IValueKeyHolderWrite<'a> {
 /// The new value is the value returned from `func`, which is called on the current value.
 /// If the returned value from `func` is [`Err`], the current value remains (although it could be modified by `func`)
 ///
-fn replace<F>(path: &[String], root: &mut IValue, mut func: F) -> Result<bool, Error>
+fn replace<F>(path: &[String], root: &mut IValue, mut func: F) -> bool
 where
-    F: FnMut(&mut IValue) -> Result<IValue, Error>,
+    F: FnMut(&mut IValue) -> IValue,
 {
     let mut target = root;
 
@@ -53,12 +52,7 @@ where
         let target_opt = match target_once.destructure_mut() {
             DestructuredMut::Object(obj) => {
                 if is_last {
-                    if let Entry::Occupied(mut e) = obj.entry(token) {
-                        let v = e.get_mut();
-                        *v = func(v)?;
-                        return Ok(true);
-                    }
-                    return Ok(false);
+                    return obj.get_mut(token.as_str()).map(|v| *v = func(v)).is_some();
                 }
                 obj.get_mut(token.as_str())
             }
@@ -68,12 +62,7 @@ where
                     arr, token
                 ));
                 if is_last {
-                    if idx < arr.len() {
-                        let v = &mut arr.as_mut_slice()[idx];
-                        *v = func(v)?;
-                        return Ok(true);
-                    }
-                    return Ok(false);
+                    return arr.get_mut(idx).map(|v| *v = func(v)).is_some();
                 }
                 arr.get_mut(idx)
             }
@@ -87,7 +76,7 @@ where
         }
     }
 
-    Ok(false)
+    false
 }
 
 ///
@@ -96,7 +85,7 @@ where
 /// The value is modified by `func`, which is called on the current value.
 /// If the returned value from `func` is [`Err`], the current value remains (although it could be modified by `func`)
 ///
-fn update<F, T>(path: &[String], root: &mut IValue, mut func: F) -> Result<Option<T>, Error>
+fn update<F, T>(path: &[String], root: &mut IValue, func: F) -> Result<Option<T>, Error>
 where
     F: FnMut(&mut IValue) -> Result<T, Error>,
 {
@@ -109,12 +98,7 @@ where
         let target_opt = match target_once.destructure_mut() {
             DestructuredMut::Object(obj) => {
                 if is_last {
-                    if let Entry::Occupied(mut e) = obj.entry(token) {
-                        let v = e.get_mut();
-                        return func(v).map(Some);
-                    } else {
-                        return Ok(None);
-                    }
+                    return obj.get_mut(token.as_str()).map(func).transpose();
                 }
                 obj.get_mut(token.as_str())
             }
@@ -124,12 +108,7 @@ where
                     arr, token
                 ));
                 if is_last {
-                    if idx < arr.len() {
-                        let v = &mut arr.as_mut_slice()[idx];
-                        return func(v).map(Some);
-                    } else {
-                        return Ok(None);
-                    }
+                    return arr.get_mut(idx).map(func).transpose();
                 }
                 arr.get_mut(idx)
             }
@@ -149,7 +128,7 @@ where
 ///
 /// Removes a value at a given `path`, starting from `root`
 ///
-fn remove(path: &[String], root: &mut IValue) -> Result<bool, Error> {
+fn remove(path: &[String], root: &mut IValue) -> bool {
     let mut target = root;
 
     let last_index = path.len().saturating_sub(1);
@@ -159,7 +138,7 @@ fn remove(path: &[String], root: &mut IValue) -> Result<bool, Error> {
         let target_opt = match target_once.destructure_mut() {
             DestructuredMut::Object(obj) => {
                 if is_last {
-                    return Ok(obj.remove(token.as_str()).is_some());
+                    return obj.remove(token.as_str()).is_some();
                 }
                 obj.get_mut(token.as_str())
             }
@@ -169,7 +148,7 @@ fn remove(path: &[String], root: &mut IValue) -> Result<bool, Error> {
                     arr, token
                 ));
                 if is_last {
-                    return Ok(arr.remove(idx).is_some());
+                    return arr.remove(idx).is_some();
                 }
                 arr.get_mut(idx)
             }
@@ -183,7 +162,7 @@ fn remove(path: &[String], root: &mut IValue) -> Result<bool, Error> {
         }
     }
 
-    Ok(false)
+    false
 }
 
 impl<'a> IValueKeyHolderWrite<'a> {
@@ -296,7 +275,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             // update the root
             self.set_root(Some(v)).and(Ok(true))
         } else {
-            replace(&path, self.get_value()?.unwrap(), |_| Ok(v.take())).map_err(Into::into)
+            Ok(replace(&path, self.get_value()?.unwrap(), |_| v.take()))
         }
     }
 
@@ -309,8 +288,8 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         } else {
             replace(&path, root, |current| {
                 merge(current, v.take());
-                Ok(current.take())
-            })?
+                current.take()
+            })
         };
         Ok(updated)
     }
@@ -339,7 +318,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn delete_path(&mut self, path: Vec<String>) -> RedisResult<bool> {
-        remove(&path, self.get_value()?.unwrap()).map_err(Into::into)
+        Ok(remove(&path, self.get_value()?.unwrap()))
     }
 
     fn incr_by(&mut self, path: Vec<String>, num: &str) -> RedisResult<Number> {
