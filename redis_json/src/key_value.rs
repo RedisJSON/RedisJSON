@@ -306,11 +306,11 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     pub fn find_paths(&mut self, path: &str, option: SetOptions) -> Result<Vec<UpdateInfo>, Error> {
         if option != SetOptions::NotExists {
             let query = compile(path)?;
-            let mut res = calc_once_paths(query, self.val);
+            let mut paths = calc_once_paths(query, self.val);
             if option != SetOptions::MergeExisting {
-                prepare_paths_for_updating(&mut res);
+                paths = prepare_paths_for_updating(paths);
             }
-            let res = res
+            let res = paths
                 .into_iter()
                 .map(|v| UpdateInfo::SUI(SetUpdateInfo { path: v }))
                 .collect_vec();

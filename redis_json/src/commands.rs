@@ -306,42 +306,52 @@ pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
 /// JSON.MSET <key> <path> <json> [[<key> <path> <json>]...]
 ///
 pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    let mut args = args.into_iter().skip(1);
-
-    if args.len() < 3 {
+    if args.len() == 1 || (args.len() - 1) % 3 != 0 {
         return Err(RedisError::WrongArity);
     }
 
     // Collect all the actions from the args (redis_key, update_info, value)
-    let mut actions = Vec::new();
-    while let Ok(key) = args.next_arg() {
-        let mut redis_key = manager.open_key_write(ctx, key)?;
+    let actions: Vec<_> = args[1..]
+        .chunks_exact(3)
+        .map(|args| -> RedisResult<_> {
+            let [key, path, value] = args else {
+                unreachable!();
+            };
+            let mut redis_key = manager.open_key_write(ctx, key.safe_clone(ctx))?;
 
-        // Verify the key is a JSON type
-        let key_value = redis_key.get_value()?;
+            // Verify the path is valid and get all the update info
+            let update_info = path.try_as_str().map(Path::new).and_then(|path| {
+                if path == *JSON_ROOT_PATH {
+                    Ok(None)
+                } else {
+                    // Verify the key is a JSON type
+                    redis_key.get_value()?.map_or_else(
+                        || {
+                            Err(RedisError::Str(
+                                "ERR new objects must be created at the root",
+                            ))
+                        },
+                        |value| {
+                            KeyValue::new(value)
+                                .find_paths(path.get_path(), SetOptions::None)
+                                .into_both()
+                        },
+                    )
+                }
+            })?;
 
-        // Verify the path is valid and get all the update info
-        let path = Path::new(args.next_str()?);
-        let update_info = if path == *JSON_ROOT_PATH {
-            None
-        } else if let Some(value) = key_value {
-            Some(KeyValue::new(value).find_paths(path.get_path(), SetOptions::None)?)
-        } else {
-            return Err(RedisError::Str(
-                "ERR new objects must be created at the root",
-            ));
-        };
+            // Parse the input and validate it's valid JSON
+            let value = value
+                .try_as_str()
+                .and_then(|value| manager.from_str(value, Format::JSON, true).into_both())?;
 
-        // Parse the input and validate it's valid JSON
-        let value_str = args.next_str()?;
-        let value = manager.from_str(value_str, Format::JSON, true)?;
+            Ok((redis_key, update_info, value))
+        })
+        .try_collect()?;
 
-        actions.push((redis_key, update_info, value));
-    }
-
-    let res = actions
+    actions
         .into_iter()
-        .fold(REDIS_OK, |res, (mut redis_key, update_info, value)| {
+        .try_for_each(|(mut redis_key, update_info, value)| {
             let updated = if let Some(update_info) = update_info {
                 !update_info.is_empty() && apply_updates::<M>(&mut redis_key, value, update_info)
             } else {
@@ -351,11 +361,12 @@ pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
             if updated {
                 redis_key.notify_keyspace_event(ctx, "json.mset")?
             }
-            res
-        });
-
-    manager.apply_changes(ctx);
-    res
+            Ok(())
+        })
+        .and_then(|_| {
+            manager.apply_changes(ctx);
+            REDIS_OK
+        })
 }
 
 fn apply_updates<M>(redis_key: &mut M::WriteHolder, value: M::O, ui: Vec<UpdateInfo>) -> bool
@@ -469,10 +480,10 @@ where
 /// Sort the paths so higher indices precede lower indices on the same array,
 /// And longer paths precede shorter paths
 /// And if a path is a sub-path of the other, then only paths with shallower hierarchy (closer to the top-level) remain
-pub fn prepare_paths_for_updating(paths: &mut Vec<Vec<String>>) {
+pub fn prepare_paths_for_updating(mut paths: Vec<Vec<String>>) -> Vec<Vec<String>> {
     if paths.len() < 2 {
         // No need to reorder when there are less than 2 paths
-        return;
+        return paths;
     }
     paths.sort_by(|v1, v2| {
         v1.iter()
@@ -520,6 +531,7 @@ pub fn prepare_paths_for_updating(paths: &mut Vec<Vec<String>>) {
             .map(|found| path == *found)
             .unwrap_or(false)
     });
+    paths
 }
 
 ///
@@ -540,8 +552,8 @@ pub fn json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
             redis_key.delete()?;
             1
         } else {
-            let mut paths = find_paths(path.get_path(), doc, |_| true)?;
-            prepare_paths_for_updating(&mut paths);
+            let paths =
+                find_paths(path.get_path(), doc, |_| true).map(prepare_paths_for_updating)?;
             paths.into_iter().try_fold(0i64, |acc, p| {
                 redis_key
                     .delete_path(p)
@@ -836,7 +848,7 @@ pub fn json_bool_toggle<M: Manager>(
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
-    let path = Path::new(args.next_str()?);
+    let path = args.next_str().map(Path::new)?;
     let redis_key = manager.open_key_write(ctx, key)?;
 
     if path.is_legacy() {
@@ -1127,17 +1139,16 @@ where
         .ok_or_else(RedisError::nonexistent_key)?;
     let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
 
-    let mut res = vec![];
     let mut need_notify = false;
-    for p in paths {
-        res.push(match p {
-            Some(p) => {
+    let res: Vec<_> = paths
+        .into_iter()
+        .map(|p| {
+            p.map_or(Ok(RedisValue::Null), |p| {
                 need_notify = true;
-                (redis_key.arr_append(p, args.clone())? as i64).into()
-            }
-            _ => RedisValue::Null,
-        });
-    }
+                redis_key.arr_append(p, args.clone()).map(Into::into)
+            })
+        })
+        .try_collect()?;
     if need_notify {
         redis_key.notify_keyspace_event(ctx, "json.arrappend")?;
         manager.apply_changes(ctx);
@@ -1256,17 +1267,16 @@ where
 
     let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
 
-    let mut res: Vec<RedisValue> = vec![];
     let mut need_notify = false;
-    for p in paths {
-        res.push(match p {
-            Some(p) => {
+    let res: Vec<_> = paths
+        .into_iter()
+        .map(|p| {
+            p.map_or(Ok(RedisValue::Null), |p| {
                 need_notify = true;
-                (redis_key.arr_insert(p, &args, index)? as i64).into()
-            }
-            _ => RedisValue::Null,
-        });
-    }
+                redis_key.arr_insert(p, &args, index).map(Into::into)
+            })
+        })
+        .try_collect()?;
 
     if need_notify {
         redis_key.notify_keyspace_event(ctx, "json.arrinsert")?;
@@ -1445,23 +1455,24 @@ where
         .ok_or_else(RedisError::nonexistent_key)?;
 
     let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
-    let mut res: Vec<RedisValue> = vec![];
     let mut need_notify = false;
-    for p in paths {
-        res.push(match p {
-            Some(p) => redis_key.arr_pop(p, index, |v| {
-                v.map_or(Ok(RedisValue::Null), |v| {
-                    need_notify = true;
-                    if format_options.is_resp3_reply() {
-                        Ok(KeyValue::value_to_resp3(v, format_options))
-                    } else {
-                        serde_json::to_string(&v).into_both()
-                    }
+    let res: Vec<_> = paths
+        .into_iter()
+        .map(|p| {
+            p.map_or(Ok(RedisValue::Null), |p| {
+                redis_key.arr_pop(p, index, |v| {
+                    v.map_or(Ok(RedisValue::Null), |v| {
+                        need_notify = true;
+                        if format_options.is_resp3_reply() {
+                            Ok(KeyValue::value_to_resp3(v, format_options))
+                        } else {
+                            serde_json::to_string(&v).into_both()
+                        }
+                    })
                 })
-            })?,
-            _ => RedisValue::Null, // Not an array
-        });
-    }
+            })
+        })
+        .try_collect()?;
     if need_notify {
         redis_key.notify_keyspace_event(ctx, "json.arrpop")?;
         manager.apply_changes(ctx);
