@@ -162,12 +162,12 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     fn to_resp3(&self, paths: Vec<Path>, format: ReplyFormatOptions) -> Result<RedisValue, Error> {
         let results = paths
             .into_iter()
-            .map(|path: Path| self.to_resp3_path(&path, format))
+            .map(|path: Path| self.to_resp3_path(path, format))
             .collect();
         Ok(RedisValue::Array(results))
     }
 
-    pub fn to_resp3_path(&self, path: &Path, format: ReplyFormatOptions) -> RedisValue {
+    pub fn to_resp3_path(&self, path: Path, format: ReplyFormatOptions) -> RedisValue {
         compile(path.get_path()).map_or(RedisValue::Array(vec![]), |q| {
             Self::values_to_resp3(calc_once(q, self.val), format)
         })

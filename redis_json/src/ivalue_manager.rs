@@ -39,7 +39,7 @@ pub struct IValueKeyHolderWrite<'a> {
 /// The new value is the value returned from `func`, which is called on the current value.
 /// If the returned value from `func` is [`Err`], the current value remains (although it could be modified by `func`)
 ///
-fn replace<F>(path: &[String], root: &mut IValue, mut func: F) -> bool
+fn replace<F>(path: Vec<String>, root: &mut IValue, mut func: F) -> bool
 where
     F: FnMut(&mut IValue) -> IValue,
 {
@@ -65,7 +65,7 @@ where
 /// The value is modified by `func`, which is called on the current value.
 /// If the returned value from `func` is [`Err`], the current value remains (although it could be modified by `func`)
 ///
-fn update<F, T>(path: &[String], root: &mut IValue, mut func: F) -> RedisResult<T>
+fn update<F, T>(path: Vec<String>, root: &mut IValue, mut func: F) -> RedisResult<T>
 where
     F: FnMut(&mut IValue) -> Result<T, Error>,
 {
@@ -88,7 +88,7 @@ where
 ///
 /// Removes a value at a given `path`, starting from `root`
 ///
-fn remove(path: &[String], root: &mut IValue) -> bool {
+fn remove(path: Vec<String>, root: &mut IValue) -> bool {
     path[..path.len() - 1]
         .iter()
         .try_fold(root, |target, token| match target.destructure_mut() {
@@ -120,7 +120,7 @@ fn remove(path: &[String], root: &mut IValue) -> bool {
 }
 
 impl<'a> IValueKeyHolderWrite<'a> {
-    fn do_op<F, T>(&mut self, paths: &[String], op_fun: F) -> RedisResult<T>
+    fn do_op<F, T>(&mut self, paths: Vec<String>, op_fun: F) -> RedisResult<T>
     where
         F: FnMut(&mut IValue) -> Result<T, Error>,
     {
@@ -141,7 +141,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
     {
         let in_value = &serde_json::from_str(num)?;
         if let serde_json::Value::Number(in_value) = in_value {
-            self.do_op(&path, |v| {
+            self.do_op(path, |v| {
                 let num_res = match (v.get_type(), in_value.as_i64()) {
                     (SelectValueType::Long, Some(num2)) => {
                         let num1 = v.get_long();
@@ -221,7 +221,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             // update the root
             self.set_root(Some(v)).and(Ok(true))
         } else {
-            Ok(replace(&path, self.get_value()?.unwrap(), |_| v.take()))
+            Ok(replace(path, self.get_value()?.unwrap(), |_| v.take()))
         }
     }
 
@@ -232,7 +232,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             merge(root, v);
             true
         } else {
-            replace(&path, root, |current| {
+            replace(path, root, |current| {
                 merge(current, v.take());
                 current.take()
             })
@@ -241,7 +241,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn dict_add(&mut self, path: Vec<String>, key: &str, mut v: IValue) -> RedisResult<bool> {
-        self.do_op(&path, |val| {
+        self.do_op(path, |val| {
             val.as_object_mut().map_or(Ok(false), |o| {
                 let res = !o.contains_key(key);
                 if res {
@@ -253,7 +253,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn delete_path(&mut self, path: Vec<String>) -> RedisResult<bool> {
-        Ok(remove(&path, self.get_value()?.unwrap()))
+        Ok(remove(path, self.get_value()?.unwrap()))
     }
 
     fn incr_by(&mut self, path: Vec<String>, num: &str) -> RedisResult<Number> {
@@ -269,7 +269,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn bool_toggle(&mut self, path: Vec<String>) -> RedisResult<bool> {
-        self.do_op(&path, |v| {
+        self.do_op(path, |v| {
             if let DestructuredMut::Bool(mut bool_mut) = v.destructure_mut() {
                 //Using DestructuredMut in order to modify a `Bool` variant
                 let val = bool_mut.get() ^ true;
@@ -284,7 +284,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     fn str_append(&mut self, path: Vec<String>, val: String) -> RedisResult<usize> {
         let json = serde_json::from_str(&val)?;
         if let serde_json::Value::String(s) = json {
-            self.do_op(&path, |v| {
+            self.do_op(path, |v| {
                 let v_str = v.as_string_mut().unwrap();
                 let new_str = [v_str.as_str(), s.as_str()].concat();
                 *v_str = IString::intern(&new_str);
@@ -299,7 +299,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn arr_append(&mut self, path: Vec<String>, args: Vec<IValue>) -> RedisResult<usize> {
-        self.do_op(&path, |v| {
+        self.do_op(path, |v| {
             let arr = v.as_array_mut().unwrap();
             for a in &args {
                 arr.push(a.clone());
@@ -314,7 +314,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         args: &[IValue],
         index: i64,
     ) -> RedisResult<usize> {
-        self.do_op(&paths, |v| {
+        self.do_op(paths, |v| {
             // Verify legal index in bounds
             let len = v.len().unwrap() as i64;
             let index = if index < 0 { len + index } else { index };
@@ -336,7 +336,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     where
         C: FnOnce(Option<&IValue>) -> RedisResult,
     {
-        self.do_op(&path, |v| {
+        self.do_op(path, |v| {
             v.as_array_mut()
                 .map(|array| {
                     if array.is_empty() {
@@ -353,7 +353,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> RedisResult<usize> {
-        self.do_op(&path, |v| {
+        self.do_op(path, |v| {
             v.as_array_mut()
                 .map(|array| {
                     let len = array.len() as i64;
@@ -378,7 +378,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn clear(&mut self, path: Vec<String>) -> RedisResult<usize> {
-        let cleared = self.do_op(&path, |v| match v.destructure_mut() {
+        let cleared = self.do_op(path, |v| match v.destructure_mut() {
             DestructuredMut::Object(obj) => {
                 obj.clear();
                 Ok(1)
