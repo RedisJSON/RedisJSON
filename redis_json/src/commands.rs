@@ -271,7 +271,7 @@ pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
                                         redis_key.dict_add(aui.path, &aui.key, val.clone())
                                     }
                                 }
-                                .and_then(|updated| Ok(updated || res)) // If any of the updates succeed, return true
+                                .map(|updated| updated || res) // If any of the updates succeed, return true
                             })
                     }?;
                     if res {
@@ -325,18 +325,20 @@ pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
                     Ok(None)
                 } else {
                     // Verify the key is a JSON type
-                    redis_key.get_value()?.map_or_else(
-                        || {
-                            Err(RedisError::Str(
-                                "ERR new objects must be created at the root",
-                            ))
-                        },
-                        |value| {
-                            KeyValue::new(value)
-                                .find_paths(path.get_path(), SetOptions::None)
-                                .into_both()
-                        },
-                    )
+                    redis_key.get_value().and_then(|value| {
+                        value.map_or_else(
+                            || {
+                                Err(RedisError::Str(
+                                    "ERR new objects must be created at the root",
+                                ))
+                            },
+                            |value| {
+                                KeyValue::new(value)
+                                    .find_paths(path.get_path(), SetOptions::None)
+                                    .into_both()
+                            },
+                        )
+                    })
                 }
             })?;
 
