@@ -7,7 +7,7 @@
 use crate::error::Error;
 use crate::manager::{err_json, err_msg_json_expected, err_msg_json_path_doesnt_exist};
 use crate::manager::{Manager, ReadHolder, WriteHolder};
-use crate::redisjson::{normalize_arr_start_index, ResultInto};
+use crate::redisjson::normalize_arr_start_index;
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
 use bson::{from_document, Document};
@@ -65,7 +65,7 @@ where
 /// The value is modified by `func`, which is called on the current value.
 /// If the returned value from `func` is [`Err`], the current value remains (although it could be modified by `func`)
 ///
-fn update<F, T>(path: &[String], root: &mut IValue, func: F) -> Result<Option<T>, Error>
+fn update<F, T>(path: &[String], root: &mut IValue, mut func: F) -> RedisResult<T>
 where
     F: FnMut(&mut IValue) -> Result<T, Error>,
 {
@@ -81,8 +81,8 @@ where
             }
             _ => None,
         })
-        .map(func)
-        .transpose()
+        .map(|v| func(v).map_err(Into::into))
+        .unwrap_or_else(|| Err(RedisError::String(err_msg_json_path_doesnt_exist())))
 }
 
 ///
@@ -120,18 +120,12 @@ fn remove(path: &[String], root: &mut IValue) -> bool {
 }
 
 impl<'a> IValueKeyHolderWrite<'a> {
-    fn do_op<F, T>(&mut self, paths: &[String], mut op_fun: F) -> RedisResult<Option<T>>
+    fn do_op<F, T>(&mut self, paths: &[String], op_fun: F) -> RedisResult<T>
     where
         F: FnMut(&mut IValue) -> Result<T, Error>,
     {
         let root = self.get_value()?.unwrap();
-        if paths.is_empty() {
-            // updating the root require special treatment
-            op_fun(root).map(Some)
-        } else {
-            update(paths, root, op_fun)
-        }
-        .map_err(Into::into)
+        update(paths, root, op_fun)
     }
 
     fn do_num_op<F1, F2>(
@@ -147,7 +141,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
     {
         let in_value = &serde_json::from_str(num)?;
         if let serde_json::Value::Number(in_value) = in_value {
-            let res = self.do_op(&path, |v| {
+            self.do_op(&path, |v| {
                 let num_res = match (v.get_type(), in_value.as_i64()) {
                     (SelectValueType::Long, Some(num2)) => {
                         let num1 = v.get_long();
@@ -164,21 +158,18 @@ impl<'a> IValueKeyHolderWrite<'a> {
                 let new_val = IValue::from(num_res?);
                 *v = new_val.clone();
                 Ok(new_val)
-            })?;
-            res.map_or_else(
-                || Err(RedisError::String(err_msg_json_path_doesnt_exist())),
-                |n| {
-                    n.as_number()
-                        .and_then(|n| {
-                            if n.has_decimal_point() {
-                                n.to_f64().and_then(serde_json::Number::from_f64)
-                            } else {
-                                n.to_i64().map(Into::into)
-                            }
-                        })
-                        .ok_or_else(|| RedisError::Str("result is not a number"))
-                },
-            )
+            })
+            .and_then(|n| {
+                n.as_number()
+                    .and_then(|n| {
+                        if n.has_decimal_point() {
+                            n.to_f64().and_then(serde_json::Number::from_f64)
+                        } else {
+                            n.to_i64().map(Into::into)
+                        }
+                    })
+                    .ok_or_else(|| RedisError::Str("result is not a number"))
+            })
         } else {
             Err(RedisError::Str("bad input number"))
         }
@@ -251,17 +242,14 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
 
     fn dict_add(&mut self, path: Vec<String>, key: &str, mut v: IValue) -> RedisResult<bool> {
         self.do_op(&path, |val| {
-            let ret = val.as_object_mut().map_or(false, |o| {
+            val.as_object_mut().map_or(Ok(false), |o| {
                 let res = !o.contains_key(key);
                 if res {
                     o.insert(key.to_string(), v.take());
                 }
-                res
-            });
-            Ok(ret)
+                Ok(res)
+            })
         })
-        .map(|o| o.unwrap_or(false))
-        .into_both()
     }
 
     fn delete_path(&mut self, path: Vec<String>) -> RedisResult<bool> {
@@ -281,19 +269,16 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn bool_toggle(&mut self, path: Vec<String>) -> RedisResult<bool> {
-        let res = self
-            .do_op(&path, |v| {
-                if let DestructuredMut::Bool(mut bool_mut) = v.destructure_mut() {
-                    //Using DestructuredMut in order to modify a `Bool` variant
-                    let val = bool_mut.get() ^ true;
-                    bool_mut.set(val);
-                    Ok(Some(val))
-                } else {
-                    Ok(None)
-                }
-            })?
-            .flatten();
-        res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
+        self.do_op(&path, |v| {
+            if let DestructuredMut::Bool(mut bool_mut) = v.destructure_mut() {
+                //Using DestructuredMut in order to modify a `Bool` variant
+                let val = bool_mut.get() ^ true;
+                bool_mut.set(val);
+                Ok(val)
+            } else {
+                Err(err_json(v, "bool"))
+            }
+        })
     }
 
     fn str_append(&mut self, path: Vec<String>, val: String) -> RedisResult<usize> {
@@ -305,7 +290,6 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 *v_str = IString::intern(&new_str);
                 Ok(new_str.len())
             })
-            .and_then(|res| res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist())))
         } else {
             Err(RedisError::String(err_msg_json_expected(
                 "string",
@@ -322,7 +306,6 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             }
             Ok(arr.len())
         })
-        .and_then(|res| res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist())))
     }
 
     fn arr_insert(
@@ -347,75 +330,69 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             }
             Ok(curr.len())
         })
-        .and_then(|res| res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist())))
     }
 
     fn arr_pop<C>(&mut self, path: Vec<String>, index: i64, serialize_callback: C) -> RedisResult
     where
         C: FnOnce(Option<&IValue>) -> RedisResult,
     {
-        let res = self
-            .do_op(&path, |v| {
-                if let Some(array) = v.as_array_mut() {
+        self.do_op(&path, |v| {
+            v.as_array_mut()
+                .map(|array| {
                     if array.is_empty() {
-                        return Ok(None);
+                        return None;
                     }
                     // Verify legal index in bounds
                     let len = array.len() as i64;
                     let index = normalize_arr_start_index(index, len) as usize;
-                    Ok(array.remove(index))
-                } else {
-                    Err(err_json(v, "array"))
-                }
-            })?
-            .flatten();
-        serialize_callback(res.as_ref())
+                    array.remove(index)
+                })
+                .ok_or_else(|| err_json(v, "array"))
+        })
+        .and_then(|res| serialize_callback(res.as_ref()))
     }
 
     fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> RedisResult<usize> {
         self.do_op(&path, |v| {
-            if let Some(array) = v.as_array_mut() {
-                let len = array.len() as i64;
-                let stop = stop.normalize(len);
-                let start = if start < 0 || start < len {
-                    start.normalize(len)
-                } else {
-                    stop + 1 //  start >=0 && start >= len
-                };
-                let range = if start > stop || len == 0 {
-                    0..0 // Return an empty array
-                } else {
-                    start..(stop + 1)
-                };
+            v.as_array_mut()
+                .map(|array| {
+                    let len = array.len() as i64;
+                    let stop = stop.normalize(len);
+                    let start = if start < 0 || start < len {
+                        start.normalize(len)
+                    } else {
+                        stop + 1 //  start >=0 && start >= len
+                    };
+                    let range = if start > stop || len == 0 {
+                        0..0 // Return an empty array
+                    } else {
+                        start..(stop + 1)
+                    };
 
-                array.rotate_left(range.start);
-                array.truncate(range.end - range.start);
-                Ok(array.len())
-            } else {
-                Err(err_json(v, "array"))
-            }
+                    array.rotate_left(range.start);
+                    array.truncate(range.end - range.start);
+                    array.len()
+                })
+                .ok_or_else(|| err_json(v, "array"))
         })
-        .and_then(|res| res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist())))
     }
 
     fn clear(&mut self, path: Vec<String>) -> RedisResult<usize> {
-        let cleared = self
-            .do_op(&path, |v| match v.destructure_mut() {
-                DestructuredMut::Object(obj) => {
-                    obj.clear();
-                    Ok(1)
-                }
-                DestructuredMut::Array(arr) => {
-                    arr.clear();
-                    Ok(1)
-                }
-                DestructuredMut::Number(n) => {
-                    *n = INumber::from(0);
-                    Ok(1)
-                }
-                _ => Ok(0),
-            })?
-            .unwrap_or(0);
+        let cleared = self.do_op(&path, |v| match v.destructure_mut() {
+            DestructuredMut::Object(obj) => {
+                obj.clear();
+                Ok(1)
+            }
+            DestructuredMut::Array(arr) => {
+                arr.clear();
+                Ok(1)
+            }
+            DestructuredMut::Number(n) => {
+                *n = INumber::from(0);
+                Ok(1)
+            }
+            _ => Ok(0),
+        })?;
         Ok(cleared)
     }
 }
