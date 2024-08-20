@@ -53,13 +53,13 @@ pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> Result<Value, Error> {
         }
         NodeType::Integer => {
             let n = raw::load_signed(rdb)?;
-            Ok(Value::Number(n.into()))
+            Ok(n.into())
         }
         NodeType::Number => {
             let n = raw::load_double(rdb)?;
             Number::from_f64(n)
+                .map(Into::into)
                 .ok_or_else(|| Error::from("Can't load as float"))
-                .into_both()
         }
         NodeType::String => {
             let buffer = raw::load_string_buffer(rdb)?;
@@ -67,7 +67,7 @@ pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> Result<Value, Error> {
         }
         NodeType::Dict => {
             let len = raw::load_unsigned(rdb)?;
-            let m = (0..len)
+            (0..len)
                 .map(|_| match raw::load_unsigned(rdb)?.into() {
                     NodeType::KeyVal => {
                         let buffer = raw::load_string_buffer(rdb)?;
@@ -75,13 +75,15 @@ pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> Result<Value, Error> {
                     }
                     _ => Err(Error::from("Can't load old RedisJSON RDB")),
                 })
-                .try_collect()?;
-            Ok(Value::Object(m))
+                .try_collect()
+                .map(Value::Object)
         }
         NodeType::Array => {
             let len = raw::load_unsigned(rdb)?;
-            let v = (0..len).map(|_| json_rdb_load(rdb)).try_collect()?;
-            Ok(Value::Array(v))
+            (0..len)
+                .map(|_| json_rdb_load(rdb))
+                .try_collect()
+                .map(Value::Array)
         }
         NodeType::KeyVal => Err(Error::from("Can't load old RedisJSON RDB")),
     }
