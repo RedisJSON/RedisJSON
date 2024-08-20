@@ -593,23 +593,21 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
             .map(|key| {
                 manager
                     .open_key_read(ctx, key)
-                    .map_or(RedisValue::Null, |json_key| {
-                        json_key
-                            .get_value()
+                    .ok()
+                    .and_then(|json_key| {
+                        json_key.get_value().ok().flatten().and_then(|doc| {
+                            let key_value = KeyValue::new(doc);
+                            let format_options =
+                                ReplyFormatOptions::new(is_resp3(ctx), ReplyFormat::STRING);
+                            if !path.is_legacy() {
+                                key_value.to_string_multi(path.get_path(), format_options)
+                            } else {
+                                key_value.to_string_single(path.get_path(), format_options)
+                            }
                             .ok()
-                            .flatten()
-                            .map_or(RedisValue::Null, |doc| {
-                                let key_value = KeyValue::new(doc);
-                                let format_options =
-                                    ReplyFormatOptions::new(is_resp3(ctx), ReplyFormat::STRING);
-                                if !path.is_legacy() {
-                                    key_value.to_string_multi(path.get_path(), format_options)
-                                } else {
-                                    key_value.to_string_single(path.get_path(), format_options)
-                                }
-                                .map_or(RedisValue::Null, |v| v.into())
-                            })
+                        })
                     })
+                    .map_or(RedisValue::Null, Into::into)
             })
             .collect_vec();
 
