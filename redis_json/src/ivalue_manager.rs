@@ -43,40 +43,20 @@ fn replace<F>(path: &[String], root: &mut IValue, mut func: F) -> bool
 where
     F: FnMut(&mut IValue) -> IValue,
 {
-    let mut target = root;
-
-    let last_index = path.len().saturating_sub(1);
-    for (i, token) in path.iter().enumerate() {
-        let target_once = target;
-        let is_last = i == last_index;
-        let target_opt = match target_once.destructure_mut() {
-            DestructuredMut::Object(obj) => {
-                if is_last {
-                    return obj.get_mut(token.as_str()).map(|v| *v = func(v)).is_some();
-                }
-                obj.get_mut(token.as_str())
-            }
+    path.iter()
+        .try_fold(root, |target, token| match target.destructure_mut() {
+            DestructuredMut::Object(obj) => obj.get_mut(token.as_str()),
             DestructuredMut::Array(arr) => {
                 let idx = token.parse::<usize>().expect(&format!(
                     "An array index is parsed successfully. Array = {:?}, index = {:?}",
                     arr, token
                 ));
-                if is_last {
-                    return arr.get_mut(idx).map(|v| *v = func(v)).is_some();
-                }
                 arr.get_mut(idx)
             }
             _ => None,
-        };
-
-        if let Some(t) = target_opt {
-            target = t;
-        } else {
-            break;
-        }
-    }
-
-    false
+        })
+        .map(|v| *v = func(v))
+        .is_some()
 }
 
 ///
@@ -89,80 +69,54 @@ fn update<F, T>(path: &[String], root: &mut IValue, func: F) -> Result<Option<T>
 where
     F: FnMut(&mut IValue) -> Result<T, Error>,
 {
-    let mut target = root;
-
-    let last_index = path.len().saturating_sub(1);
-    for (i, token) in path.iter().enumerate() {
-        let target_once = target;
-        let is_last = i == last_index;
-        let target_opt = match target_once.destructure_mut() {
-            DestructuredMut::Object(obj) => {
-                if is_last {
-                    return obj.get_mut(token.as_str()).map(func).transpose();
-                }
-                obj.get_mut(token.as_str())
-            }
+    path.iter()
+        .try_fold(root, |target, token| match target.destructure_mut() {
+            DestructuredMut::Object(obj) => obj.get_mut(token.as_str()),
             DestructuredMut::Array(arr) => {
                 let idx = token.parse::<usize>().expect(&format!(
                     "An array index is parsed successfully. Array = {:?}, index = {:?}",
                     arr, token
                 ));
-                if is_last {
-                    return arr.get_mut(idx).map(func).transpose();
-                }
                 arr.get_mut(idx)
             }
             _ => None,
-        };
-
-        if let Some(t) = target_opt {
-            target = t;
-        } else {
-            break;
-        }
-    }
-
-    Ok(None)
+        })
+        .map(func)
+        .transpose()
 }
 
 ///
 /// Removes a value at a given `path`, starting from `root`
 ///
 fn remove(path: &[String], root: &mut IValue) -> bool {
-    let mut target = root;
-
-    let last_index = path.len().saturating_sub(1);
-    for (i, token) in path.iter().enumerate() {
-        let target_once = target;
-        let is_last = i == last_index;
-        let target_opt = match target_once.destructure_mut() {
-            DestructuredMut::Object(obj) => {
-                if is_last {
-                    return obj.remove(token.as_str()).is_some();
-                }
-                obj.get_mut(token.as_str())
-            }
+    path[..path.len() - 1]
+        .iter()
+        .try_fold(root, |target, token| match target.destructure_mut() {
+            DestructuredMut::Object(obj) => obj.get_mut(token.as_str()),
             DestructuredMut::Array(arr) => {
                 let idx = token.parse::<usize>().expect(&format!(
                     "An array index is parsed successfully. Array = {:?}, index = {:?}",
                     arr, token
                 ));
-                if is_last {
-                    return arr.remove(idx).is_some();
-                }
                 arr.get_mut(idx)
             }
             _ => None,
-        };
-
-        if let Some(t) = target_opt {
-            target = t;
-        } else {
-            break;
-        }
-    }
-
-    false
+        })
+        .and_then(|target| {
+            let token = &path[path.len() - 1];
+            match target.destructure_mut() {
+                DestructuredMut::Object(obj) => obj.remove(token.as_str()),
+                DestructuredMut::Array(arr) => {
+                    let idx = token.parse::<usize>().expect(&format!(
+                        "An array index is parsed successfully. Array = {:?}, index = {:?}",
+                        arr, token
+                    ));
+                    arr.remove(idx)
+                }
+                _ => None,
+            }
+        })
+        .is_some()
 }
 
 impl<'a> IValueKeyHolderWrite<'a> {
@@ -173,10 +127,11 @@ impl<'a> IValueKeyHolderWrite<'a> {
         let root = self.get_value()?.unwrap();
         if paths.is_empty() {
             // updating the root require special treatment
-            op_fun(root).into_both()
+            op_fun(root).map(Some)
         } else {
-            update(paths, root, op_fun).into_both()
+            update(paths, root, op_fun)
         }
+        .map_err(Into::into)
     }
 
     fn do_num_op<F1, F2>(
@@ -295,8 +250,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn dict_add(&mut self, path: Vec<String>, key: &str, mut v: IValue) -> RedisResult<bool> {
-        let root = self.get_value()?.unwrap();
-        let mut cb = |val: &mut IValue| {
+        self.do_op(&path, |val| {
             let ret = val.as_object_mut().map_or(false, |o| {
                 let res = !o.contains_key(key);
                 if res {
@@ -304,17 +258,10 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 }
                 res
             });
-            ret
-        };
-
-        let updated = if path.is_empty() {
-            // update the root
-            Some(cb(root))
-        } else {
-            update(&path, root, |val| Ok(cb(val)))?
-        }
-        .unwrap_or(false);
-        Ok(updated)
+            Ok(ret)
+        })
+        .map(|o| o.unwrap_or(false))
+        .into_both()
     }
 
     fn delete_path(&mut self, path: Vec<String>) -> RedisResult<bool> {
@@ -352,14 +299,13 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     fn str_append(&mut self, path: Vec<String>, val: String) -> RedisResult<usize> {
         let json = serde_json::from_str(&val)?;
         if let serde_json::Value::String(s) = json {
-            let res = self.do_op(&path, |v| {
+            self.do_op(&path, |v| {
                 let v_str = v.as_string_mut().unwrap();
                 let new_str = [v_str.as_str(), s.as_str()].concat();
                 *v_str = IString::intern(&new_str);
                 Ok(new_str.len())
-            })?;
-
-            res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
+            })
+            .and_then(|res| res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist())))
         } else {
             Err(RedisError::String(err_msg_json_expected(
                 "string",
@@ -369,15 +315,14 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn arr_append(&mut self, path: Vec<String>, args: Vec<IValue>) -> RedisResult<usize> {
-        let res = self.do_op(&path, |v| {
+        self.do_op(&path, |v| {
             let arr = v.as_array_mut().unwrap();
             for a in &args {
                 arr.push(a.clone());
             }
             Ok(arr.len())
-        })?;
-
-        res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
+        })
+        .and_then(|res| res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist())))
     }
 
     fn arr_insert(
@@ -386,7 +331,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         args: &[IValue],
         index: i64,
     ) -> RedisResult<usize> {
-        let res = self.do_op(&paths, |v: &mut IValue| {
+        self.do_op(&paths, |v| {
             // Verify legal index in bounds
             let len = v.len().unwrap() as i64;
             let index = if index < 0 { len + index } else { index };
@@ -401,17 +346,14 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 index += 1;
             }
             Ok(curr.len())
-        })?;
-
-        res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
+        })
+        .and_then(|res| res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist())))
     }
 
-    fn arr_pop<C: FnOnce(Option<&IValue>) -> RedisResult>(
-        &mut self,
-        path: Vec<String>,
-        index: i64,
-        serialize_callback: C,
-    ) -> RedisResult {
+    fn arr_pop<C>(&mut self, path: Vec<String>, index: i64, serialize_callback: C) -> RedisResult
+    where
+        C: FnOnce(Option<&IValue>) -> RedisResult,
+    {
         let res = self
             .do_op(&path, |v| {
                 if let Some(array) = v.as_array_mut() {
@@ -431,7 +373,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> RedisResult<usize> {
-        let res = self.do_op(&path, |v| {
+        self.do_op(&path, |v| {
             if let Some(array) = v.as_array_mut() {
                 let len = array.len() as i64;
                 let stop = stop.normalize(len);
@@ -452,31 +394,27 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             } else {
                 Err(err_json(v, "array"))
             }
-        })?;
-
-        res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
+        })
+        .and_then(|res| res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist())))
     }
 
     fn clear(&mut self, path: Vec<String>) -> RedisResult<usize> {
         let cleared = self
-            .do_op(&path, |v| match v.type_() {
-                ValueType::Object => {
-                    let obj = v.as_object_mut().unwrap();
+            .do_op(&path, |v| match v.destructure_mut() {
+                DestructuredMut::Object(obj) => {
                     obj.clear();
-                    Ok(Some(1))
+                    Ok(1)
                 }
-                ValueType::Array => {
-                    let arr = v.as_array_mut().unwrap();
+                DestructuredMut::Array(arr) => {
                     arr.clear();
-                    Ok(Some(1))
+                    Ok(1)
                 }
-                ValueType::Number => {
-                    *v = IValue::from(0);
-                    Ok(Some(1))
+                DestructuredMut::Number(n) => {
+                    *n = INumber::from(0);
+                    Ok(1)
                 }
-                _ => Ok(None),
+                _ => Ok(0),
             })?
-            .flatten()
             .unwrap_or(0);
         Ok(cleared)
     }

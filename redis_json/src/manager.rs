@@ -49,12 +49,9 @@ pub trait WriteHolder<O: Clone, V: SelectValue> {
     fn str_append(&mut self, path: Vec<String>, val: String) -> RedisResult<usize>;
     fn arr_append(&mut self, path: Vec<String>, args: Vec<O>) -> RedisResult<usize>;
     fn arr_insert(&mut self, path: Vec<String>, args: &[O], index: i64) -> RedisResult<usize>;
-    fn arr_pop<C: FnOnce(Option<&V>) -> RedisResult>(
-        &mut self,
-        path: Vec<String>,
-        index: i64,
-        serialize_callback: C,
-    ) -> RedisResult;
+    fn arr_pop<C>(&mut self, path: Vec<String>, index: i64, serialize_callback: C) -> RedisResult
+    where
+        C: FnOnce(Option<&V>) -> RedisResult;
     fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> RedisResult<usize>;
     fn clear(&mut self, path: Vec<String>) -> RedisResult<usize>;
     fn notify_keyspace_event(self, ctx: &Context, command: &str) -> RedisResult<()>;
