@@ -588,6 +588,8 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
             return Err(RedisError::WrongArity);
         }
 
+        let format_options = ReplyFormatOptions::new(is_resp3(ctx), ReplyFormat::STRING);
+
         let results = keys
             .into_iter()
             .map(|key| {
@@ -597,8 +599,6 @@ pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
                     .and_then(|json_key| {
                         json_key.get_value().ok().flatten().and_then(|doc| {
                             let key_value = KeyValue::new(doc);
-                            let format_options =
-                                ReplyFormatOptions::new(is_resp3(ctx), ReplyFormat::STRING);
                             if !path.is_legacy() {
                                 key_value.to_string_multi(path.get_path(), format_options)
                             } else {
