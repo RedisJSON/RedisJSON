@@ -96,27 +96,21 @@ impl SelectValue for Value {
     fn get_str(&self) -> String {
         match self {
             Self::String(s) => s.to_string(),
-            _ => {
-                panic!("not a string");
-            }
+            _ => panic!("not a string"),
         }
     }
 
     fn as_str(&self) -> &str {
         match self {
             Self::String(s) => s.as_str(),
-            _ => {
-                panic!("not a string");
-            }
+            _ => panic!("not a string"),
         }
     }
 
     fn get_bool(&self) -> bool {
         match self {
             Self::Bool(b) => *b,
-            _ => {
-                panic!("not a bool");
-            }
+            _ => panic!("not a bool"),
         }
     }
 

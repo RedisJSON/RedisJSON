@@ -469,7 +469,7 @@ where
 {
     values
         .into_iter()
-        .map(|n| n.map_or_else(|| none_value.clone(), |t| t.into()))
+        .map(|n| n.map_or_else(|| none_value.clone(), Into::into))
         .collect()
 }
 
@@ -1061,14 +1061,14 @@ fn json_arr_append_legacy<M: Manager>(
             err_msg_json_path_doesnt_exist_with_param_or(path.get_original(), "not an array"),
         ))
     } else if paths.len() == 1 {
-        let res = redis_key.arr_append(paths.pop().unwrap(), args)?;
+        let res = redis_key.arr_append(paths.pop().unwrap(), &args)?;
         redis_key.notify_keyspace_event(ctx, "json.arrappend")?;
         manager.apply_changes(ctx);
         Ok(res.into())
     } else {
         let mut res = 0;
         for p in paths {
-            res = redis_key.arr_append(p, args.clone())?;
+            res = redis_key.arr_append(p, &args)?;
         }
         redis_key.notify_keyspace_event(ctx, "json.arrappend")?;
         manager.apply_changes(ctx);
@@ -1094,7 +1094,7 @@ fn json_arr_append_impl<M: Manager>(
         .map(|p| {
             p.map_or(Ok(RedisValue::Null), |p| {
                 need_notify = true;
-                redis_key.arr_append(p, args.clone()).map(Into::into)
+                redis_key.arr_append(p, &args).map(Into::into)
             })
         })
         .try_collect()?;

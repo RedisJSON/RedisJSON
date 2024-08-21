@@ -47,7 +47,7 @@ pub trait WriteHolder<O: Clone, V: SelectValue> {
     fn pow_by(&mut self, path: Vec<String>, num: &str) -> RedisResult<Number>;
     fn bool_toggle(&mut self, path: Vec<String>) -> RedisResult<bool>;
     fn str_append(&mut self, path: Vec<String>, val: String) -> RedisResult<usize>;
-    fn arr_append(&mut self, path: Vec<String>, args: Vec<O>) -> RedisResult<usize>;
+    fn arr_append(&mut self, path: Vec<String>, args: &[O]) -> RedisResult<usize>;
     fn arr_insert(&mut self, path: Vec<String>, args: &[O], index: i64) -> RedisResult<usize>;
     fn arr_pop<C>(&mut self, path: Vec<String>, index: i64, serialize_callback: C) -> RedisResult
     where

@@ -282,29 +282,31 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn str_append(&mut self, path: Vec<String>, val: String) -> RedisResult<usize> {
-        let json = serde_json::from_str(&val)?;
-        if let serde_json::Value::String(s) = json {
-            self.do_op(path, |v| {
-                let v_str = v.as_string_mut().unwrap();
-                let new_str = [v_str.as_str(), s.as_str()].concat();
-                *v_str = IString::intern(&new_str);
-                Ok(new_str.len())
-            })
-        } else {
-            Err(RedisError::String(err_msg_json_expected(
+        match serde_json::from_str(&val)? {
+            serde_json::Value::String(s) => self.do_op(path, |v| {
+                v.as_string_mut()
+                    .map(|v_str| {
+                        let new_str = [v_str.as_str(), s.as_str()].concat();
+                        *v_str = IString::intern(&new_str);
+                        Ok(new_str.len())
+                    })
+                    .unwrap_or_else(|| Err(err_json(v, "string")))
+            }),
+            _ => Err(RedisError::String(err_msg_json_expected(
                 "string",
                 val.as_str(),
-            )))
+            ))),
         }
     }
 
-    fn arr_append(&mut self, path: Vec<String>, args: Vec<IValue>) -> RedisResult<usize> {
+    fn arr_append(&mut self, path: Vec<String>, args: &[IValue]) -> RedisResult<usize> {
         self.do_op(path, |v| {
-            let arr = v.as_array_mut().unwrap();
-            for a in &args {
-                arr.push(a.clone());
-            }
-            Ok(arr.len())
+            v.as_array_mut()
+                .map(|arr| {
+                    args.iter().for_each(|a| arr.push(a.clone()));
+                    Ok(arr.len())
+                })
+                .unwrap_or_else(|| Err(err_json(v, "array")))
         })
     }
 
@@ -315,20 +317,20 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         index: i64,
     ) -> RedisResult<usize> {
         self.do_op(paths, |v| {
-            // Verify legal index in bounds
-            let len = v.len().unwrap() as i64;
-            let index = if index < 0 { len + index } else { index };
-            if !(0..=len).contains(&index) {
-                return Err("ERR index out of bounds".into());
-            }
-            let mut index = index as usize;
-            let curr = v.as_array_mut().unwrap();
-            curr.reserve(args.len());
-            for a in args {
-                curr.insert(index, a.clone());
-                index += 1;
-            }
-            Ok(curr.len())
+            v.as_array_mut()
+                .map(|arr| {
+                    // Verify legal index in bounds
+                    let len = arr.len() as _;
+                    let index = if index < 0 { len + index } else { index };
+                    if !(0..=len).contains(&index) {
+                        return Err("ERR index out of bounds".into());
+                    }
+                    arr.reserve(args.len());
+                    args.iter().for_each(|a| arr.push(a.clone()));
+                    arr.as_mut_slice()[index as _..].rotate_right(args.len());
+                    Ok(arr.len())
+                })
+                .unwrap_or_else(|| Err(err_json(v, "array")))
         })
     }
 
@@ -378,7 +380,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn clear(&mut self, path: Vec<String>) -> RedisResult<usize> {
-        let cleared = self.do_op(path, |v| match v.destructure_mut() {
+        self.do_op(path, |v| match v.destructure_mut() {
             DestructuredMut::Object(obj) => {
                 obj.clear();
                 Ok(1)
@@ -392,8 +394,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 Ok(1)
             }
             _ => Ok(0),
-        })?;
-        Ok(cleared)
+        })
     }
 }
 
