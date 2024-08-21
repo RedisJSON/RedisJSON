@@ -33,16 +33,7 @@ pub struct IValueKeyHolderWrite<'a> {
     val: Option<&'a mut RedisJSON<IValue>>,
 }
 
-///
-/// Replaces a value at a given `path`, starting from `root`
-///
-/// The new value is the value returned from `func`, which is called on the current value.
-/// If the returned value from `func` is [`Err`], the current value remains (although it could be modified by `func`)
-///
-fn replace<F>(path: Vec<String>, root: &mut IValue, mut func: F) -> bool
-where
-    F: FnMut(&mut IValue) -> IValue,
-{
+fn follow_path(path: Vec<String>, root: &mut IValue) -> Option<&mut IValue> {
     path.iter()
         .try_fold(root, |target, token| match target.destructure_mut() {
             DestructuredMut::Object(obj) => obj.get_mut(token.as_str()),
@@ -55,8 +46,19 @@ where
             }
             _ => None,
         })
-        .map(|v| *v = func(v))
-        .is_some()
+}
+
+///
+/// Replaces a value at a given `path`, starting from `root`
+///
+/// The new value is the value returned from `func`, which is called on the current value.
+/// If the returned value from `func` is [`Err`], the current value remains (although it could be modified by `func`)
+///
+fn replace<F>(path: Vec<String>, root: &mut IValue, mut func: F) -> bool
+where
+    F: FnMut(&mut IValue) -> IValue,
+{
+    follow_path(path, root).map(|v| *v = func(v)).is_some()
 }
 
 ///
@@ -69,52 +71,28 @@ fn update<F, T>(path: Vec<String>, root: &mut IValue, mut func: F) -> RedisResul
 where
     F: FnMut(&mut IValue) -> Result<T, Error>,
 {
-    path.iter()
-        .try_fold(root, |target, token| match target.destructure_mut() {
-            DestructuredMut::Object(obj) => obj.get_mut(token.as_str()),
-            DestructuredMut::Array(arr) => {
-                let idx = token.parse::<usize>().expect(&format!(
-                    "An array index is parsed successfully. Array = {:?}, index = {:?}",
-                    arr, token
-                ));
-                arr.get_mut(idx)
-            }
-            _ => None,
-        })
-        .map(|v| func(v).map_err(Into::into))
-        .unwrap_or_else(|| Err(RedisError::String(err_msg_json_path_doesnt_exist())))
+    follow_path(path, root).map_or_else(
+        || Err(RedisError::String(err_msg_json_path_doesnt_exist())),
+        |v| func(v).map_err(Into::into),
+    )
 }
 
 ///
 /// Removes a value at a given `path`, starting from `root`
 ///
-fn remove(path: Vec<String>, root: &mut IValue) -> bool {
-    path[..path.len() - 1]
-        .iter()
-        .try_fold(root, |target, token| match target.destructure_mut() {
-            DestructuredMut::Object(obj) => obj.get_mut(token.as_str()),
+fn remove(mut path: Vec<String>, root: &mut IValue) -> bool {
+    let token = path.pop().unwrap();
+    follow_path(path, root)
+        .and_then(|target| match target.destructure_mut() {
+            DestructuredMut::Object(obj) => obj.remove(token.as_str()),
             DestructuredMut::Array(arr) => {
                 let idx = token.parse::<usize>().expect(&format!(
                     "An array index is parsed successfully. Array = {:?}, index = {:?}",
                     arr, token
                 ));
-                arr.get_mut(idx)
+                arr.remove(idx)
             }
             _ => None,
-        })
-        .and_then(|target| {
-            let token = &path[path.len() - 1];
-            match target.destructure_mut() {
-                DestructuredMut::Object(obj) => obj.remove(token.as_str()),
-                DestructuredMut::Array(arr) => {
-                    let idx = token.parse::<usize>().expect(&format!(
-                        "An array index is parsed successfully. Array = {:?}, index = {:?}",
-                        arr, token
-                    ));
-                    arr.remove(idx)
-                }
-                _ => None,
-            }
         })
         .is_some()
 }

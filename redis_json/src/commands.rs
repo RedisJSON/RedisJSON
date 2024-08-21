@@ -550,13 +550,15 @@ pub fn json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
             redis_key.delete()?;
             1
         } else {
-            let paths =
-                find_paths(path.get_path(), doc, |_| true).map(prepare_paths_for_updating)?;
-            paths.into_iter().try_fold(0i64, |acc, p| {
-                redis_key
-                    .delete_path(p)
-                    .map(|deleted| acc + if deleted { 1 } else { 0 })
-            })?
+            find_paths(path.get_path(), doc, |_| true)
+                .map(prepare_paths_for_updating)
+                .and_then(|paths| {
+                    paths.into_iter().try_fold(0i64, |acc, p| {
+                        redis_key
+                            .delete_path(p)
+                            .map(|deleted| acc + if deleted { 1 } else { 0 })
+                    })
+                })?
         };
         if res > 0 {
             redis_key.notify_keyspace_event(ctx, "json.del")?;
