@@ -343,9 +343,11 @@ pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
             })?;
 
             // Parse the input and validate it's valid JSON
-            let value = value
-                .try_as_str()
-                .and_then(|value| manager.from_str(value, Format::JSON, true).into_both())?;
+            let value = value.try_as_str().and_then(|value| {
+                manager
+                    .from_str(value, Format::JSON, true)
+                    .map_err(Into::into)
+            })?;
 
             Ok((redis_key, update_info, value))
         })
@@ -771,7 +773,7 @@ fn json_num_op_legacy<M: Manager>(
                 NumOp::Mult => redis_key.mult_by(p, number),
                 NumOp::Pow => redis_key.pow_by(p, number),
             }
-            .into_both()
+            .map(Into::into)
         })
         .transpose()
         .unwrap_or_else(|| {
