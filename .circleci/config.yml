@@ -82,6 +82,7 @@ commands:
             echo "python3: $(command -v python3)"
             python3 --version
             python3 -m pip list
+            python3 -m pip install --upgrade setuptools six pip
 
   install-prerequisites:
     parameters:
@@ -413,7 +414,7 @@ jobs:
 
   build-macos-m1:
     macos:
-      xcode: 14.2.0
+      xcode: 15.4.0
     resource_class: macos.m1.large.gen1
     parameters:
       upload:
@@ -662,17 +663,6 @@ workflows:
           <<: *on-integ-and-version-tags
           context: common
 
-  benchmark_flow_label:
-    when:
-      << pipeline.parameters.run_benchmark_flow_label >>
-    jobs:
-      - benchmark-json-oss-standalone:
-          <<: *on-any-branch
-          context: common
-      - benchmark-json-oss-standalone-profiler:
-          <<: *on-any-branch
-          context: common
-  
   nightly:
     triggers:
       - schedule:
