@@ -321,7 +321,7 @@ jobs:
 
   build-macos-m1:
     macos:
-      xcode: 14.2.0
+      xcode: 15.4.0
     resource_class: macos.m1.large.gen1
     parameters:
       upload:
@@ -512,7 +512,8 @@ workflows:
               platform: [jammy, focal, bionic]
       - build-macos-m1:
           context: common
-          <<: *on-integ-and-version-tags
+          <<: *not-on-integ-branch
+          # <<: *on-integ-and-version-tags
       - coverage:
           <<: *always
       - sanitize:
@@ -544,7 +545,7 @@ workflows:
           requires:
             - upload-release-artifacts
 
-  
+
   nightly:
     triggers:
       - schedule:
@@ -555,7 +556,7 @@ workflows:
           name: build-with-redis-<<matrix.redis_version>>
           matrix:
             parameters:
-              redis_version: ["7", "unstable"]  
+              redis_version: ["7", "unstable"]
 
   nightly-twice-a-week-by-param:
     when:
