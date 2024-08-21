@@ -321,7 +321,7 @@ jobs:
 
   build-macos-m1:
     macos:
-      xcode: 15.4.0
+      xcode: 14.2.0
     resource_class: macos.m1.large.gen1
     parameters:
       upload:
@@ -513,6 +513,7 @@ workflows:
       - build-macos-m1:
           context: common
           <<: *not-on-integ-branch
+          # TODO: revert back to below:
           # <<: *on-integ-and-version-tags
       - coverage:
           <<: *always
