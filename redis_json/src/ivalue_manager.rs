@@ -49,32 +49,18 @@ fn follow_path(path: Vec<String>, root: &mut IValue) -> Option<&mut IValue> {
 }
 
 ///
-/// Replaces a value at a given `path`, starting from `root`
-///
-/// The new value is the value returned from `func`, which is called on the current value.
-/// If the returned value from `func` is [`Err`], the current value remains (although it could be modified by `func`)
-///
-fn replace<F>(path: Vec<String>, root: &mut IValue, mut func: F) -> bool
-where
-    F: FnMut(&mut IValue) -> IValue,
-{
-    follow_path(path, root).map(|v| *v = func(v)).is_some()
-}
-
-///
 /// Updates a value at a given `path`, starting from `root`
 ///
 /// The value is modified by `func`, which is called on the current value.
 /// If the returned value from `func` is [`Err`], the current value remains (although it could be modified by `func`)
 ///
-fn update<F, T>(path: Vec<String>, root: &mut IValue, mut func: F) -> RedisResult<T>
+fn update<F, T>(path: Vec<String>, root: &mut IValue, func: F) -> RedisResult<T>
 where
     F: FnMut(&mut IValue) -> Result<T, Error>,
 {
-    follow_path(path, root).map_or_else(
-        || Err(RedisError::String(err_msg_json_path_doesnt_exist())),
-        |v| func(v).map_err(Into::into),
-    )
+    follow_path(path, root)
+        .map_or_else(|| Err(err_msg_json_path_doesnt_exist().into()), func)
+        .map_err(Into::into)
 }
 
 ///
@@ -102,8 +88,8 @@ impl<'a> IValueKeyHolderWrite<'a> {
     where
         F: FnMut(&mut IValue) -> Result<T, Error>,
     {
-        let root = self.get_value()?.unwrap();
-        update(paths, root, op_fun)
+        self.get_value()
+            .and_then(|root| update(paths, root.unwrap(), op_fun))
     }
 
     fn do_num_op<F1, F2>(
@@ -199,7 +185,8 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             // update the root
             self.set_root(Some(v)).and(Ok(true))
         } else {
-            Ok(replace(path, self.get_value()?.unwrap(), |_| v.take()))
+            self.get_value()
+                .map(|root| update(path, root.unwrap(), |val| Ok(*val = v.take())).is_ok())
         }
     }
 
@@ -210,10 +197,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             merge(root, v);
             true
         } else {
-            replace(path, root, |current| {
-                merge(current, v.take());
-                current.take()
-            })
+            update(path, root, |current| Ok(merge(current, v.take()))).is_ok()
         };
         Ok(updated)
     }
@@ -231,7 +215,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn delete_path(&mut self, path: Vec<String>) -> RedisResult<bool> {
-        Ok(remove(path, self.get_value()?.unwrap()))
+        self.get_value().map(|root| remove(path, root.unwrap()))
     }
 
     fn incr_by(&mut self, path: Vec<String>, num: &str) -> RedisResult<Number> {
