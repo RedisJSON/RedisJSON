@@ -117,19 +117,15 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         INumber::try_from(op2(num1, num2))
                             .map_err(|_| RedisError::Str("result is not a number"))
                     }
-                }
-                .map(IValue::from)?;
-                *v = new_val.clone();
+                }?;
+                *v = IValue::from(new_val.clone());
                 Ok(new_val)
             })?;
-            n.as_number()
-                .and_then(|n| {
                     if n.has_decimal_point() {
                         n.to_f64().and_then(serde_json::Number::from_f64)
                     } else {
                         n.to_i64().map(Into::into)
                     }
-                })
                 .ok_or_else(|| RedisError::Str("result is not a number"))
         } else {
             Err(RedisError::Str("bad input number"))

@@ -317,39 +317,26 @@ pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
             let [key, path, value] = args else {
                 unreachable!();
             };
-            let mut redis_key = manager.open_key_write(ctx, key.safe_clone(ctx))?;
+            let mut key = manager.open_key_write(ctx, key.safe_clone(ctx))?;
 
             // Verify the path is valid and get all the update info
-            let update_info = path.try_as_str().map(Path::new).and_then(|path| {
-                if path == *JSON_ROOT_PATH {
-                    Ok(None)
-                } else {
-                    // Verify the key is a JSON type
-                    redis_key.get_value().and_then(|value| {
-                        value.map_or_else(
-                            || {
-                                Err(RedisError::Str(
-                                    "ERR new objects must be created at the root",
-                                ))
-                            },
-                            |value| {
-                                KeyValue::new(value)
-                                    .find_paths(path.get_path(), SetOptions::None)
-                                    .into_both()
-                            },
-                        )
-                    })
-                }
-            })?;
+            let path = path.try_as_str().map(Path::new)?;
+            let update_info = if path == *JSON_ROOT_PATH {
+                Ok(None)
+            } else if let Some(value) = key.get_value()? {
+                KeyValue::new(value)
+                    .find_paths(path.get_path(), SetOptions::None)
+                    .into_both()
+            } else {
+                Err(RedisError::Str(
+                    "ERR new objects must be created at the root",
+                ))
+            }?;
 
             // Parse the input and validate it's valid JSON
-            let value = value.try_as_str().and_then(|value| {
-                manager
-                    .from_str(value, Format::JSON, true)
-                    .map_err(Into::into)
-            })?;
+            let value = manager.from_str(value.try_as_str()?, Format::JSON, true)?;
 
-            Ok((redis_key, update_info, value))
+            Ok((key, update_info, value))
         })
         .try_collect()?;
 
