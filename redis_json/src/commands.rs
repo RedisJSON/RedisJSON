@@ -704,7 +704,7 @@ fn json_num_op<M: Manager>(
 
         // Convert to RESP2 format return as one JSON array
         let values = to_json_value::<Number>(results, Value::Null);
-        Ok(KeyValue::<M::V>::serialize_object(&values, ReplyFormatOptions::default()).into())
+        Ok(KeyValue::<M::V>::serialize_object(values, ReplyFormatOptions::default()).into())
     }
 }
 

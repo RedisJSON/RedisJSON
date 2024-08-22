@@ -271,7 +271,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                     if !(0..=len).contains(&index) {
                         return Err("ERR index out of bounds".into());
                     }
-                    arr.extend(args.iter().map(IValue::clone));
+                    arr.extend(args.iter().cloned());
                     arr[index as _..].rotate_right(args.len());
                     Ok(arr.len())
                 })

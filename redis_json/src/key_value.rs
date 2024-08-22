@@ -31,28 +31,25 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     pub fn get_first<'b>(&'a self, path: &'b str) -> Result<&'a V, Error> {
-        self.get_values(path).and_then(|v| {
-            v.first().copied().ok_or_else(|| {
-                err_msg_json_path_doesnt_exist_with_param(path)
-                    .as_str()
-                    .into()
-            })
+        let results = self.get_values(path)?;
+        results.first().copied().ok_or_else(|| {
+            err_msg_json_path_doesnt_exist_with_param(path)
+                .as_str()
+                .into()
         })
     }
 
     pub fn resp_serialize(&self, path: Path) -> RedisResult {
         if path.is_legacy() {
-            self.get_first(path.get_path())
-                .map(Self::resp_serialize_inner)
+            let v = self.get_first(path.get_path())?;
+            Ok(Self::resp_serialize_inner(v))
         } else {
-            self.get_values(path.get_path()).map(|v| {
-                v.into_iter()
-                    .map(Self::resp_serialize_inner)
-                    .collect_vec()
-                    .into()
-            })
+            let v = self.get_values(path.get_path())?;
+            Ok(v.into_iter()
+                .map(Self::resp_serialize_inner)
+                .collect_vec()
+                .into())
         }
-        .map_err(Into::into)
     }
 
     fn resp_serialize_inner(v: &V) -> RedisValue {
@@ -92,15 +89,14 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     pub fn get_values<'b>(&'a self, path: &'b str) -> Result<Vec<&'a V>, Error> {
-        compile(path)
-            .map(|query| calc_once(query, self.val))
-            .map_err(Into::into)
+        let query = compile(path)?;
+        Ok(calc_once(query, self.val))
     }
 
-    pub fn serialize_object<O: Serialize>(o: &O, format: ReplyFormatOptions) -> String {
+    pub fn serialize_object<O: Serialize>(o: O, format: ReplyFormatOptions) -> String {
         // When using the default formatting, we can use serde_json's default serializer
         if format.no_formatting() {
-            serde_json::to_string(o).unwrap()
+            serde_json::to_string(&o).unwrap()
         } else {
             let formatter = RedisJsonFormatter::new(format);
             let mut out = serde_json::Serializer::with_formatter(Vec::new(), formatter);
@@ -157,7 +153,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 .collect();
             RedisValue::Map(map)
         } else {
-            Self::serialize_object(&temp_doc, format).into()
+            Self::serialize_object(temp_doc, format).into()
         };
         Ok(res)
     }
@@ -185,8 +181,8 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         if is_legacy {
             self.to_string_single(path, format).map(Into::into)
         } else if format.is_resp3_reply() {
-            self.get_values(path)
-                .map(|values| Self::values_to_resp3(values, format))
+            let values = self.get_values(path)?;
+            Ok(Self::values_to_resp3(values, format))
         } else {
             self.to_string_multi(path, format).map(Into::into)
         }
@@ -270,15 +266,15 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
 
         match token_type {
             JsonPathToken::String => {
-                let res = if query.size() == 1 {
+                if query.size() == 1 {
                     // Adding to the root
-                    vec![UpdateInfo::AUI(AddUpdateInfo {
+                    Ok(vec![UpdateInfo::AUI(AddUpdateInfo {
                         path: Vec::new(),
                         key: last,
-                    })]
+                    })])
                 } else {
                     // Adding somewhere in existing object
-                    calc_once_paths(query, self.val)
+                    Ok(calc_once_paths(query, self.val)
                         .into_iter()
                         .map(|v| {
                             UpdateInfo::AUI(AddUpdateInfo {
@@ -286,9 +282,8 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                                 key: last.to_string(),
                             })
                         })
-                        .collect()
-                };
-                Ok(res)
+                        .collect())
+                }
             }
             JsonPathToken::Number => {
                 // if we reach here with array path we are either out of range
@@ -328,18 +323,13 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    pub fn to_string_single(
-        &self,
-        path: &str,
-        format: ReplyFormatOptions,
-    ) -> Result<String, Error> {
-        self.get_first(path)
-            .map(|first| Self::serialize_object(first, format))
+    pub fn to_string_single(&self, path: &str, fmt: ReplyFormatOptions) -> Result<String, Error> {
+        self.get_first(path).map(|o| Self::serialize_object(o, fmt))
     }
 
-    pub fn to_string_multi(&self, path: &str, format: ReplyFormatOptions) -> Result<String, Error> {
+    pub fn to_string_multi(&self, path: &str, fmt: ReplyFormatOptions) -> Result<String, Error> {
         self.get_values(path)
-            .map(|val| Self::serialize_object(&val, format))
+            .map(|o| Self::serialize_object(o, fmt))
     }
 
     pub fn get_type(&self, path: &str) -> Result<String, Error> {
@@ -383,11 +373,10 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             .map_or(Ok(ObjectLen::NoneExisting), |first| {
                 match first.get_type() {
                     SelectValueType::Object => Ok(ObjectLen::Len(first.len().unwrap())),
-                    _ => Err(err_msg_json_expected(
+                    _ => Err(Error::from(err_msg_json_expected(
                         "object",
                         self.get_type(path).unwrap().as_str(),
-                    )
-                    .into()),
+                    ))),
                 }
             })
     }
@@ -426,13 +415,13 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         start: i64,
         end: i64,
     ) -> Result<RedisValue, Error> {
-        self.get_values(path).map(|v| {
-            v.into_iter()
-                .map(|value| Self::arr_first_index_single(value, &json_value, start, end))
-                .map(RedisValue::from)
-                .collect_vec()
-                .into()
-        })
+        let values = self.get_values(path)?;
+        Ok(values
+            .into_iter()
+            .map(|value| Self::arr_first_index_single(value, &json_value, start, end))
+            .map(RedisValue::from)
+            .collect_vec()
+            .into())
     }
 
     pub fn arr_index_legacy(
@@ -442,15 +431,14 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         start: i64,
         end: i64,
     ) -> Result<RedisValue, Error> {
-        self.get_first(path).and_then(|arr| {
-            match Self::arr_first_index_single(arr, &json_value, start, end) {
-                FoundIndex::NotArray => Err(Error::from(err_msg_json_expected(
-                    "array",
-                    self.get_type(path).unwrap().as_str(),
-                ))),
-                i => Ok(i.into()),
-            }
-        })
+        let arr = self.get_first(path)?;
+        match Self::arr_first_index_single(arr, &json_value, start, end) {
+            FoundIndex::NotArray => Err(Error::from(err_msg_json_expected(
+                "array",
+                self.get_type(path).unwrap().as_str(),
+            ))),
+            i => Ok(i.into()),
+        }
     }
 
     /// Returns first array index of `v` in `arr`, or `NotFound` if not found in `arr`, or `NotArray` if `arr` is not an array
