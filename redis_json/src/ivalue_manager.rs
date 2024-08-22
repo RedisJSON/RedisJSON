@@ -56,7 +56,7 @@ fn follow_path(path: Vec<String>, root: &mut IValue) -> Option<&mut IValue> {
 ///
 fn update<F, T>(path: Vec<String>, root: &mut IValue, func: F) -> RedisResult<T>
 where
-    F: FnMut(&mut IValue) -> Result<T, Error>,
+    F: FnOnce(&mut IValue) -> Result<T, Error>,
 {
     follow_path(path, root)
         .map_or_else(|| Err(err_msg_json_path_doesnt_exist().into()), func)
@@ -86,54 +86,51 @@ fn remove(mut path: Vec<String>, root: &mut IValue) -> bool {
 impl<'a> IValueKeyHolderWrite<'a> {
     fn do_op<F, T>(&mut self, paths: Vec<String>, op_fun: F) -> RedisResult<T>
     where
-        F: FnMut(&mut IValue) -> Result<T, Error>,
+        F: FnOnce(&mut IValue) -> Result<T, Error>,
     {
-        self.get_value()
-            .and_then(|root| update(paths, root.unwrap(), op_fun))
+        let root = self.get_value()?.unwrap();
+        update(paths, root, op_fun)
     }
 
     fn do_num_op<F1, F2>(
         &mut self,
         path: Vec<String>,
         num: &str,
-        mut op1_fun: F1,
-        mut op2_fun: F2,
+        op1: F1,
+        op2: F2,
     ) -> RedisResult<Number>
     where
-        F1: FnMut(i64, i64) -> i64,
-        F2: FnMut(f64, f64) -> f64,
+        F1: FnOnce(i64, i64) -> i64,
+        F2: FnOnce(f64, f64) -> f64,
     {
         let in_value = &serde_json::from_str(num)?;
         if let serde_json::Value::Number(in_value) = in_value {
-            self.do_op(path, |v| {
-                let num_res = match (v.get_type(), in_value.as_i64()) {
+            let n = self.do_op(path, |v| {
+                let new_val = match (v.get_type(), in_value.as_i64()) {
                     (SelectValueType::Long, Some(num2)) => {
                         let num1 = v.get_long();
-                        let res = op1_fun(num1, num2);
-                        Ok(res.into())
+                        Ok(op1(num1, num2).into())
                     }
                     _ => {
                         let num1 = v.get_double();
                         let num2 = in_value.as_f64().unwrap();
-                        INumber::try_from(op2_fun(num1, num2))
+                        INumber::try_from(op2(num1, num2))
                             .map_err(|_| RedisError::Str("result is not a number"))
                     }
-                };
-                let new_val = IValue::from(num_res?);
+                }
+                .map(IValue::from)?;
                 *v = new_val.clone();
                 Ok(new_val)
-            })
-            .and_then(|n| {
-                n.as_number()
-                    .and_then(|n| {
-                        if n.has_decimal_point() {
-                            n.to_f64().and_then(serde_json::Number::from_f64)
-                        } else {
-                            n.to_i64().map(Into::into)
-                        }
-                    })
-                    .ok_or_else(|| RedisError::Str("result is not a number"))
-            })
+            })?;
+            n.as_number()
+                .and_then(|n| {
+                    if n.has_decimal_point() {
+                        n.to_f64().and_then(serde_json::Number::from_f64)
+                    } else {
+                        n.to_i64().map(Into::into)
+                    }
+                })
+                .ok_or_else(|| RedisError::Str("result is not a number"))
         } else {
             Err(RedisError::Str("bad input number"))
         }
@@ -146,17 +143,12 @@ impl<'a> IValueKeyHolderWrite<'a> {
         Ok(())
     }
 
-    fn set_root(&mut self, v: Option<IValue>) -> RedisResult<()> {
-        if let Some(data) = v {
-            self.get_json_holder()?;
-            if let Some(val) = &mut self.val {
-                val.data = data
-            } else {
-                self.key.set_value(&REDIS_JSON_TYPE, RedisJSON { data })?
-            }
+    fn set_root(&mut self, data: IValue) -> RedisResult<()> {
+        self.get_json_holder()?;
+        if let Some(val) = &mut self.val {
+            val.data = data
         } else {
-            self.val = None;
-            self.key.delete()?;
+            self.key.set_value(&REDIS_JSON_TYPE, RedisJSON { data })?
         }
         Ok(())
     }
@@ -176,30 +168,22 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
 
     fn get_value(&mut self) -> RedisResult<Option<&mut IValue>> {
         self.get_json_holder()?;
-        let val = self.val.as_mut().map(|v| &mut v.data);
-        Ok(val)
+        Ok(self.val.as_mut().map(|v| &mut v.data))
     }
 
     fn set_value(&mut self, path: Vec<String>, mut v: IValue) -> RedisResult<bool> {
         if path.is_empty() {
             // update the root
-            self.set_root(Some(v)).and(Ok(true))
+            self.set_root(v).and(Ok(true))
         } else {
-            self.get_value()
-                .map(|root| update(path, root.unwrap(), |val| Ok(*val = v.take())).is_ok())
+            let root = self.get_value()?.unwrap();
+            Ok(update(path, root, |val| Ok(*val = v.take())).is_ok())
         }
     }
 
     fn merge_value(&mut self, path: Vec<String>, mut v: IValue) -> RedisResult<bool> {
         let root = self.get_value()?.unwrap();
-        let updated = if path.is_empty() {
-            // update the root
-            merge(root, v);
-            true
-        } else {
-            update(path, root, |current| Ok(merge(current, v.take()))).is_ok()
-        };
-        Ok(updated)
+        Ok(update(path, root, |current| Ok(merge(current, v.take()))).is_ok())
     }
 
     fn dict_add(&mut self, path: Vec<String>, key: &str, mut v: IValue) -> RedisResult<bool> {
@@ -288,7 +272,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                         return Err("ERR index out of bounds".into());
                     }
                     arr.extend(args.iter().map(IValue::clone));
-                    arr.as_mut_slice()[index as _..].rotate_right(args.len());
+                    arr[index as _..].rotate_right(args.len());
                     Ok(arr.len())
                 })
                 .unwrap_or_else(|| Err(err_json(v, "array")))
@@ -299,7 +283,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     where
         C: FnOnce(Option<&IValue>) -> RedisResult,
     {
-        self.do_op(path, |v| {
+        let res = self.do_op(path, |v| {
             v.as_array_mut()
                 .map(|array| {
                     if array.is_empty() {
@@ -311,8 +295,8 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                     array.remove(index)
                 })
                 .ok_or_else(|| err_json(v, "array"))
-        })
-        .and_then(|res| serialize_callback(res.as_ref()))
+        })?;
+        serialize_callback(res.as_ref())
     }
 
     fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> RedisResult<usize> {

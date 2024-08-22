@@ -395,10 +395,10 @@ where
     }
 }
 
-fn find_paths<T, F>(path: &str, doc: &T, mut f: F) -> RedisResult<Vec<Vec<String>>>
+fn find_paths<T, F>(path: &str, doc: &T, f: F) -> RedisResult<Vec<Vec<String>>>
 where
     T: SelectValue,
-    F: FnMut(&T) -> bool,
+    F: Fn(&T) -> bool,
 {
     let query = compile(path).map_err(|e| RedisError::String(e.to_string()))?;
     let res = calc_once_with_paths(query, doc)
