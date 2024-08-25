@@ -626,23 +626,21 @@ pub fn json_type<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
 
 fn json_type_impl<M: Manager>(redis_key: &M::ReadHolder, path: &str) -> RedisResult {
     redis_key.get_value()?.map_or(Ok(RedisValue::Null), |root| {
-        let value = KeyValue::new(root)
+        Ok(KeyValue::new(root)
             .get_values(path)?
             .into_iter()
-            .map(|v| RedisValue::from(KeyValue::value_name(v)))
+            .map(KeyValue::value_name)
+            .map(RedisValue::from)
             .collect_vec()
-            .into();
-        Ok(value)
+            .into())
     })
 }
 
 fn json_type_legacy<M: Manager>(redis_key: &M::ReadHolder, path: &str) -> RedisResult {
-    let value = redis_key
+    Ok(redis_key
         .get_value()?
-        .map(|doc| KeyValue::new(doc).get_type(path).map(|s| s.into()).ok())
-        .flatten()
-        .unwrap_or(RedisValue::Null);
-    Ok(value)
+        .and_then(|doc| KeyValue::new(doc).get_type(path).ok())
+        .map_or(RedisValue::Null, Into::into))
 }
 
 enum NumOp {
@@ -673,9 +671,9 @@ fn json_num_op<M: Manager>(
             .map(|v| {
                 v.map_or(RedisValue::Null, |v| {
                     if let Some(i) = v.as_i64() {
-                        RedisValue::Integer(i)
+                        i.into()
                     } else {
-                        RedisValue::Float(v.as_f64().unwrap_or_default())
+                        v.as_f64().unwrap_or_default().into()
                     }
                 })
             })
@@ -992,10 +990,9 @@ fn json_str_len_impl<M: Manager>(redis_key: &M::ReadHolder, path: &str) -> Redis
 }
 
 fn json_str_len_legacy<M: Manager>(redis_key: &M::ReadHolder, path: &str) -> RedisResult {
-    match redis_key.get_value()? {
-        Some(doc) => Ok(RedisValue::Integer(KeyValue::new(doc).str_len(path)? as i64)),
-        None => Ok(RedisValue::Null),
-    }
+    redis_key.get_value()?.map_or(Ok(RedisValue::Null), |doc| {
+        KeyValue::new(doc).str_len(path).map(Into::into)
+    })
 }
 
 ///
@@ -1576,7 +1573,7 @@ fn json_obj_len_impl<M: Manager>(redis_key: M::ReadHolder, path: &str) -> RedisR
 fn json_obj_len_legacy<M: Manager>(redis_key: M::ReadHolder, path: &str) -> RedisResult {
     match redis_key.get_value()? {
         Some(doc) => match KeyValue::new(doc).obj_len(path)? {
-            ObjectLen::Len(l) => Ok(RedisValue::Integer(l as i64)),
+            ObjectLen::Len(l) => Ok(l.into()),
             _ => Ok(RedisValue::Null),
         },
         None => Ok(RedisValue::Null),

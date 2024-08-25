@@ -79,16 +79,13 @@ pub trait Manager {
     fn is_json(&self, key: *mut RedisModuleKey) -> RedisResult<bool>;
 }
 
-pub(crate) fn err_json<V: SelectValue>(value: &V, expected_value: &'static str) -> RedisError {
-    RedisError::String(format!(
-        "ERR {}",
-        expected(expected_value, KeyValue::value_name(value))
-    ))
+pub(crate) fn err_json<V: SelectValue>(value: &V, exp: &'static str) -> RedisError {
+    expected(exp, KeyValue::value_name(value))
 }
 
-pub(crate) fn expected(expected_value: &'static str, found: &str) -> RedisError {
+pub(crate) fn expected(exp: &'static str, found: &str) -> RedisError {
     RedisError::String(format!(
-        "WRONGTYPE wrong type of path value - expected {expected_value} but found {found}"
+        "ERR WRONGTYPE wrong type of path value - expected {exp} but found {found}"
     ))
 }
 
