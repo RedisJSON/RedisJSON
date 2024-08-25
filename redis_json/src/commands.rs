@@ -4,12 +4,11 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
-use crate::error::Error;
 use crate::formatter::ReplyFormatOptions;
 use crate::key_value::KeyValue;
 use crate::manager::{
-    err_msg_json_path_doesnt_exist_with_param, err_msg_json_path_doesnt_exist_with_param_or,
-    Manager, ReadHolder, UpdateInfo, WriteHolder,
+    path_doesnt_exist_with_param, path_doesnt_exist_with_param_or, Manager, ReadHolder, UpdateInfo,
+    WriteHolder,
 };
 use crate::redisjson::{Format, Path, ReplyFormat, ResultInto, SetOptions, JSON_ROOT_PATH};
 use json_path::select_value::{SelectValue, SelectValueType};
@@ -387,7 +386,7 @@ where
     T: SelectValue,
     F: Fn(&T) -> bool,
 {
-    let query = compile(path).map_err(|e| RedisError::String(e.to_string()))?;
+    let query = compile(path)?;
     let res = calc_once_with_paths(query, doc)
         .into_iter()
         .filter_map(|e| {
@@ -404,7 +403,7 @@ fn get_all_values_and_paths<'a, T>(path: &str, doc: &'a T) -> RedisResult<Vec<(&
 where
     T: SelectValue,
 {
-    let query = compile(path).map_err(|e| RedisError::String(e.to_string()))?;
+    let query = compile(path)?;
     let res = calc_once_with_paths(query, doc)
         .into_iter()
         .map(|e| (e.res, e.path_tracker.unwrap().to_string_path()))
@@ -766,8 +765,9 @@ fn json_num_op_legacy<M: Manager>(
         })
         .transpose()
         .unwrap_or_else(|| {
-            Err(RedisError::String(
-                err_msg_json_path_doesnt_exist_with_param_or(path, "does not contains a number"),
+            Err(path_doesnt_exist_with_param_or(
+                path,
+                "does not contains a number",
             ))
         })?;
     redis_key.notify_keyspace_event(ctx, cmd)?;
@@ -870,9 +870,7 @@ fn json_bool_toggle_legacy<M: Manager>(
         manager.apply_changes(ctx);
         Ok(res.to_string().into())
     } else {
-        Err(RedisError::String(
-            err_msg_json_path_doesnt_exist_with_param_or(path, "not a bool"),
-        ))
+        Err(path_doesnt_exist_with_param_or(path, "not a bool"))
     }
 }
 
@@ -960,9 +958,7 @@ fn json_str_append_legacy<M: Manager>(
         manager.apply_changes(ctx);
         Ok(res.unwrap().into())
     } else {
-        Err(RedisError::String(
-            err_msg_json_path_doesnt_exist_with_param_or(path, "not a string"),
-        ))
+        Err(path_doesnt_exist_with_param_or(path, "not a string"))
     }
 }
 
@@ -1048,8 +1044,9 @@ fn json_arr_append_legacy<M: Manager>(
         v.get_type() == SelectValueType::Array
     })?;
     if paths.is_empty() {
-        Err(RedisError::String(
-            err_msg_json_path_doesnt_exist_with_param_or(path.get_original(), "not an array"),
+        Err(path_doesnt_exist_with_param_or(
+            path.get_original(),
+            "not an array",
         ))
     } else if paths.len() == 1 {
         let res = redis_key.arr_append(paths.pop().unwrap(), &args)?;
@@ -1140,11 +1137,7 @@ where
     let json_value: Value = serde_json::from_str(value)?;
 
     let res = key.get_value()?.map_or_else(
-        || {
-            Err(Error::from(err_msg_json_path_doesnt_exist_with_param(
-                path.get_original(),
-            )))
-        },
+        || Err(path_doesnt_exist_with_param(path.get_original())),
         |doc| {
             if path.is_legacy() {
                 KeyValue::new(doc).arr_index_legacy(path.get_path(), json_value, start, end)
@@ -1234,9 +1227,7 @@ fn json_arr_insert_legacy<M: Manager>(
 
     let paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
     if paths.is_empty() {
-        Err(RedisError::String(
-            err_msg_json_path_doesnt_exist_with_param_or(path, "not an array"),
-        ))
+        Err(path_doesnt_exist_with_param_or(path, "not an array"))
     } else {
         let mut res = None;
         for p in paths {
@@ -1286,8 +1277,9 @@ fn json_arr_len_legacy<M: Manager>(key: M::ReadHolder, path: Path) -> RedisResul
     })?;
     values.into_iter().next().flatten().map_or_else(
         || {
-            Err(RedisError::String(
-                err_msg_json_path_doesnt_exist_with_param_or(path.get_original(), "not an array"),
+            Err(path_doesnt_exist_with_param_or(
+                path.get_original(),
+                "not an array",
             ))
         },
         |v| Ok(v.len().unwrap().into()),
@@ -1416,9 +1408,7 @@ fn json_arr_pop_legacy<M: Manager>(
 
     let paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
     if paths.is_empty() {
-        Err(RedisError::String(
-            err_msg_json_path_doesnt_exist_with_param_or(path, "not an array"),
-        ))
+        Err(path_doesnt_exist_with_param_or(path, "not an array"))
     } else {
         let res = paths.into_iter().try_fold(RedisValue::Null, |_, p| {
             redis_key.arr_pop(p, index, |v| {
@@ -1498,9 +1488,7 @@ fn json_arr_trim_legacy<M: Manager>(
 
     let paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
     if paths.is_empty() {
-        Err(RedisError::String(
-            err_msg_json_path_doesnt_exist_with_param_or(path, "not an array"),
-        ))
+        Err(path_doesnt_exist_with_param_or(path, "not an array"))
     } else {
         let res = paths
             .into_iter()
@@ -1549,9 +1537,7 @@ fn json_obj_keys_legacy<M: Manager>(redis_key: M::ReadHolder, path: &str) -> Red
         .get_first(path)
         .map_or(Ok(RedisValue::Null), |v| match v.get_type() {
             SelectValueType::Object => Ok(v.keys().unwrap().collect_vec().into()),
-            _ => Err(RedisError::String(
-                err_msg_json_path_doesnt_exist_with_param_or(path, "not an object"),
-            )),
+            _ => Err(path_doesnt_exist_with_param_or(path, "not an object")),
         })
 }
 
@@ -1574,11 +1560,7 @@ pub fn json_obj_len<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString
 fn json_obj_len_impl<M: Manager>(redis_key: M::ReadHolder, path: &str) -> RedisResult {
     redis_key.get_value().and_then(|res| {
         res.map_or_else(
-            || {
-                Err(RedisError::String(
-                    err_msg_json_path_doesnt_exist_with_param_or(path, "not an object"),
-                ))
-            },
+            || Err(path_doesnt_exist_with_param_or(path, "not an object")),
             |root| {
                 find_all_values(path, root, |v| v.get_type() == SelectValueType::Object).map(|v| {
                     v.into_iter()

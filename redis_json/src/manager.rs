@@ -9,13 +9,10 @@ use redis_module::key::KeyFlags;
 use serde_json::Number;
 
 use redis_module::raw::RedisModuleKey;
-use redis_module::{Context, RedisResult, RedisString};
-
-use crate::Format;
-
-use crate::error::Error;
+use redis_module::{Context, RedisError, RedisResult, RedisString};
 
 use crate::key_value::KeyValue;
+use crate::Format;
 
 pub struct SetUpdateInfo {
     pub path: Vec<String>,
@@ -77,30 +74,32 @@ pub trait Manager {
     fn open_key_write(&self, ctx: &Context, key: RedisString) -> RedisResult<Self::WriteHolder>;
     fn apply_changes(&self, ctx: &Context);
     #[allow(clippy::wrong_self_convention)]
-    fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> Result<Self::O, Error>;
+    fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> RedisResult<Self::O>;
     fn get_memory(&self, v: &Self::V) -> RedisResult<usize>;
     fn is_json(&self, key: *mut RedisModuleKey) -> RedisResult<bool>;
 }
 
-pub(crate) fn err_json<V: SelectValue>(value: &V, expected_value: &'static str) -> Error {
-    Error::from(err_msg_json_expected(
-        expected_value,
-        KeyValue::value_name(value),
+pub(crate) fn err_json<V: SelectValue>(value: &V, expected_value: &'static str) -> RedisError {
+    RedisError::String(format!(
+        "ERR {}",
+        expected(expected_value, KeyValue::value_name(value))
     ))
 }
 
-pub(crate) fn err_msg_json_expected(expected_value: &'static str, found: &str) -> String {
-    format!("WRONGTYPE wrong type of path value - expected {expected_value} but found {found}")
+pub(crate) fn expected(expected_value: &'static str, found: &str) -> RedisError {
+    RedisError::String(format!(
+        "WRONGTYPE wrong type of path value - expected {expected_value} but found {found}"
+    ))
 }
 
-pub(crate) fn err_msg_json_path_doesnt_exist_with_param(path: &str) -> String {
-    format!("ERR Path '{path}' does not exist")
+pub(crate) fn path_doesnt_exist_with_param(path: &str) -> RedisError {
+    RedisError::String(format!("ERR Path '{path}' does not exist"))
 }
 
-pub(crate) fn err_msg_json_path_doesnt_exist() -> String {
-    "ERR Path does not exist".to_string()
+pub(crate) fn path_doesnt_exist() -> RedisError {
+    RedisError::String("ERR Path does not exist".into())
 }
 
-pub(crate) fn err_msg_json_path_doesnt_exist_with_param_or(path: &str, or: &str) -> String {
-    format!("ERR Path '{path}' does not exist or {or}")
+pub(crate) fn path_doesnt_exist_with_param_or(path: &str, or: &str) -> RedisError {
+    RedisError::String(format!("ERR Path '{path}' does not exist or {or}"))
 }

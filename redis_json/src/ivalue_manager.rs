@@ -4,8 +4,7 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
-use crate::error::Error;
-use crate::manager::{err_json, err_msg_json_expected, err_msg_json_path_doesnt_exist};
+use crate::manager::{err_json, expected, path_doesnt_exist};
 use crate::manager::{Manager, ReadHolder, WriteHolder};
 use crate::redisjson::normalize_arr_start_index;
 use crate::Format;
@@ -37,13 +36,7 @@ fn follow_path(path: Vec<String>, root: &mut IValue) -> Option<&mut IValue> {
     path.iter()
         .try_fold(root, |target, token| match target.destructure_mut() {
             DestructuredMut::Object(obj) => obj.get_mut(token.as_str()),
-            DestructuredMut::Array(arr) => {
-                let idx = token.parse::<usize>().expect(&format!(
-                    "An array index is parsed successfully. Array = {:?}, index = {:?}",
-                    arr, token
-                ));
-                arr.get_mut(idx)
-            }
+            DestructuredMut::Array(arr) => arr.get_mut(token.parse::<usize>().ok()?),
             _ => None,
         })
 }
@@ -56,11 +49,9 @@ fn follow_path(path: Vec<String>, root: &mut IValue) -> Option<&mut IValue> {
 ///
 fn update<F, T>(path: Vec<String>, root: &mut IValue, func: F) -> RedisResult<T>
 where
-    F: FnOnce(&mut IValue) -> Result<T, Error>,
+    F: FnOnce(&mut IValue) -> RedisResult<T>,
 {
-    follow_path(path, root)
-        .map_or_else(|| Err(err_msg_json_path_doesnt_exist().into()), func)
-        .map_err(Into::into)
+    follow_path(path, root).map_or_else(|| Err(path_doesnt_exist()), func)
 }
 
 ///
@@ -71,13 +62,7 @@ fn remove(mut path: Vec<String>, root: &mut IValue) -> bool {
     follow_path(path, root)
         .and_then(|target| match target.destructure_mut() {
             DestructuredMut::Object(obj) => obj.remove(token.as_str()),
-            DestructuredMut::Array(arr) => {
-                let idx = token.parse::<usize>().expect(&format!(
-                    "An array index is parsed successfully. Array = {:?}, index = {:?}",
-                    arr, token
-                ));
-                arr.remove(idx)
-            }
+            DestructuredMut::Array(arr) => arr.remove(token.parse::<usize>().ok()?),
             _ => None,
         })
         .is_some()
@@ -86,7 +71,7 @@ fn remove(mut path: Vec<String>, root: &mut IValue) -> bool {
 impl<'a> IValueKeyHolderWrite<'a> {
     fn do_op<F, T>(&mut self, paths: Vec<String>, op_fun: F) -> RedisResult<T>
     where
-        F: FnOnce(&mut IValue) -> Result<T, Error>,
+        F: FnOnce(&mut IValue) -> RedisResult<T>,
     {
         let root = self.get_value()?.unwrap();
         update(paths, root, op_fun)
@@ -121,12 +106,12 @@ impl<'a> IValueKeyHolderWrite<'a> {
                 *v = IValue::from(new_val.clone());
                 Ok(new_val)
             })?;
-                    if n.has_decimal_point() {
-                        n.to_f64().and_then(serde_json::Number::from_f64)
-                    } else {
-                        n.to_i64().map(Into::into)
-                    }
-                .ok_or_else(|| RedisError::Str("result is not a number"))
+            if n.has_decimal_point() {
+                n.to_f64().and_then(serde_json::Number::from_f64)
+            } else {
+                n.to_i64().map(Into::into)
+            }
+            .ok_or_else(|| RedisError::Str("result is not a number"))
         } else {
             Err(RedisError::Str("bad input number"))
         }
@@ -234,10 +219,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                     })
                     .unwrap_or_else(|| Err(err_json(v, "string")))
             }),
-            _ => Err(RedisError::String(err_msg_json_expected(
-                "string",
-                val.as_str(),
-            ))),
+            _ => Err(expected("string", val.as_str())),
         }
     }
 
@@ -265,7 +247,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                     let len = arr.len() as _;
                     let index = if index < 0 { len + index } else { index };
                     if !(0..=len).contains(&index) {
-                        return Err("ERR index out of bounds".into());
+                        return Err(RedisError::Str("ERR index out of bounds"));
                     }
                     arr.extend(args.iter().cloned());
                     arr[index as _..].rotate_right(args.len());
@@ -424,7 +406,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         ctx.replicate_verbatim();
     }
 
-    fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> Result<Self::O, Error> {
+    fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> RedisResult<Self::O> {
         match format {
             Format::JSON | Format::STRING => {
                 let mut deserializer = serde_json::Deserializer::from_str(val);
@@ -433,23 +415,21 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                 }
                 IValue::deserialize(&mut deserializer).map_err(|e| e.into())
             }
-            Format::BSON => from_document(
-                Document::from_reader(&mut Cursor::new(val.as_bytes()))
-                    .map_err(|e| e.to_string())?,
-            )
-            .map_err(|e| e.to_string().into())
-            .and_then(|docs: Document| {
-                docs.iter().next().map_or(Ok(IValue::NULL), |(_, b)| {
-                    let v: serde_json::Value = b.clone().into();
-                    let mut out = serde_json::Serializer::new(Vec::new());
-                    v.serialize(&mut out).unwrap();
-                    self.from_str(
-                        &String::from_utf8(out.into_inner()).unwrap(),
-                        Format::JSON,
-                        limit_depth,
-                    )
-                })
-            }),
+            Format::BSON => Document::from_reader(&mut Cursor::new(val.as_bytes()))
+                .and_then(from_document)
+                .map_err(|e| RedisError::String(e.to_string()))
+                .and_then(|docs: Document| {
+                    docs.iter().next().map_or(Ok(IValue::NULL), |(_, b)| {
+                        let v: serde_json::Value = b.clone().into();
+                        let mut out = serde_json::Serializer::new(Vec::new());
+                        v.serialize(&mut out).unwrap();
+                        self.from_str(
+                            &String::from_utf8(out.into_inner()).unwrap(),
+                            Format::JSON,
+                            limit_depth,
+                        )
+                    })
+                }),
         }
     }
 

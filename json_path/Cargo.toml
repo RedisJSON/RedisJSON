@@ -15,6 +15,7 @@ ijson.workspace = true
 log = "0.4"
 regex = "1"
 itertools = "0.13"
+redis-module ={ version = "^2.0.7", default-features = false, features = ["min-redis-compatibility-version-7-2"] }
 
 [dev-dependencies]
 env_logger = "0.11"
