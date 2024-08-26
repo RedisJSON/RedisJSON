@@ -10,12 +10,11 @@
 // User-provided JSON is converted to a tree. This tree is stored transparently in Redis.
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
-use redis_module::raw;
+use redis_module::{raw, RedisResult, RedisError};
 
 use std::os::raw::{c_int, c_void};
 
 use crate::backward;
-use crate::error::Error;
 use crate::ivalue_manager::RedisIValueJsonKeyManager;
 use crate::manager::Manager;
 use once_cell::unsync::Lazy;
@@ -68,14 +67,14 @@ pub enum Format {
     BSON,
 }
 impl FromStr for Format {
-    type Err = Error;
+    type Err = RedisError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "STRING" => Ok(Self::STRING),
             "JSON" => Ok(Self::JSON),
             "BSON" => Ok(Self::BSON),
-            _ => Err("ERR wrong format".into()),
+            _ => Err(RedisError::Str("ERR wrong format")),
         }
     }
 }
@@ -88,7 +87,7 @@ pub enum ReplyFormat {
     EXPAND,
 }
 impl FromStr for ReplyFormat {
-    type Err = Error;
+    type Err = RedisError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -96,7 +95,7 @@ impl FromStr for ReplyFormat {
             "STRINGS" => Ok(Self::STRINGS),
             "EXPAND1" => Ok(Self::EXPAND1),
             "EXPAND" => Ok(Self::EXPAND),
-            _ => Err("ERR wrong reply format".into()),
+            _ => Err(RedisError::Str("ERR wrong reply format")),
         }
     }
 }
@@ -195,6 +194,7 @@ where
 }
 
 pub mod type_methods {
+
     use super::*;
     use std::{ffi::CString, ptr::null_mut};
 
@@ -218,7 +218,7 @@ pub mod type_methods {
     pub fn value_rdb_load_json(
         rdb: *mut raw::RedisModuleIO,
         encver: c_int,
-    ) -> Result<String, Error> {
+    ) -> RedisResult<String> {
         Ok(match encver {
             0 => {
                 let v = backward::json_rdb_load(rdb)?;
