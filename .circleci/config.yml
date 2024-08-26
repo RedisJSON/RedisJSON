@@ -309,16 +309,16 @@ jobs:
       - vm-build-platforms-steps:
           platform: <<parameters.platform>>
 
-  build-arm-platforms:
-    parameters:
-      platform:
-        type: string
-    machine:
-      image: ubuntu-2004:202101-01
-    resource_class: arm.medium
-    steps:
-      - vm-build-platforms-steps:
-          platform: <<parameters.platform>>
+  # build-arm-platforms:
+  #   parameters:
+  #     platform:
+  #       type: string
+  #   machine:
+  #     image: ubuntu-2004:202101-01
+  #   resource_class: arm.medium
+  #   steps:
+  #     - vm-build-platforms-steps:
+  #         platform: <<parameters.platform>>
 
   build-macos-m1:
     macos:
@@ -504,13 +504,7 @@ workflows:
           context: common
           matrix:
             parameters:
-              platform: [jammy, focal, bionic, centos7, rocky8, rocky9, bullseye, amzn2]
-      - build-arm-platforms:
-          <<: *on-integ-and-version-tags
-          context: common
-          matrix:
-            parameters:
-              platform: [jammy, focal, bionic]
+              platform: [centos7, rocky8, rocky9, bullseye, amzn2]
       - build-macos-m1:
           context: common
           <<: *on-integ-and-version-tags
@@ -529,7 +523,7 @@ workflows:
           context: common
           requires:
             - build-platforms
-            - build-arm-platforms
+            # - build-arm-platforms
             - build-macos-m1
       - upload-artifacts:
           name: upload-release-artifacts
@@ -537,7 +531,7 @@ workflows:
           context: common
           requires:
             - build-platforms
-            - build-arm-platforms
+            # - build-arm-platforms
             - build-macos-m1
       - release-qa-tests:
           <<: *on-version-tags
