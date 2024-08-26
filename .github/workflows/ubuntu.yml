@@ -1,9 +1,6 @@
 name: Build for Ubuntu
 
 on:
-  # TODO remove
-  pull_request:
-    branches: [ master ]
   push:
     branches:
       - master
