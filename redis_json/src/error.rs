@@ -50,7 +50,7 @@ impl From<&str> for Error {
         Self { msg: e.to_string() }
     }
 }
- 
+
 impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
         Self { msg: e.to_string() }

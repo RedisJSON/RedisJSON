@@ -10,7 +10,7 @@
 // User-provided JSON is converted to a tree. This tree is stored transparently in Redis.
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
-use redis_module::{raw, RedisResult, RedisError};
+use redis_module::{raw, RedisError, RedisResult};
 
 use std::os::raw::{c_int, c_void};
 
@@ -215,10 +215,7 @@ pub mod type_methods {
     }
 
     #[allow(non_snake_case, unused)]
-    pub fn value_rdb_load_json(
-        rdb: *mut raw::RedisModuleIO,
-        encver: c_int,
-    ) -> RedisResult<String> {
+    pub fn value_rdb_load_json(rdb: *mut raw::RedisModuleIO, encver: c_int) -> RedisResult<String> {
         Ok(match encver {
             0 => {
                 let v = backward::json_rdb_load(rdb)?;
