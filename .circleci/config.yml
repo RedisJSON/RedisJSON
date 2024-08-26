@@ -76,6 +76,7 @@ commands:
             echo "python3: $(command -v python3)"
             python3 --version
             python3 -m pip list
+            python3 -m pip install --upgrade setuptools six pip
 
   install-prerequisites:
     parameters:
@@ -321,7 +322,7 @@ jobs:
 
   build-macos-m1:
     macos:
-      xcode: 14.2.0
+      xcode: 15.4.0
     resource_class: macos.m1.large.gen1
     parameters:
       upload:
@@ -544,7 +545,7 @@ workflows:
           requires:
             - upload-release-artifacts
 
-  
+
   nightly:
     triggers:
       - schedule:
@@ -555,7 +556,7 @@ workflows:
           name: build-with-redis-<<matrix.redis_version>>
           matrix:
             parameters:
-              redis_version: ["7", "unstable"]  
+              redis_version: ["7", "unstable"]
 
   nightly-twice-a-week-by-param:
     when:
