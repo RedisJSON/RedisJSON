@@ -10,7 +10,7 @@ use crate::redisjson::normalize_arr_start_index;
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
 use bson::{from_document, Document};
-use ijson::{DestructuredMut, INumber, IObject, IString, IValue, ValueType};
+use ijson::{DestructuredMut, DestructuredRef, INumber, IObject, IString, IValue};
 use json_path::select_value::{SelectValue, SelectValueType};
 use redis_module::key::{verify_type, KeyFlags, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
@@ -33,7 +33,7 @@ pub struct IValueKeyHolderWrite<'a> {
 }
 
 fn follow_path(path: Vec<String>, root: &mut IValue) -> Option<&mut IValue> {
-    path.iter()
+    path.into_iter()
         .try_fold(root, |target, token| match target.destructure_mut() {
             DestructuredMut::Object(obj) => obj.get_mut(token.as_str()),
             DestructuredMut::Array(arr) => arr.get_mut(token.parse::<usize>().ok()?),
@@ -234,23 +234,18 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         })
     }
 
-    fn arr_insert(
-        &mut self,
-        paths: Vec<String>,
-        args: &[IValue],
-        index: i64,
-    ) -> RedisResult<usize> {
+    fn arr_insert(&mut self, paths: Vec<String>, args: &[IValue], idx: i64) -> RedisResult<usize> {
         self.do_op(paths, |v| {
             v.as_array_mut()
                 .map(|arr| {
                     // Verify legal index in bounds
                     let len = arr.len() as _;
-                    let index = if index < 0 { len + index } else { index };
-                    if !(0..=len).contains(&index) {
+                    let idx = if idx < 0 { len + idx } else { idx };
+                    if !(0..=len).contains(&idx) {
                         return Err(RedisError::Str("ERR index out of bounds"));
                     }
                     arr.extend(args.iter().cloned());
-                    arr[index as _..].rotate_right(args.len());
+                    arr[idx as _..].rotate_right(args.len());
                     Ok(arr.len())
                 })
                 .unwrap_or_else(|| Err(err_json(v, "array")))
@@ -438,49 +433,40 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     ///
     fn get_memory(&self, v: &Self::V) -> RedisResult<usize> {
         let res = size_of::<IValue>()
-            + match v.type_() {
-                ValueType::Null | ValueType::Bool => 0,
-                ValueType::Number => {
-                    let num = v.as_number().unwrap();
+            + match v.destructure_ref() {
+                DestructuredRef::Null | DestructuredRef::Bool(_) => 0,
+                DestructuredRef::Number(num) => {
                     if num.has_decimal_point() {
-                        // 64bit float
-                        16
+                        16 // 64bit float
                     } else if num >= &INumber::from(-128) && num <= &INumber::from(383) {
-                        // 8bit
-                        0
+                        0 // 8bit
                     } else if num > &INumber::from(-8_388_608) && num <= &INumber::from(8_388_607) {
-                        // 24bit
-                        4
+                        4 // 24bit
                     } else {
-                        // 64bit
-                        16
+                        16 // 64bit
                     }
                 }
-                ValueType::String => v.as_string().unwrap().len(),
-                ValueType::Array => {
-                    let arr = v.as_array().unwrap();
+                DestructuredRef::String(str) => str.len(),
+                DestructuredRef::Array(arr) => {
                     let capacity = arr.capacity();
                     if capacity == 0 {
                         0
                     } else {
-                        size_of::<usize>() * (capacity + 2)
-                            + arr
-                                .into_iter()
-                                .map(|v| self.get_memory(v).unwrap())
-                                .sum::<usize>()
+                        arr.into_iter()
+                            .fold(size_of::<usize>() * (capacity + 2), |acc, v| {
+                                acc + self.get_memory(v).unwrap()
+                            })
                     }
                 }
-                ValueType::Object => {
-                    let val = v.as_object().unwrap();
+                DestructuredRef::Object(val) => {
                     let capacity = val.capacity();
                     if capacity == 0 {
                         0
                     } else {
-                        size_of::<usize>() * (capacity * 3 + 2)
-                            + val
-                                .into_iter()
-                                .map(|(s, v)| s.len() + self.get_memory(v).unwrap())
-                                .sum::<usize>()
+                        val.into_iter()
+                            .fold(size_of::<usize>() * (capacity * 3 + 2), |acc, (s, v)| {
+                                acc + s.len() + self.get_memory(v).unwrap()
+                            })
                     }
                 }
             };

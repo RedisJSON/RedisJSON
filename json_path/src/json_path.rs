@@ -67,11 +67,10 @@ impl<'i> Query<'i> {
     /// Example: $.foo.bar has 2 elements
     #[allow(dead_code)]
     pub fn size(&mut self) -> usize {
-        if self.size.is_some() {
-            return self.size.unwrap();
-        }
-        self.is_static();
-        self.size()
+        self.size.unwrap_or_else(|| {
+            self.is_static();
+            self.size()
+        })
     }
 
     /// Results whether or not the compiled json path is static
@@ -81,28 +80,16 @@ impl<'i> Query<'i> {
     ///     none static path: $.*.bar
     #[allow(dead_code)]
     pub fn is_static(&mut self) -> bool {
-        if self.is_static.is_some() {
-            return self.is_static.unwrap();
-        }
-        let mut size = 0;
-        let mut is_static = true;
-        let root_copy = self.root.clone();
-        for n in root_copy {
-            size += 1;
-            match n.as_rule() {
-                Rule::literal | Rule::number => continue,
-                Rule::numbers_list | Rule::string_list => {
-                    let inner = n.into_inner();
-                    if inner.count() > 1 {
-                        is_static = false;
-                    }
-                }
-                _ => is_static = false,
-            }
-        }
-        self.size = Some(size);
-        self.is_static = Some(is_static);
-        self.is_static()
+        self.is_static.unwrap_or_else(|| {
+            self.size = Some(self.root.len());
+            let root_copy = self.root.clone();
+            self.is_static = Some(root_copy.fold(true, |is_static, n| match n.as_rule() {
+                Rule::literal | Rule::number => is_static,
+                Rule::numbers_list | Rule::string_list => is_static && n.into_inner().count() <= 1,
+                _ => false,
+            }));
+            self.is_static()
+        })
     }
 }
 
@@ -339,53 +326,33 @@ impl<'i, 'j, S: SelectValue> PartialEq for TermEvaluationResult<'i, 'j, S> {
 
 impl<'i, 'j, S: SelectValue> PartialOrd for TermEvaluationResult<'i, 'j, S> {
     fn partial_cmp(&self, s: &Self) -> Option<Ordering> {
+        use SelectValueType as SVT;
+        use TermEvaluationResult as TER;
         match (self, s) {
-            (TermEvaluationResult::Integer(n1), TermEvaluationResult::Integer(n2)) => {
-                Some(n1.cmp(n2))
-            }
-            (TermEvaluationResult::Float(_), TermEvaluationResult::Integer(n2)) => {
-                self.partial_cmp(&TermEvaluationResult::Float(*n2 as f64))
-            }
-            (TermEvaluationResult::Integer(n1), TermEvaluationResult::Float(_)) => {
-                TermEvaluationResult::Float(*n1 as f64).partial_cmp(s)
-            }
-            (TermEvaluationResult::Float(f1), TermEvaluationResult::Float(f2)) => {
-                f1.partial_cmp(f2)
-            }
-            (TermEvaluationResult::Str(s1), TermEvaluationResult::Str(s2)) => Some(s1.cmp(s2)),
-            (TermEvaluationResult::Str(s1), TermEvaluationResult::String(s2)) => {
-                Some((*s1).cmp(s2))
-            }
-            (TermEvaluationResult::String(s1), TermEvaluationResult::Str(s2)) => {
-                Some((s1[..]).cmp(s2))
-            }
-            (TermEvaluationResult::String(s1), TermEvaluationResult::String(s2)) => {
-                Some(s1.cmp(s2))
-            }
-            (TermEvaluationResult::Bool(b1), TermEvaluationResult::Bool(b2)) => Some(b1.cmp(b2)),
-            (TermEvaluationResult::Null, TermEvaluationResult::Null) => Some(Ordering::Equal),
-            (TermEvaluationResult::Value(v), _) => match v.get_type() {
-                SelectValueType::Long => TermEvaluationResult::Integer(v.get_long()).partial_cmp(s),
-                SelectValueType::Double => {
-                    TermEvaluationResult::Float(v.get_double()).partial_cmp(s)
-                }
-                SelectValueType::String => TermEvaluationResult::Str(v.as_str()).partial_cmp(s),
-                SelectValueType::Bool => TermEvaluationResult::Bool(v.get_bool()).partial_cmp(s),
-                SelectValueType::Null => TermEvaluationResult::Null.partial_cmp(s),
+            (TER::Integer(n1), TER::Integer(n2)) => n1.partial_cmp(n2),
+            (TER::Float(_), TER::Integer(n2)) => self.partial_cmp(&TER::Float(*n2 as _)),
+            (TER::Integer(n1), TER::Float(_)) => TER::Float(*n1 as _).partial_cmp(s),
+            (TER::Float(f1), TER::Float(f2)) => f1.partial_cmp(f2),
+            (TER::Str(s1), TER::Str(s2)) => s1.partial_cmp(s2),
+            (TER::Str(s1), TER::String(s2)) => (*s1).partial_cmp(s2),
+            (TER::String(s1), TER::Str(s2)) => s1[..].partial_cmp(s2),
+            (TER::String(s1), TER::String(s2)) => s1.partial_cmp(s2),
+            (TER::Bool(b1), TER::Bool(b2)) => b1.partial_cmp(b2),
+            (TER::Null, TER::Null) => Some(Ordering::Equal),
+            (TER::Value(v), _) => match v.get_type() {
+                SVT::Long => TER::Integer(v.get_long()).partial_cmp(s),
+                SVT::Double => TER::Float(v.get_double()).partial_cmp(s),
+                SVT::String => TER::Str(v.as_str()).partial_cmp(s),
+                SVT::Bool => TER::Bool(v.get_bool()).partial_cmp(s),
+                SVT::Null => TER::Null.partial_cmp(s),
                 _ => None,
             },
-            (_, TermEvaluationResult::Value(v)) => match v.get_type() {
-                SelectValueType::Long => {
-                    self.partial_cmp(&TermEvaluationResult::Integer(v.get_long()))
-                }
-                SelectValueType::Double => {
-                    self.partial_cmp(&TermEvaluationResult::Float(v.get_double()))
-                }
-                SelectValueType::String => self.partial_cmp(&TermEvaluationResult::Str(v.as_str())),
-                SelectValueType::Bool => {
-                    self.partial_cmp(&TermEvaluationResult::Bool(v.get_bool()))
-                }
-                SelectValueType::Null => self.partial_cmp(&TermEvaluationResult::Null),
+            (_, TER::Value(v)) => match v.get_type() {
+                SVT::Long => self.partial_cmp(&TER::Integer(v.get_long())),
+                SVT::Double => self.partial_cmp(&TER::Float(v.get_double())),
+                SVT::String => self.partial_cmp(&TER::Str(v.as_str())),
+                SVT::Bool => self.partial_cmp(&TER::Bool(v.get_bool())),
+                SVT::Null => self.partial_cmp(&TER::Null),
                 _ => None,
             },
             _ => None,
@@ -399,21 +366,17 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
     }
 
     fn re(&self, s: &Self) -> bool {
+        use SelectValueType as SVT;
+        use TermEvaluationResult as TER;
         match (self, s) {
-            (TermEvaluationResult::Value(v), TermEvaluationResult::Str(regex)) => {
-                match v.get_type() {
-                    SelectValueType::String => Self::re_is_match(regex, v.as_str()),
-                    _ => false,
-                }
-            }
-            (TermEvaluationResult::Value(v1), TermEvaluationResult::Value(v2)) => {
-                match (v1.get_type(), v2.get_type()) {
-                    (SelectValueType::String, SelectValueType::String) => {
-                        Self::re_is_match(v2.as_str(), v1.as_str())
-                    }
-                    _ => false,
-                }
-            }
+            (TER::Value(v), TER::Str(regex)) => match v.get_type() {
+                SVT::String => Self::re_is_match(regex, v.as_str()),
+                _ => false,
+            },
+            (TER::Value(v1), TER::Value(v2)) => match (v1.get_type(), v2.get_type()) {
+                (SVT::String, SVT::String) => Self::re_is_match(v2.as_str(), v1.as_str()),
+                _ => false,
+            },
             _ => false,
         }
     }

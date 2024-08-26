@@ -178,21 +178,20 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     pub fn value_to_resp3(value: &V, format: ReplyFormatOptions) -> RedisValue {
+        use SelectValueType as SVT;
         match value.get_type() {
-            SelectValueType::Null => RedisValue::Null,
-            SelectValueType::Bool => value.get_bool().into(),
-            SelectValueType::Long => value.get_long().into(),
-            SelectValueType::Double => value.get_double().into(),
-            SelectValueType::String if format.format == ReplyFormat::EXPAND => {
-                value.get_str().into()
-            }
-            SelectValueType::Array if format.format == ReplyFormat::EXPAND => value
+            SVT::Null => RedisValue::Null,
+            SVT::Bool => value.get_bool().into(),
+            SVT::Long => value.get_long().into(),
+            SVT::Double => value.get_double().into(),
+            SVT::String if format.format == ReplyFormat::EXPAND => value.get_str().into(),
+            SVT::Array if format.format == ReplyFormat::EXPAND => value
                 .values()
                 .unwrap()
                 .map(|value| Self::value_to_resp3(value, format))
                 .collect_vec()
                 .into(),
-            SelectValueType::Object if format.format == ReplyFormat::EXPAND => value
+            SVT::Object if format.format == ReplyFormat::EXPAND => value
                 .items()
                 .unwrap()
                 .map(|(key, value)| (key.into(), Self::value_to_resp3(value, format)))
@@ -309,9 +308,8 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             // incorrect casts. However when querying the type of such a value,
             // any response other than 'integer' is a breaking change
             SelectValueType::Double => match value.is_double() {
-                Some(true) => "number",
-                Some(false) => "integer",
-                _ => unreachable!(),
+                true => "number",
+                false => "integer",
             },
             SelectValueType::String => "string",
             SelectValueType::Array => "array",

@@ -6,7 +6,7 @@
 
 /// Use `SelectValue`
 use crate::select_value::{SelectValue, SelectValueType};
-use ijson::{IValue, ValueType};
+use ijson::{INumber, IValue, ValueType};
 use serde_json::Value;
 
 impl SelectValue for Value {
@@ -86,10 +86,10 @@ impl SelectValue for Value {
         matches!(self, Self::Array(_))
     }
 
-    fn is_double(&self) -> Option<bool> {
+    fn is_double(&self) -> bool {
         match self {
-            Self::Number(num) => Some(num.is_f64()),
-            _ => None,
+            Self::Number(num) => num.is_f64(),
+            _ => false,
         }
     }
 
@@ -194,8 +194,8 @@ impl SelectValue for IValue {
         self.is_array()
     }
 
-    fn is_double(&self) -> Option<bool> {
-        Some(self.as_number()?.has_decimal_point())
+    fn is_double(&self) -> bool {
+        self.as_number().map_or(false, INumber::has_decimal_point)
     }
 
     fn get_str(&self) -> String {
