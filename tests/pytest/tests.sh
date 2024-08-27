@@ -16,9 +16,9 @@ cd $HERE
 help() {
 	cat <<-END
 		Run Python tests using RLTest
-	
+
 		[ARGVARS...] tests.sh [--help|help] [<module-so-path>]
-		
+
 		Argument variables:
 		MODULE=path      Path to redisjson.so
 		TEST=test        Run specific test (e.g. test.py:test_name)
@@ -47,7 +47,7 @@ help() {
 	END
 }
 
-#---------------------------------------------------------------------------------------------- 
+#----------------------------------------------------------------------------------------------
 
 setup_rltest() {
 	if [[ $RLTEST == view ]]; then
@@ -70,7 +70,7 @@ setup_rltest() {
 			echo "PYTHONPATH=$PYTHONPATH"
 		fi
 	fi
-	
+
 	if [[ $RLTEST_VERBOSE == 1 ]]; then
 		RLTEST_ARGS+=" -v"
 	fi
@@ -102,6 +102,7 @@ setup_redis_server() {
 			REDIS_SERVER=${REDIS_SERVER:-redis-server-asan-6.2}
 			if ! command -v $REDIS_SERVER > /dev/null; then
 				echo Building Redis for clang-asan ...
+				sudo apt -qq update -y
 				$READIES/bin/getredis --force -v 6.2 --own-openssl --no-run --suffix asan --clang-asan --clang-san-blacklist /build/redis.blacklist
 			fi
 
