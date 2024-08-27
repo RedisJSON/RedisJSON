@@ -59,7 +59,7 @@ fn replace<F: FnMut(&mut IValue) -> Result<Option<IValue>, Error>>(
                 if is_last {
                     if let Entry::Occupied(mut e) = obj.entry(token) {
                         let v = e.get_mut();
-                        if let Some(res) = (func)(v)? {
+                        if let Some(res) = func(v)? {
                             *v = res;
                         } else {
                             e.remove();
@@ -71,22 +71,22 @@ fn replace<F: FnMut(&mut IValue) -> Result<Option<IValue>, Error>>(
             }
             ValueType::Array => {
                 let arr = target_once.as_array_mut().unwrap();
-                if let Ok(x) = token.parse::<usize>() {
-                    if is_last {
-                        if x < arr.len() {
-                            let v = &mut arr.as_mut_slice()[x];
-                            if let Some(res) = (func)(v)? {
-                                *v = res;
-                            } else {
-                                arr.remove(x);
-                            }
+                let idx = token.parse::<usize>().expect(&format!(
+                    "An array index is parsed successfully. Array = {:?}, index = {:?}",
+                    arr, token
+                ));
+                if is_last {
+                    if idx < arr.len() {
+                        let v = &mut arr.as_mut_slice()[idx];
+                        if let Some(res) = func(v)? {
+                            *v = res;
+                        } else {
+                            arr.remove(idx);
                         }
-                        return Ok(());
                     }
-                    arr.get_mut(x)
-                } else {
-                    panic!("Array index should have been parsed successfully before reaching here")
+                    return Ok(());
                 }
+                arr.get_mut(idx)
             }
             _ => None,
         };
@@ -125,13 +125,8 @@ fn update<F: FnMut(&mut IValue) -> Result<Option<()>, Error>>(
                 if is_last {
                     if let Entry::Occupied(mut e) = obj.entry(token) {
                         let v = e.get_mut();
-                        match (func)(v) {
-                            Ok(res) => {
-                                if res.is_none() {
-                                    e.remove();
-                                }
-                            }
-                            Err(err) => return Err(err),
+                        if func(v)?.is_none() {
+                            e.remove();
                         }
                     }
                     return Ok(());
@@ -140,25 +135,20 @@ fn update<F: FnMut(&mut IValue) -> Result<Option<()>, Error>>(
             }
             ValueType::Array => {
                 let arr = target_once.as_array_mut().unwrap();
-                if let Ok(x) = token.parse::<usize>() {
-                    if is_last {
-                        if x < arr.len() {
-                            let v = &mut arr.as_mut_slice()[x];
-                            match (func)(v) {
-                                Ok(res) => {
-                                    if res.is_none() {
-                                        arr.remove(x);
-                                    }
-                                }
-                                Err(err) => return Err(err),
-                            }
+                let idx = token.parse::<usize>().expect(&format!(
+                    "An array index is parsed successfully. Array = {:?}, index = {:?}",
+                    arr, token
+                ));
+                if is_last {
+                    if idx < arr.len() {
+                        let v = &mut arr.as_mut_slice()[idx];
+                        if func(v)?.is_none() {
+                            arr.remove(idx);
                         }
-                        return Ok(());
                     }
-                    arr.get_mut(x)
-                } else {
-                    panic!("Array index should have been parsed successfully before reaching here")
+                    return Ok(());
                 }
+                arr.get_mut(idx)
             }
             _ => None,
         };
@@ -181,16 +171,11 @@ impl<'a> IValueKeyHolderWrite<'a> {
         if paths.is_empty() {
             // updating the root require special treatment
             let root = self.get_value().unwrap().unwrap();
-            let res = (op_fun)(root);
-            match res {
-                Ok(res) => {
-                    if res.is_none() {
-                        root.take();
-                    }
-                }
-                Err(err) => {
-                    return Err(RedisError::String(err.msg));
-                }
+            if op_fun(root)
+                .map_err(|err| RedisError::String(err.msg))?
+                .is_none()
+            {
+                root.take();
             }
         } else {
             update(paths, self.get_value().unwrap().unwrap(), op_fun)?;
@@ -633,24 +618,17 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
             .map_or_else(
                 |e| Err(e.to_string().into()),
                 |docs: Document| {
-                    let v = if docs.is_empty() {
-                        IValue::NULL
-                    } else {
-                        docs.iter().next().map_or_else(
-                            || IValue::NULL,
-                            |(_, b)| {
-                                let v: serde_json::Value = b.clone().into();
-                                let mut out = serde_json::Serializer::new(Vec::new());
-                                v.serialize(&mut out).unwrap();
-                                self.from_str(
-                                    &String::from_utf8(out.into_inner()).unwrap(),
-                                    Format::JSON,
-                                    limit_depth,
-                                )
-                                .unwrap()
-                            },
+                    let v = docs.iter().next().map_or(IValue::NULL, |(_, b)| {
+                        let v: serde_json::Value = b.clone().into();
+                        let mut out = serde_json::Serializer::new(Vec::new());
+                        v.serialize(&mut out).unwrap();
+                        self.from_str(
+                            &String::from_utf8(out.into_inner()).unwrap(),
+                            Format::JSON,
+                            limit_depth,
                         )
-                    };
+                        .unwrap()
+                    });
                     Ok(v)
                 },
             ),
