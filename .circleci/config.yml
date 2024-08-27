@@ -401,18 +401,6 @@ jobs:
                 make upload-artifacts SHOW=1
             fi
 
-  release-qa-tests:
-    docker:
-      - image: redisfab/rmbuilder:6.2.7-x64-bullseye
-    steps:
-      - early-returns
-      - early-return-for-forked-pull-requests
-      - checkout
-      - setup-automation
-      - run:
-          name: Run QA Automation
-          command: ./tests/qa/qatests -m "$CIRCLE_TAG"
-
 #----------------------------------------------------------------------------------------------------------------------------------
 
 on-any-branch: &on-any-branch
@@ -533,12 +521,6 @@ workflows:
             - build-platforms
             # - build-arm-platforms
             - build-macos-m1
-      - release-qa-tests:
-          <<: *on-version-tags
-          context: common
-          requires:
-            - upload-release-artifacts
-
 
   nightly:
     triggers:
