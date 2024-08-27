@@ -7,10 +7,11 @@
 use crate::error::Error;
 use crate::formatter::ReplyFormatOptions;
 use crate::key_value::KeyValue;
-use crate::manager::err_msg_json_path_doesnt_exist_with_param;
-use crate::manager::err_msg_json_path_doesnt_exist_with_param_or;
-use crate::manager::{Manager, ReadHolder, UpdateInfo, WriteHolder};
-use crate::redisjson::{Format, Path, ReplyFormat};
+use crate::manager::{
+    err_msg_json_path_doesnt_exist_with_param, err_msg_json_path_doesnt_exist_with_param_or,
+    Manager, ReadHolder, UpdateInfo, WriteHolder,
+};
+use crate::redisjson::{Format, Path, ReplyFormat, SetOptions};
 use json_path::select_value::{SelectValue, SelectValueType};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
@@ -18,8 +19,6 @@ use std::cmp::Ordering;
 use std::str::FromStr;
 
 use json_path::{calc_once_with_paths, compile, json_path::UserPathTracker};
-
-use crate::redisjson::SetOptions;
 
 use serde_json::{Number, Value};
 
@@ -147,7 +146,7 @@ pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
 
     let key = manager.open_key_read(ctx, &key)?;
     let value = match key.get_value()? {
-        Some(doc) => KeyValue::new(doc).to_json(&mut paths, &format_options)?,
+        Some(doc) => KeyValue::new(doc).to_json(paths, &format_options)?,
         None => RedisValue::Null,
     };
 
@@ -199,23 +198,18 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
                     Ok(RedisValue::Null)
                 }
             } else {
-                let update_info = KeyValue::new(doc).find_paths(path.get_path(), &op)?;
-                if !update_info.is_empty() {
-                    let updated = apply_updates::<M>(&mut redis_key, val, update_info);
-                    if updated {
-                        redis_key.notify_keyspace_event(ctx, "json.set")?;
-                        manager.apply_changes(ctx);
-                        REDIS_OK
-                    } else {
-                        Ok(RedisValue::Null)
-                    }
+                let update_info = KeyValue::new(doc).find_paths(path.get_path(), op)?;
+                if !update_info.is_empty() && apply_updates::<M>(&mut redis_key, val, update_info) {
+                    redis_key.notify_keyspace_event(ctx, "json.set")?;
+                    manager.apply_changes(ctx);
+                    REDIS_OK
                 } else {
                     Ok(RedisValue::Null)
                 }
             }
         }
         (None, SetOptions::AlreadyExists) => Ok(RedisValue::Null),
-        (None, _) => {
+        _ => {
             if path.get_path() == JSON_ROOT_PATH {
                 redis_key.set_value(Vec::new(), val)?;
                 redis_key.notify_keyspace_event(ctx, "json.set")?;
@@ -265,7 +259,7 @@ pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
                 REDIS_OK
             } else {
                 let mut update_info =
-                    KeyValue::new(doc).find_paths(path.get_path(), &SetOptions::None)?;
+                    KeyValue::new(doc).find_paths(path.get_path(), SetOptions::MergeExisting)?;
                 if !update_info.is_empty() {
                     let mut res = false;
                     if update_info.len() == 1 {
@@ -336,7 +330,7 @@ pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
         let update_info = if path.get_path() == JSON_ROOT_PATH {
             None
         } else if let Some(value) = key_value {
-            Some(KeyValue::new(value).find_paths(path.get_path(), &SetOptions::None)?)
+            Some(KeyValue::new(value).find_paths(path.get_path(), SetOptions::None)?)
         } else {
             return Err(RedisError::Str(
                 "ERR new objects must be created at the root",
@@ -377,24 +371,18 @@ fn apply_updates<M: Manager>(
     // If there is only one update info, we can avoid cloning the value
     if update_info.len() == 1 {
         match update_info.pop().unwrap() {
-            UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value).unwrap_or(false),
-            UpdateInfo::AUI(aui) => redis_key
-                .dict_add(aui.path, &aui.key, value)
-                .unwrap_or(false),
+            UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value),
+            UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, value),
         }
+        .unwrap_or(false)
     } else {
-        let mut updated = false;
-        for ui in update_info {
-            updated = match ui {
-                UpdateInfo::SUI(sui) => redis_key
-                    .set_value(sui.path, value.clone())
-                    .unwrap_or(false),
-                UpdateInfo::AUI(aui) => redis_key
-                    .dict_add(aui.path, &aui.key, value.clone())
-                    .unwrap_or(false),
-            } || updated
-        }
-        updated
+        update_info.into_iter().fold(false, |updated, ui| {
+            match ui {
+                UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value.clone()),
+                UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, value.clone()),
+            }
+            .unwrap_or(updated)
+        })
     }
 }
 
@@ -438,11 +426,8 @@ where
 {
     values_and_paths
         .into_iter()
-        .map(|(v, p)| match f(v) {
-            true => Some(p),
-            _ => None,
-        })
-        .collect::<Vec<Option<Vec<String>>>>()
+        .map(|(v, p)| f(v).then_some(p))
+        .collect()
 }
 
 /// Returns a Vec of Values with `None` for Values that do not match the filter
@@ -452,11 +437,8 @@ where
 {
     values_and_paths
         .into_iter()
-        .map(|(v, _)| match f(v) {
-            true => Some(v),
-            _ => None,
-        })
-        .collect::<Vec<Option<&T>>>()
+        .map(|(v, _)| f(v).then_some(v))
+        .collect()
 }
 
 fn find_all_paths<T: SelectValue, F>(
@@ -496,13 +478,13 @@ where
     values
         .into_iter()
         .map(|n| n.map_or_else(|| none_value.clone(), |t| t.into()))
-        .collect::<Vec<Value>>()
+        .collect()
 }
 
 /// Sort the paths so higher indices precede lower indices on the same array,
 /// And longer paths precede shorter paths
 /// And if a path is a sub-path of the other, then only paths with shallower hierarchy (closer to the top-level) remain
-fn prepare_paths_for_deletion(paths: &mut Vec<Vec<String>>) {
+pub fn prepare_paths_for_updating(paths: &mut Vec<Vec<String>>) {
     if paths.len() < 2 {
         // No need to reorder when there are less than 2 paths
         return;
@@ -542,21 +524,17 @@ fn prepare_paths_for_deletion(paths: &mut Vec<Vec<String>>) {
     });
     // Remove paths which are nested by others (on each sub-tree only top most ancestor should be deleted)
     // (TODO: Add a mode in which the jsonpath selector will already skip nested paths)
-    let mut string_paths = Vec::new();
-    paths.iter().for_each(|v| {
-        string_paths.push(v.join(","));
-    });
+    let mut string_paths = paths.iter().map(|v| v.join(",")).collect_vec();
     string_paths.sort();
 
     paths.retain(|v| {
         let path = v.join(",");
-        let found = string_paths.binary_search(&path).unwrap();
-        for p in string_paths.iter().take(found) {
-            if path.starts_with(p.as_str()) {
-                return false;
-            }
-        }
-        true
+        string_paths
+            .iter()
+            .skip_while(|p| !path.starts_with(*p))
+            .next()
+            .map(|found| path == *found)
+            .unwrap_or(false)
     });
 }
 
@@ -580,7 +558,7 @@ pub fn json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
                 1
             } else {
                 let mut paths = find_paths(path.get_path(), doc, |_| true)?;
-                prepare_paths_for_deletion(&mut paths);
+                prepare_paths_for_updating(&mut paths);
                 let mut changed = 0;
                 for p in paths {
                     if redis_key.delete_path(p)? {
@@ -676,8 +654,8 @@ where
         Some(root) => KeyValue::new(root)
             .get_values(path)?
             .iter()
-            .map(|v| (KeyValue::value_name(*v)).into())
-            .collect::<Vec<RedisValue>>()
+            .map(|v| RedisValue::from(KeyValue::value_name(*v)))
+            .collect_vec()
             .into(),
         None => RedisValue::Null,
     };
@@ -688,14 +666,11 @@ fn json_type_legacy<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
 where
     M: Manager,
 {
-    let value = redis_key.get_value()?.map_or_else(
-        || RedisValue::Null,
-        |doc| {
-            KeyValue::new(doc)
-                .get_type(path)
-                .map_or(RedisValue::Null, |s| s.into())
-        },
-    );
+    let value = redis_key.get_value()?.map_or(RedisValue::Null, |doc| {
+        KeyValue::new(doc)
+            .get_type(path)
+            .map_or(RedisValue::Null, |s| s.into())
+    });
     Ok(value)
 }
 
@@ -734,7 +709,7 @@ where
             op,
             cmd,
         )?
-        .drain(..)
+        .into_iter()
         .map(|v| {
             v.map_or(RedisValue::Null, |v| {
                 if let Some(i) = v.as_i64() {
@@ -744,7 +719,7 @@ where
                 }
             })
         })
-        .collect::<Vec<RedisValue>>()
+        .collect_vec()
         .into();
         Ok(res)
     } else if path.is_legacy() {
@@ -796,21 +771,21 @@ where
         )
     })?;
 
-    let mut res = vec![];
     let mut need_notify = false;
-    for p in paths {
-        res.push(match p {
-            Some(p) => {
+    let res = paths
+        .into_iter()
+        .map(|p| {
+            p.map(|p| {
                 need_notify = true;
-                Some(match op {
-                    NumOp::Incr => redis_key.incr_by(p, number)?,
-                    NumOp::Mult => redis_key.mult_by(p, number)?,
-                    NumOp::Pow => redis_key.pow_by(p, number)?,
-                })
-            }
-            _ => None,
-        });
-    }
+                match op {
+                    NumOp::Incr => redis_key.incr_by(p, number),
+                    NumOp::Mult => redis_key.mult_by(p, number),
+                    NumOp::Pow => redis_key.pow_by(p, number),
+                }
+            })
+            .transpose()
+        })
+        .try_collect()?;
     if need_notify {
         redis_key.notify_keyspace_event(ctx, cmd)?;
         manager.apply_changes(ctx);
@@ -1676,9 +1651,7 @@ where
         let values = find_all_values(path, root, |v| v.get_type() == SelectValueType::Object)?;
         let mut res: Vec<RedisValue> = vec![];
         for v in values {
-            res.push(v.map_or(RedisValue::Null, |v| {
-                v.keys().unwrap().collect::<Vec<&str>>().into()
-            }));
+            res.push(v.map_or(RedisValue::Null, |v| v.keys().unwrap().collect_vec().into()));
         }
         res.into()
     };
@@ -1695,7 +1668,7 @@ where
     };
     let value = match KeyValue::new(root).get_first(path) {
         Ok(v) => match v.get_type() {
-            SelectValueType::Object => v.keys().unwrap().collect::<Vec<&str>>().into(),
+            SelectValueType::Object => v.keys().unwrap().collect_vec().into(),
             _ => {
                 return Err(RedisError::String(
                     err_msg_json_path_doesnt_exist_with_param_or(path, "not an object"),
@@ -1737,7 +1710,7 @@ where
                     RedisValue::Integer(v.len().unwrap() as i64)
                 })
             })
-            .collect::<Vec<RedisValue>>()
+            .collect_vec()
             .into(),
         None => {
             return Err(RedisError::String(
@@ -1838,7 +1811,7 @@ pub fn json_debug<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
                         .get_values(path.get_path())?
                         .iter()
                         .map(|v| manager.get_memory(v).unwrap())
-                        .collect::<Vec<usize>>(),
+                        .collect(),
                     None => vec![],
                 }
                 .into())
@@ -1870,8 +1843,7 @@ pub fn json_resp<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
     };
 
     let key = manager.open_key_read(ctx, &key)?;
-    key.get_value()?.map_or_else(
-        || Ok(RedisValue::Null),
-        |doc| KeyValue::new(doc).resp_serialize(path),
-    )
+    key.get_value()?.map_or(Ok(RedisValue::Null), |doc| {
+        KeyValue::new(doc).resp_serialize(path)
+    })
 }
