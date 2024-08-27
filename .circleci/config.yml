@@ -600,7 +600,7 @@ workflows:
           context: common
           matrix:
             parameters:
-              platform: [centos7, rocky8, rocky9, bullseye, amzn2]
+              platform: [xenial, centos7, rocky8, bullseye, amzn2]
       - build-macos-m1:
           context: common
           <<: *on-integ-and-version-tags
@@ -657,7 +657,7 @@ workflows:
           matrix:
             parameters:
               redis_version: ["6.0", "6.2", "7", "7.2", "unstable"]
-  
+
   nightly-perf-once-a-week:
     triggers:
       - schedule:
