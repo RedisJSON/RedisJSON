@@ -86,7 +86,7 @@ ifeq ($(DEBUG),1)
 	else
 		NIGHTLY=1
 		CARGO_FLAGS += -Zbuild-std
-		RUST_FLAGS += -Zsanitizer=$(SAN)
+		RUST_FLAGS += -Zsanitizer=$(SAN) -C link-args=-znostart-stop-gc
 		ifeq ($(SAN),memory)
 			RUST_FLAGS += -Zsanitizer-memory-track-origins
 		endif
@@ -230,6 +230,13 @@ upload-artifacts:
 	$(SHOW)SNAPSHOT=1 ./sbin/upload-artifacts
 
 .PHONY: pack upload-artifacts upload-release
+
+#----------------------------------------------------------------------------------------------
+
+clang-install:
+	./sbin/install_clang.sh
+
+.PHONY: clang-install
 
 #----------------------------------------------------------------------------------------------
 
