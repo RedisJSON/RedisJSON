@@ -236,12 +236,40 @@ const fn dummy_init(_ctx: &Context, _args: &[RedisString]) -> Status {
 #[cfg(not(feature = "as-library"))]
 const fn dummy_info(_ctx: &InfoContext, _for_crash_report: bool) {}
 
+const fn version() -> i32 {
+    let string = env!("CARGO_PKG_VERSION");
+    let mut bytes = string.as_bytes();
+    let mut value: i32 = 0;
+    let mut result = 0;
+    let mut multiplier = 10000;
+
+    while let [byte, rest @ ..] = bytes {
+        bytes = rest;
+        match byte {
+            b'0'..=b'9' => {
+                value = value * 10 + (*byte - b'0') as i32;
+            }
+            b'.' => {
+                result += value * multiplier;
+                multiplier /= 100;
+                value = 0;
+            }
+            _ => {
+                // The provided string is not a valid version specification.
+                unreachable!()
+            }
+        }
+    }
+
+    result + value
+}
+
 #[cfg(not(feature = "as-library"))]
 redis_json_module_create! {
     data_types: [REDIS_JSON_TYPE],
     pre_command_function: pre_command,
     get_manage: Some(ivalue_manager::RedisIValueJsonKeyManager{phantom:PhantomData}),
-    version: 02_06_12,
+    version: version(),
     init: dummy_init,
     info: dummy_info,
 }
