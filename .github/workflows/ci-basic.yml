@@ -1,0 +1,63 @@
+name: CI Basic
+
+on:
+  push:
+    paths-ignore:
+      - '.circleci/**'
+      - 'docs/**'
+      - '*.md'
+    branches-ignore:
+      - main
+      - master
+      - '[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+'
+      - 'feature-*'
+    tags-ignore:
+      - 'v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-m[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  build-linux-jammy:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        shell: bash -l -eo pipefail {0}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+      - name: Deps checkout
+        uses: actions/checkout@v3
+        with:
+          path: setup
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            .install
+            tests/pytest/requirements.*
+      - name: Setup specific
+        working-directory: setup/.install
+        run: ./install_script.sh ${{ steps.mode.outputs.mode }}
+      - name: Full checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - name: Setup common
+        run: .install/common_installations.sh ${{ steps.mode.outputs.mode }}
+
+      - name: Get Redis
+        uses: actions/checkout@v4
+        with:
+          repository: redis/redis
+          ref: 'unstable' # todo change per version/tag
+          path: redis
+      - name: Build Redis
+        working-directory: redis
+        run: make install
+      - name: Build module
+        run: make build
+      - name: Unit tests
+        run: make cargo_test
+      - name: Flow tests
+        run: make pytest
