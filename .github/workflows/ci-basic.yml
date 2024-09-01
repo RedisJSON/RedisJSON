@@ -2,20 +2,20 @@ name: CI Basic
 
 on:
   push:
-    paths-ignore:
-      - '.circleci/**'
-      - 'docs/**'
-      - '*.md'
-    branches-ignore:
-      - main
-      - master
-      - '[0-9]+.[0-9]+.[0-9]+'
-      - '[0-9]+.[0-9]+'
-      - 'feature-*'
-    tags-ignore:
-      - 'v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+'
-      - 'v[0-9]+.[0-9]+.[0-9]+-m[0-9]+'
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+#    paths-ignore:
+#      - '.circleci/**'
+#      - 'docs/**'
+#      - '*.md'
+#    branches-ignore:
+#      - main
+#      - master
+#      - '[0-9]+.[0-9]+.[0-9]+'
+#      - '[0-9]+.[0-9]+'
+#      - 'feature-*'
+#    tags-ignore:
+#      - 'v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+'
+#      - 'v[0-9]+.[0-9]+.[0-9]+-m[0-9]+'
+#      - 'v[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
   build-linux-jammy:
