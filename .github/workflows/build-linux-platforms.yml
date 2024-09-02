@@ -127,7 +127,7 @@ jobs:
       - name: Flow tests
         shell: bash
         run: |
-          . "$HOME/.cargo/env" # to use cargo with the same version for all
+#          . "$HOME/.cargo/env" # to use cargo with the same version for all
           cmake --version
           make pytest
       - name: Unit tests
