@@ -99,12 +99,12 @@ jobs:
           echo ::group::Install rust
           ./getrust.sh
           echo ::endgroup::
-      - name: Install python dependencies
+      - name: common instalaations
+        shell: bash
         run: |
-          pip install -q --upgrade setuptools
-          pip install -q --upgrade pip
-          pip install -q -r tests/pytest/requirements.txt
-          pip install -q addict toml jinja2 ramp-packer
+          ./.install/common_installations.sh
+        env:
+          PIP_BREAK_SYSTEM_PACKAGES: 1
       - name: Get Redis
         uses: actions/checkout@v3
         with:
@@ -127,7 +127,6 @@ jobs:
       - name: Flow tests
         shell: bash
         run: |
-          # . "$HOME/.cargo/env" # to use cargo with the same version for all
           cmake --version
           make pytest
       - name: Unit tests
