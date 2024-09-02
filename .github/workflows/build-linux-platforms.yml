@@ -124,12 +124,13 @@ jobs:
           . "$HOME/.cargo/env" # to use cargo with the same version for all
           cargo --version
           cargo build
-#      - name: Unit tests
-#        run: |
-#          . "$HOME/.cargo/env" # to use cargo with the same version for all
-#          cargo test
       - name: Flow tests
+        shell: bash
         run: |
           . "$HOME/.cargo/env" # to use cargo with the same version for all
-#          make pytest
-          make test
+          make pytest
+      - name: Unit tests
+        shell: bash
+        run: |
+          . "$HOME/.cargo/env" # to use cargo with the same version for all
+          cargo test
