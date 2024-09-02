@@ -109,8 +109,8 @@ jobs:
 #        shell: bash
 #        run: |
 #          ./.install/common_installations.sh
-        env:
-          PIP_BREAK_SYSTEM_PACKAGES: 1
+#        env:
+#          PIP_BREAK_SYSTEM_PACKAGES: 1
       - name: Get Redis
         uses: actions/checkout@v3
         with:
