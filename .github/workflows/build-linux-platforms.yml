@@ -1,0 +1,134 @@
+name: Build all supported linux platforms
+
+on:
+  push:
+#    paths-ignore:
+#      - '.circleci/**'
+#      - 'docs/**'
+#      - '*.md'
+#    branches:
+#      - main
+#      - master
+#      - '[0-9]+.[0-9]+.[0-9]+'
+#      - '[0-9]+.[0-9]+'
+#      - 'feature-*'
+#    tags:
+#      - 'v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+'
+#      - 'v[0-9]+.[0-9]+.[0-9]+-m[0-9]+'
+#      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  build-linux-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        docker_image:
+          # https://github.com/actions/checkout/issues/1386 - sparse checkout does not work on got 2.25 which is the default in focal
+          - image: "ubuntu:focal"
+            pre_req_install_cmd: | 
+              apt-get update && apt-get install -y software-properties-common
+              add-apt-repository ppa:git-core/ppa && apt-get update && apt-get install -y git
+            install_deps_script: ./ubuntu_20.04.sh
+          - image: "ubuntu:bionic"
+            pre_req_install_cmd: |
+              # https://github.com/actions/checkout/issues/1809
+              echo "ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION=node16" >> $GITHUB_ENV
+              echo "ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION=node16" >> $GITHUB_ENV
+              # https://github.blog/changelog/2024-03-07-github-actions-all-actions-will-run-on-node20-instead-of-node16-by-default/
+              echo "ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true" >> $GITHUB_ENV
+              apt-get update && apt-get install -y software-properties-common
+              add-apt-repository ppa:git-core/ppa && apt-get update && apt-get install -y git
+            install_deps_script: ./ubuntu_18.04.sh
+          - image: "rockylinux:8"
+            pre_req_install_cmd: |
+              dnf install -y git
+            install_deps_script: ./rocky_linux_8.sh
+          - image: "rockylinux:9"
+            pre_req_install_cmd: |
+              dnf install -y git
+            install_deps_script: ./rocky_linux_9.sh
+          - image: "debian:bullseye"
+            pre_req_install_cmd: |
+              apt-get update && apt-get install -y git
+            install_deps_script: ./debian_gnu_linux_11.sh
+          - image: "amazonlinux:2"
+            pre_req_install_cmd: |
+              # https://github.com/actions/checkout/issues/1809
+              echo "ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION=node16" >> $GITHUB_ENV
+              echo "ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION=node16" >> $GITHUB_ENV
+              # https://github.blog/changelog/2024-03-07-github-actions-all-actions-will-run-on-node20-instead-of-node16-by-default/
+              echo "ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true" >> $GITHUB_ENV
+              yum install -y git
+            install_deps_script: ./amazon_linux_2.sh
+          - image: "mcr.microsoft.com/cbl-mariner/base/core:2.0"
+            pre_req_install_cmd: tdnf install --noplugins --skipsignature -y ca-certificates git
+            install_deps_script: ./mariner2.sh
+    container:
+      image: ${{ matrix.docker_image.image }}
+    defaults:
+      run:
+        shell: bash -l -eo pipefail {0}
+    steps:
+      - name: Install git
+        run: ${{ matrix.docker_image.pre_req_install_cmd }}
+        shell: bash
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - name: Deps checkout
+        uses: actions/checkout@v3
+        with:
+          path: setup
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            .install
+            tests/pytest/requirements.*
+      - name: Full checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - name: Setup
+        shell: bash
+        working-directory: .install
+        run: |
+          echo ::group::Install dependencies
+          ${{ matrix.docker_image.install_deps_script }}
+          echo ::endgroup::
+          echo ::group::Install rust
+          ./getrust.sh
+          echo ::endgroup::
+      - name: common instalaations
+        shell: bash
+        run: |
+          ./.install/common_installations.sh
+        env:
+          PIP_BREAK_SYSTEM_PACKAGES: 1
+      - name: Get Redis
+        uses: actions/checkout@v3
+        with:
+          repository: redis/redis
+          ref: 'unstable' # todo change per version/tag
+          path: redis
+          submodules: 'recursive'
+      - name: Build Redis
+        working-directory: redis
+        shell: bash
+        run: |
+          find .
+          make install
+      - name: Build module
+        shell: bash
+        run: |
+          . "$HOME/.cargo/env" # to use cargo with the same version for all
+          cargo --version
+          cargo build
+      - name: Unit tests
+        run: |
+          . "$HOME/.cargo/env" # to use cargo with the same version for all
+          cargo test
+      - name: Flow tests
+        run: |
+          . "$HOME/.cargo/env" # to use cargo with the same version for all
+          make pytest
