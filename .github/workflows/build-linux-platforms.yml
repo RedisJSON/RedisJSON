@@ -99,10 +99,16 @@ jobs:
           echo ::group::Install rust
           ./getrust.sh
           echo ::endgroup::
-      - name: common instalaations
-        shell: bash
+      - name: Install python dependencies
         run: |
-          ./.install/common_installations.sh
+          pip install -q --upgrade setuptools
+          pip install -q --upgrade pip
+          pip install -q -r tests/pytest/requirements.txt
+          pip install -q addict toml jinja2 ramp-packer
+#      - name: common instalaations
+#        shell: bash
+#        run: |
+#          ./.install/common_installations.sh
         env:
           PIP_BREAK_SYSTEM_PACKAGES: 1
       - name: Get Redis
