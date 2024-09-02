@@ -105,12 +105,6 @@ jobs:
           pip install -q --upgrade pip
           pip install -q -r tests/pytest/requirements.txt
           pip install -q addict toml jinja2 ramp-packer
-#      - name: common instalaations
-#        shell: bash
-#        run: |
-#          ./.install/common_installations.sh
-#        env:
-#          PIP_BREAK_SYSTEM_PACKAGES: 1
       - name: Get Redis
         uses: actions/checkout@v3
         with:
