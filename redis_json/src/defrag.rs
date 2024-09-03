@@ -86,7 +86,7 @@ pub unsafe extern "C" fn defrag(
 pub(crate) fn defrag_info(ctx: &Context) -> RedisResult {
     let defrag_stats = DEFRAG_STATS.lock(ctx);
     Ok(RedisValue::OrderedMap(
-        vec![
+        [
             (
                 RedisValueKey::String("defrag_started".to_owned()),
                 RedisValue::Integer(defrag_stats.defrag_started as i64),
