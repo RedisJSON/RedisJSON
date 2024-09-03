@@ -6,7 +6,7 @@
 
 /// Use `SelectValue`
 use crate::select_value::{SelectValue, SelectValueType};
-use ijson::{IValue, ValueType};
+use ijson::{INumber, IValue, ValueType};
 use serde_json::Value;
 
 impl SelectValue for Value {
@@ -38,16 +38,16 @@ impl SelectValue for Value {
         }
     }
 
-    fn keys<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a str> + 'a>> {
+    fn keys(&self) -> Option<impl Iterator<Item = &str>> {
         match self {
-            Self::Object(o) => Some(Box::new(o.keys().map(|k| &k[..]))),
+            Self::Object(o) => Some(o.keys().map(|k| &k[..])),
             _ => None,
         }
     }
 
-    fn items<'a>(&'a self) -> Option<Box<dyn Iterator<Item = (&'a str, &'a Self)> + 'a>> {
+    fn items(&self) -> Option<impl Iterator<Item = (&str, &Self)>> {
         match self {
-            Self::Object(o) => Some(Box::new(o.iter().map(|(k, v)| (&k[..], v)))),
+            Self::Object(o) => Some(o.iter().map(|(k, v)| (&k[..], v))),
             _ => None,
         }
     }
@@ -86,37 +86,31 @@ impl SelectValue for Value {
         matches!(self, Self::Array(_))
     }
 
-    fn is_double(&self) -> Option<bool> {
+    fn is_double(&self) -> bool {
         match self {
-            Self::Number(num) => Some(num.is_f64()),
-            _ => None,
+            Self::Number(num) => num.is_f64(),
+            _ => false,
         }
     }
 
     fn get_str(&self) -> String {
         match self {
             Self::String(s) => s.to_string(),
-            _ => {
-                panic!("not a string");
-            }
+            _ => panic!("not a string"),
         }
     }
 
     fn as_str(&self) -> &str {
         match self {
             Self::String(s) => s.as_str(),
-            _ => {
-                panic!("not a string");
-            }
+            _ => panic!("not a string"),
         }
     }
 
     fn get_bool(&self) -> bool {
         match self {
             Self::Bool(b) => *b,
-            _ => {
-                panic!("not a bool");
-            }
+            _ => panic!("not a bool"),
         }
     }
 
@@ -169,16 +163,12 @@ impl SelectValue for IValue {
         }
     }
 
-    fn keys<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a str> + 'a>> {
-        self.as_object()
-            .map_or(None, |o| Some(Box::new(o.keys().map(|k| &k[..]))))
+    fn keys(&self) -> Option<impl Iterator<Item = &str>> {
+        self.as_object().map(|o| o.keys().map(|k| &k[..]))
     }
 
-    fn items<'a>(&'a self) -> Option<Box<dyn Iterator<Item = (&'a str, &'a Self)> + 'a>> {
-        match self.as_object() {
-            Some(o) => Some(Box::new(o.iter().map(|(k, v)| (&k[..], v)))),
-            _ => None,
-        }
+    fn items(&self) -> Option<impl Iterator<Item = (&str, &Self)>> {
+        self.as_object().map(|o| o.iter().map(|(k, v)| (&k[..], v)))
     }
 
     fn len(&self) -> Option<usize> {
@@ -204,8 +194,8 @@ impl SelectValue for IValue {
         self.is_array()
     }
 
-    fn is_double(&self) -> Option<bool> {
-        Some(self.as_number()?.has_decimal_point())
+    fn is_double(&self) -> bool {
+        self.as_number().map_or(false, INumber::has_decimal_point)
     }
 
     fn get_str(&self) -> String {

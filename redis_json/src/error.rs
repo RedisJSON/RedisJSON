@@ -4,8 +4,6 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
-use json_path::json_path::QueryCompilationError;
-use redis_module::RedisError;
 use std::num::ParseIntError;
 
 #[derive(Debug)]
@@ -16,12 +14,6 @@ pub struct Error {
 impl From<String> for Error {
     fn from(e: String) -> Self {
         Self { msg: e }
-    }
-}
-
-impl From<QueryCompilationError> for Error {
-    fn from(e: QueryCompilationError) -> Self {
-        Self { msg: e.to_string() }
     }
 }
 
@@ -50,12 +42,6 @@ impl From<redis_module::error::Error> for Error {
             redis_module::error::Error::FromUtf8(err) => err.into(),
             redis_module::error::Error::ParseInt(err) => err.into(),
         }
-    }
-}
-
-impl From<RedisError> for Error {
-    fn from(e: RedisError) -> Self {
-        Self::from(format!("ERR {e}"))
     }
 }
 
@@ -104,12 +90,6 @@ mod tests {
     fn test_from_parse_int_error() {
         let err: Error = "a12".parse::<i32>().unwrap_err().into();
         assert_eq!(err.msg, "invalid digit found in string");
-    }
-
-    #[test]
-    fn test_from_redis_error() {
-        let err: Error = RedisError::short_read().into();
-        assert_eq!(err.msg, "ERR ERR short read or OOM loading DB");
     }
 
     #[test]

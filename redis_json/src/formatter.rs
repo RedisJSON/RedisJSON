@@ -37,6 +37,7 @@ use std::io;
 
 pub use crate::redisjson::ReplyFormat;
 
+#[derive(Clone, Copy)]
 pub struct ReplyFormatOptions<'a> {
     pub format: ReplyFormat,
     pub indent: Option<&'a str>,
@@ -91,7 +92,7 @@ pub struct RedisJsonFormatter<'a> {
 }
 
 impl<'a> RedisJsonFormatter<'a> {
-    pub const fn new(format: &'a ReplyFormatOptions) -> Self {
+    pub const fn new(format: ReplyFormatOptions<'a>) -> Self {
         RedisJsonFormatter {
             current_indent: 0,
             has_value: false,
@@ -220,7 +221,7 @@ mod tests {
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn test_default_formatter() {
-        let mut formatter = RedisJsonFormatter::new(&ReplyFormatOptions {
+        let mut formatter = RedisJsonFormatter::new(ReplyFormatOptions {
             format: ReplyFormat::STRING,
             indent: None,
             space: None,
@@ -284,7 +285,7 @@ mod tests {
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn test_ident_formatter() {
-        let mut formatter = RedisJsonFormatter::new(&ReplyFormatOptions {
+        let mut formatter = RedisJsonFormatter::new(ReplyFormatOptions {
             format: ReplyFormat::STRING,
             indent: Some("_"),
             space: None,
@@ -348,7 +349,7 @@ mod tests {
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn test_space_formatter() {
-        let mut formatter = RedisJsonFormatter::new(&ReplyFormatOptions {
+        let mut formatter = RedisJsonFormatter::new(ReplyFormatOptions {
             format: ReplyFormat::STRING,
             indent: None,
             space: Some("s"),
@@ -412,7 +413,7 @@ mod tests {
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn test_new_line_formatter() {
-        let mut formatter = RedisJsonFormatter::new(&ReplyFormatOptions {
+        let mut formatter = RedisJsonFormatter::new(ReplyFormatOptions {
             format: ReplyFormat::STRING,
             indent: None,
             space: None,

@@ -8,6 +8,7 @@ use itertools::Itertools;
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use pest_derive::Parser;
+use redis_module::RedisError;
 use std::cmp::Ordering;
 
 use crate::select_value::{SelectValue, SelectValueType};
@@ -66,11 +67,10 @@ impl<'i> Query<'i> {
     /// Example: $.foo.bar has 2 elements
     #[allow(dead_code)]
     pub fn size(&mut self) -> usize {
-        if self.size.is_some() {
-            return self.size.unwrap();
-        }
-        self.is_static();
-        self.size()
+        self.size.unwrap_or_else(|| {
+            self.is_static();
+            self.size()
+        })
     }
 
     /// Results whether or not the compiled json path is static
@@ -80,28 +80,16 @@ impl<'i> Query<'i> {
     ///     none static path: $.*.bar
     #[allow(dead_code)]
     pub fn is_static(&mut self) -> bool {
-        if self.is_static.is_some() {
-            return self.is_static.unwrap();
-        }
-        let mut size = 0;
-        let mut is_static = true;
-        let root_copy = self.root.clone();
-        for n in root_copy {
-            size += 1;
-            match n.as_rule() {
-                Rule::literal | Rule::number => continue,
-                Rule::numbers_list | Rule::string_list => {
-                    let inner = n.into_inner();
-                    if inner.count() > 1 {
-                        is_static = false;
-                    }
-                }
-                _ => is_static = false,
-            }
-        }
-        self.size = Some(size);
-        self.is_static = Some(is_static);
-        self.is_static()
+        self.is_static.unwrap_or_else(|| {
+            self.size = Some(self.root.len());
+            let root_copy = self.root.clone();
+            self.is_static = Some(root_copy.fold(true, |is_static, n| match n.as_rule() {
+                Rule::literal | Rule::number => is_static,
+                Rule::numbers_list | Rule::string_list => is_static && n.into_inner().count() <= 1,
+                _ => false,
+            }));
+            self.is_static()
+        })
     }
 }
 
@@ -112,6 +100,12 @@ impl std::fmt::Display for QueryCompilationError {
             "Error occurred on position {}, {}",
             self.location, self.message
         )
+    }
+}
+
+impl From<QueryCompilationError> for RedisError {
+    fn from(e: QueryCompilationError) -> Self {
+        Self::String(e.to_string())
     }
 }
 
@@ -134,49 +128,39 @@ impl std::fmt::Display for Rule {
 /// Compile the given string query into a query object.
 /// Returns error on compilation error.
 pub(crate) fn compile(path: &str) -> Result<Query, QueryCompilationError> {
-    let query = JsonPathParser::parse(Rule::query, path);
-    match query {
-        Ok(mut q) => {
+    JsonPathParser::parse(Rule::query, path)
+        .map(|mut q| {
             let root = q.next().unwrap();
-            Ok(Query {
+            Query {
                 root: root.into_inner(),
                 is_static: None,
                 size: None,
-            })
-        }
-        // pest::error::Error
-        Err(e) => {
+            }
+        })
+        .map_err(|e| {
             let pos = match e.location {
                 pest::error::InputLocation::Pos(pos) => pos,
                 pest::error::InputLocation::Span((pos, _end)) => pos,
             };
             let msg = match e.variant {
                 pest::error::ErrorVariant::ParsingError {
-                    ref positives,
-                    ref negatives,
+                    positives,
+                    negatives,
                 } => {
-                    let positives = if positives.is_empty() {
-                        None
-                    } else {
-                        Some(
-                            positives
-                                .iter()
-                                .map(|v| format!("{v}"))
-                                .collect_vec()
-                                .join(", "),
-                        )
-                    };
-                    let negatives = if negatives.is_empty() {
-                        None
-                    } else {
-                        Some(
-                            negatives
-                                .iter()
-                                .map(|v| format!("{v}"))
-                                .collect_vec()
-                                .join(", "),
-                        )
-                    };
+                    let positives = (!positives.is_empty()).then(|| {
+                        positives
+                            .into_iter()
+                            .map(|v| format!("{v}"))
+                            .collect_vec()
+                            .join(", ")
+                    });
+                    let negatives = (!negatives.is_empty()).then(|| {
+                        negatives
+                            .into_iter()
+                            .map(|v| format!("{v}"))
+                            .collect_vec()
+                            .join(", ")
+                    });
 
                     match (positives, negatives) {
                         (None, None) => "parsing error".to_string(),
@@ -187,7 +171,7 @@ pub(crate) fn compile(path: &str) -> Result<Query, QueryCompilationError> {
                         ),
                     }
                 }
-                pest::error::ErrorVariant::CustomError { ref message } => message.clone(),
+                pest::error::ErrorVariant::CustomError { message } => message,
             };
 
             let final_msg = if pos == path.len() {
@@ -195,12 +179,11 @@ pub(crate) fn compile(path: &str) -> Result<Query, QueryCompilationError> {
             } else {
                 format!("\"{} ---->>>> {}\", {}.", &path[..pos], &path[pos..], msg)
             };
-            Err(QueryCompilationError {
+            QueryCompilationError {
                 location: pos,
                 message: final_msg,
-            })
-        }
-    }
+            }
+        })
 }
 
 pub trait UserPathTracker {
@@ -294,30 +277,28 @@ struct PathTracker<'i, 'j> {
     element: PathTrackerElement<'i>,
 }
 
-const fn create_empty_tracker<'i, 'j>() -> PathTracker<'i, 'j> {
-    PathTracker {
-        parent: None,
-        element: PathTrackerElement::Root,
+impl<'i, 'j> Default for PathTracker<'i, 'j> {
+    fn default() -> Self {
+        PathTracker {
+            parent: None,
+            element: PathTrackerElement::Root,
+        }
     }
 }
 
-const fn create_str_tracker<'i, 'j>(
-    s: &'i str,
-    parent: &'j PathTracker<'i, 'j>,
-) -> PathTracker<'i, 'j> {
-    PathTracker {
-        parent: Some(parent),
-        element: PathTrackerElement::Key(s),
+impl<'i, 'j> PathTracker<'i, 'j> {
+    const fn str_tracker(s: &'i str, parent: &'j Self) -> Self {
+        Self {
+            parent: Some(parent),
+            element: PathTrackerElement::Key(s),
+        }
     }
-}
 
-const fn create_index_tracker<'i, 'j>(
-    index: usize,
-    parent: &'j PathTracker<'i, 'j>,
-) -> PathTracker<'i, 'j> {
-    PathTracker {
-        parent: Some(parent),
-        element: PathTrackerElement::Index(index),
+    const fn index_tracker(i: usize, parent: &'j Self) -> Self {
+        Self {
+            parent: Some(parent),
+            element: PathTrackerElement::Index(i),
+        }
     }
 }
 
@@ -334,137 +315,70 @@ enum TermEvaluationResult<'i, 'j, S: SelectValue> {
     Invalid,
 }
 
-enum CmpResult {
-    Ord(Ordering),
-    NotComparable,
-}
-
-impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
-    fn cmp(&self, s: &Self) -> CmpResult {
-        match (self, s) {
-            (TermEvaluationResult::Integer(n1), TermEvaluationResult::Integer(n2)) => {
-                CmpResult::Ord(n1.cmp(n2))
-            }
-            (TermEvaluationResult::Float(_), TermEvaluationResult::Integer(n2)) => {
-                self.cmp(&TermEvaluationResult::Float(*n2 as f64))
-            }
-            (TermEvaluationResult::Integer(n1), TermEvaluationResult::Float(_)) => {
-                TermEvaluationResult::Float(*n1 as f64).cmp(s)
-            }
-            (TermEvaluationResult::Float(f1), TermEvaluationResult::Float(f2)) => {
-                if *f1 > *f2 {
-                    CmpResult::Ord(Ordering::Greater)
-                } else if *f1 < *f2 {
-                    CmpResult::Ord(Ordering::Less)
-                } else {
-                    CmpResult::Ord(Ordering::Equal)
-                }
-            }
-            (TermEvaluationResult::Str(s1), TermEvaluationResult::Str(s2)) => {
-                CmpResult::Ord(s1.cmp(s2))
-            }
-            (TermEvaluationResult::Str(s1), TermEvaluationResult::String(s2)) => {
-                CmpResult::Ord((*s1).cmp(s2))
-            }
-            (TermEvaluationResult::String(s1), TermEvaluationResult::Str(s2)) => {
-                CmpResult::Ord((s1[..]).cmp(s2))
-            }
-            (TermEvaluationResult::String(s1), TermEvaluationResult::String(s2)) => {
-                CmpResult::Ord(s1.cmp(s2))
-            }
-            (TermEvaluationResult::Bool(b1), TermEvaluationResult::Bool(b2)) => {
-                CmpResult::Ord(b1.cmp(b2))
-            }
-            (TermEvaluationResult::Null, TermEvaluationResult::Null) => {
-                CmpResult::Ord(Ordering::Equal)
-            }
-            (TermEvaluationResult::Value(v), _) => match v.get_type() {
-                SelectValueType::Long => TermEvaluationResult::Integer(v.get_long()).cmp(s),
-                SelectValueType::Double => TermEvaluationResult::Float(v.get_double()).cmp(s),
-                SelectValueType::String => TermEvaluationResult::Str(v.as_str()).cmp(s),
-                SelectValueType::Bool => TermEvaluationResult::Bool(v.get_bool()).cmp(s),
-                SelectValueType::Null => TermEvaluationResult::Null.cmp(s),
-                _ => CmpResult::NotComparable,
-            },
-            (_, TermEvaluationResult::Value(v)) => match v.get_type() {
-                SelectValueType::Long => self.cmp(&TermEvaluationResult::Integer(v.get_long())),
-                SelectValueType::Double => self.cmp(&TermEvaluationResult::Float(v.get_double())),
-                SelectValueType::String => self.cmp(&TermEvaluationResult::Str(v.as_str())),
-                SelectValueType::Bool => self.cmp(&TermEvaluationResult::Bool(v.get_bool())),
-                SelectValueType::Null => self.cmp(&TermEvaluationResult::Null),
-                _ => CmpResult::NotComparable,
-            },
-            (_, _) => CmpResult::NotComparable,
-        }
-    }
-    fn gt(&self, s: &Self) -> bool {
-        match self.cmp(s) {
-            CmpResult::Ord(o) => o.is_gt(),
-            CmpResult::NotComparable => false,
-        }
-    }
-
-    fn ge(&self, s: &Self) -> bool {
-        match self.cmp(s) {
-            CmpResult::Ord(o) => o.is_ge(),
-            CmpResult::NotComparable => false,
-        }
-    }
-
-    fn lt(&self, s: &Self) -> bool {
-        match self.cmp(s) {
-            CmpResult::Ord(o) => o.is_lt(),
-            CmpResult::NotComparable => false,
-        }
-    }
-
-    fn le(&self, s: &Self) -> bool {
-        match self.cmp(s) {
-            CmpResult::Ord(o) => o.is_le(),
-            CmpResult::NotComparable => false,
-        }
-    }
-
+impl<'i, 'j, S: SelectValue> PartialEq for TermEvaluationResult<'i, 'j, S> {
     fn eq(&self, s: &Self) -> bool {
         match (self, s) {
             (TermEvaluationResult::Value(v1), TermEvaluationResult::Value(v2)) => v1 == v2,
-            (_, _) => match self.cmp(s) {
-                CmpResult::Ord(o) => o.is_eq(),
-                CmpResult::NotComparable => false,
-            },
+            _ => self.partial_cmp(s).map_or(false, Ordering::is_eq),
         }
     }
+}
 
-    fn ne(&self, s: &Self) -> bool {
-        !self.eq(s)
-    }
-
-    fn re_is_match(regex: &str, s: &str) -> bool {
-        Regex::new(regex).map_or_else(|_| false, |re| Regex::is_match(&re, s))
-    }
-
-    fn re_match(&self, s: &Self) -> bool {
+impl<'i, 'j, S: SelectValue> PartialOrd for TermEvaluationResult<'i, 'j, S> {
+    fn partial_cmp(&self, s: &Self) -> Option<Ordering> {
+        use SelectValueType as SVT;
+        use TermEvaluationResult as TER;
         match (self, s) {
-            (TermEvaluationResult::Value(v), TermEvaluationResult::Str(regex)) => {
-                match v.get_type() {
-                    SelectValueType::String => Self::re_is_match(regex, v.as_str()),
-                    _ => false,
-                }
-            }
-            (TermEvaluationResult::Value(v1), TermEvaluationResult::Value(v2)) => {
-                match (v1.get_type(), v2.get_type()) {
-                    (SelectValueType::String, SelectValueType::String) => {
-                        Self::re_is_match(v2.as_str(), v1.as_str())
-                    }
-                    (_, _) => false,
-                }
-            }
-            (_, _) => false,
+            (TER::Integer(n1), TER::Integer(n2)) => n1.partial_cmp(n2),
+            (TER::Float(_), TER::Integer(n2)) => self.partial_cmp(&TER::Float(*n2 as _)),
+            (TER::Integer(n1), TER::Float(_)) => TER::Float(*n1 as _).partial_cmp(s),
+            (TER::Float(f1), TER::Float(f2)) => f1.partial_cmp(f2),
+            (TER::Str(s1), TER::Str(s2)) => s1.partial_cmp(s2),
+            (TER::Str(s1), TER::String(s2)) => (*s1).partial_cmp(s2),
+            (TER::String(s1), TER::Str(s2)) => s1[..].partial_cmp(s2),
+            (TER::String(s1), TER::String(s2)) => s1.partial_cmp(s2),
+            (TER::Bool(b1), TER::Bool(b2)) => b1.partial_cmp(b2),
+            (TER::Null, TER::Null) => Some(Ordering::Equal),
+            (TER::Value(v), _) => match v.get_type() {
+                SVT::Long => TER::Integer(v.get_long()).partial_cmp(s),
+                SVT::Double => TER::Float(v.get_double()).partial_cmp(s),
+                SVT::String => TER::Str(v.as_str()).partial_cmp(s),
+                SVT::Bool => TER::Bool(v.get_bool()).partial_cmp(s),
+                SVT::Null => TER::Null.partial_cmp(s),
+                _ => None,
+            },
+            (_, TER::Value(v)) => match v.get_type() {
+                SVT::Long => self.partial_cmp(&TER::Integer(v.get_long())),
+                SVT::Double => self.partial_cmp(&TER::Float(v.get_double())),
+                SVT::String => self.partial_cmp(&TER::Str(v.as_str())),
+                SVT::Bool => self.partial_cmp(&TER::Bool(v.get_bool())),
+                SVT::Null => self.partial_cmp(&TER::Null),
+                _ => None,
+            },
+            _ => None,
         }
+    }
+}
+
+impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
+    fn re_is_match(regex: &str, s: &str) -> bool {
+        Regex::new(regex).map_or(false, |re| Regex::is_match(&re, s))
     }
 
     fn re(&self, s: &Self) -> bool {
-        self.re_match(s)
+        use SelectValueType as SVT;
+        use TermEvaluationResult as TER;
+        match (self, s) {
+            (TER::Value(v), TER::Str(regex)) => match v.get_type() {
+                SVT::String => Self::re_is_match(regex, v.as_str()),
+                _ => false,
+            },
+            (TER::Value(v1), TER::Value(v2)) => match (v1.get_type(), v2.get_type()) {
+                (SVT::String, SVT::String) => Self::re_is_match(v2.as_str(), v1.as_str()),
+                _ => false,
+            },
+            _ => false,
+        }
     }
 }
 
@@ -519,27 +433,25 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         match json.get_type() {
             SelectValueType::Object => {
                 if let Some(pt) = path_tracker {
-                    let items = json.items().unwrap();
-                    for (key, val) in items {
+                    json.items().unwrap().for_each(|(key, val)| {
                         self.calc_internal(
                             pairs.clone(),
                             val,
-                            Some(create_str_tracker(key, &pt)),
+                            Some(PathTracker::str_tracker(key, &pt)),
                             calc_data,
                         );
                         self.calc_full_scan(
                             pairs.clone(),
                             val,
-                            Some(create_str_tracker(key, &pt)),
+                            Some(PathTracker::str_tracker(key, &pt)),
                             calc_data,
                         );
-                    }
+                    })
                 } else {
-                    let values = json.values().unwrap();
-                    for v in values {
+                    json.values().unwrap().for_each(|v| {
                         self.calc_internal(pairs.clone(), v, None, calc_data);
                         self.calc_full_scan(pairs.clone(), v, None, calc_data);
-                    }
+                    })
                 }
             }
             SelectValueType::Array => {
@@ -549,13 +461,13 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                         self.calc_internal(
                             pairs.clone(),
                             v,
-                            Some(create_index_tracker(i, &pt)),
+                            Some(PathTracker::index_tracker(i, &pt)),
                             calc_data,
                         );
                         self.calc_full_scan(
                             pairs.clone(),
                             v,
-                            Some(create_index_tracker(i, &pt)),
+                            Some(PathTracker::index_tracker(i, &pt)),
                             calc_data,
                         );
                     }
@@ -582,7 +494,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 if let Some(pt) = path_tracker {
                     let items = json.items().unwrap();
                     for (key, val) in items {
-                        let new_tracker = Some(create_str_tracker(key, &pt));
+                        let new_tracker = Some(PathTracker::str_tracker(key, &pt));
                         self.calc_internal(pairs.clone(), val, new_tracker, calc_data);
                     }
                 } else {
@@ -596,7 +508,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 let values = json.values().unwrap();
                 if let Some(pt) = path_tracker {
                     for (i, v) in values.enumerate() {
-                        let new_tracker = Some(create_index_tracker(i, &pt));
+                        let new_tracker = Some(PathTracker::index_tracker(i, &pt));
                         self.calc_internal(pairs.clone(), v, new_tracker, calc_data);
                     }
                 } else {
@@ -620,7 +532,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         let curr_val = json.get_key(curr.as_str());
         if let Some(e) = curr_val {
             if let Some(pt) = path_tracker {
-                let new_tracker = Some(create_str_tracker(curr.as_str(), &pt));
+                let new_tracker = Some(PathTracker::str_tracker(curr.as_str(), &pt));
                 self.calc_internal(pairs, e, new_tracker, calc_data);
             } else {
                 self.calc_internal(pairs, e, None, calc_data);
@@ -650,7 +562,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                     _ => panic!("{c:?}"),
                 };
                 if let Some(e) = curr_val {
-                    let new_tracker = Some(create_str_tracker(s, &pt));
+                    let new_tracker = Some(PathTracker::str_tracker(s, &pt));
                     self.calc_internal(pairs.clone(), e, new_tracker, calc_data);
                 }
             }
@@ -699,7 +611,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 let i = Self::calc_abs_index(c.as_str().parse::<i64>().unwrap(), n);
                 let curr_val = json.get_index(i);
                 if let Some(e) = curr_val {
-                    let new_tracker = Some(create_index_tracker(i, &pt));
+                    let new_tracker = Some(PathTracker::index_tracker(i, &pt));
                     self.calc_internal(pairs.clone(), e, new_tracker, calc_data);
                 }
             }
@@ -773,7 +685,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             for i in (start..end).step_by(step) {
                 let curr_val = json.get_index(i);
                 if let Some(e) = curr_val {
-                    let new_tracker = Some(create_index_tracker(i, &pt));
+                    let new_tracker = Some(PathTracker::index_tracker(i, &pt));
                     self.calc_internal(pairs.clone(), e, new_tracker, calc_data);
                 }
             }
@@ -865,12 +777,12 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             let term2_val = self.evaluate_single_term(term2, json, calc_data);
             trace!("evaluate_single_filter term2_val {:?}", &term2_val);
             match op.as_rule() {
-                Rule::gt => term1_val.gt(&term2_val),
-                Rule::ge => term1_val.ge(&term2_val),
-                Rule::lt => term1_val.lt(&term2_val),
-                Rule::le => term1_val.le(&term2_val),
-                Rule::eq => term1_val.eq(&term2_val),
-                Rule::ne => term1_val.ne(&term2_val),
+                Rule::gt => term1_val > term2_val,
+                Rule::ge => term1_val >= term2_val,
+                Rule::lt => term1_val < term2_val,
+                Rule::le => term1_val <= term2_val,
+                Rule::eq => term1_val == term2_val,
+                Rule::ne => term1_val != term2_val,
                 Rule::re => term1_val.re(&term2_val),
                 _ => panic!("{op:?}"),
             }
@@ -981,9 +893,10 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                         self.calc_range(pairs, curr, json, path_tracker, calc_data);
                     }
                     Rule::filter => {
-                        if json.get_type() == SelectValueType::Array
-                            || json.get_type() == SelectValueType::Object
-                        {
+                        if matches!(
+                            json.get_type(),
+                            SelectValueType::Array | SelectValueType::Object
+                        ) {
                             /* lets expend the array, this is how most json path engines work.
                              * Personally, I think this if should not exists. */
                             let values = json.values().unwrap();
@@ -997,11 +910,10 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                                     trace!("calc_internal v {:?}", &v);
                                     if self.evaluate_filter(curr.clone().into_inner(), v, calc_data)
                                     {
-                                        let new_tracker = Some(create_index_tracker(i, &pt));
                                         self.calc_internal(
                                             pairs.clone(),
                                             v,
-                                            new_tracker,
+                                            Some(PathTracker::index_tracker(i, &pt)),
                                             calc_data,
                                         );
                                     }
@@ -1056,11 +968,11 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             root: json,
         };
         if self.tracker_generator.is_some() {
-            self.calc_internal(root, json, Some(create_empty_tracker()), &mut calc_data);
+            self.calc_internal(root, json, Some(PathTracker::default()), &mut calc_data);
         } else {
             self.calc_internal(root, json, None, &mut calc_data);
         }
-        calc_data.results.drain(..).collect()
+        calc_data.results
     }
 
     pub fn calc_with_paths<'j: 'i, S: SelectValue>(

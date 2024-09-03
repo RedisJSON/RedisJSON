@@ -8,9 +8,11 @@ pub mod json_node;
 pub mod json_path;
 pub mod select_value;
 
+use redis_module::RedisResult;
+
 use crate::json_path::{
-    CalculationResult, DummyTracker, DummyTrackerGenerator, PTracker, PTrackerGenerator,
-    PathCalculator, Query, QueryCompilationError, UserPathTracker,
+    CalculationResult, DummyTrackerGenerator, PTracker, PTrackerGenerator, PathCalculator, Query,
+    UserPathTracker,
 };
 use crate::select_value::SelectValue;
 
@@ -62,8 +64,8 @@ pub const fn create_with_generator<'i>(
 
 /// Compile the given json path, compilation results can after be used
 /// to create `PathCalculator` calculator object to calculate json paths
-pub fn compile(s: &str) -> Result<Query, QueryCompilationError> {
-    json_path::compile(s)
+pub fn compile(s: &str) -> RedisResult<Query> {
+    json_path::compile(s).map_err(Into::into)
 }
 
 /// Calc once allows to perform a one time calculation on the give query.
@@ -78,7 +80,7 @@ pub fn calc_once<'j, 'p, S: SelectValue>(q: Query<'j>, json: &'p S) -> Vec<&'p S
     }
     .calc_with_paths_on_root(json, root)
     .into_iter()
-    .map(|e: CalculationResult<'p, S, DummyTracker>| e.res)
+    .map(|e| e.res)
     .collect()
 }
 

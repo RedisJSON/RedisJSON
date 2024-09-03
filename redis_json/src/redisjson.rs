@@ -10,19 +10,22 @@
 // User-provided JSON is converted to a tree. This tree is stored transparently in Redis.
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
-use redis_module::raw;
+use redis_module::{raw, RedisError, RedisResult};
 
 use std::os::raw::{c_int, c_void};
 
 use crate::backward;
-use crate::error::Error;
 use crate::ivalue_manager::RedisIValueJsonKeyManager;
 use crate::manager::Manager;
+use once_cell::unsync::Lazy;
 use serde::Serialize;
 use std::fmt;
 use std::fmt::Display;
 use std::marker::PhantomData;
 use std::str::FromStr;
+
+const JSON_ROOT_PATH_LEGACY: &str = ".";
+pub const JSON_ROOT_PATH: Lazy<Path> = Lazy::new(|| Path::new("$"));
 
 /// Returns normalized start index
 #[must_use]
@@ -64,19 +67,19 @@ pub enum Format {
     BSON,
 }
 impl FromStr for Format {
-    type Err = Error;
+    type Err = RedisError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "STRING" => Ok(Self::STRING),
             "JSON" => Ok(Self::JSON),
             "BSON" => Ok(Self::BSON),
-            _ => Err("ERR wrong format".into()),
+            _ => Err(RedisError::Str("ERR wrong format")),
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ReplyFormat {
     STRING,
     STRINGS,
@@ -84,7 +87,7 @@ pub enum ReplyFormat {
     EXPAND,
 }
 impl FromStr for ReplyFormat {
-    type Err = Error;
+    type Err = RedisError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -92,7 +95,7 @@ impl FromStr for ReplyFormat {
             "STRINGS" => Ok(Self::STRINGS),
             "EXPAND1" => Ok(Self::EXPAND1),
             "EXPAND" => Ok(Self::EXPAND),
-            _ => Err("ERR wrong reply format".into()),
+            _ => Err(RedisError::Str("ERR wrong reply format")),
         }
     }
 }
@@ -152,13 +155,46 @@ impl Display for Path<'_> {
     }
 }
 
+/// Returns the default path for the given RESP version
+impl Default for Path<'_> {
+    fn default() -> Self {
+        Self::new(JSON_ROOT_PATH_LEGACY)
+    }
+}
+
+impl PartialEq for Path<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.get_path() == other.get_path()
+    }
+}
+
+impl Eq for Path<'_> {}
+
 #[derive(Debug)]
 pub struct RedisJSON<T> {
     //FIXME: make private and expose array/object Values without requiring a path
     pub data: T,
 }
 
+pub(crate) trait ResultInto<S, F> {
+    fn into_both(self) -> Result<S, F>;
+}
+
+impl<T, E, S, F> ResultInto<S, F> for Result<T, E>
+where
+    S: From<T>,
+    F: From<E>,
+{
+    fn into_both(self) -> Result<S, F> {
+        match self {
+            Ok(ok) => Ok(ok.into()),
+            Err(e) => Err(e.into()),
+        }
+    }
+}
+
 pub mod type_methods {
+
     use super::*;
     use std::{ffi::CString, ptr::null_mut};
 
@@ -179,10 +215,7 @@ pub mod type_methods {
     }
 
     #[allow(non_snake_case, unused)]
-    pub fn value_rdb_load_json(
-        rdb: *mut raw::RedisModuleIO,
-        encver: c_int,
-    ) -> Result<String, Error> {
+    pub fn value_rdb_load_json(rdb: *mut raw::RedisModuleIO, encver: c_int) -> RedisResult<String> {
         Ok(match encver {
             0 => {
                 let v = backward::json_rdb_load(rdb)?;
