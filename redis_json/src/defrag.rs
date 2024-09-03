@@ -74,7 +74,7 @@ pub unsafe extern "C" fn defrag(
     let value = value.cast::<*mut RedisJSON<ijson::IValue>>();
     let new_val = defrag_allocator.realloc_ptr(*value, Layout::new::<RedisJSON<ijson::IValue>>());
     if !new_val.is_null() {
-        *value = new_val;
+        std::ptr::write(value, new_val);
     }
     std::ptr::write(
         &mut (**value).data as *mut ijson::IValue,
