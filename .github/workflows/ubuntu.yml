@@ -65,7 +65,7 @@ jobs:
           ./deps/readies/bin/getrust
           python3 -m pip list
           python3 -m pip install --upgrade setuptools six pip
-          pip install -q -r .install/build_package_requirments.txt
+          pip install -q -r .install/build_package_requirements.txt
           python3 -m pip install -r tests/pytest/requirements.txt
       - name: Get Redis
         uses: actions/checkout@v3

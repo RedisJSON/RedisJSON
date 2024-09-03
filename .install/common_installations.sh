@@ -24,7 +24,7 @@ echo "pip path: $(which pip)"
 
 pip install -q -r tests/pytest/requirements.txt
 # These packages are needed to build the package
-pip install -q -r .install/build_package_requirments.txt
+pip install -q -r .install/build_package_requirements.txt
 
 # List installed packages
 pip list

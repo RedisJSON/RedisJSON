@@ -29,7 +29,7 @@ jobs:
           pip install -q --upgrade setuptools
           pip install -q --upgrade pip
           pip install -q -r tests/pytest/requirements.txt
-          pip install -q -r .install/build_package_requirments.txt
+          pip install -q -r .install/build_package_requirements.txt
         env:
           PIP_BREAK_SYSTEM_PACKAGES: 1
       - name: Checkout Redis
