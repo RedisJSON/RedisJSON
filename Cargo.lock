@@ -436,7 +436,7 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 [[package]]
 name = "ijson"
 version = "0.1.3"
-source = "git+https://github.com/RedisJSON/ijson?rev=e0119ac74f6c4ee918718ee122c3948b74ebeba8#e0119ac74f6c4ee918718ee122c3948b74ebeba8"
+source = "git+https://github.com/RedisJSON/ijson?rev=70adf555b0747e17841119380ccdee702e83d802#70adf555b0747e17841119380ccdee702e83d802"
 dependencies = [
  "dashmap",
  "hashbrown 0.13.2",
@@ -820,9 +820,8 @@ dependencies = [
 
 [[package]]
 name = "redis-module"
-version = "2.0.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d3b95d9fe5b8681bacea6532bbc7632590ae4499cecc8e019685b515fddda71"
+version = "99.99.99"
+source = "git+https://github.com/RedisLabsModules/redismodule-rs?rev=32f284bd18ee799e54f8da835c81a137a34d7f83#32f284bd18ee799e54f8da835c81a137a34d7f83"
 dependencies = [
  "backtrace",
  "bindgen",
@@ -843,9 +842,8 @@ dependencies = [
 
 [[package]]
 name = "redis-module-macros"
-version = "2.0.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9c92438cbeaaba0f99e2944ceeb2e34fc8fa7955576296570575df046b81197"
+version = "99.99.99"
+source = "git+https://github.com/RedisLabsModules/redismodule-rs?rev=32f284bd18ee799e54f8da835c81a137a34d7f83#32f284bd18ee799e54f8da835c81a137a34d7f83"
 dependencies = [
  "proc-macro2",
  "quote 1.0.37",
@@ -856,9 +854,8 @@ dependencies = [
 
 [[package]]
 name = "redis-module-macros-internals"
-version = "2.0.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd1ba5724bf8bfd0c9d6f1169e45255957175b7d81944b325909024a159bc74c"
+version = "99.99.99"
+source = "git+https://github.com/RedisLabsModules/redismodule-rs?rev=32f284bd18ee799e54f8da835c81a137a34d7f83#32f284bd18ee799e54f8da835c81a137a34d7f83"
 dependencies = [
  "lazy_static",
  "proc-macro2",
@@ -876,6 +873,7 @@ dependencies = [
  "ijson",
  "itertools",
  "json_path",
+ "lazy_static",
  "libc",
  "linkme",
  "redis-module",
