@@ -128,7 +128,7 @@ jobs:
         shell: bash
         run: |
           cmake --version
-          MODULE=/target/release/librejson.so RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
+          MODULE=$(realpath ./target/release/librejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
       - name: Unit tests
         shell: bash
         run: |
