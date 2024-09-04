@@ -19,11 +19,12 @@ def enableDefrag(env):
 
 def defragOnObj(env, obj):
     enableDefrag(env)
-    env.expect('JSON.SET', 'test', '$', json.dumps(obj)).ok()
+    json_str = json.dumps(obj)
+    env.expect('JSON.SET', 'test', '$', json_str).ok()
     for i in range(10000):
-        env.expect('JSON.SET', 'test%d' % i, '$', json.dumps(obj)).ok()
+        env.expect('JSON.SET', 'test%d' % i, '$', json_str).ok()
     i += 1
-    env.expect('JSON.SET', 'test%d' % i, '$', json.dumps(obj)).ok()
+    env.expect('JSON.SET', 'test%d' % i, '$', json_str).ok()
     for i in range(10000):
         env.expect('DEL', 'test%d' % i).equal(1)
     i += 1
