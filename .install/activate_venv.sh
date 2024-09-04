@@ -1,3 +1,4 @@
+#!/bin/bash
 
 activate_venv() {
 	echo "copy ativation script to shell config"

@@ -102,7 +102,7 @@ jobs:
       - name: common installations
         shell: bash
         run: |
-          ./.install/common_installations.sh sudo
+          ./.install/common_installations.sh
         env:
           PIP_BREAK_SYSTEM_PACKAGES: 1
       - name: Get Redis
