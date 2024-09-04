@@ -123,12 +123,12 @@ jobs:
         run: |
           . "$HOME/.cargo/env" # to use cargo with the same version for all
           cargo --version
-          cargo build
+          cargo build --release
       - name: Flow tests
         shell: bash
         run: |
           cmake --version
-          make pytest
+          MODULE=/target/release/librejson.so RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
       - name: Unit tests
         shell: bash
         run: |
