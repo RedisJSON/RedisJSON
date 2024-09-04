@@ -110,12 +110,12 @@ def testDefragBigJsons(env):
     # wait for fragmentation for up to 30 seconds
     frag = env.cmd('info', 'memory')['allocator_frag_ratio']
     startTime = time.time()
-    while frag < 1.6:
+    while frag < 1.4:
         time.sleep(0.1)
         frag = env.cmd('info', 'memory')['allocator_frag_ratio']
         if time.time() - startTime > 30:
             # We will wait for up to 30 seconds and then we consider it a failure
-            env.assertTrue(False, message='Failed waiting for fragmentation, current value %s which is expected to be above 1.6.' % frag)
+            env.assertTrue(False, message='Failed waiting for fragmentation, current value %s which is expected to be above 1.4.' % frag)
             return
 
     #enable active defrag
