@@ -99,7 +99,7 @@ jobs:
           echo ::group::Install rust
           ./getrust.sh
           echo ::endgroup::
-      - name: common instalaations
+      - name: common installations
         shell: bash
         run: |
           ./.install/common_installations.sh
