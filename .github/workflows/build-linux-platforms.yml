@@ -128,6 +128,7 @@ jobs:
         shell: bash
         run: |
           cmake --version
+          ./.install/activate_venv.sh
           MODULE=$(realpath ./target/release/librejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
       - name: Unit tests
         shell: bash
