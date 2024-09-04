@@ -90,3 +90,44 @@ def testDefragObject(env):
 
 def testDefragComplex(env):
     defragOnObj(env, {"foo": ["foo", 1, None, True, False, {}, {"foo": [], "bar": 1}]})
+
+def testDefragBigJsons(env):
+    enableDefrag(env)
+
+    # Disable defrag so we can actually create fragmentation
+    env.cmd('CONFIG', 'SET', 'activedefrag', 'no')
+    
+    env.expect('JSON.SET', 'key1', '$', "[]").ok()
+    env.expect('JSON.SET', 'key2', '$', "[]").ok()
+
+    for i in range(100000):
+        env.cmd('JSON.ARRAPPEND', 'key1', '$', "[1.11111111111]")
+        env.cmd('JSON.ARRAPPEND', 'key2', '$', "[1.11111111111]")
+
+    # Now we delete key2 which should cause fragmenation
+    env.expect('DEL', 'key2').equal(1)
+
+    # wait for fragmentation for up to 30 seconds
+    frag = env.cmd('info', 'memory')['mem_fragmentation_ratio']
+    startTime = time.time()
+    while frag < 1.6:
+        time.sleep(0.1)
+        frag = env.cmd('info', 'memory')['mem_fragmentation_ratio']
+        if time.time() - startTime > 30:
+            # We will wait for up to 30 seconds and then we consider it a failure
+            env.assertTrue(False, message='Failed waiting for fragmentation')
+            return
+
+    #enable active defrag
+    env.cmd('CONFIG', 'SET', 'activedefrag', 'yes')
+
+    # wait for fragmentation for go down for up to 30 seconds
+    frag = env.cmd('info', 'memory')['mem_fragmentation_ratio']
+    startTime = time.time()
+    while frag < 1.1:
+        time.sleep(0.1)
+        frag = env.cmd('info', 'memory')['mem_fragmentation_ratio']
+        if time.time() - startTime > 30:
+            # We will wait for up to 30 seconds and then we consider it a failure
+            env.assertTrue(False, message='Failed waiting for fragmentation to go down')
+            return
