@@ -108,11 +108,11 @@ def testDefragBigJsons(env):
     env.expect('DEL', 'key2').equal(1)
 
     # wait for fragmentation for up to 30 seconds
-    frag = env.cmd('info', 'memory')['mem_fragmentation_ratio']
+    frag = env.cmd('info', 'memory')['allocator_frag_ratio']
     startTime = time.time()
     while frag < 1.6:
         time.sleep(0.1)
-        frag = env.cmd('info', 'memory')['mem_fragmentation_ratio']
+        frag = env.cmd('info', 'memory')['allocator_frag_ratio']
         if time.time() - startTime > 30:
             # We will wait for up to 30 seconds and then we consider it a failure
             env.assertTrue(False, message='Failed waiting for fragmentation')
@@ -122,11 +122,11 @@ def testDefragBigJsons(env):
     env.cmd('CONFIG', 'SET', 'activedefrag', 'yes')
 
     # wait for fragmentation for go down for up to 30 seconds
-    frag = env.cmd('info', 'memory')['mem_fragmentation_ratio']
+    frag = env.cmd('info', 'memory')['allocator_frag_ratio']
     startTime = time.time()
-    while frag < 1.1:
+    while frag > 1.1:
         time.sleep(0.1)
-        frag = env.cmd('info', 'memory')['mem_fragmentation_ratio']
+        frag = env.cmd('info', 'memory')['allocator_frag_ratio']
         if time.time() - startTime > 30:
             # We will wait for up to 30 seconds and then we consider it a failure
             env.assertTrue(False, message='Failed waiting for fragmentation to go down')
