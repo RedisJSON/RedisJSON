@@ -20,6 +20,13 @@ def enableDefrag(env):
 def defragOnObj(env, obj):
     enableDefrag(env)
     env.expect('JSON.SET', 'test', '$', json.dumps(obj)).ok()
+    for i in range(10000):
+        env.expect('JSON.SET', 'test%d' % i, '$', json.dumps(obj)).ok()
+    i += 1
+    env.expect('JSON.SET', 'test%d' % i, '$', json.dumps(obj)).ok()
+    for i in range(10000):
+        env.expect('DEL', 'test%d' % i).equal(1)
+    i += 1
     _, _, _, _, _, keysDefrag = env.cmd('JSON.DEBUG', 'DEFRAG_INFO')
     startTime = time.time()
     # Wait for at least 2 defrag full cycles
@@ -34,8 +41,9 @@ def defragOnObj(env, obj):
             env.assertTrue(False, message='Failed waiting for defrag to run')
             return
     # make sure json is still valid.
-    res = json.loads(env.cmd('JSON.GET', 'test', '$'))[0]
+    res = json.loads(env.cmd('JSON.GET', 'test%d' % i, '$'))[0]
     env.assertEqual(res, obj)
+    env.assertGreater(env.cmd('info', 'Stats')['active_defrag_key_hits'], 0)
 
 def testDefragNumber(env):
     defragOnObj(env, 1)
