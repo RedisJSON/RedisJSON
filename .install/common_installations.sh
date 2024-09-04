@@ -17,12 +17,12 @@ python3 -m venv venv
 activate_venv
 source venv/bin/activate
 
-pip install --upgrade pip
-pip install -q --upgrade setuptools
-echo "pip version: $(pip --version)"
-echo "pip path: $(which pip)"
+pip3 install --upgrade pip
+pip3 install -q --upgrade setuptools
+echo "pip version: $(pip3 --version)"
+echo "pip path: $(which pip3)"
 
-pip install -q -r tests/pytest/requirements.txt
+pip3 install -q -r tests/pytest/requirements.txt
 
 # List installed packages
-pip list
+pip3 list
