@@ -279,7 +279,7 @@ jobs:
     parameters:
       redis_version:
         type: string
-        default: "7"
+        default: "unstable"
       persist:
         type: string
         default: "yes"
@@ -486,7 +486,7 @@ workflows:
     jobs:
       - build-linux-debian:
           name: build
-          <<: *not-on-integ-branch
+          <<: *always
       - build-platforms:
           <<: *on-integ-and-version-tags
           context: common
