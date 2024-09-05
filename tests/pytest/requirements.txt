@@ -1,4 +1,4 @@
 RLTest ~= 0.7.2
 six >= 1.10.0
 gevent >= 22.10.2
-# packaging >= 20.8
+packaging >= 20.8

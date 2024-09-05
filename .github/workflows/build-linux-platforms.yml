@@ -99,12 +99,6 @@ jobs:
           echo ::group::Install rust
           ./getrust.sh
           echo ::endgroup::
-      - name: common installations
-        shell: bash
-        run: |
-          ./.install/common_installations.sh
-        env:
-          PIP_BREAK_SYSTEM_PACKAGES: 1
       - name: Get Redis
         uses: actions/checkout@v3
         with:
@@ -128,8 +122,15 @@ jobs:
         shell: bash
         run: |
           cmake --version
+          echo ::group::Activate virtual environment
           ./.install/activate_venv.sh
+          echo ::endgroup::
+          echo ::group::Install python dependencies
+          ./common_installations.sh
+          echo ::endgroup::
           MODULE=$(realpath ./target/release/librejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
+        env:
+          PIP_BREAK_SYSTEM_PACKAGES: 1
       - name: Unit tests
         shell: bash
         run: |

@@ -3,8 +3,6 @@ set -e
 OS_TYPE=$(uname -s)
 MODE=$1 # whether to install using sudo or not
 
-./.install/activate_venv.sh
-
 pip3 install --upgrade pip
 pip3 install -q --upgrade setuptools
 echo "pip version: $(pip3 --version)"
