@@ -11,6 +11,6 @@ $MODE apt install -yqq wget make clang-format gcc python3 python3-venv python3-p
 
 $MODE update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 60 --slave /usr/bin/g++ g++ /usr/bin/g++-10
 
-pip install -q addict toml jinja2 ramp-packer
+# pip install -q addict toml jinja2 ramp-packer
 
 source install_cmake.sh $MODE
