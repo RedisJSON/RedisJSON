@@ -118,21 +118,21 @@ jobs:
           . "$HOME/.cargo/env" # to use cargo with the same version for all
           cargo --version
           cargo build --release
-      - name: Flow tests
+      - name: Run tests
         shell: bash
         run: |
-          cmake --version
           echo ::group::Activate virtual environment
           ./.install/activate_venv.sh
           echo ::endgroup::
           echo ::group::Install python dependencies
-          ./common_installations.sh
+          ./.install/common_installations.sh
           echo ::endgroup::
+          echo ::group::Flow tests
           MODULE=$(realpath ./target/release/librejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
-        env:
-          PIP_BREAK_SYSTEM_PACKAGES: 1
-      - name: Unit tests
-        shell: bash
-        run: |
+          echo ::endgroup::
+          echo ::group::Unit tests
           . "$HOME/.cargo/env" # to use cargo with the same version for all
           cargo test
+          echo ::endgroup::
+        env:
+          PIP_BREAK_SYSTEM_PACKAGES: 1
