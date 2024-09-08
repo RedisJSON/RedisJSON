@@ -24,12 +24,6 @@ jobs:
       fail-fast: false
       matrix:
         docker_image:
-          # https://github.com/actions/checkout/issues/1386 - sparse checkout does not work on got 2.25 which is the default in focal
-          - image: "ubuntu:focal"
-            pre_req_install_cmd: | 
-              apt-get update && apt-get install -y software-properties-common
-              add-apt-repository ppa:git-core/ppa && apt-get update && apt-get install -y git
-            install_deps_script: ./ubuntu_20.04.sh
           - image: "ubuntu:bionic"
             pre_req_install_cmd: |
               # https://github.com/actions/checkout/issues/1809
