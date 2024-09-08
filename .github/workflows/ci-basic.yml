@@ -20,10 +20,16 @@ on:
 jobs:
   build-linux-jammy:
     runs-on: ubuntu-22.04
+    container:
+      image: ubuntu-22.04
     defaults:
       run:
         shell: bash -l -eo pipefail {0}
     steps:
+      - name: Install git
+        shell: bash
+        run: |
+          apt-get update && apt-get install -y git
       - name: Checkout
         uses: actions/checkout@v3
       - name: Setup
