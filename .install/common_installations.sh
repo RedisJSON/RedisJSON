@@ -8,7 +8,7 @@ pip install -q --upgrade setuptools
 echo "pip version: $(pip3 --version)"
 echo "pip path: $(which pip3)"
 
-pip install -v --no-build-isolation --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" -q -r tests/pytest/requirements.txt
+pip install -q -r tests/pytest/requirements.txt
 
 # List installed packages
 pip list
