@@ -25,39 +25,50 @@ jobs:
         shell: bash -l -eo pipefail {0}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
-      - name: Deps checkout
         uses: actions/checkout@v3
-        with:
-          path: setup
-          sparse-checkout-cone-mode: false
-          sparse-checkout: |
-            .install
-            tests/pytest/requirements.*
-      - name: Setup specific
-        working-directory: setup/.install
-        run: ./install_script.sh ${{ steps.mode.outputs.mode }}
-      - name: Full checkout
-        uses: actions/checkout@v3
-        with:
-          submodules: recursive
-      - name: Setup common
-        run: .install/common_installations.sh ${{ steps.mode.outputs.mode }}
-
+      - name: Setup
+        shell: bash
+        working-directory: .install
+        run: |
+          echo ::group::Install dependencies
+          ./ubuntu_22.04.sh
+          echo ::endgroup::
+          echo ::group::Install rust
+          ./getrust.sh
+          echo ::endgroup::
       - name: Get Redis
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           repository: redis/redis
           ref: 'unstable' # todo change per version/tag
           path: redis
       - name: Build Redis
         working-directory: redis
-        run: make install
+        shell: bash
+        run: |
+          find .
+          make install
       - name: Build module
-        run: make build
-      - name: Unit tests
-        run: make cargo_test
-      - name: Flow tests
-        run: make pytest
+        shell: bash
+        run: |
+          . "$HOME/.cargo/env" # to use cargo with the same version for all
+          cargo --version
+          cargo build --release
+      - name: Run tests
+        shell: bash
+        run: |
+          echo ::group::Activate virtual environment
+          ./.install/activate_venv.sh
+          echo ::endgroup::
+          echo ::group::Install python dependencies
+          ./.install/common_installations.sh
+          echo ::endgroup::
+          echo ::group::Flow tests
+          MODULE=$(realpath ./target/release/librejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
+          echo ::endgroup::
+          echo ::group::Unit tests
+          . "$HOME/.cargo/env" # to use cargo with the same version for all
+          cargo test
+          echo ::endgroup::
+        env:
+          PIP_BREAK_SYSTEM_PACKAGES: 1
