@@ -66,13 +66,11 @@ jobs:
     steps:
       - name: Install git
         run: ${{ matrix.docker_image.pre_req_install_cmd }}
-        shell: bash
       - name: Checkout
         uses: actions/checkout@v3
         with:
           submodules: 'recursive'
       - name: Setup
-        shell: bash
         working-directory: .install
         run: |
           echo ::group::Install dependencies
@@ -90,13 +88,11 @@ jobs:
           submodules: 'recursive'
       - name: Build Redis
         working-directory: redis
-        shell: bash
         run: |
           make install
       - name: Build module
-        shell: bash
         run: |
-          ./.install/activate_venv.sh
+          . "$HOME/.cargo/env"
           cargo --version
           cargo build --release
       - name: Set Artifact Names
@@ -107,7 +103,6 @@ jobs:
           echo "name=$(echo "${{ matrix.docker_image.image }} x86-64, Redis unstable" | \
             sed -e 's/[":\/\\<>\|*?]/_/g' -e 's/__*/_/g' -e 's/^_//' -e 's/_$//')" >> $GITHUB_OUTPUT
       - name: Run tests
-        shell: bash
         run: |
           echo ::group::Activate virtual environment
           ./.install/activate_venv.sh

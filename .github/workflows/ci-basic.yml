@@ -27,7 +27,6 @@ jobs:
         shell: bash -l -eo pipefail {0}
     steps:
       - name: Install git
-        shell: bash
         run: |
           apt-get update && apt-get install -y git
       - name: Checkout
@@ -35,7 +34,6 @@ jobs:
         with:
           submodules: 'recursive'
       - name: Setup
-        shell: bash
         working-directory: .install
         run: |
           echo ::group::Install dependencies
@@ -52,13 +50,11 @@ jobs:
           path: redis
       - name: Build Redis
         working-directory: redis
-        shell: bash
         run: |
           make install
       - name: Build module
-        shell: bash
         run: |
-          ./.install/activate_venv.sh
+          . "$HOME/.cargo/env"
           cargo --version
           cargo build --release
       - name: Set Artifact Names
@@ -69,7 +65,6 @@ jobs:
           echo "name=$(echo "ubuntu22 x86-64, Redis unstable" | \
             sed -e 's/[":\/\\<>\|*?]/_/g' -e 's/__*/_/g' -e 's/^_//' -e 's/_$//')" >> $GITHUB_OUTPUT
       - name: Run tests
-        shell: bash
         run: |
           echo ::group::Activate virtual environment
           ./.install/activate_venv.sh
