@@ -17,7 +17,7 @@ regex = "1"
 itertools = "0.13"
 
 [dev-dependencies]
-env_logger = "0.10"
+env_logger = "0.10" # do not change this version without running a full ci cycle
 
 [[bin]]
 name = "jsonpath"
