@@ -432,13 +432,10 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             if !(0..=len).contains(&index) {
                 return Err("ERR index out of bounds".into());
             }
-            let mut index = index as usize;
+            let index = index as usize;
             let curr = v.as_array_mut().unwrap();
-            curr.reserve(args.len());
-            for a in args {
-                curr.insert(index, a.clone());
-                index += 1;
-            }
+            curr.extend(args.iter().cloned());
+            curr[index..].rotate_right(args.len());
             res = Some(curr.len());
             Ok(Some(()))
         })?;
