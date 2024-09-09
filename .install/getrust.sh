@@ -7,8 +7,8 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 
 # Install and set the required Rust version
-# rustup install 1.72.0
-# rustup default 1.72.0
+rustup install 1.72.0
+rustup default 1.72.0
 
 # Update rustup and install nightly toolchain
 rustup update
