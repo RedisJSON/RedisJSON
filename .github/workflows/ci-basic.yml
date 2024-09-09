@@ -58,6 +58,7 @@ jobs:
       - name: Build module
         shell: bash
         run: |
+          ./.install/activate_venv.sh
           cargo --version
           cargo build --release
       - name: Set Artifact Names
