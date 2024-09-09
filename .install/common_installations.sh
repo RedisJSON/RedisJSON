@@ -10,7 +10,7 @@ echo "pip path: $(which pip3)"
 
 pip3 install -q -r tests/pytest/requirements.txt
 # These packages are needed to build the package
-pip3 install -q addict toml jinja2 ramp-packer
+pip3 install -q -r .install/build_package_requirements.txt
 
 # List installed packages
 pip3 list
