@@ -11,6 +11,10 @@ jobs:
       label: ${{ steps.start-ec2-runner.outputs.label }}
       ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
     steps:
+      - name: Checkout the module
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
       - name: start ranner
         id: start-ec2-runner
         uses: ./.github/actions/start-ec2-runner
@@ -45,6 +49,10 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ always() }} # required to stop the runner even if the error happened in the previous jobs
     steps:
+      - name: Checkout the module
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
       - name: stop runner
         uses: ./.github/actions/stop-ec2-runner
         with:
