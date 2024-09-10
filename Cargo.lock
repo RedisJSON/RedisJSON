@@ -821,7 +821,7 @@ dependencies = [
 [[package]]
 name = "redis-module"
 version = "99.99.99"
-source = "git+https://github.com/RedisLabsModules/redismodule-rs?rev=32f284bd18ee799e54f8da835c81a137a34d7f83#32f284bd18ee799e54f8da835c81a137a34d7f83"
+source = "git+https://github.com/RedisLabsModules/redismodule-rs?tag=v2.0.8#bce557d5ec9381d8b70eaee30c47f74bb66f458b"
 dependencies = [
  "backtrace",
  "bindgen",
@@ -843,7 +843,7 @@ dependencies = [
 [[package]]
 name = "redis-module-macros"
 version = "99.99.99"
-source = "git+https://github.com/RedisLabsModules/redismodule-rs?rev=32f284bd18ee799e54f8da835c81a137a34d7f83#32f284bd18ee799e54f8da835c81a137a34d7f83"
+source = "git+https://github.com/RedisLabsModules/redismodule-rs?tag=v2.0.8#bce557d5ec9381d8b70eaee30c47f74bb66f458b"
 dependencies = [
  "proc-macro2",
  "quote 1.0.37",
@@ -855,7 +855,7 @@ dependencies = [
 [[package]]
 name = "redis-module-macros-internals"
 version = "99.99.99"
-source = "git+https://github.com/RedisLabsModules/redismodule-rs?rev=32f284bd18ee799e54f8da835c81a137a34d7f83#32f284bd18ee799e54f8da835c81a137a34d7f83"
+source = "git+https://github.com/RedisLabsModules/redismodule-rs?tag=v2.0.8#bce557d5ec9381d8b70eaee30c47f74bb66f458b"
 dependencies = [
  "lazy_static",
  "proc-macro2",
