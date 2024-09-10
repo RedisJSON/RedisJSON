@@ -69,7 +69,7 @@ runs:
         aws-region: ${{ inputs.ci_cto_aws_region }}
     - name: Start EC2 instance
       id: start-ec2-runner
-      uses: redisearch/start-ec2-runner@v1
+      uses: machulav/start-ec2-runner@v1
       with:
         ec2-image-id: ${{ inputs.aws-image-id }}
         ec2-instance-type: ${{ inputs.aws_instance_type }}
