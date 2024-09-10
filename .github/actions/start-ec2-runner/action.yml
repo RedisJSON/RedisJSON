@@ -69,8 +69,9 @@ runs:
         aws-region: ${{ inputs.ci_cto_aws_region }}
     - name: Start EC2 instance
       id: start-ec2-runner
-      uses: machulav/start-ec2-runner@v1
+      uses: machulav/ec2-github-runner@v2
       with:
+        mode: start
         ec2-image-id: ${{ inputs.aws-image-id }}
         ec2-instance-type: ${{ inputs.aws_instance_type }}
         aws-resource-tags: ${{ inputs.tag }}
