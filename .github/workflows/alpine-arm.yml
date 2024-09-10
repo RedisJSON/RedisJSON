@@ -6,7 +6,7 @@ on:
 jobs:
   start-runner:
     name: Start self-hosted EC2 runner
-    runs-on: ${{ vars.RUNS_ON }}
+    runs-on: ubuntu-latest
     outputs:
       label: ${{ steps.start-ec2-runner.outputs.label }}
       ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
@@ -42,7 +42,7 @@ jobs:
     needs:
       - start-runner # required to get output from the start-runner job
       - test  # required to wait when the main job is done
-    runs-on: ${{ vars.RUNS_ON }}
+    runs-on: ubuntu-latest
     if: ${{ always() }} # required to stop the runner even if the error happened in the previous jobs
     steps:
       - name: stop runner
