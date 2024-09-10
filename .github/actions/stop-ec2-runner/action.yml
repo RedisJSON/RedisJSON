@@ -35,7 +35,7 @@ runs:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        aws-access-key-id: ${{ intpus.ci_cto_aws_access_key_id }}
+        aws-access-key-id: ${{ inputs.ci_cto_aws_access_key_id }}
         aws-secret-access-key: ${{ inputs.ci_cto_aws_secret_access_key }}
         aws-region: ${{ inputs.ci_cto_aws_region }}
     - name: Stop EC2 runner

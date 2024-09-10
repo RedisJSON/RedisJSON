@@ -14,11 +14,10 @@ inputs:
     description: 'The tag to apply to the instance'
     default: | # Make sure there is no trailing comma!
       [
-        {"Key": "Name",         "Value": "redisearch-ci-runner"},
+        {"Key": "Name",         "Value": "redisjson-ci-runner"},
         {"Key": "Environment",  "Value": "CI"},
         {"Key": "Run ID",       "Value": "${{ github.run_id }}"},
         {"Key": "PR",           "Value": "${{ github.event.number }}"},
-        {"Key": "Container",    "Value": "${{ inputs.container }}"},
         {"Key": "Owner",        "Value": "${{ github.actor }}"},
         {"Key": "Project",      "Value": "${{ github.repository }}"}
       ]
@@ -65,7 +64,7 @@ runs:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        aws-access-key-id: ${{ intpus.ci_cto_aws_access_key_id }}
+        aws-access-key-id: ${{ inputs.ci_cto_aws_access_key_id }}
         aws-secret-access-key: ${{ inputs.ci_cto_aws_secret_access_key }}
         aws-region: ${{ inputs.ci_cto_aws_region }}
     - name: Start EC2 instance
