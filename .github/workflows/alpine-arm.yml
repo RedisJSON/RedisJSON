@@ -42,7 +42,6 @@ jobs:
     needs:
       - start-runner # required to get output from the start-runner job
       - test  # required to wait when the main job is done
-      - build # required to wait when the main job is done
     runs-on: ${{ vars.RUNS_ON }}
     if: ${{ always() }} # required to stop the runner even if the error happened in the previous jobs
     steps:
