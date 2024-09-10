@@ -1,0 +1,47 @@
+name: Stop EC2 Instance
+description: Stop an EC2 instance
+
+inputs:
+  label:
+    description: 'The label of the runner'
+    required: true
+    type: string
+  ec2-instance-id:
+    description: 'The ID of the EC2 instance to stop'
+    required: true
+    type: string
+
+  #### secrets ####
+  ci_cto_aws_access_key_id:
+    description: 'The AWS access key ID'
+    required: true
+    type: string
+  ci_cto_aws_secret_access_key:
+    description: 'The AWS secret access key'
+    required: true
+    type: string
+  ci_cto_aws_region:
+    description: 'The AWS region'
+    required: true
+    type: string
+  ci_gh_p_token:
+    description: 'The GitHub personal access token'
+    required: true
+    type: string
+
+runs:
+  using: composite
+  steps:
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ intpus.ci_cto_aws_access_key_id }}
+        aws-secret-access-key: ${{ inputs.ci_cto_aws_secret_access_key }}
+        aws-region: ${{ inputs.ci_cto_aws_region }}
+    - name: Stop EC2 runner
+      uses: machulav/ec2-github-runner@v2
+      with:
+        mode: stop
+        github-token: ${{ inputs.ci_gh_p_token }}
+        label: ${{ inputs.label }}
+        ec2-instance-id: ${{ inputs.ec2-instance-id }}
