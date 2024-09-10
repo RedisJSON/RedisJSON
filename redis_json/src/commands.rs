@@ -4,6 +4,7 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
+use crate::defrag::defrag_info;
 use crate::error::Error;
 use crate::formatter::ReplyFormatOptions;
 use crate::key_value::KeyValue;
@@ -1817,6 +1818,7 @@ pub fn json_debug<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
                 .into())
             }
         }
+        "DEFRAG_INFO" => defrag_info(ctx),
         "HELP" => {
             let results = vec![
                 "MEMORY <key> [path] - reports memory usage",
