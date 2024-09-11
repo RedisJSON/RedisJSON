@@ -1,4 +1,4 @@
-name: Build and Test alpine ARM
+name: Build and Test alpine ARM instance
 
 on:
   push:
