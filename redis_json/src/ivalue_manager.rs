@@ -128,14 +128,14 @@ impl<'a> IValueKeyHolderWrite<'a> {
         Ok(())
     }
 
-    fn set_root(&mut self, data: IValue) -> RedisResult<()> {
+    fn set_root(&mut self, data: IValue) -> RedisResult<bool> {
         self.get_json_holder()?;
         if let Some(val) = &mut self.val {
             val.data = data
         } else {
             self.key.set_value(&REDIS_JSON_TYPE, RedisJSON { data })?
         }
-        Ok(())
+        Ok(true)
     }
 }
 
@@ -165,7 +165,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     fn set_value(&mut self, path: Vec<String>, mut v: IValue) -> RedisResult<bool> {
         if path.is_empty() {
             // update the root
-            self.set_root(v).and(Ok(true))
+            self.set_root(v)
         } else {
             let root = self.get_value()?.unwrap();
             Ok(update(path, root, |val| Ok(*val = v.take())).is_ok())
