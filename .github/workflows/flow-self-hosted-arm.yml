@@ -44,7 +44,7 @@ jobs:
       label: ${{ steps.start-ec2-runner.outputs.label }}
       ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
     steps:
-      - name: start ranner
+      - name: start runner
         id: start-ec2-runner
         uses: ./.github/actions/start-ec2-runner
         with:

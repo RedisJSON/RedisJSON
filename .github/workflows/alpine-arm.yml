@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
-      - name: start ranner
+      - name: start runner
         id: start-ec2-runner
         uses: ./.github/actions/start-ec2-runner
         with:
