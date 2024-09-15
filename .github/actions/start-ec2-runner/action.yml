@@ -24,18 +24,6 @@ inputs:
     type: string
 
   #### secrets ####
-  ci_cto_aws_access_key_id:
-    description: 'The AWS access key ID'
-    required: true
-    type: string
-  ci_cto_aws_secret_access_key:
-    description: 'The AWS secret access key'
-    required: true
-    type: string
-  ci_cto_aws_region:
-    description: 'The AWS region'
-    required: true
-    type: string
   ci_gh_p_token:
     description: 'The GitHub personal access token'
     required: true
@@ -57,16 +45,37 @@ outputs:
   ec2-instance-id:
     description: 'The ID of the EC2 instance, should be used in runs-on field'
     value: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
+  aws-access-key-id:
+    description: 'The ID of the AWS access key, used to stop the EC2 runner'
+    value: ${{ steps.creds.outputs.aws-access-key-id }}
+  aws-secret-access-key:
+    description: 'The AWS secret access key, used to stop the EC2 runner'
+    value: ${{ steps.creds.outputs.aws-secret-access-key }}
 
 runs:
   using: composite
   steps:
-    - name: Configure AWS credentials
+    - name: Configure AWS Credentials 1
+      id: creds
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        aws-access-key-id: ${{ inputs.ci_cto_aws_access_key_id }}
-        aws-secret-access-key: ${{ inputs.ci_cto_aws_secret_access_key }}
-        aws-region: ${{ inputs.ci_cto_aws_region }}
+        aws-region: ue-north-1
+        role-to-assume: arn:aws:iam::513600691417:role/GitHubActionsRedisJSONEc2
+        output-credentials: true
+    - name: get caller identity 1
+      run: |
+        aws sts get-caller-identity
+    - name: Configure AWS Credentials 2
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: ue-north-1
+        aws-access-key-id: ${{ steps.creds.outputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ steps.creds.outputs.aws-secret-access-key }}
+        aws-session-token: ${{ steps.creds.outputs.aws-session-token }}
+        role-to-assume: arn:aws:iam::513600691417:role/GitHubActionsRedisJSONEc2
+    - name: get caller identity2
+      run: |
+        aws sts get-caller-identity
     - name: Start EC2 instance
       id: start-ec2-runner
       uses: machulav/ec2-github-runner@v2

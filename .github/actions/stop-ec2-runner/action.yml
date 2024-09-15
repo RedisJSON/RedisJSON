@@ -20,10 +20,6 @@ inputs:
     description: 'The AWS secret access key'
     required: true
     type: string
-  ci_cto_aws_region:
-    description: 'The AWS region'
-    required: true
-    type: string
   ci_gh_p_token:
     description: 'The GitHub personal access token'
     required: true
@@ -37,7 +33,7 @@ runs:
       with:
         aws-access-key-id: ${{ inputs.ci_cto_aws_access_key_id }}
         aws-secret-access-key: ${{ inputs.ci_cto_aws_secret_access_key }}
-        aws-region: ${{ inputs.ci_cto_aws_region }}
+        aws-region: ue-north-1
     - name: Stop EC2 runner
       uses: machulav/ec2-github-runner@v2
       with:
