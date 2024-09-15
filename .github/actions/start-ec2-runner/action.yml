@@ -54,9 +54,6 @@ outputs:
 
 runs:
   using: composite
-  defaults:
-    run:
-      shell: bash
   steps:
     - name: Configure AWS Credentials 1
       id: creds
