@@ -27,6 +27,9 @@ inputs:
 
 runs:
   using: composite
+  defaults:
+    run:
+      shell: bash
   steps:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4

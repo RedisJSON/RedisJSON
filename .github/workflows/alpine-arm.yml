@@ -10,6 +10,8 @@ jobs:
     outputs:
       label: ${{ steps.start-ec2-runner.outputs.label }}
       ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
+      aws-access-key-id: ${{ steps.start-ec2-runner.outputs.aws-access-key-id }}
+      aws-secret-access-key: ${{ steps.start-ec2-runner.outputs.aws-secret-access-key }}
     steps:
       - name: Checkout the module
         uses: actions/checkout@v4
