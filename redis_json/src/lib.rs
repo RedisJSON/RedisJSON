@@ -36,6 +36,7 @@ mod array_index;
 mod backward;
 pub mod c_api;
 pub mod commands;
+pub mod defrag;
 pub mod error;
 mod formatter;
 pub mod ivalue_manager;
@@ -73,7 +74,7 @@ pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
         free_effort: None,
         unlink: None,
         copy: Some(redisjson::type_methods::copy),
-        defrag: None,
+        defrag: Some(defrag::defrag),
 
         free_effort2: None,
         unlink2: None,
