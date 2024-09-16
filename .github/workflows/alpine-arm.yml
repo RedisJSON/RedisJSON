@@ -3,13 +3,15 @@ name: Build and Test alpine ARM instance
 on:
   push:
 
+permissions:
+  id-token: write # This is required for requesting the JWT
+  contents: read  # This is required for actions/checkout
+
+
 jobs:
   start-runner:
     name: Start self-hosted EC2 runner
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash
     outputs:
       label: ${{ steps.start-ec2-runner.outputs.label }}
       ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
@@ -32,9 +34,6 @@ jobs:
   test:
     needs: start-runner # required to start the main job when the runner is ready
     runs-on: ${{ needs.start-runner.outputs.ec2-instance-id }}
-    defaults:
-      run:
-        shell: bash
     container:
       image: arm64v8/alpine # required to run the job on the ARM instance
     steps:
@@ -49,9 +48,6 @@ jobs:
       - start-runner # required to get output from the start-runner job
       - test  # required to wait when the main job is done
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash
     if: ${{ always() }} # required to stop the runner even if the error happened in the previous jobs
     steps:
       - name: Checkout the module
