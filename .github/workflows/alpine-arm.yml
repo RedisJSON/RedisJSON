@@ -15,32 +15,41 @@ jobs:
     container:
       image: arm64v8/alpine # required to run the job on the ARM instance
     steps:
+      - name: Workaround alpine-arm64 GHA issues
+        shell: sh
+        run: |
+          cp /etc/os-release /etc/os-release.bak
+          sed -i 's/ID=alpine/ID=NotpineForGHA/g' /etc/os-release
       - name: Install prerequisites
         shell: sh
         run: |
-          apk add bash make tar cargo python3 python3-dev py3-pip gcc git curl build-base autoconf automake py3-cryptography linux-headers musl-dev libffi-dev openssl-dev openssh py-virtualenv clang18-libclang
+          apk add bash make libtool tar cmake python3 python3-dev py3-pip gcc git curl build-base autoconf automake py3-cryptography linux-headers musl-dev libffi-dev openssl-dev openssh py-virtualenv clang18-libclang gcompat libstdc++ libgcc g++ openblas-dev xsimd git xz bsd-compat-headers clang18
       - name: Checkout the module
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           submodules: 'recursive'
       - name: Install python dependencies
-        shell: sh
         run: |
-          pip install -q --upgrade setuptools
-          pip install -q --upgrade pip
-          pip install -q -r tests/pytest/requirements.txt
-          pip install -q -r .install/build_package_requirements.txt
+          pip install -q --upgrade pip setuptools wheel
+          pip install -q -r tests/flow/requirements.txt
+          pip install -q jinja2 ramp-packer
         env:
           PIP_BREAK_SYSTEM_PACKAGES: 1
       - name: Checkout Redis
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
-          repository: redis/redis
-          ref: '7.2.1'
-          path: redis
+          repository: 'redis/redis'
+          ref: ${{ matrix.redis-version }}
+          path: 'redis'
       - name: Build Redis
         working-directory: redis
-        run: make install
+        shell: sh
+        run: |
+          make -j `nproc`
+          echo "REDIS_SERVER=$GITHUB_WORKSPACE/redis/src/redis-server" >> $GITHUB_ENV
+          echo "$GITHUB_WORKSPACE/redis/src" >> $GITHUB_PATH
+          export PATH="$GITHUB_WORKSPACE/redis/src:$PATH"
+          redis-server --version
       - name: Build module
         shell: sh
         run: |
