@@ -14,8 +14,8 @@ runs:
     - name: Build Redis
       shell: bash
       working-directory: redis
-      run: make install
+      run: make install -j `nproc`
     - name: Build module
       shell: bash
       run: |
-        make build
+        make build -j `nproc`
