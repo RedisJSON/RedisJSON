@@ -9,31 +9,32 @@ permissions:
 
 
 jobs:
-  start-runner:
-    name: Start self-hosted EC2 runner
-    runs-on: ubuntu-latest
-    outputs:
-      label: ${{ steps.start-ec2-runner.outputs.label }}
-      ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
-      aws-access-key-id: ${{ steps.start-ec2-runner.outputs.aws-access-key-id }}
-      aws-secret-access-key: ${{ steps.start-ec2-runner.outputs.aws-secret-access-key }}
-    steps:
-      - name: Checkout the module
-        uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
-      - name: start runner
-        id: start-ec2-runner
-        uses: ./.github/actions/start-ec2-runner
-        with:
-          ci_gh_p_token: ${{ github.token }}
-          ci_cto_aws_ec2_subnet_id: subnet-c7ece48d
-          ci_cto_aws_ec2_sg_id: sg-001fb95085a7b4380
+#  start-runner:
+#    name: Start self-hosted EC2 runner
+#    runs-on: ubuntu-latest
+#    outputs:
+#      label: ${{ steps.start-ec2-runner.outputs.label }}
+#      ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
+#      aws-access-key-id: ${{ steps.start-ec2-runner.outputs.aws-access-key-id }}
+#      aws-secret-access-key: ${{ steps.start-ec2-runner.outputs.aws-secret-access-key }}
+#    steps:
+#      - name: Checkout the module
+#        uses: actions/checkout@v4
+#        with:
+#          submodules: 'recursive'
+#      - name: start runner
+#        id: start-ec2-runner
+#        uses: ./.github/actions/start-ec2-runner
+#        with:
+#          ci_gh_p_token: ${{ github.token }}
+#          ci_cto_aws_ec2_subnet_id: subnet-c7ece48d
+#          ci_cto_aws_ec2_sg_id: sg-001fb95085a7b4380
 
 
   test:
-    needs: start-runner # required to start the main job when the runner is ready
-    runs-on: ${{ needs.start-runner.outputs.ec2-instance-id }}
+#    needs: start-runner # required to start the main job when the runner is ready
+#    runs-on: ${{ needs.start-runner.outputs.ec2-instance-id }}
+    runs-on: ubuntu24-arm64-2-8
     container:
       image: arm64v8/alpine # required to run the job on the ARM instance
     steps:
@@ -42,23 +43,23 @@ jobs:
         run: |
           apk add bash make tar cargo python3 python3-dev py3-pip gcc git curl build-base autoconf automake py3-cryptography linux-headers musl-dev libffi-dev openssl-dev openssh py-virtualenv clang18-libclang
 
-  stop-runner:
-    name: Stop self-hosted EC2 runner
-    needs:
-      - start-runner # required to get output from the start-runner job
-      - test  # required to wait when the main job is done
-    runs-on: ubuntu-latest
-    if: ${{ always() }} # required to stop the runner even if the error happened in the previous jobs
-    steps:
-      - name: Checkout the module
-        uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
-      - name: stop runner
-        uses: ./.github/actions/stop-ec2-runner
-        with:
-          label: ${{ needs.start-runner.outputs.label }}
-          ec2-instance-id: ${{ needs.start-runner.outputs.ec2-instance-id }}
-          ci_cto_aws_access_key_id: ${{ needs.start-runner.outputs.aws-access-key-id }}
-          ci_cto_aws_secret_access_key: ${{ needs.start-runner.outputs.aws-secret-access-key }}
-          ci_gh_p_token: ${{ github.token }}
+#  stop-runner:
+#    name: Stop self-hosted EC2 runner
+#    needs:
+#      - start-runner # required to get output from the start-runner job
+#      - test  # required to wait when the main job is done
+#    runs-on: ubuntu-latest
+#    if: ${{ always() }} # required to stop the runner even if the error happened in the previous jobs
+#    steps:
+#      - name: Checkout the module
+#        uses: actions/checkout@v4
+#        with:
+#          submodules: 'recursive'
+#      - name: stop runner
+#        uses: ./.github/actions/stop-ec2-runner
+#        with:
+#          label: ${{ needs.start-runner.outputs.label }}
+#          ec2-instance-id: ${{ needs.start-runner.outputs.ec2-instance-id }}
+#          ci_cto_aws_access_key_id: ${{ needs.start-runner.outputs.aws-access-key-id }}
+#          ci_cto_aws_secret_access_key: ${{ needs.start-runner.outputs.aws-secret-access-key }}
+#          ci_gh_p_token: ${{ github.token }}
