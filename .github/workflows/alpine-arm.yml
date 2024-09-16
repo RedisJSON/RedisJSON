@@ -40,26 +40,22 @@ jobs:
           submodules: 'recursive'
       - name: Install python dependencies
         run: |
-          pip install -q --upgrade pip setuptools wheel
-          pip install -q -r tests/flow/requirements.txt
-          pip install -q jinja2 ramp-packer
+          pip install -q --upgrade setuptools
+          pip install -q --upgrade pip
+          pip install -q -r tests/pytest/requirements.txt
+          pip install -q -r .install/build_package_requirements.txt
         env:
           PIP_BREAK_SYSTEM_PACKAGES: 1
       - name: Checkout Redis
         uses: actions/checkout@v3
         with:
           repository: 'redis/redis'
-          ref: ${{ matrix.redis-version }}
+          ref: '7.2.1'
           path: 'redis'
       - name: Build Redis
-        working-directory: redis
         shell: sh
-        run: |
-          make -j `nproc`
-          echo "REDIS_SERVER=$GITHUB_WORKSPACE/redis/src/redis-server" >> $GITHUB_ENV
-          echo "$GITHUB_WORKSPACE/redis/src" >> $GITHUB_PATH
-          export PATH="$GITHUB_WORKSPACE/redis/src:$PATH"
-          redis-server --version
+        working-directory: redis
+        run: make install
       - name: Build module
         shell: sh
         run: |
