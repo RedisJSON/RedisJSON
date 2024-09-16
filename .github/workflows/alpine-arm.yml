@@ -12,6 +12,10 @@ jobs:
 
   test:
     runs-on: ubuntu24-arm64-4-16 # ubuntu24-arm64-2-8
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
+      ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
     container:
       image: alpine:3 # arm64v8/alpine # required to run the job on the ARM instance
     steps:
