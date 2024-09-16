@@ -33,7 +33,7 @@ runs:
       with:
         aws-access-key-id: ${{ inputs.ci_cto_aws_access_key_id }}
         aws-secret-access-key: ${{ inputs.ci_cto_aws_secret_access_key }}
-        aws-region: ue-north-1
+        aws-region: eu-north-1
     - name: Stop EC2 runner
       uses: machulav/ec2-github-runner@v2
       with:

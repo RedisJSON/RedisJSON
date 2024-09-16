@@ -27,8 +27,8 @@ jobs:
         uses: ./.github/actions/start-ec2-runner
         with:
           ci_gh_p_token: ${{ github.token }}
-          ci_cto_aws_ec2_subnet_id: ${{ secrets.CI_CTO_AWS_EC2_SUBNET_ID }}
-          ci_cto_aws_ec2_sg_id: ${{ secrets.CI_CTO_AWS_EC2_SG_ID }}
+          ci_cto_aws_ec2_subnet_id: subnet-c7ece48d
+          ci_cto_aws_ec2_sg_id: sg-001fb95085a7b4380
 
 
   test:
