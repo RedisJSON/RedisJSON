@@ -24,7 +24,7 @@ jobs:
         id: start-ec2-runner
         uses: ./.github/actions/start-ec2-runner
         with:
-          ci_gh_p_token: ${{ secrets.CI_GH_P_TOKEN }}
+          ci_gh_p_token: ${{ github.token }}
           ci_cto_aws_ec2_subnet_id: ${{ secrets.CI_CTO_AWS_EC2_SUBNET_ID }}
           ci_cto_aws_ec2_sg_id: ${{ secrets.CI_CTO_AWS_EC2_SG_ID }}
 
@@ -65,4 +65,4 @@ jobs:
           ec2-instance-id: ${{ needs.start-runner.outputs.ec2-instance-id }}
           ci_cto_aws_access_key_id: ${{ needs.start-runner.outputs.aws-access-key-id }}
           ci_cto_aws_secret_access_key: ${{ needs.start-runner.outputs.aws-secret-access-key }}
-          ci_gh_p_token: ${{ secrets.CI_GH_P_TOKEN }}
+          ci_gh_p_token: ${{ github.token }}

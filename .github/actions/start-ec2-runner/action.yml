@@ -63,6 +63,7 @@ runs:
         role-to-assume: arn:aws:iam::513600691417:role/GitHubActionsRedisJSONEc2
         output-credentials: true
     - name: get caller identity 1
+      shell: bash
       run: |
         aws sts get-caller-identity
     - name: Configure AWS Credentials 2
@@ -73,9 +74,6 @@ runs:
         aws-secret-access-key: ${{ steps.creds.outputs.aws-secret-access-key }}
         aws-session-token: ${{ steps.creds.outputs.aws-session-token }}
         role-to-assume: arn:aws:iam::513600691417:role/GitHubActionsRedisJSONEc2
-    - name: get caller identity2
-      run: |
-        aws sts get-caller-identity
     - name: Start EC2 instance
       id: start-ec2-runner
       uses: machulav/ec2-github-runner@v2
