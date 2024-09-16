@@ -29,7 +29,7 @@ jobs:
           clang18-libclang gcompat libstdc++ libgcc g++ openblas-dev \
           xsimd git xz bsd-compat-headers clang18
       - name: Checkout the module
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: 'recursive'
       - name: Install python dependencies
