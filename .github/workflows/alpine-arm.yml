@@ -34,7 +34,7 @@ jobs:
   test:
 #    needs: start-runner # required to start the main job when the runner is ready
 #    runs-on: ${{ needs.start-runner.outputs.ec2-instance-id }}
-    runs-on: ubuntu24-arm64-2-8
+    runs-on: ubuntu24-arm64-4-16 # ubuntu24-arm64-2-8
     container:
       image: arm64v8/alpine # required to run the job on the ARM instance
     steps:
