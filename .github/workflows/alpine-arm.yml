@@ -35,7 +35,7 @@ jobs:
           xsimd git xz bsd-compat-headers clang18
           echo ::endgroup::
       - name: Checkout the module
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           submodules: 'recursive'
       - name: Install python dependencies
