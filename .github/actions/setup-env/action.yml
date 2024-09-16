@@ -59,6 +59,7 @@ runs:
         else
           echo "This is not a tagged build"
           echo "TAGGED=0" >> $GITHUB_OUTPUT
+        fi
     - name: Set redis ref
       shell: bash
       id: set-redis-ref
