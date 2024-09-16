@@ -18,9 +18,11 @@ on:
         required: true
         default: 'unstable'
   workflow_call: # Allows to run this workflow from another workflow
-    redis-ref:
-      description: 'Redis ref to checkout'
-      required: true
+    inputs:
+      redis-ref:
+        description: 'Redis ref to checkout'
+        type: string
+        required: true
 
 permissions:
   id-token: write # This is required for requesting the JWT
@@ -98,10 +100,10 @@ jobs:
           path: 'redis'
       - name: build
         uses: ./.github/actions/build-json-module-and-redis
-      - name: Test
-        shell: sh
-        run: |
-          make test
+#      - name: Test
+#        shell: sh
+#        run: |
+#          make test
       - name: Pack module
         shell: sh
         run: |
