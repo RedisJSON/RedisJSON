@@ -2,6 +2,25 @@ name: Build and Test alpine ARM instance
 
 on:
   push:
+    branches:
+      - master
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - review_requested
+  workflow_dispatch: # Allows you to run this workflow manually from the Actions tab
+    inputs:
+      redis-ref:
+        description: 'Redis ref to checkout'
+        required: true
+        default: 'unstable'
+  workflow_call: # Allows to run this workflow from another workflow
+    redis-ref:
+      description: 'Redis ref to checkout'
+      required: true
 
 permissions:
   id-token: write # This is required for requesting the JWT
@@ -9,10 +28,35 @@ permissions:
 
 
 jobs:
+  setup-environment:
+    runs-on: ubuntu-latest
+    outputs:
+      TAGGED: ${{ steps.set-envtagged.outputs.TAGGED }}
+      TAG: ${{ steps.set-env.outputs.TAG }}
+      BRANCH: ${{ steps.set-env.outputs.BRANCH }}
+      TAG_OR_BRANCH: ${{ steps.set-env.outputs.TAG }}${{ steps.set-env.outputs.BRANCH }}
+      redis-ref: ${{ steps.set-env.outputs.redis-ref }}
+    steps:
+      - name: chceckout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: set env
+        id: set-env
+        uses: ./.github/actions/setup-env
+        with:
+          github-ref: ${{ github.ref }}
+          redis-ref: ${{ inputs.redis-ref }}
 
-  test:
+  alpine-arm64:
     runs-on: ubuntu24-arm64-4-16 # ubuntu24-arm64-2-8
+    needs: setup-environment
     env:
+      TAGGED: ${{ needs.setup-environment.outputs.TAGGED }}
+      VERSION: ${{ needs.setup-environment.outputs.TAG }}
+      BRANCH: ${{ needs.setup-environment.outputs.BRANCH }}
+      TAG_OR_BRANCH: ${{ needs.setup-environment.outputs.TAG_OR_BRANCH}}
+
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
       ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
@@ -50,7 +94,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           repository: 'redis/redis'
-          ref: '7.2.1'
+          ref: ${{needs.setup-environment.outputs.redis-ref}}
           path: 'redis'
       - name: build
         uses: ./.github/actions/build-json-module-and-redis

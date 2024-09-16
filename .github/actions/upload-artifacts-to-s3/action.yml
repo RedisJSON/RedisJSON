@@ -1,6 +1,6 @@
-name: Build JSON module and Redis Server
+name: Upload Artifacts to S3
 description: |
-  Build JSON module and Redis Server
+  Uploads module artifacts to S3 bucket.
 
 inputs:
   aws-access-key-id:
