@@ -16,12 +16,12 @@ jobs:
       image: arm64v8/alpine # required to run the job on the ARM instance
     steps:
       - name: Workaround alpine-arm64 GHA issues
-        shell: shell
+        shell: bash
         run: |
           cp /etc/os-release /etc/os-release.bak
           sed -i 's/ID=alpine/ID=NotpineForGHA/g' /etc/os-release
       - name: Install prerequisites
-        shell: shell
+        shell: bash
         run: |
           echo ::group::install packages
           apk add bash make libtool tar cmake python3 python3-dev \
