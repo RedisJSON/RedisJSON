@@ -1,0 +1,33 @@
+name: Build JSON module and Redis Server
+description: |
+  Build JSON module and Redis Server
+
+inputs:
+  aws-access-key-id:
+    description: 'AWS Access Key ID'
+    required: true
+  aws-secret-access-key:
+    description: 'AWS Secret Access Key'
+    required: true
+  github-ref:
+    description: 'GitHub ref'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with: # todo: use role instead of access key
+        aws-access-key-id: ${{ inputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+        aws-region: "us-east-1"
+    - name: Upload artifacts to S3 - staging
+      shell: bash
+      run: |
+        make upload-artifacts SHOW=1 VERBOSE=1
+        make upload-release SHOW=1 STAGING=1 VERBOSE=1
+    - name: Upload artifacts to S3 - release  # todo: trigger this manually instead
+      shell: bash
+      if: ${{ inputs.github-ref != 'refs/heads/master' }}
+      run: make upload-release SHOW=1 VERBOSE=1

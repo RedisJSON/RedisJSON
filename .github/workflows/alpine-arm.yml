@@ -62,3 +62,9 @@ jobs:
         shell: sh
         run: |
           make pack BRANCH=${{ github.ref_name }}
+      - name: Upload artifacts to S3
+        uses: ./.github/actions/upload-artifacts-to-s3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          github-ref: ${{ github.ref }}
