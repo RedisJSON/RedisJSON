@@ -34,7 +34,7 @@ runs:
           pip3 install --upgrade pip && pip3 install --no-cache-dir awscli && rm -rf /var/cache/apk/*
         echo ::endgroup::
         echo ::group::upload artifacts
-          make upload-artifacts SHOW=1 VERBOSE=1
+          make upload-artifacts SHOW=1 VERBOSE=1 OSNICK=alpine3.20.0
         echo ::endgroup::
         echo ::group::upload staging release
           make upload-release SHOW=1 STAGING=1 VERBOSE=1
