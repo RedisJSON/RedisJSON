@@ -93,15 +93,8 @@ jobs:
           repository: 'redis/redis'
           ref: ${{needs.setup-environment.outputs.redis-ref}}
           path: 'redis'
-      - name: Install python dependencies (sh)
+      - name: Install python dependencies
         run: |
-          echo ::group::Setup a virtual environment
-            python3 -m venv .venv
-          echo ::endgroup::
-          echo ::group::install aws cli
-            . .venv/bin/activate && \
-            pip3 install --upgrade pip && pip3 install --no-cache-dir awscli && rm -rf /var/cache/apk/*
-          echo ::endgroup::
           echo ::group::install requirements
             pip install -q --upgrade setuptools
             pip install -q --upgrade pip
@@ -112,11 +105,8 @@ jobs:
           PIP_BREAK_SYSTEM_PACKAGES: 1
       - name: build
         uses: ./.github/actions/build-json-module-and-redis
-        with:
-          virtual-environment-cmd: '. .venv/bin/activate'
       #      - name: Test
 #        run: |
-#          . .venv/bin/activate && \
 #          make test
 #      - name: Rollback Workaround alpine-arm64 GHA issues # todo: make sure we need it or we can remove it
 #        run: |
@@ -131,7 +121,6 @@ jobs:
       - name: Upload artifacts to S3
         uses: ./.github/actions/upload-artifacts-to-s3
         with:
-          virtual-environment-cmd: '. .venv/bin/activate'
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           github-ref: ${{ github.ref }}
