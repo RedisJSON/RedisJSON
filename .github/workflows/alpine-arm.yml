@@ -70,11 +70,6 @@ jobs:
         run: |
           cp /etc/os-release /etc/os-release.bak
           sed -i 's/ID=alpine/ID=NotpineForGHA/g' /etc/os-release
-      - name: Setup Python for testing
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
-          architecture: 'x64'
       - name: Install prerequisites
         shell: sh
         run: |
@@ -85,6 +80,11 @@ jobs:
           clang18-libclang gcompat libstdc++ libgcc g++ openblas-dev \
           xsimd git xz bsd-compat-headers clang18 cargo
           echo ::endgroup::
+      - name: Setup Python for testing
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+          architecture: 'x64'
       - name: Checkout the module
         uses: actions/checkout@v3
         with:
