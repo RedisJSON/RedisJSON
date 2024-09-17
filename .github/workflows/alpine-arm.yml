@@ -39,7 +39,7 @@ jobs:
       TAG_OR_BRANCH: ${{ steps.set-env.outputs.TAG }}${{ steps.set-env.outputs.BRANCH }}
       redis-ref: ${{ steps.set-env.outputs.redis-ref }}
     steps:
-      - name: chceckout
+      - name: checkout
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
@@ -63,7 +63,7 @@ jobs:
       ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
       ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
     container:
-      image: alpine:3 # arm64v8/alpine # required to run the job on the ARM instance
+      image: alpine:3 # required to run the job on the ARM instance
     steps:
       - name: Workaround alpine-arm64 GHA issues
         shell: sh
@@ -74,14 +74,18 @@ jobs:
         shell: sh
         run: |
           echo ::group::install packages
-          apk add bash make libtool tar cmake python3 python3-dev \
-          py3-pip gcc git curl build-base autoconf automake py3-cryptography \
-          linux-headers musl-dev libffi-dev openssl-dev openssh py-virtualenv \
-          clang18-libclang gcompat libstdc++ libgcc g++ openblas-dev \
-          xsimd git xz bsd-compat-headers clang18 cargo
+            apk add bash make libtool tar cmake python3 python3-dev \
+            py3-pip gcc git curl build-base autoconf automake py3-cryptography \
+            linux-headers musl-dev libffi-dev openssl-dev openssh py-virtualenv \
+            clang18-libclang gcompat libstdc++ libgcc g++ openblas-dev \
+            xsimd git xz bsd-compat-headers clang18 cargo
+          echo ::endgroup::
+          echo ::group::Setup a virtual environment
+            python3 -m venv .venv
           echo ::endgroup::
           echo ::group::install aws cli
-          pip3 install --upgrade pip && pip3 install --no-cache-dir awscli && rm -rf /var/cache/apk/*
+            . .venv/bin/activate && \
+            pip3 install --upgrade pip && pip3 install --no-cache-dir awscli && rm -rf /var/cache/apk/*
           echo ::endgroup::
       - name: Checkout the module
         uses: actions/checkout@v3
@@ -89,6 +93,7 @@ jobs:
           submodules: 'recursive'
       - name: Install python dependencies
         run: |
+          . .venv/bin/activate
           pip install -q --upgrade setuptools
           pip install -q --upgrade pip
           pip install -q -r tests/pytest/requirements.txt
@@ -106,14 +111,16 @@ jobs:
 #      - name: Test
 #        shell: sh
 #        run: |
+#          . .venv/bin/activate && \
 #          make test
-      - name: Rollback Workaround alpine-arm64 GHA issues # todo: make sure we need it or we can remove it
-        shell: sh
-        run: |
-          mv /etc/os-release.bak /etc/os-release
+#      - name: Rollback Workaround alpine-arm64 GHA issues # todo: make sure we need it or we can remove it
+#        shell: sh
+#        run: |
+#          mv /etc/os-release.bak /etc/os-release
       - name: Pack module
         shell: sh
         run: |
+          . .venv/bin/activate && \
           make pack BRANCH=$TAG_OR_BRANCH SHOW=1
 #      - name: Workaround alpine-arm64 GHA issues
 #        shell: sh

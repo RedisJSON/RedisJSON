@@ -25,6 +25,7 @@ runs:
     - name: Upload artifacts to S3 - staging
       shell: bash
       run: |
+        . .venv/bin/activate
         make upload-artifacts SHOW=1 VERBOSE=1
         make upload-release SHOW=1 STAGING=1 VERBOSE=1
     - name: Upload artifacts to S3 - release  # todo: trigger this manually instead
