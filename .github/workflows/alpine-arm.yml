@@ -2,10 +2,10 @@ name: alpine ARM64
 
 on:
   push:
-#    branches:
-#      - master
-#    tags:
-#      - 'v[0-9]+.[0-9]+.[0-9]+'
+    branches:
+      - master
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
   pull_request:
     types:
       - opened
@@ -105,9 +105,9 @@ jobs:
           PIP_BREAK_SYSTEM_PACKAGES: 1
       - name: build
         uses: ./.github/actions/build-json-module-and-redis
-#      - name: Test
-#        run: |
-#          make test
+      - name: Test
+        run: |
+          make test
       - name: Pack module
         run: |
           git config --global --add safe.directory /__w/RedisJSON/RedisJSON # to avoid git error
