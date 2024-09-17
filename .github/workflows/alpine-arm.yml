@@ -66,12 +66,12 @@ jobs:
       image: alpine:3 # required to run the job on the ARM instance
     steps:
       - name: Workaround alpine-arm64 GHA issues
-        shell: sh
+        shell: bash
         run: |
           cp /etc/os-release /etc/os-release.bak
           sed -i 's/ID=alpine/ID=NotpineForGHA/g' /etc/os-release
       - name: Install prerequisites
-        shell: sh
+        shell: bash
         run: |
           echo ::group::install packages
             apk add bash make libtool tar cmake python3 python3-dev \
@@ -85,7 +85,7 @@ jobs:
         with:
           submodules: 'recursive'
       - name: Install python dependencies
-        shell: sh
+        shell: bash
         run: |
           echo ::group::Setup a virtual environment
             python3 -m venv .venv
@@ -113,20 +113,20 @@ jobs:
         with:
           virtual-environment-cmd: '. .venv/bin/activate'
       #      - name: Test
-#        shell: sh
+#        shell: bash
 #        run: |
 #          . .venv/bin/activate && \
 #          make test
 #      - name: Rollback Workaround alpine-arm64 GHA issues # todo: make sure we need it or we can remove it
-#        shell: sh
+#        shell: bash
 #        run: |
 #          mv /etc/os-release.bak /etc/os-release
       - name: Pack module
-        shell: sh
+        shell: bash
         run: |
           make pack BRANCH=$TAG_OR_BRANCH SHOW=1
 #      - name: Workaround alpine-arm64 GHA issues
-#        shell: sh
+#        shell: bash
 #        run: |
 #          cp /etc/os-release /etc/os-release.bak
 #          sed -i 's/ID=alpine/ID=NotpineForGHA/g' /etc/os-release
