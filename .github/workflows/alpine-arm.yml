@@ -92,6 +92,7 @@ jobs:
         with:
           submodules: 'recursive'
       - name: Install python dependencies
+        shell: sh
         run: |
           . .venv/bin/activate
           pip install -q --upgrade setuptools
