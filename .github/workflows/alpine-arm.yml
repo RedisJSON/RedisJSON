@@ -87,6 +87,12 @@ jobs:
         uses: actions/checkout@v3
         with:
           submodules: 'recursive'
+      - name: Checkout Redis
+        uses: actions/checkout@v3
+        with:
+          repository: 'redis/redis'
+          ref: ${{needs.setup-environment.outputs.redis-ref}}
+          path: 'redis'
       - name: Install python dependencies (sh)
         run: |
           echo ::group::Setup a virtual environment
@@ -104,12 +110,6 @@ jobs:
           echo ::endgroup::
         env:
           PIP_BREAK_SYSTEM_PACKAGES: 1
-      - name: Checkout Redis
-        uses: actions/checkout@v3
-        with:
-          repository: 'redis/redis'
-          ref: ${{needs.setup-environment.outputs.redis-ref}}
-          path: 'redis'
       - name: build
         uses: ./.github/actions/build-json-module-and-redis
         with:
