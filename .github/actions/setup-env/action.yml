@@ -34,7 +34,7 @@ runs:
       shell: bash
       id: set-git-info
       run: |
-        export REF="${{ github.ref }}"
+        export REF="${{ inputs.github-ref }}"
         export BRANCH_PATTERN="^refs/heads/(.*)$"
         export TAG_PATTERN="^refs/tags/(.*)$"
 
@@ -51,7 +51,7 @@ runs:
       run: |
         # If this is a version tag, then set to false, meaning this
         # is not a production build.
-        export REF="${{ github.ref }}"
+        export REF="${{ inputs.github-ref }}"
         export PATTERN="refs/tags/v[0-9]+.*"
         if [[ $REF =~ $PATTERN ]]; then
           echo "This is a tagged build"
