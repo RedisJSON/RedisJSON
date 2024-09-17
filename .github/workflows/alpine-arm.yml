@@ -108,20 +108,14 @@ jobs:
 #      - name: Test
 #        run: |
 #          make test
-      - name: Rollback Workaround alpine-arm64 GHA issues # todo: make sure we need it or we can remove it
-        run: |
-          mv /etc/os-release.bak /etc/os-release
       - name: Pack module
         run: |
-          git config --global --add safe.directory /__w/RedisJSON/RedisJSON
-          make pack BRANCH=$TAG_OR_BRANCH SHOW=1
-#      - name: Workaround alpine-arm64 GHA issues
-#        run: |
-#          cp /etc/os-release /etc/os-release.bak
-#          sed -i 's/ID=alpine/ID=NotpineForGHA/g' /etc/os-release
+          git config --global --add safe.directory /__w/RedisJSON/RedisJSON # to avoid git error
+          make pack BRANCH=$TAG_OR_BRANCH SHOW=1 OSNICK=alpine3
       - name: Upload artifacts to S3
         uses: ./.github/actions/upload-artifacts-to-s3
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           github-ref: ${{ github.ref }}
+          osnick: alpine3
