@@ -94,6 +94,7 @@ jobs:
       - name: Install python dependencies
         shell: sh
         run: |
+          ls -l 
           . .venv/bin/activate
           pip install -q --upgrade setuptools
           pip install -q --upgrade pip
