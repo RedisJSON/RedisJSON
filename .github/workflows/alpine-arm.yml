@@ -83,10 +83,6 @@ jobs:
           echo ::group::Setup a virtual environment
             python3 -m venv .venv
           echo ::endgroup::
-          echo ::group::install aws cli
-            . .venv/bin/activate && \
-            pip3 install --upgrade pip && pip3 install --no-cache-dir awscli && rm -rf /var/cache/apk/*
-          echo ::endgroup::
       - name: Checkout the module
         uses: actions/checkout@v3
         with:
@@ -94,7 +90,10 @@ jobs:
       - name: Install python dependencies
         shell: sh
         run: |
-          ls -l 
+          echo ::group::install aws cli
+            . .venv/bin/activate && \
+            pip3 install --upgrade pip && pip3 install --no-cache-dir awscli && rm -rf /var/cache/apk/*
+          echo ::endgroup::
           . .venv/bin/activate
           pip install -q --upgrade setuptools
           pip install -q --upgrade pip
