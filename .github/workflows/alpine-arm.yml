@@ -55,7 +55,7 @@ jobs:
     needs: setup-environment
     defaults:
       run:
-        shell: sh
+        shell: bash
     env:
       TAGGED: ${{ needs.setup-environment.outputs.TAGGED }}
       VERSION: ${{ needs.setup-environment.outputs.TAG }}
@@ -69,6 +69,7 @@ jobs:
       image: alpine:3 # required to run the job on the ARM instance
     steps:
       - name: Workaround alpine-arm64 GHA issues
+        shell: sh
         run: |
           cp /etc/os-release /etc/os-release.bak
           sed -i 's/ID=alpine/ID=NotpineForGHA/g' /etc/os-release
@@ -86,24 +87,6 @@ jobs:
         with:
           submodules: 'recursive'
       - name: Install python dependencies (sh)
-        run: |
-          echo ::group::Setup a virtual environment
-            python3 -m venv .venv
-          echo ::endgroup::
-          echo ::group::install aws cli
-            . .venv/bin/activate && \
-            pip3 install --upgrade pip && pip3 install --no-cache-dir awscli && rm -rf /var/cache/apk/*
-          echo ::endgroup::
-          echo ::group::install requirements
-            pip install -q --upgrade setuptools
-            pip install -q --upgrade pip
-            pip install -q -r tests/pytest/requirements.txt
-            pip install -q -r .install/build_package_requirements.txt
-          echo ::endgroup::
-        env:
-          PIP_BREAK_SYSTEM_PACKAGES: 1
-      - name: Install python dependencies (bash)
-        shell: bash
         run: |
           echo ::group::Setup a virtual environment
             python3 -m venv .venv
