@@ -3,6 +3,9 @@ description: |
   Build JSON module and Redis Server
 
 inputs:
+  virtual-environment-cmd:
+    description: 'If you need to run a command to set up the virtual environment before running the action, you can use this input.'
+    required: false
   redis-ref:
     description: 'Redis version to build'
     required: true
@@ -14,8 +17,11 @@ runs:
     - name: Build Redis
       shell: bash
       working-directory: redis
-      run: make install -j `nproc`
+      run: |
+        ${{ inputs.virtual-environment-cmd }}
+        make install -j `nproc`
     - name: Build module
       shell: bash
       run: |
+        ${{ inputs.virtual-environment-cmd }}
         make build -j `nproc`

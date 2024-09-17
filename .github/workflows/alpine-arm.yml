@@ -94,11 +94,12 @@ jobs:
             . .venv/bin/activate && \
             pip3 install --upgrade pip && pip3 install --no-cache-dir awscli && rm -rf /var/cache/apk/*
           echo ::endgroup::
-          . .venv/bin/activate
-          pip install -q --upgrade setuptools
-          pip install -q --upgrade pip
-          pip install -q -r tests/pytest/requirements.txt
-          pip install -q -r .install/build_package_requirements.txt
+          echo ::group::install requirements
+            pip install -q --upgrade setuptools
+            pip install -q --upgrade pip
+            pip install -q -r tests/pytest/requirements.txt
+            pip install -q -r .install/build_package_requirements.txt
+          echo ::endgroup::
         env:
           PIP_BREAK_SYSTEM_PACKAGES: 1
       - name: Checkout Redis
@@ -109,7 +110,9 @@ jobs:
           path: 'redis'
       - name: build
         uses: ./.github/actions/build-json-module-and-redis
-#      - name: Test
+        with:
+          virtual-environment-cmd: '. .venv/bin/activate'
+      #      - name: Test
 #        shell: sh
 #        run: |
 #          . .venv/bin/activate && \
@@ -121,7 +124,6 @@ jobs:
       - name: Pack module
         shell: sh
         run: |
-          . .venv/bin/activate && \
           make pack BRANCH=$TAG_OR_BRANCH SHOW=1
 #      - name: Workaround alpine-arm64 GHA issues
 #        shell: sh
@@ -131,6 +133,7 @@ jobs:
       - name: Upload artifacts to S3
         uses: ./.github/actions/upload-artifacts-to-s3
         with:
+          virtual-environment-cmd: '. .venv/bin/activate'
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           github-ref: ${{ github.ref }}
