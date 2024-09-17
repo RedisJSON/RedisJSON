@@ -80,11 +80,9 @@ jobs:
           clang18-libclang gcompat libstdc++ libgcc g++ openblas-dev \
           xsimd git xz bsd-compat-headers clang18 cargo
           echo ::endgroup::
-      - name: Setup Python for testing
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
-          architecture: 'x64'
+          echo ::group::install aws cli
+          pip3 install --upgrade pip && pip3 install --no-cache-dir awscli && rm -rf /var/cache/apk/*
+          echo ::endgroup::
       - name: Checkout the module
         uses: actions/checkout@v3
         with:
@@ -109,19 +107,19 @@ jobs:
 #        shell: sh
 #        run: |
 #          make test
-      - name: Pack module
-        shell: sh
-        run: |
-          make pack BRANCH=$TAG_OR_BRANCH SHOW=1
       - name: Rollback Workaround alpine-arm64 GHA issues # todo: make sure we need it or we can remove it
         shell: sh
         run: |
           mv /etc/os-release.bak /etc/os-release
-      - name: Workaround alpine-arm64 GHA issues
+      - name: Pack module
         shell: sh
         run: |
-          cp /etc/os-release /etc/os-release.bak
-          sed -i 's/ID=alpine/ID=NotpineForGHA/g' /etc/os-release
+          make pack BRANCH=$TAG_OR_BRANCH SHOW=1
+#      - name: Workaround alpine-arm64 GHA issues
+#        shell: sh
+#        run: |
+#          cp /etc/os-release /etc/os-release.bak
+#          sed -i 's/ID=alpine/ID=NotpineForGHA/g' /etc/os-release
       - name: Upload artifacts to S3
         uses: ./.github/actions/upload-artifacts-to-s3
         with:
