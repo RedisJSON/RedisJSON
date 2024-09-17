@@ -71,7 +71,7 @@ jobs:
           cp /etc/os-release /etc/os-release.bak
           sed -i 's/ID=alpine/ID=NotpineForGHA/g' /etc/os-release
       - name: Setup Python for testing
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
           python-version: '3.9'
           architecture: 'x64'
