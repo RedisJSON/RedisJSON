@@ -113,6 +113,7 @@ jobs:
 #          mv /etc/os-release.bak /etc/os-release
       - name: Pack module
         run: |
+          git config --global --add safe.directory /__w/RedisJSON/RedisJSON
           make pack BRANCH=$TAG_OR_BRANCH SHOW=1
 #      - name: Workaround alpine-arm64 GHA issues
 #        run: |
