@@ -80,7 +80,7 @@ jobs:
             py3-pip gcc git curl build-base autoconf automake py3-cryptography \
             linux-headers musl-dev libffi-dev openssl-dev openssh py-virtualenv \
             clang libclang-dev gcompat libstdc++ libgcc g++ openblas-dev \
-            xsimd git xz bsd-compat-headers clang18 cargo
+            xsimd git xz bsd-compat-headers cargo
           echo ::endgroup::
       - name: Checkout the module
         uses: actions/checkout@v3
