@@ -55,7 +55,24 @@ jobs:
     needs: setup-environment
     strategy:
       matrix:
-        docker_image: ["bionic", "focal", "jammy"]
+        docker:
+          - image: "ubuntu:bionic"
+            nick: "bionic"
+            prereqs: |
+              apt-get update && apt-get install -y software-properties-common
+              add-apt-repository ppa:git-core/ppa && apt-get update && apt-get install -y git
+            install_deps: ./ubuntu_18.04.sh
+          - image: "ubuntu:focal"
+            nick: focal
+            prereqs: | 
+              apt-get update && apt-get install -y software-properties-common
+              add-apt-repository ppa:git-core/ppa && apt-get update && apt-get install -y git
+            install_deps: ./ubuntu_20.04.sh
+          - image: "ubuntu:jammy"
+            nick: "jammy"
+            prereqs: |
+              apt-get update && apt-get install -y git
+            install_deps: ./ubuntu_22.04.sh
     defaults:
       run:
         shell: bash
@@ -69,18 +86,20 @@ jobs:
       ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
       ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
     container:
-      image: "ubuntu:${{ matrix.docker_image }}"
+      image: ${{ matrix.docker.image }}
     steps:
-      - name: Install prerequisites
+      - name: Install git
         shell: sh
         run: |
-          echo ::group::install packages
-            ./.install/${{ matrix.docker_image }}.sh
-          echo ::endgroup::
+          ${{ matrix.docker.prereqs }}
       - name: Checkout the module
         uses: actions/checkout@v3
         with:
           submodules: 'recursive'
+      - name: Install dependencies
+        shell: sh
+        run: |
+          ${{ matrix.docker.install_deps }}
       - name: Checkout Redis
         uses: actions/checkout@v3
         with:
@@ -105,11 +124,11 @@ jobs:
       - name: Pack module
         run: |
           git config --global --add safe.directory /__w/RedisJSON/RedisJSON # to avoid git error
-          make pack BRANCH=$TAG_OR_BRANCH SHOW=1 OSNICK=${{ matrix.docker_image }}
+          make pack BRANCH=$TAG_OR_BRANCH SHOW=1 OSNICK=${{ matrix.docker.nick }}
       - name: Upload artifacts to S3
         uses: ./.github/actions/upload-artifacts-to-s3
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           github-ref: ${{ github.ref }}
-          osnick: ${{ matrix.docker_image }}
+          osnick: ${{ matrix.docker.nick }}
