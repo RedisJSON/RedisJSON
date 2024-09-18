@@ -19,4 +19,5 @@ runs:
     - name: Build module
       shell: bash
       run: |
-        make build -j `nproc`
+        . "$HOME/.cargo/env"
+        cargo build --release
