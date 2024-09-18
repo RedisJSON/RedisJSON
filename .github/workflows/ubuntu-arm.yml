@@ -58,7 +58,7 @@ jobs:
         docker:
           - image: "ubuntu:bionic"
             nick: "bionic"
-            prereqs: |
+            install_git: |
               apt-get update && apt-get install -y software-properties-common
               add-apt-repository ppa:git-core/ppa && apt-get update && apt-get install -y git
             install_deps: |
@@ -75,7 +75,7 @@ jobs:
               update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 2
           - image: "ubuntu:focal"
             nick: focal
-            prereqs: | 
+            install_git: | 
               apt-get update && apt-get install -y software-properties-common
               add-apt-repository ppa:git-core/ppa && apt-get update && apt-get install -y git
             install_deps: |
@@ -86,7 +86,7 @@ jobs:
               update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 60 --slave /usr/bin/g++ g++ /usr/bin/g++-10
           - image: "ubuntu:jammy"
             nick: "jammy"
-            prereqs: |
+            install_git: |
               apt-get update && apt-get install -y git
             install_deps: |
               apt update -qq
@@ -110,7 +110,7 @@ jobs:
     steps:
       - name: Install git
         run: |
-          ${{ matrix.docker.prereqs }}
+          ${{ matrix.docker.install_git }}
       - name: Checkout the module
         uses: actions/checkout@v3
         with:
