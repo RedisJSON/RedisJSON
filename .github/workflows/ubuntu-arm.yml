@@ -105,7 +105,6 @@ jobs:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
       ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
-      DEBIAN_FRONTEND: noninteractive
     container:
       image: ${{ matrix.docker.image }}
     steps:
@@ -117,6 +116,8 @@ jobs:
         with:
           submodules: 'recursive'
       - name: Install dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
           ${{ matrix.docker.install_deps }}
       - name: Checkout Redis
