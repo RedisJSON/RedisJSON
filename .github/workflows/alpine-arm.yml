@@ -90,8 +90,15 @@ jobs:
         uses: actions/checkout@v3
         with:
           repository: 'redis/redis'
-          ref: ${{needs.setup-environment.outputs.redis-ref}}
+          ref: ${{ needs.setup-environment.outputs.redis-ref }}
           path: 'redis'
+      - name: Get Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source "$HOME/.cargo/env"
+          rustup update
+          rustup update nightly
+          rustup component add rust-src --toolchain nightly
       - name: Install python dependencies
         run: |
           echo ::group::install requirements
