@@ -116,10 +116,10 @@ jobs:
         with:
           submodules: 'recursive'
       - name: Install dependencies
-        env:
-          DEBIAN_FRONTEND: noninteractive
         run: |
           ${{ matrix.docker.install_deps }}
+        env:
+          DEBIAN_FRONTEND: noninteractive
       - name: Checkout Redis
         uses: actions/checkout@v3
         with:
@@ -155,6 +155,7 @@ jobs:
 #          make test
       - name: Pack module
         run: |
+          source venv/bin/activate
           git config --global --add safe.directory /__w/RedisJSON/RedisJSON # to avoid git error
           MODULE=$(realpath ./target/release/librejson.so) BRANCH=$TAG_OR_BRANCH \
             SHOW=1 OSNICK=${{ matrix.docker.nick }} ./sbin/pack.sh
