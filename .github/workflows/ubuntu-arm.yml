@@ -149,7 +149,8 @@ jobs:
       - name: Pack module
         run: |
           git config --global --add safe.directory /__w/RedisJSON/RedisJSON # to avoid git error
-          make pack BRANCH=$TAG_OR_BRANCH SHOW=1 OSNICK=${{ matrix.docker.nick }}
+          MODULE=$(realpath ./target/release/librejson.so) BRANCH=$TAG_OR_BRANCH \
+            SHOW=1 OSNICK=${{ matrix.docker.nick }} ./sbin/pack.sh
       - name: Upload artifacts to S3
         uses: ./.github/actions/upload-artifacts-to-s3
         with:
