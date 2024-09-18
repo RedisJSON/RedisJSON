@@ -109,7 +109,6 @@ jobs:
       image: ${{ matrix.docker.image }}
     steps:
       - name: Install git
-        shell: sh
         run: |
           ${{ matrix.docker.prereqs }}
       - name: Checkout the module
@@ -117,7 +116,6 @@ jobs:
         with:
           submodules: 'recursive'
       - name: Install dependencies
-        shell: sh
         run: |
           ${{ matrix.docker.install_deps }}
       - name: Checkout Redis
@@ -126,6 +124,13 @@ jobs:
           repository: 'redis/redis'
           ref: ${{needs.setup-environment.outputs.redis-ref}}
           path: 'redis'
+      - name: Get Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source "$HOME/.cargo/env"
+          rustup update
+          rustup update nightly
+          rustup component add rust-src --toolchain nightly
       - name: Install python dependencies
         run: |
           echo ::group::install requirements
