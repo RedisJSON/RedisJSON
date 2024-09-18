@@ -124,7 +124,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           repository: 'redis/redis'
-          ref: ${{needs.setup-environment.outputs.redis-ref}}
+          ref: ${{ needs.setup-environment.outputs.redis-ref }}
           path: 'redis'
       - name: Get Rust
         run: |
@@ -135,6 +135,11 @@ jobs:
           rustup component add rust-src --toolchain nightly
       - name: Install python dependencies
         run: |
+          echo ::group::activate venv
+            python3 -m venv venv
+            echo "source $PWD/venv/bin/activate" >> ~/.bash_profile
+            source venv/bin/activate
+          echo ::endgroup::
           echo ::group::install requirements
             pip install -q --upgrade setuptools
             pip install -q --upgrade pip
