@@ -152,7 +152,8 @@ jobs:
         uses: ./.github/actions/build-json-module-and-redis
       - name: Test
         run: |
-          make test
+          source venv/bin/activate
+          MODULE=$(realpath ./target/release/librejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
       - name: Pack module
         run: |
           source venv/bin/activate
