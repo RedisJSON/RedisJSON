@@ -1,0 +1,22 @@
+name: Build JSON module and Redis Server
+description: |
+  Build JSON module and Redis Server
+
+inputs:
+  redis-ref:
+    description: 'Redis version to build'
+    required: true
+    default: '7.2.1'
+
+runs:
+  using: composite
+  steps:
+    - name: Build Redis
+      shell: bash
+      working-directory: redis
+      run: |
+        make install -j `nproc`
+    - name: Build module
+      shell: bash
+      run: |
+        make build -j `nproc`
