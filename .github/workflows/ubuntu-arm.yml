@@ -153,12 +153,12 @@ jobs:
       - name: Test
         run: |
           source venv/bin/activate
-          MODULE=$(realpath ./target/release/librejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
+          MODULE=$(realpath ./target/release/rejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
       - name: Pack module
         run: |
           source venv/bin/activate
           git config --global --add safe.directory /__w/RedisJSON/RedisJSON # to avoid git error
-          MODULE=$(realpath ./target/release/librejson.so) BRANCH=$TAG_OR_BRANCH \
+          MODULE=$(realpath ./target/release/rejson.so) BRANCH=$TAG_OR_BRANCH \
             SHOW=1 OSNICK=${{ matrix.docker.nick }} ./sbin/pack.sh
       - name: Upload artifacts to S3
         uses: ./.github/actions/upload-artifacts-to-s3
