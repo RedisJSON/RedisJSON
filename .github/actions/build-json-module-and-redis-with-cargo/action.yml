@@ -21,3 +21,4 @@ runs:
       run: |
         . "$HOME/.cargo/env"
         cargo build --release
+        cp $(realpath ./target/release)/librejson.* $(realpath ./target/release)/rejson.so
