@@ -93,16 +93,19 @@ jobs:
       - name: Run tests
         run: |
           echo ::group::Activate virtual environment
-          ./.install/activate_venv.sh
+            ./.install/activate_venv.sh
           echo ::endgroup::
           echo ::group::Install python dependencies
-          ./.install/common_installations.sh
+            pip install -q --upgrade setuptools
+            pip install -q --upgrade pip
+            pip install -q -r tests/pytest/requirements.txt
+            pip install -q -r .install/build_package_requirements.txt
           echo ::endgroup::
           echo ::group::Flow tests
-          MODULE=$(realpath ./target/release/librejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
+            MODULE=$(realpath ./target/release/librejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
           echo ::endgroup::
           echo ::group::Unit tests
-          cargo test
+            cargo test
           echo ::endgroup::
         env:
           PIP_BREAK_SYSTEM_PACKAGES: 1
