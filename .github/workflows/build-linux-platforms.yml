@@ -93,13 +93,12 @@ jobs:
       - name: Run tests
         run: |
           echo ::group::Activate virtual environment
-            ./.install/activate_venv.sh
+            python3 -m venv venv
+            echo "source $PWD/venv/bin/activate" >> ~/.bash_profile
+            source venv/bin/activate
           echo ::endgroup::
           echo ::group::Install python dependencies
-            pip3 install -q --upgrade setuptools
-            pip3 install -q --upgrade pip
-            pip3 install -q -r tests/pytest/requirements.txt
-            pip3 install -q -r .install/build_package_requirements.txt
+            ./.install/common_installations.sh
           echo ::endgroup::
           echo ::group::Flow tests
             MODULE=$(realpath ./target/release/librejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
