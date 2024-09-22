@@ -96,10 +96,10 @@ jobs:
             ./.install/activate_venv.sh
           echo ::endgroup::
           echo ::group::Install python dependencies
-            pip install -q --upgrade setuptools
-            pip install -q --upgrade pip
-            pip install -q -r tests/pytest/requirements.txt
-            pip install -q -r .install/build_package_requirements.txt
+            pip3 install -q --upgrade setuptools
+            pip3 install -q --upgrade pip
+            pip3 install -q -r tests/pytest/requirements.txt
+            pip3 install -q -r .install/build_package_requirements.txt
           echo ::endgroup::
           echo ::group::Flow tests
             MODULE=$(realpath ./target/release/librejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
