@@ -2,10 +2,10 @@ name: Build and Test ubuntu ARM instances
 
 on:
   push:
-    # branches:
-    #   - master
-    # tags:
-    #   - 'v[0-9]+.[0-9]+.[0-9]+'
+    branches:
+      - master
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
   pull_request:
     types:
       - opened
@@ -150,10 +150,10 @@ jobs:
           PIP_BREAK_SYSTEM_PACKAGES: 1
       - name: build
         uses: ./.github/actions/build-json-module-and-redis-with-cargo
-      # - name: Test
-      #   run: |
-      #     source venv/bin/activate
-      #     MODULE=$(realpath ./target/release/rejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
+      - name: Test
+        run: |
+          source venv/bin/activate
+          MODULE=$(realpath ./target/release/rejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
       - name: Pack module
         run: |
           source venv/bin/activate
