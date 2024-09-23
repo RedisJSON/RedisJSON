@@ -122,7 +122,7 @@ jobs:
           git config --global --add safe.directory /__w/RedisJSON/RedisJSON # to avoid git error
           MODULE=$(realpath ./target/release/rejson.so) ./sbin/pack.sh
       - name: Upload artifacts to S3
-        uses: ./.github/actions/upload-artifacts-to-s3
+        uses: ./.github/actions/upload-artifacts-to-s3-without-make
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

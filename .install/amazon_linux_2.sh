@@ -13,7 +13,7 @@ $MODE sed -i 's/mirrorlist=/#mirrorlist=/g' /etc/yum.repos.d/CentOS-SCLo-scl-rh.
 $MODE sed -i 's/#baseurl=http:\/\/mirror/baseurl=http:\/\/vault/g' /etc/yum.repos.d/CentOS-SCLo-scl-rh.repo # Enable a working baseurl
 
 $MODE yum install -y wget git which devtoolset-11-gcc devtoolset-11-gcc-c++ devtoolset-11-make \
-  make rsync python3 unzip tar python3-devel python3-pip awscli
+  rsync python3 unzip tar python3-devel python3-pip awscli
 
 source /opt/rh/devtoolset-11/enable
 
