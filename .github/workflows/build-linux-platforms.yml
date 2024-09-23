@@ -2,10 +2,10 @@ name: Build all supported linux platforms
 
 on:
   push:
-    # branches:
-    #   - master
-    # tags:
-    #   - 'v[0-9]+.[0-9]+.[0-9]+'
+    branches:
+      - master
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
   pull_request:
     types:
       - opened
@@ -93,16 +93,6 @@ jobs:
           submodules: 'recursive'
       - name: build
         uses: ./.github/actions/build-json-module-and-redis-with-cargo
-      # - name: Install python dependencies
-      #   run: |
-      #     echo ::group::Activate virtual environment
-      #       python3 -m venv venv
-      #       echo "source $PWD/venv/bin/activate" >> ~/.bash_profile
-      #       source venv/bin/activate
-      #     echo ::endgroup::
-      #     echo ::group::Install python dependencies
-      #       ./.install/common_installations.sh
-      #     echo ::endgroup::
       - name: Set Artifact Names
         # Artifact names have to be unique, so we base them on the environment.
         # We also remove invalid characters from the name.
