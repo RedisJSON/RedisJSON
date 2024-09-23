@@ -29,6 +29,10 @@ jobs:
               apt-get update && apt-get install -y software-properties-common
               add-apt-repository ppa:git-core/ppa && apt-get update && apt-get install -y git
             install_deps_script: ./ubuntu_18.04.sh
+          - image: "ubuntu:jammy"
+            pre_req_install_cmd: |
+              apt-get update && apt-get install -y git
+            install_deps_script: ./ubuntu_22.04.sh
           - image: "rockylinux:8"
             pre_req_install_cmd: |
               dnf install -y git
