@@ -93,16 +93,16 @@ jobs:
           submodules: 'recursive'
       - name: build
         uses: ./.github/actions/build-json-module-and-redis-with-cargo
-      - name: Install python dependencies
-        run: |
-          echo ::group::Activate virtual environment
-            python3 -m venv venv
-            echo "source $PWD/venv/bin/activate" >> ~/.bash_profile
-            source venv/bin/activate
-          echo ::endgroup::
-          echo ::group::Install python dependencies
-            ./.install/common_installations.sh
-          echo ::endgroup::
+      # - name: Install python dependencies
+      #   run: |
+      #     echo ::group::Activate virtual environment
+      #       python3 -m venv venv
+      #       echo "source $PWD/venv/bin/activate" >> ~/.bash_profile
+      #       source venv/bin/activate
+      #     echo ::endgroup::
+      #     echo ::group::Install python dependencies
+      #       ./.install/common_installations.sh
+      #     echo ::endgroup::
       - name: Set Artifact Names
         # Artifact names have to be unique, so we base them on the environment.
         # We also remove invalid characters from the name.
@@ -112,12 +112,18 @@ jobs:
             sed -e 's/[":\/\\<>\|*?]/_/g' -e 's/__*/_/g' -e 's/^_//' -e 's/_$//')" >> $GITHUB_OUTPUT
       - name: Run tests
         run: |
-          echo ::group::Unit tests
+          echo ::group::Activate virtual environment
+            python3 -m venv venv
+            echo "source $PWD/venv/bin/activate" >> ~/.bash_profile
             source venv/bin/activate
+          echo ::endgroup::
+          echo ::group::Install python dependencies
+            ./.install/common_installations.sh
+          echo ::endgroup::
+          echo ::group::Unit tests
             cargo test
           echo ::endgroup::
           echo ::group::Flow tests
-            source venv/bin/activate
             MODULE=$(realpath ./target/release/rejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
           echo ::endgroup::
         env:
