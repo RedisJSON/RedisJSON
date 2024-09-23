@@ -112,12 +112,12 @@ jobs:
             sed -e 's/[":\/\\<>\|*?]/_/g' -e 's/__*/_/g' -e 's/^_//' -e 's/_$//')" >> $GITHUB_OUTPUT
       - name: Run tests
         run: |
+          echo ::group::Unit tests
+            cargo test
+          echo ::endgroup::
           echo ::group::Flow tests
             source venv/bin/activate
             MODULE=$(realpath ./target/release/rejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
-          echo ::endgroup::
-          echo ::group::Unit tests
-            cargo test
           echo ::endgroup::
         env:
           PIP_BREAK_SYSTEM_PACKAGES: 1
