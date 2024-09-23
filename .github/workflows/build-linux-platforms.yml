@@ -113,6 +113,7 @@ jobs:
       - name: Run tests
         run: |
           echo ::group::Unit tests
+            source venv/bin/activate
             cargo test
           echo ::endgroup::
           echo ::group::Flow tests
