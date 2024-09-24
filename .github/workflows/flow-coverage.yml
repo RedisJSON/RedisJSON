@@ -1,11 +1,11 @@
 name: Coverage analysis
 
 on:
-  workflow_call:
+  push:
 
 jobs:
   coverage:
-    runs-on: ${{ vars.RUNS_ON }}
+    runs-on: ubuntu-latest
     defaults:
       run:
         shell: bash -l -eo pipefail {0}
