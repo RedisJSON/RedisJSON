@@ -20,11 +20,11 @@ jobs:
         echo ::group::Install dependencies
           ./install_script.sh sudo
         echo ::endgroup::
-        echo ::group::Install clang 18
-          ./install_clang.sh sudo
-        echo ::endgroup::
         echo ::group::Install Python dependencies
           ./common_installations.sh sudo
+        echo ::endgroup::
+        echo ::group::Install clang 18
+          ./install_clang.sh sudo
         echo ::endgroup::
     - name: Get Redis
       env:
