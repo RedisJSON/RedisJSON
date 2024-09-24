@@ -1,7 +1,7 @@
 name: Coverage analysis
 
 on:
-  push:
+  workflow_call:
 
 jobs:
   coverage:
