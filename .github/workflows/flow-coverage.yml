@@ -18,7 +18,7 @@ jobs:
       working-directory: .install
       run: |
         ./install_script.sh sudo
-        ./sbin/install_clang.sh sudo
+        ./install_clang.sh sudo
     - name: Setup common
       run: |
         .install/common_installations.sh sudo
