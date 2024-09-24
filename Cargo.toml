@@ -1,9 +1,13 @@
 cargo-features = ["edition2021"]
 
-[package]
-name = "redisjson"
-version = "2.4.10"
-authors = ["Guy Korland <guy.korland@redis.com>", "Meir Shpilraien <meir@redis.com>", "Omer Shadmi <omer.shadmi@redis.com>"]
+[workspace.dependencies]
+ijson = { git="https://github.com/RedisJSON/ijson", rev="eede48fad51b4ace5043d3e0714f5a65481a065d", default_features=false}
+serde_json = { version="1", features = ["unbounded_depth"]}
+serde = { version = "1", features = ["derive"] }
+serde_derive = "1"
+bson = "2.11"
+
+[workspace.package]
 edition = "2021"
 description = "JSON data type for Redis"
 repository = "https://github.com/RedisJSON/RedisJSON"
