@@ -14,14 +14,18 @@ jobs:
       with:
         submodules: recursive
         fetch-depth: 0 # fetch all history for accurate results
-    - name: Setup specific
+    - name: Setup
       working-directory: .install
       run: |
-        ./install_script.sh sudo
-        ./install_clang.sh sudo
-    - name: Setup common
-      run: |
-        .install/common_installations.sh sudo
+        echo ::group::Install dependencies
+          ./install_script.sh sudo
+        echo ::endgroup::
+        echo ::group::Install clang 18
+          ./install_clang.sh sudo
+        echo ::endgroup::
+        echo ::group::Install Python dependencies
+          ./common_installations.sh sudo
+        echo ::endgroup::
     - name: Get Redis
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
