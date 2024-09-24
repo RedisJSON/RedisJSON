@@ -12,7 +12,7 @@ chmod u+x llvm.sh
 # expected to fail:
 ./llvm.sh $CLANG_VERSION
 
-apt-get install python3-lldb-18 --yes --force-yes
+$MODE apt-get install python3-lldb-18 --yes --force-yes
 
 ./llvm.sh $CLANG_VERSION
 
