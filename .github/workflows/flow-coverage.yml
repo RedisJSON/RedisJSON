@@ -16,9 +16,12 @@ jobs:
         fetch-depth: 0 # fetch all history for accurate results
     - name: Setup specific
       working-directory: .install
-      run: ./install_script.sh sudo
+      run: |
+        ./install_script.sh
+        ./sbin/install_clang.sh
     - name: Setup common
-      run: .install/common_installations.sh sudo
+      run: |
+        .install/common_installations.sh
     - name: Get Redis
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
