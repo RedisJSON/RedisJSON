@@ -11,7 +11,7 @@ ijson = { git="https://github.com/RedisJSON/ijson", rev="eede48fad51b4ace5043d3e
 serde_json = { version="1", features = ["unbounded_depth"]}
 serde = { version = "1", features = ["derive"] }
 serde_derive = "1"
-bson = "2"
+bson = "2.11"
 
 [workspace.package]
 edition = "2021"
