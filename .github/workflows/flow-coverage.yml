@@ -22,9 +22,8 @@ jobs:
       run: |
         ./.install/common_installations.sh sudo
     - name: Install clang 18
-      working-directory: .install
       run: |
-        ./install_clang.sh sudo
+        ./sbin/install_clang.sh sudo
     - name: Get Redis
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
