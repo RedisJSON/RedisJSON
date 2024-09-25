@@ -60,7 +60,6 @@ function register_clang_version {
     update-alternatives \
          --verbose \
         --install /usr/bin/clang                clang                /usr/bin/clang-${version} ${priority} \
-        --slave   /usr/bin/clang++              clang++              /usr/bin/clang++-${version}  \
         --slave   /usr/bin/clang-format         clang-format         /usr/bin/clang-format-${version}  \
         --slave   /usr/bin/clang-cpp            clang-cpp            /usr/bin/clang-cpp-${version} \
         --slave   /usr/bin/clang-cl             clang-cl             /usr/bin/clang-cl-${version} \
@@ -83,6 +82,9 @@ function register_clang_version {
         --slave   /usr/bin/wasm-ld              wasm-ld              /usr/bin/wasm-ld-${version} \
         --slave   /usr/bin/yaml2obj             yaml2obj             /usr/bin/yaml2obj-${version}
         
+    update-alternatives \
+         --verbose \
+        --install /usr/bin/clang++              clang++              /usr/bin/clang++-${version} ${priority}
 }
 
 register_clang_version $1 $2
