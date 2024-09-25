@@ -1,11 +1,28 @@
 #!/usr/bin/env bash
 
-#     --slave /usr/bin/$1 $1 /usr/bin/$1-\${version} \\
+# This script registers a specific version of Clang and LLVM tools using the `update-alternatives` command.
+# It creates symlinks for the given version, allowing users to switch between multiple versions of Clang and LLVM.
+
+
+# Function: register_clang_version
+# Arguments:
+#   1. version  - The version of Clang/LLVM to be registered (e.g., 18).
+#   2. priority - The priority of the version. A higher priority number indicates a preferred version.
+#
+# Sets up a primary symlink and several slave symlinks that correspond to related tools for Clang and LLVM.
+#
+# `update-alternatives --install` creates or updates the alternative for the given tool.
+# The first argument after `--install` is the path to the main symlink (e.g., /usr/bin/clang).
+# The second argument is the name of the alternative (e.g., clang), and the third argument is the
+# path to the actual binary for the specified version (e.g., /usr/bin/clang-18).
+# The `--slave` options are used to link other related binaries (like clang-format, llvm-nm, etc.)
+# so that all tools are switched consistently when the main tool (e.g., clang) is switched.
 
 function register_clang_version {
     local version=$1
     local priority=$2
 
+    # Register LLVM tools
     update-alternatives \
          --verbose \
         --install /usr/bin/llvm-config          llvm-config          /usr/bin/llvm-config-${version} ${priority} \
@@ -56,7 +73,7 @@ function register_clang_version {
         --slave   /usr/bin/llvm-undname         llvm-undname         /usr/bin/llvm-undname-${version} \
         --slave   /usr/bin/llvm-xray            llvm-xray            /usr/bin/llvm-xray-${version}
         
-
+    # Register Clang tools
     update-alternatives \
          --verbose \
         --install /usr/bin/clang                clang                /usr/bin/clang-${version} ${priority} \
@@ -81,7 +98,8 @@ function register_clang_version {
         --slave   /usr/bin/verify-uselistorder  verify-uselistorder  /usr/bin/verify-uselistorder-${version} \
         --slave   /usr/bin/wasm-ld              wasm-ld              /usr/bin/wasm-ld-${version} \
         --slave   /usr/bin/yaml2obj             yaml2obj             /usr/bin/yaml2obj-${version}
-        
+
+    # Register clang++
     update-alternatives \
          --verbose \
         --install /usr/bin/clang++              clang++              /usr/bin/clang++-${version} ${priority}
