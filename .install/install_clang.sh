@@ -17,3 +17,4 @@ $MODE apt-get install python3-lldb-18 --yes --force-yes
 ./llvm.sh $CLANG_VERSION
 
 $MODE $CWD/update_clang_alternatives.sh $CLANG_VERSION 1
+$MODE $CWD/update_clang_alternatives.sh $CLANG_VERSION 1
