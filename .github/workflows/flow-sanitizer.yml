@@ -1,0 +1,15 @@
+name: Clang Sanitizer
+
+# Documentation: https://redislabs.atlassian.net/wiki/spaces/DX/pages/3967844669/RediSearch+CI+refactor
+
+on:
+  workflow_call:
+
+jobs:
+  clang-sanitizer:
+    uses: ./.github/actions/run-tests
+    with:
+      container: redisfab/clang:17-x64-bullseye
+      test-config: QUICK=1
+      san: addr
+    secrets: inherit

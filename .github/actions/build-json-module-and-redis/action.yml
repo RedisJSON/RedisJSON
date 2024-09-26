@@ -7,6 +7,8 @@ inputs:
     description: 'Redis version to build'
     required: true
     default: '7.2.1'
+  san:
+    type: string
 
 runs:
   using: composite
@@ -19,4 +21,4 @@ runs:
     - name: Build module
       shell: bash
       run: |
-        make build -j `nproc`
+        make build SAN=${{ inputs.san }} -j `nproc`
