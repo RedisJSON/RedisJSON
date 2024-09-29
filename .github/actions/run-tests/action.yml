@@ -27,33 +27,23 @@ runs:
     - name: Check if node20 is Supported
       id: node20
       uses: ./.github/actions/node20-supported
-    - name: Deps checkout (node20)
+      with:
+        container: ${{ inputs.container }}
+    - name: Install git
       if: steps.node20.outputs.supported == 'true'
-      uses: actions/checkout@v4
-      with:
-        path: setup
-        sparse-checkout-cone-mode: false
-        sparse-checkout: |
-          .install
-          tests/pytests/requirements.*
-    - name: Deps checkout (node20 not supported)
-      if: steps.node20.outputs.supported == 'false'
-      uses: actions/checkout@v3
-      with:
-        path: setup
-        sparse-checkout-cone-mode: false
-        sparse-checkout: |
-          .install
-          tests/pytests/requirements.*
+      working-directory: .install
+      run: | # TODO: must be changed to run a script based on the input env
+        apt-get update && apt-get install -y git
     - name: Setup specific
-      working-directory: setup/.install
+      working-directory: .install
       run: ./install_script.sh ${{ steps.mode.outputs.mode }}
-    - name: Full checkout (node20)
+
+    - name: Full checkout (node20 supported)
       if: steps.node20.outputs.supported == 'true'
       uses: actions/checkout@v4
       with:
         submodules: recursive
-    - name: Full checkout (node20 not supported)
+    - name: Full checkout (node20 unsupported)
       if: steps.node20.outputs.supported == 'false'
       uses: actions/checkout@v3
       with:
@@ -68,8 +58,10 @@ runs:
         ref: 'unstable' # todo change per version/tag
         path: redis
         submodules: 'recursive'
-    - name: build
-      uses: ./.github/actions/build-json-module-and-redis-with-cargo
+    - name: Build
+      uses: ./.github/actions/build-json-module-and-redis
+      with:
+        san: ${{ inputs.san }}
 
     - name: Set Artifact Names
       # Artifact names have to be unique, so we base them on the environment.
@@ -79,41 +71,41 @@ runs:
         echo "name=$(echo "${{ inputs.container || inputs.env }} ${{ runner.arch }}, Redis ${{ inputs.get-redis || 'unstable' }}" | \
                       sed -e 's/[":\/\\<>\|*?]/_/g' -e 's/__*/_/g' -e 's/^_//' -e 's/_$//')" >> $GITHUB_OUTPUT
 
-    - name: Build
-      run: make SAN=${{ inputs.san }}
-    - name: Unit tests
-      id: test1
-      continue-on-error: true
-      run: make unit-tests LOG=1 CLEAR_LOGS=0 SAN=${{ inputs.san }}
-    - name: Flow tests
-      id: test2
-      continue-on-error: true
-      run: make pytest LOG=1 CLEAR_LOGS=0 SAN=${{ inputs.san }} ${{ inputs.test-config }}
+    - name: Run tests
+      id: test
+      run: |
+        echo ::group::Activate virtual environment
+          python3 -m venv venv
+          echo "source $PWD/venv/bin/activate" >> ~/.bash_profile
+          source venv/bin/activate
+        echo ::endgroup::
+        echo ::group::Install python dependencies
+          ./.install/common_installations.sh
+        echo ::endgroup::
+        echo ::group::Unit tests
+          make cargo_test LOG=1 CLEAR_LOGS=0 SAN=${{ inputs.san }}
+        echo ::endgroup::
+        echo ::group::Flow tests
+          make pytest LOG=1 CLEAR_LOGS=0 SAN=${{ inputs.san }} ${{ inputs.test-config }}
+        echo ::endgroup::
+      env:
+        PIP_BREAK_SYSTEM_PACKAGES: 1
 
-    # Using version 4 if node20 is supported, since it is MUCH faster (15m vs 25s)
-    - name: Upload Artifacts
-      # Upload artifacts only if node20 is supported and tests failed (including sanitizer failures)
-      if: >
-        steps.node20.outputs.supported == 'true' &&
-        (steps.test1.outcome == 'failure' || steps.test2.outcome == 'failure')
+    - name: Upload test artifacts (node20 supported)
+      if: steps.node20.outputs.supported == 'true' && steps.test.outcome == 'failure'
       uses: actions/upload-artifact@v4
       with:
-        name: Test Logs ${{ steps.artifact-names.outputs.name }}
+        name: Test logs ${{ steps.artifact-names.outputs.name }}
         path: tests/**/logs/*.log*
         if-no-files-found: ignore
-    # If node20 is not supported, we can only use version 3.
-    # Here we only upload the artifacts if the tests had failed, since it is very slow
-    - name: Upload Artifacts (node20 not supported)
-      # Upload artifacts only if tests failed (including sanitizer failures)
-      if: >
-        steps.node20.outputs.supported == 'false' &&
-        (steps.test1.outcome == 'failure' || steps.test2.outcome == 'failure')
+    - name: Upload test artifacts (node20 unsupported)
+      if: steps.node20.outputs.supported == 'false' && steps.test.outcome == 'failure'
       uses: actions/upload-artifact@v3
       with:
-        name: Test Logs ${{ steps.artifact-names.outputs.name }}
+        name: Test logs ${{ steps.artifact-names.outputs.name }}
         path: tests/**/logs/*.log*
         if-no-files-found: ignore
 
     - name: Fail flow if tests failed
-      if: steps.test1.outcome == 'failure' || steps.test2.outcome == 'failure'
+      if: steps.test.outcome == 'failure'
       run: exit 1

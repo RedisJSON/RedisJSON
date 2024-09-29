@@ -7,9 +7,13 @@ on:
 
 jobs:
   clang-sanitizer:
-    uses: ./.github/actions/run-tests
-    with:
-      container: redisfab/clang:17-x64-bullseye
-      test-config: QUICK=1
-      san: addr
-    secrets: inherit
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        shell: bash -l -eo pipefail {0}
+    steps:
+      - uses: ./.github/actions/run-tests
+        with:
+          container: redisfab/clang:17-x64-bullseye
+          test-config: QUICK=1
+          san: addr
