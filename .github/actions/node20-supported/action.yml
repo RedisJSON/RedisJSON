@@ -11,7 +11,7 @@ outputs:
 
 runs:
   using: composite
-  id: node20 # TODO: Remove this when node20 is supported on all platforms, or when we drop support for theses platforms
+  shell: bash
   steps:
     - name: Check if node20 is Supported
       run: |
