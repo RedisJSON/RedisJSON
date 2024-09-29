@@ -14,6 +14,7 @@ runs:
   shell: bash
   steps:
     - name: Check if node20 is Supported
+      id: node20
       run: |
         for platform in ubuntu:bionic centos:7 amazonlinux:2 alpine:3; do
           if [[ "${{ inputs.container }}" == "$platform" ]]; then
