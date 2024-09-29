@@ -17,10 +17,9 @@ inputs:
 
 runs:
   using: composite
-  defaults:
-    shell: bash -l -eo pipefail {0}
   steps:
     - name: Get Installation Mode
+      shell: bash
       id: mode
       run: |
         [[ -z "${{ inputs.container }}" ]] && echo "mode=sudo" >> $GITHUB_OUTPUT || echo "mode=" >> $GITHUB_OUTPUT
@@ -30,11 +29,13 @@ runs:
       with:
         container: ${{ inputs.container }}
     - name: Install git
+      shell: bash
       if: steps.node20.outputs.supported == 'true'
       working-directory: .install
       run: | # TODO: must be changed to run a script based on the input env
         apt-get update && apt-get install -y git
     - name: Setup specific
+      shell: bash
       working-directory: .install
       run: ./install_script.sh ${{ steps.mode.outputs.mode }}
 
@@ -49,6 +50,7 @@ runs:
       with:
         submodules: recursive
     - name: Setup common
+      shell: bash
       run: .install/common_installations.sh ${{ steps.mode.outputs.mode }}
 
     - name: Get Redis
@@ -64,6 +66,7 @@ runs:
         san: ${{ inputs.san }}
 
     - name: Set Artifact Names
+      shell: bash
       # Artifact names have to be unique, so we base them on the environment.
       # We also remove invalid characters from the name.
       id: artifact-names
@@ -72,6 +75,7 @@ runs:
                       sed -e 's/[":\/\\<>\|*?]/_/g' -e 's/__*/_/g' -e 's/^_//' -e 's/_$//')" >> $GITHUB_OUTPUT
 
     - name: Run tests
+      shell: bash
       id: test
       run: |
         echo ::group::Activate virtual environment
@@ -107,5 +111,6 @@ runs:
         if-no-files-found: ignore
 
     - name: Fail flow if tests failed
+      shell: bash
       if: steps.test.outcome == 'failure'
       run: exit 1
