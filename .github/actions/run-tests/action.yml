@@ -17,6 +17,7 @@ inputs:
 
 runs:
   using: composite
+  container: ${{ inputs.container }}
   steps:
     - name: Get Installation Mode
       shell: bash
@@ -28,12 +29,12 @@ runs:
       uses: ./.github/actions/node20-supported
       with:
         container: ${{ inputs.container }}
-    # - name: Install git
-    #   shell: bash
-    #   if: steps.node20.outputs.supported == 'true'
-    #   working-directory: .install
-    #   run: | # TODO: must be changed to run a script based on the input env
-    #     ${{ steps.mode.outputs.mode }} apt-get update && apt-get install -y git
+    - name: Install git
+      shell: bash
+      if: steps.node20.outputs.supported == 'true'
+      working-directory: .install
+      run: | # TODO: must be changed to run a script based on the input env
+        ${{ steps.mode.outputs.mode }} apt-get update && apt-get install -y git
     - name: Setup specific
       shell: bash
       working-directory: .install
