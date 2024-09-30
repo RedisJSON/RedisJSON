@@ -10,8 +10,14 @@ source "$HOME/.cargo/env"
 rustup update
 rustup update nightly
 
+rustup toolchain uninstall stable
+rustup toolchain install stable
+
+rustup toolchain uninstall nightly
+rustup toolchain install nightly
+
 # for RedisJSON build with addess santizer
-rustup component add rust-src --toolchain nightly
+rustup component add --toolchain nightly rust-src
 
 # Verify cargo installation
 cargo --version
