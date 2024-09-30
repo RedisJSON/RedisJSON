@@ -12,7 +12,7 @@ jobs:
       run:
         shell: bash -l -eo pipefail {0}
     container:
-      image: redisfab/clang:17-x64-bullseye
+      image: "ubuntu:jammy"
     steps:
       - name: checkout
         uses: actions/checkout@v3
@@ -20,6 +20,6 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/run-tests
         with:
-          container: redisfab/clang:17-x64-bullseye
+          container: "ubuntu:jammy"
           test-config: QUICK=1
           san: addr
