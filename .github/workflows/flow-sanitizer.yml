@@ -12,7 +12,7 @@ jobs:
       run:
         shell: bash -l -eo pipefail {0}
     container:
-      image: "rockylinux:9"
+      image: "ubuntu:jammy"
     steps:
       - name: checkout
         uses: actions/checkout@v3
@@ -20,6 +20,6 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/run-tests
         with:
-          container: "rockylinux:9"
+          container: "ubuntu:jammy"
           test-config: QUICK=1
           san: addr
