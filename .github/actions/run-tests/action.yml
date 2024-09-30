@@ -39,6 +39,7 @@ runs:
       working-directory: .install
       run: |
         ./install_script.sh ${{ steps.mode.outputs.mode }}
+        ./getrust.sh ${{ steps.mode.outputs.mode }}
 
     - name: Full checkout (node20 supported)
       if: steps.node20.outputs.supported == 'true'

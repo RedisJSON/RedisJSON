@@ -18,11 +18,6 @@ runs:
       working-directory: redis
       run: |
         make install -j `nproc`
-    - name: Install Rust
-      shell: bash
-      working-directory: .install
-      run: |
-        ./getrust.sh
     - name: Build module
       shell: bash
       run: |
