@@ -1,23 +1,22 @@
 #!/bin/bash
 
+MODE=$1 # whether to install using sudo or not
+
 # Download and install rustup
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+$MODE curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
 # Source the cargo environment script to update the PATH
-source "$HOME/.cargo/env"
+$MODE source "$HOME/.cargo/env"
 
 # Update rustup and install nightly toolchain
-rustup update
-rustup update nightly
-
-rustup toolchain uninstall stable
-rustup toolchain install stable
-
-rustup toolchain uninstall nightly
-rustup toolchain install nightly
+$MODE rustup update
+$MODE rustup update nightly
 
 # for RedisJSON build with addess santizer
-rustup component add --toolchain nightly rust-src
+$MODE rustup component add --toolchain nightly rust-src
 
 # Verify cargo installation
 cargo --version
+
+profile_d=`get_profile_d`
+$MODE cp $HOME/.cargo/env $profile_d/rust.sh
