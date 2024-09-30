@@ -33,8 +33,7 @@ runs:
       if: steps.node20.outputs.supported == 'true'
       working-directory: .install
       run: | # TODO: must be changed to run a script based on the input env
-        ${{ steps.mode.outputs.mode }} apt-get update && apt-get install -y software-properties-common
-        ${{ steps.mode.outputs.mode }} add-apt-repository ppa:git-core/ppa && apt-get update && apt-get install -y git
+        ${{ steps.mode.outputs.mode }} dnf install -y git
     - name: Setup specific
       shell: bash
       working-directory: .install
