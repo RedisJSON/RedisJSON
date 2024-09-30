@@ -49,9 +49,9 @@ runs:
       uses: actions/checkout@v3
       with:
         submodules: recursive
-    - name: Setup common
-      shell: bash
-      run: .install/common_installations.sh ${{ steps.mode.outputs.mode }}
+    # - name: Setup common
+    #   shell: bash
+    #   run: .install/common_installations.sh ${{ steps.mode.outputs.mode }}
 
     - name: Get Redis
       uses: actions/checkout@v3
