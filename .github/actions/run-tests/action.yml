@@ -17,7 +17,6 @@ inputs:
 
 runs:
   using: composite
-  container: ${{ inputs.container }}
   steps:
     - name: Get Installation Mode
       shell: bash
