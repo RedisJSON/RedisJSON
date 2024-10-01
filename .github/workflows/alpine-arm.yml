@@ -83,7 +83,7 @@ jobs:
             xsimd git xz bsd-compat-headers clang18 cargo
           echo ::endgroup::
           echo ::group::Get Rust
-            ./getrust.sh
+            ./.install/getrust.sh
           echo ::endgroup::
       - name: Checkout the module
         uses: actions/checkout@v3
