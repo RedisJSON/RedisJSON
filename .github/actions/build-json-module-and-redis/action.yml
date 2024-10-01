@@ -21,5 +21,4 @@ runs:
     - name: Build module
       shell: bash
       run: |
-        . "$HOME/.cargo/env"
         make build SAN=${{ inputs.san }} -j `nproc`
