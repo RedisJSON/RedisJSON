@@ -90,6 +90,7 @@ runs:
           ./.install/common_installations.sh
         echo ::endgroup::
         echo ::group::Unit tests
+          . "$HOME/.cargo/env"
           make cargo_test LOG=1 CLEAR_LOGS=0 SAN=${{ inputs.san }}
         echo ::endgroup::
         echo ::group::Flow tests

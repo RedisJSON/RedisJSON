@@ -24,5 +24,6 @@ runs:
       shell: bash
       run: |
         echo ::group::Build RedisJSON
+          . "$HOME/.cargo/env"
           make build SAN=${{ inputs.san }} -j `nproc`
         echo ::endgroup::
