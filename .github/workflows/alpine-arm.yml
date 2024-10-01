@@ -16,7 +16,7 @@ on:
       redis-ref:
         description: 'Redis ref to checkout'
         required: true
-        default: 'unstable'
+        default: '8.0-m01'
   workflow_call: # Allows to run this workflow from another workflow
     inputs:
       redis-ref:

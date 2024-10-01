@@ -30,7 +30,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: redis/redis
-          ref: '7.2.1'
+          ref: '8.0-m01'
           path: redis
       - name: Build Redis
         working-directory: redis

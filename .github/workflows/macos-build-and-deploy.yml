@@ -40,7 +40,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: redis/redis
-          ref: 'unstable' # todo change per version/tag
+          ref: '8.0-m01' # todo change per version/tag
           path: redis
       - name: Build Redis
         working-directory: redis
