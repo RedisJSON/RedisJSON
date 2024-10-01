@@ -82,8 +82,11 @@ jobs:
             clang18-libclang gcompat libstdc++ libgcc g++ openblas-dev \
             xsimd git xz bsd-compat-headers clang18 cargo
           echo ::endgroup::
+      - name: Install Rust
+        working-directory: .install
+        run: |
           echo ::group::Get Rust
-            ./.install/getrust.sh
+            ./getrust.sh
           echo ::endgroup::
       - name: Checkout the module
         uses: actions/checkout@v3
