@@ -31,7 +31,9 @@ runs:
     - name: Install git
       shell: bash
       run: | # TODO: must be changed to run a script based on the input env
-        ${{ steps.mode.outputs.mode }} apt-get update && apt-get install -y git
+        echo ::group::Install git
+          ${{ steps.mode.outputs.mode }} apt-get update && apt-get install -y git
+        echo ::endgroup::
     - name: Setup specific
       shell: bash
       working-directory: .install
