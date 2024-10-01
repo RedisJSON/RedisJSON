@@ -20,11 +20,10 @@ cargo --version
 
 rustup show
 
-profile_d=`get_profile_d`
 if [[ -f $HOME/.cargo/env ]]; then
-  $MODE cp $HOME/.cargo/env $profile_d/rust.sh
+  $MODE cp $HOME/.cargo/env /etc/profile.d/rust.sh
 elif [[ -f /usr/local/cargo/env ]]; then
-	$MODE cp /usr/local/cargo/env $profile_d/rust.sh
+	$MODE cp /usr/local/cargo/env /etc/profile.d/rust.sh
 else
 	eprint "rust: environment file not found"
 	exit 1
