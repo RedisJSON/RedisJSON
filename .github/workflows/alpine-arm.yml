@@ -32,7 +32,7 @@ jobs:
   setup-environment:
     runs-on: ubuntu-latest
     outputs:
-      TAGGED: ${{ steps.set-envtagged.outputs.TAGGED }}
+      TAGGED: ${{ steps.set-env.outputs.TAGGED }}
       TAG: ${{ steps.set-env.outputs.TAG }}
       BRANCH: ${{ steps.set-env.outputs.BRANCH }}
       TAG_OR_BRANCH: ${{ steps.set-env.outputs.TAG }}${{ steps.set-env.outputs.BRANCH }}
