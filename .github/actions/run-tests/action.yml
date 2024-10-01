@@ -30,7 +30,6 @@ runs:
         container: ${{ inputs.container }}
     - name: Install git
       shell: bash
-      if: steps.node20.outputs.supported == 'true'
       run: | # TODO: must be changed to run a script based on the input env
         ${{ steps.mode.outputs.mode }} apt-get update && apt-get install -y git
     - name: Setup specific
