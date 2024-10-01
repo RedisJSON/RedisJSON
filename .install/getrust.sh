@@ -18,5 +18,14 @@ $MODE rustup component add --toolchain nightly rust-src
 # Verify cargo installation
 cargo --version
 
+rustup show
+
 profile_d=`get_profile_d`
-$MODE cp $HOME/.cargo/env $profile_d/rust.sh
+if [[ -f $HOME/.cargo/env ]]; then
+  $MODE cp $HOME/.cargo/env $profile_d/rust.sh
+elif [[ -f /usr/local/cargo/env ]]; then
+	$MODE cp /usr/local/cargo/env $profile_d/rust.sh
+else
+	eprint "rust: environment file not found"
+	exit 1
+fi
