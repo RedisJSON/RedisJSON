@@ -16,7 +16,7 @@ jobs:
       run:
         shell: bash -l -eo pipefail {0}
     container:
-      image: ${{ inputs.container.image }}
+      image: ${{ inputs.container }}
     steps:
       - name: checkout
         uses: actions/checkout@v3
@@ -24,6 +24,6 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/run-tests
         with:
-          container: ${{ inputs.container.image }}
+          container: ${{ inputs.container }}
           test-config: QUICK=1
           sanitizer: addr
