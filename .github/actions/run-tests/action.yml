@@ -36,10 +36,9 @@ runs:
         ${{ steps.mode.outputs.mode }} apt-get update && apt-get install -y git
     - name: Setup specific
       shell: bash
-      working-directory: .install
       run: |
-        ./install_script.sh ${{ steps.mode.outputs.mode }}
-        ./getrust.sh ${{ steps.mode.outputs.mode }}
+        ./.install/install_script.sh ${{ steps.mode.outputs.mode }}
+        ./.install/getrust.sh ${{ steps.mode.outputs.mode }}
 
     - name: Full checkout (node20 supported)
       if: steps.node20.outputs.supported == 'true'
