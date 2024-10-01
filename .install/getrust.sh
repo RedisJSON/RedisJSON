@@ -6,8 +6,8 @@ MODE=$1 # whether to install using sudo or not
 $MODE curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
 # Source the cargo environment script to update the PATH
-$MODE echo "source $HOME/.cargo/env" >> ~/.bashrc
-$MODE source $HOME/.cargo/env
+echo "source $HOME/.cargo/env" >> $HOME/.bashrc
+source $HOME/.cargo/env
 
 # Update rustup and install nightly toolchain
 $MODE rustup update
