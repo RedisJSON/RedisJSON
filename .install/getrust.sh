@@ -7,6 +7,7 @@ $MODE curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
 # Source the cargo environment script to update the PATH
 $MODE echo source "$HOME/.cargo/env" >> ~/.bash_profile
+$MODE source "$HOME/.cargo/env"
 
 # Update rustup and install nightly toolchain
 $MODE rustup update
