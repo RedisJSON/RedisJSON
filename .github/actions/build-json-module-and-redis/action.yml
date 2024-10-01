@@ -7,7 +7,7 @@ inputs:
     description: 'Redis version to build'
     required: true
     default: '7.2.1'
-  san:
+  sanitizer:
     type: string
 
 runs:
@@ -27,5 +27,5 @@ runs:
           if [[ -f "$HOME/.cargo/env" ]]; then
             . "$HOME/.cargo/env"
           fi
-          make build SAN=${{ inputs.san }} -j `nproc`
+          make build SAN=${{ inputs.sanitizer }} -j `nproc`
         echo ::endgroup::

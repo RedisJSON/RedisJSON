@@ -4,6 +4,10 @@ name: Clang Sanitizer
 
 on:
   workflow_call:
+    inputs:
+      container:
+        default: "ubuntu:jammy"
+        type: string
 
 jobs:
   clang-sanitizer:
@@ -12,7 +16,7 @@ jobs:
       run:
         shell: bash -l -eo pipefail {0}
     container:
-      image: "ubuntu:jammy"
+      image: ${{ inputs.container.image }}
     steps:
       - name: checkout
         uses: actions/checkout@v3
@@ -20,6 +24,6 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/run-tests
         with:
-          container: "ubuntu:jammy"
+          container: ${{ inputs.container.image }}
           test-config: QUICK=1
-          san: addr
+          sanitizer: addr

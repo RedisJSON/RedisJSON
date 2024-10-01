@@ -8,7 +8,7 @@ inputs:
     type: string
   container:
     type: string
-  san:
+  sanitizer:
     type: string
   test-config:
     description: 'Test configuration environment variable (e.g. "CONFIG=tls" or "QUICK=1")'
@@ -30,7 +30,8 @@ runs:
         container: ${{ inputs.container }}
     - name: Install git
       shell: bash
-      run: | # TODO: must be changed to run a script based on the input env
+      run: |
+        # TODO: must be changed to run a script based on the input env
         echo ::group::Install git
           ${{ steps.mode.outputs.mode }} apt-get update && apt-get install -y git
         echo ::endgroup::
@@ -66,14 +67,15 @@ runs:
     - name: Build
       uses: ./.github/actions/build-json-module-and-redis
       with:
-        san: ${{ inputs.san }}
+        sanitizer: ${{ inputs.san }}
 
     - name: Set Artifact Names
       shell: bash
       # Artifact names have to be unique, so we base them on the environment.
       # We also remove invalid characters from the name.
       id: artifact-names
-      run: | # Invalid characters include: Double quote ", Colon :, Less than <, Greater than >, Vertical bar |, Asterisk *, Question mark ?
+      run: |
+        # Invalid characters include: Double quote ", Colon :, Less than <, Greater than >, Vertical bar |, Asterisk *, Question mark ?
         echo "name=$(echo "${{ inputs.container || inputs.env }} ${{ runner.arch }}, Redis ${{ inputs.get-redis || 'unstable' }}" | \
                       sed -e 's/[":\/\\<>\|*?]/_/g' -e 's/__*/_/g' -e 's/^_//' -e 's/_$//')" >> $GITHUB_OUTPUT
 
