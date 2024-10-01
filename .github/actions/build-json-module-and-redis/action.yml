@@ -17,8 +17,12 @@ runs:
       shell: bash
       working-directory: redis
       run: |
-        make install -j `nproc`
+        echo ::group::Build Redis
+          make install -j `nproc`
+        echo ::endgroup::
     - name: Build module
       shell: bash
       run: |
-        make build SAN=${{ inputs.san }} -j `nproc`
+        echo ::group::Build RedisJSON
+          make build SAN=${{ inputs.san }} -j `nproc`
+        echo ::endgroup::

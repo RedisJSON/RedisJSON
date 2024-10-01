@@ -36,8 +36,12 @@ runs:
       shell: bash
       working-directory: .install
       run: |
-        ./install_script.sh ${{ steps.mode.outputs.mode }}
-        ./getrust.sh ${{ steps.mode.outputs.mode }}
+        echo ::group::OS-Specific Setup
+          ./install_script.sh ${{ steps.mode.outputs.mode }}
+        echo ::endgroup::
+        echo ::group::Get Rust
+          ./getrust.sh ${{ steps.mode.outputs.mode }}
+        echo ::endgroup::
 
     - name: Full checkout (node20 supported)
       if: steps.node20.outputs.supported == 'true'
