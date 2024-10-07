@@ -15,9 +15,6 @@ homepage = "https://redis.io/docs/stack/json/"
 crate-type = ["cdylib", "rlib"]
 name = "rejson"
 
-[dev-dependencies]
-env_logger = "0.11"
-
 [dependencies]
 bitflags = "2"
 bson.workspace = true
