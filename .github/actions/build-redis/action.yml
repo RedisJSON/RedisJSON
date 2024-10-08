@@ -16,5 +16,5 @@ runs:
       working-directory: redis
       run: |
         echo ::group::Build Redis
-          make install -j `nproc`
+          sudo make install -j `nproc`
         echo ::endgroup::
