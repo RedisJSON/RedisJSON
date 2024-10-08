@@ -30,18 +30,10 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: ./deps/readies/bin/getredis --with-github-token
     - name: Build and test
-      run: make coverage QUICK=1 SHOW=1 LOG=1
+      run: make coverage QUICK=1 SHOW=1
     - name: Upload coverage
       uses: codecov/codecov-action@v3
       with:
         file: bin/linux-x64-debug-cov/cov.info
         fail_ci_if_error: true # Fail on upload errors
         token: ${{ secrets.CODECOV_TOKEN }}
-
-    - name: Upload test artifacts
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: Coverage logs
-        path: tests/**/logs/*.log*
-        if-no-files-found: ignore
