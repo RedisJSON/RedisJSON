@@ -26,14 +26,9 @@ jobs:
       run: |
         ./install_clang.sh sudo
     - name: Get Redis
-      uses: actions/checkout@v3
-      with:
-        repository: redis/redis
-        ref: '7.2.1'
-        path: redis
-        submodules: 'recursive'
-    - name: Build Redis
-      uses: ./.github/actions/build-redis
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: ./deps/readies/bin/getredis --with-github-token
     - name: Build and test
       run: make coverage QUICK=1 SHOW=1
     - name: Upload coverage
@@ -42,3 +37,11 @@ jobs:
         file: bin/linux-x64-debug-cov/cov.info
         fail_ci_if_error: true # Fail on upload errors
         token: ${{ secrets.CODECOV_TOKEN }}
+
+    - name: Upload test artifacts
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: Coverage logs
+        path: tests/**/logs/*.log*
+        if-no-files-found: ignore
