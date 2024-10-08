@@ -18,10 +18,10 @@ on:
       - 'v[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
-  build-linux-jammy:
+  build-linux:
     runs-on: "ubuntu-latest"
     container:
-        image: "ubuntu:focal"
+        image: "ubuntu:bionic"
     defaults:
       run:
         shell: bash -l -eo pipefail {0}
@@ -37,10 +37,10 @@ jobs:
         working-directory: .install
         run: |
           echo ::group::Install dependencies
-          ./ubuntu_22.04.sh
+            ./ubuntu_18.04.sh
           echo ::endgroup::
           echo ::group::Install rust
-          ./getrust.sh
+            ./getrust.sh
           echo ::endgroup::
       - name: Get Redis
         uses: actions/checkout@v3
@@ -67,16 +67,16 @@ jobs:
       - name: Run tests
         run: |
           echo ::group::Activate virtual environment
-          ./.install/activate_venv.sh
+            ./.install/activate_venv.sh
           echo ::endgroup::
           echo ::group::Install python dependencies
-          ./.install/common_installations.sh
+            ./.install/common_installations.sh
           echo ::endgroup::
           echo ::group::Unit tests
-          cargo test
+            cargo test
           echo ::endgroup::
           echo ::group::Flow tests
-          MODULE=$(realpath ./target/release/librejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
+            MODULE=$(realpath ./target/release/librejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
           echo ::endgroup::
         env:
           PIP_BREAK_SYSTEM_PACKAGES: 1
