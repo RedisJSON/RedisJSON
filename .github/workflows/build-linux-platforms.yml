@@ -103,7 +103,7 @@ jobs:
             ./.install/common_installations.sh
           echo ::endgroup::
           echo ::group::Unit tests
-            cargo test
+            cargo test --features test
           echo ::endgroup::
           echo ::group::Flow tests
             MODULE=$(realpath ./target/release/rejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
