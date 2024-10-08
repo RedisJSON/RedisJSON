@@ -85,7 +85,8 @@ else
 fi
 
 cd artifacts${MAYBE_SNAP}
-[[ $VERBOSE == 1 ]] && du -ah --apparent-size *
+# in some versions --apparent-size is not supported
+[[ $VERBOSE == 1 ]] && du -ah --apparent-size * || du -ah -s *
 
 #----------------------------------------------------------------------------------------------
 

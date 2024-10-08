@@ -1,0 +1,129 @@
+name: Build all supported linux platforms
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - review_requested
+
+jobs:
+  build-linux-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        docker_image:
+          - image: "ubuntu:bionic"
+            pre_req_install_cmd: |
+              # https://github.com/actions/checkout/issues/1809
+              echo "ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION=node16" >> $GITHUB_ENV
+              echo "ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION=node16" >> $GITHUB_ENV
+              # https://github.blog/changelog/2024-03-07-github-actions-all-actions-will-run-on-node20-instead-of-node16-by-default/
+              echo "ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true" >> $GITHUB_ENV
+              apt-get update && apt-get install -y software-properties-common
+              add-apt-repository ppa:git-core/ppa && apt-get update && apt-get install -y git
+          - image: "ubuntu:focal"
+            # https://github.com/actions/checkout/issues/1386 - sparse checkout does not work on got 2.25 which is the default in focal
+            pre_req_install_cmd: | 
+              apt-get update && apt-get install -y software-properties-common
+              add-apt-repository ppa:git-core/ppa && apt-get update && apt-get install -y git
+          - image: "ubuntu:jammy"
+            pre_req_install_cmd: |
+              apt-get update && apt-get install -y git
+          - image: "rockylinux:8"
+            pre_req_install_cmd: |
+              dnf install -y git
+          - image: "rockylinux:9"
+            pre_req_install_cmd: |
+              dnf install -y git
+          - image: "debian:bullseye"
+            pre_req_install_cmd: |
+              apt-get update && apt-get install -y git
+          - image: "amazonlinux:2"
+            pre_req_install_cmd: |
+              # https://github.com/actions/checkout/issues/1809
+              echo "ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION=node16" >> $GITHUB_ENV
+              echo "ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION=node16" >> $GITHUB_ENV
+              # https://github.blog/changelog/2024-03-07-github-actions-all-actions-will-run-on-node20-instead-of-node16-by-default/
+              echo "ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true" >> $GITHUB_ENV
+              yum install -y git
+          - image: "mcr.microsoft.com/cbl-mariner/base/core:2.0"
+            pre_req_install_cmd: tdnf install --noplugins --skipsignature -y ca-certificates git
+    container:
+      image: ${{ matrix.docker_image.image }}
+    defaults:
+      run:
+        shell: bash -l -eo pipefail {0}
+    steps:
+      - name: Install git
+        run: ${{ matrix.docker_image.pre_req_install_cmd }}
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - name: Setup
+        working-directory: .install
+        run: |
+          echo ::group::Install dependencies
+            ./install_script.sh 
+          echo ::endgroup::
+          echo ::group::Install rust
+            ./getrust.sh
+          echo ::endgroup::
+      - name: Get Redis
+        uses: actions/checkout@v3
+        with:
+          repository: redis/redis
+          ref: 'unstable' # todo change per version/tag
+          path: redis
+          submodules: 'recursive'
+      - name: build
+        uses: ./.github/actions/build-json-module-and-redis-with-cargo
+      - name: Set Artifact Names
+        # Artifact names have to be unique, so we base them on the environment.
+        # We also remove invalid characters from the name.
+        id: artifact-names
+        run: | # Invalid characters include: Double quote ", Colon :, Less than <, Greater than >, Vertical bar |, Asterisk *, Question mark ?
+          echo "name=$(echo "${{ matrix.docker_image.image }} x86-64, Redis unstable" | \
+            sed -e 's/[":\/\\<>\|*?]/_/g' -e 's/__*/_/g' -e 's/^_//' -e 's/_$//')" >> $GITHUB_OUTPUT
+      - name: Run tests
+        run: |
+          echo ::group::Activate virtual environment
+            python3 -m venv venv
+            echo "source $PWD/venv/bin/activate" >> ~/.bash_profile
+            source venv/bin/activate
+          echo ::endgroup::
+          echo ::group::Install python dependencies
+            ./.install/common_installations.sh
+          echo ::endgroup::
+          echo ::group::Unit tests
+            cargo test --features test
+          echo ::endgroup::
+          echo ::group::Flow tests
+            MODULE=$(realpath ./target/release/rejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
+          echo ::endgroup::
+        env:
+          PIP_BREAK_SYSTEM_PACKAGES: 1
+      - name: Upload test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: Test logs ${{ steps.artifact-names.outputs.name }}
+          path: tests/**/logs/*.log*
+          if-no-files-found: ignore
+      - name: Pack module
+        run: |
+          git config --global --add safe.directory /__w/RedisJSON/RedisJSON # to avoid git error
+          MODULE=$(realpath ./target/release/rejson.so) ./sbin/pack.sh
+      - name: Upload artifacts to S3
+        uses: ./.github/actions/upload-artifacts-to-s3-without-make
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          github-ref: ${{ github.ref }}
