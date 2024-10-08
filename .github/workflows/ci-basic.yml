@@ -21,15 +21,14 @@ jobs:
   build-linux:
     runs-on: "ubuntu-latest"
     container:
-        image: "ubuntu:focal"
+        image: "ubuntu:jammy"
     defaults:
       run:
         shell: bash -l -eo pipefail {0}
     steps:
       - name: Install git
         run: |
-          apt-get update && apt-get install -y software-properties-common
-          add-apt-repository ppa:git-core/ppa && apt-get update && apt-get install -y git
+          apt-get update && apt-get install -y git
       - name: Checkout
         uses: actions/checkout@v3
         with:
@@ -49,15 +48,8 @@ jobs:
           repository: redis/redis
           ref: 'unstable' # todo change per version/tag
           path: redis
-      - name: Build Redis
-        working-directory: redis
-        run: |
-          make install
-      - name: Build module
-        run: |
-          . "$HOME/.cargo/env"
-          cargo --version
-          cargo build --release
+      - name: build
+        uses: ./.github/actions/build-json-module-and-redis-with-cargo
       - name: Set Artifact Names
         # Artifact names have to be unique, so we base them on the environment.
         # We also remove invalid characters from the name.
@@ -77,7 +69,7 @@ jobs:
             cargo test --features test
           echo ::endgroup::
           echo ::group::Flow tests
-            MODULE=$(realpath ./target/release/librejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
+            MODULE=$(realpath ./target/release/rejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
           echo ::endgroup::
         env:
           PIP_BREAK_SYSTEM_PACKAGES: 1
