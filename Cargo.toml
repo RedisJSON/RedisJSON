@@ -30,7 +30,7 @@ ijson = "0.1"
 serde_json = { version="1", features = ["unbounded_depth"]}
 serde = "1"
 libc = "0.2"
-redis-module = { version="2", features = ["experimental-api"]}
+redis-module = { git="https://github.com/RedisLabsModules/redismodule-rs", tag="v2.0.8", default-features = false, features = ["min-redis-compatibility-version-7-2"] }
 itertools = "0.12"
 regex = "1"
 proc-macro2 = "1"
