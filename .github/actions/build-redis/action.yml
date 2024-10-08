@@ -1,0 +1,20 @@
+name: Build Redis Server
+description: |
+  Build Redis Server
+
+inputs:
+  redis-ref:
+    description: 'Redis version to build'
+    required: true
+    default: '7.2.1'
+
+runs:
+  using: composite
+  steps:
+    - name: Build Redis
+      shell: bash
+      working-directory: redis
+      run: |
+        echo ::group::Build Redis
+          make install -j `nproc`
+        echo ::endgroup::

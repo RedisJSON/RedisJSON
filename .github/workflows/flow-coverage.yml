@@ -26,9 +26,14 @@ jobs:
       run: |
         ./install_clang.sh sudo
     - name: Get Redis
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: ./deps/readies/bin/getredis --with-github-token
+      uses: actions/checkout@v3
+      with:
+        repository: redis/redis
+        ref: 'unstable'
+        path: redis
+        submodules: 'recursive'
+    - name: Build Redis
+      uses: ./.github/actions/build-redis
     - name: Build and test
       run: make coverage QUICK=1 SHOW=1
     - name: Upload coverage
