@@ -21,7 +21,7 @@ jobs:
   build-linux-jammy:
     runs-on: "ubuntu-latest"
     container:
-        image: "ubuntu:jammy"
+        image: "ubuntu:focal"
     defaults:
       run:
         shell: bash -l -eo pipefail {0}
@@ -72,11 +72,11 @@ jobs:
           echo ::group::Install python dependencies
           ./.install/common_installations.sh
           echo ::endgroup::
-          echo ::group::Flow tests
-          MODULE=$(realpath ./target/release/librejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
-          echo ::endgroup::
           echo ::group::Unit tests
           cargo test
+          echo ::endgroup::
+          echo ::group::Flow tests
+          MODULE=$(realpath ./target/release/librejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
           echo ::endgroup::
         env:
           PIP_BREAK_SYSTEM_PACKAGES: 1
