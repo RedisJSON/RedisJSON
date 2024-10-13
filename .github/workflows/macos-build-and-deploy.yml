@@ -7,11 +7,6 @@ on:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch: # Allows you to run this workflow manually from the Actions tab
-    inputs:
-      redis-ref:
-        description: 'Redis ref to checkout'
-        required: true
-        default: 'unstable'
 
 jobs:
   build:
