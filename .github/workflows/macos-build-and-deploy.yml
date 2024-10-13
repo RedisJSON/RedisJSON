@@ -6,6 +6,12 @@ on:
       - master
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch: # Allows you to run this workflow manually from the Actions tab
+    inputs:
+      redis-ref:
+        description: 'Redis ref to checkout'
+        required: true
+        default: 'unstable'
 
 jobs:
   build:
@@ -28,13 +34,13 @@ jobs:
             tests/pytest/requirements.*
       - name: Setup specific
         working-directory: setup/.install
-        run: ./install_script.sh ${{ steps.mode.outputs.mode }}
+        run: ./install_script.sh
       - name: Full checkout
         uses: actions/checkout@v3
         with:
           submodules: recursive
       - name: Setup common
-        run: .install/common_installations.sh ${{ steps.mode.outputs.mode }}
+        run: .install/common_installations.sh
 
       - name: Get Redis
         uses: actions/checkout@v4
