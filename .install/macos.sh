@@ -7,7 +7,7 @@ fi
 
 export HOMEBREW_NO_AUTO_UPDATE=1
 
-LLVM_VERSION="18"
+LLVM_VERSION="16"
 
 brew update
 brew install coreutils
