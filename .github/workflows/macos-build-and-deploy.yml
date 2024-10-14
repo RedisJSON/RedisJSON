@@ -99,7 +99,16 @@ jobs:
         with:
           submodules: recursive
       - name: Setup common
-        run: .install/common_installations.sh
+        run: |
+          echo ::group::Activate virtual environment
+            python3 -m venv venv
+            echo "source venv/bin/activate" >> ~/.bashrc
+            echo "source venv/bin/activate" >> ~/.zshrc
+            source venv/bin/activate
+          echo ::endgroup::
+          echo ::group::Install python dependencies
+            ./.install/common_installations.sh
+          echo ::endgroup::
 
       - name: Get Redis
         uses: actions/checkout@v4
