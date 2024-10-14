@@ -1,0 +1,29 @@
+name: Clang Sanitizer
+
+# Documentation: https://redislabs.atlassian.net/wiki/spaces/DX/pages/3967844669/RediSearch+CI+refactor
+
+on:
+  workflow_call:
+    inputs:
+      container:
+        default: "ubuntu:jammy"
+        type: string
+
+jobs:
+  clang-sanitizer:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        shell: bash -l -eo pipefail {0}
+    container:
+      image: ${{ inputs.container }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/run-tests
+        with:
+          container: ${{ inputs.container }}
+          test-config: QUICK=1
+          sanitizer: addr
