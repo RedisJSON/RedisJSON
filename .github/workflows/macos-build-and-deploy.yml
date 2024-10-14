@@ -15,7 +15,7 @@ on:
 
 jobs:
   build-macos-x64:
-    runs-on: macos-12
+    runs-on: macos-13
     defaults:
       run:
         shell: bash -l -eo pipefail {0}
@@ -60,21 +60,15 @@ jobs:
       - name: Pack module
         run: |
           make pack BRANCH=${{ github.ref_name }}
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Upload artifacts to S3
+        uses: ./.github/actions/upload-artifacts-to-s3
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: "us-east-1"
-      - name: Upload artifacts to S3 - staging
-        run: |
-          make upload-artifacts SHOW=1 VERBOSE=1
-          make upload-release SHOW=1 STAGING=1 VERBOSE=1
-      - name: Upload artifacts to S3 - release  # todo: trigger this manually instead
-        if: ${{ github.ref != 'refs/heads/master' }}
-        run: make upload-release SHOW=1 VERBOSE=1
+          github-ref: ${{ github.ref }}
+    
   build-macos-m1:
-    runs-on: macos-13
+    runs-on: macos-latest-xlarge
     defaults:
       run:
         shell: bash -l -eo pipefail {0}
@@ -128,16 +122,9 @@ jobs:
       - name: Pack module
         run: |
           make pack BRANCH=${{ github.ref_name }}
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Upload artifacts to S3
+        uses: ./.github/actions/upload-artifacts-to-s3
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: "us-east-1"
-      - name: Upload artifacts to S3 - staging
-        run: |
-          make upload-artifacts SHOW=1 VERBOSE=1
-          make upload-release SHOW=1 STAGING=1 VERBOSE=1
-      - name: Upload artifacts to S3 - release  # todo: trigger this manually instead
-        if: ${{ github.ref != 'refs/heads/master' }}
-        run: make upload-release SHOW=1 VERBOSE=1
+          github-ref: ${{ github.ref }}
