@@ -2,10 +2,10 @@ name: Build for macos
 
 on:
   push:
-    # branches:
-    #   - master
-    # tags:
-    #   - 'v[0-9]+.[0-9]+.[0-9]+'
+    branches:
+      - master
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch: # Allows you to run this workflow manually from the Actions tab
     inputs:
       redis-ref:
@@ -54,9 +54,9 @@ jobs:
       - name: Build module
         run: |
           make build
-      # - name: Test
-      #   run: |
-      #     make test
+      - name: Test
+        run: |
+          make test
       - name: Pack module
         run: |
           make pack BRANCH=${{ github.ref_name }}
@@ -123,9 +123,9 @@ jobs:
       - name: Build module
         run: |
           make build
-      # - name: Test
-      #   run: |
-      #     make test
+      - name: Test
+        run: |
+          make test
       - name: Pack module
         run: |
           make pack BRANCH=${{ github.ref_name }}
