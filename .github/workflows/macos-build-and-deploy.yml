@@ -2,19 +2,29 @@ name: Build for macos
 
 on:
   push:
-    branches:
-      - master
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+    # branches:
+    #   - master
+    # tags:
+    #   - 'v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch: # Allows you to run this workflow manually from the Actions tab
 
 jobs:
   build:
-    runs-on: macos-12
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        docker:
+          - image: macos:12.0
+          - image: macos:13.0
     defaults:
       run:
         shell: bash -l -eo pipefail {0}
+    container:
+      image: ${{ matrix.docker.image }}
     steps:
+      - name: Install Git
+        run: |
+          brew install git
       - name: Checkout
         uses: actions/checkout@v4
         with:
