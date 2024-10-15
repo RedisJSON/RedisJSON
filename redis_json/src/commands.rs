@@ -183,7 +183,11 @@ pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -
     }
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
-    let current = redis_key.get_value()?;
+    let current = if set_option != SetOptions::None {
+        redis_key.get_value()?
+    } else {
+        None
+    };
 
     let val = manager.from_str(value, format, true)?;
 
