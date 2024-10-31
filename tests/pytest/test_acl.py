@@ -6,7 +6,7 @@ def test_acl_category(env):
     res = env.cmd('ACL', 'CAT')
     env.assertTrue('json' in res)
 
-@skip_redis_less_than("7.4.1")
+@skip_redis_less_than(redis_less_than="7.4.1")
 def test_acl_json_commands(env):
     """Tests that the RedisJSON commands are registered to the `json` ACL category"""
     res = env.cmd('ACL', 'CAT', 'json')
