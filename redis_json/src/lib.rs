@@ -188,7 +188,7 @@ macro_rules! redis_json_module_create {(
         }
 
         fn add_json_acl_category(ctx: &Context, _args: &[RedisString]) -> Status {
-            redis_module::raw::RedisModule_AddACLCategory.unwrap()(ctx, CString::new("json").unwrap().as_ptr())
+            redis_module::raw::RedisModule_AddACLCategory.unwrap()(ctx, CString::new("json").unwrap().as_ptr()).into()
         }
 
         redis_module! {
