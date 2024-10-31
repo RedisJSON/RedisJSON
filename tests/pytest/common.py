@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from functools import wraps
 from includes import *
 from packaging import version
+from unittest import SkipTest
 
 @contextmanager
 def TimeLimit(timeout):
@@ -45,29 +46,17 @@ def no_san(f):
         return f(env, *args, **kwargs)
     return wrapper
 
-def skip_redis_less_than(f, redis_less_than=None):
-    @wraps(f)
-    def wrapper(env, *args, **kwargs):
-        if redis_less_than and server_version_is_less_than(redis_less_than):
-            env.skip()
-            return
-        return f(env, *args, **kwargs)
-    return wrapper
+def skip_redis_less_than(redis_less_than=None):
+    def decorate(f):
+        def wrapper():
+            if redis_less_than and server_version_is_less_than(redis_less_than):
+                raise SkipTest()
+            return f()
+        return wrapper
+    return decorate
 
 
 server_ver = None
-def server_version_at_least(env, ver):
-    global server_ver
-    if server_ver is None:
-        v = env.cmd('INFO')['redis_version']
-        server_ver = version.parse(v)
-    if not isinstance(ver, version.Version):
-        ver = version.parse(ver)
-    return server_ver >= ver
-
-def server_version_less_than(env, ver):
-    return not server_version_at_least(env, ver)
-
 def server_version_is_at_least(ver):
     global server_ver
     if server_ver is None:
