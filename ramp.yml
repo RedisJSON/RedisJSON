@@ -25,3 +25,4 @@ capabilities:
     - intershard_tls
     - intershard_tls_pass
     - ipv6
+    - bigstore_version_2
