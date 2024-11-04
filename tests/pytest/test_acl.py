@@ -1,12 +1,14 @@
 from common import *
 
 
+@skip_redis_less_than(redis_less_than="7.4.1")
 def test_acl_category(env):
     """Test that the `json` category was added appropriately in module load"""
     res = env.cmd('ACL', 'CAT')
+    print(res)
     env.assertTrue('json' in res)
 
-@skip_redis_less_than(redis_less_than="7.4.1")
+@skip_redis_less_than(redis_less_than="8.0.0")
 def test_acl_json_commands(env):
     """Tests that the RedisJSON commands are registered to the `json` ACL category"""
     res = env.cmd('ACL', 'CAT', 'json')
@@ -24,6 +26,7 @@ def test_acl_json_commands(env):
     res = env.cmd('ACL', 'CAT', 'read')
     env.assertTrue('json.get' in res)
 
+@skip_redis_less_than(redis_less_than="7.4.1")
 def test_acl_non_default_user(env):
     """Tests that a user with a non-default ACL can't access the json category"""
 
@@ -77,4 +80,4 @@ def test_acl_non_default_user(env):
 
     # `testusr` should now be able to run `json` commands like `json.set`
     env.expect('json.set', 'idx', '$', '0').ok()
-    env.expect('json.get', 'idx', '$').equal([0])
+    env.expect('json.get', 'idx', '$').equal('[0]')

@@ -9,6 +9,7 @@ extern crate redis_module;
 #[cfg(not(feature = "as-library"))]
 use commands::*;
 use redis_module::native_types::RedisType;
+use redis_module::AclCategory;
 use redis_module::raw::RedisModuleTypeMethods;
 #[cfg(not(feature = "as-library"))]
 use redis_module::InfoContext;
@@ -187,48 +188,41 @@ macro_rules! redis_json_module_create {(
             Status::Ok
         }
 
-        fn add_json_acl_category(ctx: &Context, _args: &[RedisString]) -> Status {
-            let category = CString::new("json").unwrap();
-            unsafe {
-                redis_module::raw::RedisModule_AddACLCategory.unwrap()(ctx.ctx, category.as_ptr()).into()
-            }
-        }
-
         redis_module! {
             name: $crate::MODULE_NAME,
             version: $version,
             allocator: (get_allocator!(), get_allocator!()),
             data_types: [$($data_type,)*],
+            acl_categories: ["json", ],
             init: json_init_config,
             init: initialize,
-            init: add_json_acl_category,
             info: $info_func,
             commands: [
-                ["json.del", json_command!(json_del), "write", 1,1,1, "json write"],
-                ["json.get", json_command!(json_get), "readonly", 1,1,1, "json read"],
-                ["json.mget", json_command!(json_mget), "readonly", 1,1,1, "json read"],
-                ["json.set", json_command!(json_set), "write deny-oom", 1,1,1, "json write"],
-                ["json.mset", json_command!(json_mset), "write deny-oom", 1,-1,3, "json write"],
-                ["json.type", json_command!(json_type), "readonly", 1,1,1, "json read"],
-                ["json.numincrby", json_command!(json_num_incrby), "write", 1,1,1, "json write"],
-                ["json.toggle", json_command!(json_bool_toggle), "write deny-oom", 1,1,1, "json write"],
-                ["json.nummultby", json_command!(json_num_multby), "write", 1,1,1, "json write"],
-                ["json.numpowby", json_command!(json_num_powby), "write", 1,1,1, "json write"],
-                ["json.strappend", json_command!(json_str_append), "write deny-oom", 1,1,1, "json write"],
-                ["json.strlen", json_command!(json_str_len), "readonly", 1,1,1, "json read"],
-                ["json.arrappend", json_command!(json_arr_append), "write deny-oom", 1,1,1, "json write"],
-                ["json.arrindex", json_command!(json_arr_index), "readonly", 1,1,1, "json read"],
-                ["json.arrinsert", json_command!(json_arr_insert), "write deny-oom", 1,1,1, "json write"],
-                ["json.arrlen", json_command!(json_arr_len), "readonly", 1,1,1, "json read"],
-                ["json.arrpop", json_command!(json_arr_pop), "write", 1,1,1, "json write"],
-                ["json.arrtrim", json_command!(json_arr_trim), "write", 1,1,1, "json write"],
-                ["json.objkeys", json_command!(json_obj_keys), "readonly", 1,1,1, "json read"],
-                ["json.objlen", json_command!(json_obj_len), "readonly", 1,1,1, "json read"],
-                ["json.clear", json_command!(json_clear), "write", 1,1,1, "json write"],
-                ["json.debug", json_command!(json_debug), "readonly", 2,2,1, "json read"],
-                ["json.forget", json_command!(json_del), "write", 1,1,1, "json write"],
-                ["json.resp", json_command!(json_resp), "readonly", 1,1,1, "json read"],
-                ["json.merge", json_command!(json_merge), "write deny-oom", 1,1,1, "json write"],
+                ["json.del", json_command!(json_del), "write", 1,1,1, "write"],
+                ["json.get", json_command!(json_get), "readonly", 1,1,1, "read"],
+                ["json.mget", json_command!(json_mget), "readonly", 1,1,1, "read"],
+                ["json.set", json_command!(json_set), "write deny-oom", 1,1,1, "write"],
+                ["json.mset", json_command!(json_mset), "write deny-oom", 1,-1,3, "write"],
+                ["json.type", json_command!(json_type), "readonly", 1,1,1, "read"],
+                ["json.numincrby", json_command!(json_num_incrby), "write", 1,1,1, "write"],
+                ["json.toggle", json_command!(json_bool_toggle), "write deny-oom", 1,1,1, "write"],
+                ["json.nummultby", json_command!(json_num_multby), "write", 1,1,1, "write"],
+                ["json.numpowby", json_command!(json_num_powby), "write", 1,1,1, "write"],
+                ["json.strappend", json_command!(json_str_append), "write deny-oom", 1,1,1, "write"],
+                ["json.strlen", json_command!(json_str_len), "readonly", 1,1,1, "read"],
+                ["json.arrappend", json_command!(json_arr_append), "write deny-oom", 1,1,1, "write"],
+                ["json.arrindex", json_command!(json_arr_index), "readonly", 1,1,1, "read"],
+                ["json.arrinsert", json_command!(json_arr_insert), "write deny-oom", 1,1,1, "write"],
+                ["json.arrlen", json_command!(json_arr_len), "readonly", 1,1,1, "read"],
+                ["json.arrpop", json_command!(json_arr_pop), "write", 1,1,1, "write"],
+                ["json.arrtrim", json_command!(json_arr_trim), "write", 1,1,1, "write"],
+                ["json.objkeys", json_command!(json_obj_keys), "readonly", 1,1,1, "read"],
+                ["json.objlen", json_command!(json_obj_len), "readonly", 1,1,1, "read"],
+                ["json.clear", json_command!(json_clear), "write", 1,1,1, "write"],
+                ["json.debug", json_command!(json_debug), "readonly", 2,2,1, "read"],
+                ["json.forget", json_command!(json_del), "write", 1,1,1, "write"],
+                ["json.resp", json_command!(json_resp), "readonly", 1,1,1, "read"],
+                ["json.merge", json_command!(json_merge), "write deny-oom", 1,1,1, "write"],
             ],
         }
     }

@@ -4,6 +4,8 @@ from functools import wraps
 from includes import *
 from packaging import version
 from unittest import SkipTest
+from RLTest import Env
+import inspect
 
 @contextmanager
 def TimeLimit(timeout):
@@ -51,7 +53,11 @@ def skip_redis_less_than(redis_less_than=None):
         def wrapper():
             if redis_less_than and server_version_is_less_than(redis_less_than):
                 raise SkipTest()
-            return f()
+            if len(inspect.signature(f).parameters) > 0:
+                env = Env()
+                return f(env)
+            else:
+                return f()
         return wrapper
     return decorate
 
