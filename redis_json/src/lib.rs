@@ -178,7 +178,7 @@ macro_rules! redis_json_module_create {(
                     RedisValue::Array(a) => !a.is_empty(),
                     _ => false,
                 });
-                ctx.log_notice(&format!("Initialized shared string cache, thread safe: {is_bigredis}."));
+            ctx.log_notice(&format!("Initialized shared string cache, thread safe: {is_bigredis}."));
             if let Err(e) = ijson::init_shared_string_cache(is_bigredis) {
                 ctx.log(RedisLogLevel::Warning, &format!("Failed initializing shared string cache, {e}."));
                 return Status::Err;
