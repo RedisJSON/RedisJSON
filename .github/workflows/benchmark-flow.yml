@@ -33,7 +33,6 @@ on:
 
 jobs:
   benchmark-steps:
-    continue-on-error: true
     runs-on: ubuntu-latest
     container: ${{ inputs.container }}
     steps:
