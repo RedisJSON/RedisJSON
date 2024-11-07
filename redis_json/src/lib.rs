@@ -122,6 +122,7 @@ macro_rules! redis_json_module_create {(
         use rawmod::ModuleOptions;
         use redis_module::redis_module;
         use redis_module::logging::RedisLogLevel;
+        use redis_module::RedisValue;
 
         use std::{
             ffi::{CStr, CString},
@@ -171,6 +172,17 @@ macro_rules! redis_json_module_create {(
             export_shared_api(ctx);
             ctx.set_module_options(ModuleOptions::HANDLE_IO_ERRORS);
             ctx.log_notice("Enabled diskless replication");
+            let is_bigredis =
+                ctx.call("config", &["get", "bigredis-enabled"])
+                .map_or(false, |res| match res {
+                    RedisValue::Array(a) => !a.is_empty(),
+                    _ => false,
+                });
+            ctx.log_notice(&format!("Initialized shared string cache, thread safe: {is_bigredis}."));
+            if let Err(e) = ijson::init_shared_string_cache(is_bigredis) {
+                ctx.log(RedisLogLevel::Warning, &format!("Failed initializing shared string cache, {e}."));
+                return Status::Err;
+            }
             $init_func(ctx, args)
         }
 
