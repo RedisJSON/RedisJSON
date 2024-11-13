@@ -10,6 +10,7 @@ extern crate redis_module;
 use commands::*;
 use redis_module::native_types::RedisType;
 use redis_module::raw::RedisModuleTypeMethods;
+use redis_module::AclCategory;
 #[cfg(not(feature = "as-library"))]
 use redis_module::InfoContext;
 
@@ -122,6 +123,7 @@ macro_rules! redis_json_module_create {(
         use rawmod::ModuleOptions;
         use redis_module::redis_module;
         use redis_module::logging::RedisLogLevel;
+        use redis_module::RedisValue;
 
         use std::{
             ffi::{CStr, CString},
@@ -171,6 +173,17 @@ macro_rules! redis_json_module_create {(
             export_shared_api(ctx);
             ctx.set_module_options(ModuleOptions::HANDLE_IO_ERRORS);
             ctx.log_notice("Enabled diskless replication");
+            let is_bigredis =
+                ctx.call("config", &["get", "bigredis-enabled"])
+                .map_or(false, |res| match res {
+                    RedisValue::Array(a) => !a.is_empty(),
+                    _ => false,
+                });
+            ctx.log_notice(&format!("Initialized shared string cache, thread safe: {is_bigredis}."));
+            if let Err(e) = ijson::init_shared_string_cache(is_bigredis) {
+                ctx.log(RedisLogLevel::Warning, &format!("Failed initializing shared string cache, {e}."));
+                return Status::Err;
+            }
             $init_func(ctx, args)
         }
 
@@ -187,40 +200,42 @@ macro_rules! redis_json_module_create {(
             Status::Ok
         }
 
+        use AclCategory as ACL;
         redis_module! {
             name: $crate::MODULE_NAME,
             version: $version,
             allocator: (get_allocator!(), get_allocator!()),
             data_types: [$($data_type,)*],
+            acl_categories: [ACL::from("json"), ],
             init: json_init_config,
             init: initialize,
             info: $info_func,
             commands: [
-                ["json.del", json_command!(json_del), "write", 1,1,1],
-                ["json.get", json_command!(json_get), "readonly", 1,1,1],
-                ["json.mget", json_command!(json_mget), "readonly", 1,1,1],
-                ["json.set", json_command!(json_set), "write deny-oom", 1,1,1],
-                ["json.mset", json_command!(json_mset), "write deny-oom", 1,-1,3],
-                ["json.type", json_command!(json_type), "readonly", 1,1,1],
-                ["json.numincrby", json_command!(json_num_incrby), "write", 1,1,1],
-                ["json.toggle", json_command!(json_bool_toggle), "write deny-oom", 1,1,1],
-                ["json.nummultby", json_command!(json_num_multby), "write", 1,1,1],
-                ["json.numpowby", json_command!(json_num_powby), "write", 1,1,1],
-                ["json.strappend", json_command!(json_str_append), "write deny-oom", 1,1,1],
-                ["json.strlen", json_command!(json_str_len), "readonly", 1,1,1],
-                ["json.arrappend", json_command!(json_arr_append), "write deny-oom", 1,1,1],
-                ["json.arrindex", json_command!(json_arr_index), "readonly", 1,1,1],
-                ["json.arrinsert", json_command!(json_arr_insert), "write deny-oom", 1,1,1],
-                ["json.arrlen", json_command!(json_arr_len), "readonly", 1,1,1],
-                ["json.arrpop", json_command!(json_arr_pop), "write", 1,1,1],
-                ["json.arrtrim", json_command!(json_arr_trim), "write", 1,1,1],
-                ["json.objkeys", json_command!(json_obj_keys), "readonly", 1,1,1],
-                ["json.objlen", json_command!(json_obj_len), "readonly", 1,1,1],
-                ["json.clear", json_command!(json_clear), "write", 1,1,1],
-                ["json.debug", json_command!(json_debug), "readonly", 2,2,1],
-                ["json.forget", json_command!(json_del), "write", 1,1,1],
-                ["json.resp", json_command!(json_resp), "readonly", 1,1,1],
-                ["json.merge", json_command!(json_merge), "write deny-oom", 1,1,1],
+                ["json.del", json_command!(json_del), "write", 1,1,1, ACL::Write, ACL::from("json")],
+                ["json.get", json_command!(json_get), "readonly", 1,1,1, ACL::Read, ACL::from("json")],
+                ["json.mget", json_command!(json_mget), "readonly", 1,1,1, ACL::Read, ACL::from("json")],
+                ["json.set", json_command!(json_set), "write deny-oom", 1,1,1, ACL::Write, ACL::from("json")],
+                ["json.mset", json_command!(json_mset), "write deny-oom", 1,-1,3, ACL::Write, ACL::from("json")],
+                ["json.type", json_command!(json_type), "readonly", 1,1,1, ACL::Read, ACL::from("json")],
+                ["json.numincrby", json_command!(json_num_incrby), "write", 1,1,1, ACL::Write, ACL::from("json")],
+                ["json.toggle", json_command!(json_bool_toggle), "write deny-oom", 1,1,1, ACL::Write, ACL::from("json")],
+                ["json.nummultby", json_command!(json_num_multby), "write", 1,1,1, ACL::Write, ACL::from("json")],
+                ["json.numpowby", json_command!(json_num_powby), "write", 1,1,1, ACL::Write, ACL::from("json")],
+                ["json.strappend", json_command!(json_str_append), "write deny-oom", 1,1,1, ACL::Write, ACL::from("json")],
+                ["json.strlen", json_command!(json_str_len), "readonly", 1,1,1, ACL::Read, ACL::from("json")],
+                ["json.arrappend", json_command!(json_arr_append), "write deny-oom", 1,1,1, ACL::Write, ACL::from("json")],
+                ["json.arrindex", json_command!(json_arr_index), "readonly", 1,1,1, ACL::Read, ACL::from("json")],
+                ["json.arrinsert", json_command!(json_arr_insert), "write deny-oom", 1,1,1, ACL::Write, ACL::from("json")],
+                ["json.arrlen", json_command!(json_arr_len), "readonly", 1,1,1, ACL::Read, ACL::from("json")],
+                ["json.arrpop", json_command!(json_arr_pop), "write", 1,1,1, ACL::Write, ACL::from("json")],
+                ["json.arrtrim", json_command!(json_arr_trim), "write", 1,1,1, ACL::Write, ACL::from("json")],
+                ["json.objkeys", json_command!(json_obj_keys), "readonly", 1,1,1, ACL::Read, ACL::from("json")],
+                ["json.objlen", json_command!(json_obj_len), "readonly", 1,1,1, ACL::Read, ACL::from("json")],
+                ["json.clear", json_command!(json_clear), "write", 1,1,1, ACL::Write, ACL::from("json")],
+                ["json.debug", json_command!(json_debug), "readonly", 2,2,1, ACL::Read, ACL::from("json")],
+                ["json.forget", json_command!(json_del), "write", 1,1,1, ACL::Write, ACL::from("json")],
+                ["json.resp", json_command!(json_resp), "readonly", 1,1,1, ACL::Read, ACL::from("json")],
+                ["json.merge", json_command!(json_merge), "write deny-oom", 1,1,1, ACL::Write, ACL::from("json")],
             ],
         }
     }
