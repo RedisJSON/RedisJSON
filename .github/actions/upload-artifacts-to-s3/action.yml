@@ -39,10 +39,3 @@ runs:
         echo ::group::upload staging release
           make upload-release SHOW=1 STAGING=1 VERBOSE=1
         echo ::endgroup::
-        
-        echo ::group::upload production release
-          # todo: trigger this manually instead
-          if [[ "${{ inputs.github-ref}}" != 'refs/heads/master' ]]; then
-            make upload-release SHOW=1 VERBOSE=1
-          fi
-        echo ::endgroup::

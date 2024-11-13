@@ -70,9 +70,6 @@ jobs:
         run: |
           make upload-artifacts SHOW=1 VERBOSE=1
           make upload-release SHOW=1 STAGING=1 VERBOSE=1
-      - name: Upload artifacts to S3 - release  # todo: trigger this manually instead
-        if: ${{ github.ref != 'refs/heads/master' }}
-        run: make upload-release SHOW=1 VERBOSE=1
     
   build-macos-m1:
     runs-on: macos-latest-xlarge
@@ -138,7 +135,3 @@ jobs:
       - name: Upload artifacts to S3 - staging
         run: |
           make upload-artifacts SHOW=1 VERBOSE=1
-          make upload-release SHOW=1 STAGING=1 VERBOSE=1
-      - name: Upload artifacts to S3 - release  # todo: trigger this manually instead
-        if: ${{ github.ref != 'refs/heads/master' }}
-        run: make upload-release SHOW=1 VERBOSE=1
