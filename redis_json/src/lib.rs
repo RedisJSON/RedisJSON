@@ -10,6 +10,7 @@ extern crate redis_module;
 use commands::*;
 use redis_module::native_types::RedisType;
 use redis_module::raw::RedisModuleTypeMethods;
+#[cfg(not(feature = "as-library"))]
 use redis_module::AclCategory;
 #[cfg(not(feature = "as-library"))]
 use redis_module::InfoContext;
