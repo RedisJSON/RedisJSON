@@ -239,7 +239,7 @@ const fn dummy_init(_ctx: &Context, _args: &[RedisString]) -> Status {
     Status::Ok
 }
 
-pub fn init_ijson_shared_string_cache(ctx: &Context) -> Status {
+pub fn init_ijson_shared_string_cache(ctx: &Context) {
     let is_bigredis =
                 ctx.call("config", &["get", "bigredis-enabled"])
                 .map_or(false, |res| match res {
@@ -249,9 +249,8 @@ pub fn init_ijson_shared_string_cache(ctx: &Context) -> Status {
     ctx.log_notice(&format!("Initialized shared string cache, thread safe: {is_bigredis}."));
     if let Err(e) = ijson::init_shared_string_cache(is_bigredis) {
         ctx.log(RedisLogLevel::Warning, &format!("Failed initializing shared string cache, {e}."));
-        return Status::Err;
+        panic!("Failed initializing shared string cache, {e}.");
     }
-    Status::Ok
 }
 
 #[cfg(not(feature = "as-library"))]
