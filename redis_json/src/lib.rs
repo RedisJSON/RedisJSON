@@ -239,7 +239,7 @@ const fn dummy_init(_ctx: &Context, _args: &[RedisString]) -> Status {
     Status::Ok
 }
 
-fn init_ijson_shared_string_cache(ctx: &Context) -> Status {
+pub fn init_ijson_shared_string_cache(ctx: &Context) -> Status {
     let is_bigredis =
                 ctx.call("config", &["get", "bigredis-enabled"])
                 .map_or(false, |res| match res {
