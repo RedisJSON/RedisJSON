@@ -173,7 +173,7 @@ macro_rules! redis_json_module_create {(
             export_shared_api(ctx);
             ctx.set_module_options(ModuleOptions::HANDLE_IO_ERRORS);
             ctx.log_notice("Enabled diskless replication");
-            init_ijson_shared_string_cache(ctx);
+            $crate::init_ijson_shared_string_cache(ctx);
             $init_func(ctx, args)
         }
 
