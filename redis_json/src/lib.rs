@@ -10,6 +10,7 @@ extern crate redis_module;
 use commands::*;
 use redis_module::native_types::RedisType;
 use redis_module::raw::RedisModuleTypeMethods;
+#[cfg(not(feature = "as-library"))]
 use redis_module::AclCategory;
 #[cfg(not(feature = "as-library"))]
 use redis_module::InfoContext;
@@ -180,7 +181,7 @@ macro_rules! redis_json_module_create {(
                     _ => false,
                 });
             ctx.log_notice(&format!("Initialized shared string cache, thread safe: {is_bigredis}."));
-            if let Err(e) = ijson::init_shared_string_cache(is_bigredis) {
+            if let Err(e) = $crate::init_ijson_shared_string_cache(is_bigredis) {
                 ctx.log(RedisLogLevel::Warning, &format!("Failed initializing shared string cache, {e}."));
                 return Status::Err;
             }
@@ -247,6 +248,10 @@ const fn pre_command(_ctx: &Context, _args: &[RedisString]) {}
 #[cfg(not(feature = "as-library"))]
 const fn dummy_init(_ctx: &Context, _args: &[RedisString]) -> Status {
     Status::Ok
+}
+
+pub fn init_ijson_shared_string_cache(is_bigredis: bool) -> Result<(), String> {
+    ijson::init_shared_string_cache(is_bigredis)
 }
 
 #[cfg(not(feature = "as-library"))]
