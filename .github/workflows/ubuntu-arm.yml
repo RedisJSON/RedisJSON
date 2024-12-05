@@ -40,7 +40,7 @@ jobs:
       redis-ref: ${{ steps.set-env.outputs.redis-ref }}
     steps:
       - name: checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: set env
@@ -112,7 +112,7 @@ jobs:
         run: |
           ${{ matrix.docker.install_git }}
       - name: Checkout the module
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: 'recursive'
       - name: Install dependencies
@@ -121,7 +121,7 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
       - name: Checkout Redis
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: 'redis/redis'
           ref: ${{ needs.setup-environment.outputs.redis-ref }}

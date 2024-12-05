@@ -39,7 +39,7 @@ jobs:
       redis-ref: ${{ steps.set-env.outputs.redis-ref }}
     steps:
       - name: checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: set env
@@ -83,11 +83,11 @@ jobs:
             xsimd git xz bsd-compat-headers clang18 cargo
           echo ::endgroup::
       - name: Checkout the module
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: 'recursive'
       - name: Checkout Redis
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: 'redis/redis'
           ref: ${{needs.setup-environment.outputs.redis-ref}}

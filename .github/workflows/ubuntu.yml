@@ -38,7 +38,7 @@ jobs:
           apt update
           apt install -y git
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: 'recursive'
       - name: Install python 3.12
@@ -65,7 +65,7 @@ jobs:
           pip install -q -r .install/build_package_requirements.txt
           python3 -m pip install -r tests/pytest/requirements.txt
       - name: Get Redis
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: redis/redis
           ref: '7.4'
