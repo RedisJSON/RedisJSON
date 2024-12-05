@@ -34,12 +34,12 @@ jobs:
           pip install -q -r .install/build_package_requirements.txt
         env:
           PIP_BREAK_SYSTEM_PACKAGES: 1
-      - name: Checkout Redis
-        uses: actions/checkout@v4
-        with:
-          repository: redis/redis
-          ref: '7.4'
-          path: redis
+      - name: checkout redis
+        run: |
+          # Perform checkout
+          REPO_URL="https://github.com/redis/redis.git"
+          # Clone the repository to the current directory
+          git clone --recurse-submodules --depth=1 $REPO_URL redis
       - name: Build Redis
         working-directory: redis
         run: make install
