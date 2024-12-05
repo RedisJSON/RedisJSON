@@ -16,16 +16,13 @@ on:
 # variables, install the latest version of git within the container,
 # and use the actions/checkout@v3 instead of @v4, until it is fixed.
 env:
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-  ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
-  ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
   DEBIAN_FRONTEND: noninteractive
 
 jobs:
   build:
     strategy:
       matrix:
-        docker_image: ["ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy"]
+        docker_image: ["ubuntu:focal", "ubuntu:jammy"]
     runs-on: "ubuntu-latest"
     container:
         image: ${{ matrix.docker_image }}

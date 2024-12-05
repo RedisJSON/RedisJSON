@@ -21,11 +21,6 @@ jobs:
         docker_image:
           - image: "ubuntu:bionic"
             pre_req_install_cmd: |
-              # https://github.com/actions/checkout/issues/1809
-              echo "ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION=node16" >> $GITHUB_ENV
-              echo "ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION=node16" >> $GITHUB_ENV
-              # https://github.blog/changelog/2024-03-07-github-actions-all-actions-will-run-on-node20-instead-of-node16-by-default/
-              echo "ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true" >> $GITHUB_ENV
               apt-get update && apt-get install -y software-properties-common
               add-apt-repository ppa:git-core/ppa && apt-get update && apt-get install -y git
           - image: "ubuntu:focal"
@@ -47,11 +42,7 @@ jobs:
               apt-get update && apt-get install -y git
           - image: "amazonlinux:2"
             pre_req_install_cmd: |
-              # https://github.com/actions/checkout/issues/1809
-              echo "ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION=node16" >> $GITHUB_ENV
-              echo "ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION=node16" >> $GITHUB_ENV
-              # https://github.blog/changelog/2024-03-07-github-actions-all-actions-will-run-on-node20-instead-of-node16-by-default/
-              echo "ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true" >> $GITHUB_ENV
+              yum update
               yum install -y git
           - image: "mcr.microsoft.com/cbl-mariner/base/core:2.0"
             pre_req_install_cmd: tdnf install --noplugins --skipsignature -y ca-certificates git
@@ -64,9 +55,17 @@ jobs:
       - name: Install git
         run: ${{ matrix.docker_image.pre_req_install_cmd }}
       - name: Checkout
-        uses: actions/checkout@v3
+        if: matrix.docker_image.image != 'amazonlinux:2' && matrix.docker_image.image != 'ubuntu:bionic'
+        uses: actions/checkout@v4
         with:
           submodules: 'recursive'
+      - name: git checkout
+        if: matrix.docker_image.image == 'amazonlinux:2' || matrix.docker_image.image == 'ubuntu:bionic'
+        run: |
+          # Perform checkout
+          REPO_URL="https://github.com/${{ github.repository }}.git"
+          # Clone the repository to the current directory
+          git clone --recurse-submodules --depth=1 $REPO_URL .
       - name: Setup
         working-directory: .install
         run: |
