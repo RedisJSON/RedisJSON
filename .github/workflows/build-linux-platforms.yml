@@ -118,8 +118,8 @@ jobs:
         env:
           PIP_BREAK_SYSTEM_PACKAGES: 1
       - name: Upload test artifacts
-        if: failure()
-        uses: actions/upload-artifact@v3
+        if: failure() && matrix.docker_image.image != 'amazonlinux:2' && matrix.docker_image.image != 'ubuntu:bionic'
+        uses: actions/upload-artifact@v4
         with:
           name: Test logs ${{ steps.artifact-names.outputs.name }}
           path: tests/**/logs/*.log*
