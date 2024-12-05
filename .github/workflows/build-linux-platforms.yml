@@ -83,7 +83,7 @@ jobs:
           ref: 'unstable' # todo change per version/tag
           path: redis
           submodules: 'recursive'
-      - name: git checkout
+      - name: Get Redis
         if: matrix.docker_image.image == 'amazonlinux:2' || matrix.docker_image.image == 'ubuntu:bionic'
         run: |
           # Perform checkout
