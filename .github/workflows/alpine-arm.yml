@@ -1,11 +1,6 @@
 name: alpine ARM64
 
 on:
-  push:
-    branches:
-      - master
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
   pull_request:
     types:
       - opened
@@ -39,7 +34,7 @@ jobs:
       redis-ref: ${{ steps.set-env.outputs.redis-ref }}
     steps:
       - name: checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: set env
@@ -82,16 +77,25 @@ jobs:
             clang18-libclang gcompat libstdc++ libgcc g++ openblas-dev \
             xsimd git xz bsd-compat-headers clang18 cargo
           echo ::endgroup::
-      - name: Checkout the module
-        uses: actions/checkout@v3
-        with:
-          submodules: 'recursive'
-      - name: Checkout Redis
-        uses: actions/checkout@v3
-        with:
-          repository: 'redis/redis'
-          ref: ${{needs.setup-environment.outputs.redis-ref}}
-          path: 'redis'
+      - name: git checkout
+        run: |
+          # Perform checkout
+          REPO_URL="https://github.com/${{ github.repository }}.git"
+          # Clone the repository to the current directory
+          git clone --recurse-submodules --depth=1 $REPO_URL .
+          git config --global --add safe.directory /__w/${{ github.repository }}
+          REF=${{github.sha}}
+          git fetch origin ${REF}
+          git checkout ${REF}
+      - name: checkout redis
+        run: |
+          # Perform checkout
+          REPO_URL="https://github.com/redis/redis.git"
+          # Clone the repository to the current directory
+          git clone --recurse-submodules --depth=1 $REPO_URL redis
+          cd redis
+          git fetch origin ${{inputs.redis-ref}}
+          git checkout ${{inputs.redis-ref}}
       - name: Install python dependencies
         run: |
           echo ::group::install requirements

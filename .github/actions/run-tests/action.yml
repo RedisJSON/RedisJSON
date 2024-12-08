@@ -53,12 +53,12 @@ runs:
         submodules: recursive
     - name: Full checkout (node20 unsupported)
       if: steps.node20.outputs.supported == 'false'
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         submodules: recursive
 
     - name: Get Redis
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: redis/redis
         ref: 'unstable' # todo change per version/tag

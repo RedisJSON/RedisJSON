@@ -1,60 +1,79 @@
 name: Build all supported linux platforms
 
 on:
-  push:
-    branches:
-      - master
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
-  pull_request:
-    types:
-      - opened
-      - reopened
-      - review_requested
+  workflow_call: # Allows to run this workflow from another workflow
+    inputs:
+      redis-ref:
+        description: 'Redis ref to checkout'  # todo change per version/tag
+        type: string
+        required: true
+      os:
+        description: 'OS to build on, bash array style'
+        type: string
+        required: true
 
 jobs:
-  build-linux-matrix:
+  prepare-values:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      redis-ref: ${{ steps.set-env.outputs.redis-ref }}
+    steps:
+      - name: set env
+        id: set-env
+        run: |
+          echo "redis-ref=${{ inputs.redis-ref || 'unstable' }}" >> $GITHUB_OUTPUT  # todo change per version/tag
+      - name: Set matrix
+        id: set-matrix
+        run: |
+          OS="${{ inputs.os }}"
+          if [ -z "${OS}" ]; then
+            OS="bionic focal jammy rocky8 rocky9 bullseye amazonlinux2 mariner2"
+          fi
+          MATRIX="["
+          for os in $OS; do
+            case $os in
+              bionic)
+                MATRIX="${MATRIX}{\"image\": \"ubuntu:bionic\", \"pre_req_install_cmd\": \"apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update && apt-get install -y git\"},"
+                ;;
+              focal)
+                MATRIX="${MATRIX}{\"image\": \"ubuntu:focal\", \"pre_req_install_cmd\": \"apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update && apt-get install -y git\"},"
+                ;;
+              jammy)
+                MATRIX="${MATRIX}{\"image\": \"ubuntu:jammy\", \"pre_req_install_cmd\": \"apt-get update && apt-get install -y git\"},"
+                ;;
+              rocky8)
+                MATRIX="${MATRIX}{\"image\": \"rockylinux:8\", \"pre_req_install_cmd\": \"dnf install -y git\"},"
+                ;;
+              rocky9)
+                MATRIX="${MATRIX}{\"image\": \"rockylinux:9\", \"pre_req_install_cmd\": \"dnf install -y git\"},"
+                ;;
+              bullseye)
+                MATRIX="${MATRIX}{\"image\": \"debian:bullseye\", \"pre_req_install_cmd\": \"apt-get update && apt-get install -y git\"},"
+                ;;
+              amazonlinux2)
+                MATRIX="${MATRIX}{\"image\": \"amazonlinux:2\", \"pre_req_install_cmd\": \"yum update && yum install -y git\"},"
+                ;;
+              mariner2)
+                MATRIX="${MATRIX}{\"image\": \"mcr.microsoft.com/cbl-mariner/base/core:2.0\", \"pre_req_install_cmd\": \"tdnf install --noplugins --skipsignature -y ca-certificates git\"},"
+                ;;
+              *)
+                echo "Unknown OS: $os"
+                exit 1
+                ;;
+            esac
+          done
+          MATRIX="${MATRIX%?}]"
+          echo "${MATRIX}"
+          echo "matrix=${MATRIX}" >> $GITHUB_OUTPUT
+  build-linux-matrix:
+    name: ${{matrix.docker_image.image}}, ${{needs.prepare-values.outputs.redis-ref}}
+    runs-on: ubuntu-latest
+    needs: prepare-values
     strategy:
       fail-fast: false
-      matrix:
-        docker_image:
-          - image: "ubuntu:bionic"
-            pre_req_install_cmd: |
-              # https://github.com/actions/checkout/issues/1809
-              echo "ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION=node16" >> $GITHUB_ENV
-              echo "ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION=node16" >> $GITHUB_ENV
-              # https://github.blog/changelog/2024-03-07-github-actions-all-actions-will-run-on-node20-instead-of-node16-by-default/
-              echo "ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true" >> $GITHUB_ENV
-              apt-get update && apt-get install -y software-properties-common
-              add-apt-repository ppa:git-core/ppa && apt-get update && apt-get install -y git
-          - image: "ubuntu:focal"
-            # https://github.com/actions/checkout/issues/1386 - sparse checkout does not work on got 2.25 which is the default in focal
-            pre_req_install_cmd: | 
-              apt-get update && apt-get install -y software-properties-common
-              add-apt-repository ppa:git-core/ppa && apt-get update && apt-get install -y git
-          - image: "ubuntu:jammy"
-            pre_req_install_cmd: |
-              apt-get update && apt-get install -y git
-          - image: "rockylinux:8"
-            pre_req_install_cmd: |
-              dnf install -y git
-          - image: "rockylinux:9"
-            pre_req_install_cmd: |
-              dnf install -y git
-          - image: "debian:bullseye"
-            pre_req_install_cmd: |
-              apt-get update && apt-get install -y git
-          - image: "amazonlinux:2"
-            pre_req_install_cmd: |
-              # https://github.com/actions/checkout/issues/1809
-              echo "ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION=node16" >> $GITHUB_ENV
-              echo "ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION=node16" >> $GITHUB_ENV
-              # https://github.blog/changelog/2024-03-07-github-actions-all-actions-will-run-on-node20-instead-of-node16-by-default/
-              echo "ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true" >> $GITHUB_ENV
-              yum install -y git
-          - image: "mcr.microsoft.com/cbl-mariner/base/core:2.0"
-            pre_req_install_cmd: tdnf install --noplugins --skipsignature -y ca-certificates git
+      matrix: 
+        docker_image: ${{fromJson(needs.prepare-values.outputs.matrix)}}
     container:
       image: ${{ matrix.docker_image.image }}
     defaults:
@@ -64,9 +83,21 @@ jobs:
       - name: Install git
         run: ${{ matrix.docker_image.pre_req_install_cmd }}
       - name: Checkout
-        uses: actions/checkout@v3
+        if: matrix.docker_image.image != 'amazonlinux:2' && matrix.docker_image.image != 'ubuntu:bionic'
+        uses: actions/checkout@v4
         with:
           submodules: 'recursive'
+      - name: git checkout
+        if: matrix.docker_image.image == 'amazonlinux:2' || matrix.docker_image.image == 'ubuntu:bionic'
+        run: |
+          # Perform checkout
+          REPO_URL="https://github.com/${{ github.repository }}.git"
+          # Clone the repository to the current directory
+          git config --global --add safe.directory /__w/${{ github.repository }}
+          git clone --recurse-submodules --depth=1 $REPO_URL .
+          REF=${{github.sha}}
+          git fetch origin ${REF}
+          git checkout ${REF}
       - name: Setup
         working-directory: .install
         run: |
@@ -77,12 +108,23 @@ jobs:
             ./getrust.sh
           echo ::endgroup::
       - name: Get Redis
-        uses: actions/checkout@v3
+        if: matrix.docker_image.image != 'amazonlinux:2' && matrix.docker_image.image != 'ubuntu:bionic'
+        uses: actions/checkout@v4
         with:
           repository: redis/redis
-          ref: 'unstable' # todo change per version/tag
+          ref: ${{needs.prepare-values.outputs.redis-ref}}
           path: redis
           submodules: 'recursive'
+      - name: Get Redis
+        if: matrix.docker_image.image == 'amazonlinux:2' || matrix.docker_image.image == 'ubuntu:bionic'
+        run: |
+          # Perform checkout
+          REPO_URL="https://github.com/redis/redis.git"
+          # Clone the repository to the current directory
+          git clone --recurse-submodules --depth=1 $REPO_URL redis
+          cd redis
+          git fetch origin ${{needs.prepare-values.outputs.redis-ref}}
+          git checkout ${{needs.prepare-values.outputs.redis-ref}}
       - name: build
         uses: ./.github/actions/build-json-module-and-redis-with-cargo
       - name: Set Artifact Names
@@ -111,8 +153,8 @@ jobs:
         env:
           PIP_BREAK_SYSTEM_PACKAGES: 1
       - name: Upload test artifacts
-        if: failure()
-        uses: actions/upload-artifact@v3
+        if: failure() && matrix.docker_image.image != 'amazonlinux:2' && matrix.docker_image.image != 'ubuntu:bionic'
+        uses: actions/upload-artifact@v4
         with:
           name: Test logs ${{ steps.artifact-names.outputs.name }}
           path: tests/**/logs/*.log*
