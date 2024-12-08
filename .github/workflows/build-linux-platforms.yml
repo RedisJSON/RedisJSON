@@ -82,7 +82,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: 
-        docker_image: ${{fromJson(needs.prepare-matrix-values.outputs.matrix)}}
+        docker_image: ${{fromJson(needs.prepare-values.outputs.matrix)}}
     container:
       image: ${{ matrix.docker_image.image }}
     defaults:
