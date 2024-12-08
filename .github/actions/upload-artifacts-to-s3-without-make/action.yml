@@ -27,11 +27,11 @@ runs:
           python3 -m venv .aws-cli-venv && source .aws-cli-venv/bin/activate &&
           pip3 install --upgrade pip && pip3 install --no-cache-dir awscli && rm -rf /var/cache/apk/*
           echo ::endgroup::
-          
+
           # Variables from the workflow
-          AWS_ACCESS_KEY_ID="${{ inputs.aws-access-key-id }}"
-          AWS_SECRET_ACCESS_KEY="${{ inputs.aws-secret-access-key }}"
-          AWS_REGION="us-east-1"
+          export AWS_ACCESS_KEY_ID="${{ inputs.aws-access-key-id }}"
+          export AWS_SECRET_ACCESS_KEY="${{ inputs.aws-secret-access-key }}"
+          export AWS_REGION="us-east-1"
           # Check if the required environment variables are set
           if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ] || [ -z "$AWS_REGION" ]; then
             echo "Missing AWS credentials or region configuration."
