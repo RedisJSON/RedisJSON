@@ -23,11 +23,16 @@ on:
         required: true
 
 jobs:
-  prepare-matrix-values:
+  prepare-values:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      redis-ref: ${{ steps.set-env.outputs.redis-ref }}
     steps:
+      - name: set env
+        id: set-env
+        run: |
+          echo "redis-ref=${{ inputs.redis-ref || 'unstable' }}" >> $GITHUB_OUTPUT
       - name: Set matrix
         id: set-matrix
         run: |
@@ -73,7 +78,7 @@ jobs:
           echo "matrix=${MATRIX}" >> $GITHUB_OUTPUT
   build-linux-matrix:
     runs-on: ubuntu-latest
-    needs: prepare-matrix-values
+    needs: prepare-values
     strategy:
       fail-fast: false
       matrix: 
@@ -97,7 +102,10 @@ jobs:
           # Perform checkout
           REPO_URL="https://github.com/${{ github.repository }}.git"
           # Clone the repository to the current directory
-          git clone --recurse-submodules --depth=1 -b ${{github.sha}} $REPO_URL .
+          git clone --recurse-submodules --depth=1 $REPO_URL .
+          REF=${{github.sha}}
+          git fetch origin ${REF}
+          git checkout ${REF}
       - name: Setup
         working-directory: .install
         run: |
@@ -121,7 +129,9 @@ jobs:
           # Perform checkout
           REPO_URL="https://github.com/redis/redis.git"
           # Clone the repository to the current directory
-          git clone --recurse-submodules --depth=1 -b unstable $REPO_URL redis
+          git clone --recurse-submodules --depth=1 $REPO_URL redis
+          git fetch origin ${{needs.prepare-values.outputs.redis-ref}}
+          git checkout ${{needs.prepare-values.outputs.redis-ref}}
       - name: build
         uses: ./.github/actions/build-json-module-and-redis-with-cargo
       - name: Set Artifact Names

@@ -18,72 +18,10 @@ on:
       - 'v[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
-  build-linux-jammy:
-    runs-on: "ubuntu-latest"
-    container:
-        image: "ubuntu:jammy"
-    defaults:
-      run:
-        shell: bash -l -eo pipefail {0}
-    steps:
-      - name: Install git
-        run: |
-          apt-get update && apt-get install -y git
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
-      - name: Setup
-        working-directory: .install
-        run: |
-          echo ::group::Install dependencies
-          ./ubuntu_22.04.sh
-          echo ::endgroup::
-          echo ::group::Install rust
-          ./getrust.sh
-          echo ::endgroup::
-      - name: Get Redis
-        uses: actions/checkout@v4
-        with:
-          repository: redis/redis
-          ref: 'unstable' # todo change per version/tag
-          path: redis
-      - name: Build Redis
-        working-directory: redis
-        run: |
-          make install
-      - name: Build module
-        run: |
-          . "$HOME/.cargo/env"
-          cargo --version
-          cargo build --release
-      - name: Set Artifact Names
-        # Artifact names have to be unique, so we base them on the environment.
-        # We also remove invalid characters from the name.
-        id: artifact-names
-        run: | # Invalid characters include: Double quote ", Colon :, Less than <, Greater than >, Vertical bar |, Asterisk *, Question mark ?
-          echo "name=$(echo "ubuntu22 x86-64, Redis unstable" | \
-            sed -e 's/[":\/\\<>\|*?]/_/g' -e 's/__*/_/g' -e 's/^_//' -e 's/_$//')" >> $GITHUB_OUTPUT
-      - name: Run tests
-        run: |
-          echo ::group::Activate virtual environment
-          ./.install/activate_venv.sh
-          echo ::endgroup::
-          echo ::group::Install python dependencies
-          ./.install/common_installations.sh
-          echo ::endgroup::
-          echo ::group::Flow tests
-          MODULE=$(realpath ./target/release/librejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
-          echo ::endgroup::
-          echo ::group::Unit tests
-          cargo test
-          echo ::endgroup::
-        env:
-          PIP_BREAK_SYSTEM_PACKAGES: 1
-      - name: Upload artifacts
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Test logs ${{ steps.artifact-names.outputs.name }}
-          path: tests/**/logs/*.log*
-          if-no-files-found: ignore
+  build-linux:
+    crdt_tests:
+    uses: ./.github/workflows/build-linux-platforms.yaml
+    with:
+      os: jammy focal bionic
+      redis-ref: unstable
+    secrets: inherit

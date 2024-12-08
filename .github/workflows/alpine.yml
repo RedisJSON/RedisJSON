@@ -25,7 +25,10 @@ jobs:
           # Perform checkout
           REPO_URL="https://github.com/${{ github.repository }}.git"
           # Clone the repository to the current directory
-          git clone --recurse-submodules --depth=1 -b ${{github.sha}} $REPO_URL .
+          git clone --recurse-submodules --depth=1 $REPO_URL .
+          REF=${{github.sha}}
+          git fetch origin ${REF}
+          git checkout ${REF}
       - name: Install python dependencies
         run: |
           pip install -q --upgrade setuptools
@@ -39,7 +42,9 @@ jobs:
           # Perform checkout
           REPO_URL="https://github.com/redis/redis.git"
           # Clone the repository to the current directory
-          git clone --recurse-submodules --depth=1 -b unstable $REPO_URL redis
+          git clone --recurse-submodules --depth=1 $REPO_URL redis
+          git fetch origin unstable
+          git checkout unstable
       - name: Build Redis
         working-directory: redis
         run: make install
