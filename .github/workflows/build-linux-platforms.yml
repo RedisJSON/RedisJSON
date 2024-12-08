@@ -35,7 +35,7 @@ jobs:
           if [ -z "${OS}" ]; then
             OS="bionic focal jammy rocky8 rocky9 bullseye amazonlinux2 mariner2"
           fi
-          MATRIX="["
+          MATRIX="{["
           for os in $OS; do
             case $os in
               bionic)
@@ -68,7 +68,7 @@ jobs:
                 ;;
             esac
           done
-          MATRIX="${MATRIX%?}]"
+          MATRIX="${MATRIX%?}]}"
           echo "${MATRIX}"
           echo "matrix=${MATRIX}" >> $GITHUB_OUTPUT
   build-linux-matrix:
