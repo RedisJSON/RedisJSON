@@ -101,17 +101,25 @@ jobs:
       VERSION: ${{ needs.setup-environment.outputs.TAG }}
       BRANCH: ${{ needs.setup-environment.outputs.BRANCH }}
       TAG_OR_BRANCH: ${{ needs.setup-environment.outputs.TAG_OR_BRANCH}}
-
-      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-      ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
-      ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
     container:
       image: ${{ matrix.docker.image }}
     steps:
       - name: Install git
         run: |
           ${{ matrix.docker.install_git }}
+      - name: git checkout
+        if: matrix.docker_image.image == 'ubuntu:bionic'
+        run: |
+          # Perform checkout
+          REPO_URL="https://github.com/${{ github.repository }}.git"
+          # Clone the repository to the current directory
+          git config --global --add safe.directory /__w/${{ github.repository }}
+          git clone --recurse-submodules --depth=1 $REPO_URL .
+          REF=${{github.sha}}
+          git fetch origin ${REF}
+          git checkout ${REF}
       - name: Checkout the module
+        if: matrix.docker_image.image != 'ubuntu:bionic'
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
@@ -121,11 +129,19 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
       - name: Checkout Redis
+        if: matrix.docker_image.image != 'ubuntu:bionic'
         uses: actions/checkout@v4
         with:
           repository: 'redis/redis'
           ref: ${{ needs.setup-environment.outputs.redis-ref }}
           path: 'redis'
+      - name: Get Redis
+        if: matrix.docker_image.image == 'ubuntu:bionic'
+        run: |
+          # Perform checkout
+          REPO_URL="https://github.com/redis/redis.git"
+          # Clone the repository to the current directory
+          git clone --recurse-submodules --depth=1 $REPO_URL redis
       - name: Get Rust
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
