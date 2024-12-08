@@ -20,7 +20,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Configure AWS credentials # todo - use aws role instead
+    - name: Configure AWS credentials and upload artifcats # todo - use aws role instead
       shell: bash
       run: |
           # Variables from the workflow
@@ -37,23 +37,20 @@ runs:
           aws configure set aws_access_key_id "$AWS_ACCESS_KEY_ID"
           aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY"
           aws configure set region "$AWS_REGION"
-    - name: Upload artifacts to S3 - staging
-      shell: bash
-      run: |
-        echo ::group::install aws cli
+          echo ::group::install aws cli
           python3 -m venv .aws-cli-venv && source .aws-cli-venv/bin/activate &&
           pip3 install --upgrade pip && pip3 install --no-cache-dir awscli && rm -rf /var/cache/apk/*
-        echo ::endgroup::
-        echo ::group::upload artifacts
-          SNAPSHOT=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
-        echo ::endgroup::
-        echo ::group::upload staging release
-          RELEASE=1 SHOW=1 STAGING=1 VERBOSE=1 ./sbin/upload-artifacts
-        echo ::endgroup::
-        
-        echo ::group::upload production release
-          # todo: trigger this manually instead
-          if [[ "${{ inputs.github-ref}}" != 'refs/heads/master' ]]; then
-            RELEASE=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
-          fi
-        echo ::endgroup::
+          echo ::endgroup::
+          echo ::group::upload artifacts
+            SNAPSHOT=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
+          echo ::endgroup::
+          echo ::group::upload staging release
+            RELEASE=1 SHOW=1 STAGING=1 VERBOSE=1 ./sbin/upload-artifacts
+          echo ::endgroup::
+          
+          echo ::group::upload production release
+            # todo: trigger this manually instead
+            if [[ "${{ inputs.github-ref}}" != 'refs/heads/master' ]]; then
+              RELEASE=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
+            fi
+          echo ::endgroup::
