@@ -89,7 +89,7 @@ jobs:
           # Perform checkout
           REPO_URL="https://github.com/redis/redis.git"
           # Clone the repository to the current directory
-          git clone --recurse-submodules --depth=1 -b ${{ github.sha }} $REPO_URL redis
+          git clone --recurse-submodules --depth=1 -b unstable $REPO_URL redis
       - name: build
         uses: ./.github/actions/build-json-module-and-redis-with-cargo
       - name: Set Artifact Names
