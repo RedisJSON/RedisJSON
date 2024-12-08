@@ -23,6 +23,11 @@ runs:
     - name: Configure AWS credentials and upload artifcats # todo - use aws role instead
       shell: bash
       run: |
+          echo ::group::install aws cli
+          python3 -m venv .aws-cli-venv && source .aws-cli-venv/bin/activate &&
+          pip3 install --upgrade pip && pip3 install --no-cache-dir awscli && rm -rf /var/cache/apk/*
+          echo ::endgroup::
+          
           # Variables from the workflow
           AWS_ACCESS_KEY_ID="${{ inputs.aws-access-key-id }}"
           AWS_SECRET_ACCESS_KEY="${{ inputs.aws-secret-access-key }}"
@@ -37,10 +42,7 @@ runs:
           aws configure set aws_access_key_id "$AWS_ACCESS_KEY_ID"
           aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY"
           aws configure set region "$AWS_REGION"
-          echo ::group::install aws cli
-          python3 -m venv .aws-cli-venv && source .aws-cli-venv/bin/activate &&
-          pip3 install --upgrade pip && pip3 install --no-cache-dir awscli && rm -rf /var/cache/apk/*
-          echo ::endgroup::
+
           echo ::group::upload artifacts
             SNAPSHOT=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
           echo ::endgroup::
