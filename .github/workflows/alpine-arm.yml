@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - master
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
   pull_request:
     types:
       - opened
@@ -99,8 +97,8 @@ jobs:
           # Clone the repository to the current directory
           git clone --recurse-submodules --depth=1 $REPO_URL redis
           cd redis
-          git fetch origin unstable
-          git checkout unstable
+          git fetch origin ${{inputs.redis-ref}}
+          git checkout ${{inputs.redis-ref}}
       - name: Install python dependencies
         run: |
           echo ::group::install requirements

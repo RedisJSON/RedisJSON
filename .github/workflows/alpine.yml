@@ -4,8 +4,18 @@ on:
   push:
     branches:
       - master
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch: # Allows you to run this workflow manually from the Actions tab
+    inputs:
+      redis-ref:
+        description: 'Redis ref to checkout'
+        required: true
+        default: 'unstable'
+  workflow_call: # Allows to run this workflow from another workflow
+    inputs:
+      redis-ref:
+        description: 'Redis ref to checkout'
+        type: string
+        required: true
 
 jobs:
   build:
@@ -45,8 +55,8 @@ jobs:
           # Clone the repository to the current directory
           git clone --recurse-submodules --depth=1 $REPO_URL redis
           cd redis
-          git fetch origin unstable
-          git checkout unstable
+          git fetch origin ${{inputs.redis-ref}}
+          git checkout ${{inputs.redis-ref}}
       - name: Build Redis
         working-directory: redis
         run: make install

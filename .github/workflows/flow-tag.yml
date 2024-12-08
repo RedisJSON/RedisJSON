@@ -1,0 +1,38 @@
+name: Trigger Workflows on Tag
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      redis-ref:
+        description: 'Redis ref to checkout'
+        required: true
+        default: 'unstable'
+
+jobs:
+  build-linux-x86:
+    uses: ./.github/workflows/build-linux-platforms.yml
+    with:
+      os: bionic focal jammy rocky8 rocky9 bullseye amazonlinux2 mariner2
+      ${{inputs.redis-ref || unstable}}
+    secrets: inherit
+  ubuntu-arm64:
+    uses: ./.github/workflows/ubuntu-arm.yml
+    with:
+      ${{inputs.redis-ref || unstable}}
+  macos:
+    uses: ./.github/workflows/macos-build-and-deploy.yml
+    with:
+      ${{inputs.redis-ref || unstable}}
+    secrets: inherit
+  alpine-arm:
+    uses: ./.github/workflows/alpine-arm.yml
+    with:
+      ${{inputs.redis-ref || unstable}}
+  alpine:
+    uses: ./.github/workflows/alpine.yml
+    with:
+      ${{inputs.redis-ref || unstable}}
+    secrets: inherit
