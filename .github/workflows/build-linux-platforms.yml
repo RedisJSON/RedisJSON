@@ -102,6 +102,7 @@ jobs:
           # Perform checkout
           REPO_URL="https://github.com/${{ github.repository }}.git"
           # Clone the repository to the current directory
+          git config --global --add safe.directory /__w/${{ github.repository }}
           git clone --recurse-submodules --depth=1 $REPO_URL .
           REF=${{github.sha}}
           git fetch origin ${REF}
