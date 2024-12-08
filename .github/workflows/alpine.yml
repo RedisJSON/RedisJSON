@@ -44,6 +44,7 @@ jobs:
           REPO_URL="https://github.com/redis/redis.git"
           # Clone the repository to the current directory
           git clone --recurse-submodules --depth=1 $REPO_URL redis
+          cd redis
           git fetch origin unstable
           git checkout unstable
       - name: Build Redis

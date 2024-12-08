@@ -14,7 +14,7 @@ on:
   workflow_call: # Allows to run this workflow from another workflow
     inputs:
       redis-ref:
-        description: 'Redis ref to checkout'
+        description: 'Redis ref to checkout'  # todo change per version/tag
         type: string
         required: true
       os:
@@ -32,7 +32,7 @@ jobs:
       - name: set env
         id: set-env
         run: |
-          echo "redis-ref=${{ inputs.redis-ref || 'unstable' }}" >> $GITHUB_OUTPUT
+          echo "redis-ref=${{ inputs.redis-ref || 'unstable' }}" >> $GITHUB_OUTPUT  # todo change per version/tag
       - name: Set matrix
         id: set-matrix
         run: |
@@ -121,7 +121,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: redis/redis
-          ref: 'unstable' # todo change per version/tag
+          ref: ${{needs.prepare-values.outputs.redis-ref}}
           path: redis
           submodules: 'recursive'
       - name: Get Redis
@@ -131,6 +131,7 @@ jobs:
           REPO_URL="https://github.com/redis/redis.git"
           # Clone the repository to the current directory
           git clone --recurse-submodules --depth=1 $REPO_URL redis
+          cd redis
           git fetch origin ${{needs.prepare-values.outputs.redis-ref}}
           git checkout ${{needs.prepare-values.outputs.redis-ref}}
       - name: build
