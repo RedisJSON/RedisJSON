@@ -69,7 +69,8 @@ jobs:
             esac
           done
           MATRIX="${MATRIX%?}]"
-          echo "::set-output name=matrix::${MATRIX}"
+          echo "${MATRIX}"
+          echo "matrix=${MATRIX}" >> $GITHUB_OUTPUT
   build-linux-matrix:
     runs-on: ubuntu-latest
     needs: prepare-matrix-values
