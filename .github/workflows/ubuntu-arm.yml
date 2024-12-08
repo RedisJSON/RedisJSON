@@ -1,16 +1,6 @@
 name: Build and Test ubuntu ARM instances
 
 on:
-  push:
-    branches:
-      - master
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
-  pull_request:
-    types:
-      - opened
-      - reopened
-      - review_requested
   workflow_dispatch: # Allows you to run this workflow manually from the Actions tab
     inputs:
       redis-ref:

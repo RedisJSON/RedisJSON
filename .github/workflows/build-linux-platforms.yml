@@ -1,14 +1,6 @@
 name: Build all supported linux platforms
 
 on:
-  push:
-    branches:
-      - master
-  pull_request:
-    types:
-      - opened
-      - reopened
-      - review_requested
   workflow_call: # Allows to run this workflow from another workflow
     inputs:
       redis-ref:

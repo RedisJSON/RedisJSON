@@ -1,9 +1,6 @@
 name: alpine ARM64
 
 on:
-  push:
-    branches:
-      - master
   pull_request:
     types:
       - opened
