@@ -20,7 +20,7 @@ on:
 jobs:
   build-linux:
     crdt_tests:
-    uses: ./.github/workflows/build-linux-platforms.yaml
+    uses: ./.github/workflows/build-linux-platforms.yml
     with:
       os: jammy focal bionic
       redis-ref: unstable
