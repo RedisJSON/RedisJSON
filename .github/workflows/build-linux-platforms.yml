@@ -11,41 +11,71 @@ on:
       - opened
       - reopened
       - review_requested
+  workflow_call: # Allows to run this workflow from another workflow
+    inputs:
+      redis-ref:
+        description: 'Redis ref to checkout'
+        type: string
+        required: true
+      os:
+        description: 'OS to build on, bash array style'
+        type: string
+        required: true
 
 jobs:
+  prepare-matrix-values:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Set matrix
+        id: set-matrix
+        run: |
+          OS="${{ github.event.inputs.os | '' }}"
+          if [ -z "${OS}" ]; then
+            OS="bionic focal jammy rocky8 rocky9 bullseye amazonlinux2 mariner2"
+          fi
+          MATRIX="["
+          for os in $OS; do
+            case $os in
+              bionic)
+                MATRIX="${MATRIX} {\"docker_image\": \"ubuntu:bionic\", \"pre_req_install_cmd\": \"apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update && apt-get install -y git\"},"
+                ;;
+              focal)
+                MATRIX="${MATRIX} {\"docker_image\": \"ubuntu:focal\", \"pre_req_install_cmd\": \"apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update && apt-get install -y git\"},"
+                ;;
+              jammy)
+                MATRIX="${MATRIX} {\"docker_image\": \"ubuntu:jammy\", \"pre_req_install_cmd\": \"apt-get update && apt-get install -y git\"},"
+                ;;
+              rocky8)
+                MATRIX="${MATRIX} {\"docker_image\": \"rockylinux:8\", \"pre_req_install_cmd\": \"dnf install -y git\"},"
+                ;;
+              rocky9)
+                MATRIX="${MATRIX} {\"docker_image\": \"rockylinux:9\", \"pre_req_install_cmd\": \"dnf install -y git\"},"
+                ;;
+              bullseye)
+                MATRIX="${MATRIX} {\"docker_image\": \"debian:bullseye\", \"pre_req_install_cmd\": \"apt-get update && apt-get install -y git\"},"
+                ;;
+              amazonlinux2)
+                MATRIX="${MATRIX} {\"docker_image\": \"amazonlinux:2\", \"pre_req_install_cmd\": \"yum update && yum install -y git\"},"
+                ;;
+              mariner2)
+                MATRIX="${MATRIX} {\"docker_image\": \"mcr.microsoft.com/cbl-mariner/base/core:2.0\", \"pre_req_install_cmd\": \"tdnf install --noplugins --skipsignature -y ca-certificates git\"},"
+                ;;
+              *)
+                echo "Unknown OS: $os"
+                exit 1
+                ;;
+            esac
+          done
+          MATRIX="${MATRIX%?}]"
+          echo "::set-output name=matrix::${MATRIX}"
   build-linux-matrix:
     runs-on: ubuntu-latest
+    needs: prepare-matrix-values
     strategy:
       fail-fast: false
-      matrix:
-        docker_image:
-          - image: "ubuntu:bionic"
-            pre_req_install_cmd: |
-              apt-get update && apt-get install -y software-properties-common
-              add-apt-repository ppa:git-core/ppa && apt-get update && apt-get install -y git
-          - image: "ubuntu:focal"
-            # https://github.com/actions/checkout/issues/1386 - sparse checkout does not work on got 2.25 which is the default in focal
-            pre_req_install_cmd: | 
-              apt-get update && apt-get install -y software-properties-common
-              add-apt-repository ppa:git-core/ppa && apt-get update && apt-get install -y git
-          - image: "ubuntu:jammy"
-            pre_req_install_cmd: |
-              apt-get update && apt-get install -y git
-          - image: "rockylinux:8"
-            pre_req_install_cmd: |
-              dnf install -y git
-          - image: "rockylinux:9"
-            pre_req_install_cmd: |
-              dnf install -y git
-          - image: "debian:bullseye"
-            pre_req_install_cmd: |
-              apt-get update && apt-get install -y git
-          - image: "amazonlinux:2"
-            pre_req_install_cmd: |
-              yum update
-              yum install -y git
-          - image: "mcr.microsoft.com/cbl-mariner/base/core:2.0"
-            pre_req_install_cmd: tdnf install --noplugins --skipsignature -y ca-certificates git
+      matrix: ${{fromJson(needs.prepare-matrix-values.outputs.matrix)}}
     container:
       image: ${{ matrix.docker_image.image }}
     defaults:
