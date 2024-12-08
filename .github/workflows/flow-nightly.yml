@@ -1,4 +1,4 @@
-name: Trigger Workflows Nightly
+name: JSON Nightly
 
 on:
   push:

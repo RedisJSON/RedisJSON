@@ -1,4 +1,4 @@
-name: Trigger Workflows on Tag
+name: JSON TAG
 
 on:
   push:
