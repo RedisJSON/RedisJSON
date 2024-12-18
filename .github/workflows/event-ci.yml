@@ -40,6 +40,7 @@ jobs:
     uses: ./.github/workflows/flow-sanitizer.yml
     needs: [prepare-values]
     with:
+      container: ubuntu:jammy
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
   spellcheck:
