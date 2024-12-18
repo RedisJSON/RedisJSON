@@ -6,5 +6,11 @@ runs:
     - name: Pack module
       shell: bash
       run: |
-        git config --global --add safe.directory /__w/RedisJSON/RedisJSON # to avoid git error
-        MODULE=$(realpath ./target/release/rejson.so) ./sbin/pack.sh
+        if command -v scl_source &> /dev/null
+        then
+            . scl_source enable devtoolset-11 || true
+        fi
+        . venv/bin/activate
+        export PATH="$GITHUB_WORKSPACE/redis/src:$PATH"
+        git config --global --add safe.directory $GITHUB_WORKSPACE
+        make pack BRANCH=$TAG_OR_BRANCH SHOW=1

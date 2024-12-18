@@ -19,6 +19,7 @@ runs:
     - name: Build module
       shell: bash
       run: |
+        . $HOME/.cargo/env
         echo "source $HOME/.cargo/env" >> $HOME/.bash_profile
         cargo build --release
         cp $(realpath ./target/release)/librejson.so $(realpath ./target/release)/rejson.so
