@@ -3,7 +3,7 @@ on:
   workflow_call: # Allows to run this workflow from another workflow
 
 jobs:
-  spellcheck:
+  linter:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
