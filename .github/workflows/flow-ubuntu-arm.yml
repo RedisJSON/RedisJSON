@@ -98,7 +98,7 @@ jobs:
         run: |
           ${{ matrix.docker.install_git }}
       - name: git checkout
-        if: matrix.docker_image.image == 'ubuntu:bionic'
+        if: matrix.docker.image == 'ubuntu:bionic'
         run: |
           # Perform checkout
           REPO_URL="https://github.com/${{ github.repository }}.git"
@@ -109,7 +109,7 @@ jobs:
           git fetch origin ${REF}
           git checkout ${REF}
       - name: Checkout the module
-        if: matrix.docker_image.image != 'ubuntu:bionic'
+        if: matrix.docker.image != 'ubuntu:bionic'
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
@@ -119,14 +119,14 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
       - name: Checkout Redis
-        if: matrix.docker_image.image != 'ubuntu:bionic'
+        if: matrix.docker.image != 'ubuntu:bionic'
         uses: actions/checkout@v4
         with:
           repository: 'redis/redis'
           ref: ${{ needs.setup-environment.outputs.redis-ref }}
           path: 'redis'
       - name: Get Redis
-        if: matrix.docker_image.image == 'ubuntu:bionic'
+        if: matrix.docker.image == 'ubuntu:bionic'
         run: |
           # Perform checkout
           REPO_URL="https://github.com/redis/redis.git"

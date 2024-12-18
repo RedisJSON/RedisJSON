@@ -14,6 +14,10 @@ inputs:
     description: 'Test configuration environment variable (e.g. "CONFIG=tls" or "QUICK=1")'
     required: true
     type: string
+  redis-ref:
+    description: 'Redis ref to checkout'
+    type: string
+    required: true
 
 runs:
   using: composite
@@ -61,7 +65,7 @@ runs:
       uses: actions/checkout@v4
       with:
         repository: redis/redis
-        ref: 'unstable' # todo change per version/tag
+        ref: ${{ inputs.redis-ref }}
         path: redis
         submodules: 'recursive'
     - name: Build
@@ -76,7 +80,7 @@ runs:
       id: artifact-names
       run: |
         # Invalid characters include: Double quote ", Colon :, Less than <, Greater than >, Vertical bar |, Asterisk *, Question mark ?
-        echo "name=$(echo "${{ inputs.container || inputs.env }} ${{ runner.arch }}, Redis ${{ inputs.get-redis || 'unstable' }}" | \
+        echo "name=$(echo "${{ inputs.container || inputs.env }} ${{ runner.arch }}, Redis ${{ inputs.redis-ref }}" | \
                       sed -e 's/[":\/\\<>\|*?]/_/g' -e 's/__*/_/g' -e 's/^_//' -e 's/_$//')" >> $GITHUB_OUTPUT
 
     - name: Run tests

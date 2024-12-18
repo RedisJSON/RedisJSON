@@ -12,29 +12,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  prepare-values:
+    runs-on: ubuntu-latest
+    outputs:
+      redis-ref: ${{ steps.set-env.outputs.redis-ref }}
+    steps:
+      - name: set env
+        id: set-env
+        run: |
+          echo "redis-ref=unstable" >> $GITHUB_OUTPUT  # todo change per version/tag
   linux:
     uses: ./.github/workflows/flow-linux-x86.yml
+    needs: [prepare-values]
     with:
       os: jammy rocky9 amazonlinux2
-      redis-ref: unstable
+      redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
   linux-valgrind:
     uses: ./.github/workflows/flow-linux-x86.yml
+    needs: [prepare-values]
     with:
       os: jammy
-      redis-ref: unstable
+      redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
       run_valgrind: true
     secrets: inherit
   linux-sanitizer:
-    uses: ./.github/workflows/flow-linux-x86.yml
+    uses: ./.github/workflows/flow-sanitizer.yml
+    needs: [prepare-values]
     with:
-      os: jammy
-      redis-ref: unstable
-      run_sanitizer: true
-    secrets: inherit
-  coverage:
-    uses: ./.github/workflows/flow-coverage.yml
+      redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
   spellcheck:
     uses: ./.github/workflows/flow-spellcheck.yml
+    secrets: inherit
+  linter:
+    uses: ./.github/workflows/flow-linter.yml
     secrets: inherit

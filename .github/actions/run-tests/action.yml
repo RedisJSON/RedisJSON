@@ -5,10 +5,6 @@ inputs:
     description: 'Run valgrind on the tests'
     type: string
     default: 0
-  run_sanitizer:
-    description: 'Run sanitizer on the tests'
-    type: string
-    default: ''
 
 runs:
   using: composite
@@ -28,5 +24,5 @@ runs:
             cargo test
           echo ::endgroup::
           echo ::group::Flow tests
-            MODULE=$(realpath ./target/release/rejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh VG=${{inputs.run_valgrind}} SAN=${{inputs.run_sanitizer}}
+            MODULE=$(realpath ./target/release/rejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh VG=${{inputs.run_valgrind}}
           echo ::endgroup::

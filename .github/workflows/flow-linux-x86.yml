@@ -15,11 +15,7 @@ on:
         description: 'Run valgrind on the tests'
         type: boolean
         default: false
-      run_sanitizer:
-        description: 'Run sanitizer on the tests'
-        type: boolean
-        default: false
-
+      
 jobs:
   prepare-values:
     runs-on: ubuntu-latest
@@ -136,14 +132,11 @@ jobs:
           echo ::endgroup::
       - name: build
         uses: ./.github/actions/build-json-module-and-redis-with-cargo
-        with:
-          run_sanitizer: ${{inputs.run_sanitizer && 'addr' || ''}}
       - name: Run tests
         uses: ./.github/actions/run-tests
         with: 
           run_valgrind: ${{inputs.run_valgrind && '1' || '0'}}
-          run_sanitizer: ${{inputs.run_sanitizer && 'addr' || ''}}
-     - name: Upload test artifacts
+      - name: Upload test artifacts
         if: failure()
         uses: ./.github/actions/upload-artifacts
         with: 

@@ -11,7 +11,7 @@ on:
     inputs:
       redis-ref:
         description: 'Redis ref to checkout'
-        required: true
+        type: string
         default: 'unstable'
 
 jobs:
