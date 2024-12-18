@@ -26,6 +26,7 @@ jobs:
     needs: [prepare-values]
     with:
       # os: jammy rocky9 amazonlinux2
+      os: bionic focal jammy rocky8 rocky9 bullseye amazonlinux2 mariner2
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
   ubuntu-arm64:
