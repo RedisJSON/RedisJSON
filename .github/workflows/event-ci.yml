@@ -1,0 +1,40 @@
+name: Event CI
+
+permissions:
+  id-token: write
+  contents: read
+
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    uses: ./.github/workflows/flow-linux-x86.yml
+    with:
+      os: jammy rocky9 amazonlinux2
+      redis-ref: unstable
+    secrets: inherit
+  linux-valgrind:
+    uses: ./.github/workflows/flow-linux-x86.yml
+    with:
+      os: jammy
+      redis-ref: unstable
+      run_valgrind: true
+    secrets: inherit
+  linux-sanitizer:
+    uses: ./.github/workflows/flow-linux-x86.yml
+    with:
+      os: jammy
+      redis-ref: unstable
+      run_sanitizer: true
+    secrets: inherit
+  coverage:
+    uses: ./.github/workflows/flow-coverage.yml
+    secrets: inherit
+  spellcheck:
+    uses: ./.github/workflows/flow-spellcheck.yml
+    secrets: inherit

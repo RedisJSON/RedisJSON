@@ -11,6 +11,14 @@ on:
         description: 'OS to build on, bash array style'
         type: string
         required: true
+      run_valgrind:
+        description: 'Run valgrind on the tests'
+        type: boolean
+        default: false
+      run_sanitizer:
+        description: 'Run sanitizer on the tests'
+        type: boolean
+        default: false
 
 jobs:
   prepare-values:
@@ -66,6 +74,7 @@ jobs:
           MATRIX="${MATRIX%?}]"
           echo "${MATRIX}"
           echo "matrix=${MATRIX}" >> $GITHUB_OUTPUT
+
   build-linux-matrix:
     name: ${{matrix.docker_image.image}}, ${{needs.prepare-values.outputs.redis-ref}}
     runs-on: ubuntu-latest
@@ -79,6 +88,8 @@ jobs:
     defaults:
       run:
         shell: bash -l -eo pipefail {0}
+    env:
+      PIP_BREAK_SYSTEM_PACKAGES: 1
     steps:
       - name: Install git
         run: ${{ matrix.docker_image.pre_req_install_cmd }}
@@ -87,10 +98,18 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
+      - name: Checkout Redis
+        if: matrix.docker_image.image != 'amazonlinux:2' && matrix.docker_image.image != 'ubuntu:bionic'
+        uses: actions/checkout@v4
+        with:
+          repository: redis/redis
+          ref: ${{needs.prepare-values.outputs.redis-ref}}
+          path: redis
+          submodules: 'recursive'
       - name: git checkout
         if: matrix.docker_image.image == 'amazonlinux:2' || matrix.docker_image.image == 'ubuntu:bionic'
         run: |
-          # Perform checkout
+         # Perform checkout
           REPO_URL="https://github.com/${{ github.repository }}.git"
           # Clone the repository to the current directory
           git config --global --add safe.directory /__w/${{ github.repository }}
@@ -98,6 +117,14 @@ jobs:
           REF=${{github.sha}}
           git fetch origin ${REF}
           git checkout ${REF}
+
+          # Perform checkout
+          REPO_URL="https://github.com/redis/redis.git"
+          # Clone the repository to the current directory
+          git clone --recurse-submodules --depth=1 $REPO_URL redis
+          cd redis
+          git fetch origin ${{needs.prepare-values.outputs.redis-ref}}
+          git checkout ${{needs.prepare-values.outputs.redis-ref}}
       - name: Setup
         working-directory: .install
         run: |
@@ -107,62 +134,22 @@ jobs:
           echo ::group::Install rust
             ./getrust.sh
           echo ::endgroup::
-      - name: Get Redis
-        if: matrix.docker_image.image != 'amazonlinux:2' && matrix.docker_image.image != 'ubuntu:bionic'
-        uses: actions/checkout@v4
-        with:
-          repository: redis/redis
-          ref: ${{needs.prepare-values.outputs.redis-ref}}
-          path: redis
-          submodules: 'recursive'
-      - name: Get Redis
-        if: matrix.docker_image.image == 'amazonlinux:2' || matrix.docker_image.image == 'ubuntu:bionic'
-        run: |
-          # Perform checkout
-          REPO_URL="https://github.com/redis/redis.git"
-          # Clone the repository to the current directory
-          git clone --recurse-submodules --depth=1 $REPO_URL redis
-          cd redis
-          git fetch origin ${{needs.prepare-values.outputs.redis-ref}}
-          git checkout ${{needs.prepare-values.outputs.redis-ref}}
       - name: build
         uses: ./.github/actions/build-json-module-and-redis-with-cargo
-      - name: Set Artifact Names
-        # Artifact names have to be unique, so we base them on the environment.
-        # We also remove invalid characters from the name.
-        id: artifact-names
-        run: | # Invalid characters include: Double quote ", Colon :, Less than <, Greater than >, Vertical bar |, Asterisk *, Question mark ?
-          echo "name=$(echo "${{ matrix.docker_image.image }} x86-64, Redis unstable" | \
-            sed -e 's/[":\/\\<>\|*?]/_/g' -e 's/__*/_/g' -e 's/^_//' -e 's/_$//')" >> $GITHUB_OUTPUT
-      - name: Run tests
-        run: |
-          echo ::group::Activate virtual environment
-            python3 -m venv venv
-            echo "source $PWD/venv/bin/activate" >> ~/.bash_profile
-            source venv/bin/activate
-          echo ::endgroup::
-          echo ::group::Install python dependencies
-            ./.install/common_installations.sh
-          echo ::endgroup::
-          echo ::group::Unit tests
-            cargo test
-          echo ::endgroup::
-          echo ::group::Flow tests
-            MODULE=$(realpath ./target/release/rejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
-          echo ::endgroup::
-        env:
-          PIP_BREAK_SYSTEM_PACKAGES: 1
-      - name: Upload test artifacts
-        if: failure() && matrix.docker_image.image != 'amazonlinux:2' && matrix.docker_image.image != 'ubuntu:bionic'
-        uses: actions/upload-artifact@v4
         with:
-          name: Test logs ${{ steps.artifact-names.outputs.name }}
-          path: tests/**/logs/*.log*
-          if-no-files-found: ignore
+          run_sanitizer: ${{inputs.run_sanitizer && 'addr' || ''}}
+      - name: Run tests
+        uses: ./.github/actions/run-tests
+        with: 
+          run_valgrind: ${{inputs.run_valgrind && '1' || '0'}}
+          run_sanitizer: ${{inputs.run_sanitizer && 'addr' || ''}}
+     - name: Upload test artifacts
+        if: failure()
+        uses: ./.github/actions/upload-artifacts
+        with: 
+          image: ${{ matrix.docker_image.image }}
       - name: Pack module
-        run: |
-          git config --global --add safe.directory /__w/RedisJSON/RedisJSON # to avoid git error
-          MODULE=$(realpath ./target/release/rejson.so) ./sbin/pack.sh
+        uses: ./.github/actions/pack-module
       - name: Upload artifacts to S3
         uses: ./.github/actions/upload-artifacts-to-s3-without-make
         with:

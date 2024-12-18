@@ -1,0 +1,10 @@
+name: Run pack module script
+
+runs:
+  using: composite
+  steps:
+    - name: Pack module
+      shell: bash
+      run: |
+        git config --global --add safe.directory /__w/RedisJSON/RedisJSON # to avoid git error
+        MODULE=$(realpath ./target/release/rejson.so) ./sbin/pack.sh

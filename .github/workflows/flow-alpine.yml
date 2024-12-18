@@ -1,4 +1,8 @@
-name: alpine
+name: Flow alpine
+
+permissions:
+  id-token: write
+  contents: read
 
 on:
   workflow_dispatch: # Allows you to run this workflow manually from the Actions tab
@@ -16,12 +20,15 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{matrix.runs_on}}
     defaults:
       run:
         shell: bash
     container:
       image: alpine:3
+    strategy:
+      matrix:
+        runs_on: [ubuntu24-arm64-4-16, ubuntu-latest]
     steps:
       - name: Install prerequisites
         shell: sh

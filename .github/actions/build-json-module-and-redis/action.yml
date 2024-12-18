@@ -3,10 +3,6 @@ description: |
   Build JSON module and Redis Server
 
 inputs:
-  redis-ref:
-    description: 'Redis version to build'
-    required: true
-    default: '7.4'
   sanitizer:
     type: string
 
