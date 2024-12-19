@@ -27,6 +27,8 @@ jobs:
       BRANCH: ${{ steps.set-env.outputs.BRANCH }}
       TAG_OR_BRANCH: ${{ steps.set-env.outputs.TAG }}${{ steps.set-env.outputs.BRANCH }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: set env
         id: set-env
         uses: ./.github/actions/setup-env
@@ -160,4 +162,3 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          github-ref: ${{ github.ref }}

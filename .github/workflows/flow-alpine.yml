@@ -19,13 +19,37 @@ on:
         required: true
 
 jobs:
+  setup-environment:
+    runs-on: ubuntu-latest
+    outputs:
+      redis-ref: ${{ steps.set-env.outputs.redis-ref }}
+      TAGGED: ${{ steps.set-env.outputs.TAGGED }}
+      TAG: ${{ steps.set-env.outputs.TAG }}
+      BRANCH: ${{ steps.set-env.outputs.BRANCH }}
+      TAG_OR_BRANCH: ${{ steps.set-env.outputs.TAG }}${{ steps.set-env.outputs.BRANCH }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: set env
+        id: set-env
+        uses: ./.github/actions/setup-env
+        with:
+          github-ref: ${{ github.ref }}
+          redis-ref: ${{ inputs.redis-ref }}
   build:
     runs-on: ${{matrix.runs_on}}
+    needs: setup-environment
     defaults:
       run:
         shell: bash
     container:
       image: alpine:3
+    env:
+      TAGGED: ${{ needs.setup-environment.outputs.TAGGED }}
+      VERSION: ${{ needs.setup-environment.outputs.TAG }}
+      BRANCH: ${{ needs.setup-environment.outputs.BRANCH }}
+      TAG_OR_BRANCH: ${{ needs.setup-environment.outputs.TAG_OR_BRANCH}}
+      PIP_BREAK_SYSTEM_PACKAGES: 1
     strategy:
       matrix:
         runs_on: [ubuntu24-arm64-4-16, ubuntu-latest]
@@ -71,11 +95,9 @@ jobs:
         run: |
           make test
       - name: Pack module
-        run: |
-          make pack BRANCH=${{ github.ref_name }}
+        uses: ./.github/actions/pack-module
       - name: Upload artifacts to S3
-        uses: ./.github/actions/upload-artifacts-to-s3
+        uses: ./.github/actions/upload-artifacts-to-s3-without-make
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          github-ref: ${{ github.ref }}

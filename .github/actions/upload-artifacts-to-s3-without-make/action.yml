@@ -9,9 +9,6 @@ inputs:
   aws-secret-access-key:
     description: 'AWS Secret Access Key'
     required: true
-  github-ref:
-    description: 'GitHub ref'
-    required: true
   osnick:
     description: 'OS Nickname'
     required: false
@@ -52,7 +49,7 @@ runs:
           
           echo ::group::upload production release
             # todo: trigger this manually instead
-            if [[ "${{ inputs.github-ref}}" != 'refs/heads/master' ]]; then
+            if [[ "${TAGGED}" == "1" ]]; then
               RELEASE=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
             fi
           echo ::endgroup::
