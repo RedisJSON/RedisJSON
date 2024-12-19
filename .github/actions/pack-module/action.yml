@@ -12,9 +12,10 @@ runs:
         fi
         if [ -d "venv" ]; then
           . venv/bin/activate
+          git config --global --add safe.directory $GITHUB_WORKSPACE
+          export PATH="$GITHUB_WORKSPACE/redis/src:$PATH"
+          MODULE=$(realpath ./target/release/rejson.so) BRANCH=$TAG_OR_BRANCH \
+            SHOW=1 OSNICK=${{ matrix.docker.nick }} ./sbin/pack.sh
+        else
+          make pack BRANCH=$TAG_OR_BRANCH
         fi
-        git config --global --add safe.directory $GITHUB_WORKSPACE
-        export PATH="$GITHUB_WORKSPACE/redis/src:$PATH"
-        MODULE=$(realpath ./target/release/rejson.so) BRANCH=$TAG_OR_BRANCH \
-          SHOW=1 OSNICK=${{ matrix.docker.nick }} ./sbin/pack.sh
-        . venv/bin/activate

@@ -48,8 +48,9 @@ runs:
           echo ::endgroup::
           
           echo ::group::upload production release
-            # todo: trigger this manually instead
-            if [[ "${TAGGED}" == "1" ]]; then
+            REF="${{ inputs.github-ref }}"
+            PATTERN="refs/tags/v[0-9]+.*"
+            if [[ $REF =~ $PATTERN ]]; then
               RELEASE=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
             fi
           echo ::endgroup::
