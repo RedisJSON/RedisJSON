@@ -1,4 +1,4 @@
-name: Event CI
+name: Event Build Sanity
 
 permissions:
   id-token: write
