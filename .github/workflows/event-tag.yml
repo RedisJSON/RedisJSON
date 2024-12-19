@@ -1,21 +1,21 @@
-name: Event Weekly
-
-on:
-  schedule:
-    - cron: "0 0 * * 0"
+name: Event TAG
 
 permissions:
   id-token: write
   contents: read
+  
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      redis-ref:
+        description: 'Redis ref to checkout'
+        required: true
+        default: 'unstable'
 
 jobs:
-  run-benchmarks:
-    uses: ./.github/workflows/benchmark-runner.yml
-    secrets: inherit
-    with:
-      extended: true
-
-  jobs:
   build-linux-x86:
     uses: ./.github/workflows/flow-linux-x86.yml
     with:
@@ -36,20 +36,6 @@ jobs:
     uses: ./.github/workflows/flow-alpine.yml
     with:
       redis-ref: ${{inputs.redis-ref || 'unstable'}}
-    secrets: inherit
-  linux-valgrind:
-    uses: ./.github/workflows/flow-linux-x86.yml
-    with:
-      os: jammy
-      redis-ref: unstable
-      run_valgrind: true
-    secrets: inherit
-  linux-sanitizer:
-    uses: ./.github/workflows/flow-linux-x86.yml
-    with:
-      os: jammy
-      redis-ref: unstable
-      run_sanitizer: true
     secrets: inherit
   linux-valgrind:
     uses: ./.github/workflows/flow-linux-x86.yml
