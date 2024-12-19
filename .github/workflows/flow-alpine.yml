@@ -92,7 +92,8 @@ jobs:
         run: |
           make build
       - name: Run tests
-        uses: ./.github/actions/run-tests
+        run: |
+          make test
       - name: Pack module
         uses: ./.github/actions/pack-module
       - name: Upload artifacts to S3
