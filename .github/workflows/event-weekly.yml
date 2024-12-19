@@ -13,7 +13,8 @@ jobs:
     uses: ./.github/workflows/benchmark-runner.yml
     secrets: inherit
     with:
-      extended: truejobs:
+      extended: true
+
   prepare-values:
     runs-on: ubuntu-latest
     outputs:
