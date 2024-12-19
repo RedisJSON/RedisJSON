@@ -96,6 +96,8 @@ jobs:
           make test
       - name: Pack module
         uses: ./.github/actions/pack-module
+        with: 
+          use-venv: '0'
       - name: Upload artifacts to S3
         uses: ./.github/actions/upload-artifacts-to-s3-without-make
         with:
