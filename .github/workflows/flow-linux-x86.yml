@@ -152,10 +152,10 @@ jobs:
         with: 
           image: ${{ matrix.docker_image.image }}
       - name: Pack module
-        if: !inputs.run_valgrind
+        if: ${{!inputs.run_valgrind}}
         uses: ./.github/actions/pack-module
       - name: Upload artifacts to S3
-        if: !inputs.run_valgrind
+        if: ${{!inputs.run_valgrind}}
         uses: ./.github/actions/upload-artifacts-to-s3-without-make
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
