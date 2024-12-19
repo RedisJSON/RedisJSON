@@ -1,20 +1,17 @@
-name: Event Weekly
-
-on:
-  schedule:
-    - cron: "0 0 * * 0"
+name: Event Build Sanity
 
 permissions:
   id-token: write
   contents: read
 
-jobs:
-  run-benchmarks:
-    uses: ./.github/workflows/benchmark-runner.yml
-    secrets: inherit
-    with:
-      extended: true
+on:
+  pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
   prepare-values:
     runs-on: ubuntu-latest
     outputs:
@@ -31,39 +28,28 @@ jobs:
       # os: jammy rocky9 amazonlinux2
       os: bionic focal jammy rocky8 rocky9 bullseye amazonlinux2 mariner2
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+      run-test: false
     secrets: inherit
   ubuntu-arm64:
     uses: ./.github/workflows/flow-ubuntu-arm.yml
     needs: [prepare-values]
     with:
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+      run-test: false
     secrets: inherit
   alpine:
     uses: ./.github/workflows/flow-alpine.yml
     needs: [prepare-values]
     with:
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+      run-test: false
     secrets: inherit
   macos:
     uses: ./.github/workflows/flow-macos.yml
     needs: [prepare-values]
     with:
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
-    secrets: inherit
-  linux-valgrind:
-    uses: ./.github/workflows/flow-linux-x86.yml
-    needs: [prepare-values]
-    with:
-      os: jammy
-      redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
-      run_valgrind: true
-    secrets: inherit
-  linux-sanitizer:
-    uses: ./.github/workflows/flow-sanitizer.yml
-    needs: [prepare-values]
-    with:
-      container: ubuntu:jammy
-      redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+      run-test: false
     secrets: inherit
   spellcheck:
     uses: ./.github/workflows/flow-spellcheck.yml

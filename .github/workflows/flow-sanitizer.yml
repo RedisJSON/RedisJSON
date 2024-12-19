@@ -8,6 +8,11 @@ on:
       container:
         default: "ubuntu:jammy"
         type: string
+        required: true
+      redis-ref:
+        description: 'Redis ref to checkout'
+        type: string
+        required: true
 
 jobs:
   clang-sanitizer:
@@ -19,11 +24,12 @@ jobs:
       image: ${{ inputs.container }}
     steps:
       - name: checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/run-tests
+      - uses: ./.github/actions/san-run-tests
         with:
           container: ${{ inputs.container }}
           test-config: QUICK=1
           sanitizer: addr
+          redis-ref: ${{inputs.redis-ref}}
