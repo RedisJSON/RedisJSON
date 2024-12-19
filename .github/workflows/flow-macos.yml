@@ -7,12 +7,18 @@ on:
         description: 'Redis ref to checkout'
         required: true
         default: 'unstable'
+      run-test:
+        type: boolean
+        default: true
   workflow_call: # Allows you to run this workflow manually from the Actions tab
     inputs:
       redis-ref:
         description: 'Redis ref to checkout'
         type: string
         default: 'unstable'
+      run-test:
+        type: boolean
+        default: true
 
 jobs:
   setup-environment:
@@ -80,6 +86,7 @@ jobs:
         run: |
           make build
       - name: Test
+        if: ${{inputs.run-test}}
         run: |
           make test
       - name: Pack module
@@ -149,6 +156,7 @@ jobs:
         run: |
           make build
       - name: Test
+        if: ${{inputs.run-test}}
         run: |
           make test
       - name: Pack module

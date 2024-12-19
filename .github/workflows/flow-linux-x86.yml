@@ -1,12 +1,32 @@
 name: Build all supported linux platforms
 
 on:
+  workflow_dispatch: # Allows to run this workflow from another workflow
+    inputs:
+      redis-ref:
+        description: 'Redis ref to checkout'  # todo change per version/tag
+        type: string
+        required: true
+      run-test:
+        type: boolean
+        default: true
+      os:
+        description: 'OS to build on, bash array style'
+        type: string
+        required: true
+      run_valgrind:
+        description: 'Run valgrind on the tests'
+        type: boolean
+        default: false
   workflow_call: # Allows to run this workflow from another workflow
     inputs:
       redis-ref:
         description: 'Redis ref to checkout'  # todo change per version/tag
         type: string
         required: true
+      run-test:
+        type: boolean
+        default: true
       os:
         description: 'OS to build on, bash array style'
         type: string
@@ -145,6 +165,7 @@ jobs:
       - name: build
         uses: ./.github/actions/build-json-module-and-redis-with-cargo
       - name: Run tests
+        if: ${{inputs.run-test}}
         uses: ./.github/actions/run-tests
         with: 
           run_valgrind: ${{inputs.run_valgrind && '1' || '0'}}

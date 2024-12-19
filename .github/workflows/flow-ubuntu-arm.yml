@@ -7,12 +7,18 @@ on:
         description: 'Redis ref to checkout'
         required: true
         default: 'unstable'
+      run-test:
+        type: boolean
+        default: true
   workflow_call: # Allows to run this workflow from another workflow
     inputs:
       redis-ref:
         description: 'Redis ref to checkout'
         type: string
         required: true
+      run-test:
+        type: boolean
+        default: true
 
 permissions:
   id-token: write # This is required for requesting the JWT
@@ -157,6 +163,7 @@ jobs:
       - name: build
         uses: ./.github/actions/build-json-module-and-redis-with-cargo
       - name: Test
+        if: ${{inputs.run-test}}
         run: |
           source venv/bin/activate
           MODULE=$(realpath ./target/release/rejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh

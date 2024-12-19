@@ -11,12 +11,18 @@ on:
         description: 'Redis ref to checkout'
         required: true
         default: 'unstable'
+      run-test:
+        type: boolean
+        default: true
   workflow_call: # Allows to run this workflow from another workflow
     inputs:
       redis-ref:
         description: 'Redis ref to checkout'
         type: string
         required: true
+      run-test:
+        type: boolean
+        default: true
 
 jobs:
   setup-environment:
@@ -92,6 +98,7 @@ jobs:
         run: |
           make build
       - name: Run tests
+        if: ${{inputs.run-test}}
         run: |
           make test
       - name: Pack module
