@@ -161,15 +161,9 @@ jobs:
           source venv/bin/activate
           MODULE=$(realpath ./target/release/rejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
       - name: Pack module
-        run: |
-          source venv/bin/activate
-          git config --global --add safe.directory /__w/RedisJSON/RedisJSON # to avoid git error
-          MODULE=$(realpath ./target/release/rejson.so) BRANCH=$TAG_OR_BRANCH \
-            SHOW=1 OSNICK=${{ matrix.docker.nick }} ./sbin/pack.sh
+        uses: ./.github/actions/pack-module
       - name: Upload artifacts to S3
-        uses: ./.github/actions/upload-artifacts-to-s3
+        uses: ./.github/actions/upload-artifacts-to-s3-without-make
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          github-ref: ${{ github.ref }}
-          osnick: ${{ matrix.docker.nick }}
