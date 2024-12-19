@@ -72,7 +72,6 @@ jobs:
           submodules: recursive
       - name: Setup common
         run: .install/common_installations.sh
-
       - name: Get Redis
         uses: actions/checkout@v4
         with:
@@ -90,9 +89,7 @@ jobs:
         run: |
           make test
       - name: Pack module
-        uses: ./.github/actions/pack-module
-        with:
-          use-venv: '0'
+        uses: ./.github/actions/make-pack
       - name: Upload artifacts to S3
         uses: ./.github/actions/upload-artifacts-to-s3-without-make
         with:
@@ -160,9 +157,7 @@ jobs:
         run: |
           make test
       - name: Pack module
-        uses: ./.github/actions/pack-module
-        with:
-          use-venv: '0'
+        uses: ./.github/actions/make-pack
       - name: Upload artifacts to S3
         uses: ./.github/actions/upload-artifacts-to-s3-without-make
         with:
