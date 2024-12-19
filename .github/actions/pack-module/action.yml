@@ -11,6 +11,8 @@ runs:
             . scl_source enable devtoolset-11 || true
         fi
         . venv/bin/activate
-        export PATH="$GITHUB_WORKSPACE/redis/src:$PATH"
         git config --global --add safe.directory $GITHUB_WORKSPACE
-        make pack BRANCH=$TAG_OR_BRANCH SHOW=1
+        export PATH="$GITHUB_WORKSPACE/redis/src:$PATH"
+        MODULE=$(realpath ./target/release/rejson.so) BRANCH=$TAG_OR_BRANCH \
+          SHOW=1 OSNICK=${{ matrix.docker.nick }} ./sbin/pack.sh
+        . venv/bin/activate

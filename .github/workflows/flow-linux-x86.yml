@@ -17,16 +17,22 @@ on:
         default: false
       
 jobs:
-  prepare-values:
+  setup-environment:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       redis-ref: ${{ steps.set-env.outputs.redis-ref }}
+      TAGGED: ${{ steps.set-env.outputs.TAGGED }}
+      TAG: ${{ steps.set-env.outputs.TAG }}
+      BRANCH: ${{ steps.set-env.outputs.BRANCH }}
+      TAG_OR_BRANCH: ${{ steps.set-env.outputs.TAG }}${{ steps.set-env.outputs.BRANCH }}
     steps:
       - name: set env
         id: set-env
-        run: |
-          echo "redis-ref=${{ inputs.redis-ref || 'unstable' }}" >> $GITHUB_OUTPUT  # todo change per version/tag
+        uses: ./.github/actions/setup-env
+        with:
+          github-ref: ${{ github.ref }}
+          redis-ref: ${{ inputs.redis-ref }}
       - name: Set matrix
         id: set-matrix
         run: |
@@ -72,20 +78,24 @@ jobs:
           echo "matrix=${MATRIX}" >> $GITHUB_OUTPUT
 
   build-linux-matrix:
-    name: ${{matrix.docker_image.image}}, ${{needs.prepare-values.outputs.redis-ref}}
+    name: ${{matrix.docker_image.image}}, ${{needs.setup-environment.outputs.redis-ref}}
     runs-on: ubuntu-latest
-    needs: prepare-values
+    needs: setup-environment
     strategy:
       fail-fast: false
       matrix: 
-        docker_image: ${{fromJson(needs.prepare-values.outputs.matrix)}}
+        docker_image: ${{fromJson(needs.setup-environment.outputs.matrix)}}
+    env:
+      TAGGED: ${{ needs.setup-environment.outputs.TAGGED }}
+      VERSION: ${{ needs.setup-environment.outputs.TAG }}
+      BRANCH: ${{ needs.setup-environment.outputs.BRANCH }}
+      TAG_OR_BRANCH: ${{ needs.setup-environment.outputs.TAG_OR_BRANCH}}
+      PIP_BREAK_SYSTEM_PACKAGES: 1
     container:
       image: ${{ matrix.docker_image.image }}
     defaults:
       run:
         shell: bash -l -eo pipefail {0}
-    env:
-      PIP_BREAK_SYSTEM_PACKAGES: 1
     steps:
       - name: Install git
         run: ${{ matrix.docker_image.pre_req_install_cmd }}
@@ -99,7 +109,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: redis/redis
-          ref: ${{needs.prepare-values.outputs.redis-ref}}
+          ref: ${{needs.setup-environment.outputs.redis-ref}}
           path: redis
           submodules: 'recursive'
       - name: git checkout
@@ -119,8 +129,8 @@ jobs:
           # Clone the repository to the current directory
           git clone --recurse-submodules --depth=1 $REPO_URL redis
           cd redis
-          git fetch origin ${{needs.prepare-values.outputs.redis-ref}}
-          git checkout ${{needs.prepare-values.outputs.redis-ref}}
+          git fetch origin ${{needs.setup-environment.outputs.redis-ref}}
+          git checkout ${{needs.setup-environment.outputs.redis-ref}}
       - name: Setup
         working-directory: .install
         run: |
@@ -142,8 +152,10 @@ jobs:
         with: 
           image: ${{ matrix.docker_image.image }}
       - name: Pack module
+        if: !inputs.run_valgrind
         uses: ./.github/actions/pack-module
       - name: Upload artifacts to S3
+        if: !inputs.run_valgrind
         uses: ./.github/actions/upload-artifacts-to-s3-without-make
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
