@@ -21,50 +21,31 @@ jobs:
         id: set-env
         run: |
           echo "redis-ref=unstable" >> $GITHUB_OUTPUT  # todo change per version/tag
-  # linux:
-  #   uses: ./.github/workflows/flow-linux-x86.yml
-  #   needs: [prepare-values]
-  #   with:
-  #     # os: jammy rocky9 amazonlinux2
-  #     os: bionic focal jammy rocky8 rocky9 bullseye amazonlinux2 mariner2
-  #     redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
-  #   secrets: inherit
-  # ubuntu-arm64:
-  #   uses: ./.github/workflows/flow-ubuntu-arm.yml
-  #   needs: [prepare-values]
-  #   with:
-  #     redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
-  #   secrets: inherit
-  # alpine:
-  #   uses: ./.github/workflows/flow-alpine.yml
-  #   needs: [prepare-values]
-  #   with:
-  #     redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
-  #   secrets: inherit
-  macos:
-    uses: ./.github/workflows/flow-macos.yml
+  linux:
+    uses: ./.github/workflows/flow-linux-x86.yml
     needs: [prepare-values]
     with:
+      os: jammy rocky9 amazonlinux2
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
-  # linux-valgrind:
-  #   uses: ./.github/workflows/flow-linux-x86.yml
-  #   needs: [prepare-values]
-  #   with:
-  #     os: jammy
-  #     redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
-  #     run_valgrind: true
-  #   secrets: inherit
-  # linux-sanitizer:
-  #   uses: ./.github/workflows/flow-sanitizer.yml
-  #   needs: [prepare-values]
-  #   with:
-  #     container: ubuntu:jammy
-  #     redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
-  #   secrets: inherit
-  # spellcheck:
-  #   uses: ./.github/workflows/flow-spellcheck.yml
-  #   secrets: inherit
-  # linter:
-  #   uses: ./.github/workflows/flow-linter.yml
-  #   secrets: inherit
+  linux-valgrind:
+    uses: ./.github/workflows/flow-linux-x86.yml
+    needs: [prepare-values]
+    with:
+      os: jammy
+      redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+      run_valgrind: true
+    secrets: inherit
+  linux-sanitizer:
+    uses: ./.github/workflows/flow-sanitizer.yml
+    needs: [prepare-values]
+    with:
+      container: ubuntu:jammy
+      redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+    secrets: inherit
+  spellcheck:
+    uses: ./.github/workflows/flow-spellcheck.yml
+    secrets: inherit
+  linter:
+    uses: ./.github/workflows/flow-linter.yml
+    secrets: inherit

@@ -5,6 +5,7 @@ permissions:
   contents: read
 
 on:
+  push:
   schedule:
     - cron: '20 20 * * *' # 20:20 UTC every day
   workflow_dispatch:
@@ -27,7 +28,6 @@ jobs:
     uses: ./.github/workflows/flow-linux-x86.yml
     needs: [prepare-values]
     with:
-      # os: jammy rocky9 amazonlinux2
       os: bionic focal jammy rocky8 rocky9 bullseye amazonlinux2 mariner2
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
