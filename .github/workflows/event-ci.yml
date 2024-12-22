@@ -44,7 +44,7 @@ jobs:
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
   linux-coverage:
-    needs: docs-only
+    needs: [prepare-values]
     if: ${{ needs.docs-only.outputs.only-docs-changed == 'false' && !github.event.pull_request.draft }}
     uses: ./.github/workflows/flow-coverage.yml
     secrets: inherit
