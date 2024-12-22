@@ -134,12 +134,11 @@ jobs:
             python3 -m venv venv
             echo "source venv/bin/activate" >> ~/.bashrc
             echo "source venv/bin/activate" >> ~/.zshrc
-            source venv/bin/activate
+            . venv/bin/activate
           echo ::endgroup::
           echo ::group::Install python dependencies
             ./.install/common_installations.sh
           echo ::endgroup::
-
       - name: Get Redis
         uses: actions/checkout@v4
         with:
@@ -157,7 +156,7 @@ jobs:
         run: |
           make test
       - name: Pack module
-        uses: ./.github/actions/make-pack
+        run: make pack BRANCH=$TAG_OR_BRANCH
       - name: Upload artifacts to S3
         uses: ./.github/actions/upload-artifacts-to-s3-without-make
         with:
