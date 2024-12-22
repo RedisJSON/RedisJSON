@@ -89,7 +89,7 @@ jobs:
         run: |
           make test
       - name: Pack module
-        uses: ./.github/actions/make-pack
+        run: make pack BRANCH=$TAG_OR_BRANCH
       - name: Upload artifacts to S3
         uses: ./.github/actions/upload-artifacts-to-s3-without-make
         with:
