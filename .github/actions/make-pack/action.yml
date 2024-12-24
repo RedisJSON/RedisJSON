@@ -1,0 +1,9 @@
+name: Run make pack module script
+
+runs:
+  using: composite
+  steps:
+    - name: Pack module
+      shell: bash
+      run: |
+        make pack BRANCH=$TAG_OR_BRANCH
