@@ -13,6 +13,10 @@ inputs:
     description: 'OS Nickname'
     required: false
     default: ''
+  github-ref: 
+    description: 'github ref'
+    required: false
+    default: ''
 
 runs:
   using: composite
