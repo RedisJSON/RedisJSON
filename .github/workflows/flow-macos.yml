@@ -95,6 +95,8 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          github-ref: ${{ github.ref }}
+          
     
   build-macos-m1:
     runs-on: macos-latest-xlarge
