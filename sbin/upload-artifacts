@@ -89,8 +89,10 @@ else
 fi
 
 cd artifacts${MAYBE_SNAP}
-# in some versions --apparent-size is not supported
-[[ $VERBOSE == 1 ]] && du -ah --apparent-size * || du -ah -s *
+if du --help | grep -q -- --apparent-size; then
+	DU_ARGS='--apparent-size'
+fi
+[[ $VERBOSE == 1 ]] && du -ah ${DU_ARGS} *
 
 #----------------------------------------------------------------------------------------------
 
