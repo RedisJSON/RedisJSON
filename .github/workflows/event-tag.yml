@@ -1,20 +1,21 @@
-name: Event Weekly
-
-on:
-  schedule:
-    - cron: "0 0 * * 0"
+name: Event TAG
 
 permissions:
   id-token: write
   contents: read
+  
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      redis-ref:
+        description: 'Redis ref to checkout'
+        required: true
+        default: 'unstable'
 
 jobs:
-  run-benchmarks:
-    uses: ./.github/workflows/benchmark-runner.yml
-    secrets: inherit
-    with:
-      extended: true
-
   prepare-values:
     runs-on: ubuntu-latest
     outputs:
@@ -28,7 +29,6 @@ jobs:
     uses: ./.github/workflows/flow-linux-x86.yml
     needs: [prepare-values]
     with:
-      # os: jammy rocky9 amazonlinux2
       os: bionic focal jammy rocky8 rocky9 bullseye amazonlinux2 mariner2
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
@@ -48,21 +48,6 @@ jobs:
     uses: ./.github/workflows/flow-macos.yml
     needs: [prepare-values]
     with:
-      redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
-    secrets: inherit
-  linux-valgrind:
-    uses: ./.github/workflows/flow-linux-x86.yml
-    needs: [prepare-values]
-    with:
-      os: jammy
-      redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
-      run_valgrind: true
-    secrets: inherit
-  linux-sanitizer:
-    uses: ./.github/workflows/flow-sanitizer.yml
-    needs: [prepare-values]
-    with:
-      container: ubuntu:jammy
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
   spellcheck:
