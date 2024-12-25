@@ -74,6 +74,7 @@ jobs:
           REF=${{github.sha}}
           git fetch origin ${REF}
           git checkout ${REF}
+          git submodule update --init --recursive
       - name: Install python dependencies
         run: |
           pip install -q --upgrade setuptools
@@ -91,6 +92,7 @@ jobs:
           cd redis
           git fetch origin ${{inputs.redis-ref}}
           git checkout ${{inputs.redis-ref}}
+          git submodule update --init --recursive
       - name: Build Redis
         working-directory: redis
         run: make install

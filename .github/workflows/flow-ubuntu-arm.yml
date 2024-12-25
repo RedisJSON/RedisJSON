@@ -114,6 +114,7 @@ jobs:
           REF=${{github.sha}}
           git fetch origin ${REF}
           git checkout ${REF}
+          git submodule update --init --recursive
       - name: Checkout the module
         if: matrix.docker.image != 'ubuntu:bionic'
         uses: actions/checkout@v4
@@ -138,6 +139,10 @@ jobs:
           REPO_URL="https://github.com/redis/redis.git"
           # Clone the repository to the current directory
           git clone --recurse-submodules --depth=1 $REPO_URL redis
+          cd redis
+          git fetch origin ${{inputs.redis-ref}}
+          git checkout ${{inputs.redis-ref}}
+          git submodule update --init --recursive
       - name: Get Rust
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
