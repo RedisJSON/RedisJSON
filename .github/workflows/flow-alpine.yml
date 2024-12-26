@@ -87,10 +87,11 @@ jobs:
           # Perform checkout
           REPO_URL="https://github.com/redis/redis.git"
           # Clone the repository to the current directory
-          git clone --recurse-submodules --depth=1 $REPO_URL redis
+          git clone --recurse-submodules $REPO_URL redis
           cd redis
-          git fetch origin ${{inputs.redis-ref}}
-          git checkout ${{inputs.redis-ref}}
+          git fetch origin ${{ needs.setup-environment.outputs.redis-ref }}
+          git checkout ${{ needs.setup-environment.outputs.redis-ref }}
+          git submodule update --init --recursive
       - name: Build Redis
         working-directory: redis
         run: make install
