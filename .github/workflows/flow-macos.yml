@@ -76,7 +76,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: redis/redis
-          ref: ${{ inputs.redis-ref }}
+          ref: ${{ needs.setup-environment.outputs.redis-ref }}
           path: redis
       - name: Build Redis
         working-directory: redis
@@ -144,7 +144,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: redis/redis
-          ref: ${{ inputs.redis-ref }}
+          ref: ${{ needs.setup-environment.outputs.redis-ref }}
           path: redis
       - name: Build Redis
         working-directory: redis
