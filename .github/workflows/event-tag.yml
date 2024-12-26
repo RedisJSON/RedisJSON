@@ -24,7 +24,7 @@ jobs:
       - name: set env
         id: set-env
         run: |
-          echo "redis-ref=unstable" >> $GITHUB_OUTPUT  # todo change per version/tag
+          echo "redis-ref=7.4" >> $GITHUB_OUTPUT  # todo change per version/tag
   linux:
     uses: ./.github/workflows/flow-linux-x86.yml
     needs: [prepare-values]
