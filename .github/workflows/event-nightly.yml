@@ -1,20 +1,19 @@
-name: Event Weekly
-
-on:
-  schedule:
-    - cron: "0 0 * * 0"
+name: Event Nightly
 
 permissions:
   id-token: write
   contents: read
 
+on:
+  schedule:
+    - cron: '20 20 * * *' # 20:20 UTC every day
+  workflow_dispatch:
+    inputs:
+      redis-ref:
+        description: 'Redis ref to checkout'
+        required: true
+        default: 'unstable'
 jobs:
-  run-benchmarks:
-    uses: ./.github/workflows/benchmark-runner.yml
-    secrets: inherit
-    with:
-      extended: true
-
   prepare-values:
     runs-on: ubuntu-latest
     outputs:
@@ -28,7 +27,6 @@ jobs:
     uses: ./.github/workflows/flow-linux-x86.yml
     needs: [prepare-values]
     with:
-      # os: jammy rocky9 amazonlinux2
       os: bionic focal jammy rocky8 rocky9 bullseye amazonlinux2 mariner2
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
