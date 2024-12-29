@@ -64,5 +64,5 @@ runs:
       shell: bash
       id: set-redis-ref
       run: |
-        export REDIS_REF="${{ inputs.redis-ref || '7.2.1'}}"
+        export REDIS_REF="${{ inputs.redis-ref || '7.2'}}"
         echo "REDIS_REF=${REDIS_REF}" >> $GITHUB_OUTPUT
