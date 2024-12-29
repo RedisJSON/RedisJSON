@@ -22,7 +22,7 @@ runs:
         echo ::endgroup::
         echo ::group::Unit tests
           . $HOME/.cargo/env
-          RUST_BACKTRACE=1 cargo test
+          RUST_BACKTRACE=1 cargo test --features test
         echo ::endgroup::
         echo ::group::Flow tests
           MODULE=$(realpath ./target/release/rejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh VG=${{inputs.run_valgrind}}
