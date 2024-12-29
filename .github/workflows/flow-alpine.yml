@@ -74,6 +74,7 @@ jobs:
           REF=${{github.sha}}
           git fetch origin ${REF}
           git checkout ${REF}
+          git submodule update --init --recursive
       - name: Install python dependencies
         run: |
           pip install -q --upgrade setuptools

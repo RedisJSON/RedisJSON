@@ -114,6 +114,7 @@ jobs:
           REF=${{github.sha}}
           git fetch origin ${REF}
           git checkout ${REF}
+          git submodule update --init --recursive
       - name: Checkout the module
         if: matrix.docker.image != 'ubuntu:bionic'
         uses: actions/checkout@v4
