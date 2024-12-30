@@ -11,7 +11,7 @@ use crate::redisjson::normalize_arr_start_index;
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
 use bson::{from_document, Document};
-use ijson::{DestructuredMut, INumber, IObject, IString, IValue, ValueType};
+use ijson::{DestructuredMut, DestructuredRef, INumber, IObject, IString, IValue};
 use json_path::select_value::{SelectValue, SelectValueType};
 use redis_module::key::{verify_type, KeyFlags, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
@@ -451,55 +451,45 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     ///
     /// following https://github.com/Diggsey/ijson/issues/23#issuecomment-1377270111
     ///
-    fn get_memory(&self, v: &Self::V) -> Result<usize, RedisError> {
-        let res = size_of::<IValue>()
-            + match v.type_() {
-                ValueType::Null | ValueType::Bool => 0,
-                ValueType::Number => {
-                    let num = v.as_number().unwrap();
-                    if num.has_decimal_point() {
-                        // 64bit float
-                        16
-                    } else if num >= &INumber::from(-128) && num <= &INumber::from(383) {
-                        // 8bit
-                        0
-                    } else if num > &INumber::from(-8_388_608) && num <= &INumber::from(8_388_607) {
-                        // 24bit
-                        4
-                    } else {
-                        // 64bit
-                        16
-                    }
+    fn get_memory(v: &Self::V) -> Result<usize, RedisError> {
+        Ok(match v.destructure_ref() {
+            DestructuredRef::Null | DestructuredRef::Bool(_) => 0,
+            DestructuredRef::Number(num) => {
+                const STATIC_LO: i32 = -1 << 7; // INumber::STATIC_LOWER
+                const STATIC_HI: i32 = 0b11 << 7; // INumber::STATIC_UPPER
+                const SHORT_LO: i32 = -1 << 23; // INumber::SHORT_LOWER
+                const SHORT_HI: i32 = 1 << 23; // INumber::SHORT_UPPER
+
+                if num.has_decimal_point() {
+                    16 // 64bit float
+                } else if &INumber::from(STATIC_LO) <= num && num < &INumber::from(STATIC_HI) {
+                    0 // 8bit
+                } else if &INumber::from(SHORT_LO) <= num && num < &INumber::from(SHORT_HI) {
+                    4 // 24bit
+                } else {
+                    16 // 64bit
                 }
-                ValueType::String => v.as_string().unwrap().len(),
-                ValueType::Array => {
-                    let arr = v.as_array().unwrap();
-                    let capacity = arr.capacity();
-                    if capacity == 0 {
-                        0
-                    } else {
-                        size_of::<usize>() * (capacity + 2)
-                            + arr
-                                .into_iter()
-                                .map(|v| self.get_memory(v).unwrap())
-                                .sum::<usize>()
-                    }
+            }
+            DestructuredRef::String(s) => s.len(),
+            DestructuredRef::Array(arr) => match arr.capacity() {
+                0 => 0,
+                capacity => {
+                    arr.into_iter() // IValueManager::get_memory() always returns OK, safe to unwrap here
+                        .map(|val| Self::get_memory(val).unwrap())
+                        .sum::<usize>()
+                        + (capacity + 2) * size_of::<usize>()
                 }
-                ValueType::Object => {
-                    let val = v.as_object().unwrap();
-                    let capacity = val.capacity();
-                    if capacity == 0 {
-                        0
-                    } else {
-                        size_of::<usize>() * (capacity * 3 + 2)
-                            + val
-                                .into_iter()
-                                .map(|(s, v)| s.len() + self.get_memory(v).unwrap())
-                                .sum::<usize>()
-                    }
+            },
+            DestructuredRef::Object(obj) => match obj.capacity() {
+                0 => 0,
+                capacity => {
+                    obj.into_iter() // IValueManager::get_memory() always returns OK, safe to unwrap here
+                        .map(|(s, val)| s.len() + Self::get_memory(val).unwrap())
+                        .sum::<usize>()
+                    + (capacity * 3 + 2) * size_of::<usize>()
                 }
-            };
-        Ok(res)
+            },
+        } + size_of::<IValue>())
     }
 
     fn is_json(&self, key: *mut RedisModuleKey) -> Result<bool, RedisError> {
@@ -521,9 +511,6 @@ mod tests {
     fn test_get_memory() {
         let _guard = SINGLE_THREAD_TEST_MUTEX.lock();
 
-        let manager = RedisIValueJsonKeyManager {
-            phantom: PhantomData,
-        };
         let json = r#"{
                             "a": 100.12,
                             "b": "foo",
@@ -540,7 +527,7 @@ mod tests {
                             "m": {"t": "f"}
                         }"#;
         let value = serde_json::from_str(json).unwrap();
-        let res = manager.get_memory(&value).unwrap();
+        let res = RedisIValueJsonKeyManager::get_memory(&value).unwrap();
         assert_eq!(res, 903);
     }
 
