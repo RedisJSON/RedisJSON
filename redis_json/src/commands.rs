@@ -1800,9 +1800,7 @@ pub fn json_debug<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
             let key = manager.open_key_read(ctx, &key)?;
             if path.is_legacy() {
                 Ok(match key.get_value()? {
-                    Some(doc) => {
-                        manager.get_memory(KeyValue::new(doc).get_first(path.get_path())?)?
-                    }
+                    Some(doc) => M::get_memory(KeyValue::new(doc).get_first(path.get_path())?)?,
                     None => 0,
                 }
                 .into())
@@ -1810,9 +1808,9 @@ pub fn json_debug<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
                 Ok(match key.get_value()? {
                     Some(doc) => KeyValue::new(doc)
                         .get_values(path.get_path())?
-                        .iter()
-                        .map(|v| manager.get_memory(v).unwrap())
-                        .collect(),
+                        .into_iter()
+                        .map(M::get_memory)
+                        .try_collect()?,
                     None => vec![],
                 }
                 .into())
