@@ -95,7 +95,7 @@ pub trait Manager {
     fn apply_changes(&self, ctx: &Context);
     #[allow(clippy::wrong_self_convention)]
     fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> Result<Self::O, Error>;
-    fn get_memory(&self, v: &Self::V) -> Result<usize, RedisError>;
+    fn get_memory(v: &Self::V) -> Result<usize, RedisError>;
     fn is_json(&self, key: *mut RedisModuleKey) -> Result<bool, RedisError>;
 }
 
