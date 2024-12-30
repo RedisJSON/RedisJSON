@@ -251,9 +251,6 @@ pub mod type_methods {
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn mem_usage(value: *const c_void) -> usize {
         let json = unsafe { &*(value as *mut RedisJSON<ijson::IValue>) };
-        let manager = RedisIValueJsonKeyManager {
-            phantom: PhantomData,
-        };
-        manager.get_memory(&json.data).unwrap_or(0)
+        RedisIValueJsonKeyManager::get_memory(&json.data).unwrap_or(0)
     }
 }
