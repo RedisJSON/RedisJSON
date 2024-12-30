@@ -684,7 +684,6 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         } + size_of::<IValue>())
     }
 
-
     fn is_json(&self, key: *mut RedisModuleKey) -> Result<bool, RedisError> {
         match verify_type(key, &REDIS_JSON_TYPE) {
             Ok(_) => Ok(true),
