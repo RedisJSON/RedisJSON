@@ -12,7 +12,7 @@ use crate::Format;
 use crate::REDIS_JSON_TYPE;
 use bson::{from_document, Document};
 use ijson::object::Entry;
-use ijson::{DestructuredMut, DestructuredRef, INumber, IObject, IString, IValue};
+use ijson::{DestructuredMut, DestructuredRef, INumber, IObject, IString, IValue, ValueType};
 use json_path::select_value::{SelectValue, SelectValueType};
 use redis_module::key::{verify_type, KeyFlags, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
