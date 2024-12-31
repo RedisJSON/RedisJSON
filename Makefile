@@ -147,6 +147,8 @@ RUST_SOEXT.linux=so
 RUST_SOEXT.freebsd=so
 RUST_SOEXT.macos=dylib
 
+RUST_FLAGS += -C target-feature=-crt-static
+
 build:
 ifneq ($(NIGHTLY),1)
 	$(SHOW)set -e ;\
