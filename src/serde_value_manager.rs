@@ -506,7 +506,7 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
         }
     }
 
-    fn get_memory(&self, v: &Value) -> Result<usize, RedisError> {
+    fn get_memory(v: &Value) -> Result<usize, RedisError> {
         let res = match v {
             Value::Null => 0,
             Value::Bool(v) => mem::size_of_val(v),
