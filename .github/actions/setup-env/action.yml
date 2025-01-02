@@ -19,7 +19,7 @@ outputs:
     value: ${{ steps.set-git-info.outputs.TAG }}
   BRANCH:
     description: 'The branch name'
-    value: ${{ steps.set-git-info.outputs.TAG }}
+    value: ${{ steps.set-git-info.outputs.BRANCH }}
   TAG_OR_BRANCH:
     description: 'The tag or branch name'
     value: ${{ steps.set-git-info.outputs.TAG }}${{ steps.set-git-info.outputs.BRANCH }}
@@ -34,17 +34,24 @@ runs:
       shell: bash
       id: set-git-info
       run: |
-        export REF="${{ inputs.github-ref }}"
-        export BRANCH_PATTERN="^refs/heads/(.*)$"
-        export TAG_PATTERN="^refs/tags/(.*)$"
+        if [[ "${{github.event_name}}" == "pull_request" ]]; then
+          BRANCH="${{github.event.pull_request.base.ref}}"
+        else
+          REF="${{ github.ref }}"
+          BRANCH_PATTERN="^refs/heads/(.*)$"
+          TAG_PATTERN="^refs/tags/(.*)$"
 
-        if [[ $REF =~ $BRANCH_PATTERN ]]; then
-          echo "BRANCH=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
-        fi
+          if [[ $REF =~ $BRANCH_PATTERN ]]; then
+            BRANCH=${BASH_REMATCH[1]}
+          fi
 
-        if [[ $REF =~ $TAG_PATTERN ]]; then
-          echo "TAG=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
+          if [[ $REF =~ $TAG_PATTERN ]]; then
+            TAG=${BASH_REMATCH[1]}
+          fi
         fi
+        echo "TAG=${TAG}" >> $GITHUB_OUTPUT
+        echo "BRANCH=${BRANCH}" >> $GITHUB_OUTPUT
+        echo "TAG=${TAG}, BRANCH=${BRANCH}"
     - name: Set the tagged flag
       shell: bash
       id: set-tagged
