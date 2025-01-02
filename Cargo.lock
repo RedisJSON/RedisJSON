@@ -814,7 +814,7 @@ dependencies = [
 
 [[package]]
 name = "redis_json"
-version = "2.6.13"
+version = "2.6.14"
 dependencies = [
  "bitflags 2.6.0",
  "bson",
