@@ -18,14 +18,17 @@ if [[ $1 == --help || $1 == help || $HELP == 1 ]]; then
 	cat <<-END
 		Generate RedisJSON distribution packages.
 
-		[ARGVARS...] pack.sh [--help|help]
+		[ARGVARS...] pack.sh [--help|help] [<module-so-path>]
 
 		Argument variables:
-		MODULE=path         Path of module .so
-
 		RAMP=0|1            Build RAMP package
 		DEPS=0|1            Build dependencies files
 		SYM=0|1             Build debug symbols file
+		RELEASE=1           Generate "release" packages (artifacts/release/)
+		SNAPSHOT=1          Generate "shapshot" packages (artifacts/snapshot/)
+
+		MODULE_NAME=name    Module name (default: bf)
+		PACKAGE_NAME=name   Package stem name
 
 		BRANCH=name         Branch name for snapshot packages
 		WITH_GITSHA=1       Append Git SHA to shapshot package names
@@ -33,7 +36,7 @@ if [[ $1 == --help || $1 == help || $HELP == 1 ]]; then
 		RAMP_VARIANT=name   RAMP variant (e.g. ramp-{name}.yml)
 
 		ARTDIR=dir          Directory in which packages are created (default: bin/artifacts)
-		
+
 		RAMP_YAML=path      RAMP configuration file path
 		RAMP_ARGS=args      Extra arguments to RAMP
 
@@ -53,8 +56,10 @@ OP=""
 
 # RLEC naming conventions
 
-ARCH=$($READIES/bin/platform --arch)
-[[ $ARCH == x64 ]] && ARCH=x86_64
+ARCH=$(uname -m)
+
+[[ $ARCH == x64 ]]     && ARCH=x86_64
+[[ $ARCH == arm64 ]]   && ARCH=aarch64
 [[ $ARCH == arm64v8 ]] && ARCH=aarch64
 
 OS=$($READIES/bin/platform --os)
@@ -73,22 +78,25 @@ OSNICK=$($READIES/bin/platform --osnick)
 [[ $OSNICK == rocky8 ]]  && OSNICK=rhel8
 [[ $OSNICK == rocky9 ]]  && OSNICK=rhel9
 
+
 PLATFORM="$OS-$OSNICK-$ARCH"
 
 #----------------------------------------------------------------------------------------------
 
-if [[ -z $MODULE || ! -f $MODULE ]]; then
-	eprint "MODULE is not defined or does not refer to a file"
-	exit 1
-fi
+MODULE="$1"
 
 RAMP=${RAMP:-1}
 DEPS=${DEPS:-1}
 SYM=${SYM:-1}
 
+RELEASE=${RELEASE:-1}
+SNAPSHOT=${SNAPSHOT:-1}
+
 [[ -z $ARTDIR ]] && ARTDIR=bin/artifacts
 mkdir -p $ARTDIR $ARTDIR/snapshots
 ARTDIR=$(cd $ARTDIR && pwd)
+
+#----------------------------------------------------------------------------------------------
 
 MODULE_NAME=${MODULE_NAME:-ReJSON}
 PACKAGE_NAME=rejson-oss
@@ -103,24 +111,43 @@ pack_ramp() {
 	cd $ROOT
 
 	local stem=${PACKAGE_NAME}.${PLATFORM}
+	local stem_debug=${PACKAGE_NAME}.debug.${PLATFORM}
 
-	local verspec=${SEMVER}${_VARIANT}
-	
+	if [[ $SNAPSHOT == 0 ]]; then
+		local verspec=${SEMVER}${VARIANT}
+		local packdir=.
+		local s3base=""
+	else
+		local verspec=${BRANCH}${VARIANT}
+		local packdir=snapshots
+		local s3base=snapshots/
+	fi
+
 	local fq_package=$stem.${verspec}.zip
+	local fq_package_debug=$stem_debug.${verspec}.zip
 
-	[[ ! -d $ARTDIR ]] && mkdir -p $ARTDIR
+	[[ ! -d $ARTDIR/$packdir ]] && mkdir -p $ARTDIR/$packdir
 
-	local packfile="$ARTDIR/$fq_package"
+	local packfile=$ARTDIR/$packdir/$fq_package
+	local packfile_debug=$ARTDIR/$packdir/$fq_package_debug
 
 	local xtx_vars=""
-	local dep_fname="${PACKAGE_NAME}.${PLATFORM}.${verspec}.tgz"
+	for dep in $DEP_NAMES; do
+		eval "export NAME_${dep}=${PACKAGE_NAME}_${dep}"
+		local dep_fname="${PACKAGE_NAME}.${dep}.${PLATFORM}.${verspec}.tgz"
+		eval "export PATH_${dep}=${s3base}${dep_fname}"
+		local dep_sha256="$ARTDIR/$packdir/${dep_fname}.sha256"
+		eval "export SHA256_${dep}=$(cat $dep_sha256)"
 
-	if [[ -z $RAMP_YAML ]]; then
-		RAMP_YAML=$ROOT/ramp.yml
+		xtx_vars+=" -e NAME_$dep -e PATH_$dep -e SHA256_$dep"
+	done
+
+	if [[ -n $RAMP_YAML ]]; then
+		RAMP_YAML="$(realpath $RAMP_YAML)"
 	elif [[ -z $RAMP_VARIANT ]]; then
-		RAMP_YAML=$ROOT/ramp.yml
+		RAMP_YAML="$ROOT/pack/ramp.yml"
 	else
-		RAMP_YAML=$ROOT/ramp${_RAMP_VARIANT}.yml
+		RAMP_YAML="$ROOT/pack/ramp${_RAMP_VARIANT}.yml"
 	fi
 
 	python3 $READIES/bin/xtx \
@@ -133,7 +160,7 @@ pack_ramp() {
 	fi
 
 	runn rm -f /tmp/ramp.fname $packfile
-	
+
 	# ROOT is required so ramp will detect the right git commit
 	cd $ROOT
 	runn @ <<-EOF
@@ -155,18 +182,35 @@ pack_ramp() {
 			exit 1
 		else
 			local packname=`cat /tmp/ramp.fname`
-			echo "# Created $packname"
+			echo "# Created $(realpath $packname)"
 		fi
 	fi
 
-	cd $ARTDIR/snapshots
-	if [[ ! -z $BRANCH ]]; then
-		local snap_package=$stem.${BRANCH}${_VARIANT}.zip
-		ln -sf ../$fq_package $snap_package
+	if [[ -f $MODULE.debug ]]; then
+		runn @ <<-EOF
+			$RAMP_CMD pack -m /tmp/ramp.yml \
+				$RAMP_ARGS \
+				-n $MODULE_NAME \
+				--verbose \
+				--debug \
+				--packname-file /tmp/ramp.fname \
+				-o $packfile_debug \
+				$MODULE.debug \
+				>/tmp/ramp.err 2>&1 || true
+			EOF
+
+		if [[ $NOP != 1 ]]; then
+			if [[ ! -e $packfile_debug ]]; then
+				eprint "Error generating RAMP file:"
+				>&2 cat /tmp/ramp.err
+				exit 1
+			else
+				local packname=`cat /tmp/ramp.fname`
+				echo "# Created $(realpath $packname)"
+			fi
+		fi
 	fi
 
-	local packname=`cat /tmp/ramp.fname`
-	echo "Created $packname"
 	cd $ROOT
 }
 
@@ -175,52 +219,50 @@ pack_ramp() {
 pack_deps() {
 	local dep="$1"
 
+	cd $ROOT
+
 	local stem=${PACKAGE_NAME}.${dep}.${PLATFORM}
-	local verspec=${SEMVER}${_VARIANT}
+	local verspec=${SEMVER}${VARIANT}
+	local fq_package=$stem.${verspec}.tgz
 
 	local depdir=$(cat $ARTDIR/$dep.dir)
-
-	local fq_dep=$stem.${verspec}.tgz
-	local tar_path=$ARTDIR/$fq_dep
+	local tar_path=$ARTDIR/$fq_package
 	local dep_prefix_dir=$(cat $ARTDIR/$dep.prefix)
-	
-	{ cd $depdir ;\
-	  cat $ARTDIR/$dep.files | \
-	  xargs tar -c --sort=name --owner=root:0 --group=root:0 --mtime='UTC 1970-01-01' \
-		--transform "s,^,$dep_prefix_dir," 2> /tmp/pack.err | \
-	  gzip -n - > $tar_path ; E=$?; } || true
-	rm -f $ARTDIR/$dep.prefix $ARTDIR/$dep.files $ARTDIR/$dep.dir
 
-	cd $ROOT
-	if [[ $E != 0 || -s /tmp/pack.err ]]; then
-		eprint "Error creating $tar_path:"
-		cat /tmp/pack.err >&2
-		exit 1
+	rm -f $tar_path
+	if [[ $NOP != 1 ]]; then
+		{ cd $depdir ;\
+		  cat $ARTDIR/$dep.files | \
+		  xargs tar -c --sort=name --owner=root:0 --group=root:0 --mtime='UTC 1970-01-01' \
+			--transform "s,^,$dep_prefix_dir," 2> /tmp/pack.err | \
+		  gzip -n - > $tar_path ; E=$?; } || true
+		if [[ ! -e $tar_path || -z $(tar tzf $tar_path) ]]; then
+			eprint "Count not create $tar_path. Aborting."
+			rm -f $tar_path
+			exit 1
+		fi
+	else
+		runn @ <<-EOF
+			cd $depdir
+			cat $ARTDIR/$dep.files | \
+			xargs tar -c --sort=name --owner=root:0 --group=root:0 --mtime='UTC 1970-01-01' \
+				--transform "s,^,$dep_prefix_dir," 2> /tmp/pack.err | \
+			gzip -n - > $tar_path ; E=$?; } || true
+			EOF
 	fi
 	runn @ <<-EOF
-		sha256sum $tar_path | awk '{print $1}' > $tar_path.sha256
+		sha256sum $tar_path | gawk '{print $1}' > $tar_path.sha256
 		EOF
 
+	mkdir -p $ARTDIR/snapshots
 	cd $ARTDIR/snapshots
 	if [[ -n $BRANCH ]]; then
-		local snap_dep=$stem.${BRANCH}${_VARIANT}.tgz
-		runn ln -sf ../$fq_dep $snap_dep
-		runn ln -sf ../$fq_dep.sha256 $snap_dep.sha256
+		local snap_package=$stem.${BRANCH}${VARIANT}.tgz
+		runn ln -sf ../$fq_package $snap_package
+		runn ln -sf ../$fq_package.sha256 $snap_package.sha256
 	fi
 
 	cd $ROOT
-}
-
-#----------------------------------------------------------------------------------------------
-
-prepare_symbols_dep() {
-	if [[ ! -f $MODULE.debug ]]; then return 0; fi
-	echo "# Preparing debug symbols dependencies ..."
-	echo $(cd "$(dirname $MODULE)" && pwd) > $ARTDIR/debug.dir
-	echo $(basename $MODULE.debug) > $ARTDIR/debug.files
-	echo "" > $ARTDIR/debug.prefix
-	pack_deps debug
-	echo "# Done."
 }
 
 #----------------------------------------------------------------------------------------------
@@ -237,7 +279,16 @@ fi
 
 #----------------------------------------------------------------------------------------------
 
+git_config_add_ifnx() {
+	local key="$1"
+	local val="$2"
+	if [[ -z $(git config --global --get $key $val) ]]; then
+		git config --global --add $key $val
+	fi
+}
+
 if [[ -z $BRANCH ]]; then
+	git_config_add_ifnx safe.directory $ROOT
 	BRANCH=$(git rev-parse --abbrev-ref HEAD)
 	# this happens of detached HEAD
 	if [[ $BRANCH == HEAD ]]; then
@@ -246,21 +297,33 @@ if [[ -z $BRANCH ]]; then
 fi
 BRANCH=${BRANCH//[^A-Za-z0-9._-]/_}
 if [[ $WITH_GITSHA == 1 ]]; then
+	git_config_add_ifnx safe.directory $ROOT
 	GIT_COMMIT=$(git rev-parse --short HEAD)
 	BRANCH="${BRANCH}-${GIT_COMMIT}"
 fi
-export BRANCH
+
+#----------------------------------------------------------------------------------------------
+
+RELEASE_ramp=${PACKAGE_NAME}.$OS-$OSNICK-$ARCH.$SEMVER${VARIANT}.zip
+SNAPSHOT_ramp=${PACKAGE_NAME}.$OS-$OSNICK-$ARCH.${BRANCH}${VARIANT}.zip
+
+RELEASE_deps=
+SNAPSHOT_deps=
+for dep in $DEP_NAMES; do
+	RELEASE_deps+=" ${PACKAGE_NAME}.${dep}.$OS-$OSNICK-$ARCH.$SEMVER${VARIANT}.tgz"
+	SNAPSHOT_deps+=" ${PACKAGE_NAME}.${dep}.$OS-$OSNICK-$ARCH.${BRANCH}${VARIANT}.tgz"
+done
 
 #----------------------------------------------------------------------------------------------
 
 if [[ $JUST_PRINT == 1 ]]; then
 	if [[ $RAMP == 1 ]]; then
-		echo "${PACKAGE_NAME}.${OS}-${OSNICK}-${ARCH}.${SEMVER}${VARIANT}.zip"
+		[[ $RELEASE == 1 ]] && echo $RELEASE_ramp
+		[[ $SNAPSHOT == 1 ]] && echo $SNAPSHOT_ramp
 	fi
 	if [[ $DEPS == 1 ]]; then
-		for dep in $DEP_NAMES; do
-			echo "${PACKAGE_NAME}.${dep}.${OS}-${OSNICK}-${ARCH}.${SEMVER}${VARIANT}.tgz"
-		done
+		[[ $RELEASE == 1 ]] && echo $RELEASE_deps
+		[[ $SNAPSHOT == 1 ]] && echo $SNAPSHOT_deps
 	fi
 	exit 0
 fi
@@ -269,14 +332,19 @@ fi
 
 mkdir -p $ARTDIR
 
-if [[ $DEPS == 1 ]]; then
+if [[ $DEPS == 1 && -n $DEP_NAMES ]]; then
+	# set up `debug` dep
+	dirname "$(realpath "$MODULE")" > "$ARTDIR/debug.dir"
+	echo "$(basename "$(realpath "$MODULE")").debug" > "$ARTDIR/debug.files"
+	echo "" > $ARTDIR/debug.prefix
+
 	echo "# Building dependencies ..."
 
-	[[ $SYM == 1 ]] && prepare_symbols_dep
-
 	for dep in $DEP_NAMES; do
-		echo "# $dep ..."
-		pack_deps $dep
+		if [[ $OS != macos ]]; then
+			echo "# $dep ..."
+			pack_deps $dep
+		fi
 	done
 	echo "# Done."
 fi
@@ -292,7 +360,14 @@ if [[ $RAMP == 1 ]]; then
 	fi
 
 	echo "# Building RAMP $RAMP_VARIANT files ..."
-	pack_ramp
+
+	[[ -z $MODULE ]] && { eprint "Nothing to pack. Aborting."; exit 1; }
+	[[ ! -f $MODULE ]] && { eprint "$MODULE does not exist. Aborting."; exit 1; }
+	MODULE=$(realpath $MODULE)
+
+	[[ $RELEASE == 1 ]] && SNAPSHOT=0 pack_ramp
+	[[ $SNAPSHOT == 1 ]] && pack_ramp
+
 	echo "# Done."
 fi
 

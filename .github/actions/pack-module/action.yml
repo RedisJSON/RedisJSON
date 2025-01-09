@@ -13,5 +13,4 @@ runs:
         . venv/bin/activate
         git config --global --add safe.directory $GITHUB_WORKSPACE
         export PATH="$GITHUB_WORKSPACE/redis/src:$PATH"
-        MODULE=$(realpath ./target/release/rejson.so) BRANCH=$TAG_OR_BRANCH \
-          SHOW=1 OSNICK=${{ matrix.docker.nick }} ./sbin/pack.sh
+        BRANCH=$TAG_OR_BRANCH SHOW=1 OSNICK=${{ matrix.docker.nick }} ./sbin/pack.sh $(realpath ./target/release/rejson.so)
