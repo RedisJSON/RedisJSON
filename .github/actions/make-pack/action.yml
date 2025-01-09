@@ -6,4 +6,4 @@ runs:
     - name: Pack module
       shell: bash
       run: |
-        make pack BRANCH=$TAG_OR_BRANCH
+        BRANCH=$TAG_OR_BRANCH make pack
