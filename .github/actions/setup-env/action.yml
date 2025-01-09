@@ -34,20 +34,16 @@ runs:
       shell: bash
       id: set-git-info
       run: |
-        if [[ "${{github.event_name}}" == "pull_request" ]]; then
-          BRANCH="${{github.event.pull_request.base.ref}}"
-        else
+        if [[ "${{github.event_name}}" != "pull_request" ]]; then
           REF="${{ github.ref }}"
-          BRANCH_PATTERN="^refs/heads/(.*)$"
           TAG_PATTERN="^refs/tags/(.*)$"
-
-          if [[ $REF =~ $BRANCH_PATTERN ]]; then
-            BRANCH=${BASH_REMATCH[1]}
-          fi
-
           if [[ $REF =~ $TAG_PATTERN ]]; then
             TAG=${BASH_REMATCH[1]}
           fi
+        fi
+
+        if [[ -z $TAG ]]; then
+          BRANCH=${{ github.head_ref || github.ref_name }}
         fi
         echo "TAG=${TAG}" >> $GITHUB_OUTPUT
         echo "BRANCH=${BRANCH}" >> $GITHUB_OUTPUT
