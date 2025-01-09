@@ -49,6 +49,8 @@ runs:
             TAG=${BASH_REMATCH[1]}
           fi
         fi
+
+        BRANCH=${{ github.head_ref || github.ref_name }}
         echo "TAG=${TAG}" >> $GITHUB_OUTPUT
         echo "BRANCH=${BRANCH}" >> $GITHUB_OUTPUT
         echo "TAG=${TAG}, BRANCH=${BRANCH}"

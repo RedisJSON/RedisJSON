@@ -222,7 +222,7 @@ bench benchmark: $(TARGET)
 #----------------------------------------------------------------------------------------------
 
 pack:
-	$(SHOW)MODULE=$(abspath $(TARGET)) ./sbin/pack.sh
+	$(SHOW) BINDIR=$(BINDIR) ./sbin/pack.sh $(abspath $(TARGET))
 
 upload-release:
 	$(SHOW)RELEASE=1 ./sbin/upload-artifacts
