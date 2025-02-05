@@ -248,7 +248,6 @@ coverage:
 	$(SHOW)$(MAKE) build COV=1
 	$(SHOW)$(COVERAGE_RESET.llvm)
 	-$(SHOW)$(MAKE) test COV=1
-	set -x
 	$(SHOW)$(COVERAGE_COLLECT_REPORT.llvm)
 
 .PHONY: coverage
