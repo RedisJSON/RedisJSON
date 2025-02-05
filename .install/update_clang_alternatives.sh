@@ -21,13 +21,13 @@
 # Function to register alternatives as slave first and fall back to master if it fails
 register_alternative() {
     local tool=$1
-    local tool_bin=$2
+    local tool_with_version=$2
     local version=$3
     local priority=$4
 
     # Try registering as slave first
     echo "Registering ${tool} as a slave alternative."
-    update-alternatives --verbose --install "/usr/bin/${tool}" "${tool}" "/usr/bin/${tool_bin}-${version}" "${priority}"
+    update-alternatives --verbose --install "/usr/bin/${tool}" "${tool}" "/usr/bin/${tool_with_version}" "${priority}"
 
     # Check if the previous command resulted in an error indicating that the tool is a master alternative
     if [ $? -ne 0 ]; then
@@ -36,7 +36,7 @@ register_alternative() {
         # Force reinstallation in case of broken symlink group
         echo "Forcing reinstallation of ${tool}."
         update-alternatives --remove "${tool}" "/usr/bin/${tool}-${version}"
-        update-alternatives --install "/usr/bin/${tool}" "${tool}" "/usr/bin/${tool}-${version}" ${priority}
+        update-alternatives --install "/usr/bin/${tool}" "${tool}" "/usr/bin/${tool_with_version}" ${priority}
     fi
 }
 

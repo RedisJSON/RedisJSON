@@ -5,7 +5,6 @@
 function register_clang_version {
     local version=$1
     local priority=$2
-    echo "hello world."
 
     update-alternatives \
          --verbose \
