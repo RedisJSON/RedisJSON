@@ -21,6 +21,13 @@ jobs:
     - name: Setup common
       run: |
         ./.install/common_installations.sh sudo
+    - name: Get Rust
+      run: |
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        source "$HOME/.cargo/env"
+        rustup update
+        rustup update nightly
+        rustup component add rust-src --toolchain nightly
     - name: Install clang 18
       working-directory: .install
       run: |
@@ -29,13 +36,6 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: ./deps/readies/bin/getredis --with-github-token
-    - name: Get Rust
-      run: |
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        source "$HOME/.cargo/env"
-        rustup update
-        rustup update nightly
-        rustup component add rust-src --toolchain nightly
     - name: Build and test
       run: make coverage QUICK=1 SHOW=1
     - name: Upload coverage
