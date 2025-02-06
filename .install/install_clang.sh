@@ -17,6 +17,7 @@ $MODE $CWD/update_clang_alternatives.sh $CLANG_VERSION 1
 
 ls /bin/
 
+$MODE clang --version
 $MODE clang++ --version
 $MODE llvm-cov --version
 $MODE llvm-profdata --version
