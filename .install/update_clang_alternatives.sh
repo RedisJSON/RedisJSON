@@ -26,18 +26,18 @@ register_alternative() {
     local priority=$4
 
     # Try registering as slave first
-    echo "Registering ${tool} as a slave alternative."
+    update-alternatives --remove-all "${tool}"
     update-alternatives --verbose --install "/usr/bin/${tool}" "${tool}" "/usr/bin/${tool_with_version}" "${priority}"
 
     # Check if the previous command resulted in an error indicating that the tool is a master alternative
-    if [ $? -ne 0 ]; then
-        echo "Error: Failed to set up ${tool} as an alternative."
-
-        # Force reinstallation in case of broken symlink group
-        echo "Forcing reinstallation of ${tool}."
-        update-alternatives --remove "${tool}" "/usr/bin/${tool}-${version}"
-        update-alternatives --install "/usr/bin/${tool}" "${tool}" "/usr/bin/${tool_with_version}" ${priority}
-    fi
+    #if [ $? -ne 0 ]; then
+    #    echo "Error: Failed to set up ${tool} as an alternative."
+#
+    #    # Force reinstallation in case of broken symlink group
+    #    echo "Forcing reinstallation of ${tool}."
+    #    update-alternatives --remove "${tool}" "/usr/bin/${tool}-${version}"
+    #    update-alternatives --install "/usr/bin/${tool}" "${tool}" "/usr/bin/${tool_with_version}" ${priority}
+    #fi
 }
 
 # Function to register Clang tools
