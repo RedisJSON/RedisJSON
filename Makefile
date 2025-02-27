@@ -98,7 +98,7 @@ else
 endif
 
 ifeq ($(COV),1)
-RUST_FLAGS += -C instrument_coverage
+RUST_FLAGS += -C instrument-coverage
 endif
 
 ifeq ($(PROFILE),1)
