@@ -11,8 +11,6 @@ This is what RedisJSON (https://github.com/RedisJSON/RedisJSON) currently has re
   -     Need to verify on OSX
   -     Currently does not have an `install` option - needed?
 *  Documentation
-  -     docs/commands.md
-  -     docs/design.md ~ 30% done
   -     README.md ~ 85% done
     -   Missing about/what is ReJSON
     -   Some notes about performance
