@@ -25,6 +25,5 @@ jobs:
           # List of files we allow to be changed without running the CI. Modify as needed.
           files: |
             **.md
-            docs/**
             licenses/**
             LICENSE.txt
