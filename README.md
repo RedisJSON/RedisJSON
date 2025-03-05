@@ -55,7 +55,9 @@ Make sure you have Rust installed:
 Then, build as usual:
 
 ```bash
-cargo build --release
+git clone --recursive https://github.com/RedisJSON/RedisJSON.git
+cd RedisJSON
+make
 ```
 
 When running the tests, you need to explicitly specify the `test` feature to disable use of the Redis memory allocator when testing:
