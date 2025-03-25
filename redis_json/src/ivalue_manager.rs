@@ -397,9 +397,7 @@ impl RedisIValueJsonKeyManager<'_> {
             DestructuredRef::Array(arr) => match arr.capacity() {
                 0 => 0,
                 capacity => {
-                    arr.into_iter()
-                        .map(|val| Self::get_memory_impl(val))
-                        .sum::<usize>()
+                    arr.into_iter().map(Self::get_memory_impl).sum::<usize>()
                         + (capacity + 2) * size_of::<usize>()
                 }
             },
