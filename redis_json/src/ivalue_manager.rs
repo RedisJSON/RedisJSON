@@ -477,7 +477,8 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                     arr.into_iter() // IValueManager::get_memory() always returns OK, safe to unwrap here
                         .map(|val| Self::get_memory(val).unwrap())
                         .sum::<usize>()
-                        + (capacity + 2) * size_of::<usize>()
+                        + (capacity - arr.len()) * size_of::<IValue>()
+                        + 2 * size_of::<usize>()
                 }
             },
             DestructuredRef::Object(obj) => match obj.capacity() {
@@ -486,7 +487,8 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                     obj.into_iter() // IValueManager::get_memory() always returns OK, safe to unwrap here
                         .map(|(s, val)| s.len() + Self::get_memory(val).unwrap())
                         .sum::<usize>()
-                    + (capacity * 3 + 2) * size_of::<usize>()
+                    + (capacity - obj.len()) * size_of::<IValue>()
+                    + (capacity * 2 + 2) * size_of::<usize>()
                 }
             },
         } + size_of::<IValue>())
