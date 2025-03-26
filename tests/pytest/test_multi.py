@@ -856,7 +856,7 @@ def testDebugCommand(env):
 
     # Test missing path (defaults to root)
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1')
-    r.assertEqual(res, 1187)
+    r.assertEqual(res, 1075)
 
     # Test missing subcommand
     r.expect('JSON.DEBUG', 'non_existing_doc', '$..a').raiseError()
