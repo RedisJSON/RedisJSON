@@ -6,7 +6,7 @@
 
 /// Use `SelectValue`
 use crate::select_value::{SelectValue, SelectValueType};
-use ijson::{IValue, ValueType};
+use ijson::{DestructuredRef, IString, IValue, ValueType};
 use serde_json::Value;
 
 impl SelectValue for Value {
@@ -96,27 +96,21 @@ impl SelectValue for Value {
     fn get_str(&self) -> String {
         match self {
             Self::String(s) => s.to_string(),
-            _ => {
-                panic!("not a string");
-            }
+            _ => panic!("not a string"),
         }
     }
 
     fn as_str(&self) -> &str {
         match self {
             Self::String(s) => s.as_str(),
-            _ => {
-                panic!("not a string");
-            }
+            _ => panic!("not a string"),
         }
     }
 
     fn get_bool(&self) -> bool {
         match self {
             Self::Bool(b) => *b,
-            _ => {
-                panic!("not a bool");
-            }
+            _ => panic!("not a bool"),
         }
     }
 
@@ -160,32 +154,33 @@ impl SelectValue for IValue {
     }
 
     fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a Self> + 'a>> {
-        if let Some(arr) = self.as_array() {
-            Some(Box::new(arr.iter()))
-        } else if let Some(o) = self.as_object() {
-            Some(Box::new(o.values()))
-        } else {
-            None
+        match self.destructure_ref() {
+            DestructuredRef::Array(arr) => Some(Box::new(arr.iter())),
+            DestructuredRef::Object(o) => Some(Box::new(o.values())),
+            _ => None,
         }
     }
 
     fn keys<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a str> + 'a>> {
-        self.as_object()
-            .map_or(None, |o| Some(Box::new(o.keys().map(|k| &k[..]))))
+        match self.destructure_ref() {
+            DestructuredRef::Object(o) => Some(Box::new(o.keys().map(IString::as_str))),
+            _ => None,
+        }
     }
 
     fn items<'a>(&'a self) -> Option<Box<dyn Iterator<Item = (&'a str, &'a Self)> + 'a>> {
-        match self.as_object() {
-            Some(o) => Some(Box::new(o.iter().map(|(k, v)| (&k[..], v)))),
+        match self.destructure_ref() {
+            DestructuredRef::Object(o) => Some(Box::new(o.iter().map(|(k, v)| (k.as_str(), v)))),
             _ => None,
         }
     }
 
     fn len(&self) -> Option<usize> {
-        self.as_array().map_or_else(
-            || self.as_object().map(ijson::IObject::len),
-            |arr| Some(arr.len()),
-        )
+        match self.destructure_ref() {
+            DestructuredRef::Array(arr) => Some(arr.len()),
+            DestructuredRef::Object(o) => Some(o.len()),
+            _ => None,
+        }
     }
 
     fn is_empty(&self) -> Option<bool> {

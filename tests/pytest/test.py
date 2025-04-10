@@ -474,6 +474,13 @@ def testDelCommand(env):
     r.assertEqual(r.execute_command('JSON.DEL', 'test', '.'), 1)
     r.assertIsNone(r.execute_command('JSON.GET', 'test'))
 
+def testDelDeletesKey(env):
+    """Test that JSON.DEL deletes the key if the key is left empty"""
+    r = env
+    r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"foo": "bar"}'))
+    r.assertEqual(r.execute_command('JSON.DEL', 'test', '.foo'), 1)
+    r.assertIsNone(r.execute_command('JSON.GET', 'test'))
+
 def testObjectCRUD(env):
     r = env
 
