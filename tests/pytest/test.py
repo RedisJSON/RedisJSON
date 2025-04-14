@@ -445,9 +445,7 @@ def testDelCommand(env):
     r.assertEqual(r.execute_command('JSON.OBJLEN', 'test', '.'), 1)
     r.assertIsNone(r.execute_command('JSON.TYPE', 'test', '.baz'))
     r.assertEqual(r.execute_command('JSON.DEL', 'test', '.foo'), 1)
-    r.assertEqual(r.execute_command('JSON.OBJLEN', 'test', '.'), 0)
-    r.assertIsNone(r.execute_command('JSON.TYPE', 'test', '.foo'))
-    r.assertEqual(r.execute_command('JSON.TYPE', 'test', '.'), 'object')
+    r.assertIsNone(r.execute_command('JSON.GET', 'test'))
 
     # Test deleting some keys from an object
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{}'))
@@ -457,11 +455,10 @@ def testDelCommand(env):
     r.assertEqual(r.execute_command('JSON.OBJLEN', 'test', '.'), 1)
     r.assertIsNone(r.execute_command('JSON.TYPE', 'test', '.baz'))
     r.assertEqual(r.execute_command('JSON.DEL', 'test', '.foo'), 1)
-    r.assertEqual(r.execute_command('JSON.OBJLEN', 'test', '.'), 0)
-    r.assertIsNone(r.execute_command('JSON.TYPE', 'test', '.foo'))
-    r.assertEqual(r.execute_command('JSON.TYPE', 'test', '.'), 'object')
+    r.assertIsNone(r.execute_command('JSON.GET', 'test'))
 
     # Test with an array
+    r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{}'))
     r.assertOk(r.execute_command('JSON.SET', 'test', '.foo', '"bar"'))
     r.assertOk(r.execute_command('JSON.SET', 'test', '.baz', '"qux"'))
     r.assertOk(r.execute_command('JSON.SET', 'test', '.arr', '[1.2,1,2]'))
