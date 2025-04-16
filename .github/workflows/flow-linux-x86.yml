@@ -60,7 +60,7 @@ jobs:
         run: |
           OS="${{ inputs.os }}"
           if [ -z "${OS}" ]; then
-            OS="bionic focal jammy rocky8 rocky9 bullseye amazonlinux2 mariner2"
+            OS="bionic focal jammy rocky8 rocky9 bullseye amazonlinux2 mariner2 azurelinux3"
           fi
           MATRIX="["
           for os in $OS; do
@@ -88,6 +88,9 @@ jobs:
                 ;;
               mariner2)
                 MATRIX="${MATRIX}{\"image\": \"mcr.microsoft.com/cbl-mariner/base/core:2.0\", \"pre_req_install_cmd\": \"tdnf install --noplugins --skipsignature -y ca-certificates git\"},"
+                ;;
+              azurelinux3)
+                MATRIX="${MATRIX}{\"image\": \"mcr.microsoft.com/azurelinux/base/core:3.0\", \"pre_req_install_cmd\": \"tdnf install --noplugins --skipsignature -y ca-certificates git\"},"
                 ;;
               *)
                 echo "Unknown OS: $os"
