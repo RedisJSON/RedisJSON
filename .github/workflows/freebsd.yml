@@ -1,10 +1,6 @@
 name: freebsd
 
-on:
-  push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
+on: []
 
 jobs:
   build:
