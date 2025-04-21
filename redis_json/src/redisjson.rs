@@ -146,6 +146,31 @@ impl<'a> Path<'a> {
     }
 }
 
+const JSON_ROOT_PATH_LEGACY: &str = ".";
+const JSON_ROOT_PATH_S: &str = "$";
+pub const JSON_ROOT_PATH: Path = Path {
+    original_path: JSON_ROOT_PATH_S,
+    fixed_path: None,
+};
+
+/// Returns the deault path for the given RESP version
+impl Default for Path<'_> {
+    fn default() -> Self {
+        Path {
+            original_path: JSON_ROOT_PATH_LEGACY,
+            fixed_path: Some(JSON_ROOT_PATH_S.into()),
+        }
+    }
+}
+
+impl PartialEq for Path<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.get_path() == other.get_path()
+    }
+}
+
+impl Eq for Path<'_> {}
+
 impl Display for Path<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.get_path())
