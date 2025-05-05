@@ -5,12 +5,20 @@
 [![Codecov](https://codecov.io/gh/RedisJSON/RedisJSON/branch/master/graph/badge.svg)](https://codecov.io/gh/RedisJSON/RedisJSON)
 
 # RedisJSON
-Starting with version 8.0, RedisXXX is an integral part of Redis. See https://github.com/redis/redis 
 
 [![Forum](https://img.shields.io/badge/Forum-RedisJSON-blue)](https://forum.redislabs.com/c/modules/redisjson)
 [![Discord](https://img.shields.io/discord/697882427875393627?style=flat-square)](https://discord.gg/QUkjSsk)
 
+<picture>
 <img src="docs/docs/images/logo.svg" alt="logo" width="300"/>
+</picture>
+
+> [!NOTE]
+> Starting with Redis 8, the JSON data structures are an integral part of Redis. There is no need to install this module separately.
+>
+> Therefore, we no longer release standalone versions of RedisJSON.
+>
+> See https://github.com/redis/redis
 
 ## Overview
 
