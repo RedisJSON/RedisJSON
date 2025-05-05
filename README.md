@@ -13,7 +13,7 @@
 > [!NOTE]
 > Starting with Redis 8, the JSON data structure is integral to Redis. You don't need to install this module separately.
 >
-> Therefore, we no longer release standalone versions of RedisJSON.
+> We no longer release standalone versions of RedisJSON.
 >
 > See https://github.com/redis/redis
 
