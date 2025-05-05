@@ -11,7 +11,7 @@
 <img src="docs/docs/images/logo.svg" alt="logo" width="300"/>
 
 > [!NOTE]
-> Starting with Redis 8, the JSON data structure is an integral part of Redis. There is no need to install this module separately.
+> Starting with Redis 8, the JSON data structure is integral to Redis. You don't need to install this module separately.
 >
 > Therefore, we no longer release standalone versions of RedisJSON.
 >
