@@ -843,7 +843,7 @@ def testDebugCommand(env):
     # Test multi
     # json.get a $..a ==> "[{},[],\"str\",42,1.2,false,null]"
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1', '$..a')
-    r.assertEqual(res, [8, 8, 11, 8, 24, 8, 8])
+    r.assertEqual(res, [8, 8, 32, 8, 16, 8, 8])
 
     # Test single
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1', '$.nested2.a')

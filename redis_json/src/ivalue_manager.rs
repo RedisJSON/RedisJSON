@@ -14,7 +14,7 @@ use crate::redisjson::normalize_arr_start_index;
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
 use bson::{from_document, Document};
-use ijson::{DestructuredMut, DestructuredRef, INumber, IObject, IString, IValue};
+use ijson::{DestructuredMut, INumber, IObject, IString, IValue};
 use json_path::select_value::{SelectValue, SelectValueType};
 use redis_module::key::{verify_type, KeyFlags, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
@@ -373,50 +373,6 @@ pub struct RedisIValueJsonKeyManager<'a> {
     pub phantom: PhantomData<&'a u64>,
 }
 
-impl RedisIValueJsonKeyManager<'_> {
-    ///
-    /// following https://github.com/Diggsey/ijson/issues/23#issuecomment-1377270111
-    ///
-    fn get_memory_impl(v: &IValue) -> usize {
-        match v.destructure_ref() {
-            DestructuredRef::Null | DestructuredRef::Bool(_) => 0,
-            DestructuredRef::Number(num) => {
-                const STATIC_LO: i32 = -1 << 7; // INumber::STATIC_LOWER
-                const STATIC_HI: i32 = 0b11 << 7; // INumber::STATIC_UPPER
-                const SHORT_LO: i32 = -1 << 23; // INumber::SHORT_LOWER
-                const SHORT_HI: i32 = 1 << 23; // INumber::SHORT_UPPER
-
-                if num.has_decimal_point() {
-                    16 // 64bit float
-                } else if &INumber::from(STATIC_LO) <= num && num < &INumber::from(STATIC_HI) {
-                    0 // 8bit
-                } else if &INumber::from(SHORT_LO) <= num && num < &INumber::from(SHORT_HI) {
-                    4 // 24bit
-                } else {
-                    16 // 64bit
-                }
-            }
-            DestructuredRef::String(s) => s.len(),
-            DestructuredRef::Array(arr) => match arr.capacity() {
-                0 => 0,
-                capacity => {
-                    arr.into_iter().map(Self::get_memory_impl).sum::<usize>()
-                        + (capacity + 2) * size_of::<usize>()
-                }
-            },
-            DestructuredRef::Object(obj) => match obj.capacity() {
-                0 => 0,
-                capacity => {
-                    obj.into_iter()
-                        .map(|(s, val)| s.len() + Self::get_memory_impl(val))
-                        .sum::<usize>()
-                        + (capacity * 3 + 2) * size_of::<usize>()
-                }
-            },
-        }
-    }
-}
-
 impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     type WriteHolder = IValueKeyHolderWrite<'a>;
     type ReadHolder = IValueKeyHolderRead;
@@ -496,7 +452,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     }
 
     fn get_memory(v: &Self::V) -> Result<usize, RedisError> {
-        Ok(Self::get_memory_impl(v) + size_of::<IValue>())
+        Ok(v.mem_allocated() + size_of::<IValue>())
     }
 
     fn is_json(&self, key: *mut RedisModuleKey) -> Result<bool, RedisError> {
@@ -535,7 +491,7 @@ mod tests {
                         }"#;
         let value = serde_json::from_str(json).unwrap();
         let res = RedisIValueJsonKeyManager::get_memory(&value).unwrap();
-        assert_eq!(res, 759);
+        assert_eq!(res, 1216);
     }
 
     /// Tests the deserialiser of IValue for a string with unicode
