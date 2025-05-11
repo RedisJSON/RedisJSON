@@ -325,7 +325,7 @@ class testResp3():
         r.assertEqual(r.execute_command('JSON.OBJKEYS', 'test_resp3'), ['a'])
         r.assertEqual(r.execute_command('JSON.OBJLEN', 'test_resp3'), 1)
         r.assertEqual(r.execute_command('JSON.TYPE', 'test_resp3'), ['object'])
-        r.assertEqual(r.execute_command('JSON.DEBUG', 'MEMORY', 'test_resp3'), 443)
+        r.assertEqual(r.execute_command('JSON.DEBUG', 'MEMORY', 'test_resp3'), 536)
         r.assertEqual(r.execute_command('JSON.DEL', 'test_resp3'), 1)
 
         # Test JSON.strX commands on object type when default path is used
