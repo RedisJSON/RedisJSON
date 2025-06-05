@@ -10,7 +10,7 @@ on:
       redis-ref:
         description: 'Redis ref to checkout'
         required: true
-        default: 'unstable'
+        default: '8.2'
       run-test:
         type: boolean
         default: true

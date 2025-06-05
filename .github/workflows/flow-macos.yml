@@ -6,7 +6,7 @@ on:
       redis-ref:
         description: 'Redis ref to checkout'
         required: true
-        default: 'unstable'
+        default: '8.2'
       run-test:
         type: boolean
         default: true
@@ -15,7 +15,7 @@ on:
       redis-ref:
         description: 'Redis ref to checkout'
         type: string
-        default: 'unstable'
+        default: '8.2'
       run-test:
         type: boolean
         default: true
