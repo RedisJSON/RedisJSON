@@ -159,9 +159,13 @@ jobs:
           echo ::endgroup::
           echo ::group::install requirements
             pip install -q --upgrade setuptools
-            pip install -q --upgrade pip
-            pip install -q -r tests/pytest/requirements.txt
-            pip install -q -r .install/build_package_requirements.txt
+            # Upgrade pip to latest version to ensure ARM64 wheel support
+            pip install -q --upgrade "pip>=21.0"
+            # Install compatible Cython version as fallback for source builds
+            pip install -q "Cython<3.0"
+            # Prefer binary wheels to avoid compilation issues on ARM64
+            pip install -q --prefer-binary -r tests/pytest/requirements.txt
+            pip install -q --prefer-binary -r .install/build_package_requirements.txt
           echo ::endgroup::
         env:
           PIP_BREAK_SYSTEM_PACKAGES: 1
