@@ -18,9 +18,7 @@ use redis_module::AclCategory;
 #[cfg(not(feature = "as-library"))]
 use redis_module::InfoContext;
 
-#[cfg(not(feature = "as-library"))]
 use redis_module::Status;
-#[cfg(not(feature = "as-library"))]
 use redis_module::{Context, RedisResult};
 
 #[cfg(not(feature = "as-library"))]
@@ -92,29 +90,44 @@ pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
 
 #[macro_export]
 macro_rules! run_on_manager {
+    // New variant for runtime manager selection with user-specified types
     (
     pre_command: $pre_command_expr:expr,
-    get_mngr: $get_mngr_expr:expr,
+    runtime_managers: {
+        $( $condition:expr => $manager_ident:ident { $($field:ident: $value:expr),* $(,)? } ),* $(,)?
+    },
     run: $run_expr:expr,
     ) => {{
         $pre_command_expr();
-        let m = $get_mngr_expr;
-        match m {
-            Some(mngr) => $run_expr(mngr),
-            None => $run_expr($crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            }),
-        }
+
+        $(
+            if $condition {
+                let mngr = $manager_ident {
+                    $( $field: $value, )*
+                };
+                return $run_expr(mngr);
+            }
+        )*
+
+        // Always use the built-in default
+        let mngr = $crate::ivalue_manager::RedisIValueJsonKeyManager {
+            phantom: PhantomData,
+        };
+        $run_expr(mngr)
     }};
 }
 
 #[macro_export]
-macro_rules! redis_json_module_create {(
+macro_rules! redis_json_module_create {
+    // Only the runtime manager selection variant
+    (
         data_types: [
             $($data_type:ident),* $(,)*
         ],
         pre_command_function: $pre_command_function_expr:expr,
-        get_manage: $get_manager_expr:expr,
+        runtime_managers: {
+            $( $condition:expr => $manager_ident:ident { $($field:ident: $value:expr),* $(,)? } ),* $(,)?
+        },
         version: $version:expr,
         init: $init_func:expr,
         info: $info_func:ident,
@@ -142,7 +155,9 @@ macro_rules! redis_json_module_create {(
                 |ctx: &Context, args: Vec<RedisString>| -> RedisResult {
                     run_on_manager!(
                         pre_command: ||$pre_command_function_expr(ctx, &args),
-                        get_mngr: $get_manager_expr,
+                        runtime_managers: {
+                            $( $condition => $manager_ident { $($field: $value),* } ),*
+                        },
                         run: |mngr|$cmd(mngr, ctx, args),
                     )
                 }
@@ -164,7 +179,9 @@ macro_rules! redis_json_module_create {(
         }
 
         redis_json_module_export_shared_api! {
-            get_manage:$get_manager_expr,
+            runtime_managers: {
+                $( $condition => $manager_ident { $($field: $value),* } ),*
+            },
             pre_command_function: $pre_command_function_expr,
         }
 
@@ -292,7 +309,8 @@ const fn version() -> i32 {
 redis_json_module_create! {
     data_types: [REDIS_JSON_TYPE],
     pre_command_function: pre_command,
-    get_manage: Some(ivalue_manager::RedisIValueJsonKeyManager{phantom:PhantomData}),
+    runtime_managers: {
+    },
     version: version(),
     init: dummy_init,
     info: dummy_info,
