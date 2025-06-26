@@ -92,7 +92,6 @@ pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
 
 #[macro_export]
 macro_rules! run_on_manager {
-    // New variant with mandatory default case (Option<Manager>)
     (
     pre_command: $pre_command_expr:expr,
     get_manage: {
@@ -127,7 +126,6 @@ macro_rules! run_on_manager {
 
 #[macro_export]
 macro_rules! redis_json_module_create {
-    // New variant with mandatory default case (Option<Manager>)
     (
         data_types: [
             $($data_type:ident),* $(,)*
@@ -270,7 +268,7 @@ macro_rules! redis_json_module_create {
                 ["json.merge", json_command!(json_merge), "write deny-oom", 1,1,1, ACL::Write, ACL::from("json")],
             ],
         }
-    };
+    }
 }
 
 #[cfg(not(feature = "as-library"))]
