@@ -93,7 +93,7 @@ macro_rules! run_on_manager {
     // New variant for runtime manager selection with user-specified types
     (
     pre_command: $pre_command_expr:expr,
-    runtime_managers: {
+    get_manage: {
         $( $condition:expr => $manager_ident:ident { $($field:ident: $value:expr),* $(,)? } ),* $(,)?
     },
     run: $run_expr:expr,
@@ -125,7 +125,7 @@ macro_rules! redis_json_module_create {
             $($data_type:ident),* $(,)*
         ],
         pre_command_function: $pre_command_function_expr:expr,
-        runtime_managers: {
+        get_manage: {
             $( $condition:expr => $manager_ident:ident { $($field:ident: $value:expr),* $(,)? } ),* $(,)?
         },
         version: $version:expr,
@@ -155,7 +155,7 @@ macro_rules! redis_json_module_create {
                 |ctx: &Context, args: Vec<RedisString>| -> RedisResult {
                     run_on_manager!(
                         pre_command: ||$pre_command_function_expr(ctx, &args),
-                        runtime_managers: {
+                        get_manage: {
                             $( $condition => $manager_ident { $($field: $value),* } ),*
                         },
                         run: |mngr|$cmd(mngr, ctx, args),
@@ -179,7 +179,7 @@ macro_rules! redis_json_module_create {
         }
 
         redis_json_module_export_shared_api! {
-            runtime_managers: {
+            get_manage: {
                 $( $condition => $manager_ident { $($field: $value),* } ),*
             },
             pre_command_function: $pre_command_function_expr,
@@ -309,7 +309,7 @@ const fn version() -> i32 {
 redis_json_module_create! {
     data_types: [REDIS_JSON_TYPE],
     pre_command_function: pre_command,
-    runtime_managers: {
+    get_manage: {
     },
     version: version(),
     init: dummy_init,
