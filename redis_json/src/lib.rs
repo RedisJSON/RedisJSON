@@ -18,8 +18,9 @@ use redis_module::AclCategory;
 #[cfg(not(feature = "as-library"))]
 use redis_module::InfoContext;
 
-use crate::ivalue_manager::RedisIValueJsonKeyManager;
+#[cfg(not(feature = "as-library"))]
 use redis_module::Status;
+#[cfg(not(feature = "as-library"))]
 use redis_module::{Context, RedisResult};
 
 #[cfg(not(feature = "as-library"))]
@@ -273,10 +274,10 @@ macro_rules! redis_json_module_create {
 }
 
 #[cfg(not(feature = "as-library"))]
-const fn pre_command(_ctx: &Context, _args: &[redis_module::RedisString]) {}
+const fn pre_command(_ctx: &Context, _args: &[RedisString]) {}
 
 #[cfg(not(feature = "as-library"))]
-const fn dummy_init(_ctx: &Context, _args: &[redis_module::RedisString]) -> Status {
+const fn dummy_init(_ctx: &Context, _args: &[RedisString]) -> Status {
     Status::Ok
 }
 
@@ -315,16 +316,12 @@ const fn version() -> i32 {
     result + value
 }
 
-fn test() -> bool {
-    false
-}
-
 #[cfg(not(feature = "as-library"))]
 redis_json_module_create! {
     data_types: [REDIS_JSON_TYPE],
     pre_command_function: pre_command,
     get_manage: {
-    _ => Some(RedisIValueJsonKeyManager {
+    _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
         phantom: PhantomData,
     })
     },
