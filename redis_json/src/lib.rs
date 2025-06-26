@@ -18,6 +18,7 @@ use redis_module::AclCategory;
 #[cfg(not(feature = "as-library"))]
 use redis_module::InfoContext;
 
+use crate::ivalue_manager::RedisIValueJsonKeyManager;
 use redis_module::Status;
 use redis_module::{Context, RedisResult};
 
@@ -90,11 +91,12 @@ pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
 
 #[macro_export]
 macro_rules! run_on_manager {
-    // New variant for runtime manager selection with user-specified types
+    // New variant with mandatory default case (Option<Manager>)
     (
     pre_command: $pre_command_expr:expr,
     get_manage: {
         $( $condition:expr => $manager_ident:ident { $($field:ident: $value:expr),* $(,)? } ),* $(,)?
+        _ => $default_manager:expr $(,)?
     },
     run: $run_expr:expr,
     ) => {{
@@ -109,17 +111,22 @@ macro_rules! run_on_manager {
             }
         )*
 
-        // Always use the built-in default
-        let mngr = $crate::ivalue_manager::RedisIValueJsonKeyManager {
-            phantom: PhantomData,
-        };
-        $run_expr(mngr)
+        // Handle default case (Option<Manager>)
+        match $default_manager {
+            Some(mngr) => $run_expr(mngr),
+            None => {
+                let mngr = $crate::ivalue_manager::RedisIValueJsonKeyManager {
+                    phantom: PhantomData,
+                };
+                $run_expr(mngr)
+            }
+        }
     }};
 }
 
 #[macro_export]
 macro_rules! redis_json_module_create {
-    // Only the runtime manager selection variant
+    // New variant with mandatory default case (Option<Manager>)
     (
         data_types: [
             $($data_type:ident),* $(,)*
@@ -127,6 +134,7 @@ macro_rules! redis_json_module_create {
         pre_command_function: $pre_command_function_expr:expr,
         get_manage: {
             $( $condition:expr => $manager_ident:ident { $($field:ident: $value:expr),* $(,)? } ),* $(,)?
+            _ => $default_manager:expr $(,)?
         },
         version: $version:expr,
         init: $init_func:expr,
@@ -157,6 +165,7 @@ macro_rules! redis_json_module_create {
                         pre_command: ||$pre_command_function_expr(ctx, &args),
                         get_manage: {
                             $( $condition => $manager_ident { $($field: $value),* } ),*
+                            _ => $default_manager
                         },
                         run: |mngr|$cmd(mngr, ctx, args),
                     )
@@ -181,6 +190,7 @@ macro_rules! redis_json_module_create {
         redis_json_module_export_shared_api! {
             get_manage: {
                 $( $condition => $manager_ident { $($field: $value),* } ),*
+                _ => $default_manager
             },
             pre_command_function: $pre_command_function_expr,
         }
@@ -259,14 +269,14 @@ macro_rules! redis_json_module_create {
                 ["json.merge", json_command!(json_merge), "write deny-oom", 1,1,1, ACL::Write, ACL::from("json")],
             ],
         }
-    }
+    };
 }
 
 #[cfg(not(feature = "as-library"))]
-const fn pre_command(_ctx: &Context, _args: &[RedisString]) {}
+const fn pre_command(_ctx: &Context, _args: &[redis_module::RedisString]) {}
 
 #[cfg(not(feature = "as-library"))]
-const fn dummy_init(_ctx: &Context, _args: &[RedisString]) -> Status {
+const fn dummy_init(_ctx: &Context, _args: &[redis_module::RedisString]) -> Status {
     Status::Ok
 }
 
@@ -305,11 +315,18 @@ const fn version() -> i32 {
     result + value
 }
 
+fn test() -> bool {
+    false
+}
+
 #[cfg(not(feature = "as-library"))]
 redis_json_module_create! {
     data_types: [REDIS_JSON_TYPE],
     pre_command_function: pre_command,
     get_manage: {
+    _ => Some(RedisIValueJsonKeyManager {
+        phantom: PhantomData,
+    })
     },
     version: version(),
     init: dummy_init,

@@ -326,6 +326,7 @@ macro_rules! redis_json_module_export_shared_api {
     (
         get_manage: {
             $( $condition:expr => $manager_ident:ident { $($field:ident: $value:expr),* $(,)? } ),* $(,)?
+            _ => $default_manager:expr $(,)?
         },
         pre_command_function: $pre_command_function_expr:expr,
     ) => {
@@ -340,6 +341,7 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
                 },
                 run: |mngr|{json_api_open_key_internal(mngr, ctx, RedisString::new(NonNull::new(ctx), key_str))as *mut c_void},
             )
@@ -355,6 +357,7 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
                 },
                 run: |mngr| {
                     json_api_open_key_with_flags_internal(
@@ -378,6 +381,7 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
                 },
                 run: |mngr|{json_api_open_key_internal(mngr, ctx, RedisString::create(NonNull::new(ctx), key)) as *mut c_void},
             )
@@ -389,6 +393,7 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
                 },
                 run: |mngr|{json_api_get(mngr, key, path)},
             )
@@ -400,6 +405,7 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
                 },
                 run: |mngr|{json_api_next(mngr, iter)},
             )
@@ -411,6 +417,7 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
                 },
                 run: |mngr|{json_api_len(mngr, iter)},
             )
@@ -422,6 +429,7 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
                 },
                 run: |mngr|{json_api_free_iter(mngr, iter)},
             )
@@ -433,6 +441,7 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
                 },
                 run: |mngr|{json_api_get_at(mngr, json, index)},
             )
@@ -444,6 +453,7 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
                 },
                 run: |mngr|{json_api_get_len(mngr, json, count)},
             )
@@ -455,6 +465,7 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
                 },
                 run: |mngr|{json_api_get_type(mngr, json)},
             )
@@ -466,6 +477,7 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
                 },
                 run: |mngr|{json_api_get_int(mngr, json, val)},
             )
@@ -477,6 +489,7 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
                 },
                 run: |mngr|{json_api_get_double(mngr, json, val)},
             )
@@ -488,6 +501,7 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
                 },
                 run: |mngr|{json_api_get_boolean(mngr, json, val)},
             )
@@ -503,6 +517,7 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
                 },
                 run: |mngr|{json_api_get_string(mngr, json, str, len)},
             )
@@ -518,6 +533,7 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
                 },
                 run: |mngr|{json_api_get_json(mngr, json, ctx, str)},
             )
@@ -531,6 +547,7 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
                 },
                 run: |mngr|{json_api_get_json_from_iter(mngr, iter, ctx, str)},
             )
@@ -542,6 +559,7 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
                 },
                 run: |mngr|{json_api_is_json(mngr, key)},
             )
@@ -583,6 +601,7 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
                 },
                 run: |mngr|{json_api_reset_iter(mngr, iter)},
             )
@@ -594,6 +613,7 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
                 },
                 run: |mngr|{json_api_get_key_value(mngr, json)},
             )
@@ -606,6 +626,7 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
                 },
                 run: |mngr|{json_api_next_key_value(mngr, iter, str)},
             )
@@ -617,6 +638,7 @@ macro_rules! redis_json_module_export_shared_api {
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
                 },
                 run: |mngr|{json_api_free_key_values_iter(mngr, iter)},
             )
