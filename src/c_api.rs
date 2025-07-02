@@ -274,7 +274,10 @@ pub fn get_llapi_ctx() -> Context {
 #[macro_export]
 macro_rules! redis_json_module_export_shared_api {
     (
-        get_manage: $get_manager_expr:expr,
+        get_manage: {
+            $( $condition:expr => $manager_ident:ident { $($field:ident: $value:expr),* $(,)? } ),* $(,)?
+            _ => $default_manager:expr $(,)?
+        },
         pre_command_function: $pre_command_function_expr:expr,
     ) => {
         #[no_mangle]
@@ -284,7 +287,10 @@ macro_rules! redis_json_module_export_shared_api {
         ) -> *mut c_void {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
-                get_mngr: $get_manager_expr,
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
                 run: |mngr|{json_api_open_key_internal(mngr, ctx, RedisString::new(ctx, key_str))as *mut c_void},
             )
         }
@@ -298,7 +304,10 @@ macro_rules! redis_json_module_export_shared_api {
             let key = unsafe { CStr::from_ptr(path).to_str().unwrap() };
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
-                get_mngr: $get_manager_expr,
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
                 run: |mngr|{json_api_open_key_internal(mngr, ctx, RedisString::create(ctx, key)) as *mut c_void},
             )
         }
@@ -307,7 +316,10 @@ macro_rules! redis_json_module_export_shared_api {
         pub extern "C" fn JSONAPI_get(key: *const c_void, path: *const c_char) -> *const c_void {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
-                get_mngr: $get_manager_expr,
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
                 run: |mngr|{json_api_get(mngr, key, path)},
             )
         }
@@ -316,7 +328,10 @@ macro_rules! redis_json_module_export_shared_api {
         pub extern "C" fn JSONAPI_next(iter: *mut c_void) -> *const c_void {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
-                get_mngr: $get_manager_expr,
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
                 run: |mngr|{json_api_next(mngr, iter)},
             )
         }
@@ -325,7 +340,10 @@ macro_rules! redis_json_module_export_shared_api {
         pub extern "C" fn JSONAPI_len(iter: *const c_void) -> size_t {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
-                get_mngr: $get_manager_expr,
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
                 run: |mngr|{json_api_len(mngr, iter)},
             )
         }
@@ -334,7 +352,10 @@ macro_rules! redis_json_module_export_shared_api {
         pub extern "C" fn JSONAPI_freeIter(iter: *mut c_void) {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
-                get_mngr: $get_manager_expr,
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
                 run: |mngr|{json_api_free_iter(mngr, iter)},
             )
         }
@@ -343,7 +364,10 @@ macro_rules! redis_json_module_export_shared_api {
         pub extern "C" fn JSONAPI_getAt(json: *const c_void, index: size_t) -> *const c_void {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
-                get_mngr: $get_manager_expr,
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
                 run: |mngr|{json_api_get_at(mngr, json, index)},
             )
         }
@@ -352,7 +376,10 @@ macro_rules! redis_json_module_export_shared_api {
         pub extern "C" fn JSONAPI_getLen(json: *const c_void, count: *mut size_t) -> c_int {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
-                get_mngr: $get_manager_expr,
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
                 run: |mngr|{json_api_get_len(mngr, json, count)},
             )
         }
@@ -361,7 +388,10 @@ macro_rules! redis_json_module_export_shared_api {
         pub extern "C" fn JSONAPI_getType(json: *const c_void) -> c_int {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
-                get_mngr: $get_manager_expr,
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
                 run: |mngr|{json_api_get_type(mngr, json)},
             )
         }
@@ -370,7 +400,10 @@ macro_rules! redis_json_module_export_shared_api {
         pub extern "C" fn JSONAPI_getInt(json: *const c_void, val: *mut c_longlong) -> c_int {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
-                get_mngr: $get_manager_expr,
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
                 run: |mngr|{json_api_get_int(mngr, json, val)},
             )
         }
@@ -379,7 +412,10 @@ macro_rules! redis_json_module_export_shared_api {
         pub extern "C" fn JSONAPI_getDouble(json: *const c_void, val: *mut c_double) -> c_int {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
-                get_mngr: $get_manager_expr,
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
                 run: |mngr|{json_api_get_double(mngr, json, val)},
             )
         }
@@ -388,7 +424,10 @@ macro_rules! redis_json_module_export_shared_api {
         pub extern "C" fn JSONAPI_getBoolean(json: *const c_void, val: *mut c_int) -> c_int {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
-                get_mngr: $get_manager_expr,
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
                 run: |mngr|{json_api_get_boolean(mngr, json, val)},
             )
         }
@@ -401,7 +440,10 @@ macro_rules! redis_json_module_export_shared_api {
         ) -> c_int {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
-                get_mngr: $get_manager_expr,
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
                 run: |mngr|{json_api_get_string(mngr, json, str, len)},
             )
         }
@@ -414,7 +456,10 @@ macro_rules! redis_json_module_export_shared_api {
         ) -> c_int {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
-                get_mngr: $get_manager_expr,
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
                 run: |mngr|{json_api_get_json(mngr, json, ctx, str)},
             )
         }
@@ -425,7 +470,10 @@ macro_rules! redis_json_module_export_shared_api {
             str: *mut *mut rawmod::RedisModuleString,) -> c_int {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
-                get_mngr: $get_manager_expr,
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
                 run: |mngr|{json_api_get_json_from_iter(mngr, iter, ctx, str)},
             )
         }
@@ -434,7 +482,10 @@ macro_rules! redis_json_module_export_shared_api {
         pub extern "C" fn JSONAPI_isJSON(key: *mut rawmod::RedisModuleKey) -> c_int {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
-                get_mngr: $get_manager_expr,
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
                 run: |mngr|{json_api_is_json(mngr, key)},
             )
         }
@@ -473,7 +524,10 @@ macro_rules! redis_json_module_export_shared_api {
         pub extern "C" fn JSONAPI_resetIter(iter: *mut c_void) {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
-                get_mngr: $get_manager_expr,
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
                 run: |mngr|{json_api_reset_iter(mngr, iter)},
             )
         }
