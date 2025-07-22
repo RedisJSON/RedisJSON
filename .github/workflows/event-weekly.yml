@@ -38,6 +38,12 @@ jobs:
     with:
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
+  azurelinux3-arm64:
+    uses: ./.github/workflows/flow-azurelinux3-arm.yml
+    needs: [prepare-values]
+    with:
+      redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+    secrets: inherit
   alpine:
     uses: ./.github/workflows/flow-alpine.yml
     needs: [prepare-values]
