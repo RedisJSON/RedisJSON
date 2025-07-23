@@ -30,6 +30,12 @@ jobs:
       os: jammy rocky9 amazonlinux2 azurelinux3
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
+  azurelinux3-arm64:
+    uses: ./.github/workflows/flow-azurelinux3-arm.yml
+    needs: [prepare-values]
+    with:
+      redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+    secrets: inherit
   linux-valgrind:
     uses: ./.github/workflows/flow-linux-x86.yml
     needs: [prepare-values]
