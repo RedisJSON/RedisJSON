@@ -94,12 +94,25 @@ pub fn get_manager_type() -> ManagerType {
 macro_rules! run_on_manager {
     (
     pre_command: $pre_command_expr:expr,
-    get_mngr: $get_mngr_expr:expr,
+    get_manage: {
+        $( $condition:expr => $manager_ident:ident { $($field:ident: $value:expr),* $(,)? } ),* $(,)?
+        _ => $default_manager:expr $(,)?
+    },
     run: $run_expr:expr,
     ) => {{
         $pre_command_expr();
-        let m = $get_mngr_expr;
-        match m {
+
+        $(
+            if $condition {
+                let mngr = $manager_ident {
+                    $( $field: $value, )*
+                };
+                return $run_expr(mngr);
+            }
+        )*
+
+        // Handle default case (Option<Manager>)
+        match $default_manager {
             Some(mngr) => $run_expr(mngr),
             None => match $crate::get_manager_type() {
                 $crate::ManagerType::IValue => {
@@ -118,12 +131,16 @@ macro_rules! run_on_manager {
 }
 
 #[macro_export]
-macro_rules! redis_json_module_create {(
+macro_rules! redis_json_module_create {
+    (
         data_types: [
             $($data_type:ident),* $(,)*
         ],
         pre_command_function: $pre_command_function_expr:expr,
-        get_manage: $get_manager_expr:expr,
+        get_manage: {
+            $( $condition:expr => $manager_ident:ident { $($field:ident: $value:expr),* $(,)? } ),* $(,)?
+            _ => $default_manager:expr $(,)?
+        },
         version: $version:expr,
         init: $init_func:expr,
         info: $info_func:ident,
@@ -148,7 +165,10 @@ macro_rules! redis_json_module_create {(
                 |ctx: &Context, args: Vec<RedisString>| -> RedisResult {
                     run_on_manager!(
                         pre_command: ||$pre_command_function_expr(ctx, &args),
-                        get_mngr: $get_manager_expr,
+                        get_manage: {
+                            $( $condition => $manager_ident { $($field: $value),* } ),*
+                            _ => $default_manager
+                        },
                         run: |mngr|$cmd(mngr, ctx, args),
                     )
                 }
@@ -156,7 +176,10 @@ macro_rules! redis_json_module_create {(
         }
 
         redis_json_module_export_shared_api! {
-            get_manage:$get_manager_expr,
+            get_manage: {
+                $( $condition => $manager_ident { $($field: $value),* } ),*
+                _ => $default_manager
+            },
             pre_command_function: $pre_command_function_expr,
         }
 
@@ -243,15 +266,18 @@ const fn dummy_init(_ctx: &Context, _args: &[RedisString]) -> Status {
 #[cfg(not(feature = "as-library"))]
 const fn dummy_info(_ctx: &InfoContext, _for_crash_report: bool) {}
 
+use crate::{ivalue_manager::RedisIValueJsonKeyManager, serde_value_manager::RedisJsonKeyManager};
+
 #[cfg(not(feature = "as-library"))]
 redis_json_module_create! {
     data_types: [REDIS_JSON_TYPE],
     pre_command_function: pre_command,
     get_manage: {
-        match get_manager_type() {
-            ManagerType::IValue => Some(ivalue_manager::RedisIValueJsonKeyManager{phantom:PhantomData}),
-            _ => None,
-        }
+    matches!(get_manager_type(), ManagerType::IValue) => RedisIValueJsonKeyManager{phantom:PhantomData},
+    matches!(get_manager_type(), ManagerType::SerdeValue) => RedisJsonKeyManager {
+        phantom: PhantomData,
+    },
+    _ => None::<crate::ivalue_manager::RedisIValueJsonKeyManager>,
     },
     version: 02_04_09,
     init: dummy_init,
