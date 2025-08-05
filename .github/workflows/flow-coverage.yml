@@ -22,12 +22,9 @@ jobs:
       run: |
         ./.install/common_installations.sh sudo
     - name: Get Rust
+      working-directory: .install
       run: |
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        source "$HOME/.cargo/env"
-        rustup update
-        rustup update nightly
-        rustup component add rust-src --toolchain nightly
+        ./getrust.sh sudo
     - name: Install clang 18
       working-directory: .install
       run: |
