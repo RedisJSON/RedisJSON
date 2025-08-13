@@ -9,12 +9,25 @@ $MODE curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 echo "source $HOME/.cargo/env" >> $HOME/.bashrc
 source $HOME/.cargo/env
 
-# Update rustup and install nightly toolchain
+# Update rustup
 $MODE rustup update
-$MODE rustup update nightly
 
-# for RedisJSON build with addess santizer
-$MODE rustup component add --toolchain nightly rust-src
+# Install the toolchain specified in rust-toolchain.toml (if present)
+if [ -f "rust-toolchain.toml" ]; then
+    TOOLCHAIN=$(grep -E '^\s*channel\s*=' rust-toolchain.toml | sed 's/.*=\s*"\([^"]*\)".*/\1/' | tr -d ' ')
+    if [ -n "$TOOLCHAIN" ]; then
+        $MODE rustup toolchain install "$TOOLCHAIN"
+    else
+        $MODE rustup update nightly
+    fi
+else
+    $MODE rustup update nightly
+fi
+
+# Install required components for the active toolchain
+$MODE rustup component add rust-src
+$MODE rustup component add rustfmt
+$MODE rustup component add clippy
 
 # Verify cargo installation
 cargo --version
