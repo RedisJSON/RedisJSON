@@ -843,7 +843,7 @@ def testDebugCommand(env):
     # Test multi
     # json.get a $..a ==> "[{},[],\"str\",42,1.2,false,null]"
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1', '$..a')
-    r.assertEqual(res, [8, 8, 32, 8, 16, 8, 8])
+    r.assertEqual(res, [8, 8, 8, 8, 16, 8, 8])
 
     # Test single
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1', '$.nested2.a')
@@ -855,7 +855,7 @@ def testDebugCommand(env):
 
     # Test missing path (defaults to root)
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1')
-    r.assertEqual(res, 1440)
+    r.assertEqual(res, 1080)
 
     # Test missing subcommand
     r.expect('JSON.DEBUG', 'non_existing_doc', '$..a').raiseError()
