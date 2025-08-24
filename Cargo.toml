@@ -7,7 +7,7 @@ members = [
 ]
 
 [workspace.dependencies]
-ijson = { git="https://github.com/RedisJSON/ijson", rev="adf71f0c5e9a9356ac0d22d9e93b9f87a2ff4fc1", default-features=false}
+ijson = { git="https://github.com/RedisJSON/ijson", rev="d3ec366ea9fc4788ab54642aab709d1e05c31f6f", default-features=false}
 serde_json = { version="1", features = ["unbounded_depth"]}
 serde = { version = "1", features = ["derive"] }
 serde_derive = "1"
