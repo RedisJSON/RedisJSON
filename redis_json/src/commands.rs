@@ -527,8 +527,6 @@ pub fn prepare_paths_for_updating(paths: &mut Vec<Vec<String>>) {
         let i_b = b.parse::<usize>();
         match (i_a, i_b) {
             (Ok(i1), Ok(i2)) => i1.cmp(&i2),
-            (Ok(_), Err(_)) => Ordering::Greater, //String before Numeric
-            (Err(_), Ok(_)) => Ordering::Less,    //String before Numeric
             _ => a.cmp(b),
         }
     });
