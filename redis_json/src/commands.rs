@@ -523,39 +523,14 @@ pub fn prepare_paths_for_updating(paths: &mut Vec<Vec<String>>) {
     // (TODO: Add a mode in which the jsonpath selector will already skip nested paths)
     let mut string_paths = paths.iter().map(|v| v.join(",")).collect_vec();
     string_paths.sort_by(|a, b| {
-        let parts_a: Vec<&str> = a.split(',').collect();
-        let parts_b: Vec<&str> = b.split(',').collect();
-
-        parts_a
-            .iter()
-            .zip_longest(parts_b.iter())
-            .fold_while(Ordering::Equal, |_acc, v| {
-                match v {
-                    EitherOrBoth::Left(_) => Done(Ordering::Less), // Shorter paths before longer paths
-                    EitherOrBoth::Right(_) => Done(Ordering::Greater), // Shorter paths before longer paths
-                    EitherOrBoth::Both(p1, p2) => {
-                        let i1 = p1.parse::<usize>();
-                        let i2 = p2.parse::<usize>();
-                        match (i1, i2) {
-                            (Ok(i1), Ok(i2)) => {
-                                // Numeric compare - lower indices before higher ones for path prefix matching
-                                match i1.cmp(&i2) {
-                                    Ordering::Less => Done(Ordering::Less),
-                                    Ordering::Greater => Done(Ordering::Greater),
-                                    Ordering::Equal => Continue(Ordering::Equal),
-                                }
-                            }
-                            (_, _) => match p1.cmp(p2) {
-                                // String compare
-                                Ordering::Less => Done(Ordering::Less),
-                                Ordering::Equal => Continue(Ordering::Equal),
-                                Ordering::Greater => Done(Ordering::Greater),
-                            },
-                        }
-                    }
-                }
-            })
-            .into_inner()
+        let i_a = a.parse::<usize>();
+        let i_b = b.parse::<usize>();
+        match (i_a, i_b) {
+            (Ok(i1), Ok(i2)) => i1.cmp(&i2),
+            (Ok(_), Err(_)) => Ordering::Greater, //String before Numeric
+            (Err(_), Ok(_)) => Ordering::Less,    //String before Numeric
+            _ => a.cmp(b),
+        }
     });
 
     paths.retain(|v| {
