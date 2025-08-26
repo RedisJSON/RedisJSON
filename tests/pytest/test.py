@@ -1350,6 +1350,87 @@ def test_promote_u64_to_f64(env):
     r.assertEqual(val, float(2 * i64max + 3))            # u64 + u64 promotes to f64. as prior, not breaking
     r.expect('JSON.TYPE', 'num', '$').equal(['number'])  # promoted
 
+
+def test_mset_replication_in_aof(env):
+    env.skipOnCluster()
+    env = Env(useAof=True)
+    with env.getClusterConnectionIfNeeded() as r:
+        r.execute_command('config', 'set', 'notify-keyspace-events', 'KEA')
+
+        pubsub = r.pubsub()
+        pubsub.psubscribe('__key*')
+
+        time.sleep(1)
+        env.assertEqual('psubscribe', pubsub.get_message(timeout=1)['type'])
+
+        command = [b'JSON.MSET']
+        data = 'a' * 100
+        num_params = 5
+        for i in range(0, num_params):
+            key = f'k:{i}'
+            value = json.dumps({"data": data})
+            command.append(key.encode())
+            command.append(b'$')
+            command.append(value.encode())
+        env.expect(*command).ok()
+
+        for i in range(0, num_params):
+            msg = pubsub.get_message(timeout=1)
+            env.assertEqual(msg['data'], 'json.mset')
+            env.assertEqual(msg['type'], 'pmessage')
+            msg = pubsub.get_message(timeout=1)
+            env.assertEqual(msg['data'], f'k:{i}')
+            env.assertEqual(msg['type'], 'pmessage')
+
+    # verify JSON.MSET is appearing in the AOF once only
+    role = 'master'
+    aof_fn = env.envRunner._getFileName(role, '.aof.1.incr.aof')
+    with open(f'{env.logDir}/appendonlydir/{aof_fn}', 'r') as fd:
+        aof_content = [l for l in fd.readlines() if 'JSON.MSET' in l]
+        assert(len(aof_content) == 1)
+
+
+def test_recursive_descent(env):
+    r = env
+    r.expect('JSON.SET', 'k', '$', '[{"a":1}]').ok()
+    r.expect('JSON.SET', 'k', '$..*', '[{"a":1}]').ok()
+    r.expect('JSON.GET', 'k', '$').equal('[[[{"a":1}]]]')
+
+def test_json_del_matches_with_numeric_pathes(env):
+    r = env
+    r.expect(
+        "JSON.SET",
+        "k",
+        "$",
+        '[{"x":1},{"x":2},{"x":3},{"x":4},{"x":5},{"x":6},{"x":7},{"x":8},{"x":9},{"x":10},{"x":11},{"x":12}]',
+    ).ok()
+    r.expect("JSON.DEL", "k", "$[?(@.x>0)]").equal(12)
+
+    r.expect(
+        "JSON.SET",
+        "k",
+        "$",
+        '[{"x":11},{"x":2},{"x":3},{"x":4},{"x":5},{"x":6},{"x":7},{"x":8},{"x":9},{"x":10},{"x":20},{"x":30},{"x":40},{"x":50},{"x":60},{"x":70},{"x":80},{"x":90},{"x":100}]',
+    ).ok()
+    r.expect("JSON.DEL", "k", "$[?(@.x>10)]").equal(10)
+
+    r.expect(
+        "JSON.SET",
+        "k",
+        "$",
+        '[{"x":10},{"x":20},{"x":30},{"x":40},{"x":50},{"x":60},{"x":70},{"x":80},{"x":90},{"x":100},{"x":9},{"x":120}]',
+    ).ok()
+    r.expect("JSON.DEL", "k", "$[?(@.x>10)]").equal(10)
+
+    r.expect(
+        "JSON.SET",
+        "k",
+        "$",
+        '[{"x":11}, {"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11}]',
+    ).ok()
+    r.expect("JSON.DEL", "k", "$[?(@.x>10)]").equal(21)
+
+
 # class CacheTestCase(BaseReJSONTest):
 #     @property
 #     def module_args(env):
