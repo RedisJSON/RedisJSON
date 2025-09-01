@@ -990,23 +990,53 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                             /* lets expend the array, this is how most json path engines work.
                              * Personally, I think this if should not exists. */
                             let values = json.values().unwrap();
+                            let items_iter = if json.get_type() == SelectValueType::Object {
+                                Some(json.items().unwrap())
+                            } else {
+                                None
+                            };
                             if let Some(pt) = path_tracker {
                                 trace!(
                                     "calc_internal type {:?} path_tracker {:?}",
                                     json.get_type(),
                                     &pt
                                 );
-                                for (i, v) in values.enumerate() {
-                                    trace!("calc_internal v {:?}", &v);
-                                    if self.evaluate_filter(curr.clone().into_inner(), v, calc_data)
-                                    {
-                                        let new_tracker = Some(create_index_tracker(i, &pt));
-                                        self.calc_internal(
-                                            pairs.clone(),
+                                // if the json is an object, then we need to iterate over the items and create a tracker for each key
+                                if let Some(items) = items_iter {
+                                    for (k, v) in items {
+                                        trace!("calc_internal k {:?}", &k);
+                                        trace!("calc_internal v {:?}", &v);
+                                        if self.evaluate_filter(
+                                            curr.clone().into_inner(),
                                             v,
-                                            new_tracker,
                                             calc_data,
-                                        );
+                                        ) {
+                                            let new_tracker = Some(create_str_tracker(k, &pt));
+                                            self.calc_internal(
+                                                pairs.clone(),
+                                                v,
+                                                new_tracker,
+                                                calc_data,
+                                            );
+                                        }
+                                    }
+                                } else {
+                                    // if the json is an array, then we need to iterate over the values and create a tracker for each index
+                                    for (i, v) in values.enumerate() {
+                                        trace!("calc_internal v {:?}", &v);
+                                        if self.evaluate_filter(
+                                            curr.clone().into_inner(),
+                                            v,
+                                            calc_data,
+                                        ) {
+                                            let new_tracker = Some(create_index_tracker(i, &pt));
+                                            self.calc_internal(
+                                                pairs.clone(),
+                                                v,
+                                                new_tracker,
+                                                calc_data,
+                                            );
+                                        }
                                     }
                                 }
                             } else {
