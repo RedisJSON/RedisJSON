@@ -1565,6 +1565,11 @@ def test_json_del_matches_with_numeric_pathes(env):
     ).ok()
     r.expect("JSON.DEL", "k", "$[?(@.x>10)]").equal(21)
 
+def test_json_del_matches_with_object_pathes(env):
+    r = env
+    r.expect("JSON.SET", "test", "$", '{"root" : {"1" : {"value":1},"2" : {"value":2},"3" : {"value":3},"4" : {"value":4},"5" : {"value":5}}}').ok()
+    r.expect("JSON.DEL", "test", "$.root[?(@.value > 2)]").equal(3)
+    r.expect("JSON.GET", "test", "$").equal('[{"root":{"1":{"value":1},"2":{"value":2}}}]')
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property
