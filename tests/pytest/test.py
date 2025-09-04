@@ -1534,6 +1534,46 @@ def test_recursive_descent(env):
     r.expect('JSON.SET', 'k', '$..*', '[{"a":1}]').ok()
     r.expect('JSON.GET', 'k', '$').equal('[[[{"a":1}]]]')
 
+def test_json_del_matches_with_numeric_pathes(env):
+    r = env
+    r.expect(
+        "JSON.SET",
+        "k",
+        "$",
+        '[{"x":1},{"x":2},{"x":3},{"x":4},{"x":5},{"x":6},{"x":7},{"x":8},{"x":9},{"x":10},{"x":11},{"x":12}]',
+    ).ok()
+    r.expect("JSON.DEL", "k", "$[?(@.x>0)]").equal(12)
+
+    r.expect(
+        "JSON.SET",
+        "k",
+        "$",
+        '[{"x":11},{"x":2},{"x":3},{"x":4},{"x":5},{"x":6},{"x":7},{"x":8},{"x":9},{"x":10},{"x":20},{"x":30},{"x":40},{"x":50},{"x":60},{"x":70},{"x":80},{"x":90},{"x":100}]',
+    ).ok()
+    r.expect("JSON.DEL", "k", "$[?(@.x>10)]").equal(10)
+
+    r.expect(
+        "JSON.SET",
+        "k",
+        "$",
+        '[{"x":10},{"x":20},{"x":30},{"x":40},{"x":50},{"x":60},{"x":70},{"x":80},{"x":90},{"x":100},{"x":9},{"x":120}]',
+    ).ok()
+    r.expect("JSON.DEL", "k", "$[?(@.x>10)]").equal(10)
+
+    r.expect(
+        "JSON.SET",
+        "k",
+        "$",
+        '[{"x":11}, {"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11},{"x":11}]',
+    ).ok()
+    r.expect("JSON.DEL", "k", "$[?(@.x>10)]").equal(21)
+
+def test_json_del_matches_with_object_pathes(env):
+    r = env
+    r.expect("JSON.SET", "test", "$", '{"root" : {"1" : {"value":1},"2" : {"value":2},"3" : {"value":3},"4" : {"value":4},"5" : {"value":5}}}').ok()
+    r.expect("JSON.DEL", "test", "$.root[?(@.value > 2)]").equal(3)
+    r.expect("JSON.GET", "test", "$").equal('[{"root":{"1":{"value":1},"2":{"value":2}}}]')
+
 # class CacheTestCase(BaseReJSONTest):
 #     @property
 #     def module_args(env):
