@@ -492,6 +492,48 @@ struct PathCalculatorData<'i, S: SelectValue, UPT: UserPathTracker> {
     root: &'i S,
 }
 
+// The following block of code is used to create a unified iterator for arrays and objects.
+// This can be used in places where we need to iterate over both arrays and objects, create a path tracker from them.
+enum Item<'a, S: SelectValue> {
+    ArrayItem(usize, &'a S),
+    ObjectItem(&'a str, &'a S),
+}
+
+impl<'a, S: SelectValue> Item<'a, S> {
+    fn value(&self) -> &'a S {
+        match self {
+            Item::ArrayItem(_, v) => v,
+            Item::ObjectItem(_, v) => v,
+        }
+    }
+
+    fn create_tracker<'i, 'j>(&self, parent: &'j PathTracker<'i, 'j>) -> PathTracker<'i, 'j>
+    where
+        'a: 'i,
+    {
+        match self {
+            Item::ArrayItem(index, _) => create_index_tracker(*index, parent),
+            Item::ObjectItem(key, _) => create_str_tracker(key, parent),
+        }
+    }
+}
+
+enum UnifiedIter<'a, S: SelectValue> {
+    Array(std::iter::Enumerate<Box<dyn Iterator<Item = &'a S> + 'a>>),
+    Object(Box<dyn Iterator<Item = (&'a str, &'a S)> + 'a>),
+}
+
+impl<'a, S: SelectValue> Iterator for UnifiedIter<'a, S> {
+    type Item = Item<'a, S>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            UnifiedIter::Array(iter) => iter.next().map(|(i, v)| Item::ArrayItem(i, v)),
+            UnifiedIter::Object(iter) => iter.next().map(|(k, v)| Item::ObjectItem(k, v)),
+        }
+    }
+}
+
 impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
     #[must_use]
     pub const fn create(query: &'i Query<'i>) -> PathCalculator<'i, UPTG> {
@@ -989,18 +1031,24 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                         {
                             /* lets expend the array, this is how most json path engines work.
                              * Personally, I think this if should not exists. */
-                            let values = json.values().unwrap();
+                            let unified_iter = if json.get_type() == SelectValueType::Object {
+                                UnifiedIter::Object(json.items().unwrap())
+                            } else {
+                                UnifiedIter::Array(json.values().unwrap().enumerate())
+                            };
+
                             if let Some(pt) = path_tracker {
                                 trace!(
                                     "calc_internal type {:?} path_tracker {:?}",
                                     json.get_type(),
                                     &pt
                                 );
-                                for (i, v) in values.enumerate() {
+                                for item in unified_iter {
+                                    let v = item.value();
                                     trace!("calc_internal v {:?}", &v);
                                     if self.evaluate_filter(curr.clone().into_inner(), v, calc_data)
                                     {
-                                        let new_tracker = Some(create_index_tracker(i, &pt));
+                                        let new_tracker = Some(item.create_tracker(&pt));
                                         self.calc_internal(
                                             pairs.clone(),
                                             v,
@@ -1014,7 +1062,8 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                                     "calc_internal type {:?} path_tracker None",
                                     json.get_type()
                                 );
-                                for v in values {
+                                for item in unified_iter {
+                                    let v = item.value();
                                     trace!("calc_internal v {:?}", &v);
                                     if self.evaluate_filter(curr.clone().into_inner(), v, calc_data)
                                     {
