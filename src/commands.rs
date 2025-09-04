@@ -817,21 +817,28 @@ fn prepare_paths_for_deletion(paths: &mut Vec<Vec<String>>) {
     });
     // Remove paths which are nested by others (on each sub-tree only top most ancestor should be deleted)
     // (TODO: Add a mode in which the jsonpath selector will already skip nested paths)
-    let mut string_paths = Vec::new();
-    paths.iter().for_each(|v| {
-        string_paths.push(v.join(","));
+    let mut string_paths = paths.iter().map(|v| v.join(",")).collect_vec();
+    string_paths.sort_by(|a, b| {
+        let i_a = a.parse::<usize>();
+        let i_b = b.parse::<usize>();
+        match (i_a, i_b) {
+            (Ok(i1), Ok(i2)) => i1.cmp(&i2),
+            _ => a.cmp(b),
+        }
     });
-    string_paths.sort();
 
     paths.retain(|v| {
         let path = v.join(",");
-        let found = string_paths.binary_search(&path).unwrap();
-        for p in string_paths.iter().take(found) {
-            if path.starts_with(p.as_str()) {
-                return false;
-            }
-        }
-        true
+        string_paths
+            .iter()
+            .skip_while(|p| {
+                // Check if path is a proper nested path of p
+                // A path is nested if it starts with p followed by a comma, or if it equals p
+                !path.starts_with(*p) || (path.len() > p.len() && !path[p.len()..].starts_with(","))
+            })
+            .next()
+            .map(|found| path == *found)
+            .unwrap_or(false)
     });
 }
 
