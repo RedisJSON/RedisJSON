@@ -525,13 +525,24 @@ pub fn prepare_paths_for_updating(paths: &mut Vec<Vec<String>>) {
     // Remove paths which are nested by others (on each sub-tree only top most ancestor should be deleted)
     // (TODO: Add a mode in which the jsonpath selector will already skip nested paths)
     let mut string_paths = paths.iter().map(|v| v.join(",")).collect_vec();
-    string_paths.sort();
+    string_paths.sort_by(|a, b| {
+        let i_a = a.parse::<usize>();
+        let i_b = b.parse::<usize>();
+        match (i_a, i_b) {
+            (Ok(i1), Ok(i2)) => i1.cmp(&i2),
+            _ => a.cmp(b),
+        }
+    });
 
     paths.retain(|v| {
         let path = v.join(",");
         string_paths
             .iter()
-            .skip_while(|p| !path.starts_with(*p))
+            .skip_while(|p| {
+                // Check if path is a proper nested path of p
+                // A path is nested if it starts with p followed by a comma, or if it equals p
+                !path.starts_with(*p) || (path.len() > p.len() && !path[p.len()..].starts_with(","))
+            })
             .next()
             .map(|found| path == *found)
             .unwrap_or(false)
@@ -1844,4 +1855,35 @@ pub fn json_resp<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
     key.get_value()?.map_or(Ok(RedisValue::Null), |doc| {
         KeyValue::new(doc).resp_serialize(path)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_prepare_paths_for_updating_with_numeric_pathes() {
+        let mut pathes = vec![
+            vec!["0".to_string()],
+            vec!["1".to_string()],
+            vec!["2".to_string()],
+            vec!["3".to_string()],
+            vec!["4".to_string()],
+            vec!["5".to_string()],
+            vec!["6".to_string()],
+            vec!["7".to_string()],
+            vec!["8".to_string()],
+            vec!["9".to_string()],
+            vec!["10".to_string()],
+            vec!["20".to_string()],
+            vec!["30".to_string()],
+            vec!["40".to_string()],
+            vec!["50".to_string()],
+            vec!["60".to_string()],
+            vec!["100".to_string()],
+        ];
+        let pathes_expected = pathes.clone().into_iter().rev().collect::<Vec<_>>();
+        prepare_paths_for_updating(&mut pathes);
+        assert_eq!(pathes, pathes_expected);
+    }
 }
