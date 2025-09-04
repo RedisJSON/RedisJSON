@@ -5,7 +5,6 @@ from common import *
 def test_acl_category(env):
     """Test that the `json` category was added appropriately in module load"""
     res = env.cmd('ACL', 'CAT')
-    print(res)
     env.assertTrue('json' in res)
 
 @skip_redis_less_than(redis_less_than="7.99.99")

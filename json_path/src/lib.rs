@@ -590,4 +590,30 @@ mod json_path_tests {
                            },
                            results:[[foo, 0, val], [foo, 1, val]]);
     }
+
+    #[test]
+    fn test_query_inside_object_values_indicates_array_path() {
+        setup();
+        verify_json_path!(path:"$.root[?(@.value > 2)]",
+                           json:{
+                            "root": {
+                              "1": {
+                                "value": 1
+                              },
+                              "2": {
+                                "value": 2
+                              },
+                              "3": {
+                                "value": 3
+                              },
+                              "4": {
+                                "value": 4
+                              },
+                              "5": {
+                                "value": 5
+                              }
+                            }
+                          },
+                           results:[[root, 3], [root, 4], [root, 5]]);
+    }
 }
