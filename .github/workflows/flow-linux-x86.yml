@@ -18,6 +18,10 @@ on:
         description: 'Run valgrind on the tests'
         type: boolean
         default: false
+      beta-version:
+        description: 'Beta version for S3 uploads'
+        type: string
+        required: false
   workflow_call: # Allows to run this workflow from another workflow
     inputs:
       redis-ref:
@@ -35,6 +39,10 @@ on:
         description: 'Run valgrind on the tests'
         type: boolean
         default: false
+      beta-version:
+        description: 'Beta version for S3 uploads'
+        type: string
+        required: false
       
 jobs:
   setup-environment:
@@ -189,3 +197,4 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           github-ref: ${{ github.ref }}
+          beta-version: ${{ inputs.beta-version }}

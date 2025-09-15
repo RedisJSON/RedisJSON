@@ -10,6 +10,10 @@ on:
       run-test:
         type: boolean
         default: true
+      beta-version:
+        description: 'Beta version for S3 uploads'
+        type: string
+        required: false
   workflow_call: # Allows to run this workflow from another workflow
     inputs:
       redis-ref:
@@ -19,6 +23,10 @@ on:
       run-test:
         type: boolean
         default: true
+      beta-version:
+        description: 'Beta version for S3 uploads'
+        type: string
+        required: false
 
 permissions:
   id-token: write # This is required for requesting the JWT
@@ -152,4 +160,5 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          github-ref: ${{ github.ref }} 
+          github-ref: ${{ github.ref }}
+          beta-version: ${{ inputs.beta-version }} 
