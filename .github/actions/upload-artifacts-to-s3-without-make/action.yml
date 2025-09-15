@@ -58,3 +58,15 @@ runs:
               RELEASE=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
             fi
           echo ::endgroup::
+          
+          echo ::group::upload to beta folder with version
+            # Generate beta version for nightly builds
+            TIMESTAMP=$(date -u +"%Y%m%d.%H%M%S")
+            WORKFLOW_NUM=${{ github.run_number }}
+            BETA_VERSION="99.99.99.${TIMESTAMP}.${WORKFLOW_NUM}"
+            echo "Generated beta version: ${BETA_VERSION}"
+            
+            # Upload to beta folder
+            export BETA_VERSION="${BETA_VERSION}"
+            BETA=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
+          echo ::endgroup::

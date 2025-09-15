@@ -21,6 +21,7 @@ if [[ $1 == --help || $1 == help || $HELP == 1 ]]; then
 
 		RELEASE=1     Upload release artifacts
 		STAGING=1     Upload into staging area
+		BETA=1        Upload to beta folder with version
 
 		NOP=1         No operation
 		VERBOSE=1     Show artifacts details
@@ -61,6 +62,8 @@ OP=""
 
 if [[ $STAGING == 1 ]]; then
 	S3_URL=s3://redismodules/lab/staging
+elif [[ $BETA == 1 ]]; then
+	S3_URL=s3://redismodules/beta
 else
 	S3_URL=s3://redismodules
 fi
@@ -108,7 +111,14 @@ s3_ls() {
 s3_upload() {
 	local prod_subdir="$PROD"
 	local prefix="$PREFIX"
-	local upload_dir="${S3_URL}/${prod_subdir}${MAYBE_SNAP}"
+	
+	# For beta uploads, include version in the directory structure
+	if [[ $BETA == 1 && -n $BETA_VERSION ]]; then
+		local upload_dir="${S3_URL}/${prod_subdir}/${BETA_VERSION}${MAYBE_SNAP}"
+	else
+		local upload_dir="${S3_URL}/${prod_subdir}${MAYBE_SNAP}"
+	fi
+	
 	local file
 	if [[ $SNAPSHOT == 1 ]]; then
 		for file in `ls ${prefix}.*${PLATFORM}*.zip ${prefix}.*${PLATFORM}*.tgz 2> /dev/null`; do
