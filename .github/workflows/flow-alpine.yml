@@ -50,6 +50,7 @@ jobs:
         with:
           github-ref: ${{ github.ref }}
           redis-ref: ${{ inputs.redis-ref }}
+          beta-version: ${{ inputs.beta-version }}
   build:
     runs-on: ${{matrix.runs_on}}
     needs: setup-environment

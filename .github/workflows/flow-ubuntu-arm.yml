@@ -53,6 +53,7 @@ jobs:
         with:
           github-ref: ${{ github.ref }}
           redis-ref: ${{ inputs.redis-ref }}
+          beta-version: ${{ inputs.beta-version }}
 
   ubuntu-arm64:
     runs-on: ubuntu24-arm64-4-16 # ubuntu24-arm64-2-8
@@ -186,6 +187,8 @@ jobs:
           MODULE=$(realpath ./target/release/rejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh
       - name: Pack module
         uses: ./.github/actions/pack-module
+        with:
+          beta-version: ${{ inputs.beta-version }}
       - name: Upload artifacts to S3
         uses: ./.github/actions/upload-artifacts-to-s3-without-make
         with:

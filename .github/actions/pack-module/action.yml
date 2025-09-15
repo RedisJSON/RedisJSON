@@ -1,5 +1,10 @@
 name: Run pack module script
 
+inputs:
+  beta-version:
+    description: 'Beta version for S3 uploads'
+    required: false
+
 runs:
   using: composite
   steps:
@@ -13,4 +18,7 @@ runs:
         . venv/bin/activate
         git config --global --add safe.directory $GITHUB_WORKSPACE
         export PATH="$GITHUB_WORKSPACE/redis/src:$PATH"
+        if [[ -n "${{ inputs.beta-version }}" ]]; then
+          export BETA_VERSION="${{ inputs.beta-version }}"
+        fi
         BRANCH=$TAG_OR_BRANCH SHOW=1 OSNICK=${{ matrix.docker.nick }} ./sbin/pack.sh $(realpath ./target/release/rejson.so)

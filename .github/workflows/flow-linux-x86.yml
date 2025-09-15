@@ -63,6 +63,7 @@ jobs:
         with:
           github-ref: ${{ github.ref }}
           redis-ref: ${{ inputs.redis-ref }}
+          beta-version: ${{ inputs.beta-version }}
       - name: Set matrix
         id: set-matrix
         run: |
@@ -190,6 +191,8 @@ jobs:
       - name: Pack module
         if: ${{!inputs.run_valgrind}}
         uses: ./.github/actions/pack-module
+        with:
+          beta-version: ${{ inputs.beta-version }}
       - name: Upload artifacts to S3
         if: ${{!inputs.run_valgrind}}
         uses: ./.github/actions/upload-artifacts-to-s3-without-make

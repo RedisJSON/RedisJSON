@@ -52,6 +52,7 @@ jobs:
         with:
           github-ref: ${{ github.ref }}
           redis-ref: ${{ inputs.redis-ref }}
+          beta-version: ${{ inputs.beta-version }}
 
   azurelinux3-arm64:
     runs-on: ubuntu24-arm64-4-16 # ubuntu24-arm64-2-8
@@ -155,6 +156,8 @@ jobs:
         uses: ./.github/actions/run-tests
       - name: Pack module
         uses: ./.github/actions/pack-module
+        with:
+          beta-version: ${{ inputs.beta-version }}
       - name: Upload artifacts to S3
         uses: ./.github/actions/upload-artifacts-to-s3-without-make
         with:

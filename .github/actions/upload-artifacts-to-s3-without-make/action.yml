@@ -49,17 +49,18 @@ runs:
           aws configure set region "$AWS_REGION"
 
           echo ::group::upload artifacts
-            SNAPSHOT=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
+            SHOW=1 VERBOSE=1 make upload-artifacts
           echo ::endgroup::
           echo ::group::upload staging release
-            RELEASE=1 SHOW=1 STAGING=1 VERBOSE=1 ./sbin/upload-artifacts
+            STAGING=1 SHOW=1 VERBOSE=1 make upload-artifacts
           echo ::endgroup::
           
           echo ::group::upload production release
             REF="${{ inputs.github-ref }}"
             PATTERN="refs/tags/v[0-9]+.*"
             if [[ $REF =~ $PATTERN ]]; then
-              RELEASE=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
+              echo "This is a tagged build"
+              SHOW=1 VERBOSE=1 make upload-release
             fi
           echo ::endgroup::
           
