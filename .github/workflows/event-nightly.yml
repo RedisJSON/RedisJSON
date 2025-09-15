@@ -17,6 +17,7 @@ on:
     inputs:
       redis-ref:
         description: 'Redis ref to checkout'
+        type: string
         required: true
         default: 'unstable'
 jobs:
@@ -30,7 +31,7 @@ jobs:
       - name: set env
         id: set-env
         run: |
-          echo "redis-ref=unstable" >> $GITHUB_OUTPUT  # todo change per version/tag
+          echo "redis-ref=${{ inputs.redis-ref || 'unstable' }}" >> $GITHUB_OUTPUT
           
           # Generate timestamp at workflow start for consistent beta versioning
           TIMESTAMP=$(date -u +"%Y%m%d.%H%M%S")
