@@ -200,7 +200,11 @@ macro_rules! redis_json_module_create {
                 match GIT_SHA { Some(val) => val, _ => "unknown"},
                 match GIT_BRANCH { Some(val) => val, _ => "unknown"},
                 ));
-            export_shared_api(ctx);
+
+            // Temporarily disable shared API export on Alpine to isolate the crash
+            ctx.log_notice("Skipping shared API export to avoid Alpine ARM64 crashes");
+            // export_shared_api(ctx);
+
             ctx.set_module_options(ModuleOptions::HANDLE_IO_ERRORS);
             ctx.log_notice("Enabled diskless replication");
             let is_bigredis =
