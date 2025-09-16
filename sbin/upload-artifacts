@@ -110,9 +110,9 @@ s3_upload() {
 	local prod_subdir="$PROD"
 	local prefix="$PREFIX"
 	
-	# For beta uploads, include beta in the path: s3://redismodules/rejson-oss/beta/VERSION/
+	# For beta uploads, put files directly in beta folder: s3://redismodules/rejson-oss/beta/
 	if [[ $BETA == 1 && -n $BETA_VERSION ]]; then
-		local upload_dir="${S3_URL}/${prod_subdir}/beta/${BETA_VERSION}${MAYBE_SNAP}"
+		local upload_dir="${S3_URL}/${prod_subdir}/beta${MAYBE_SNAP}"
 	else
 		local upload_dir="${S3_URL}/${prod_subdir}${MAYBE_SNAP}"
 	fi
