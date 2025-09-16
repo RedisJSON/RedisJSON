@@ -62,8 +62,6 @@ OP=""
 
 if [[ $STAGING == 1 ]]; then
 	S3_URL=s3://redismodules/lab/staging
-elif [[ $BETA == 1 ]]; then
-	S3_URL=s3://redismodules/beta
 else
 	S3_URL=s3://redismodules
 fi
@@ -112,9 +110,9 @@ s3_upload() {
 	local prod_subdir="$PROD"
 	local prefix="$PREFIX"
 	
-	# For beta uploads, include version in the directory structure
+	# For beta uploads, include beta in the path: s3://redismodules/rejson-oss/beta/VERSION/
 	if [[ $BETA == 1 && -n $BETA_VERSION ]]; then
-		local upload_dir="${S3_URL}/${prod_subdir}/${BETA_VERSION}${MAYBE_SNAP}"
+		local upload_dir="${S3_URL}/${prod_subdir}/beta/${BETA_VERSION}${MAYBE_SNAP}"
 	else
 		local upload_dir="${S3_URL}/${prod_subdir}${MAYBE_SNAP}"
 	fi
