@@ -186,7 +186,7 @@ pack_ramp() {
 		fi
 	fi
 
-	if [[ -f $MODULE.debug ]]; then
+	if [[ -f $MODULE.debug ]] && ! ([[ "$(uname -m)" == "aarch64" ]] && [[ -f "/etc/alpine-release" ]]); then
 		runn @ <<-EOF
 			$RAMP_CMD pack -m /tmp/ramp.yml \
 				$RAMP_ARGS \
