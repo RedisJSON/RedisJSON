@@ -318,7 +318,25 @@ where
 }
 
 pub fn get_llapi_ctx() -> Context {
-    Context::new(unsafe { LLAPI_CTX.unwrap() })
+    unsafe { 
+        match LLAPI_CTX {
+            Some(ctx) if !ctx.is_null() => Context::new(ctx),
+            _ => {
+                // Fallback: try to get a thread-safe context
+                let fallback_ctx = rawmod::RedisModule_GetThreadSafeContext.unwrap()(
+                    std::ptr::null_mut(),
+                );
+                if !fallback_ctx.is_null() {
+                    LLAPI_CTX = Some(fallback_ctx);
+                    Context::new(fallback_ctx)
+                } else {
+                    // Last resort: create a dummy context with null
+                    // This will prevent crashes but the pre_command function should handle null gracefully
+                    Context::new(std::ptr::null_mut())
+                }
+            }
+        }
+    }
 }
 
 #[macro_export]
@@ -649,9 +667,18 @@ macro_rules! redis_json_module_export_shared_api {
 
         pub fn export_shared_api(ctx: &Context) {
             unsafe {
-                LLAPI_CTX = Some(rawmod::RedisModule_GetThreadSafeContext.unwrap()(
+                let thread_safe_ctx = rawmod::RedisModule_GetThreadSafeContext.unwrap()(
                     std::ptr::null_mut(),
-                ));
+                );
+                
+                if !thread_safe_ctx.is_null() {
+                    LLAPI_CTX = Some(thread_safe_ctx);
+                    ctx.log_notice("Successfully initialized shared API context");
+                } else {
+                    ctx.log(redis_module::logging::RedisLogLevel::Warning, 
+                           "Warning: Failed to get thread-safe context for shared API");
+                    // Don't update LLAPI_CTX if we get a null pointer
+                }
 
                 for v in 1..6 {
                     let version = format!("RedisJSON_V{}", v);

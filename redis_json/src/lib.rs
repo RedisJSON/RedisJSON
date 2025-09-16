@@ -272,7 +272,14 @@ macro_rules! redis_json_module_create {
 }
 
 #[cfg(not(feature = "as-library"))]
-const fn pre_command(_ctx: &Context, _args: &[RedisString]) {}
+fn pre_command(_ctx: &Context, _args: &[RedisString]) {
+    // Guard against null context by checking LLAPI_CTX directly
+    unsafe {
+        if LLAPI_CTX.is_none() {
+            return;
+        }
+    }
+}
 
 #[cfg(not(feature = "as-library"))]
 const fn dummy_init(_ctx: &Context, _args: &[RedisString]) -> Status {
