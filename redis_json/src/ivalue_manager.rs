@@ -261,7 +261,22 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                         return Err(RedisError::Str("ERR index out of bounds"));
                     }
                     arr.extend(args.iter().cloned());
-                    arr[idx as _..].rotate_right(args.len());
+                    use ijson::array::ArraySliceMut::*;
+                    match arr.as_mut_slice() {
+                        Heterogeneous(slice) => slice[idx as _..].rotate_right(args.len()),
+                        I8(slice) => slice[idx as _..].rotate_right(args.len()),
+                        U8(slice) => slice[idx as _..].rotate_right(args.len()),
+                        I16(slice) => slice[idx as _..].rotate_right(args.len()),
+                        U16(slice) => slice[idx as _..].rotate_right(args.len()),
+                        F16(slice) => slice[idx as _..].rotate_right(args.len()),
+                        BF16(slice) => slice[idx as _..].rotate_right(args.len()),
+                        I32(slice) => slice[idx as _..].rotate_right(args.len()),
+                        U32(slice) => slice[idx as _..].rotate_right(args.len()),
+                        F32(slice) => slice[idx as _..].rotate_right(args.len()),
+                        I64(slice) => slice[idx as _..].rotate_right(args.len()),
+                        U64(slice) => slice[idx as _..].rotate_right(args.len()),
+                        F64(slice) => slice[idx as _..].rotate_right(args.len()),
+                    };
                     Ok(arr.len())
                 })
                 .unwrap_or_else(|| Err(err_json(v, "array").into()))
@@ -305,7 +320,22 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                         start..(stop + 1)
                     };
 
-                    array.rotate_left(range.start);
+                    use ijson::array::ArraySliceMut::*;
+                    match array.as_mut_slice() {
+                        Heterogeneous(slice) => slice[0..].rotate_left(range.start),
+                        I8(slice) => slice[0..].rotate_left(range.start),
+                        U8(slice) => slice[0..].rotate_left(range.start),
+                        I16(slice) => slice[0..].rotate_left(range.start),
+                        U16(slice) => slice[0..].rotate_left(range.start),
+                        F16(slice) => slice[0..].rotate_left(range.start),
+                        BF16(slice) => slice[0..].rotate_left(range.start),
+                        I32(slice) => slice[0..].rotate_left(range.start),
+                        U32(slice) => slice[0..].rotate_left(range.start),
+                        F32(slice) => slice[0..].rotate_left(range.start),
+                        I64(slice) => slice[0..].rotate_left(range.start),
+                        U64(slice) => slice[0..].rotate_left(range.start),
+                        F64(slice) => slice[0..].rotate_left(range.start),
+                    };
                     array.truncate(range.end - range.start);
                     array.len()
                 })
@@ -491,7 +521,7 @@ mod tests {
                         }"#;
         let value = serde_json::from_str(json).unwrap();
         let res = RedisIValueJsonKeyManager::get_memory(&value).unwrap();
-        assert_eq!(res, 736);
+        assert_eq!(res, 728);
     }
 
     /// Tests the deserialiser of IValue for a string with unicode

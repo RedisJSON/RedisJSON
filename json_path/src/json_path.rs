@@ -13,7 +13,7 @@ use pest::Parser;
 use pest_derive::Parser;
 use std::cmp::Ordering;
 
-use crate::select_value::{SelectValue, SelectValueType};
+use crate::select_value::{SelectValue, SelectValueType, ValueRef};
 use log::trace;
 use regex::Regex;
 use std::fmt::Debug;
@@ -495,14 +495,14 @@ struct PathCalculatorData<'i, S: SelectValue, UPT: UserPathTracker> {
 // The following block of code is used to create a unified iterator for arrays and objects.
 // This can be used in places where we need to iterate over both arrays and objects, create a path tracker from them.
 enum Item<'a, S: SelectValue> {
-    ArrayItem(usize, &'a S),
+    ArrayItem(usize, ValueRef<'a, S>),
     ObjectItem(&'a str, &'a S),
 }
 
 impl<'a, S: SelectValue> Item<'a, S> {
     fn value(&self) -> &'a S {
         match self {
-            Item::ArrayItem(_, v) => v,
+            Item::ArrayItem(_, v) => v.as_ref_with_lifetime(),
             Item::ObjectItem(_, v) => v,
         }
     }
@@ -519,7 +519,7 @@ impl<'a, S: SelectValue> Item<'a, S> {
 }
 
 enum UnifiedIter<'a, S: SelectValue> {
-    Array(std::iter::Enumerate<Box<dyn Iterator<Item = &'a S> + 'a>>),
+    Array(std::iter::Enumerate<Box<dyn Iterator<Item = ValueRef<'a, S>> + 'a>>),
     Object(Box<dyn Iterator<Item = (&'a str, &'a S)> + 'a>),
 }
 
@@ -554,7 +554,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         }
     }
 
-    fn calc_full_scan<'j: 'i, 'k, 'l, S: SelectValue>(
+    fn calc_full_scan<'j, 'k, 'l, S: SelectValue>(
         &self,
         pairs: Pairs<'i, Rule>,
         json: &'j S,
@@ -582,8 +582,18 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 } else {
                     let values = json.values().unwrap();
                     for v in values {
-                        self.calc_internal(pairs.clone(), v, None, calc_data);
-                        self.calc_full_scan(pairs.clone(), v, None, calc_data);
+                        self.calc_internal(
+                            pairs.clone(),
+                            v.as_ref_with_lifetime(),
+                            None,
+                            calc_data,
+                        );
+                        self.calc_full_scan(
+                            pairs.clone(),
+                            v.as_ref_with_lifetime(),
+                            None,
+                            calc_data,
+                        );
                     }
                 }
             }
@@ -593,21 +603,31 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                     for (i, v) in values.enumerate() {
                         self.calc_internal(
                             pairs.clone(),
-                            v,
+                            v.as_ref_with_lifetime(),
                             Some(create_index_tracker(i, &pt)),
                             calc_data,
                         );
                         self.calc_full_scan(
                             pairs.clone(),
-                            v,
+                            v.as_ref_with_lifetime(),
                             Some(create_index_tracker(i, &pt)),
                             calc_data,
                         );
                     }
                 } else {
                     for v in values {
-                        self.calc_internal(pairs.clone(), v, None, calc_data);
-                        self.calc_full_scan(pairs.clone(), v, None, calc_data);
+                        self.calc_internal(
+                            pairs.clone(),
+                            v.as_ref_with_lifetime(),
+                            None,
+                            calc_data,
+                        );
+                        self.calc_full_scan(
+                            pairs.clone(),
+                            v.as_ref_with_lifetime(),
+                            None,
+                            calc_data,
+                        );
                     }
                 }
             }
@@ -633,7 +653,12 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 } else {
                     let values = json.values().unwrap();
                     for v in values {
-                        self.calc_internal(pairs.clone(), v, None, calc_data);
+                        self.calc_internal(
+                            pairs.clone(),
+                            v.as_ref_with_lifetime(),
+                            None,
+                            calc_data,
+                        );
                     }
                 }
             }
@@ -642,11 +667,21 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 if let Some(pt) = path_tracker {
                     for (i, v) in values.enumerate() {
                         let new_tracker = Some(create_index_tracker(i, &pt));
-                        self.calc_internal(pairs.clone(), v, new_tracker, calc_data);
+                        self.calc_internal(
+                            pairs.clone(),
+                            v.as_ref_with_lifetime(),
+                            new_tracker,
+                            calc_data,
+                        );
                     }
                 } else {
                     for v in values {
-                        self.calc_internal(pairs.clone(), v, None, calc_data);
+                        self.calc_internal(
+                            pairs.clone(),
+                            v.as_ref_with_lifetime(),
+                            None,
+                            calc_data,
+                        );
                     }
                 }
             }
@@ -745,7 +780,12 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 let curr_val = json.get_index(i);
                 if let Some(e) = curr_val {
                     let new_tracker = Some(create_index_tracker(i, &pt));
-                    self.calc_internal(pairs.clone(), e, new_tracker, calc_data);
+                    self.calc_internal(
+                        pairs.clone(),
+                        e.as_ref_with_lifetime(),
+                        new_tracker,
+                        calc_data,
+                    );
                 }
             }
         } else {
@@ -753,7 +793,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 let i = Self::calc_abs_index(c.as_str().parse::<i64>().unwrap(), n);
                 let curr_val = json.get_index(i);
                 if let Some(e) = curr_val {
-                    self.calc_internal(pairs.clone(), e, None, calc_data);
+                    self.calc_internal(pairs.clone(), e.as_ref_with_lifetime(), None, calc_data);
                 }
             }
         }
@@ -819,14 +859,19 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 let curr_val = json.get_index(i);
                 if let Some(e) = curr_val {
                     let new_tracker = Some(create_index_tracker(i, &pt));
-                    self.calc_internal(pairs.clone(), e, new_tracker, calc_data);
+                    self.calc_internal(
+                        pairs.clone(),
+                        e.as_ref_with_lifetime(),
+                        new_tracker,
+                        calc_data,
+                    );
                 }
             }
         } else {
             for i in (start..end).step_by(step) {
                 let curr_val = json.get_index(i);
                 if let Some(e) = curr_val {
-                    self.calc_internal(pairs.clone(), e, None, calc_data);
+                    self.calc_internal(pairs.clone(), e.as_ref_with_lifetime(), None, calc_data);
                 }
             }
         }

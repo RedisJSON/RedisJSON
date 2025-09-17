@@ -77,7 +77,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 res.push(RedisValue::SimpleStringStatic("["));
                 v.values()
                     .unwrap()
-                    .for_each(|v| res.push(Self::resp_serialize_inner(v)));
+                    .for_each(|v| res.push(Self::resp_serialize_inner(v.as_ref())));
                 RedisValue::Array(res)
             }
 
@@ -220,7 +220,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                     value
                         .values()
                         .unwrap()
-                        .map(|v| Self::value_to_resp3(v, format))
+                        .map(|v| Self::value_to_resp3(v.as_ref(), format))
                         .collect(),
                 ),
                 SelectValueType::Object => RedisValue::Map(
@@ -418,7 +418,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                         && a.values()
                             .unwrap()
                             .zip(b.values().unwrap())
-                            .all(|(a, b)| Self::is_equal(a, b))
+                            .all(|(a, b)| Self::is_equal(a.as_ref(), b.as_ref()))
                 }
                 SelectValueType::Object => {
                     a.len().unwrap() == b.len().unwrap()
@@ -485,7 +485,10 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
 
         for index in start..end {
-            if Self::is_equal(arr.get_index(index as usize).unwrap(), v) {
+            let Some(value) = arr.get_index(index as usize) else {
+                return FoundIndex::NotFound;
+            };
+            if Self::is_equal(value.as_ref(), v) {
                 return FoundIndex::Index(index);
             }
         }
