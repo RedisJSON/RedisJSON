@@ -98,7 +98,7 @@ pub fn json_api_get_at<M: Manager>(_: M, json: *const c_void, index: size_t) -> 
     match json.get_type() {
         SelectValueType::Array => json
             .get_index(index)
-            .map_or_else(null, |v| (v as *const M::V).cast::<c_void>()),
+            .map_or_else(null, |v| (v.as_ref_with_lifetime() as *const M::V).cast::<c_void>()),
         _ => null(),
     }
 }
