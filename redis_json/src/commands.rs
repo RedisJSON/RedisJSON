@@ -64,12 +64,12 @@ const JSONGET_SUBCOMMANDS_MAXSTRLEN: usize = max_strlen(&[
     CMD_ARG_FORMAT,
 ]);
 
-pub enum Values<V: SelectValue> {
-    Single(V),
-    Multi(Vec<V>),
+pub enum Values<'a, V: SelectValue> {
+    Single(&'a V),
+    Multi(Vec<&'a V>),
 }
 
-impl<V: SelectValue> Serialize for Values<V> {
+impl<'a, V: SelectValue> Serialize for Values<'a, V> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -395,7 +395,7 @@ fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
     let res = calc_once_with_paths(query, doc);
     Ok(res
         .into_iter()
-        .filter(|e| f(&e.res))
+        .filter(|e| f(e.res))
         .map(|e| e.path_tracker.unwrap().to_string_path())
         .collect())
 }
@@ -404,7 +404,7 @@ fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
 fn get_all_values_and_paths<'a, T: SelectValue>(
     path: &str,
     doc: &'a T,
-) -> Result<Vec<(T, Vec<String>)>, RedisError> {
+) -> Result<Vec<(&'a T, Vec<String>)>, RedisError> {
     let query = match compile(path) {
         Ok(q) => q,
         Err(e) => return Err(RedisError::String(e.to_string())),
@@ -412,14 +412,14 @@ fn get_all_values_and_paths<'a, T: SelectValue>(
     let res = calc_once_with_paths(query, doc);
     Ok(res
         .into_iter()
-        .map(|e| (e.res.clone(), e.path_tracker.unwrap().to_string_path()))
+        .map(|e| (e.res, e.path_tracker.unwrap().to_string_path()))
         .collect())
 }
 
 /// Returns a Vec of paths with `None` for Values that do not match the filter
-fn filter_paths<T, F>(values_and_paths: Vec<(T, Vec<String>)>, f: F) -> Vec<Option<Vec<String>>>
+fn filter_paths<T, F>(values_and_paths: Vec<(&T, Vec<String>)>, f: F) -> Vec<Option<Vec<String>>>
 where
-    F: Fn(T) -> bool,
+    F: Fn(&T) -> bool,
 {
     values_and_paths
         .into_iter()
@@ -428,13 +428,13 @@ where
 }
 
 /// Returns a Vec of Values with `None` for Values that do not match the filter
-fn filter_values<T: Clone, F>(values_and_paths: Vec<(T, Vec<String>)>, f: F) -> Vec<Option<T>>
+fn filter_values<T, F>(values_and_paths: Vec<(&T, Vec<String>)>, f: F) -> Vec<Option<&T>>
 where
-    F: Fn(T) -> bool,
+    F: Fn(&T) -> bool,
 {
     values_and_paths
         .into_iter()
-        .map(|(v, _)| f(v.clone()).then_some(v))
+        .map(|(v, _)| f(v).then_some(v))
         .collect()
 }
 
@@ -444,22 +444,22 @@ fn find_all_paths<T: SelectValue, F>(
     f: F,
 ) -> Result<Vec<Option<Vec<String>>>, RedisError>
 where
-    F: Fn(T) -> bool,
+    F: Fn(&T) -> bool,
 {
     let res = get_all_values_and_paths(path, doc)?;
     match res.is_empty() {
-        false => Ok(filter_paths(res, &f)),
+        false => Ok(filter_paths(res, f)),
         _ => Ok(vec![]),
     }
 }
 
-fn find_all_values<T: SelectValue, F>(
+fn find_all_values<'a, T: SelectValue, F>(
     path: &str,
-    doc: &T,
+    doc: &'a T,
     f: F,
-) -> Result<Vec<Option<T>>, RedisError>
+) -> Result<Vec<Option<&'a T>>, RedisError>
 where
-    F: Fn(T) -> bool,
+    F: Fn(&T) -> bool,
 {
     let res = get_all_values_and_paths(path, doc)?;
     match res.is_empty() {
@@ -664,7 +664,7 @@ where
         Some(root) => KeyValue::new(root)
             .get_values(path)?
             .iter()
-            .map(|v| RedisValue::from(KeyValue::value_name(v)))
+            .map(|v| RedisValue::from(KeyValue::value_name(*v)))
             .collect_vec()
             .into(),
         None => RedisValue::Null,
@@ -1716,7 +1716,7 @@ where
         Some(root) => find_all_values(path, root, |v| v.get_type() == SelectValueType::Object)?
             .iter()
             .map(|v| {
-                v.clone().map_or(RedisValue::Null, |v| {
+                v.map_or(RedisValue::Null, |v| {
                     RedisValue::Integer(v.len().unwrap() as i64)
                 })
             })
@@ -1806,7 +1806,7 @@ pub fn json_debug<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
             let key = manager.open_key_read(ctx, &key)?;
             if path.is_legacy() {
                 Ok(match key.get_value()? {
-                    Some(doc) => M::get_memory(KeyValue::new(doc).get_first(path.get_path())?.clone())?,
+                    Some(doc) => M::get_memory(KeyValue::new(doc).get_first(path.get_path())?)?,
                     None => 0,
                 }
                 .into())

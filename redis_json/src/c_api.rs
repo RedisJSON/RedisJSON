@@ -40,8 +40,8 @@ pub enum JSONType {
     Null = 6,
 }
 
-struct ResultsIterator<V: SelectValue> {
-    results: Vec<V>,
+struct ResultsIterator<'a, V: SelectValue> {
+    results: Vec<&'a V>,
     pos: usize,
 }
 
@@ -239,8 +239,7 @@ pub fn json_api_next<M: Manager>(_: M, iter: *mut c_void) -> *const c_void {
     if iter.pos >= iter.results.len() {
         null_mut()
     } else {
-        let x = Box::new(iter.results[iter.pos].clone());
-        let res = (Box::leak(x) as *const M::V).cast::<c_void>();
+        let res = (iter.results[iter.pos] as *const M::V).cast::<c_void>();
         iter.pos += 1;
         res
     }
