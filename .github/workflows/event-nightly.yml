@@ -17,6 +17,7 @@ on:
     inputs:
       redis-ref:
         description: 'Redis ref to checkout'
+        type: string
         required: true
         default: 'unstable'
 jobs:
@@ -24,29 +25,43 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       redis-ref: ${{ steps.set-env.outputs.redis-ref }}
+      beta-timestamp: ${{ steps.set-env.outputs.beta-timestamp }}
+      beta-version: ${{ steps.set-env.outputs.beta-version }}
     steps:
       - name: set env
         id: set-env
         run: |
-          echo "redis-ref=unstable" >> $GITHUB_OUTPUT  # todo change per version/tag
+          echo "redis-ref=${{ inputs.redis-ref || 'unstable' }}" >> $GITHUB_OUTPUT
+          
+          # Generate timestamp at workflow start for consistent beta versioning
+          TIMESTAMP=$(date -u +"%Y%m%d.%H%M%S")
+          WORKFLOW_NUM=${{ github.run_number }}
+          BETA_VERSION="99.99.99.${TIMESTAMP}.${WORKFLOW_NUM}"
+          
+          echo "beta-timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
+          echo "beta-version=${BETA_VERSION}" >> $GITHUB_OUTPUT
+          echo "Generated beta version: ${BETA_VERSION}"
   linux:
     uses: ./.github/workflows/flow-linux-x86.yml
     needs: [prepare-values]
     with:
       os: bionic focal jammy rocky8 rocky9 bullseye amazonlinux2 mariner2 azurelinux3
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+      beta-version: ${{needs.prepare-values.outputs.beta-version}}
     secrets: inherit
   ubuntu-arm64:
     uses: ./.github/workflows/flow-ubuntu-arm.yml
     needs: [prepare-values]
     with:
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+      beta-version: ${{needs.prepare-values.outputs.beta-version}}
     secrets: inherit
   azurelinux3-arm64:
     uses: ./.github/workflows/flow-azurelinux3-arm.yml
     needs: [prepare-values]
     with:
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+      beta-version: ${{needs.prepare-values.outputs.beta-version}}
     secrets: inherit
   # alpine:
   #   uses: ./.github/workflows/flow-alpine.yml
@@ -59,6 +74,14 @@ jobs:
     needs: [prepare-values]
     with:
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+      beta-version: ${{needs.prepare-values.outputs.beta-version}}
+    secrets: inherit
+  alpine:
+    uses: ./.github/workflows/flow-alpine.yml
+    needs: [prepare-values]
+    with:
+      redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+      beta-version: ${{needs.prepare-values.outputs.beta-version}}
     secrets: inherit
   linux-valgrind:
     uses: ./.github/workflows/flow-linux-x86.yml
@@ -67,6 +90,7 @@ jobs:
       os: jammy
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
       run_valgrind: true
+      beta-version: ${{needs.prepare-values.outputs.beta-version}}
     secrets: inherit
   linux-sanitizer:
     uses: ./.github/workflows/flow-sanitizer.yml
@@ -74,6 +98,7 @@ jobs:
     with:
       container: ubuntu:jammy
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+      beta-version: ${{needs.prepare-values.outputs.beta-version}}
     secrets: inherit
   spellcheck:
     uses: ./.github/workflows/flow-spellcheck.yml
