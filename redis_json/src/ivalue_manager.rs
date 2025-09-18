@@ -481,7 +481,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         }
     }
 
-    fn get_memory(v: &Self::V) -> Result<usize, RedisError> {
+    fn get_memory(v: Self::V) -> Result<usize, RedisError> {
         Ok(v.mem_allocated() + size_of::<IValue>())
     }
 
@@ -520,7 +520,7 @@ mod tests {
                             "m": {"t": "f"}
                         }"#;
         let value = serde_json::from_str(json).unwrap();
-        let res = RedisIValueJsonKeyManager::get_memory(&value).unwrap();
+        let res = RedisIValueJsonKeyManager::get_memory(value).unwrap();
         assert_eq!(res, 728);
     }
 
