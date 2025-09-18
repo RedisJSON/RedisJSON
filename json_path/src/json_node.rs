@@ -12,15 +12,6 @@ use crate::select_value::{SelectValue, SelectValueType, ValueRef};
 use ijson::{array::ArrayIterItem, DestructuredRef, IString, IValue, ValueType};
 use serde_json::Value;
 
-impl<'a> From<ArrayIterItem<'a>> for ValueRef<'a, IValue> {
-    fn from(item: ArrayIterItem<'a>) -> Self {
-        match item {
-            ArrayIterItem::Borrowed(val) => ValueRef::Borrowed(val),
-            ArrayIterItem::Owned(val) => ValueRef::Owned(val),
-        }
-    }
-}
-
 impl SelectValue for Value {
     fn get_type(&self) -> SelectValueType {
         match self {
@@ -167,7 +158,10 @@ impl SelectValue for IValue {
 
     fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = ValueRef<'a, Self>> + 'a>> {
         match self.destructure_ref() {
-            DestructuredRef::Array(arr) => Some(Box::new(arr.iter().map(|item| item.into()))),
+            DestructuredRef::Array(arr) => Some(Box::new(arr.iter().map(|item| match item {
+                ArrayIterItem::Borrowed(val) => ValueRef::Borrowed(val),
+                ArrayIterItem::Owned(val) => ValueRef::Owned(val),
+            }))),
             DestructuredRef::Object(o) => Some(Box::new(o.values().map(|v| ValueRef::Borrowed(v)))),
             _ => None,
         }
@@ -204,8 +198,12 @@ impl SelectValue for IValue {
     }
 
     fn get_index<'a>(&'a self, index: usize) -> Option<ValueRef<'a, Self>> {
-        self.as_array()
-            .and_then(|arr| arr.iter().nth(index).map(|item| item.into()))
+        self.as_array().and_then(|arr| {
+            arr.iter().nth(index).map(|item| match item {
+                ArrayIterItem::Borrowed(val) => ValueRef::Borrowed(val),
+                ArrayIterItem::Owned(val) => ValueRef::Owned(val),
+            })
+        })
     }
 
     fn is_array(&self) -> bool {
