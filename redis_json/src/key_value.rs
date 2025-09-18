@@ -30,10 +30,10 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         KeyValue { val: v }
     }
 
-    pub fn get_first<'b>(&'a self, path: &'b str) -> Result<&'a V, Error> {
+    pub fn get_first<'b>(&'a self, path: &'b str) -> Result<V, Error> {
         let results = self.get_values(path)?;
         match results.first() {
-            Some(s) => Ok(s),
+            Some(s) => Ok(s.clone()),
             None => Err(err_msg_json_path_doesnt_exist_with_param(path)
                 .as_str()
                 .into()),
@@ -43,12 +43,12 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     pub fn resp_serialize(&self, path: Path) -> RedisResult {
         if path.is_legacy() {
             let v = self.get_first(path.get_path())?;
-            Ok(Self::resp_serialize_inner(v))
+            Ok(Self::resp_serialize_inner(&v))
         } else {
             Ok(self
                 .get_values(path.get_path())?
                 .into_iter()
-                .map(|v| Self::resp_serialize_inner(v))
+                .map(|v| Self::resp_serialize_inner(&v))
                 .collect_vec()
                 .into())
         }
@@ -93,7 +93,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    pub fn get_values<'b>(&'a self, path: &'b str) -> Result<Vec<&'a V>, Error> {
+    pub fn get_values<'b>(&'a self, path: &'b str) -> Result<Vec<V>, Error> {
         let query = compile(path)?;
         let results = calc_once(query, self.val);
         Ok(results)
@@ -132,7 +132,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                         let results = calc_once(query, self.val);
 
                         let value = if is_legacy {
-                            (!results.is_empty()).then(|| Values::Single(results[0]))
+                            (!results.is_empty()).then(|| Values::Single(results[0].clone()))
                         } else {
                             Some(Values::Multi(results))
                         };
@@ -155,7 +155,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 .map(|(k, v)| {
                     let key = RedisValueKey::String(k.to_string());
                     let value = match v {
-                        Some(Values::Single(value)) => Self::value_to_resp3(value, format),
+                        Some(Values::Single(value)) => Self::value_to_resp3(&value, format),
                         Some(Values::Multi(values)) => Self::values_to_resp3(&values, format),
                         None => RedisValue::Null,
                     };
@@ -200,7 +200,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         Ok(res)
     }
 
-    fn values_to_resp3(values: &[&V], format: &ReplyFormatOptions) -> RedisValue {
+    fn values_to_resp3(values: &[V], format: &ReplyFormatOptions) -> RedisValue {
         values
             .iter()
             .map(|v| Self::value_to_resp3(v, format))
@@ -355,7 +355,8 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     pub fn get_type(&self, path: &str) -> Result<String, Error> {
-        let s = Self::value_name(self.get_first(path)?);
+        let binding = self.get_first(path)?.clone();
+        let s = Self::value_name(&binding);
         Ok(s.to_string())
     }
 
@@ -443,7 +444,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             .get_values(path)?
             .into_iter()
             .map(|value| {
-                RedisValue::from(Self::arr_first_index_single(value, &json_value, start, end))
+                RedisValue::from(Self::arr_first_index_single(&value, &json_value, start, end))
             })
             .collect_vec();
         Ok(res.into())
@@ -457,7 +458,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         end: i64,
     ) -> Result<RedisValue, Error> {
         let arr = self.get_first(path)?;
-        match Self::arr_first_index_single(arr, &json_value, start, end) {
+        match Self::arr_first_index_single(&arr, &json_value, start, end) {
             FoundIndex::NotArray => Err(Error::from(err_msg_json_expected(
                 "array",
                 self.get_type(path).unwrap().as_str(),
