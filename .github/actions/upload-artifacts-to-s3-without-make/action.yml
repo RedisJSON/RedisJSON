@@ -49,10 +49,10 @@ runs:
           aws configure set region "$AWS_REGION"
 
           echo ::group::upload artifacts
-            SHOW=1 VERBOSE=1 make upload-artifacts
+            SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
           echo ::endgroup::
           echo ::group::upload staging release
-            STAGING=1 SHOW=1 VERBOSE=1 make upload-artifacts
+            STAGING=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
           echo ::endgroup::
           
           echo ::group::upload production release
@@ -60,7 +60,7 @@ runs:
             PATTERN="refs/tags/v[0-9]+.*"
             if [[ $REF =~ $PATTERN ]]; then
               echo "This is a tagged build"
-              SHOW=1 VERBOSE=1 make upload-release
+              RELEASE=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
             fi
           echo ::endgroup::
           
