@@ -161,11 +161,7 @@ endif
 	$(SHOW)cp $(TARGET_DIR)/librejson.$(RUST_SOEXT.$(OS)) $(TARGET)
 ifneq ($(DEBUG),1)
 ifneq ($(OS),macos)
-	$(SHOW)if [ -f "/etc/alpine-release" ] && [ "$$(uname -m)" = "aarch64" ]; then \
-		echo "Skipping debug symbol extraction on Alpine ARM64 to avoid musl/objcopy issues"; \
-	else \
-		$(call extract_symbols,$(TARGET)); \
-	fi
+	$(SHOW)./sbin/extract_symbols_safe.sh $(TARGET) || $(call extract_symbols,$(TARGET))
 endif
 endif
 
