@@ -163,8 +163,16 @@ pack_ramp() {
 
 	# ROOT is required so ramp will detect the right git commit
 	cd $ROOT
+	
+	# Add Alpine-specific timeout and error handling
+	local ramp_timeout=""
+	if [[ "$(uname -m)" == "aarch64" ]] && [[ -f "/etc/alpine-release" ]]; then
+		ramp_timeout="timeout 300"  # 5 minute timeout for Alpine ARM64
+		echo "# Using 5-minute timeout for Alpine ARM64 RAMP packaging"
+	fi
+	
 	runn @ <<-EOF
-		$RAMP_CMD pack -m /tmp/ramp.yml \
+		$ramp_timeout $RAMP_CMD pack -m /tmp/ramp.yml \
 			$RAMP_ARGS \
 			-n $MODULE_NAME \
 			--verbose \
@@ -357,6 +365,12 @@ if [[ $RAMP == 1 ]]; then
 	if ! command -v redis-server > /dev/null; then
 		eprint "Cannot find redis-server. Aborting."
 		exit 1
+	fi
+
+	# Check for Alpine ARM64 and add memory overcommit setting
+	if [[ "$(uname -m)" == "aarch64" ]] && [[ -f "/etc/alpine-release" ]]; then
+		echo "# Detected Alpine ARM64 - applying memory overcommit workaround"
+		sysctl vm.overcommit_memory=1 2>/dev/null || echo "# Warning: Could not set vm.overcommit_memory=1"
 	fi
 
 	echo "# Building RAMP $RAMP_VARIANT files ..."
