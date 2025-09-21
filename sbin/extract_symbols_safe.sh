@@ -6,9 +6,9 @@ TARGET="$1"
 # Check if we should skip debug symbol extraction
 SKIP_EXTRACTION=false
 
-if [ -f "/etc/alpine-release" ] && [ "$(uname -m)" = "aarch64" ]; then
-    # Alpine ARM64 - skip to avoid musl/objcopy issues
-    echo "Skipping debug symbol extraction on Alpine ARM64 to avoid musl/objcopy issues"
+if [ -f "/etc/alpine-release" ]; then
+    # Alpine (any architecture) - skip to avoid musl/objcopy issues
+    echo "Skipping debug symbol extraction on Alpine ($(uname -m)) to avoid musl/objcopy issues"
     SKIP_EXTRACTION=true
 elif ! command -v objcopy >/dev/null 2>&1; then
     # objcopy not available - skip to avoid command not found errors
