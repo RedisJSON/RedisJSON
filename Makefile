@@ -161,7 +161,7 @@ endif
 	$(SHOW)cp $(TARGET_DIR)/librejson.$(RUST_SOEXT.$(OS)) $(TARGET)
 ifneq ($(DEBUG),1)
 ifneq ($(OS),macos)
-	$(SHOW)./sbin/extract_symbols_safe.sh $(TARGET) || $(call extract_symbols,$(TARGET))
+	$(SHOW)./sbin/extract_symbols_safe.sh $(TARGET)
 endif
 endif
 
