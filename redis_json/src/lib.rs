@@ -200,9 +200,7 @@ macro_rules! redis_json_module_create {
                 match GIT_SHA { Some(val) => val, _ => "unknown"},
                 match GIT_BRANCH { Some(val) => val, _ => "unknown"},
                 ));
-
             export_shared_api(ctx);
-
             ctx.set_module_options(ModuleOptions::HANDLE_IO_ERRORS);
             ctx.log_notice("Enabled diskless replication");
             let is_bigredis =
@@ -274,14 +272,7 @@ macro_rules! redis_json_module_create {
 }
 
 #[cfg(not(feature = "as-library"))]
-fn pre_command(_ctx: &Context, _args: &[RedisString]) {
-    // Guard against null context by checking LLAPI_CTX directly
-    unsafe {
-        if LLAPI_CTX.is_none() {
-            return;
-        }
-    }
-}
+const fn pre_command(_ctx: &Context, _args: &[RedisString]) {}
 
 #[cfg(not(feature = "as-library"))]
 const fn dummy_init(_ctx: &Context, _args: &[RedisString]) -> Status {
@@ -336,4 +327,3 @@ redis_json_module_create! {
     init: dummy_init,
     info: dummy_info,
 }
-

@@ -318,24 +318,7 @@ where
 }
 
 pub fn get_llapi_ctx() -> Context {
-    unsafe {
-        match LLAPI_CTX {
-            Some(ctx) if !ctx.is_null() => Context::new(ctx),
-            _ => {
-                // Fallback: try to get a thread-safe context
-                let fallback_ctx =
-                    rawmod::RedisModule_GetThreadSafeContext.unwrap()(std::ptr::null_mut());
-                if !fallback_ctx.is_null() {
-                    LLAPI_CTX = Some(fallback_ctx);
-                    Context::new(fallback_ctx)
-                } else {
-                    // Last resort: create a dummy context with null
-                    // This will prevent crashes but the pre_command function should handle null gracefully
-                    Context::new(std::ptr::null_mut())
-                }
-            }
-        }
-    }
+    Context::new(unsafe { LLAPI_CTX.unwrap() })
 }
 
 #[macro_export]
@@ -666,22 +649,10 @@ macro_rules! redis_json_module_export_shared_api {
 
         pub fn export_shared_api(ctx: &Context) {
             unsafe {
-                // Try to get thread-safe context, but don't fail if we can't
-                let thread_safe_ctx = rawmod::RedisModule_GetThreadSafeContext.unwrap()(
+                LLAPI_CTX = Some(rawmod::RedisModule_GetThreadSafeContext.unwrap()(
                     std::ptr::null_mut(),
-                );
+                ));
 
-                if !thread_safe_ctx.is_null() {
-                    LLAPI_CTX = Some(thread_safe_ctx);
-                    ctx.log_notice("Successfully initialized shared API context");
-                } else {
-                    ctx.log(redis_module::logging::RedisLogLevel::Warning,
-                           "Warning: Failed to get thread-safe context for shared API - module will work without shared API");
-                    // On Alpine ARM64, this might fail - continue without shared API
-                    return;
-                }
-
-                // Only export API if we successfully got the context
                 for v in 1..6 {
                     let version = format!("RedisJSON_V{}", v);
                     VEC_EXPORT_SHARED_API_NAME.push(CString::new(version.as_str()).unwrap());
