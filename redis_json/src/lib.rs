@@ -202,9 +202,9 @@ macro_rules! redis_json_module_create {
                 ));
 
             // Check if we're on Alpine ARM64 and skip shared API export if so
-            let is_alpine_arm64 = std::path::Path::new("/etc/alpine-release").exists() 
+            let is_alpine_arm64 = std::path::Path::new("/etc/alpine-release").exists()
                 && std::env::consts::ARCH == "aarch64";
-            
+
             if is_alpine_arm64 {
                 ctx.log_notice("Skipping shared API export on Alpine ARM64 to avoid crashes");
             } else {
