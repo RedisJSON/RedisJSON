@@ -201,14 +201,7 @@ macro_rules! redis_json_module_create {
                 match GIT_BRANCH { Some(val) => val, _ => "unknown"},
                 ));
 
-            // Check if we're on Alpine and skip shared API export if so
-            let is_alpine = std::path::Path::new("/etc/alpine-release").exists();
-
-            if is_alpine {
-                ctx.log_notice(&format!("Skipping shared API export on Alpine {} to avoid crashes", std::env::consts::ARCH));
-            } else {
-                export_shared_api(ctx);
-            }
+            export_shared_api(ctx);
 
             ctx.set_module_options(ModuleOptions::HANDLE_IO_ERRORS);
             ctx.log_notice("Enabled diskless replication");
@@ -344,86 +337,3 @@ redis_json_module_create! {
     info: dummy_info,
 }
 
-#[cfg(test)]
-mod tests {
-    use std::path::Path;
-
-    /// Test Alpine detection logic
-    #[test]
-    fn test_alpine_detection() {
-        // Test the logic we use in the actual code
-        let is_alpine = std::path::Path::new("/etc/alpine-release").exists();
-        
-        // On most CI systems, this should be false
-        // On actual Alpine systems, this would be true
-        // We can't easily mock the file system in unit tests, but we can test the logic
-        
-        // Test that the function compiles and runs without panicking
-        assert!(is_alpine == is_alpine); // Tautology, but ensures code runs
-    }
-
-    /// Test Alpine detection with different architectures
-    #[test]
-    fn test_alpine_detection_logic() {
-        // Test the individual components of our detection logic
-        
-        // Test architecture detection (this will be the actual arch of the test runner)
-        let current_arch = std::env::consts::ARCH;
-        assert!(!current_arch.is_empty());
-        
-        // Test that we can check for ARM64 specifically
-        let is_arm64 = std::env::consts::ARCH == "aarch64";
-        
-        // On x86_64 CI, this should be false
-        // On ARM64 CI, this should be true
-        // Either way, the test validates the logic works
-        assert!(is_arm64 == (current_arch == "aarch64"));
-    }
-
-    /// Test file existence checking (the pattern we use)
-    #[test]
-    fn test_file_existence_pattern() {
-        // Test that our file existence checking pattern works
-        // We can't test /etc/alpine-release specifically, but we can test the pattern
-        
-        // Test with a file that definitely doesn't exist
-        let nonexistent_file = Path::new("/this/path/definitely/does/not/exist/nowhere");
-        assert!(!nonexistent_file.exists());
-        
-        // Test with Cargo.toml which should exist in the project root
-        let cargo_toml = Path::new("Cargo.toml");
-        // This might not exist in the test context, so we'll just test the method works
-        let _exists = cargo_toml.exists(); // Just ensure the method can be called
-        
-        // This validates that our .exists() pattern works correctly
-        assert!(true); // Always pass - we're just testing the pattern compiles and runs
-    }
-
-    /// Test the combined logic with mocked conditions
-    #[test]
-    fn test_alpine_logic_combinations() {
-        // Test all combinations of the boolean logic
-        
-        // Simulate different scenarios
-        let scenarios = [
-            (true, true),   // Alpine + ARM64 = should skip
-            (true, false),  // Alpine + x86_64 = should skip  
-            (false, true),  // Non-Alpine + ARM64 = should not skip
-            (false, false), // Non-Alpine + x86_64 = should not skip
-        ];
-        
-        for (is_alpine, _is_arm64) in scenarios {
-            let should_skip = is_alpine; // Now we skip on any Alpine, regardless of architecture
-            
-            // Alpine (any architecture) should trigger the skip
-            assert_eq!(should_skip, is_alpine);
-            
-            // Validate that Alpine triggers the skip
-            if is_alpine {
-                assert!(should_skip);
-            } else {
-                assert!(!should_skip);
-            }
-        }
-    }
-}
