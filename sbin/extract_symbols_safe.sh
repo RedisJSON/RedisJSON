@@ -3,23 +3,23 @@
 # Safe symbol extraction script that handles Alpine ARM64 issues
 TARGET="$1"
 
-# Check if we're building for Alpine ARM64 (either native or in container)
-# Also check if objcopy is available to avoid command not found errors
-IS_ALPINE_ARM64=false
+# Check if we should skip debug symbol extraction
+SKIP_EXTRACTION=false
 
 if [ -f "/etc/alpine-release" ] && [ "$(uname -m)" = "aarch64" ]; then
-    IS_ALPINE_ARM64=true
+    # Alpine ARM64 - skip to avoid musl/objcopy issues
+    echo "Skipping debug symbol extraction on Alpine ARM64 to avoid musl/objcopy issues"
+    SKIP_EXTRACTION=true
 elif ! command -v objcopy >/dev/null 2>&1; then
-    # If objcopy is not available, we're likely in a CI environment building for Alpine
-    echo "objcopy not available - likely building for Alpine in CI environment"
-    IS_ALPINE_ARM64=true
+    # objcopy not available - skip to avoid command not found errors
+    echo "objcopy not available - skipping debug symbol extraction"
+    SKIP_EXTRACTION=true
 fi
 
-if [ "$IS_ALPINE_ARM64" = true ]; then
-    echo "Skipping debug symbol extraction on Alpine ARM64 to avoid musl/objcopy issues"
+if [ "$SKIP_EXTRACTION" = true ]; then
     exit 0
 else
-    # If not Alpine ARM64 and objcopy is available, extract debug symbols
+    # Extract debug symbols if objcopy is available
     echo "Extracting debug symbols for $TARGET"
     objcopy --only-keep-debug "$TARGET" "$TARGET.debug"
     objcopy --strip-debug "$TARGET"
