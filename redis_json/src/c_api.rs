@@ -18,13 +18,13 @@ use std::{
 
 use crate::formatter::ReplyFormatOptions;
 use crate::key_value::KeyValue;
-use json_path::select_value::{SelectValue, SelectValueType};
+use json_path::select_value::{SelectValue, SelectValueType, ValueRef};
 use json_path::{compile, create};
 use redis_module::raw as rawmod;
 use redis_module::{key::KeyFlags, Context, RedisString, Status};
 
 use crate::manager::{Manager, ReadHolder};
-
+// TODO AVIV: FIX ITERATORS API
 //
 // structs
 //
@@ -40,8 +40,25 @@ pub enum JSONType {
     Null = 6,
 }
 
+#[repr(C)]
+pub enum JSONPrimitiveType {
+    Heterogeneous = 0,
+    I8 = 1,
+    U8 = 2,
+    I16 = 3,
+    U16 = 4,
+    F16 = 5,
+    BF16 = 6,
+    I32 = 7,
+    U32 = 8,
+    F32 = 9,
+    I64 = 10,
+    U64 = 11,
+    F64 = 12,
+}
+
 struct ResultsIterator<'a, V: SelectValue> {
-    results: Vec<&'a V>,
+    results: Vec<ValueRef<'a, V>>,
     pos: usize,
 }
 
@@ -93,14 +110,8 @@ pub fn json_api_open_key_with_flags_internal<M: Manager>(
     null()
 }
 
-pub fn json_api_get_at<M: Manager>(_: M, json: *const c_void, index: size_t) -> *const c_void {
-    let json = unsafe { &*(json.cast::<M::V>()) };
-    match json.get_type() {
-        SelectValueType::Array => json
-            .get_index(index)
-            .map_or_else(null, |v| (v.as_ref_with_lifetime() as *const M::V).cast::<c_void>()),
-        _ => null(),
-    }
+pub fn json_api_get_at<M: Manager>(_: M, _json: *const c_void, _index: size_t) -> *const c_void {
+    panic!("json_api_get_at is deprecated");
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -239,7 +250,7 @@ pub fn json_api_next<M: Manager>(_: M, iter: *mut c_void) -> *const c_void {
     if iter.pos >= iter.results.len() {
         null_mut()
     } else {
-        let res = (iter.results[iter.pos] as *const M::V).cast::<c_void>();
+        let res = (iter.results[iter.pos].as_ref() as *const M::V).cast::<c_void>();
         iter.pos += 1;
         res
     }
@@ -314,6 +325,22 @@ where
     let iter = unsafe { &mut *(iter.cast::<Box<dyn Iterator<Item = (&'a str, &'a M::V)> + 'a>>()) };
     unsafe {
         drop(Box::from_raw(iter));
+    }
+}
+
+pub fn json_api_get_at_with_type<M: Manager>(_: M, json: *const c_void, index: size_t, r#type: *mut c_void) -> *const c_void {
+    let json = unsafe { &*(json.cast::<M::V>()) };
+    match json.get_type() {
+        SelectValueType::Array => {
+            let Some(value) = json.get_index(index) else {
+                return null();
+            };
+            let r#type =  r#type.cast::<JSONPrimitiveType>();
+            //TODO AVIV: IMPLEMENT THIS
+            todo!()
+           
+        },
+        _ => null(),
     }
 }
 
@@ -644,6 +671,18 @@ macro_rules! redis_json_module_export_shared_api {
             )
         }
 
+        // #[no_mangle]
+        // pub extern "C" fn JSONAPI_getAtWithType(json: *const c_void, index: size_t, r#type: *mut c_void) -> *const c_void {
+        //     run_on_manager!(
+        //         pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+        //         get_manage: {
+        //             $( $condition => $manager_ident { $($field: $value),* } ),*
+        //             _ => $default_manager
+        //         },
+        //         run: |mngr|{json_api_get_at_with_type(mngr, json, index, r#type)},
+        //     )
+        // }
+
         // The apiname argument of export_shared_api should be a string literal with static lifetime
         static mut VEC_EXPORT_SHARED_API_NAME : Vec<CString> = Vec::new();
 
@@ -696,6 +735,8 @@ macro_rules! redis_json_module_export_shared_api {
             freeKeyValuesIter: JSONAPI_freeKeyValuesIter,
             // V5 entries
             openKeyWithFlags: JSONAPI_openKey_withFlags,
+            // V6 entries
+            //getAtWithType: JSONAPI_getAtWithType,
         };
 
         #[repr(C)]
@@ -751,6 +792,8 @@ macro_rules! redis_json_module_export_shared_api {
                 key_str: *mut rawmod::RedisModuleString,
                 flags: c_int,
             ) -> *mut c_void,
+            // V6
+            //pub getAtWithType: extern "C" fn(json: *const c_void, index: size_t, r#type: *mut c_void) -> *const c_void,
 
         }
     };

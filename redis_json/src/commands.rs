@@ -16,7 +16,7 @@ use crate::manager::{
     Manager, ReadHolder, UpdateInfo, WriteHolder,
 };
 use crate::redisjson::{Format, Path, ReplyFormat, SetOptions, JSON_ROOT_PATH};
-use json_path::select_value::{SelectValue, SelectValueType};
+use json_path::select_value::{SelectValue, SelectValueType, ValueRef};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use std::cmp::Ordering;
@@ -65,8 +65,8 @@ const JSONGET_SUBCOMMANDS_MAXSTRLEN: usize = max_strlen(&[
 ]);
 
 pub enum Values<'a, V: SelectValue> {
-    Single(&'a V),
-    Multi(Vec<&'a V>),
+    Single(ValueRef<'a, V>),
+    Multi(Vec<ValueRef<'a, V>>),
 }
 
 impl<'a, V: SelectValue> Serialize for Values<'a, V> {
@@ -383,7 +383,7 @@ fn apply_updates<M: Manager>(
     }
 }
 
-fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
+fn find_paths<T: SelectValue, F: FnMut(ValueRef<'_, T>) -> bool>(
     path: &str,
     doc: &T,
     mut f: F,
@@ -395,7 +395,7 @@ fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
     let res = calc_once_with_paths(query, doc);
     Ok(res
         .into_iter()
-        .filter(|e| f(e.res))
+        .filter(|e| f(e.res.clone()))
         .map(|e| e.path_tracker.unwrap().to_string_path())
         .collect())
 }
@@ -404,7 +404,7 @@ fn find_paths<T: SelectValue, F: FnMut(&T) -> bool>(
 fn get_all_values_and_paths<'a, T: SelectValue>(
     path: &str,
     doc: &'a T,
-) -> Result<Vec<(&'a T, Vec<String>)>, RedisError> {
+) -> Result<Vec<(ValueRef<'a, T>, Vec<String>)>, RedisError> {
     let query = match compile(path) {
         Ok(q) => q,
         Err(e) => return Err(RedisError::String(e.to_string())),
@@ -417,9 +417,12 @@ fn get_all_values_and_paths<'a, T: SelectValue>(
 }
 
 /// Returns a Vec of paths with `None` for Values that do not match the filter
-fn filter_paths<T, F>(values_and_paths: Vec<(&T, Vec<String>)>, f: F) -> Vec<Option<Vec<String>>>
+fn filter_paths<T: SelectValue, F>(
+    values_and_paths: Vec<(ValueRef<'_, T>, Vec<String>)>,
+    f: F,
+) -> Vec<Option<Vec<String>>>
 where
-    F: Fn(&T) -> bool,
+    F: Fn(ValueRef<'_, T>) -> bool,
 {
     values_and_paths
         .into_iter()
@@ -428,13 +431,16 @@ where
 }
 
 /// Returns a Vec of Values with `None` for Values that do not match the filter
-fn filter_values<T, F>(values_and_paths: Vec<(&T, Vec<String>)>, f: F) -> Vec<Option<&T>>
+fn filter_values<T: SelectValue, F>(
+    values_and_paths: Vec<(ValueRef<'_, T>, Vec<String>)>,
+    f: F,
+) -> Vec<Option<ValueRef<'_, T>>>
 where
-    F: Fn(&T) -> bool,
+    F: Fn(ValueRef<'_, T>) -> bool,
 {
     values_and_paths
         .into_iter()
-        .map(|(v, _)| f(v).then_some(v))
+        .map(|(v, _)| f(v.clone()).then_some(v))
         .collect()
 }
 
@@ -444,7 +450,7 @@ fn find_all_paths<T: SelectValue, F>(
     f: F,
 ) -> Result<Vec<Option<Vec<String>>>, RedisError>
 where
-    F: Fn(&T) -> bool,
+    F: Fn(ValueRef<'_, T>) -> bool,
 {
     let res = get_all_values_and_paths(path, doc)?;
     match res.is_empty() {
@@ -457,9 +463,9 @@ fn find_all_values<'a, T: SelectValue, F>(
     path: &str,
     doc: &'a T,
     f: F,
-) -> Result<Vec<Option<&'a T>>, RedisError>
+) -> Result<Vec<Option<ValueRef<'a, T>>>, RedisError>
 where
-    F: Fn(&T) -> bool,
+    F: Fn(ValueRef<'_, T>) -> bool,
 {
     let res = get_all_values_and_paths(path, doc)?;
     match res.is_empty() {
@@ -664,7 +670,7 @@ where
         Some(root) => KeyValue::new(root)
             .get_values(path)?
             .iter()
-            .map(|v| RedisValue::from(KeyValue::value_name(*v)))
+            .map(|v| RedisValue::from(KeyValue::value_name(v.as_ref())))
             .collect_vec()
             .into(),
         None => RedisValue::Null,
@@ -1716,7 +1722,7 @@ where
         Some(root) => find_all_values(path, root, |v| v.get_type() == SelectValueType::Object)?
             .iter()
             .map(|v| {
-                v.map_or(RedisValue::Null, |v| {
+                v.clone().map_or(RedisValue::Null, |v| {
                     RedisValue::Integer(v.len().unwrap() as i64)
                 })
             })
@@ -1806,7 +1812,9 @@ pub fn json_debug<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
             let key = manager.open_key_read(ctx, &key)?;
             if path.is_legacy() {
                 Ok(match key.get_value()? {
-                    Some(doc) => M::get_memory(KeyValue::new(doc).get_first(path.get_path())?)?,
+                    Some(doc) => {
+                        M::get_memory(KeyValue::new(doc).get_first(path.get_path())?.as_ref())?
+                    }
                     None => 0,
                 }
                 .into())
@@ -1815,7 +1823,7 @@ pub fn json_debug<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
                     Some(doc) => KeyValue::new(doc)
                         .get_values(path.get_path())?
                         .into_iter()
-                        .map(M::get_memory)
+                        .map(|v| M::get_memory(v.as_ref()))
                         .try_collect()?,
                     None => vec![],
                 }

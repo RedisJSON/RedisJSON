@@ -48,9 +48,9 @@ impl SelectValue for Value {
         }
     }
 
-    fn items<'a>(&'a self) -> Option<Box<dyn Iterator<Item = (&'a str, &'a Self)> + 'a>> {
+    fn items<'a>(&'a self) -> Option<Box<dyn Iterator<Item = (&'a str, ValueRef<'a, Self>)> + 'a>> {
         match self {
-            Self::Object(o) => Some(Box::new(o.iter().map(|(k, v)| (&k[..], v)))),
+            Self::Object(o) => Some(Box::new(o.iter().map(|(k, v)| (&k[..], ValueRef::Borrowed(v))))),
             _ => None,
         }
     }
@@ -71,9 +71,9 @@ impl SelectValue for Value {
         }
     }
 
-    fn get_key<'a>(&'a self, key: &str) -> Option<&'a Self> {
+    fn get_key<'a>(&'a self, key: &str) -> Option<ValueRef<'a, Self>> {
         match self {
-            Self::Object(o) => o.get(key),
+            Self::Object(o) => o.get(key).map(|v| ValueRef::Borrowed(v)),
             _ => None,
         }
     }
@@ -174,9 +174,9 @@ impl SelectValue for IValue {
         }
     }
 
-    fn items<'a>(&'a self) -> Option<Box<dyn Iterator<Item = (&'a str, &'a Self)> + 'a>> {
+    fn items<'a>(&'a self) -> Option<Box<dyn Iterator<Item = (&'a str, ValueRef<'a, Self>)> + 'a>> {
         match self.destructure_ref() {
-            DestructuredRef::Object(o) => Some(Box::new(o.iter().map(|(k, v)| (k.as_str(), v)))),
+            DestructuredRef::Object(o) => Some(Box::new(o.iter().map(|(k, v)| (k.as_str(), ValueRef::Borrowed(v))))),
             _ => None,
         }
     }
@@ -193,8 +193,8 @@ impl SelectValue for IValue {
         self.is_empty()
     }
 
-    fn get_key<'a>(&'a self, key: &str) -> Option<&'a Self> {
-        self.as_object().and_then(|o| o.get(key))
+    fn get_key<'a>(&'a self, key: &str) -> Option<ValueRef<'a, Self>> {
+        self.as_object().and_then(|o| o.get(key).map(|v| ValueRef::Borrowed(v)))
     }
 
     fn get_index<'a>(&'a self, index: usize) -> Option<ValueRef<'a, Self>> {
