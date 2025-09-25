@@ -27,7 +27,7 @@ macro_rules! value_ref_items {
                 let iter = borrowed_val.items().unwrap();
                 let collected: Vec<_> = iter.map(|(k, v)| (k.to_string(), v)).collect();
                 Box::new(collected.into_iter())
-                    as Box<dyn Iterator<Item = (String, ValueRef<'_, _>)>>
+                    as Box<dyn Iterator<Item = (String, ValueRef<'_, S>)>>
             }
             ValueRef::Owned(owned_val) => {
                 // For owned values, collect first to avoid lifetime issues
@@ -36,7 +36,7 @@ macro_rules! value_ref_items {
                     .map(|(k, v)| (k.to_string(), ValueRef::Owned(v.inner_cloned())))
                     .collect();
                 Box::new(collected.into_iter())
-                    as Box<dyn Iterator<Item = (String, ValueRef<'_, _>)>>
+                    as Box<dyn Iterator<Item = (String, ValueRef<'_, S>)>>
             }
         }
     }};
@@ -49,26 +49,21 @@ macro_rules! value_ref_values {
             ValueRef::Borrowed(borrowed_val) => {
                 // For borrowed values, we can iterate directly
                 let iter = borrowed_val.values().unwrap();
-                Box::new(iter) as Box<dyn Iterator<Item = ValueRef<'_, _>>>
+                Box::new(iter) as Box<dyn Iterator<Item = ValueRef<'_, S>>>
             }
             ValueRef::Owned(owned_val) => {
                 // For owned values, we need to collect first to avoid lifetime issues
                 let iter = owned_val.values().unwrap();
-                let collected: Vec<_> = iter
-                    .map(|v| match v {
-                        ValueRef::Borrowed(borrowed) => ValueRef::Owned(borrowed.clone()),
-                        ValueRef::Owned(owned) => ValueRef::Owned(owned),
-                    })
-                    .collect();
-                Box::new(collected.into_iter()) as Box<dyn Iterator<Item = ValueRef<'_, _>>>
+                let collected: Vec<_> = iter.map(|v| ValueRef::Owned(v.inner_cloned())).collect();
+                Box::new(collected.into_iter()) as Box<dyn Iterator<Item = ValueRef<'_, S>>>
             }
         }
     }};
 }
 
 macro_rules! value_ref_get_key {
-    ($json:expr, $curr:expr) => {{
-        match &$json {
+    ($value_ref:expr, $curr:expr) => {{
+        match &$value_ref {
             ValueRef::Borrowed(v) => v.get_key($curr),
             ValueRef::Owned(v) => v
                 .get_key($curr)
@@ -78,8 +73,8 @@ macro_rules! value_ref_get_key {
 }
 
 macro_rules! value_ref_get_index {
-    ($json:expr, $i:expr) => {{
-        match &$json {
+    ($value_ref:expr, $i:expr) => {{
+        match &$value_ref {
             ValueRef::Borrowed(v) => v.get_index($i),
             ValueRef::Owned(v) => v
                 .get_index($i)
@@ -644,7 +639,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                         );
                     }
                 } else {
-                    let values: Box<dyn Iterator<Item = ValueRef<'j, S>>> = value_ref_values!(json);
+                    let values = value_ref_values!(json);
                     for v in values {
                         self.calc_internal(pairs.clone(), v.clone(), None, calc_data);
                         self.calc_full_scan(pairs.clone(), v, None, calc_data);
@@ -652,7 +647,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 }
             }
             SelectValueType::Array => {
-                let values: Box<dyn Iterator<Item = ValueRef<'j, S>>> = value_ref_values!(json);
+                let values = value_ref_values!(json);
                 if let Some(pt) = path_tracker {
                     for (i, v) in values.enumerate() {
                         self.calc_internal(
@@ -1113,7 +1108,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                             /* lets expend the array, this is how most json path engines work.
                              * Personally, I think this if should not exists. */
                             let unified_iter = if json_type == SelectValueType::Object {
-                                UnifiedIter::<S>::Object(value_ref_items!(json))
+                                UnifiedIter::Object(value_ref_items!(json))
                             } else {
                                 UnifiedIter::Array(value_ref_values!(json).enumerate())
                             };
