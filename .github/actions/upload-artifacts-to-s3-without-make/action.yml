@@ -17,6 +17,10 @@ inputs:
     description: 'github ref'
     required: false
     default: ''
+  beta-version:
+    description: 'Beta version for S3 uploads'
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -45,16 +49,31 @@ runs:
           aws configure set region "$AWS_REGION"
 
           echo ::group::upload artifacts
-            SNAPSHOT=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
+            SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
           echo ::endgroup::
           echo ::group::upload staging release
-            RELEASE=1 SHOW=1 STAGING=1 VERBOSE=1 ./sbin/upload-artifacts
+            STAGING=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
           echo ::endgroup::
           
           echo ::group::upload production release
             REF="${{ inputs.github-ref }}"
             PATTERN="refs/tags/v[0-9]+.*"
             if [[ $REF =~ $PATTERN ]]; then
+              echo "This is a tagged build"
               RELEASE=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
+            fi
+          echo ::endgroup::
+          
+          echo ::group::upload to beta folder with version
+            # Use provided beta version if available
+            if [[ -n "${{ inputs.beta-version }}" ]]; then
+              BETA_VERSION="${{ inputs.beta-version }}"
+              echo "Using provided beta version: ${BETA_VERSION}"
+              
+              # Upload to beta folder
+              export BETA_VERSION="${BETA_VERSION}"
+              BETA=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
+            else
+              echo "No beta version provided, skipping beta upload"
             fi
           echo ::endgroup::

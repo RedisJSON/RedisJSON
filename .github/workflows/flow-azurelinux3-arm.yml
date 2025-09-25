@@ -10,6 +10,10 @@ on:
       run-test:
         type: boolean
         default: true
+      beta-version:
+        description: 'Beta version for S3 uploads'
+        type: string
+        required: false
   workflow_call: # Allows to run this workflow from another workflow
     inputs:
       redis-ref:
@@ -19,6 +23,10 @@ on:
       run-test:
         type: boolean
         default: true
+      beta-version:
+        description: 'Beta version for S3 uploads'
+        type: string
+        required: false
 
 permissions:
   id-token: write # This is required for requesting the JWT
@@ -44,6 +52,7 @@ jobs:
         with:
           github-ref: ${{ github.ref }}
           redis-ref: ${{ inputs.redis-ref }}
+          beta-version: ${{ inputs.beta-version }}
 
   azurelinux3-arm64:
     runs-on: ubuntu24-arm64-4-16 # ubuntu24-arm64-2-8
@@ -147,9 +156,12 @@ jobs:
         uses: ./.github/actions/run-tests
       - name: Pack module
         uses: ./.github/actions/pack-module
+        with:
+          beta-version: ${{ inputs.beta-version }}
       - name: Upload artifacts to S3
         uses: ./.github/actions/upload-artifacts-to-s3-without-make
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          github-ref: ${{ github.ref }} 
+          github-ref: ${{ github.ref }}
+          beta-version: ${{ inputs.beta-version }} 
