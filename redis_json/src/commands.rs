@@ -424,10 +424,12 @@ fn filter_paths<T: SelectValue, F>(
 where
     F: Fn(ValueRef<'_, T>) -> bool,
 {
-    values_and_paths
+    let r = values_and_paths
         .into_iter()
         .map(|(v, p)| f(v).then_some(p))
-        .collect()
+        .collect();
+    println!("filter_paths r {:?}", &r);
+    r
 }
 
 /// Returns a Vec of Values with `None` for Values that do not match the filter
@@ -453,6 +455,7 @@ where
     F: Fn(ValueRef<'_, T>) -> bool,
 {
     let res = get_all_values_and_paths(path, doc)?;
+    println!("find_all_paths res {:?}", &res);
     match res.is_empty() {
         false => Ok(filter_paths(res, f)),
         _ => Ok(vec![]),
@@ -780,12 +783,16 @@ where
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
+    println!("json_num_op_impl root {:?}", &root);
     let paths = find_all_paths(path, root, |v| {
+        println!("checking if filter f v {:?}", &v);
+        println!("v.get_type() {:?}", &v.get_type());
         matches!(
             v.get_type(),
             SelectValueType::Double | SelectValueType::Long
         )
     })?;
+    println!("json_num_op_impl paths {:?}", &paths);
 
     let mut need_notify = false;
     let res = paths
@@ -824,9 +831,11 @@ where
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
+    println!("json_num_op_legacy root {:?}", &root);
     let paths = find_paths(path, root, |v| {
         v.get_type() == SelectValueType::Double || v.get_type() == SelectValueType::Long
     })?;
+    println!("json_num_op_legacy paths {:?}", &paths);
     if !paths.is_empty() {
         let mut res = None;
         for p in paths {
