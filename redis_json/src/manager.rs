@@ -7,7 +7,7 @@
  * GNU Affero General Public License v3 (AGPLv3).
  */
 
-use json_path::select_value::SelectValue;
+use json_path::select_value::{SelectValue, ValueRef};
 use redis_module::key::KeyFlags;
 use serde_json::Number;
 
