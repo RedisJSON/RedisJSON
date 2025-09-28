@@ -845,6 +845,7 @@ version = "99.99.99"
 dependencies = [
  "bitflags 2.6.0",
  "bson",
+ "half",
  "ijson",
  "itertools",
  "json_path",
