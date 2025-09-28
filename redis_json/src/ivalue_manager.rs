@@ -376,7 +376,6 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             self.set_root(v)
         } else {
             let root = self.get_value()?.unwrap();
-            println!("set root: {:?}", root);
             Ok(update(path, root, |val| match val {
                 PathValue::IValue(val) => Ok(*val = v.take()),
                 PathValue::I8(iarray, index) => {
