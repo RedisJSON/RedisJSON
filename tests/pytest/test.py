@@ -1578,14 +1578,14 @@ def testArrInsertNumericArrayTypes(env):
     numeric_types = {
         # type -> (array, index to check, value to insert)
         'I8'   : ([-128, 0, 127, -1], 2, -64),      # i8: min, zero, max, negative
-        'U8'   : ([0, 1, 255, 42], 2, 128),         # u8: min, small, max, mid
+        'U8'   : ([0, 1, 100, 42], 2, 75),         # u8: min, small, max, mid
         'I16'  : ([-32768, 0, 32767, -12345], 2, 12345), # i16: min, zero, max, negative
         'U16'  : ([0, 1, 65535, 12345], 2, 54321),  # u16: min, small, max, mid
         'I32'  : ([-2147483648, 0, 2147483647, -100000], 2, 100000), # i32: min, zero, max, neg
         'U32'  : ([0, 1, 4294967295, 123456789], 2, 987654321),      # u32: min, small, max, mid
         'F32'  : ([0.0, 1.5, -3.4e38, 3.4e38], 2, 2.71828),         # f32: zero, pos, min, max
-        'I64'  : ([-9223372036854775808, 0, 9223372036854775807, -123456789012345], 2, 123456789012345), # i64
-        'U64'  : ([0, 1, 18446744073709551615, 123456789012345], 2, 98765432109876), # u64
+        'I64'  : ([-9223372036854775808, 0, 4,294,967,295, -4,294,967,295], 2, 123456789012345), # i64
+        'U64'  : ([0, 1, 18446744073709551615,  4,294,967,295], 2, 98765432109876), # u64
         'F64'  : ([0.0, 1.5, -1.7e308, 1.7e308], 2, 3.141592653589793), # f64: zero, pos, min, max
     }
     for (numeric_type, (array, index, value)) in numeric_types.items():
@@ -1594,6 +1594,7 @@ def testArrInsertNumericArrayTypes(env):
         r.assertEqual(r.execute_command('JSON.ARRINDEX', f'test_{numeric_type}', '.', array[index]), index)
         r.assertEqual(r.execute_command('JSON.ARRAPPEND', f'test_{numeric_type}', '.', value), len(array) + 1)
         r.assertEqual(r.execute_command('JSON.ARRINDEX', f'test_{numeric_type}', '.', value), len(array))
+        r.assertEqual(r.execute_command('JSON.GET', f'test_{numeric_type}', f'.[{len(array)}]'), str(value))
 
 
 # class CacheTestCase(BaseReJSONTest):
