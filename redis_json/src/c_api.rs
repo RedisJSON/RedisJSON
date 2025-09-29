@@ -718,7 +718,7 @@ macro_rules! redis_json_module_export_shared_api {
                     std::ptr::null_mut(),
                 ));
 
-                for v in 1..6 {
+                for v in 1..7 {
                     let version = format!("RedisJSON_V{}", v);
                     VEC_EXPORT_SHARED_API_NAME.push(CString::new(version.as_str()).unwrap());
                     ctx.export_shared_api(
