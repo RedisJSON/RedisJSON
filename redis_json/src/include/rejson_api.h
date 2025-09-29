@@ -64,7 +64,6 @@ typedef struct RedisJSONAPI {
   void (*freeIter)(JSONResultsIterator iter);
 
   RedisJSON (*getAt)(RedisJSON json, size_t index);
-  void* (*getAtWithType)(RedisJSON json, size_t index, JSONPrimitiveType *type);
 
   /* RedisJSON value functions
    * Return REDISMODULE_OK if RedisJSON is of the correct JSONType,
@@ -141,9 +140,16 @@ typedef struct RedisJSONAPI {
 
   RedisJSON (*openKeyWithFlags)(RedisModuleCtx *ctx, RedisModuleString *key_name, int flags);
 
+  ////////////////
+  // V6 entries //
+  ////////////////
+
+  void* (*getAtWithType)(RedisJSON json, size_t index, JSONPrimitiveType *type);
+
+
 } RedisJSONAPI;
 
-#define RedisJSONAPI_LATEST_API_VER 5
+#define RedisJSONAPI_LATEST_API_VER 6
 #ifdef __cplusplus
 }
 #endif
