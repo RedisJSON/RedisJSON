@@ -634,6 +634,12 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                     for (key, val) in items {
                         self.calc_internal(
                             pairs.clone(),
+                            val.clone(),
+                            Some(create_str_tracker(key.as_str(), &pt)),
+                            calc_data,
+                        );
+                        self.calc_full_scan(
+                            pairs.clone(),
                             val,
                             Some(create_str_tracker(key.as_str(), &pt)),
                             calc_data,
