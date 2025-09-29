@@ -65,10 +65,9 @@ macro_rules! value_ref_get_key {
     ($value_ref:expr, $curr:expr) => {{
         match &$value_ref {
             ValueRef::Borrowed(v) => v.get_key($curr),
-            ValueRef::Owned(v) => v.get_key($curr).and_then(|v| {
-                println!("value_ref_get_key v {:?}", &v);
-                Some(ValueRef::Owned(v.inner_cloned()))
-            }),
+            ValueRef::Owned(v) => v
+                .get_key($curr)
+                .and_then(|v| Some(ValueRef::Owned(v.inner_cloned()))),
         }
     }};
 }
@@ -728,17 +727,12 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         path_tracker: Option<PathTracker<'l, 'k>>,
         calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
     ) {
-        println!("Getting key {:?}", &curr.as_str());
         let curr_val = value_ref_get_key!(json, curr.as_str());
-        println!("got key value {:?}", &curr_val);
         if let Some(e) = curr_val {
-            println!("calc_literal curr_val {:?}", &e);
             if let Some(pt) = path_tracker {
-                println!("calc_literal pt {:?}", &pt);
                 let new_tracker = Some(create_str_tracker(curr.as_str(), &pt));
                 self.calc_internal(pairs, e, new_tracker, calc_data);
             } else {
-                println!("calc_literal path_tracker None");
                 self.calc_internal(pairs, e, None, calc_data);
             }
         }
@@ -976,15 +970,15 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
     ) -> bool {
         let mut curr = curr.into_inner();
         let term1 = curr.next().unwrap();
-        println!("evaluate_single_filter term1 {:?}", &term1);
+        trace!("evaluate_single_filter term1 {:?}", &term1);
         let term1_val = self.evaluate_single_term(term1, json.clone(), calc_data);
-        println!("evaluate_single_filter term1_val {:?}", &term1_val);
+        trace!("evaluate_single_filter term1_val {:?}", &term1_val);
         if let Some(op) = curr.next() {
-            println!("evaluate_single_filter op {:?}", &op);
+            trace!("evaluate_single_filter op {:?}", &op);
             let term2 = curr.next().unwrap();
-            println!("evaluate_single_filter term2 {:?}", &term2);
+            trace!("evaluate_single_filter term2 {:?}", &term2);
             let term2_val = self.evaluate_single_term(term2, json, calc_data);
-            println!("evaluate_single_filter term2_val {:?}", &term2_val);
+            trace!("evaluate_single_filter term2_val {:?}", &term2_val);
             match op.as_rule() {
                 Rule::gt => term1_val.gt(&term2_val),
                 Rule::ge => term1_val.ge(&term2_val),
@@ -1007,7 +1001,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
     ) -> bool {
         let first_filter = curr.next().unwrap();
-        println!("evaluate_filter first_filter {:?}", &first_filter);
+        trace!("evaluate_filter first_filter {:?}", &first_filter);
         let mut first_result = match first_filter.as_rule() {
             Rule::single_filter => {
                 self.evaluate_single_filter(first_filter, json.clone(), calc_data)
@@ -1017,7 +1011,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             }
             _ => panic!("{first_filter:?}"),
         };
-        println!("evaluate_filter first_result {:?}", &first_result);
+        trace!("evaluate_filter first_result {:?}", &first_result);
 
         // Evaluate filter operands with operator (relation) precedence of AND before OR, e.g.,
         //  A && B && C || D || E && F ===> (A && B && C) || D || (E && F)
@@ -1033,7 +1027,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 Rule::and => {
                     // Consume the operand even if not needed for evaluation
                     let second_filter = curr.next().unwrap();
-                    println!("evaluate_filter && second_filter {:?}", &second_filter);
+                    trace!("evaluate_filter && second_filter {:?}", &second_filter);
                     if !first_result {
                         continue; // Skip eval till next OR
                     }
@@ -1050,7 +1044,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                     };
                 }
                 Rule::or => {
-                    println!("evaluate_filter ||");
+                    trace!("evaluate_filter ||");
                     if first_result {
                         break; // can return True
                     }
@@ -1090,7 +1084,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         let curr = pairs.next();
         match curr {
             Some(curr) => {
-                println!("calc_internal curr {:?}", &curr.as_rule());
+                trace!("calc_internal curr {:?}", &curr.as_rule());
                 match curr.as_rule() {
                     Rule::full_scan => {
                         self.calc_internal(
@@ -1126,13 +1120,10 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                             };
 
                             if let Some(pt) = path_tracker {
-                                println!(
-                                    "calc_internal type {:?} path_tracker {:?}",
-                                    json_type, &pt
-                                );
+                                trace!("calc_internal type {:?} path_tracker {:?}", json_type, &pt);
                                 for item in unified_iter {
                                     let v = item.value();
-                                    println!("calc_internal v {:?}", &v);
+                                    trace!("calc_internal v {:?}", &v);
                                     if self.evaluate_filter(
                                         curr.clone().into_inner(),
                                         v.clone(),
@@ -1148,10 +1139,10 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                                     }
                                 }
                             } else {
-                                println!("calc_internal type {:?} path_tracker None", json_type);
+                                trace!("calc_internal type {:?} path_tracker None", json_type);
                                 for item in unified_iter {
                                     let v = item.value();
-                                    println!("calc_internal v {:?}", &v);
+                                    trace!("calc_internal v {:?}", &v);
                                     if self.evaluate_filter(
                                         curr.clone().into_inner(),
                                         v.clone(),
@@ -1162,9 +1153,10 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                                 }
                             }
                         } else if self.evaluate_filter(curr.into_inner(), json.clone(), calc_data) {
-                            println!(
+                            trace!(
                                 "calc_internal type {:?} path_tracker {:?}",
-                                json_type, &path_tracker
+                                json_type,
+                                &path_tracker
                             );
                             self.calc_internal(pairs, json, path_tracker, calc_data);
                         }
@@ -1179,10 +1171,6 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 }
             }
             None => {
-                println!("calc_internal None");
-                println!("calc_internal path_tracker {:?}", &path_tracker);
-                println!("calc_internal json {:?}", &json);
-                println!("calc_internal PUSHING CALCULATION RESULT");
                 calc_data.results.push(CalculationResult {
                     res: json,
                     path_tracker: path_tracker.map(|pt| self.generate_path(pt)),
@@ -1196,8 +1184,6 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         json: ValueRef<'j, S>,
         root: Pairs<'i, Rule>,
     ) -> Vec<CalculationResult<'j, S, UPTG::PT>> {
-        println!("--------------------------------");
-        println!("calc_with_paths_on_root json {:?}", &json);
         let mut calc_data = PathCalculatorData {
             results: Vec::new(),
             root: json.clone(),
