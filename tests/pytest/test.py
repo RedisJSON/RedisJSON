@@ -1571,8 +1571,8 @@ def test_json_del_matches_with_object_pathes(env):
     r.expect("JSON.DEL", "test", "$.root[?(@.value > 2)]").equal(3)
     r.expect("JSON.GET", "test", "$").equal('[{"root":{"1":{"value":1},"2":{"value":2}}}]')
 
-def testArrInsertNumericArrayTypes(env):
-    """Test JSON.ARRINSERT command with numeric array types"""
+def testArrtNumericArrayTypesOperations(env):
+    """Test commands with numeric array types"""
     r = env
 
     numeric_types = {
@@ -1597,6 +1597,8 @@ def testArrInsertNumericArrayTypes(env):
         r.assertEqual(r.execute_command('JSON.GET', f'test_{numeric_type}', f'.[{len(array)}]'), str(value))
         r.assertEqual(r.execute_command('JSON.NUMINCRBY', f'test_{numeric_type}', f'.[{len(array)}]', 1), str(value + 1))
         r.assertEqual(r.execute_command('JSON.GET', f'test_{numeric_type}', f'.[{len(array)}]'), str(value + 1))
+        r.assertOk(r.execute_command('JSON.SET', f'test_{numeric_type}', '.[0]', value))
+        r.assertEqual(r.execute_command('JSON.GET', f'test_{numeric_type}', f'.[0]'), str(value))
 
 
 # class CacheTestCase(BaseReJSONTest):
