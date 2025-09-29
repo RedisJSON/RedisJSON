@@ -379,41 +379,77 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             Ok(update(path, root, |val| match val {
                 PathValue::IValue(val) => Ok(*val = v.take()),
                 PathValue::I8(iarray, index) => {
-                    iarray.remove(index).ok_or(RedisError::Str("index out of bounds for array set   "))?;
-                    Ok(iarray.insert(index, v.take()))},
+                    iarray
+                        .remove(index)
+                        .ok_or(RedisError::Str("index out of bounds for array set   "))?;
+                    Ok(iarray.insert(index, v.take()))
+                }
                 PathValue::U8(iarray, index) => {
-                    iarray.remove(index).ok_or(RedisError::Str("index out of bounds for array set"))?;
-                    Ok(iarray.insert(index, v.take()))},
+                    iarray
+                        .remove(index)
+                        .ok_or(RedisError::Str("index out of bounds for array set"))?;
+                    Ok(iarray.insert(index, v.take()))
+                }
                 PathValue::I16(iarray, index) => {
-                    iarray.remove(index).ok_or(RedisError::Str("index out of bounds for array set"))?;
-                    Ok(iarray.insert(index, v.take()))},
+                    iarray
+                        .remove(index)
+                        .ok_or(RedisError::Str("index out of bounds for array set"))?;
+                    Ok(iarray.insert(index, v.take()))
+                }
                 PathValue::U16(iarray, index) => {
-                    iarray.remove(index).ok_or(RedisError::Str("index out of bounds for array set"))?;
-                    Ok(iarray.insert(index, v.take()))},
+                    iarray
+                        .remove(index)
+                        .ok_or(RedisError::Str("index out of bounds for array set"))?;
+                    Ok(iarray.insert(index, v.take()))
+                }
                 PathValue::F16(iarray, index) => {
-                    iarray.remove(index).ok_or(RedisError::Str("index out of bounds for array set"))?;
-                    Ok(iarray.insert(index, v.take()))},
+                    iarray
+                        .remove(index)
+                        .ok_or(RedisError::Str("index out of bounds for array set"))?;
+                    Ok(iarray.insert(index, v.take()))
+                }
                 PathValue::BF16(iarray, index) => {
-                    iarray.remove(index).ok_or(RedisError::Str("index out of bounds for array set"))?;
-                    Ok(iarray.insert(index, v.take()))},
+                    iarray
+                        .remove(index)
+                        .ok_or(RedisError::Str("index out of bounds for array set"))?;
+                    Ok(iarray.insert(index, v.take()))
+                }
                 PathValue::I32(iarray, index) => {
-                    iarray.remove(index).ok_or(RedisError::Str("index out of bounds for array set"))?;
-                    Ok(iarray.insert(index, v.take()))},
+                    iarray
+                        .remove(index)
+                        .ok_or(RedisError::Str("index out of bounds for array set"))?;
+                    Ok(iarray.insert(index, v.take()))
+                }
                 PathValue::U32(iarray, index) => {
-                    iarray.remove(index).ok_or(RedisError::Str("index out of bounds for array set"))?;
-                    Ok(iarray.insert(index, v.take()))},
+                    iarray
+                        .remove(index)
+                        .ok_or(RedisError::Str("index out of bounds for array set"))?;
+                    Ok(iarray.insert(index, v.take()))
+                }
                 PathValue::F32(iarray, index) => {
-                    iarray.remove(index).ok_or(RedisError::Str("index out of bounds for array set"))?;
-                    Ok(iarray.insert(index, v.take()))},
+                    iarray
+                        .remove(index)
+                        .ok_or(RedisError::Str("index out of bounds for array set"))?;
+                    Ok(iarray.insert(index, v.take()))
+                }
                 PathValue::I64(iarray, index) => {
-                    iarray.remove(index).ok_or(RedisError::Str("index out of bounds for array set"))?;
-                    Ok(iarray.insert(index, v.take()))},
+                    iarray
+                        .remove(index)
+                        .ok_or(RedisError::Str("index out of bounds for array set"))?;
+                    Ok(iarray.insert(index, v.take()))
+                }
                 PathValue::U64(iarray, index) => {
-                    iarray.remove(index).ok_or(RedisError::Str("index out of bounds for array set"))?;
-                    Ok(iarray.insert(index, v.take()))},
+                    iarray
+                        .remove(index)
+                        .ok_or(RedisError::Str("index out of bounds for array set"))?;
+                    Ok(iarray.insert(index, v.take()))
+                }
                 PathValue::F64(iarray, index) => {
-                    iarray.remove(index).ok_or(RedisError::Str("index out of bounds for array set"))?;
-                    Ok(iarray.insert(index, v.take()))},
+                    iarray
+                        .remove(index)
+                        .ok_or(RedisError::Str("index out of bounds for array set"))?;
+                    Ok(iarray.insert(index, v.take()))
+                }
             })
             .is_ok())
         }

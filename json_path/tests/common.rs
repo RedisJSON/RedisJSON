@@ -42,7 +42,10 @@ pub fn select_and_then_compare(path: &str, json: Value, target: Value) {
     let result = calculator.calc(&json);
 
     assert_eq!(
-        result.iter().map(|v| v.inner_cloned()).collect::<Vec<Value>>(),
+        result
+            .iter()
+            .map(|v| v.inner_cloned())
+            .collect::<Vec<Value>>(),
         match target {
             Value::Array(vec) => vec,
             _ => panic!("Give me the Array!"),
