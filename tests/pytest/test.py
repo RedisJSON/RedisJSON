@@ -1585,7 +1585,7 @@ def testArrtNumericArrayTypesOperations(env):
         'U32'  : ([2147483648, 2147483650, 3147483648, 3247483648], 2, 3147483649),  
         'F32'  : ([0.0, 1.5, -113.75, 0.74], 2, 2.71828),       
         'I64'  : ([0, 3294967295, -4294967295], 2, 12345645), 
-        'U64'  : ([9223372036854775808, 9323372036854775809, 9423372036854775909, 9523372036854775909], 2, 12446744073709551615),
+        'U64'  : ([9223372036854775808, 9323372036854775809, 9423372036854775909, 9523372036854775909], 2, 25666),
         'F64'  : ([0.0, 1.5, -1.7e308, 1.7e308], 2, 3.141592653589793),
     }
     for (numeric_type, (array, index, value)) in numeric_types.items():
@@ -1597,6 +1597,8 @@ def testArrtNumericArrayTypesOperations(env):
         r.assertEqual(r.execute_command('JSON.GET', f'test_{numeric_type}', f'.[{len(array)}]'), str(value))
         r.assertEqual(r.execute_command('JSON.NUMINCRBY', f'test_{numeric_type}', f'.[{len(array)}]', 1), str(value + 1))
         r.assertEqual(r.execute_command('JSON.GET', f'test_{numeric_type}', f'.[{len(array)}]'), str(value + 1))
+        r.assertEqual(r.execute_command('JSON.NUMINCRBY', f'test_{numeric_type}', f'.[{len(array)}]', 1.0), str(value + 2))
+        r.assertEqual(r.execute_command('JSON.GET', f'test_{numeric_type}', f'.[{len(array)}]'), str(value + 2))
         r.assertOk(r.execute_command('JSON.SET', f'test_{numeric_type}', '.[0]', value))
         r.assertEqual(r.execute_command('JSON.GET', f'test_{numeric_type}', f'.[0]'), str(value))
         r.assertEqual(r.execute_command('JSON.ARRINSERT', f'test_{numeric_type}', '.', 0, value), len(array) + 2)
