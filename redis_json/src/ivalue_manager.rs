@@ -151,6 +151,13 @@ fn remove(mut path: Vec<String>, root: &mut IValue) -> bool {
         .is_some()
 }
 
+enum NumOpResult {
+    INumber(INumber),
+    U64(u64),
+    I64(i64),
+    F64(f64),
+}
+
 impl<'a> IValueKeyHolderWrite<'a> {
     fn do_op<F, T>(&mut self, paths: Vec<String>, op_fun: F) -> RedisResult<T>
     where
@@ -173,6 +180,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
     {
         let in_value = &serde_json::from_str(num)?;
         use half::{bf16, f16};
+        // TODO: macro for this
         if let serde_json::Value::Number(in_value) = in_value {
             let in_value_f64 = in_value.as_f64().unwrap();
             let n = self.do_op(path, |v| match (v, in_value.as_i64()) {
@@ -190,7 +198,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         }
                     }?;
                     *v = IValue::from(new_val.clone());
-                    Ok(new_val)
+                    Ok(NumOpResult::INumber(new_val))
                 }
                 // SAFETY: index is in bounds and type is checked at creation of PathValue
                 (PathValue::I8(num1, index), num_2) => {
@@ -199,12 +207,17 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         .unwrap()
                         .get_mut(index)
                         .unwrap();
-                    let new_val = num_2.map_or(op2(*num1 as f64, in_value_f64), |num2| {
-                        op1(*num1 as i64, num2) as f64
-                    });
-                    *num1 = new_val as i8;
-                    Ok(INumber::try_from(*num1)
-                        .map_err(|_| RedisError::Str("result is not a number"))?)
+                    let new_val = match num_2 {
+                        Some(num2) => {
+                            *num1 = op1(*num1 as i64, num2) as i8;
+                            NumOpResult::I64(*num1 as i64)
+                        }
+                        None => {
+                            *num1 = op2(*num1 as f64, in_value_f64) as i8;
+                            NumOpResult::I64(*num1 as i64)
+                        }
+                    };
+                    Ok(new_val)
                 }
                 (PathValue::U8(num1, index), num_2) => {
                     let num1 = num1
@@ -212,12 +225,17 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         .unwrap()
                         .get_mut(index)
                         .unwrap();
-                    let new_val = num_2.map_or(op2(*num1 as f64, in_value_f64), |num2| {
-                        op1(*num1 as i64, num2) as f64
-                    });
-                    *num1 = new_val as u8;
-                    Ok(INumber::try_from(*num1)
-                        .map_err(|_| RedisError::Str("result is not a number"))?)
+                    let new_val = match num_2 {
+                        Some(num2) => {
+                            *num1 = op1(*num1 as i64, num2) as u8;
+                            NumOpResult::U64(*num1 as u64)
+                        }
+                        None => {
+                            *num1 = op2(*num1 as f64, in_value_f64) as u8;
+                            NumOpResult::U64(*num1 as u64)
+                        }
+                    };
+                    Ok(new_val)
                 }
                 (PathValue::I16(num1, index), num_2) => {
                     let num1 = num1
@@ -225,12 +243,17 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         .unwrap()
                         .get_mut(index)
                         .unwrap();
-                    let new_val = num_2.map_or(op2(*num1 as f64, in_value_f64), |num2| {
-                        op1(*num1 as i64, num2) as f64
-                    });
-                    *num1 = new_val as i16;
-                    Ok(INumber::try_from(*num1)
-                        .map_err(|_| RedisError::Str("result is not a number"))?)
+                    let new_val = match num_2 {
+                        Some(num2) => {
+                            *num1 = op1(*num1 as i64, num2) as i16;
+                            NumOpResult::I64(*num1 as i64)
+                        }
+                        None => {
+                            *num1 = op2(*num1 as f64, in_value_f64) as i16;
+                            NumOpResult::I64(*num1 as i64)
+                        }
+                    };
+                    Ok(new_val)
                 }
                 (PathValue::U16(num1, index), num_2) => {
                     let num1 = num1
@@ -238,12 +261,17 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         .unwrap()
                         .get_mut(index)
                         .unwrap();
-                    let new_val = num_2.map_or(op2(*num1 as f64, in_value_f64), |num2| {
-                        op1(*num1 as i64, num2) as f64
-                    });
-                    *num1 = new_val as u16;
-                    Ok(INumber::try_from(*num1)
-                        .map_err(|_| RedisError::Str("result is not a number"))?)
+                    let new_val = match num_2 {
+                        Some(num2) => {
+                            *num1 = op1(*num1 as i64, num2) as u16;
+                            NumOpResult::U64(*num1 as u64)
+                        }
+                        None => {
+                            *num1 = op2(*num1 as f64, in_value_f64) as u16;
+                            NumOpResult::U64(*num1 as u64)
+                        }
+                    };
+                    Ok(new_val)
                 }
                 (PathValue::F16(num1, index), _) => {
                     let num1 = num1
@@ -253,8 +281,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         .unwrap();
                     let new_val = op2(f64::from(*num1), in_value_f64);
                     *num1 = f16::from_f64(new_val);
-                    Ok(INumber::try_from(*num1)
-                        .map_err(|_| RedisError::Str("result is not a number"))?)
+                    Ok(NumOpResult::F64(f64::from(*num1)))
                 }
                 (PathValue::BF16(num1, index), _) => {
                     let num1 = num1
@@ -264,8 +291,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         .unwrap();
                     let new_val = op2(f64::from(*num1), in_value_f64);
                     *num1 = bf16::from_f64(new_val);
-                    Ok(INumber::try_from(*num1)
-                        .map_err(|_| RedisError::Str("result is not a number"))?)
+                    Ok(NumOpResult::F64(f64::from(*num1)))
                 }
                 (PathValue::I32(num1, index), num_2) => {
                     let num1 = num1
@@ -273,12 +299,17 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         .unwrap()
                         .get_mut(index)
                         .unwrap();
-                    let new_val = num_2.map_or(op2(*num1 as f64, in_value_f64), |num2| {
-                        op1(*num1 as i64, num2) as f64
-                    });
-                    *num1 = new_val as i32;
-                    Ok(INumber::try_from(*num1)
-                        .map_err(|_| RedisError::Str("result is not a number"))?)
+                    let new_val = match num_2 {
+                        Some(num2) => {
+                            *num1 = op1(*num1 as i64, num2) as i32;
+                            NumOpResult::I64(*num1 as i64)
+                        }
+                        None => {
+                            *num1 = op2(*num1 as f64, in_value_f64) as i32;
+                            NumOpResult::I64(*num1 as i64)
+                        }
+                    };
+                    Ok(new_val)
                 }
                 (PathValue::U32(num1, index), num_2) => {
                     let num1 = num1
@@ -286,12 +317,17 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         .unwrap()
                         .get_mut(index)
                         .unwrap();
-                    let new_val = num_2.map_or(op2(*num1 as f64, in_value_f64), |num2| {
-                        op1(*num1 as i64, num2) as f64
-                    });
-                    *num1 = new_val as u32;
-                    Ok(INumber::try_from(*num1)
-                        .map_err(|_| RedisError::Str("result is not a number"))?)
+                    let new_val = match num_2 {
+                        Some(num2) => {
+                            *num1 = op1(*num1 as i64, num2) as u32;
+                            NumOpResult::U64(*num1 as u64)
+                        }
+                        None => {
+                            *num1 = op2(*num1 as f64, in_value_f64) as u32;
+                            NumOpResult::U64(*num1 as u64)
+                        }
+                    };
+                    Ok(new_val)
                 }
                 (PathValue::F32(num1, index), _) => {
                     let num1 = num1
@@ -301,8 +337,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         .unwrap();
                     let new_val = op2(f64::from(*num1), in_value_f64);
                     *num1 = new_val as f32;
-                    Ok(INumber::try_from(*num1)
-                        .map_err(|_| RedisError::Str("result is not a number"))?)
+                    Ok(NumOpResult::F64(*num1 as f64))
                 }
                 (PathValue::I64(num1, index), num_2) => {
                     let num1 = num1
@@ -310,12 +345,17 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         .unwrap()
                         .get_mut(index)
                         .unwrap();
-                    let new_val = num_2.map_or(op2(*num1 as f64, in_value_f64), |num2| {
-                        op1(*num1 as i64, num2) as f64
-                    });
-                    *num1 = new_val as i64;
-                    Ok(INumber::try_from(*num1)
-                        .map_err(|_| RedisError::Str("result is not a number"))?)
+                    let new_val = match num_2 {
+                        Some(num2) => {
+                            *num1 = op1(*num1 as i64, num2) as i64;
+                            NumOpResult::I64(*num1 as i64)
+                        }
+                        None => {
+                            *num1 = op2(*num1 as f64, in_value_f64) as i64;
+                            NumOpResult::I64(*num1 as i64)
+                        }
+                    };
+                    Ok(new_val)
                 }
                 (PathValue::U64(num1, index), num_2) => {
                     let num1 = num1
@@ -323,12 +363,17 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         .unwrap()
                         .get_mut(index)
                         .unwrap();
-                    let new_val = num_2.map_or(op2(*num1 as f64, in_value_f64), |num2| {
-                        op1(*num1 as i64, num2) as f64
-                    });
-                    *num1 = new_val as u64;
-                    Ok(INumber::try_from(*num1)
-                        .map_err(|_| RedisError::Str("result is not a number"))?)
+                    let new_val = match num_2 {
+                        Some(num2) => {
+                            *num1 = op1(*num1 as i64, num2) as u64;
+                            NumOpResult::U64(*num1 as u64)
+                        }
+                        None => {
+                            *num1 = op2(*num1 as f64, in_value_f64) as u64;
+                            NumOpResult::U64(*num1 as u64)
+                        }
+                    };
+                    Ok(new_val)
                 }
                 (PathValue::F64(num1, index), _) => {
                     let num1 = num1
@@ -338,16 +383,21 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         .unwrap();
                     let new_val = op2(f64::from(*num1), in_value_f64);
                     *num1 = new_val as f64;
-                    Ok(INumber::try_from(*num1)
-                        .map_err(|_| RedisError::Str("result is not a number"))?)
+                    Ok(NumOpResult::F64(*num1 as f64))
                 }
             })?;
-            if n.has_decimal_point() {
-                n.to_f64().and_then(serde_json::Number::from_f64)
-            } else {
-                n.to_i64().map(Into::into)
+            match n {
+                NumOpResult::INumber(n) => if n.has_decimal_point() {
+                    n.to_f64().and_then(serde_json::Number::from_f64)
+                } else {
+                    n.to_i64().map(Into::into)
+                }
+                .ok_or_else(|| RedisError::Str("result is not a number")),
+                NumOpResult::U64(n) => Ok(n.into()),
+                NumOpResult::I64(n) => Ok(n.into()),
+                NumOpResult::F64(n) => Ok(serde_json::Number::from_f64(n)
+                    .ok_or_else(|| RedisError::Str("result is not a number"))?),
             }
-            .ok_or_else(|| RedisError::Str("result is not a number"))
         } else {
             Err(RedisError::Str("bad input number"))
         }
