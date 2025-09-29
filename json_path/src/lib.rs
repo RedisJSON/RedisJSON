@@ -126,7 +126,11 @@ mod json_path_tests {
     fn perform_search<'a>(path: &str, json: &'a Value) -> Vec<Value> {
         let query = json_path::compile(path).unwrap();
         let path_calculator = create(&query);
-        path_calculator.calc(json).into_iter().map(|v| v.inner_cloned()).collect()
+        path_calculator
+            .calc(json)
+            .into_iter()
+            .map(|v| v.inner_cloned())
+            .collect()
     }
 
     fn perform_path_search(path: &str, json: &Value) -> Vec<Vec<String>> {
