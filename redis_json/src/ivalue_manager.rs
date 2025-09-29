@@ -174,6 +174,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
         let in_value = &serde_json::from_str(num)?;
         use half::{bf16, f16};
         if let serde_json::Value::Number(in_value) = in_value {
+            let in_value_f64 = in_value.as_f64().unwrap();
             let n = self.do_op(path, |v| match (v, in_value.as_i64()) {
                 (PathValue::IValue(v), _) => {
                     let new_val = match (v.get_type(), in_value.as_i64()) {
@@ -192,131 +193,154 @@ impl<'a> IValueKeyHolderWrite<'a> {
                     Ok(new_val)
                 }
                 // SAFETY: index is in bounds and type is checked at creation of PathValue
-                (PathValue::I8(num1, index), Some(num2)) => {
+                (PathValue::I8(num1, index), num_2) => {
                     let num1 = num1
                         .as_mut_slice_of::<i8>()
                         .unwrap()
                         .get_mut(index)
                         .unwrap();
-                    let new_val = op1(*num1 as i64, num2);
+                    let new_val = num_2.map_or(op2(*num1 as f64, in_value_f64), |num2| {
+                        op1(*num1 as i64, num2) as f64
+                    });
                     *num1 = new_val as i8;
-                    Ok(new_val.into())
+                    Ok(INumber::try_from(*num1)
+                        .map_err(|_| RedisError::Str("result is not a number"))?)
                 }
-                (PathValue::U8(num1, index), Some(num2)) => {
+                (PathValue::U8(num1, index), num_2) => {
                     let num1 = num1
                         .as_mut_slice_of::<u8>()
                         .unwrap()
                         .get_mut(index)
                         .unwrap();
-                    let new_val = op1(*num1 as i64, num2);
+                    let new_val = num_2.map_or(op2(*num1 as f64, in_value_f64), |num2| {
+                        op1(*num1 as i64, num2) as f64
+                    });
                     *num1 = new_val as u8;
-                    Ok(new_val.into())
+                    Ok(INumber::try_from(*num1)
+                        .map_err(|_| RedisError::Str("result is not a number"))?)
                 }
-                (PathValue::I16(num1, index), Some(num2)) => {
+                (PathValue::I16(num1, index), num_2) => {
                     let num1 = num1
                         .as_mut_slice_of::<i16>()
                         .unwrap()
                         .get_mut(index)
                         .unwrap();
-                    let new_val = op1(*num1 as i64, num2);
+                    let new_val = num_2.map_or(op2(*num1 as f64, in_value_f64), |num2| {
+                        op1(*num1 as i64, num2) as f64
+                    });
                     *num1 = new_val as i16;
-                    Ok(new_val.into())
+                    Ok(INumber::try_from(*num1)
+                        .map_err(|_| RedisError::Str("result is not a number"))?)
                 }
-                (PathValue::U16(num1, index), Some(num2)) => {
+                (PathValue::U16(num1, index), num_2) => {
                     let num1 = num1
                         .as_mut_slice_of::<u16>()
                         .unwrap()
                         .get_mut(index)
                         .unwrap();
-                    let new_val = op1(*num1 as i64, num2);
+                    let new_val = num_2.map_or(op2(*num1 as f64, in_value_f64), |num2| {
+                        op1(*num1 as i64, num2) as f64
+                    });
                     *num1 = new_val as u16;
-                    Ok(new_val.into())
+                    Ok(INumber::try_from(*num1)
+                        .map_err(|_| RedisError::Str("result is not a number"))?)
                 }
-                (PathValue::F16(num1, index), None) => {
+                (PathValue::F16(num1, index), _) => {
                     let num1 = num1
                         .as_mut_slice_of::<f16>()
                         .unwrap()
                         .get_mut(index)
                         .unwrap();
-                    let new_val = op2(f64::from(*num1), in_value.as_f64().unwrap());
+                    let new_val = op2(f64::from(*num1), in_value_f64);
                     *num1 = f16::from_f64(new_val);
                     Ok(INumber::try_from(*num1)
                         .map_err(|_| RedisError::Str("result is not a number"))?)
                 }
-                (PathValue::BF16(num1, index), None) => {
+                (PathValue::BF16(num1, index), _) => {
                     let num1 = num1
                         .as_mut_slice_of::<bf16>()
                         .unwrap()
                         .get_mut(index)
                         .unwrap();
-                    let new_val = op2(f64::from(*num1), in_value.as_f64().unwrap());
+                    let new_val = op2(f64::from(*num1), in_value_f64);
                     *num1 = bf16::from_f64(new_val);
                     Ok(INumber::try_from(*num1)
                         .map_err(|_| RedisError::Str("result is not a number"))?)
                 }
-                (PathValue::I32(num1, index), Some(num2)) => {
+                (PathValue::I32(num1, index), num_2) => {
                     let num1 = num1
                         .as_mut_slice_of::<i32>()
                         .unwrap()
                         .get_mut(index)
                         .unwrap();
-                    let new_val = op1(*num1 as i64, num2);
+                    let new_val = num_2.map_or(op2(*num1 as f64, in_value_f64), |num2| {
+                        op1(*num1 as i64, num2) as f64
+                    });
                     *num1 = new_val as i32;
-                    Ok(new_val.into())
+                    Ok(INumber::try_from(*num1)
+                        .map_err(|_| RedisError::Str("result is not a number"))?)
                 }
-                (PathValue::U32(num1, index), Some(num2)) => {
+                (PathValue::U32(num1, index), num_2) => {
                     let num1 = num1
                         .as_mut_slice_of::<u32>()
                         .unwrap()
                         .get_mut(index)
                         .unwrap();
-                    let new_val = op1(*num1 as i64, num2);
+                    let new_val = num_2.map_or(op2(*num1 as f64, in_value_f64), |num2| {
+                        op1(*num1 as i64, num2) as f64
+                    });
                     *num1 = new_val as u32;
-                    Ok(new_val.into())
+                    Ok(INumber::try_from(*num1)
+                        .map_err(|_| RedisError::Str("result is not a number"))?)
                 }
-                (PathValue::F32(num1, index), None) => {
+                (PathValue::F32(num1, index), _) => {
                     let num1 = num1
                         .as_mut_slice_of::<f32>()
                         .unwrap()
                         .get_mut(index)
                         .unwrap();
-                    let new_val = op2(f64::from(*num1), in_value.as_f64().unwrap());
+                    let new_val = op2(f64::from(*num1), in_value_f64);
                     *num1 = new_val as f32;
                     Ok(INumber::try_from(*num1)
                         .map_err(|_| RedisError::Str("result is not a number"))?)
                 }
-                (PathValue::I64(num1, index), Some(num2)) => {
+                (PathValue::I64(num1, index), num_2) => {
                     let num1 = num1
                         .as_mut_slice_of::<i64>()
                         .unwrap()
                         .get_mut(index)
                         .unwrap();
-                    let new_val = op1(*num1 as i64, num2);
+                    let new_val = num_2.map_or(op2(*num1 as f64, in_value_f64), |num2| {
+                        op1(*num1 as i64, num2) as f64
+                    });
                     *num1 = new_val as i64;
-                    Ok(new_val.into())
+                    Ok(INumber::try_from(*num1)
+                        .map_err(|_| RedisError::Str("result is not a number"))?)
                 }
-                (PathValue::U64(num1, index), Some(num2)) => {
+                (PathValue::U64(num1, index), num_2) => {
                     let num1 = num1
                         .as_mut_slice_of::<u64>()
                         .unwrap()
                         .get_mut(index)
                         .unwrap();
-                    let new_val = op1(*num1 as i64, num2);
+                    let new_val = num_2.map_or(op2(*num1 as f64, in_value_f64), |num2| {
+                        op1(*num1 as i64, num2) as f64
+                    });
                     *num1 = new_val as u64;
-                    Ok(new_val.into())
+                    Ok(INumber::try_from(*num1)
+                        .map_err(|_| RedisError::Str("result is not a number"))?)
                 }
-                (PathValue::F64(num1, index), None) => {
+                (PathValue::F64(num1, index), _) => {
                     let num1 = num1
                         .as_mut_slice_of::<f64>()
                         .unwrap()
                         .get_mut(index)
                         .unwrap();
-                    let new_val = op2(f64::from(*num1), in_value.as_f64().unwrap());
+                    let new_val = op2(f64::from(*num1), in_value_f64);
                     *num1 = new_val as f64;
                     Ok(INumber::try_from(*num1)
                         .map_err(|_| RedisError::Str("result is not a number"))?)
                 }
-                (_, _) => Err(RedisError::Str("result is not a number")),
             })?;
             if n.has_decimal_point() {
                 n.to_f64().and_then(serde_json::Number::from_f64)
