@@ -63,8 +63,6 @@ typedef struct RedisJSONAPI {
   size_t (*len)(JSONResultsIterator iter);
   void (*freeIter)(JSONResultsIterator iter);
 
-  RedisJSON (*getAt)(RedisJSON json, size_t index);
-
   /* RedisJSON value functions
    * Return REDISMODULE_OK if RedisJSON is of the correct JSONType,
    * else REDISMODULE_ERR is returned
