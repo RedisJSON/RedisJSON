@@ -27,7 +27,9 @@ pub struct KeyValue<'a, V: SelectValue> {
 
 impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     pub const fn new(v: &'a V) -> KeyValue<'a, V> {
-        KeyValue { val: ValueRef::Borrowed(v) }
+        KeyValue {
+            val: ValueRef::Borrowed(v),
+        }
     }
 
     pub fn get_first<'b>(&'a self, path: &'b str) -> Result<ValueRef<'a, V>, Error> {
@@ -444,7 +446,12 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             .get_values(path)?
             .into_iter()
             .map(|value| {
-                RedisValue::from(Self::arr_first_index_single(value.as_ref(), &json_value, start, end))
+                RedisValue::from(Self::arr_first_index_single(
+                    value.as_ref(),
+                    &json_value,
+                    start,
+                    end,
+                ))
             })
             .collect_vec();
         Ok(res.into())
