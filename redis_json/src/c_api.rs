@@ -109,10 +109,6 @@ pub fn json_api_open_key_with_flags_internal<M: Manager>(
     null()
 }
 
-pub fn json_api_get_at<M: Manager>(_: M, _json: *const c_void, _index: size_t) -> *const c_void {
-    panic!("json_api_get_at is deprecated");
-}
-
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn json_api_get_len<M: Manager>(_: M, json: *const c_void, count: *mut libc::size_t) -> c_int {
     let json = unsafe { &*(json.cast::<M::V>()) };
@@ -489,18 +485,6 @@ macro_rules! redis_json_module_export_shared_api {
         }
 
         #[no_mangle]
-        pub extern "C" fn JSONAPI_getAt(json: *const c_void, index: size_t) -> *const c_void {
-            run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
-                get_manage: {
-                    $( $condition => $manager_ident { $($field: $value),* } ),*
-                    _ => $default_manager
-                },
-                run: |mngr|{json_api_get_at(mngr, json, index)},
-            )
-        }
-
-        #[no_mangle]
         pub extern "C" fn JSONAPI_getLen(json: *const c_void, count: *mut size_t) -> c_int {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
@@ -738,7 +722,6 @@ macro_rules! redis_json_module_export_shared_api {
             next: JSONAPI_next,
             len: JSONAPI_len,
             freeIter: JSONAPI_freeIter,
-            getAt: JSONAPI_getAt,
             getLen: JSONAPI_getLen,
             getType: JSONAPI_getType,
             getInt: JSONAPI_getInt,
@@ -780,7 +763,6 @@ macro_rules! redis_json_module_export_shared_api {
             pub next: extern "C" fn(iter: *mut c_void) -> *const c_void,
             pub len: extern "C" fn(iter: *const c_void) -> size_t,
             pub freeIter: extern "C" fn(iter: *mut c_void),
-            pub getAt: extern "C" fn(json: *const c_void, index: size_t) -> *const c_void,
             pub getLen: extern "C" fn(json: *const c_void, len: *mut size_t) -> c_int,
             pub getType: extern "C" fn(json: *const c_void) -> c_int,
             pub getInt: extern "C" fn(json: *const c_void, val: *mut c_longlong) -> c_int,
