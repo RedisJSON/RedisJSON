@@ -1599,6 +1599,9 @@ def testArrtNumericArrayTypesOperations(env):
         r.assertEqual(r.execute_command('JSON.GET', f'test_{numeric_type}', f'.[{len(array)}]'), str(value + 1))
         r.assertOk(r.execute_command('JSON.SET', f'test_{numeric_type}', '.[0]', value))
         r.assertEqual(r.execute_command('JSON.GET', f'test_{numeric_type}', f'.[0]'), str(value))
+        r.assertEqual(r.execute_command('JSON.ARRINSERT', f'test_{numeric_type}', '.', 0, value), len(array) + 2)
+        r.assertEqual(r.execute_command('JSON.GET', f'test_{numeric_type}', f'.[0]'), str(value))
+        r.assertEqual(r.execute_command('JSON.ARRTRIM', f'test_{numeric_type}', '.', 0, len(array) + 2), len(array) + 2)
 
 
 # class CacheTestCase(BaseReJSONTest):
