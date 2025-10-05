@@ -296,6 +296,7 @@ pub fn json_api_get_at<M: Manager>(
             if let Some(element) = json.get_index(index) {
                 let cloned_value = element.inner_cloned();
                 unsafe {
+                    std::ptr::drop_in_place(value.cast::<M::V>());
                     write(value.cast::<M::V>(), cloned_value);
                 }
                 Status::Ok as c_int
