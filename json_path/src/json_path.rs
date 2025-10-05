@@ -11,6 +11,7 @@ use itertools::Itertools;
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use pest_derive::Parser;
+use std::borrow::Cow;
 use std::cmp::Ordering;
 
 use crate::select_value::{SelectValue, SelectValueType, ValueRef};
@@ -25,18 +26,18 @@ macro_rules! value_ref_items {
             ValueRef::Borrowed(borrowed_val) => {
                 // For borrowed values, convert keys to owned for consistent return type
                 let iter = borrowed_val.items().unwrap();
-                let collected: Vec<_> = iter.map(|(k, v)| (k.to_string(), v)).collect();
+                let collected: Vec<_> = iter.map(|(k, v)| (Cow::Borrowed(k), v)).collect();
                 Box::new(collected.into_iter())
-                    as Box<dyn Iterator<Item = (String, ValueRef<'_, S>)>>
+                    as Box<dyn Iterator<Item = (Cow<'_, str>, ValueRef<'_, S>)>>
             }
             ValueRef::Owned(owned_val) => {
                 // For owned values, collect first to avoid lifetime issues
                 let iter = owned_val.items().unwrap();
                 let collected: Vec<_> = iter
-                    .map(|(k, v)| (k.to_string(), ValueRef::Owned(v.inner_cloned())))
+                    .map(|(k, v)| (Cow::Owned(k.to_string()), ValueRef::Owned(v.inner_cloned())))
                     .collect();
                 Box::new(collected.into_iter())
-                    as Box<dyn Iterator<Item = (String, ValueRef<'_, S>)>>
+                    as Box<dyn Iterator<Item = (Cow<'_, str>, ValueRef<'_, S>)>>
             }
         }
     }};
@@ -67,7 +68,7 @@ macro_rules! value_ref_get_key {
             ValueRef::Borrowed(v) => v.get_key($curr),
             ValueRef::Owned(v) => v
                 .get_key($curr)
-                .and_then(|v| Some(ValueRef::Owned(v.inner_cloned()))),
+                .map(|v| ValueRef::Owned(v.inner_cloned())),
         }
     }};
 }
@@ -78,7 +79,7 @@ macro_rules! value_ref_get_index {
             ValueRef::Borrowed(v) => v.get_index($i),
             ValueRef::Owned(v) => v
                 .get_index($i)
-                .and_then(|v| Some(ValueRef::Owned(v.inner_cloned()))),
+                .map(|v| ValueRef::Owned(v.inner_cloned())),
         }
     }};
 }
@@ -561,7 +562,7 @@ struct PathCalculatorData<'i, S: SelectValue, UPT: UserPathTracker> {
 // This can be used in places where we need to iterate over both arrays and objects, create a path tracker from them.
 enum Item<'a, S: SelectValue> {
     ArrayItem(usize, ValueRef<'a, S>),
-    ObjectItem(String, ValueRef<'a, S>),
+    ObjectItem(Cow<'a, str>, ValueRef<'a, S>),
 }
 
 impl<'a, S: SelectValue> Item<'a, S> {
@@ -585,7 +586,7 @@ impl<'a, S: SelectValue> Item<'a, S> {
 
 enum UnifiedIter<'a, S: SelectValue> {
     Array(std::iter::Enumerate<Box<dyn Iterator<Item = ValueRef<'a, S>> + 'a>>),
-    Object(Box<dyn Iterator<Item = (String, ValueRef<'a, S>)> + 'a>),
+    Object(Box<dyn Iterator<Item = (Cow<'a, str>, ValueRef<'a, S>)> + 'a>),
 }
 
 impl<'a, S: SelectValue> Iterator for UnifiedIter<'a, S> {
@@ -594,7 +595,7 @@ impl<'a, S: SelectValue> Iterator for UnifiedIter<'a, S> {
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             UnifiedIter::Array(iter) => iter.next().map(|(i, v)| Item::ArrayItem(i, v)),
-            UnifiedIter::Object(iter) => iter.next().map(|(k, v)| Item::ObjectItem(k, v)),
+            UnifiedIter::Object(iter) => iter.next().map(|(k, v)| Item::ObjectItem(k.into(), v)),
         }
     }
 }
@@ -633,14 +634,15 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                     for (key, val) in items {
                         self.calc_internal(
                             pairs.clone(),
+                            // TODO: avoid cloning
                             val.clone(),
-                            Some(create_str_tracker(key.as_str(), &pt)),
+                            Some(create_str_tracker(&key, &pt)),
                             calc_data,
                         );
                         self.calc_full_scan(
                             pairs.clone(),
                             val,
-                            Some(create_str_tracker(key.as_str(), &pt)),
+                            Some(create_str_tracker(&key, &pt)),
                             calc_data,
                         );
                     }
@@ -692,7 +694,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 if let Some(pt) = path_tracker {
                     let items = value_ref_items!(json);
                     for (key, val) in items {
-                        let new_tracker = Some(create_str_tracker(key.as_str(), &pt));
+                        let new_tracker = Some(create_str_tracker(&key, &pt));
                         self.calc_internal(pairs.clone(), val, new_tracker, calc_data);
                     }
                 } else {
