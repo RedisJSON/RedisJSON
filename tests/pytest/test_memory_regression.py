@@ -317,7 +317,7 @@ def test_memory_regression_all_sizes(env):
     
     if failures:
         print_failure_details(results)
-        env.assertTrue(False, f"Memory regression detected in {len(failures)} test(s)")
+        env.assertTrue(False, message=f"Memory regression detected in {len(failures)} test(s)")
     else:
         print("✅ All memory regression tests passed!")
         print("   Memory usage is within acceptable budgets.\n")
@@ -330,9 +330,9 @@ def test_memory_regression_tiny_doc(env):
     result = measure_memory(env, get_tiny_doc(), 'tiny_doc')
     
     env.assertTrue(result['passes_budget'], 
-                   f"Tiny doc overhead {result['json_overhead_ratio']:.2f}x exceeds budget {result['budget_ratio']:.2f}x")
+                   message=f"Tiny doc overhead {result['json_overhead_ratio']:.2f}x exceeds budget {result['budget_ratio']:.2f}x")
     env.assertTrue(result['passes_absolute'],
-                   f"Tiny doc memory {result['memory_json']} exceeds limit {result['absolute_limit']}")
+                   message=f"Tiny doc memory {result['memory_json']} exceeds limit {result['absolute_limit']}")
 
 
 def test_memory_regression_small_doc(env):
@@ -342,9 +342,9 @@ def test_memory_regression_small_doc(env):
     result = measure_memory(env, get_small_doc(), 'small_doc')
     
     env.assertTrue(result['passes_budget'],
-                   f"Small doc overhead {result['json_overhead_ratio']:.2f}x exceeds budget {result['budget_ratio']:.2f}x")
+                   message=f"Small doc overhead {result['json_overhead_ratio']:.2f}x exceeds budget {result['budget_ratio']:.2f}x")
     env.assertTrue(result['passes_absolute'],
-                   f"Small doc memory {result['memory_json']} exceeds limit {result['absolute_limit']}")
+                   message=f"Small doc memory {result['memory_json']} exceeds limit {result['absolute_limit']}")
 
 
 def test_memory_regression_large_doc(env):
@@ -354,9 +354,9 @@ def test_memory_regression_large_doc(env):
     result = measure_memory(env, get_large_doc(), 'large_doc')
     
     env.assertTrue(result['passes_budget'],
-                   f"Large doc overhead {result['json_overhead_ratio']:.2f}x exceeds budget {result['budget_ratio']:.2f}x")
+                   message=f"Large doc overhead {result['json_overhead_ratio']:.2f}x exceeds budget {result['budget_ratio']:.2f}x")
     env.assertTrue(result['passes_absolute'],
-                   f"Large doc memory {result['memory_json']} exceeds limit {result['absolute_limit']}")
+                   message=f"Large doc memory {result['memory_json']} exceeds limit {result['absolute_limit']}")
 
 
 def test_memory_regression_arrays(env):
@@ -370,7 +370,7 @@ def test_memory_regression_arrays(env):
     
     for result in results:
         env.assertTrue(result['passes_budget'],
-                       f"{result['test_name']} overhead {result['json_overhead_ratio']:.2f}x exceeds budget {result['budget_ratio']:.2f}x")
+                       message=f"{result['test_name']} overhead {result['json_overhead_ratio']:.2f}x exceeds budget {result['budget_ratio']:.2f}x")
 
 
 def test_memory_regression_nested(env):
@@ -383,7 +383,7 @@ def test_memory_regression_nested(env):
     
     for result in results:
         env.assertTrue(result['passes_budget'],
-                       f"{result['test_name']} overhead {result['json_overhead_ratio']:.2f}x exceeds budget {result['budget_ratio']:.2f}x")
+                       message=f"{result['test_name']} overhead {result['json_overhead_ratio']:.2f}x exceeds budget {result['budget_ratio']:.2f}x")
 
 
 def test_memory_regression_vs_string(env):
@@ -404,7 +404,7 @@ def test_memory_regression_vs_string(env):
         result = measure_memory(env, doc, name)
         
         env.assertTrue(result['passes_comparison'],
-                       f"{name} JSON vs String ratio {result['json_vs_string_ratio']:.2f}x exceeds max {MAX_REDISJSON_VS_STRING_RATIO:.2f}x")
+                       message=f"{name} JSON vs String ratio {result['json_vs_string_ratio']:.2f}x exceeds max {MAX_REDISJSON_VS_STRING_RATIO:.2f}x")
 
 
 # =============================================================================
