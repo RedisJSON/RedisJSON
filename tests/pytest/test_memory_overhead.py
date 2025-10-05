@@ -241,7 +241,7 @@ def test_memory_overhead_comparison(env):
     print(f"Updated age using JSON.SET path:  {updated_age}")
     
     # Verify the update worked
-    env.assertEqual(int(updated_age), 33, "Age should be updated to 33")
+    env.assertEqual(int(updated_age), 33, message="Age should be updated to 33")
     
     # For regular string, you'd need to:
     # 1. GET the entire string
