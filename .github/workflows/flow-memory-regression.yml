@@ -1,0 +1,145 @@
+name: Memory Regression Tests
+
+on:
+  workflow_call:
+    inputs:
+      redis-ref:
+        description: 'Redis ref to checkout'
+        type: string
+        default: 'unstable'
+      os:
+        description: 'OS to run on (ubuntu-latest, macos-latest)'
+        type: string
+        default: 'ubuntu-latest'
+
+jobs:
+  memory-regression:
+    runs-on: ${{ inputs.os }}
+    env:
+      PIP_BREAK_SYSTEM_PACKAGES: 1
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+      
+      - name: Get Redis
+        uses: actions/checkout@v4
+        with:
+          repository: redis/redis
+          ref: ${{ inputs.redis-ref }}
+          path: redis
+          submodules: 'recursive'
+      
+      - name: Setup Rust
+        run: |
+          if [ -f "$HOME/.cargo/env" ]; then
+            . "$HOME/.cargo/env"
+          fi
+          rustc --version
+          cargo --version
+      
+      - name: Build RedisJSON
+        run: |
+          . "$HOME/.cargo/env"
+          cargo build --release
+      
+      - name: Setup Python
+        run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install redis
+          if [ -f tests/pytest/requirements.txt ]; then
+            pip install -r tests/pytest/requirements.txt
+          fi
+      
+      - name: Run Memory Regression Tests
+        id: memory-test
+        run: |
+          source venv/bin/activate
+          cd tests/pytest
+          
+          # Run regression tests with budgets
+          TEST=test_memory_regression.py bash tests.sh ../../target/release/rejson.so || exit 1
+          
+          echo "✅ Memory regression tests passed - within budgets"
+      
+      - name: Download Nightly Baseline
+        id: download-baseline
+        uses: dawidd6/action-download-artifact@v3
+        continue-on-error: true
+        with:
+          workflow: event-nightly.yml
+          branch: main
+          name: memory-report-baseline
+          path: baseline/
+          if_no_artifact_found: ignore
+      
+      - name: Run Quick Memory Report
+        run: |
+          source venv/bin/activate
+          cd tests/pytest
+          
+          # Generate quick report for comparison
+          TEST=test_memory_nightly_report.py::test_nightly_memory_report_summary_only \
+            bash tests.sh ../../target/release/rejson.so | tee ../../pr_memory_report.txt
+      
+      - name: Compare with Nightly Baseline
+        id: compare
+        run: |
+          if [ ! -f "pr_memory_report.txt" ]; then
+            echo "⚠️ Could not generate memory report" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+          
+          CURRENT=$(grep "METRIC:overall_overhead_ratio:" pr_memory_report.txt | cut -d: -f3 || echo "")
+          
+          if [ -z "$CURRENT" ]; then
+            echo "⚠️ Could not extract current memory metrics" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+          
+          echo "### 📊 PR Memory Overhead" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Current:** ${CURRENT}x" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f "baseline/memory_report.txt" ]; then
+            BASELINE=$(grep "METRIC:overall_overhead_ratio:" baseline/memory_report.txt | cut -d: -f3 || echo "")
+            
+            if [ -n "$BASELINE" ]; then
+              DIFF=$(echo "$CURRENT - $BASELINE" | bc -l)
+              PERCENT=$(echo "scale=2; ($DIFF / $BASELINE) * 100" | bc -l)
+              
+              echo "**Nightly Baseline:** ${BASELINE}x" >> $GITHUB_STEP_SUMMARY
+              echo "**Change:** ${DIFF}x (${PERCENT}%)" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              
+              if [ $(echo "$PERCENT > 5" | bc -l) -eq 1 ]; then
+                echo "⚠️ **Memory increased by ${PERCENT}% vs nightly baseline**" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo "This is informational - PR passed budget checks." >> $GITHUB_STEP_SUMMARY
+              elif [ $(echo "$PERCENT < -5" | bc -l) -eq 1 ]; then
+                echo "✅ **Memory improved by ${PERCENT}%**" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "✅ **Memory stable (${PERCENT}% change)**" >> $GITHUB_STEP_SUMMARY
+              fi
+            else
+              echo "ℹ️ Could not compare with baseline" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "ℹ️ No nightly baseline found for comparison" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "This PR's memory usage will be compared in nightly runs." >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: memory-regression-logs-${{ inputs.os }}-${{ github.sha }}
+          path: tests/pytest/logs/*.log*
+          if-no-files-found: ignore
+          retention-days: 7
