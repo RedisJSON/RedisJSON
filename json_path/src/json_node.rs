@@ -7,10 +7,8 @@
  * GNU Affero General Public License v3 (AGPLv3).
  */
 
-use std::ffi::c_void;
-
 /// Use `SelectValue`
-use crate::select_value::{ArrayElementsType, SelectValue, SelectValueType, ValueRef};
+use crate::select_value::{SelectValue, SelectValueType, ValueRef};
 use ijson::{array::ArrayIterItem, DestructuredRef, IString, IValue, ValueType};
 use serde_json::Value;
 
@@ -135,18 +133,6 @@ impl SelectValue for Value {
             _ => panic!("not a double"),
         }
     }
-
-    fn get_array_elements_type(&self) -> Option<ArrayElementsType> {
-        match self {
-            Self::Array(_) => Some(ArrayElementsType::Heterogeneous),
-            _ => None,
-        }
-    }
-
-    fn get_index_raw_ref<'a>(&'a self, index: usize) -> Option<*const c_void> {
-        self.get_index(index)
-            .map(|v| v.as_ref() as *const _ as *const c_void)
-    }
 }
 
 impl SelectValue for IValue {
@@ -254,72 +240,5 @@ impl SelectValue for IValue {
 
     fn get_double(&self) -> f64 {
         self.as_number().expect("not a number").to_f64_lossy()
-    }
-
-    fn get_array_elements_type(&self) -> Option<ArrayElementsType> {
-        use ijson::array::ArrayTag;
-        match self.destructure_ref() {
-            DestructuredRef::Array(arr) => match arr.as_slice().type_tag() {
-                ArrayTag::Heterogeneous => Some(ArrayElementsType::Heterogeneous),
-                ArrayTag::I8 => Some(ArrayElementsType::I8),
-                ArrayTag::U8 => Some(ArrayElementsType::U8),
-                ArrayTag::I16 => Some(ArrayElementsType::I16),
-                ArrayTag::U16 => Some(ArrayElementsType::U16),
-                ArrayTag::F16 => Some(ArrayElementsType::F16),
-                ArrayTag::BF16 => Some(ArrayElementsType::BF16),
-                ArrayTag::I32 => Some(ArrayElementsType::I32),
-                ArrayTag::U32 => Some(ArrayElementsType::U32),
-                ArrayTag::F32 => Some(ArrayElementsType::F32),
-                ArrayTag::I64 => Some(ArrayElementsType::I64),
-                ArrayTag::U64 => Some(ArrayElementsType::U64),
-                ArrayTag::F64 => Some(ArrayElementsType::F64),
-            },
-            _ => None,
-        }
-    }
-
-    fn get_index_raw_ref<'a>(&'a self, index: usize) -> Option<*const c_void> {
-        use ijson::array::ArraySliceRef;
-        self.as_array().and_then(|arr| match arr.as_slice() {
-            ArraySliceRef::Heterogeneous(slice) => slice
-                .get(index)
-                .map(|item| item as *const _ as *const c_void),
-            ArraySliceRef::I8(slice) => slice
-                .get(index)
-                .map(|item| item as *const _ as *const c_void),
-            ArraySliceRef::U8(slice) => slice
-                .get(index)
-                .map(|item| item as *const _ as *const c_void),
-            ArraySliceRef::I16(slice) => slice
-                .get(index)
-                .map(|item| item as *const _ as *const c_void),
-            ArraySliceRef::U16(slice) => slice
-                .get(index)
-                .map(|item| item as *const _ as *const c_void),
-            ArraySliceRef::F16(slice) => slice
-                .get(index)
-                .map(|item| item as *const _ as *const c_void),
-            ArraySliceRef::BF16(slice) => slice
-                .get(index)
-                .map(|item| item as *const _ as *const c_void),
-            ArraySliceRef::I32(slice) => slice
-                .get(index)
-                .map(|item| item as *const _ as *const c_void),
-            ArraySliceRef::U32(slice) => slice
-                .get(index)
-                .map(|item| item as *const _ as *const c_void),
-            ArraySliceRef::F32(slice) => slice
-                .get(index)
-                .map(|item| item as *const _ as *const c_void),
-            ArraySliceRef::I64(slice) => slice
-                .get(index)
-                .map(|item| item as *const _ as *const c_void),
-            ArraySliceRef::U64(slice) => slice
-                .get(index)
-                .map(|item| item as *const _ as *const c_void),
-            ArraySliceRef::F64(slice) => slice
-                .get(index)
-                .map(|item| item as *const _ as *const c_void),
-        })
     }
 }

@@ -10,7 +10,7 @@
 use libc::size_t;
 use std::ffi::CString;
 use std::os::raw::{c_double, c_int, c_longlong};
-use std::ptr::{null, null_mut};
+use std::ptr::{null, null_mut, write};
 use std::{
     ffi::CStr,
     os::raw::{c_char, c_void},
@@ -18,7 +18,7 @@ use std::{
 
 use crate::formatter::ReplyFormatOptions;
 use crate::key_value::KeyValue;
-use json_path::select_value::{ArrayElementsType, SelectValue, SelectValueType, ValueRef};
+use json_path::select_value::{SelectValue, SelectValueType, ValueRef};
 use json_path::{compile, create};
 use redis_module::raw as rawmod;
 use redis_module::{key::KeyFlags, Context, RedisString, Status};
@@ -284,6 +284,29 @@ pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -
     .cast::<c_void>()
 }
 
+pub fn json_api_get_at<M: Manager>(
+    _: M,
+    json: *const c_void,
+    index: size_t,
+    value: *mut c_void,
+) -> c_int {
+    let json = unsafe { &*(json.cast::<&mut M::V>()) };
+    match json.get_type() {
+        SelectValueType::Array => {
+            if let Some(element) = json.get_index(index) {
+                let cloned_value = element.inner_cloned();
+                unsafe {
+                    write(value.cast::<M::V>(), cloned_value);
+                }
+                Status::Ok as c_int
+            } else {
+                Status::Err as c_int
+            }
+        }
+        _ => Status::Err as c_int,
+    }
+}
+
 pub fn json_api_is_json<M: Manager>(m: M, key: *mut rawmod::RedisModuleKey) -> c_int {
     m.is_json(key).map_or(0, |res| res as c_int)
 }
@@ -327,43 +350,14 @@ where
     }
 }
 
-pub fn json_api_get_at_with_type<M: Manager>(
-    _: M,
-    json: *const c_void,
-    index: size_t,
-    r#type: *mut c_void,
-) -> *const c_void {
-    let json = unsafe { &*(json.cast::<M::V>()) };
-    match json.get_type() {
-        SelectValueType::Array => {
-            let Some(value) = json.get_index_raw_ref(index) else {
-                return null();
-            };
-            let Some(array_elements_type) = json.get_array_elements_type() else {
-                return null();
-            };
-            let r#type = r#type.cast::<JSONPrimitiveType>();
-            unsafe {
-                *r#type = match array_elements_type {
-                    ArrayElementsType::Heterogeneous => JSONPrimitiveType::Heterogeneous,
-                    ArrayElementsType::I8 => JSONPrimitiveType::I8,
-                    ArrayElementsType::U8 => JSONPrimitiveType::U8,
-                    ArrayElementsType::I16 => JSONPrimitiveType::I16,
-                    ArrayElementsType::U16 => JSONPrimitiveType::U16,
-                    ArrayElementsType::F16 => JSONPrimitiveType::F16,
-                    ArrayElementsType::BF16 => JSONPrimitiveType::BF16,
-                    ArrayElementsType::I32 => JSONPrimitiveType::I32,
-                    ArrayElementsType::U32 => JSONPrimitiveType::U32,
-                    ArrayElementsType::F32 => JSONPrimitiveType::F32,
-                    ArrayElementsType::I64 => JSONPrimitiveType::I64,
-                    ArrayElementsType::U64 => JSONPrimitiveType::U64,
-                    ArrayElementsType::F64 => JSONPrimitiveType::F64,
-                };
-            }
-            value
-        }
-        _ => null(),
-    }
+pub fn json_api_alloc_json<M: Manager>(_: M) -> *mut c_void {
+    Box::into_raw(Box::new(M::V::default())).cast::<c_void>()
+}
+
+pub fn json_api_free_json<M: Manager>(_: M, json: *mut c_void) {
+    let json = json.cast::<M::V>();
+    let json = unsafe { Box::from_raw(json) };
+    drop(json);
 }
 
 pub fn get_llapi_ctx() -> Context {
@@ -445,6 +439,18 @@ macro_rules! redis_json_module_export_shared_api {
                     _ => $default_manager
                 },
                 run: |mngr|{json_api_get(mngr, key, path)},
+            )
+        }
+
+        #[no_mangle]
+        pub extern "C" fn JSONAPI_getAt(json: *const c_void, index: size_t, value: *mut c_void) -> c_int {
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
+                run: |mngr|{json_api_get_at(mngr, json, index, value)},
             )
         }
 
@@ -682,14 +688,26 @@ macro_rules! redis_json_module_export_shared_api {
         }
 
         #[no_mangle]
-        pub extern "C" fn JSONAPI_getAtWithType(json: *const c_void, index: size_t, r#type: *mut c_void) -> *const c_void {
+        pub extern "C" fn JSONAPI_allocJson() -> *mut c_void {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
                 },
-                run: |mngr|{json_api_get_at_with_type(mngr, json, index, r#type)},
+                run: |mngr|{json_api_alloc_json(mngr)},
+            )
+        }
+
+        #[no_mangle]
+        pub extern "C" fn JSONAPI_freeJson(json: *mut c_void) {
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
+                run: |mngr|{json_api_free_json(mngr, json)},
             )
         }
 
@@ -719,6 +737,7 @@ macro_rules! redis_json_module_export_shared_api {
             openKey: JSONAPI_openKey,
             openKeyFromStr: JSONAPI_openKeyFromStr,
             get: JSONAPI_get,
+            getAt: JSONAPI_getAt,
             next: JSONAPI_next,
             len: JSONAPI_len,
             freeIter: JSONAPI_freeIter,
@@ -745,7 +764,8 @@ macro_rules! redis_json_module_export_shared_api {
             // V5 entries
             openKeyWithFlags: JSONAPI_openKey_withFlags,
             // V6 entries
-            getAtWithType: JSONAPI_getAtWithType,
+            allocJson: JSONAPI_allocJson,
+            freeJson: JSONAPI_freeJson,
         };
 
         #[repr(C)]
@@ -760,6 +780,7 @@ macro_rules! redis_json_module_export_shared_api {
             pub openKeyFromStr:
                 extern "C" fn(ctx: *mut rawmod::RedisModuleCtx, path: *const c_char) -> *mut c_void,
             pub get: extern "C" fn(val: *const c_void, path: *const c_char) -> *const c_void,
+            pub getAt: extern "C" fn(json: *const c_void, index: size_t, value: *mut c_void) -> c_int,
             pub next: extern "C" fn(iter: *mut c_void) -> *const c_void,
             pub len: extern "C" fn(iter: *const c_void) -> size_t,
             pub freeIter: extern "C" fn(iter: *mut c_void),
@@ -801,7 +822,8 @@ macro_rules! redis_json_module_export_shared_api {
                 flags: c_int,
             ) -> *mut c_void,
             // V6
-            pub getAtWithType: extern "C" fn(json: *const c_void, index: size_t, r#type: *mut c_void) -> *const c_void,
+            pub allocJson: extern "C" fn() -> *mut c_void,
+            pub freeJson: extern "C" fn(json: *mut c_void),
 
         }
     };

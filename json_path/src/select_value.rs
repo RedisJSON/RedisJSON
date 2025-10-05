@@ -21,23 +21,6 @@ pub enum SelectValueType {
     Object,
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum ArrayElementsType {
-    Heterogeneous,
-    I8,
-    U8,
-    I16,
-    U16,
-    F16,
-    BF16,
-    I32,
-    U32,
-    F32,
-    I64,
-    U64,
-    F64,
-}
-
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ValueRef<'a, T: SelectValue> {
     Borrowed(&'a T),
@@ -94,7 +77,6 @@ pub trait SelectValue: Debug + Eq + PartialEq + Default + Clone + Serialize {
     fn is_empty(&self) -> Option<bool>;
     fn get_key<'a>(&'a self, key: &str) -> Option<ValueRef<'a, Self>>;
     fn get_index<'a>(&'a self, index: usize) -> Option<ValueRef<'a, Self>>;
-    fn get_index_raw_ref<'a>(&'a self, index: usize) -> Option<*const c_void>;
     fn is_array(&self) -> bool;
     fn is_double(&self) -> Option<bool>;
 
@@ -103,5 +85,4 @@ pub trait SelectValue: Debug + Eq + PartialEq + Default + Clone + Serialize {
     fn get_bool(&self) -> bool;
     fn get_long(&self) -> i64;
     fn get_double(&self) -> f64;
-    fn get_array_elements_type(&self) -> Option<ArrayElementsType>;
 }

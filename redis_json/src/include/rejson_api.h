@@ -26,22 +26,6 @@ typedef enum JSONType {
   JSONType__EOF
 } JSONType;
 
-typedef enum JSONPrimitiveType {
-  JSONPrimitiveType_Heterogeneous = 0,
-  JSONPrimitiveType_I8 = 1,
-  JSONPrimitiveType_U8 = 2,
-  JSONPrimitiveType_I16 = 2,
-  JSONPrimitiveType_U16 = 3,
-  JSONPrimitiveType_F16 = 4,
-  JSONPrimitiveType_BF16 = 5,
-  JSONPrimitiveType_I32 = 6,
-  JSONPrimitiveType_U32 = 7,
-  JSONPrimitiveType_F32 = 8,
-  JSONPrimitiveType_I64 = 9,
-  JSONPrimitiveType_U64 = 10,
-  JSONPrimitiveType_F64 = 11,
-} JSONPrimitiveType;
-
 typedef const void* RedisJSON;
 typedef const void* JSONResultsIterator;
 typedef const void* JSONPath;
@@ -58,7 +42,8 @@ typedef struct RedisJSONAPI {
   RedisJSON (*openKeyFromStr)(RedisModuleCtx *ctx, const char *path);
 
   JSONResultsIterator (*get)(RedisJSON json, const char *path);
-  
+  int (*getAt)(RedisJSON json, size_t index, RedisJSON value);
+
   RedisJSON (*next)(JSONResultsIterator iter);
   size_t (*len)(JSONResultsIterator iter);
   void (*freeIter)(JSONResultsIterator iter);
@@ -141,9 +126,8 @@ typedef struct RedisJSONAPI {
   ////////////////
   // V6 entries //
   ////////////////
-
-  void* (*getAtWithType)(RedisJSON json, size_t index, JSONPrimitiveType *type);
-
+  RedisJSON (*allocJson)();
+  void (*freeJson)(RedisJSON json);
 
 } RedisJSONAPI;
 
@@ -151,4 +135,3 @@ typedef struct RedisJSONAPI {
 #ifdef __cplusplus
 }
 #endif
-
