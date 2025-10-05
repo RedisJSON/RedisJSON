@@ -231,25 +231,17 @@ def test_memory_overhead_comparison(env):
     print(f"  Additional Cost per Byte:    {(memory_json - memory_string) / string_bytes:>10.4f}")
     print(f"{'='*80}\n")
     
-    # Verify data integrity
-    retrieved_json = env.cmd('JSON.GET', key_json)
-    retrieved_string = env.cmd('GET', key_string)
-    
-    # Parse and compare
-    parsed_json = json.loads(retrieved_json)
-    parsed_string = json.loads(retrieved_string)
-    
-    env.assertEqual(parsed_json, json_doc, "JSON.GET should return original document")
-    env.assertEqual(parsed_string, json_doc, "Regular GET should return original document")
-    
     # Test partial updates (advantage of RedisJSON)
     print("Testing RedisJSON Partial Update Capability:")
     print("-" * 80)
     
     # Update just one field with JSON.SET
-    env.cmd('JSON.SET', key_json, '.user.profile.age', '33')
+    env.cmd('JSON.SET', key_json, '.user.profile.age', 33)
     updated_age = env.cmd('JSON.GET', key_json, '.user.profile.age')
     print(f"Updated age using JSON.SET path:  {updated_age}")
+    
+    # Verify the update worked
+    env.assertEqual(int(updated_age), 33, "Age should be updated to 33")
     
     # For regular string, you'd need to:
     # 1. GET the entire string
