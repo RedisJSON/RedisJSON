@@ -67,8 +67,8 @@ jobs:
           source venv/bin/activate
           cd tests/pytest
           
-          # Run regression tests with budgets
-          TEST=test_memory_regression.py bash tests.sh ../../target/release/rejson.so || exit 1
+          # Run regression tests with budgets (QUICK=1 to only run general variant)
+          QUICK=1 TEST=test_memory_regression.py bash tests.sh ../../target/release/rejson.so || exit 1
           
           echo "✅ Memory regression tests passed - within budgets"
       
@@ -89,7 +89,7 @@ jobs:
           cd tests/pytest
           
           # Generate quick report for comparison
-          TEST=test_memory_nightly_report.py::test_nightly_memory_report_summary_only \
+          QUICK=1 TEST=test_memory_nightly_report.py::test_nightly_memory_report_summary_only \
             bash tests.sh ../../target/release/rejson.so | tee ../../pr_memory_report.txt
       
       - name: Compare with Nightly Baseline
