@@ -383,7 +383,7 @@ fn apply_updates<M: Manager>(
     }
 }
 
-fn find_paths<T: SelectValue, F: FnMut(ValueRef<'_, T>) -> bool>(
+fn find_paths<T: SelectValue, F: FnMut(&ValueRef<'_, T>) -> bool>(
     path: &str,
     doc: &T,
     mut f: F,
@@ -395,8 +395,7 @@ fn find_paths<T: SelectValue, F: FnMut(ValueRef<'_, T>) -> bool>(
     let res = calc_once_with_paths(query, doc);
     Ok(res
         .into_iter()
-        .filter(|e| f(e.res.clone()))
-        .map(|e| e.path_tracker.unwrap().to_string_path())
+        .filter_map(|e| f(&e.res).then_some(e.path_tracker.unwrap().to_string_path()))
         .collect())
 }
 
@@ -1722,7 +1721,7 @@ where
         Some(root) => find_all_values(path, root, |v| v.get_type() == SelectValueType::Object)?
             .iter()
             .map(|v| {
-                v.clone().map_or(RedisValue::Null, |v| {
+                v.as_ref().map_or(RedisValue::Null, |v| {
                     RedisValue::Integer(v.len().unwrap() as i64)
                 })
             })

@@ -290,7 +290,7 @@ pub fn json_api_get_at<M: Manager>(
     index: size_t,
     value: *mut c_void,
 ) -> c_int {
-    let json = unsafe { &*(json.cast::<&mut M::V>()) };
+    let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
         SelectValueType::Array => {
             if let Some(element) = json.get_index(index) {

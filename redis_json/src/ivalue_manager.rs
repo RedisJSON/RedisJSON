@@ -14,7 +14,7 @@ use crate::redisjson::normalize_arr_start_index;
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
 use bson::{from_document, Document};
-use ijson::array::{ArraySliceMut, ArrayTag, IArray};
+use ijson::array::{ArrayTag, IArray};
 use ijson::{DestructuredMut, INumber, IObject, IString, IValue};
 use json_path::select_value::{SelectValue, SelectValueType};
 use redis_module::key::{verify_type, KeyFlags, RedisKey, RedisKeyWritable};
@@ -73,33 +73,27 @@ impl<'a, 'b: 'a> PathValue<'a, 'b> {
             return None;
         }
         let type_tag = array.as_slice().type_tag();
-        let is_heterogeneous = matches!(array.as_mut_slice(), ArraySliceMut::Heterogeneous(_));
-        if is_heterogeneous {
-            return Some(PathValue::IValue(array.get_mut(index).unwrap()));
-        } else {
-            match type_tag {
-                ArrayTag::I8 => Some(PathValue::I8(array, index)),
-                ArrayTag::U8 => Some(PathValue::U8(array, index)),
-                ArrayTag::I16 => Some(PathValue::I16(array, index)),
-                ArrayTag::U16 => Some(PathValue::U16(array, index)),
-                ArrayTag::F16 => Some(PathValue::F16(array, index)),
-                ArrayTag::BF16 => Some(PathValue::BF16(array, index)),
-                ArrayTag::I32 => Some(PathValue::I32(array, index)),
-                ArrayTag::U32 => Some(PathValue::U32(array, index)),
-                ArrayTag::F32 => Some(PathValue::F32(array, index)),
-                ArrayTag::I64 => Some(PathValue::I64(array, index)),
-                ArrayTag::U64 => Some(PathValue::U64(array, index)),
-                ArrayTag::F64 => Some(PathValue::F64(array, index)),
-                ArrayTag::Heterogeneous => unreachable!(),
-            }
+        match type_tag {
+            ArrayTag::I8 => Some(PathValue::I8(array, index)),
+            ArrayTag::U8 => Some(PathValue::U8(array, index)),
+            ArrayTag::I16 => Some(PathValue::I16(array, index)),
+            ArrayTag::U16 => Some(PathValue::U16(array, index)),
+            ArrayTag::F16 => Some(PathValue::F16(array, index)),
+            ArrayTag::BF16 => Some(PathValue::BF16(array, index)),
+            ArrayTag::I32 => Some(PathValue::I32(array, index)),
+            ArrayTag::U32 => Some(PathValue::U32(array, index)),
+            ArrayTag::F32 => Some(PathValue::F32(array, index)),
+            ArrayTag::I64 => Some(PathValue::I64(array, index)),
+            ArrayTag::U64 => Some(PathValue::U64(array, index)),
+            ArrayTag::F64 => Some(PathValue::F64(array, index)),
+            ArrayTag::Heterogeneous => Some(PathValue::IValue(array.get_mut(index).unwrap())),
         }
     }
 }
 
 fn follow_path(path: Vec<String>, root: &mut IValue) -> Option<PathValue<'_, '_>> {
-    path.into_iter().try_fold(
-        PathValue::IValue(root),
-        |target: PathValue<'_, '_>, token: String| {
+    path.into_iter()
+        .try_fold(PathValue::IValue(root), |target, token| {
             let PathValue::IValue(target) = target else {
                 return None;
             };
@@ -112,8 +106,7 @@ fn follow_path(path: Vec<String>, root: &mut IValue) -> Option<PathValue<'_, '_>
                 }
                 _ => None,
             }
-        },
-    )
+        })
 }
 
 ///
@@ -180,211 +173,116 @@ impl<'a> IValueKeyHolderWrite<'a> {
     {
         let in_value = &serde_json::from_str(num)?;
         use half::{bf16, f16};
-        // TODO: macro for this
+
+        // Macro to generate repetitive match arms for different numeric array types
+        macro_rules! generate_array_match_arms {
+            (
+                $v:expr,
+                $num_2:expr,
+                $in_value_f64:expr,
+                signed_int: [$($si_variant:ident => $si_type:ty),* $(,)?],
+                unsigned_int: [$($ui_variant:ident => $ui_type:ty),* $(,)?],
+                half_float: [$($hf_variant:ident => $hf_type:ty),* $(,)?],
+                float: [$($f_variant:ident => $f_type:ty),* $(,)?]
+            ) => {
+                match ($v, $num_2) {
+                    (PathValue::IValue(v), _) => {
+                        let new_val = match (v.get_type(), in_value.as_i64()) {
+                            (SelectValueType::Long, Some(num2)) => {
+                                let num1 = v.get_long();
+                                Ok(op1(num1, num2).into())
+                            }
+                            _ => {
+                                let num1 = v.get_double();
+                                let num2 = in_value.as_f64().unwrap();
+                                INumber::try_from(op2(num1, num2))
+                                    .map_err(|_| RedisError::Str("result is not a number"))
+                            }
+                        }?;
+                        *v = IValue::from(new_val.clone());
+                        Ok(NumOpResult::INumber(new_val))
+                    }
+                    $(
+                        (PathValue::$si_variant(num1, index), num_2) => {
+                            let num1 = num1
+                                .as_mut_slice_of::<$si_type>()
+                                .unwrap()
+                                .get_mut(index)
+                                .unwrap();
+                            let new_val = match num_2 {
+                                Some(num2) => {
+                                    *num1 = op1(*num1 as i64, num2) as $si_type;
+                                    NumOpResult::I64(*num1 as i64)
+                                }
+                                None => {
+                                    *num1 = op2(*num1 as f64, $in_value_f64) as $si_type;
+                                    NumOpResult::I64(*num1 as i64)
+                                }
+                            };
+                            Ok(new_val)
+                        }
+                    )*
+                    $(
+                        (PathValue::$ui_variant(num1, index), num_2) => {
+                            let num1 = num1
+                                .as_mut_slice_of::<$ui_type>()
+                                .unwrap()
+                                .get_mut(index)
+                                .unwrap();
+                            let new_val = match num_2 {
+                                Some(num2) => {
+                                    *num1 = op1(*num1 as i64, num2) as $ui_type;
+                                    NumOpResult::U64(*num1 as u64)
+                                }
+                                None => {
+                                    *num1 = op2(*num1 as f64, $in_value_f64) as $ui_type;
+                                    NumOpResult::U64(*num1 as u64)
+                                }
+                            };
+                            Ok(new_val)
+                        }
+                    )*
+                    $(
+                        (PathValue::$hf_variant(num1, index), _) => {
+                            let num1 = num1
+                                .as_mut_slice_of::<$hf_type>()
+                                .unwrap()
+                                .get_mut(index)
+                                .unwrap();
+                            let new_val = op2(f64::from(*num1), $in_value_f64);
+                            *num1 = <$hf_type>::from_f64(new_val);
+                            Ok(NumOpResult::F64(f64::from(*num1)))
+                        }
+                    )*
+                    $(
+                        (PathValue::$f_variant(num1, index), _) => {
+                            let num1 = num1
+                                .as_mut_slice_of::<$f_type>()
+                                .unwrap()
+                                .get_mut(index)
+                                .unwrap();
+                            let new_val = op2(f64::from(*num1), $in_value_f64);
+                            *num1 = new_val as $f_type;
+                            Ok(NumOpResult::F64(*num1 as f64))
+                        }
+                    )*
+                }
+            };
+        }
+
         if let serde_json::Value::Number(in_value) = in_value {
             let in_value_f64 = in_value.as_f64().unwrap();
-            let n = self.do_op(path, |v| match (v, in_value.as_i64()) {
-                (PathValue::IValue(v), _) => {
-                    let new_val = match (v.get_type(), in_value.as_i64()) {
-                        (SelectValueType::Long, Some(num2)) => {
-                            let num1 = v.get_long();
-                            Ok(op1(num1, num2).into())
-                        }
-                        _ => {
-                            let num1 = v.get_double();
-                            let num2 = in_value.as_f64().unwrap();
-                            INumber::try_from(op2(num1, num2))
-                                .map_err(|_| RedisError::Str("result is not a number"))
-                        }
-                    }?;
-                    *v = IValue::from(new_val.clone());
-                    Ok(NumOpResult::INumber(new_val))
-                }
+            let n = self.do_op(path, |v| {
                 // SAFETY: index is in bounds and type is checked at creation of PathValue
-                (PathValue::I8(num1, index), num_2) => {
-                    let num1 = num1
-                        .as_mut_slice_of::<i8>()
-                        .unwrap()
-                        .get_mut(index)
-                        .unwrap();
-                    let new_val = match num_2 {
-                        Some(num2) => {
-                            *num1 = op1(*num1 as i64, num2) as i8;
-                            NumOpResult::I64(*num1 as i64)
-                        }
-                        None => {
-                            *num1 = op2(*num1 as f64, in_value_f64) as i8;
-                            NumOpResult::I64(*num1 as i64)
-                        }
-                    };
-                    Ok(new_val)
-                }
-                (PathValue::U8(num1, index), num_2) => {
-                    let num1 = num1
-                        .as_mut_slice_of::<u8>()
-                        .unwrap()
-                        .get_mut(index)
-                        .unwrap();
-                    let new_val = match num_2 {
-                        Some(num2) => {
-                            *num1 = op1(*num1 as i64, num2) as u8;
-                            NumOpResult::U64(*num1 as u64)
-                        }
-                        None => {
-                            *num1 = op2(*num1 as f64, in_value_f64) as u8;
-                            NumOpResult::U64(*num1 as u64)
-                        }
-                    };
-                    Ok(new_val)
-                }
-                (PathValue::I16(num1, index), num_2) => {
-                    let num1 = num1
-                        .as_mut_slice_of::<i16>()
-                        .unwrap()
-                        .get_mut(index)
-                        .unwrap();
-                    let new_val = match num_2 {
-                        Some(num2) => {
-                            *num1 = op1(*num1 as i64, num2) as i16;
-                            NumOpResult::I64(*num1 as i64)
-                        }
-                        None => {
-                            *num1 = op2(*num1 as f64, in_value_f64) as i16;
-                            NumOpResult::I64(*num1 as i64)
-                        }
-                    };
-                    Ok(new_val)
-                }
-                (PathValue::U16(num1, index), num_2) => {
-                    let num1 = num1
-                        .as_mut_slice_of::<u16>()
-                        .unwrap()
-                        .get_mut(index)
-                        .unwrap();
-                    let new_val = match num_2 {
-                        Some(num2) => {
-                            *num1 = op1(*num1 as i64, num2) as u16;
-                            NumOpResult::U64(*num1 as u64)
-                        }
-                        None => {
-                            *num1 = op2(*num1 as f64, in_value_f64) as u16;
-                            NumOpResult::U64(*num1 as u64)
-                        }
-                    };
-                    Ok(new_val)
-                }
-                (PathValue::F16(num1, index), _) => {
-                    let num1 = num1
-                        .as_mut_slice_of::<f16>()
-                        .unwrap()
-                        .get_mut(index)
-                        .unwrap();
-                    let new_val = op2(f64::from(*num1), in_value_f64);
-                    *num1 = f16::from_f64(new_val);
-                    Ok(NumOpResult::F64(f64::from(*num1)))
-                }
-                (PathValue::BF16(num1, index), _) => {
-                    let num1 = num1
-                        .as_mut_slice_of::<bf16>()
-                        .unwrap()
-                        .get_mut(index)
-                        .unwrap();
-                    let new_val = op2(f64::from(*num1), in_value_f64);
-                    *num1 = bf16::from_f64(new_val);
-                    Ok(NumOpResult::F64(f64::from(*num1)))
-                }
-                (PathValue::I32(num1, index), num_2) => {
-                    let num1 = num1
-                        .as_mut_slice_of::<i32>()
-                        .unwrap()
-                        .get_mut(index)
-                        .unwrap();
-                    let new_val = match num_2 {
-                        Some(num2) => {
-                            *num1 = op1(*num1 as i64, num2) as i32;
-                            NumOpResult::I64(*num1 as i64)
-                        }
-                        None => {
-                            *num1 = op2(*num1 as f64, in_value_f64) as i32;
-                            NumOpResult::I64(*num1 as i64)
-                        }
-                    };
-                    Ok(new_val)
-                }
-                (PathValue::U32(num1, index), num_2) => {
-                    let num1 = num1
-                        .as_mut_slice_of::<u32>()
-                        .unwrap()
-                        .get_mut(index)
-                        .unwrap();
-                    let new_val = match num_2 {
-                        Some(num2) => {
-                            *num1 = op1(*num1 as i64, num2) as u32;
-                            NumOpResult::U64(*num1 as u64)
-                        }
-                        None => {
-                            *num1 = op2(*num1 as f64, in_value_f64) as u32;
-                            NumOpResult::U64(*num1 as u64)
-                        }
-                    };
-                    Ok(new_val)
-                }
-                (PathValue::F32(num1, index), _) => {
-                    let num1 = num1
-                        .as_mut_slice_of::<f32>()
-                        .unwrap()
-                        .get_mut(index)
-                        .unwrap();
-                    let new_val = op2(f64::from(*num1), in_value_f64);
-                    *num1 = new_val as f32;
-                    Ok(NumOpResult::F64(*num1 as f64))
-                }
-                (PathValue::I64(num1, index), num_2) => {
-                    let num1 = num1
-                        .as_mut_slice_of::<i64>()
-                        .unwrap()
-                        .get_mut(index)
-                        .unwrap();
-                    let new_val = match num_2 {
-                        Some(num2) => {
-                            *num1 = op1(*num1 as i64, num2) as i64;
-                            NumOpResult::I64(*num1 as i64)
-                        }
-                        None => {
-                            *num1 = op2(*num1 as f64, in_value_f64) as i64;
-                            NumOpResult::I64(*num1 as i64)
-                        }
-                    };
-                    Ok(new_val)
-                }
-                (PathValue::U64(num1, index), num_2) => {
-                    let num1 = num1
-                        .as_mut_slice_of::<u64>()
-                        .unwrap()
-                        .get_mut(index)
-                        .unwrap();
-                    let new_val = match num_2 {
-                        Some(num2) => {
-                            *num1 = op1(*num1 as i64, num2) as u64;
-                            NumOpResult::U64(*num1 as u64)
-                        }
-                        None => {
-                            *num1 = op2(*num1 as f64, in_value_f64) as u64;
-                            NumOpResult::U64(*num1 as u64)
-                        }
-                    };
-                    Ok(new_val)
-                }
-                (PathValue::F64(num1, index), _) => {
-                    let num1 = num1
-                        .as_mut_slice_of::<f64>()
-                        .unwrap()
-                        .get_mut(index)
-                        .unwrap();
-                    let new_val = op2(f64::from(*num1), in_value_f64);
-                    *num1 = new_val as f64;
-                    Ok(NumOpResult::F64(*num1 as f64))
-                }
+                generate_array_match_arms!(
+                    v,
+                    in_value.as_i64(),
+                    in_value_f64,
+                    signed_int: [I8 => i8, I16 => i16, I32 => i32, I64 => i64],
+                    unsigned_int: [U8 => u8, U16 => u16, U32 => u32, U64 => u64],
+                    half_float: [F16 => f16, BF16 => bf16],
+                    float: [F32 => f32, F64 => f64]
+                )
             })?;
             match n {
                 NumOpResult::INumber(n) => if n.has_decimal_point() {
@@ -445,85 +343,32 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn set_value(&mut self, path: Vec<String>, mut v: IValue) -> RedisResult<bool> {
+        // Macro to generate repetitive match arms for array types
+        macro_rules! handle_array_types {
+            ($val:expr, $v:expr, $($variant:ident),+ $(,)?) => {
+                match $val {
+                    PathValue::IValue(val) => Ok(*val = $v.take()),
+                    $(
+                        PathValue::$variant(iarray, index) => {
+                            iarray
+                                .remove(index)
+                                .ok_or(RedisError::Str("index out of bounds for array set"))?;
+                            Ok(iarray.insert(index, $v.take()))
+                        }
+                    )+
+                }
+            };
+        }
+
         if path.is_empty() {
             // update the root
             self.set_root(v)
         } else {
             let root = self.get_value()?.unwrap();
-            Ok(update(path, root, |val| match val {
-                PathValue::IValue(val) => Ok(*val = v.take()),
-                PathValue::I8(iarray, index) => {
-                    iarray
-                        .remove(index)
-                        .ok_or(RedisError::Str("index out of bounds for array set   "))?;
-                    Ok(iarray.insert(index, v.take()))
-                }
-                PathValue::U8(iarray, index) => {
-                    iarray
-                        .remove(index)
-                        .ok_or(RedisError::Str("index out of bounds for array set"))?;
-                    Ok(iarray.insert(index, v.take()))
-                }
-                PathValue::I16(iarray, index) => {
-                    iarray
-                        .remove(index)
-                        .ok_or(RedisError::Str("index out of bounds for array set"))?;
-                    Ok(iarray.insert(index, v.take()))
-                }
-                PathValue::U16(iarray, index) => {
-                    iarray
-                        .remove(index)
-                        .ok_or(RedisError::Str("index out of bounds for array set"))?;
-                    Ok(iarray.insert(index, v.take()))
-                }
-                PathValue::F16(iarray, index) => {
-                    iarray
-                        .remove(index)
-                        .ok_or(RedisError::Str("index out of bounds for array set"))?;
-                    Ok(iarray.insert(index, v.take()))
-                }
-                PathValue::BF16(iarray, index) => {
-                    iarray
-                        .remove(index)
-                        .ok_or(RedisError::Str("index out of bounds for array set"))?;
-                    Ok(iarray.insert(index, v.take()))
-                }
-                PathValue::I32(iarray, index) => {
-                    iarray
-                        .remove(index)
-                        .ok_or(RedisError::Str("index out of bounds for array set"))?;
-                    Ok(iarray.insert(index, v.take()))
-                }
-                PathValue::U32(iarray, index) => {
-                    iarray
-                        .remove(index)
-                        .ok_or(RedisError::Str("index out of bounds for array set"))?;
-                    Ok(iarray.insert(index, v.take()))
-                }
-                PathValue::F32(iarray, index) => {
-                    iarray
-                        .remove(index)
-                        .ok_or(RedisError::Str("index out of bounds for array set"))?;
-                    Ok(iarray.insert(index, v.take()))
-                }
-                PathValue::I64(iarray, index) => {
-                    iarray
-                        .remove(index)
-                        .ok_or(RedisError::Str("index out of bounds for array set"))?;
-                    Ok(iarray.insert(index, v.take()))
-                }
-                PathValue::U64(iarray, index) => {
-                    iarray
-                        .remove(index)
-                        .ok_or(RedisError::Str("index out of bounds for array set"))?;
-                    Ok(iarray.insert(index, v.take()))
-                }
-                PathValue::F64(iarray, index) => {
-                    iarray
-                        .remove(index)
-                        .ok_or(RedisError::Str("index out of bounds for array set"))?;
-                    Ok(iarray.insert(index, v.take()))
-                }
+            Ok(update(path, root, |val| {
+                handle_array_types!(
+                    val, v, I8, U8, I16, U16, F16, BF16, I32, U32, F32, I64, U64, F64
+                )
             })
             .is_ok())
         }
