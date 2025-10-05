@@ -66,9 +66,7 @@ macro_rules! value_ref_get_key {
     ($value_ref:expr, $curr:expr) => {{
         match &$value_ref {
             ValueRef::Borrowed(v) => v.get_key($curr),
-            ValueRef::Owned(v) => v
-                .get_key($curr)
-                .map(|v| ValueRef::Owned(v.inner_cloned())),
+            ValueRef::Owned(v) => v.get_key($curr).map(|v| ValueRef::Owned(v.inner_cloned())),
         }
     }};
 }
@@ -77,9 +75,7 @@ macro_rules! value_ref_get_index {
     ($value_ref:expr, $i:expr) => {{
         match &$value_ref {
             ValueRef::Borrowed(v) => v.get_index($i),
-            ValueRef::Owned(v) => v
-                .get_index($i)
-                .map(|v| ValueRef::Owned(v.inner_cloned())),
+            ValueRef::Owned(v) => v.get_index($i).map(|v| ValueRef::Owned(v.inner_cloned())),
         }
     }};
 }

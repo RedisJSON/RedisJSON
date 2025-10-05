@@ -212,9 +212,8 @@ impl SelectValue for IValue {
     }
 
     fn get_index<'a>(&'a self, index: usize) -> Option<ValueRef<'a, Self>> {
-        self.as_array().and_then(|arr| {
-            arr.iter().nth(index).map(From::from)
-        })
+        self.as_array()
+            .and_then(|arr| arr.iter().nth(index).map(From::from))
     }
 
     fn is_array(&self) -> bool {
