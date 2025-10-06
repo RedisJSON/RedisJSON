@@ -40,9 +40,6 @@ RLEC_PLATFORMS = {
     'rocky8': {
         'os': 'Linux-rhel8',
         'env': 'rhel8.5-x86_64-aws' },
-    'rhel9': {
-        'os': 'Linux-rhel9',
-        'env': 'ubuntu24-arm64-4-16' },
     'focal': {
         'os': 'Linux-ubuntu20.04',
         'env': 'focal-amd64-aws' }
@@ -58,8 +55,7 @@ RLEC_VER_ENVS = {
     '6.2.12': ['xenial', 'bionic', 'centos7', 'rocky8'],
     '6.2.18': ['xenial', 'bionic', 'centos7', 'rocky8'],
     '6.4.2': ['xenial', 'bionic', 'focal', 'centos7', 'rocky8'],
-    '100.0.0': ['xenial', 'bionic', 'focal', 'centos7', 'rocky8'],
-    '100.0.21': ['xenial', 'bionic', 'focal', 'centos7', 'rocky8', 'rhel9']
+    '100.0.0': ['xenial', 'bionic', 'focal', 'centos7', 'rocky8']
 }
 
 class Command1(click.Command):

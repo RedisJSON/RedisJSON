@@ -1,4 +1,4 @@
-name: Build and Test ubuntu ARM instances
+name: Build and Test Linux ARM instances
 
 on:
   workflow_dispatch: # Allows you to run this workflow manually from the Actions tab
@@ -55,7 +55,7 @@ jobs:
           redis-ref: ${{ inputs.redis-ref }}
           beta-version: ${{ inputs.beta-version }}
 
-  ubuntu-arm64:
+  linux-arm64:
     runs-on: ubuntu24-arm64-4-16 # ubuntu24-arm64-2-8
     needs: setup-environment
     strategy:
