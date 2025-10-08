@@ -37,7 +37,7 @@ jobs:
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
   ubuntu-arm64:
-    uses: ./.github/workflows/flow-ubuntu-arm.yml
+    uses: ./.github/workflows/flow-linux-arm.yml
     needs: [prepare-values]
     with:
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
