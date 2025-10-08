@@ -1,4 +1,4 @@
-name: Build and Test ubuntu ARM instances
+name: Build and Test Linux ARM instances
 
 on:
   workflow_dispatch: # Allows you to run this workflow manually from the Actions tab
@@ -46,7 +46,7 @@ jobs:
           github-ref: ${{ github.ref }}
           redis-ref: ${{ inputs.redis-ref }}
 
-  ubuntu-arm64:
+  linux-arm64:
     runs-on: ubuntu24-arm64-4-16 # ubuntu24-arm64-2-8
     needs: setup-environment
     strategy:
@@ -89,6 +89,34 @@ jobs:
               apt upgrade -yqq
               apt install -yqq git wget build-essential lcov openssl libssl-dev \
                 python3 python3-pip python3-venv python3-dev unzip rsync libclang-dev clang curl
+          - image: "rockylinux:9"
+            nick: "rocky9"
+            install_git: |
+              dnf install -y git
+            install_deps: |
+              dnf -y update
+              dnf install -y --allowerasing \
+                git \
+                wget \
+                gcc \
+                gcc-c++ \
+                clang \
+                clang-devel \
+                llvm-devel \
+                make \
+                cmake \
+                libffi-devel \
+                openssl-devel \
+                zlib-devel \
+                bzip2-devel \
+                python3-devel \
+                which \
+                unzip \
+                ca-certificates \
+                python3-pip \
+                curl \
+                rsync \
+                diffutils
     defaults:
       run:
         shell: bash
