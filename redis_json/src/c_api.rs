@@ -352,6 +352,10 @@ where
     }
 }
 
+pub fn json_api_alloc_json<M: Manager>(_: M) -> *mut c_void {
+    Box::into_raw(Box::new(M::V::default())).cast::<c_void>()
+}
+
 pub fn json_api_free_json<M: Manager>(_: M, json: *mut c_void) {
     unsafe { (*(json.cast::<M::V>())).shallow_drop() };
     // Dealocate the allocated memory
@@ -686,6 +690,18 @@ macro_rules! redis_json_module_export_shared_api {
         }
 
         #[no_mangle]
+        pub extern "C" fn JSONAPI_allocJson() -> *mut c_void {
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
+                run: |mngr|{json_api_alloc_json(mngr)},
+            )
+        }
+
+        #[no_mangle]
         pub extern "C" fn JSONAPI_freeJson(json: *mut c_void) {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
@@ -750,6 +766,7 @@ macro_rules! redis_json_module_export_shared_api {
             // V5 entries
             openKeyWithFlags: JSONAPI_openKey_withFlags,
             // V6 entries
+            allocJson: JSONAPI_allocJson,
             freeJson: JSONAPI_freeJson,
         };
 
@@ -807,6 +824,7 @@ macro_rules! redis_json_module_export_shared_api {
                 flags: c_int,
             ) -> *mut c_void,
             // V6
+            pub allocJson: extern "C" fn() -> *mut c_void,
             pub freeJson: extern "C" fn(json: *mut c_void),
 
         }
