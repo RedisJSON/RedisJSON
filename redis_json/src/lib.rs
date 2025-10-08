@@ -28,7 +28,7 @@ use redis_module::key::KeyFlags;
 
 #[cfg(not(feature = "as-library"))]
 use crate::c_api::{
-    get_llapi_ctx, json_api_alloc_json, json_api_free_iter, json_api_free_json,
+    get_llapi_ctx, json_api_free_iter, json_api_free_json,
     json_api_free_key_values_iter, json_api_get, json_api_get_at, json_api_get_boolean,
     json_api_get_double, json_api_get_int, json_api_get_json, json_api_get_json_from_iter,
     json_api_get_key_value, json_api_get_len, json_api_get_string, json_api_get_type,
