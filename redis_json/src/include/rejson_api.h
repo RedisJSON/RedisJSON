@@ -126,7 +126,6 @@ typedef struct RedisJSONAPI {
   ////////////////
   // V6 entries //
   ////////////////
-  RedisJSON (*allocJson)();
   void (*freeJson)(RedisJSON json);
 
 } RedisJSONAPI;

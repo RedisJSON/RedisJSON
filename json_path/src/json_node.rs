@@ -133,6 +133,14 @@ impl SelectValue for Value {
             _ => panic!("not a double"),
         }
     }
+
+    fn shallow_clone(&self) -> Self {
+        self.clone()
+    }
+
+    fn shallow_drop(&mut self) {
+        unsafe { std::ptr::drop_in_place(self as *mut Self) };
+    }
 }
 
 impl<'a> From<ArrayIterItem<'a>> for ValueRef<'a, IValue> {
@@ -245,5 +253,27 @@ impl SelectValue for IValue {
 
     fn get_double(&self) -> f64 {
         self.as_number().expect("not a number").to_f64_lossy()
+    }
+
+    fn shallow_clone(&self) -> Self {
+        match self.get_type() {
+            SelectValueType::Null
+            | SelectValueType::Bool
+            | SelectValueType::Long
+            | SelectValueType::Double => self.clone(),
+            SelectValueType::Array | SelectValueType::Object | SelectValueType::String => unsafe {
+                std::mem::transmute_copy(self)
+            },
+        }
+    }
+
+    fn shallow_drop(&mut self) {
+        match self.get_type() {
+            SelectValueType::Null
+            | SelectValueType::Bool
+            | SelectValueType::Long
+            | SelectValueType::Double => unsafe { std::ptr::drop_in_place(self as *mut Self) },
+            SelectValueType::Array | SelectValueType::Object | SelectValueType::String => (),
+        }
     }
 }

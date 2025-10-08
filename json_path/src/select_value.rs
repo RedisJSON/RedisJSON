@@ -85,4 +85,8 @@ pub trait SelectValue: Debug + Eq + PartialEq + Default + Clone + Serialize {
     fn get_bool(&self) -> bool;
     fn get_long(&self) -> i64;
     fn get_double(&self) -> f64;
+
+    // Shallow clone and drop for c_api
+    fn shallow_clone(&self) -> Self;
+    fn shallow_drop(&mut self);
 }
