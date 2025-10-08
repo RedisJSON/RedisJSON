@@ -104,3 +104,10 @@ jobs:
   linter:
     uses: ./.github/workflows/flow-linter.yml
     secrets: inherit
+  memory-nightly-report:
+    needs: [prepare-values]
+    uses: ./.github/workflows/flow-memory-nightly.yml
+    with:
+      redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+      beta-version: ${{needs.prepare-values.outputs.beta-version}}
+    secrets: inherit

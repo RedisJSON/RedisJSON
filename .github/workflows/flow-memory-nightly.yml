@@ -1,0 +1,201 @@
+name: Nightly Memory Report
+
+on:
+  workflow_call:
+    inputs:
+      redis-ref:
+        description: 'Redis ref to checkout'
+        type: string
+        default: 'unstable'
+      beta-version:
+        description: 'Beta version for reporting'
+        type: string
+        required: false
+
+jobs:
+  memory-report:
+    runs-on: ubuntu-latest
+    env:
+      PIP_BREAK_SYSTEM_PACKAGES: 1
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+      
+      - name: Get Redis
+        uses: actions/checkout@v4
+        with:
+          repository: redis/redis
+          ref: ${{ inputs.redis-ref }}
+          path: redis
+          submodules: 'recursive'
+      
+      - name: Get version info
+        id: version
+        run: |
+          VERSION=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "commit=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          echo "short_commit=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "branch=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+      
+      - name: Setup Rust
+        run: |
+          if [ -f "$HOME/.cargo/env" ]; then
+            . "$HOME/.cargo/env"
+          fi
+          rustc --version
+          cargo --version
+      
+      - name: Build RedisJSON
+        run: |
+          . "$HOME/.cargo/env"
+          cargo build --release
+      
+      - name: Setup Python
+        run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install redis
+          if [ -f tests/pytest/requirements.txt ]; then
+            pip install -r tests/pytest/requirements.txt
+          fi
+      
+      - name: Run Memory Report
+        id: report
+        env:
+          REDISJSON_VERSION: ${{ inputs.beta-version || steps.version.outputs.version }}
+          GIT_COMMIT: ${{ steps.version.outputs.commit }}
+          GIT_BRANCH: ${{ steps.version.outputs.branch }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          OUTPUT_FILE: memory_report_${{ steps.version.outputs.short_commit }}.json
+        run: |
+          source venv/bin/activate
+          cd tests/pytest
+          
+          # Run nightly memory report
+          TEST=test_memory_nightly_report.py::test_nightly_memory_report \
+            bash tests.sh ../../target/release/rejson.so | tee ../../memory_report.txt
+          
+          echo "Report generated successfully"
+      
+      - name: Extract Key Metrics
+        id: metrics
+        run: |
+          # Extract overall overhead
+          OVERHEAD=$(grep "METRIC:overall_overhead_ratio:" memory_report.txt | cut -d: -f3)
+          SMALL=$(grep "METRIC:small_doc_overhead:" memory_report.txt | cut -d: -f3)
+          LARGE=$(grep "METRIC:large_doc_overhead:" memory_report.txt | cut -d: -f3)
+          
+          echo "overhead=$OVERHEAD" >> $GITHUB_OUTPUT
+          echo "small=$SMALL" >> $GITHUB_OUTPUT
+          echo "large=$LARGE" >> $GITHUB_OUTPUT
+          
+          # Add to job summary
+          echo "### 📊 Memory Overhead Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Overall Overhead:** ${OVERHEAD}x" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Document Size | Overhead |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------------|----------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Small | ${SMALL}x |" >> $GITHUB_STEP_SUMMARY
+          echo "| Large | ${LARGE}x |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_RedisJSON uses ${OVERHEAD}x more memory than regular Redis strings_" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📁 [View full report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Download Baseline from Main Branch
+        id: download-baseline
+        uses: dawidd6/action-download-artifact@v3
+        continue-on-error: true
+        with:
+          workflow: event-nightly.yml
+          branch: main
+          name: memory-report-baseline
+          path: baseline/
+          if_no_artifact_found: ignore
+      
+      - name: Compare with Baseline
+        id: compare
+        run: |
+          CURRENT=$(grep "METRIC:overall_overhead_ratio:" memory_report.txt | cut -d: -f3)
+          CURRENT_SMALL=$(grep "METRIC:small_doc_overhead:" memory_report.txt | cut -d: -f3)
+          CURRENT_LARGE=$(grep "METRIC:large_doc_overhead:" memory_report.txt | cut -d: -f3)
+          
+          echo "### 📊 Current Memory Overhead" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Overall | ${CURRENT}x |" >> $GITHUB_STEP_SUMMARY
+          echo "| Small docs | ${CURRENT_SMALL}x |" >> $GITHUB_STEP_SUMMARY
+          echo "| Large docs | ${CURRENT_LARGE}x |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f "baseline/memory_report.txt" ]; then
+            BASELINE=$(grep "METRIC:overall_overhead_ratio:" baseline/memory_report.txt | cut -d: -f3)
+            BASELINE_SMALL=$(grep "METRIC:small_doc_overhead:" baseline/memory_report.txt | cut -d: -f3)
+            BASELINE_LARGE=$(grep "METRIC:large_doc_overhead:" baseline/memory_report.txt | cut -d: -f3)
+            
+            DIFF=$(echo "$CURRENT - $BASELINE" | bc -l)
+            PERCENT=$(echo "scale=2; ($DIFF / $BASELINE) * 100" | bc -l)
+            
+            echo "### 📈 Comparison vs Main Branch Baseline" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Metric | Baseline | Current | Change |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|----------|---------|--------|" >> $GITHUB_STEP_SUMMARY
+            echo "| Overall | ${BASELINE}x | ${CURRENT}x | ${PERCENT}% |" >> $GITHUB_STEP_SUMMARY
+            
+            DIFF_SMALL=$(echo "$CURRENT_SMALL - $BASELINE_SMALL" | bc -l)
+            PERCENT_SMALL=$(echo "scale=2; ($DIFF_SMALL / $BASELINE_SMALL) * 100" | bc -l)
+            echo "| Small docs | ${BASELINE_SMALL}x | ${CURRENT_SMALL}x | ${PERCENT_SMALL}% |" >> $GITHUB_STEP_SUMMARY
+            
+            DIFF_LARGE=$(echo "$CURRENT_LARGE - $BASELINE_LARGE" | bc -l)
+            PERCENT_LARGE=$(echo "scale=2; ($DIFF_LARGE / $BASELINE_LARGE) * 100" | bc -l)
+            echo "| Large docs | ${BASELINE_LARGE}x | ${CURRENT_LARGE}x | ${PERCENT_LARGE}% |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            # Check if increased by more than 5%
+            if [ $(echo "$PERCENT > 5" | bc -l) -eq 1 ]; then
+              echo "⚠️ **Memory overhead increased by ${PERCENT}%**" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**Action:** Review changes since last main branch merge" >> $GITHUB_STEP_SUMMARY
+              echo "regression=true" >> $GITHUB_OUTPUT
+            elif [ $(echo "$PERCENT < -5" | bc -l) -eq 1 ]; then
+              echo "✅ **Memory overhead improved by ${PERCENT}%**" >> $GITHUB_STEP_SUMMARY
+              echo "regression=false" >> $GITHUB_OUTPUT
+            else
+              echo "✅ **Memory overhead stable (${PERCENT}% change)**" >> $GITHUB_STEP_SUMMARY
+              echo "regression=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "ℹ️ **No baseline found** - First run on main branch" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "This report will become the baseline for future comparisons." >> $GITHUB_STEP_SUMMARY
+            echo "regression=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Upload Memory Report as Baseline (Main Branch Only)
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: memory-report-baseline
+          path: memory_report.txt
+          retention-days: 90
+      
+      - name: Upload Detailed Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: memory-report-${{ steps.version.outputs.short_commit }}
+          path: |
+            memory_report.txt
+            tests/pytest/memory_report_*.json
+          retention-days: 90
+    
+    outputs:
+      overhead: ${{ steps.metrics.outputs.overhead }}
+      small_overhead: ${{ steps.metrics.outputs.small }}
+      large_overhead: ${{ steps.metrics.outputs.large }}
