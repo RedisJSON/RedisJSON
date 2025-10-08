@@ -354,6 +354,8 @@ where
 
 pub fn json_api_free_json<M: Manager>(_: M, json: *mut c_void) {
     unsafe { (*(json.cast::<M::V>())).shallow_drop() };
+    // Dealocate the allocated memory
+    let _ = unsafe { Box::from_raw(json.cast::<M::V>()) };
 }
 
 pub fn get_llapi_ctx() -> Context {
