@@ -8,8 +8,8 @@
  */
 
 /// Use `SelectValue`
-use crate::select_value::{SelectValue, SelectValueType};
-use ijson::{DestructuredRef, IString, IValue, ValueType};
+use crate::select_value::{SelectValue, SelectValueType, ValueRef};
+use ijson::{array::ArrayIterItem, DestructuredRef, IString, IValue, ValueType};
 use serde_json::Value;
 
 impl SelectValue for Value {
@@ -33,10 +33,10 @@ impl SelectValue for Value {
         }
     }
 
-    fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a Self> + 'a>> {
+    fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = ValueRef<'a, Self>> + 'a>> {
         match self {
-            Self::Array(arr) => Some(Box::new(arr.iter())),
-            Self::Object(o) => Some(Box::new(o.values())),
+            Self::Array(arr) => Some(Box::new(arr.iter().map(ValueRef::Borrowed))),
+            Self::Object(o) => Some(Box::new(o.values().map(ValueRef::Borrowed))),
             _ => None,
         }
     }
@@ -48,9 +48,11 @@ impl SelectValue for Value {
         }
     }
 
-    fn items<'a>(&'a self) -> Option<Box<dyn Iterator<Item = (&'a str, &'a Self)> + 'a>> {
+    fn items<'a>(&'a self) -> Option<Box<dyn Iterator<Item = (&'a str, ValueRef<'a, Self>)> + 'a>> {
         match self {
-            Self::Object(o) => Some(Box::new(o.iter().map(|(k, v)| (&k[..], v)))),
+            Self::Object(o) => Some(Box::new(
+                o.iter().map(|(k, v)| (&k[..], ValueRef::Borrowed(v))),
+            )),
             _ => None,
         }
     }
@@ -71,16 +73,16 @@ impl SelectValue for Value {
         }
     }
 
-    fn get_key<'a>(&'a self, key: &str) -> Option<&'a Self> {
+    fn get_key<'a>(&'a self, key: &str) -> Option<ValueRef<'a, Self>> {
         match self {
-            Self::Object(o) => o.get(key),
+            Self::Object(o) => o.get(key).map(ValueRef::Borrowed),
             _ => None,
         }
     }
 
-    fn get_index(&self, index: usize) -> Option<&Self> {
+    fn get_index<'a>(&'a self, index: usize) -> Option<ValueRef<'a, Self>> {
         match self {
-            Self::Array(arr) => arr.get(index),
+            Self::Array(arr) => arr.get(index).map(ValueRef::Borrowed),
             _ => None,
         }
     }
@@ -131,6 +133,23 @@ impl SelectValue for Value {
             _ => panic!("not a double"),
         }
     }
+
+    fn shallow_clone(&self) -> Self {
+        self.clone()
+    }
+
+    fn shallow_drop(&mut self) {
+        unsafe { std::ptr::drop_in_place(self as *mut Self) };
+    }
+}
+
+impl<'a> From<ArrayIterItem<'a>> for ValueRef<'a, IValue> {
+    fn from(item: ArrayIterItem<'a>) -> Self {
+        match item {
+            ArrayIterItem::Borrowed(val) => ValueRef::Borrowed(val),
+            ArrayIterItem::Owned(val) => ValueRef::Owned(val),
+        }
+    }
 }
 
 impl SelectValue for IValue {
@@ -156,10 +175,10 @@ impl SelectValue for IValue {
         self.as_object().map_or(false, |o| o.contains_key(key))
     }
 
-    fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a Self> + 'a>> {
+    fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = ValueRef<'a, Self>> + 'a>> {
         match self.destructure_ref() {
-            DestructuredRef::Array(arr) => Some(Box::new(arr.iter())),
-            DestructuredRef::Object(o) => Some(Box::new(o.values())),
+            DestructuredRef::Array(arr) => Some(Box::new(arr.iter().map(Into::into))),
+            DestructuredRef::Object(o) => Some(Box::new(o.values().map(ValueRef::Borrowed))),
             _ => None,
         }
     }
@@ -171,9 +190,11 @@ impl SelectValue for IValue {
         }
     }
 
-    fn items<'a>(&'a self) -> Option<Box<dyn Iterator<Item = (&'a str, &'a Self)> + 'a>> {
+    fn items<'a>(&'a self) -> Option<Box<dyn Iterator<Item = (&'a str, ValueRef<'a, Self>)> + 'a>> {
         match self.destructure_ref() {
-            DestructuredRef::Object(o) => Some(Box::new(o.iter().map(|(k, v)| (k.as_str(), v)))),
+            DestructuredRef::Object(o) => Some(Box::new(
+                o.iter().map(|(k, v)| (k.as_str(), ValueRef::Borrowed(v))),
+            )),
             _ => None,
         }
     }
@@ -190,12 +211,14 @@ impl SelectValue for IValue {
         self.is_empty()
     }
 
-    fn get_key<'a>(&'a self, key: &str) -> Option<&'a Self> {
-        self.as_object().and_then(|o| o.get(key))
+    fn get_key<'a>(&'a self, key: &str) -> Option<ValueRef<'a, Self>> {
+        self.as_object()
+            .and_then(|o| o.get(key).map(ValueRef::Borrowed))
     }
 
-    fn get_index(&self, index: usize) -> Option<&Self> {
-        self.as_array().and_then(|arr| arr.get(index))
+    fn get_index<'a>(&'a self, index: usize) -> Option<ValueRef<'a, Self>> {
+        self.as_array()
+            .and_then(|arr| arr.iter().nth(index).map(Into::into))
     }
 
     fn is_array(&self) -> bool {
@@ -227,5 +250,27 @@ impl SelectValue for IValue {
 
     fn get_double(&self) -> f64 {
         self.as_number().expect("not a number").to_f64_lossy()
+    }
+
+    fn shallow_clone(&self) -> Self {
+        match self.get_type() {
+            SelectValueType::Null
+            | SelectValueType::Bool
+            | SelectValueType::Long
+            | SelectValueType::Double => self.clone(),
+            SelectValueType::Array | SelectValueType::Object | SelectValueType::String => unsafe {
+                std::mem::transmute_copy(self)
+            },
+        }
+    }
+
+    fn shallow_drop(&mut self) {
+        match self.get_type() {
+            SelectValueType::Null
+            | SelectValueType::Bool
+            | SelectValueType::Long
+            | SelectValueType::Double => unsafe { std::ptr::drop_in_place(self as *mut Self) },
+            SelectValueType::Array | SelectValueType::Object | SelectValueType::String => (),
+        }
     }
 }

@@ -1571,6 +1571,41 @@ def test_json_del_matches_with_object_pathes(env):
     r.expect("JSON.DEL", "test", "$.root[?(@.value > 2)]").equal(3)
     r.expect("JSON.GET", "test", "$").equal('[{"root":{"1":{"value":1},"2":{"value":2}}}]')
 
+def testArrtNumericArrayTypesOperations(env):
+    """Test commands with numeric array types"""
+    r = env
+
+    numeric_types = {
+        # type -> (array, index to check, value to insert)
+        'I8'   : ([-128, 0, 127, -1], 2, -64),     
+        'U8'   : ([180, 181, 160, 42], 2, 75),       
+        'I16'  : ([-32768, 0, 32767, -12345], 2, 12345),
+        'U16'  : ([32768, 65535, 65534], 2, 54321), 
+        'I32'  : ([-214748364, 0, 214748364, -100000], 2, 100000),
+        'U32'  : ([2147483648, 2147483650, 3147483648, 3247483648], 2, 3147483649),  
+        'F32'  : ([0.0, 1.5, -113.75, 0.74], 2, 2.71828),       
+        'I64'  : ([0, 3294967295, -4294967295], 2, 12345645), 
+        'U64'  : ([9223372036854775808, 9323372036854775809, 9423372036854775909, 9523372036854775909], 2, 25666),
+        'F64'  : ([0.0, 1.5, -1.7e308, 1.7e308], 2, 3.141592653589793),
+    }
+    for (numeric_type, (array, index, value)) in numeric_types.items():
+        r.assertOk(r.execute_command('JSON.SET', f'test_{numeric_type}',
+                                    '.', json.dumps(array)))
+        r.assertEqual(r.execute_command('JSON.ARRINDEX', f'test_{numeric_type}', '.', array[index]), index)
+        r.assertEqual(r.execute_command('JSON.ARRAPPEND', f'test_{numeric_type}', '.', value), len(array) + 1)
+        r.assertEqual(r.execute_command('JSON.ARRINDEX', f'test_{numeric_type}', '.', value), len(array))
+        r.assertEqual(r.execute_command('JSON.GET', f'test_{numeric_type}', f'.[{len(array)}]'), str(value))
+        r.assertEqual(r.execute_command('JSON.NUMINCRBY', f'test_{numeric_type}', f'.[{len(array)}]', 1), str(value + 1))
+        r.assertEqual(r.execute_command('JSON.GET', f'test_{numeric_type}', f'.[{len(array)}]'), str(value + 1))
+        r.assertEqual(r.execute_command('JSON.NUMINCRBY', f'test_{numeric_type}', f'.[{len(array)}]', 1.0), str(value + 2))
+        r.assertEqual(r.execute_command('JSON.GET', f'test_{numeric_type}', f'.[{len(array)}]'), str(value + 2))
+        r.assertOk(r.execute_command('JSON.SET', f'test_{numeric_type}', '.[0]', value))
+        r.assertEqual(r.execute_command('JSON.GET', f'test_{numeric_type}', f'.[0]'), str(value))
+        r.assertEqual(r.execute_command('JSON.ARRINSERT', f'test_{numeric_type}', '.', 0, value), len(array) + 2)
+        r.assertEqual(r.execute_command('JSON.GET', f'test_{numeric_type}', f'.[0]'), str(value))
+        r.assertEqual(r.execute_command('JSON.ARRTRIM', f'test_{numeric_type}', '.', 0, len(array) + 2), len(array) + 2)
+
+
 # class CacheTestCase(BaseReJSONTest):
 #     @property
 #     def module_args(env):

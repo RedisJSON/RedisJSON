@@ -659,7 +659,7 @@ if [[ $COLLECT_LOGS == 1 ]]; then
 	mkdir -p bin/artifacts/tests
 	test_tar="bin/artifacts/tests/tests-pytests-logs-${ARCH}-${OSNICK}.tgz"
 	rm -f "$test_tar"
-	find tests/pytests/logs -name "*.log*" | tar -czf "$test_tar" -T -
+	find tests/pytest/logs -name "*.log*" | tar -czf "$test_tar" -T -
 	echo "Test logs:"
 	du -ah --apparent-size bin/artifacts/tests
 fi
