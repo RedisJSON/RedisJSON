@@ -75,14 +75,14 @@ impl SelectValue for Value {
 
     fn get_key<'a>(&'a self, key: &str) -> Option<ValueRef<'a, Self>> {
         match self {
-            Self::Object(o) => o.get(key).map(|v| ValueRef::Borrowed(v)),
+            Self::Object(o) => o.get(key).map(ValueRef::Borrowed),
             _ => None,
         }
     }
 
     fn get_index<'a>(&'a self, index: usize) -> Option<ValueRef<'a, Self>> {
         match self {
-            Self::Array(arr) => arr.get(index).map(|v| ValueRef::Borrowed(v)),
+            Self::Array(arr) => arr.get(index).map(ValueRef::Borrowed),
             _ => None,
         }
     }
@@ -177,11 +177,8 @@ impl SelectValue for IValue {
 
     fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = ValueRef<'a, Self>> + 'a>> {
         match self.destructure_ref() {
-            DestructuredRef::Array(arr) => Some(Box::new(arr.iter().map(|item| match item {
-                ArrayIterItem::Borrowed(val) => ValueRef::Borrowed(val),
-                ArrayIterItem::Owned(val) => ValueRef::Owned(val),
-            }))),
-            DestructuredRef::Object(o) => Some(Box::new(o.values().map(|v| ValueRef::Borrowed(v)))),
+            DestructuredRef::Array(arr) => Some(Box::new(arr.iter().map(Into::into))),
+            DestructuredRef::Object(o) => Some(Box::new(o.values().map(ValueRef::Borrowed))),
             _ => None,
         }
     }
@@ -216,12 +213,12 @@ impl SelectValue for IValue {
 
     fn get_key<'a>(&'a self, key: &str) -> Option<ValueRef<'a, Self>> {
         self.as_object()
-            .and_then(|o| o.get(key).map(|v| ValueRef::Borrowed(v)))
+            .and_then(|o| o.get(key).map(ValueRef::Borrowed))
     }
 
     fn get_index<'a>(&'a self, index: usize) -> Option<ValueRef<'a, Self>> {
         self.as_array()
-            .and_then(|arr| arr.iter().nth(index).map(From::from))
+            .and_then(|arr| arr.iter().nth(index).map(Into::into))
     }
 
     fn is_array(&self) -> bool {
