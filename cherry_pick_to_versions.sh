@@ -150,7 +150,19 @@ cherry_pick_to_version() {
     
     # Cherry-pick the commit
     print_info "Cherry-picking commit $commit_hash to $new_branch"
-    if git cherry-pick "$commit_hash"; then
+    
+    # Check if this is a merge commit
+    local parent_count=$(git rev-list --parents -n 1 "$commit_hash" | wc -w)
+    parent_count=$((parent_count - 1))  # Subtract 1 for the commit itself
+    
+    local cherry_pick_cmd="git cherry-pick"
+    if [ $parent_count -gt 1 ]; then
+        print_warning "Detected merge commit with $parent_count parents"
+        print_info "Using -m 1 to mainline (first parent)"
+        cherry_pick_cmd="git cherry-pick -m 1"
+    fi
+    
+    if $cherry_pick_cmd "$commit_hash"; then
         print_success "Successfully cherry-picked $commit_hash to $new_branch"
         
         # Push the new branch to remote
