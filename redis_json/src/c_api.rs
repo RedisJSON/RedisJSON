@@ -9,6 +9,7 @@
 
 use libc::size_t;
 use std::ffi::CString;
+use std::ops::Deref;
 use std::os::raw::{c_double, c_int, c_longlong};
 use std::ptr::{null, null_mut, write};
 use std::{
@@ -59,6 +60,51 @@ pub enum JSONPrimitiveType {
 struct ResultsIterator<'a, V: SelectValue> {
     results: Vec<ValueRef<'a, V>>,
     pos: usize,
+}
+
+#[repr(C)]
+struct ValueWrapper<V: SelectValue> {
+    value: *const V,
+    should_drop: bool,
+}
+
+impl<V: SelectValue> From<ValueRef<'_, V>> for ValueWrapper<V> {
+    fn from(value: ValueRef<'_, V>) -> Self {
+        let should_drop = matches!(value, ValueRef::Owned(_));
+        Self {
+            value: match value {
+                ValueRef::Borrowed(v) => v,
+                ValueRef::Owned(v) => Box::into_raw(Box::new(v)),
+            },
+            should_drop,
+        }
+    }
+}
+
+impl<V: SelectValue> Default for ValueWrapper<V> {
+    fn default() -> Self {
+        Self {
+            value: Box::into_raw(Box::new(V::default())),
+            should_drop: true,
+        }
+    }
+}
+
+impl<V: SelectValue> Drop for ValueWrapper<V> {
+    fn drop(&mut self) {
+        if self.should_drop {
+            unsafe {
+                let _ = Box::from_raw(self.value as *mut V);
+            }
+        }
+    }
+}
+
+impl<V: SelectValue> Deref for ValueWrapper<V> {
+    type Target = V;
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*(self.value.cast::<V>()) }
+    }
 }
 
 //---------------------------------------------------------------------------------------------
@@ -284,31 +330,6 @@ pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -
     .cast::<c_void>()
 }
 
-pub fn json_api_get_at<M: Manager>(
-    _: M,
-    json: *const c_void,
-    index: size_t,
-    value: *mut c_void,
-) -> c_int {
-    let json = unsafe { &*(json.cast::<M::V>()) };
-    match json.get_type() {
-        SelectValueType::Array => {
-            if let Some(element) = json.get_index(index) {
-                unsafe {
-                    if !value.is_null() {
-                        (*value.cast::<M::V>()).shallow_drop();
-                    }
-                    write(value.cast::<M::V>(), element.shallow_clone());
-                }
-                Status::Ok as c_int
-            } else {
-                Status::Err as c_int
-            }
-        }
-        _ => Status::Err as c_int,
-    }
-}
-
 pub fn json_api_is_json<M: Manager>(m: M, key: *mut rawmod::RedisModuleKey) -> c_int {
     m.is_json(key).map_or(0, |res| res as c_int)
 }
@@ -352,14 +373,44 @@ where
     }
 }
 
+pub fn json_api_get_at<M: Manager>(
+    _: M,
+    json: *const c_void,
+    index: size_t,
+    value: *mut c_void,
+) -> c_int {
+    let json = unsafe { &*(json.cast::<M::V>()) };
+    match json.get_type() {
+        SelectValueType::Array => {
+            if let Some(element) = json.get_index(index) {
+                unsafe {
+                    let old_wrapper = &mut *(value.cast::<ValueWrapper<M::V>>());
+                    if old_wrapper.should_drop {
+                        let _ = Box::from_raw(old_wrapper.value as *mut M::V);
+                    }
+
+                    write(
+                        value as *mut ValueWrapper<M::V>,
+                        ValueWrapper::from(element),
+                    );
+                }
+                Status::Ok as c_int
+            } else {
+                Status::Err as c_int
+            }
+        }
+        _ => Status::Err as c_int,
+    }
+}
+
 pub fn json_api_alloc_json<M: Manager>(_: M) -> *mut c_void {
-    Box::into_raw(Box::new(M::V::default())).cast::<c_void>()
+    Box::into_raw(Box::new(ValueWrapper::<M::V>::default())).cast::<c_void>()
 }
 
 pub fn json_api_free_json<M: Manager>(_: M, json: *mut c_void) {
-    unsafe { (*(json.cast::<M::V>())).shallow_drop() };
-    // Dealocate the allocated memory
-    let _ = unsafe { Box::from_raw(json.cast::<M::V>()) };
+    unsafe {
+        let _ = Box::from_raw(json.cast::<ValueWrapper<M::V>>());
+    }
 }
 
 pub fn get_llapi_ctx() -> Context {
@@ -739,7 +790,6 @@ macro_rules! redis_json_module_export_shared_api {
             openKey: JSONAPI_openKey,
             openKeyFromStr: JSONAPI_openKeyFromStr,
             get: JSONAPI_get,
-            getAt: JSONAPI_getAt,
             next: JSONAPI_next,
             len: JSONAPI_len,
             freeIter: JSONAPI_freeIter,
@@ -766,6 +816,7 @@ macro_rules! redis_json_module_export_shared_api {
             // V5 entries
             openKeyWithFlags: JSONAPI_openKey_withFlags,
             // V6 entries
+            getAt: JSONAPI_getAt,
             allocJson: JSONAPI_allocJson,
             freeJson: JSONAPI_freeJson,
         };
@@ -782,7 +833,6 @@ macro_rules! redis_json_module_export_shared_api {
             pub openKeyFromStr:
                 extern "C" fn(ctx: *mut rawmod::RedisModuleCtx, path: *const c_char) -> *mut c_void,
             pub get: extern "C" fn(val: *const c_void, path: *const c_char) -> *const c_void,
-            pub getAt: extern "C" fn(json: *const c_void, index: size_t, value: *mut c_void) -> c_int,
             pub next: extern "C" fn(iter: *mut c_void) -> *const c_void,
             pub len: extern "C" fn(iter: *const c_void) -> size_t,
             pub freeIter: extern "C" fn(iter: *mut c_void),
@@ -825,8 +875,92 @@ macro_rules! redis_json_module_export_shared_api {
             ) -> *mut c_void,
             // V6
             pub allocJson: extern "C" fn() -> *mut c_void,
+            pub getAt: extern "C" fn(json: *const c_void, index: size_t, value: *mut c_void) -> c_int,
             pub freeJson: extern "C" fn(json: *mut c_void),
 
         }
     };
+}
+
+mod tests {
+    use std::marker::PhantomData;
+
+    use ijson::IValue;
+
+    use crate::ivalue_manager::RedisIValueJsonKeyManager;
+
+    use super::*;
+
+    #[test]
+    fn test_json_api_alloc_and_deref() {
+        let wrapper_ptr = json_api_alloc_json(RedisIValueJsonKeyManager {
+            phantom: PhantomData,
+        });
+
+        // Simulate C code: cast to RedisJSON* (which is void**)
+        let json_ptr_ptr = wrapper_ptr as *const *const c_void;
+
+        let json_ptr = unsafe { *json_ptr_ptr };
+
+        let value = unsafe { &*(json_ptr as *const IValue) };
+
+        // Should be NULL (the default value)
+        assert_eq!(value, &IValue::NULL);
+
+        json_api_free_json(
+            RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            },
+            wrapper_ptr,
+        );
+    }
+
+    #[test]
+    fn test_json_api_get_at() {
+        let array = IValue::from(vec![
+            IValue::from("aaa"),
+            IValue::from("bbb"),
+            IValue::from("ccc"),
+        ]);
+        let array_ptr = &array as *const IValue as *const c_void;
+
+        let result_wrapper = json_api_alloc_json(RedisIValueJsonKeyManager {
+            phantom: PhantomData,
+        });
+
+        let status = json_api_get_at(
+            RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            },
+            array_ptr,
+            1,
+            result_wrapper,
+        );
+        assert_eq!(status, Status::Ok as c_int);
+
+        // C code mimic
+        let result_ptr = unsafe { *(result_wrapper as *const *const c_void) };
+        let result_value = unsafe { &*(result_ptr as *const IValue) };
+
+        assert_eq!(result_value, &IValue::from("bbb"));
+
+        // Test this also works with other api functions
+        let mut len = 0;
+        json_api_get_len(
+            RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            },
+            result_ptr,
+            &mut len,
+        );
+
+        assert_eq!(len, 3);
+
+        json_api_free_json(
+            RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            },
+            result_wrapper,
+        );
+    }
 }

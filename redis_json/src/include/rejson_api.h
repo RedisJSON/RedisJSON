@@ -42,7 +42,6 @@ typedef struct RedisJSONAPI {
   RedisJSON (*openKeyFromStr)(RedisModuleCtx *ctx, const char *path);
 
   JSONResultsIterator (*get)(RedisJSON json, const char *path);
-  int (*getAt)(RedisJSON json, size_t index, RedisJSON value);
 
   RedisJSON (*next)(JSONResultsIterator iter);
   size_t (*len)(JSONResultsIterator iter);
@@ -126,8 +125,10 @@ typedef struct RedisJSONAPI {
   ////////////////
   // V6 entries //
   ////////////////
-  RedisJSON (*allocJson)();
-  void (*freeJson)(RedisJSON json);
+  // The caller must pass 'value' which was allocate with allocJson
+  RedisJSON* (*allocJson)();
+  int (*getAt)(RedisJSON json, size_t index, RedisJSON* value);
+  void (*freeJson)(RedisJSON* json);
 
 } RedisJSONAPI;
 

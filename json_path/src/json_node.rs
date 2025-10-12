@@ -253,24 +253,18 @@ impl SelectValue for IValue {
     }
 
     fn shallow_clone(&self) -> Self {
+        use self::SelectValueType::*;
         match self.get_type() {
-            SelectValueType::Null
-            | SelectValueType::Bool
-            | SelectValueType::Long
-            | SelectValueType::Double => self.clone(),
-            SelectValueType::Array | SelectValueType::Object | SelectValueType::String => unsafe {
-                std::mem::transmute_copy(self)
-            },
+            Null | Bool | Long | Double => self.clone(),
+            Array | Object | String => unsafe { std::mem::transmute_copy(self) },
         }
     }
 
     fn shallow_drop(&mut self) {
+        use self::SelectValueType::*;
         match self.get_type() {
-            SelectValueType::Null
-            | SelectValueType::Bool
-            | SelectValueType::Long
-            | SelectValueType::Double => unsafe { std::ptr::drop_in_place(self as *mut Self) },
-            SelectValueType::Array | SelectValueType::Object | SelectValueType::String => (),
+            Null | Bool | Long | Double => unsafe { std::ptr::drop_in_place(self as *mut Self) },
+            Array | Object | String => (),
         }
     }
 }
