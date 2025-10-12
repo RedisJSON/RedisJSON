@@ -155,11 +155,11 @@ cherry_pick_to_version() {
     local parent_count=$(git rev-list --parents -n 1 "$commit_hash" | wc -w)
     parent_count=$((parent_count - 1))  # Subtract 1 for the commit itself
     
-    local cherry_pick_cmd="git cherry-pick"
+    local cherry_pick_cmd="git cherry-pick -x"
     if [ $parent_count -gt 1 ]; then
         print_warning "Detected merge commit with $parent_count parents"
         print_info "Using -m 1 to mainline (first parent)"
-        cherry_pick_cmd="git cherry-pick -m 1"
+        cherry_pick_cmd="git cherry-pick -x -m 1"
     fi
     
     if $cherry_pick_cmd "$commit_hash"; then
