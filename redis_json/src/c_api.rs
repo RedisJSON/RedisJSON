@@ -932,8 +932,8 @@ mod tests {
                 IValue::from(4),
             ]),
         ];
-        for array in arrays {
-            let array_ptr = &array as *const IValue as *const c_void;
+        for (array_idx,array) in arrays.iter().enumerate() {
+            let array_ptr = array as *const IValue as *const c_void;
 
             let result_wrapper = json_api_alloc_json(RedisIValueJsonKeyManager {
                 phantom: PhantomData,
@@ -952,7 +952,7 @@ mod tests {
                 assert_eq!(status, Status::Ok as c_int);
                 let result_ptr = unsafe { *(result_wrapper as *const *const c_void) };
                 let result_value = unsafe { &*(result_ptr as *const IValue) };
-                assert_eq!(result_value, array.get_index(i).unwrap().as_ref());
+                assert_eq!(result_value, &arrays[array_idx][i]);
             }
             assert_eq!(status, Status::Ok as c_int);
 
