@@ -917,50 +917,51 @@ mod tests {
 
     #[test]
     fn test_json_api_get_at() {
-        let array = IValue::from(vec![
-            IValue::from("aaa"),
-            IValue::from("bbb"),
-            IValue::from("ccc"),
-        ]);
-        let array_ptr = &array as *const IValue as *const c_void;
+        // Test both string and int arrays
+        let arrays = vec![
+            IValue::from(vec![
+                IValue::from("aaa"),
+                IValue::from("bbb"),
+                IValue::from("ccc"),
+                IValue::from("ddd"),
+            ]),
+            IValue::from(vec![
+                IValue::from(1),
+                IValue::from(2),
+                IValue::from(3),
+                IValue::from(4),
+            ]),
+        ];
+        for array in arrays {
+            let array_ptr = &array as *const IValue as *const c_void;
 
-        let result_wrapper = json_api_alloc_json(RedisIValueJsonKeyManager {
-            phantom: PhantomData,
-        });
-
-        let status = json_api_get_at(
-            RedisIValueJsonKeyManager {
+            let result_wrapper = json_api_alloc_json(RedisIValueJsonKeyManager {
                 phantom: PhantomData,
-            },
-            array_ptr,
-            1,
-            result_wrapper,
-        );
-        assert_eq!(status, Status::Ok as c_int);
+            });
 
-        // C code mimic
-        let result_ptr = unsafe { *(result_wrapper as *const *const c_void) };
-        let result_value = unsafe { &*(result_ptr as *const IValue) };
+            let mut status = Status::Ok as c_int;
+            for i in 0..array.len().unwrap() {
+                status = json_api_get_at(
+                    RedisIValueJsonKeyManager {
+                        phantom: PhantomData,
+                    },
+                    array_ptr,
+                    i,
+                    result_wrapper,
+                );
+                assert_eq!(status, Status::Ok as c_int);
+                let result_ptr = unsafe { *(result_wrapper as *const *const c_void) };
+                let result_value = unsafe { &*(result_ptr as *const IValue) };
+                assert_eq!(result_value, array.get_index(i).unwrap().as_ref());
+            }
+            assert_eq!(status, Status::Ok as c_int);
 
-        assert_eq!(result_value, &IValue::from("bbb"));
-
-        // Test this also works with other api functions
-        let mut len = 0;
-        json_api_get_len(
-            RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            },
-            result_ptr,
-            &mut len,
-        );
-
-        assert_eq!(len, 3);
-
-        json_api_free_json(
-            RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            },
-            result_wrapper,
-        );
+            json_api_free_json(
+                RedisIValueJsonKeyManager {
+                    phantom: PhantomData,
+                },
+                result_wrapper,
+            );
+        }
     }
 }
