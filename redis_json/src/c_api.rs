@@ -384,15 +384,9 @@ pub fn json_api_get_at<M: Manager>(
         SelectValueType::Array => {
             if let Some(element) = json.get_index(index) {
                 unsafe {
-                    let old_wrapper = &mut *(value.cast::<ValueWrapper<M::V>>());
-                    if old_wrapper.should_drop {
-                        let _ = Box::from_raw(old_wrapper.value as *mut M::V);
-                    }
-
-                    write(
-                        value as *mut ValueWrapper<M::V>,
-                        ValueWrapper::from(element),
-                    );
+                    let wrapper = &mut *(value.cast::<ValueWrapper<M::V>>());
+                    // Drop will be called automatically when we assign the new value
+                    *wrapper = ValueWrapper::from(element);
                 }
                 Status::Ok as c_int
             } else {
@@ -411,6 +405,11 @@ pub fn json_api_free_json<M: Manager>(_: M, json: *mut c_void) {
     unsafe {
         let _ = Box::from_raw(json.cast::<ValueWrapper<M::V>>());
     }
+}
+
+pub fn json_api_get_value_from_ptr<M: Manager>(_: M, json: *const c_void) -> *const c_void {
+    let json = unsafe { &*(json.cast::<ValueWrapper<M::V>>()) };
+    json.value as *const c_void
 }
 
 pub fn get_llapi_ctx() -> Context {
@@ -764,6 +763,18 @@ macro_rules! redis_json_module_export_shared_api {
             )
         }
 
+        #[no_mangle]
+        pub extern "C" fn JSONAPI_getValueFromPtr(json: *const c_void) -> *const c_void {
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
+                run: |mngr|{json_api_get_value_from_ptr(mngr, json)},
+            )
+        }
+
         // The apiname argument of export_shared_api should be a string literal with static lifetime
         static mut VEC_EXPORT_SHARED_API_NAME : Vec<CString> = Vec::new();
 
@@ -819,6 +830,7 @@ macro_rules! redis_json_module_export_shared_api {
             getAt: JSONAPI_getAt,
             allocJson: JSONAPI_allocJson,
             freeJson: JSONAPI_freeJson,
+            getValueFromPtr: JSONAPI_getValueFromPtr,
         };
 
         #[repr(C)]
@@ -876,12 +888,14 @@ macro_rules! redis_json_module_export_shared_api {
             // V6
             pub allocJson: extern "C" fn() -> *mut c_void,
             pub getAt: extern "C" fn(json: *const c_void, index: size_t, value: *mut c_void) -> c_int,
+            pub getValueFromPtr: extern "C" fn(json: *const c_void) -> *const c_void,
             pub freeJson: extern "C" fn(json: *mut c_void),
 
         }
     };
 }
 
+#[cfg(test)]
 mod tests {
     use std::marker::PhantomData;
 
@@ -916,6 +930,29 @@ mod tests {
     }
 
     #[test]
+    fn test_json_api_get_value_from_ptr() {
+        let wrapper_ptr = json_api_alloc_json(RedisIValueJsonKeyManager {
+            phantom: PhantomData,
+        });
+        let value_ptr = json_api_get_value_from_ptr(
+            RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            },
+            wrapper_ptr,
+        );
+        let value = unsafe { &*(value_ptr as *const IValue) };
+        assert_eq!(value, &IValue::NULL);
+        let wrapper = unsafe { &*(wrapper_ptr as *const ValueWrapper<IValue>) };
+        assert_eq!(wrapper.value, value as *const IValue);
+        json_api_free_json(
+            RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            },
+            wrapper_ptr,
+        );
+    }
+
+    #[test]
     fn test_json_api_get_at() {
         // Test both string and int arrays
         let arrays = vec![
@@ -932,7 +969,7 @@ mod tests {
                 IValue::from(4),
             ]),
         ];
-        for (array_idx,array) in arrays.iter().enumerate() {
+        for (array_idx, array) in arrays.iter().enumerate() {
             let array_ptr = array as *const IValue as *const c_void;
 
             let result_wrapper = json_api_alloc_json(RedisIValueJsonKeyManager {
@@ -952,7 +989,10 @@ mod tests {
                 assert_eq!(status, Status::Ok as c_int);
                 let result_ptr = unsafe { *(result_wrapper as *const *const c_void) };
                 let result_value = unsafe { &*(result_ptr as *const IValue) };
-                assert_eq!(result_value, &arrays[array_idx][i]);
+                assert_eq!(
+                    result_value,
+                    arrays[array_idx].get_index(i).unwrap().as_ref()
+                );
             }
             assert_eq!(status, Status::Ok as c_int);
 

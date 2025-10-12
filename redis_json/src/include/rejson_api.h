@@ -27,6 +27,7 @@ typedef enum JSONType {
 } JSONType;
 
 typedef const void* RedisJSON;
+typedef RedisJSON* RedisJSONPtr;
 typedef const void* JSONResultsIterator;
 typedef const void* JSONPath;
 typedef const void* JSONKeyValuesIterator;
@@ -126,9 +127,10 @@ typedef struct RedisJSONAPI {
   // V6 entries //
   ////////////////
   // The caller must pass 'value' which was allocate with allocJson
-  RedisJSON* (*allocJson)();
-  int (*getAt)(RedisJSON json, size_t index, RedisJSON* value);
-  void (*freeJson)(RedisJSON* json);
+  RedisJSONPtr (*allocJson)();
+  int (*getAt)(RedisJSON json, size_t index, RedisJSONPtr value);
+  void (*freeJson)(RedisJSONPtr json);
+  RedisJSON (*getValueFromPtr)(RedisJSONPtr json);
 
 } RedisJSONAPI;
 
