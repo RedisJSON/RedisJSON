@@ -243,5 +243,4 @@ impl SelectValue for IValue {
     fn get_double(&self) -> f64 {
         self.as_number().expect("not a number").to_f64_lossy()
     }
-
 }
