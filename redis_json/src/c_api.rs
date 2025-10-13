@@ -11,7 +11,7 @@ use libc::size_t;
 use std::ffi::CString;
 use std::ops::Deref;
 use std::os::raw::{c_double, c_int, c_longlong};
-use std::ptr::{null, null_mut, write};
+use std::ptr::{null, null_mut};
 use std::{
     ffi::CStr,
     os::raw::{c_char, c_void},
@@ -92,11 +92,7 @@ impl<V: SelectValue> Default for ValueWrapper<V> {
 
 impl<V: SelectValue> Drop for ValueWrapper<V> {
     fn drop(&mut self) {
-        if self.should_drop {
-            unsafe {
-                let _ = Box::from_raw(self.value as *mut V);
-            }
-        }
+        self.drop_inner();
     }
 }
 
@@ -104,6 +100,18 @@ impl<V: SelectValue> Deref for ValueWrapper<V> {
     type Target = V;
     fn deref(&self) -> &Self::Target {
         unsafe { &*(self.value.cast::<V>()) }
+    }
+}
+
+impl<V: SelectValue> ValueWrapper<V> {
+    pub fn drop_inner(&mut self) {
+        if self.should_drop && !self.value.is_null() {
+            unsafe {
+                let _ = Box::from_raw(self.value as *mut V);
+            }
+        }
+        self.value = null();
+        self.should_drop = false;
     }
 }
 
@@ -346,18 +354,22 @@ pub fn json_api_next_key_value<'a, M: Manager>(
     _: M,
     iter: *mut c_void,
     str: *mut *mut rawmod::RedisModuleString,
-) -> *const c_void
+    ptr: *mut c_void,
+) -> c_int
 where
     M::V: 'a,
 {
     let iter = unsafe {
         &mut *(iter.cast::<Box<dyn Iterator<Item = (&'a str, ValueRef<'a, M::V>)> + 'a>>())
     };
+    let wrapper = unsafe { &mut *(ptr.cast::<ValueWrapper<M::V>>()) };
     if let Some((k, v)) = iter.next() {
         create_rmstring(null_mut(), k, str);
-        (v.as_ref() as *const M::V).cast::<c_void>()
+        *wrapper = ValueWrapper::from(v);
+        Status::Ok as c_int
     } else {
-        null()
+        wrapper.drop_inner();
+        Status::Err as c_int
     }
 }
 
@@ -380,20 +392,22 @@ pub fn json_api_get_at<M: Manager>(
     value: *mut c_void,
 ) -> c_int {
     let json = unsafe { &*(json.cast::<M::V>()) };
+    let wrapper = unsafe { &mut *(value.cast::<ValueWrapper<M::V>>()) };
     match json.get_type() {
         SelectValueType::Array => {
             if let Some(element) = json.get_index(index) {
-                unsafe {
-                    let wrapper = &mut *(value.cast::<ValueWrapper<M::V>>());
-                    // Drop will be called automatically when we assign the new value
-                    *wrapper = ValueWrapper::from(element);
-                }
+                // Drop will be called automatically when we assign the new value
+                *wrapper = ValueWrapper::from(element);
                 Status::Ok as c_int
             } else {
+                wrapper.drop_inner();
                 Status::Err as c_int
             }
         }
-        _ => Status::Err as c_int,
+        _ => {
+            wrapper.drop_inner();
+            Status::Err as c_int
+        }
     }
 }
 
@@ -405,11 +419,6 @@ pub fn json_api_free_json<M: Manager>(_: M, json: *mut c_void) {
     unsafe {
         let _ = Box::from_raw(json.cast::<ValueWrapper<M::V>>());
     }
-}
-
-pub fn json_api_get_value_from_ptr<M: Manager>(_: M, json: *const c_void) -> *const c_void {
-    let json = unsafe { &*(json.cast::<ValueWrapper<M::V>>()) };
-    json.value as *const c_void
 }
 
 pub fn get_llapi_ctx() -> Context {
@@ -716,14 +725,14 @@ macro_rules! redis_json_module_export_shared_api {
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_nextKeyValue(iter: *mut c_void,
-            str: *mut *mut rawmod::RedisModuleString) -> *const c_void {
+            str: *mut *mut rawmod::RedisModuleString, ptr: *mut c_void) -> c_int {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
                 },
-                run: |mngr|{json_api_next_key_value(mngr, iter, str)},
+                run: |mngr|{json_api_next_key_value(mngr, iter, str, ptr)},
             )
         }
 
@@ -760,18 +769,6 @@ macro_rules! redis_json_module_export_shared_api {
                     _ => $default_manager
                 },
                 run: |mngr|{json_api_free_json(mngr, json)},
-            )
-        }
-
-        #[no_mangle]
-        pub extern "C" fn JSONAPI_getValueFromPtr(json: *const c_void) -> *const c_void {
-            run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
-                get_manage: {
-                    $( $condition => $manager_ident { $($field: $value),* } ),*
-                    _ => $default_manager
-                },
-                run: |mngr|{json_api_get_value_from_ptr(mngr, json)},
             )
         }
 
@@ -822,20 +819,22 @@ macro_rules! redis_json_module_export_shared_api {
             resetIter: JSONAPI_resetIter,
             // V4 entries
             getKeyValues: JSONAPI_getKeyValues,
-            nextKeyValue: JSONAPI_nextKeyValue,
             freeKeyValuesIter: JSONAPI_freeKeyValuesIter,
             // V5 entries
             openKeyWithFlags: JSONAPI_openKey_withFlags,
             // V6 entries
-            getAt: JSONAPI_getAt,
             allocJson: JSONAPI_allocJson,
+            getAt: JSONAPI_getAt,
+            nextKeyValue: JSONAPI_nextKeyValue,
             freeJson: JSONAPI_freeJson,
-            getValueFromPtr: JSONAPI_getValueFromPtr,
         };
 
         #[repr(C)]
         #[derive(Copy, Clone)]
         #[allow(non_snake_case)]
+        // IMPORTANT: Do not change the order of the fields, as it will break the compatibility with the C API
+        // Make sure the order is the same as the order of the fields in the RedisJSONAPI struct in rejson_api.h
+        // TODO: Make this with bindgen
         pub struct RedisJSONAPI_CURRENT {
             // V1 entries
             pub openKey: extern "C" fn(
@@ -874,10 +873,6 @@ macro_rules! redis_json_module_export_shared_api {
             pub resetIter: extern "C" fn(iter: *mut c_void),
             // V4 entries
             pub getKeyValues: extern "C" fn(json: *const c_void) -> *const c_void,
-            pub nextKeyValue: extern "C" fn(
-                iter: *mut c_void,
-                str: *mut *mut rawmod::RedisModuleString
-            ) -> *const c_void,
             pub freeKeyValuesIter: extern "C" fn(iter: *mut c_void),
             // V5
             pub openKeyWithFlags: extern "C" fn(
@@ -888,7 +883,11 @@ macro_rules! redis_json_module_export_shared_api {
             // V6
             pub allocJson: extern "C" fn() -> *mut c_void,
             pub getAt: extern "C" fn(json: *const c_void, index: size_t, value: *mut c_void) -> c_int,
-            pub getValueFromPtr: extern "C" fn(json: *const c_void) -> *const c_void,
+            pub nextKeyValue: extern "C" fn(
+                iter: *mut c_void,
+                str: *mut *mut rawmod::RedisModuleString,
+                ptr: *mut c_void
+            ) -> c_int,
             pub freeJson: extern "C" fn(json: *mut c_void),
 
         }
@@ -921,29 +920,6 @@ mod tests {
         // Should be NULL (the default value)
         assert_eq!(value, &IValue::NULL);
 
-        json_api_free_json(
-            RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            },
-            wrapper_ptr,
-        );
-    }
-
-    #[test]
-    fn test_json_api_get_value_from_ptr() {
-        let wrapper_ptr = json_api_alloc_json(RedisIValueJsonKeyManager {
-            phantom: PhantomData,
-        });
-        let value_ptr = json_api_get_value_from_ptr(
-            RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            },
-            wrapper_ptr,
-        );
-        let value = unsafe { &*(value_ptr as *const IValue) };
-        assert_eq!(value, &IValue::NULL);
-        let wrapper = unsafe { &*(wrapper_ptr as *const ValueWrapper<IValue>) };
-        assert_eq!(wrapper.value, value as *const IValue);
         json_api_free_json(
             RedisIValueJsonKeyManager {
                 phantom: PhantomData,
@@ -994,8 +970,17 @@ mod tests {
                     arrays[array_idx].get_index(i).unwrap().as_ref()
                 );
             }
-            assert_eq!(status, Status::Ok as c_int);
-
+            status = json_api_get_at(
+                RedisIValueJsonKeyManager {
+                    phantom: PhantomData,
+                },
+                array_ptr,
+                array.len().unwrap(),
+                result_wrapper,
+            );
+            assert_eq!(status, Status::Err as c_int);
+            let result_ptr = unsafe { *(result_wrapper as *const *const c_void) };
+            assert_eq!(result_ptr, null());
             json_api_free_json(
                 RedisIValueJsonKeyManager {
                     phantom: PhantomData,

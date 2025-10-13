@@ -111,9 +111,6 @@ typedef struct RedisJSONAPI {
 
   // Get an iterator over the key-value pairs of a JSON Object
   JSONKeyValuesIterator (*getKeyValues)(RedisJSON json);
-  // Get the next key-value pair
-  // The caller gains ownership of `key_name`
-  RedisJSON (*nextKeyValue)(JSONKeyValuesIterator iter, RedisModuleString **key_name);
   // Free the iterator
   void (*freeKeyValuesIter)(JSONKeyValuesIterator iter);
 
@@ -126,11 +123,15 @@ typedef struct RedisJSONAPI {
   ////////////////
   // V6 entries //
   ////////////////
-  // The caller must pass 'value' which was allocate with allocJson
   RedisJSONPtr (*allocJson)();
-  int (*getAt)(RedisJSON json, size_t index, RedisJSONPtr value);
-  void (*freeJson)(RedisJSONPtr json);
-  RedisJSON (*getValueFromPtr)(RedisJSONPtr json);
+  // The caller must pass 'ptr' which was allocated with allocJson
+  int (*getAt)(RedisJSON json, size_t index, RedisJSONPtr ptr);
+  // Get the next key-value pair
+  // The caller gains ownership of `key_name`
+  // The caller must pass 'ptr' which was allocated with allocJson
+  int (*nextKeyValue)(JSONKeyValuesIterator iter, RedisModuleString **key_name, RedisJSONPtr ptr);
+
+  void (*freeJson)(RedisJSONPtr ptr);
 
 } RedisJSONAPI;
 
