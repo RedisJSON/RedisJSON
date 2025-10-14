@@ -192,3 +192,41 @@ def testDefragWithSharedStrings(env):
     
     # If we got here without crashing, the fix is working!
     env.assertGreater(env.cmd('info', 'Stats')['active_defrag_key_hits'], 0)
+
+def testAggressiveDefragSharedStrings(env):
+    """RED-171586: Aggressive test to maximize crash likelihood with shared strings"""
+    enableDefrag(env)
+    
+    shared_strings = ['active', 'pending', 'completed', 'failed', 'processing']
+    
+    # Create many documents with shared strings
+    for i in range(10000):
+        doc = {
+            'id': f'doc-{i}',
+            'status': shared_strings[i % len(shared_strings)],
+            'type': 'document',
+            'priority': 'high' if i % 2 == 0 else 'low',
+        }
+        env.expect('JSON.SET', f'key:{i}', '$', json.dumps(doc)).ok()
+    
+    # Delete many keys to fragment memory and trigger defrag
+    for i in range(5000):
+        env.expect('DEL', f'key:{i}').equal(1)
+    
+    # Aggressively trigger defrag while doing JSON.SET
+    for iteration in range(50):
+        for j in range(100):
+            key_id = 10000 + (iteration * 100) + j
+            doc = {
+                'iteration': iteration,
+                'id': f'new-doc-{key_id}',
+                'status': shared_strings[j % len(shared_strings)],
+                'type': 'document',
+            }
+            env.expect('JSON.SET', f'newkey:{key_id}', '$', json.dumps(doc)).ok()
+        
+        time.sleep(0.01)
+    
+    # Verify data integrity
+    res = json.loads(env.cmd('JSON.GET', 'newkey:10000', '$'))[0]
+    env.assertEqual(res['status'], shared_strings[0])
