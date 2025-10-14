@@ -193,40 +193,45 @@ def testDefragWithSharedStrings(env):
     # If we got here without crashing, the fix is working!
     env.assertGreater(env.cmd('info', 'Stats')['active_defrag_key_hits'], 0)
 
-def testAggressiveDefragSharedStrings(env):
-    """RED-171586: Aggressive test to maximize crash likelihood with shared strings"""
+def testDefragCacheClear(env):
+    """
+    RED-171586: Force defrag to clear cache while documents reference it.
+    
+    This test explicitly triggers the bug by:
+    1. Creating documents that populate and reference shared string cache
+    2. Forcing defrag to run (which calls defrag_start -> clears cache)
+    3. Accessing documents that still reference freed cache strings
+    
+    Without fix: CRASH (use-after-free when accessing documents)
+    With fix: PASS (cache not cleared, documents work fine)
+    """
     enableDefrag(env)
     
-    shared_strings = ['active', 'pending', 'completed', 'failed', 'processing']
-    
-    # Create many documents with shared strings
-    for i in range(10000):
-        doc = {
-            'id': f'doc-{i}',
-            'status': shared_strings[i % len(shared_strings)],
-            'type': 'document',
-            'priority': 'high' if i % 2 == 0 else 'low',
-        }
+    # Create documents with heavily shared strings
+    shared_value = 'shared_string_value'
+    for i in range(15000):
+        doc = {'value': shared_value, 'id': i}
         env.expect('JSON.SET', f'key:{i}', '$', json.dumps(doc)).ok()
     
-    # Delete many keys to fragment memory and trigger defrag
-    for i in range(5000):
+    # Delete many to fragment and force defrag
+    for i in range(7000):
         env.expect('DEL', f'key:{i}').equal(1)
     
-    # Aggressively trigger defrag while doing JSON.SET
-    for iteration in range(50):
-        for j in range(100):
-            key_id = 10000 + (iteration * 100) + j
-            doc = {
-                'iteration': iteration,
-                'id': f'new-doc-{key_id}',
-                'status': shared_strings[j % len(shared_strings)],
-                'type': 'document',
-            }
-            env.expect('JSON.SET', f'newkey:{key_id}', '$', json.dumps(doc)).ok()
-        
-        time.sleep(0.01)
+    # Wait for defrag to start (this clears cache if bug exists)
+    startTime = time.time()
+    defragStarted = False
+    while time.time() - startTime < 30:
+        _, _, _, _, _, keysDefrag = env.cmd('JSON.DEBUG', 'DEFRAG_INFO')
+        if keysDefrag > 0:
+            defragStarted = True
+            break
+        time.sleep(0.1)
     
-    # Verify data integrity
-    res = json.loads(env.cmd('JSON.GET', 'newkey:10000', '$'))[0]
-    env.assertEqual(res['status'], shared_strings[0])
+    env.assertTrue(defragStarted, message='Defrag did not start')
+    
+    # Now access existing documents - they reference the freed cache
+    # This should crash with use-after-free if bug exists
+    for i in range(7000, 7100):
+        res = json.loads(env.cmd('JSON.GET', f'key:{i}', '$'))[0]
+        env.assertEqual(res['value'], shared_value)
+        env.assertEqual(res['id'], i)
