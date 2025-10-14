@@ -131,3 +131,64 @@ def testDefragBigJsons(env):
             # We will wait for up to 30 seconds and then we consider it a failure
             env.assertTrue(False, message='Failed waiting for fragmentation to go down, current value %s which is expected to be bellow 1.125.' % frag)
             return
+
+def testDefragWithSharedStrings(env):
+    """
+    Test for RED-171586: Defrag crash with shared strings.
+    
+    This test reproduces the scenario where:
+    1. Many JSON documents share common strings
+    2. Defrag starts and tries to clear the shared string cache
+    3. Documents still reference the cached strings
+    4. Concurrent operations trigger use-after-free
+    
+    Without the fix, this would crash Redis with SIGABRT.
+    With the fix, Redis continues operating normally.
+    """
+    enableDefrag(env)
+    
+    # Create many documents with shared strings (simulates production workload)
+    shared_strings = ['active', 'pending', 'completed', 'failed']
+    
+    for i in range(5000):
+        doc = {
+            'id': f'doc-{i}',
+            'status': shared_strings[i % len(shared_strings)],  # Shared strings
+            'type': 'document',  # Another shared string
+            'priority': 'high' if i % 2 == 0 else 'low',  # More shared strings
+        }
+        env.expect('JSON.SET', f'shared:key:{i}', '$', json.dumps(doc)).ok()
+    
+    # Get initial defrag stats
+    _, _, _, _, _, keysDefragStart = env.cmd('JSON.DEBUG', 'DEFRAG_INFO')
+    
+    # Wait for defrag to start (this is when the bug would trigger)
+    startTime = time.time()
+    defragStarted = False
+    while time.time() - startTime < 30:
+        _, _, _, _, _, keysDefrag = env.cmd('JSON.DEBUG', 'DEFRAG_INFO')
+        if keysDefrag > keysDefragStart:
+            defragStarted = True
+            break
+        time.sleep(0.1)
+    
+    env.assertTrue(defragStarted, message='Defrag did not start within 30 seconds')
+    
+    # Continue JSON operations during defrag (this would crash with the bug)
+    for i in range(100):
+        doc = {
+            'test': f'data-{i}',
+            'status': 'active',  # Using shared string
+        }
+        env.expect('JSON.SET', f'test:key:{i}', '$', json.dumps(doc)).ok()
+    
+    # Verify data integrity - read some documents with shared strings
+    res = json.loads(env.cmd('JSON.GET', 'shared:key:0', '$'))[0]
+    env.assertEqual(res['status'], 'active')
+    env.assertEqual(res['type'], 'document')
+    
+    res = json.loads(env.cmd('JSON.GET', 'shared:key:100', '$'))[0]
+    env.assertEqual(res['status'], 'active')
+    
+    # If we got here without crashing, the fix is working!
+    env.assertGreater(env.cmd('info', 'Stats')['active_defrag_key_hits'], 0)
