@@ -63,7 +63,7 @@ impl<'a, T: SelectValue> std::ops::Deref for ValueRef<'a, T> {
 
 impl<'a, T: SelectValue> PartialEq<&T> for ValueRef<'a, T> {
     fn eq(&self, other: &&T) -> bool {
-        self.as_ref() == *other
+        is_equal(self.as_ref(), *other)
     }
 }
 
