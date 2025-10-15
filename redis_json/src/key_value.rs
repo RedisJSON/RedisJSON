@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use json_path::{
     calc_once, calc_once_paths, compile,
     json_path::JsonPathToken,
-    select_value::{SelectValue, SelectValueType, ValueRef},
+    select_value::{is_equal, SelectValue, SelectValueType, ValueRef},
 };
 use redis_module::{redisvalue::RedisValueKey, RedisResult, RedisValue};
 use serde::Serialize;
@@ -408,33 +408,6 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    pub fn is_equal<T1: SelectValue, T2: SelectValue>(a: &T1, b: &T2) -> bool {
-        a.get_type() == b.get_type()
-            && match a.get_type() {
-                SelectValueType::Null => true,
-                SelectValueType::Bool => a.get_bool() == b.get_bool(),
-                SelectValueType::Long => a.get_long() == b.get_long(),
-                SelectValueType::Double => a.get_double() == b.get_double(),
-                SelectValueType::String => a.get_str() == b.get_str(),
-                SelectValueType::Array => {
-                    a.len().unwrap() == b.len().unwrap()
-                        && a.values()
-                            .unwrap()
-                            .zip(b.values().unwrap())
-                            .all(|(a, b)| Self::is_equal(a.as_ref(), b.as_ref()))
-                }
-                SelectValueType::Object => {
-                    a.len().unwrap() == b.len().unwrap()
-                        && a.keys()
-                            .unwrap()
-                            .all(|k| match (a.get_key(k), b.get_key(k)) {
-                                (Some(a), Some(b)) => Self::is_equal(a.as_ref(), b.as_ref()),
-                                _ => false,
-                            })
-                }
-            }
-    }
-
     pub fn arr_index(
         &self,
         path: &str,
@@ -496,7 +469,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             let Some(value) = arr.get_index(index as usize) else {
                 return FoundIndex::NotFound;
             };
-            if Self::is_equal(value.as_ref(), v) {
+            if is_equal(value.as_ref(), v) {
                 return FoundIndex::Index(index);
             }
         }

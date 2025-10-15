@@ -86,3 +86,30 @@ pub trait SelectValue: Debug + Eq + PartialEq + Default + Clone + Serialize {
     fn get_long(&self) -> i64;
     fn get_double(&self) -> f64;
 }
+
+pub fn is_equal<T1: SelectValue, T2: SelectValue>(a: &T1, b: &T2) -> bool {
+    a.get_type() == b.get_type()
+        && match a.get_type() {
+            SelectValueType::Null => true,
+            SelectValueType::Bool => a.get_bool() == b.get_bool(),
+            SelectValueType::Long => a.get_long() == b.get_long(),
+            SelectValueType::Double => a.get_double() == b.get_double(),
+            SelectValueType::String => a.get_str() == b.get_str(),
+            SelectValueType::Array => {
+                a.len().unwrap() == b.len().unwrap()
+                    && a.values()
+                        .unwrap()
+                        .zip(b.values().unwrap())
+                        .all(|(a, b)| is_equal(a.as_ref(), b.as_ref()))
+            }
+            SelectValueType::Object => {
+                a.len().unwrap() == b.len().unwrap()
+                    && a.keys()
+                        .unwrap()
+                        .all(|k| match (a.get_key(k), b.get_key(k)) {
+                            (Some(a), Some(b)) => is_equal(a.as_ref(), b.as_ref()),
+                            _ => false,
+                        })
+            }
+        }
+}
