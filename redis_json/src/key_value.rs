@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use json_path::{
     calc_once, calc_once_paths, compile,
     json_path::JsonPathToken,
-    select_value::{SelectValue, SelectValueType},
+    select_value::{is_equal, SelectValue, SelectValueType, ValueRef},
 };
 use redis_module::{redisvalue::RedisValueKey, RedisResult, RedisValue};
 use serde::Serialize;
@@ -22,18 +22,20 @@ use crate::{
 };
 
 pub struct KeyValue<'a, V: SelectValue> {
-    val: &'a V,
+    val: ValueRef<'a, V>,
 }
 
 impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     pub const fn new(v: &'a V) -> KeyValue<'a, V> {
-        KeyValue { val: v }
+        KeyValue {
+            val: ValueRef::Borrowed(v),
+        }
     }
 
-    pub fn get_first<'b>(&'a self, path: &'b str) -> Result<&'a V, Error> {
+    pub fn get_first<'b>(&'a self, path: &'b str) -> Result<ValueRef<'a, V>, Error> {
         let results = self.get_values(path)?;
         match results.first() {
-            Some(s) => Ok(s),
+            Some(s) => Ok(s.clone()),
             None => Err(err_msg_json_path_doesnt_exist_with_param(path)
                 .as_str()
                 .into()),
@@ -43,12 +45,12 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     pub fn resp_serialize(&self, path: Path) -> RedisResult {
         if path.is_legacy() {
             let v = self.get_first(path.get_path())?;
-            Ok(Self::resp_serialize_inner(v))
+            Ok(Self::resp_serialize_inner(v.as_ref()))
         } else {
             Ok(self
                 .get_values(path.get_path())?
                 .into_iter()
-                .map(|v| Self::resp_serialize_inner(v))
+                .map(|v| Self::resp_serialize_inner(v.as_ref()))
                 .collect_vec()
                 .into())
         }
@@ -77,7 +79,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 res.push(RedisValue::SimpleStringStatic("["));
                 v.values()
                     .unwrap()
-                    .for_each(|v| res.push(Self::resp_serialize_inner(v)));
+                    .for_each(|v| res.push(Self::resp_serialize_inner(v.as_ref())));
                 RedisValue::Array(res)
             }
 
@@ -86,16 +88,16 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 res.push(RedisValue::SimpleStringStatic("{"));
                 for (k, v) in v.items().unwrap() {
                     res.push(RedisValue::BulkString(k.to_string()));
-                    res.push(Self::resp_serialize_inner(v));
+                    res.push(Self::resp_serialize_inner(v.as_ref()));
                 }
                 RedisValue::Array(res)
             }
         }
     }
 
-    pub fn get_values<'b>(&'a self, path: &'b str) -> Result<Vec<&'a V>, Error> {
+    pub fn get_values<'b>(&'a self, path: &'b str) -> Result<Vec<ValueRef<'a, V>>, Error> {
         let query = compile(path)?;
-        let results = calc_once(query, self.val);
+        let results = calc_once(query, self.val.as_ref());
         Ok(results)
     }
 
@@ -129,10 +131,10 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 .fold(HashMap::with_capacity(path_len), |mut acc, path: Path| {
                     // If we can't compile the path, we can't continue
                     if let Ok(query) = compile(path.get_path()) {
-                        let results = calc_once(query, self.val);
+                        let results = calc_once(query, self.val.as_ref());
 
                         let value = if is_legacy {
-                            (!results.is_empty()).then(|| Values::Single(results[0]))
+                            (!results.is_empty()).then(|| Values::Single(results[0].clone()))
                         } else {
                             Some(Values::Multi(results))
                         };
@@ -155,7 +157,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 .map(|(k, v)| {
                     let key = RedisValueKey::String(k.to_string());
                     let value = match v {
-                        Some(Values::Single(value)) => Self::value_to_resp3(value, format),
+                        Some(Values::Single(value)) => Self::value_to_resp3(value.as_ref(), format),
                         Some(Values::Multi(values)) => Self::values_to_resp3(&values, format),
                         None => RedisValue::Null,
                     };
@@ -179,7 +181,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
 
     pub fn to_resp3_path(&self, path: &Path, format: &ReplyFormatOptions) -> RedisValue {
         compile(path.get_path()).map_or(RedisValue::Array(vec![]), |q| {
-            Self::values_to_resp3(&calc_once(q, self.val), format)
+            Self::values_to_resp3(&calc_once(q, self.val.as_ref()), format)
         })
     }
 
@@ -200,10 +202,10 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         Ok(res)
     }
 
-    fn values_to_resp3(values: &[&V], format: &ReplyFormatOptions) -> RedisValue {
+    fn values_to_resp3(values: &[ValueRef<'_, V>], format: &ReplyFormatOptions) -> RedisValue {
         values
             .iter()
-            .map(|v| Self::value_to_resp3(v, format))
+            .map(|v| Self::value_to_resp3(v.as_ref(), format))
             .collect_vec()
             .into()
     }
@@ -220,7 +222,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                     value
                         .values()
                         .unwrap()
-                        .map(|v| Self::value_to_resp3(v, format))
+                        .map(|v| Self::value_to_resp3(v.as_ref(), format))
                         .collect(),
                 ),
                 SelectValueType::Object => RedisValue::Map(
@@ -230,7 +232,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                         .map(|(k, v)| {
                             (
                                 RedisValueKey::String(k.to_string()),
-                                Self::value_to_resp3(v, format),
+                                Self::value_to_resp3(v.as_ref(), format),
                             )
                         })
                         .collect(),
@@ -286,7 +288,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                     })])
                 } else {
                     // Adding somewhere in existing object
-                    let res = calc_once_paths(query, self.val);
+                    let res = calc_once_paths(query, self.val.as_ref());
 
                     Ok(res
                         .into_iter()
@@ -304,7 +306,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 // or no-oping an NX where the value is already present
 
                 let query = compile(path)?;
-                let res = calc_once_paths(query, self.val);
+                let res = calc_once_paths(query, self.val.as_ref());
 
                 if res.is_empty() {
                     Err("ERR array index out of range".into())
@@ -318,7 +320,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     pub fn find_paths(&mut self, path: &str, option: SetOptions) -> Result<Vec<UpdateInfo>, Error> {
         if option != SetOptions::NotExists {
             let query = compile(path)?;
-            let mut res = calc_once_paths(query, self.val);
+            let mut res = calc_once_paths(query, self.val.as_ref());
             if option != SetOptions::MergeExisting {
                 prepare_paths_for_updating(&mut res);
             }
@@ -355,7 +357,8 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     pub fn get_type(&self, path: &str) -> Result<String, Error> {
-        let s = Self::value_name(self.get_first(path)?);
+        let first = self.get_first(path)?;
+        let s = Self::value_name(first.as_ref());
         Ok(s.to_string())
     }
 
@@ -405,33 +408,6 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    pub fn is_equal<T1: SelectValue, T2: SelectValue>(a: &T1, b: &T2) -> bool {
-        a.get_type() == b.get_type()
-            && match a.get_type() {
-                SelectValueType::Null => true,
-                SelectValueType::Bool => a.get_bool() == b.get_bool(),
-                SelectValueType::Long => a.get_long() == b.get_long(),
-                SelectValueType::Double => a.get_double() == b.get_double(),
-                SelectValueType::String => a.get_str() == b.get_str(),
-                SelectValueType::Array => {
-                    a.len().unwrap() == b.len().unwrap()
-                        && a.values()
-                            .unwrap()
-                            .zip(b.values().unwrap())
-                            .all(|(a, b)| Self::is_equal(a, b))
-                }
-                SelectValueType::Object => {
-                    a.len().unwrap() == b.len().unwrap()
-                        && a.keys()
-                            .unwrap()
-                            .all(|k| match (a.get_key(k), b.get_key(k)) {
-                                (Some(a), Some(b)) => Self::is_equal(a, b),
-                                _ => false,
-                            })
-                }
-            }
-    }
-
     pub fn arr_index(
         &self,
         path: &str,
@@ -443,7 +419,12 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             .get_values(path)?
             .into_iter()
             .map(|value| {
-                RedisValue::from(Self::arr_first_index_single(value, &json_value, start, end))
+                RedisValue::from(Self::arr_first_index_single(
+                    value.as_ref(),
+                    &json_value,
+                    start,
+                    end,
+                ))
             })
             .collect_vec();
         Ok(res.into())
@@ -457,7 +438,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         end: i64,
     ) -> Result<RedisValue, Error> {
         let arr = self.get_first(path)?;
-        match Self::arr_first_index_single(arr, &json_value, start, end) {
+        match Self::arr_first_index_single(arr.as_ref(), &json_value, start, end) {
             FoundIndex::NotArray => Err(Error::from(err_msg_json_expected(
                 "array",
                 self.get_type(path).unwrap().as_str(),
@@ -485,7 +466,10 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
 
         for index in start..end {
-            if Self::is_equal(arr.get_index(index as usize).unwrap(), v) {
+            let Some(value) = arr.get_index(index as usize) else {
+                return FoundIndex::NotFound;
+            };
+            if is_equal(value.as_ref(), v) {
                 return FoundIndex::Index(index);
             }
         }
