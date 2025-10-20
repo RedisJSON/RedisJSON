@@ -40,6 +40,6 @@ fn main() {
         json_path::PathCalculator::<json_path::DummyTrackerGenerator>::create(&query);
     let res = path_calculator.calc(&v);
     for r in res {
-        println!("{}", r);
+        println!("{}", r.as_ref());
     }
 }
