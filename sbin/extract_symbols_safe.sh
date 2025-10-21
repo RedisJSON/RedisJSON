@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Safe symbol extraction script that handles Alpine ARM64 issues
 TARGET="$1"
