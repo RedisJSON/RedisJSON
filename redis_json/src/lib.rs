@@ -195,6 +195,8 @@ macro_rules! redis_json_module_create {
         }
 
         fn initialize(ctx: &Context, args: &[RedisString]) -> Status {
+            $crate::setup_panic_handler();
+
             ctx.log_notice(&format!("version: {} git sha: {} branch: {}",
                 $version,
                 match GIT_SHA { Some(val) => val, _ => "unknown"},
@@ -276,6 +278,40 @@ const fn dummy_init(_ctx: &Context, _args: &[RedisString]) -> Status {
 
 pub fn init_ijson_shared_string_cache(is_bigredis: bool) -> Result<(), String> {
     ijson::init_shared_string_cache(is_bigredis)
+}
+
+pub fn setup_panic_handler() {
+    use redis_module::logging::log_warning;
+    use std::panic;
+
+    let default_hook = panic::take_hook();
+
+    panic::set_hook(Box::new(move |panic_info| {
+        let payload = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "Unknown panic payload".to_string()
+        };
+
+        let location = panic_info
+            .location()
+            .map(|location| {
+                format!(
+                    " at {}:{}:{}",
+                    location.file(),
+                    location.line(),
+                    location.column()
+                )
+            })
+            .unwrap_or("UNKNOWN PANIC LOCATION".to_string());
+
+        let message = format!("PANIC in RedisJSON module: {payload}{location}");
+
+        log_warning(&message);
+        default_hook(panic_info);
+    }));
 }
 
 #[cfg(not(feature = "as-library"))]
