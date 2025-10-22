@@ -1351,9 +1351,9 @@ where
             err_msg_json_path_doesnt_exist_with_param_or(path, "not an array"),
         ));
     }
-    let res = paths.into_iter().try_fold(0, |_, p| {
-        redis_key.arr_insert(p, &args, index)
-    })?;
+    let res = paths
+        .into_iter()
+        .try_fold(0, |_, p| redis_key.arr_insert(p, &args, index))?;
     redis_key.notify_keyspace_event(ctx, "json.arrinsert")?;
     manager.apply_changes(ctx);
     Ok(res.into())

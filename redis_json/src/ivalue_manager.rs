@@ -460,7 +460,8 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             };
             v.as_array_mut()
                 .map(|arr| {
-                    arr.try_extend(args).map_err(|e| RedisError::String(e.to_string()))?;
+                    arr.try_extend(args)
+                        .map_err(|e| RedisError::String(e.to_string()))?;
                     Ok(arr.len())
                 })
                 .unwrap_or_else(|| Err(err_json(v, "array").into()))
@@ -480,7 +481,8 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                     if !(0..=len).contains(&idx) {
                         return Err(RedisError::Str("ERR index out of bounds"));
                     }
-                    arr.try_extend(args.iter().cloned()).map_err(|e| RedisError::String(e.to_string()))?;
+                    arr.try_extend(args.iter().cloned())
+                        .map_err(|e| RedisError::String(e.to_string()))?;
                     use ijson::array::ArraySliceMut::*;
                     match arr.as_mut_slice() {
                         Heterogeneous(slice) => slice[idx as _..].rotate_right(args.len()),

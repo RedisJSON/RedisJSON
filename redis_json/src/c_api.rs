@@ -774,7 +774,7 @@ macro_rules! redis_json_module_export_shared_api {
 
         // The apiname argument of export_shared_api should be a string literal with static lifetime
         static mut VEC_EXPORT_SHARED_API_NAME : Vec<CString> = Vec::new();
-        
+
         #[allow(static_mut_refs)]
         pub fn export_shared_api(ctx: &Context) {
             unsafe {
