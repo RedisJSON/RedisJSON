@@ -63,3 +63,11 @@ jobs:
   linter:
     uses: ./.github/workflows/flow-linter.yml
     secrets: inherit
+  memory-regression:
+    needs: [prepare-values, docs-only]
+    if: ${{ needs.docs-only.outputs.only-docs-changed == 'false' && !github.event.pull_request.draft }}
+    uses: ./.github/workflows/flow-memory-regression.yml
+    with:
+      redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+      os: ubuntu-latest
+    secrets: inherit
