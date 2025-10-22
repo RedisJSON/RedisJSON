@@ -383,10 +383,10 @@ fn apply_updates<M: Manager>(
     }
 }
 
-fn find_paths<T: SelectValue, F: FnMut(&ValueRef<'_, T>) -> bool>(
+fn find_paths<T: SelectValue, F: Fn(&ValueRef<'_, T>) -> bool>(
     path: &str,
     doc: &T,
-    mut f: F,
+    f: F,
 ) -> Result<Vec<Vec<String>>, RedisError> {
     let query = match compile(path) {
         Ok(q) => q,
@@ -1347,18 +1347,16 @@ where
 
     let paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
     if paths.is_empty() {
-        Err(RedisError::String(
+        return Err(RedisError::String(
             err_msg_json_path_doesnt_exist_with_param_or(path, "not an array"),
-        ))
-    } else {
-        let mut res = None;
-        for p in paths {
-            res = Some(redis_key.arr_insert(p, &args, index)?);
-        }
-        redis_key.notify_keyspace_event(ctx, "json.arrinsert")?;
-        manager.apply_changes(ctx);
-        Ok(res.unwrap().into())
+        ));
     }
+    let res = paths.into_iter().try_fold(0, |_, p| {
+        redis_key.arr_insert(p, &args, index)
+    })?;
+    redis_key.notify_keyspace_event(ctx, "json.arrinsert")?;
+    manager.apply_changes(ctx);
+    Ok(res.into())
 }
 
 ///

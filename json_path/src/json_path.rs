@@ -198,7 +198,7 @@ impl std::fmt::Display for Rule {
 
 /// Compile the given string query into a query object.
 /// Returns error on compilation error.
-pub(crate) fn compile(path: &str) -> Result<Query, QueryCompilationError> {
+pub(crate) fn compile(path: &str) -> Result<Query<'_>, QueryCompilationError> {
     let query = JsonPathParser::parse(Rule::query, path);
     match query {
         Ok(mut q) => {

@@ -8,7 +8,7 @@
  */
 
 use serde::Serialize;
-use std::{ffi::c_void, fmt::Debug};
+use std::fmt::Debug;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum SelectValueType {
@@ -67,6 +67,7 @@ impl<'a, T: SelectValue> PartialEq<&T> for ValueRef<'a, T> {
     }
 }
 
+#[allow(unused)]
 pub trait SelectValue: Debug + Eq + PartialEq + Default + Clone + Serialize {
     fn get_type(&self) -> SelectValueType;
     fn contains_key(&self, key: &str) -> bool;
