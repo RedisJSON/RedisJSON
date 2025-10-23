@@ -14,7 +14,7 @@ use crate::redisjson::normalize_arr_start_index;
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
 use bson::{from_document, Document};
-use ijson::array::{ArrayTag, IArray};
+use ijson::array::{ArrayTag, IArray, TryExtend};
 use ijson::{DestructuredMut, INumber, IObject, IString, IValue};
 use json_path::select_value::{SelectValue, SelectValueType};
 use redis_module::key::{verify_type, KeyFlags, RedisKey, RedisKeyWritable};
@@ -353,7 +353,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                             iarray
                                 .remove(index)
                                 .ok_or(RedisError::Str("index out of bounds for array set"))?;
-                            Ok(iarray.insert(index, $v.take()))
+                            iarray.insert(index, $v.take()).map_err(|e| RedisError::String(e.to_string()))
                         }
                     )+
                 }
@@ -460,7 +460,8 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             };
             v.as_array_mut()
                 .map(|arr| {
-                    arr.extend(args);
+                    arr.try_extend(args)
+                        .map_err(|e| RedisError::String(e.to_string()))?;
                     Ok(arr.len())
                 })
                 .unwrap_or_else(|| Err(err_json(v, "array").into()))
@@ -480,7 +481,8 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                     if !(0..=len).contains(&idx) {
                         return Err(RedisError::Str("ERR index out of bounds"));
                     }
-                    arr.extend(args.iter().cloned());
+                    arr.try_extend(args.iter().cloned())
+                        .map_err(|e| RedisError::String(e.to_string()))?;
                     use ijson::array::ArraySliceMut::*;
                     match arr.as_mut_slice() {
                         Heterogeneous(slice) => slice[idx as _..].rotate_right(args.len()),
