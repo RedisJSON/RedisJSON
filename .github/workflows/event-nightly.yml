@@ -63,12 +63,6 @@ jobs:
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
       beta-version: ${{needs.prepare-values.outputs.beta-version}}
     secrets: inherit
-  alpine:
-    uses: ./.github/workflows/flow-alpine.yml
-    needs: [prepare-values]
-    with:
-      redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
-    secrets: inherit
   macos:
     uses: ./.github/workflows/flow-macos.yml
     needs: [prepare-values]
