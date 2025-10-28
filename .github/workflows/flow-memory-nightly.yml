@@ -180,8 +180,7 @@ jobs:
             echo "regression=false" >> $GITHUB_OUTPUT
           fi
       
-      - name: Upload Memory Report as Baseline (Main Branch Only)
-        if: github.ref == 'refs/heads/main'
+      - name: Upload Memory Report as Baseline
         uses: actions/upload-artifact@v4
         with:
           name: memory-report-baseline
