@@ -172,6 +172,12 @@ jobs:
             echo "ℹ️ No nightly baseline found. This PR will create the first baseline after merging to main." >> $GITHUB_STEP_SUMMARY
           fi
       
+      - name: Show Summary
+        run: |
+          echo "✅ Memory regression test completed successfully!"
+          echo ""
+          echo "See the Job Summary tab above for detailed comparison table."
+      
       - name: Upload test logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
