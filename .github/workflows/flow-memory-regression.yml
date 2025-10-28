@@ -74,13 +74,24 @@ jobs:
           
           echo "✅ Memory regression tests passed - within budgets"
       
-      - name: Download Nightly Baseline
+      - name: Download Nightly Baseline from Main Branch
         id: download-baseline
         uses: dawidd6/action-download-artifact@v3
         continue-on-error: true
         with:
           workflow: event-nightly.yml
           branch: main
+          name: memory-report-baseline
+          path: baseline/
+          if_no_artifact_found: ignore
+      
+      - name: Download Nightly Baseline from Current Branch (for testing)
+        if: github.ref != 'refs/heads/main'
+        uses: dawidd6/action-download-artifact@v3
+        continue-on-error: true
+        with:
+          workflow: event-nightly.yml
+          branch: ${{ github.head_ref || github.ref_name }}
           name: memory-report-baseline
           path: baseline/
           if_no_artifact_found: ignore
