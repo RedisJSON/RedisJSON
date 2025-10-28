@@ -176,7 +176,28 @@ jobs:
         run: |
           echo "✅ Memory regression test completed successfully!"
           echo ""
-          echo "See the Job Summary tab above for detailed comparison table."
+          echo "📊 Memory Comparison Results:"
+          echo ""
+          
+          if [ -f "pr_memory_report.txt" ]; then
+            CURRENT=$(grep "METRIC:overall_overhead_ratio:" pr_memory_report.txt | cut -d: -f3 || echo "")
+            if [ -n "$CURRENT" ]; then
+              echo "**Current Overall Overhead:** ${CURRENT}x"
+              echo ""
+            fi
+            
+            if [ -f "baseline/memory_report.txt" ]; then
+              BASELINE=$(grep "METRIC:overall_overhead_ratio:" baseline/memory_report.txt | cut -d: -f3 || echo "")
+              if [ -n "$BASELINE" ] && [ -n "$CURRENT" ]; then
+                DIFF=$(echo "$CURRENT - $BASELINE" | bc -l)
+                PERCENT=$(echo "scale=2; ($DIFF / $BASELINE) * 100" | bc -l)
+                echo "**Baseline:** ${BASELINE}x"
+                echo "**Change:** ${DIFF}x (${PERCENT}%)"
+              fi
+            else
+              echo "ℹ️ No baseline available. This PR will create the first baseline."
+            fi
+          fi
       
       - name: Upload test logs on failure
         if: failure()
