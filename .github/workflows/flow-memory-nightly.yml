@@ -83,6 +83,15 @@ jobs:
             bash tests.sh ../../target/release/rejson.so | tee ../../memory_report.txt
           
           echo "Report generated successfully"
+          
+          # Debug: Check if file exists and has content
+          cd ../..
+          echo "Debug: memory_report.txt size:"
+          ls -lh memory_report.txt
+          echo "Debug: First 50 lines of memory_report.txt:"
+          head -50 memory_report.txt
+          echo "Debug: Looking for METRIC lines:"
+          grep "METRIC:" memory_report.txt || echo "No METRIC lines found!"
       
       - name: Extract Key Metrics
         id: metrics
