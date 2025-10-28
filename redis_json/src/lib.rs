@@ -28,12 +28,13 @@ use redis_module::key::KeyFlags;
 
 #[cfg(not(feature = "as-library"))]
 use crate::c_api::{
-    get_llapi_ctx, json_api_free_iter, json_api_free_key_values_iter, json_api_get,
-    json_api_get_at, json_api_get_boolean, json_api_get_double, json_api_get_int,
-    json_api_get_json, json_api_get_json_from_iter, json_api_get_key_value, json_api_get_len,
-    json_api_get_string, json_api_get_type, json_api_is_json, json_api_len, json_api_next,
-    json_api_next_key_value, json_api_open_key_internal, json_api_open_key_with_flags_internal,
-    json_api_reset_iter, LLAPI_CTX,
+    get_llapi_ctx, json_api_alloc_json, json_api_free_iter, json_api_free_json,
+    json_api_free_key_values_iter, json_api_get, json_api_get_at, json_api_get_boolean,
+    json_api_get_double, json_api_get_int, json_api_get_json, json_api_get_json_from_iter,
+    json_api_get_key_value, json_api_get_len, json_api_get_string, json_api_get_type,
+    json_api_is_json, json_api_len, json_api_next, json_api_next_key_value,
+    json_api_open_key_internal, json_api_open_key_with_flags_internal, json_api_reset_iter,
+    LLAPI_CTX,
 };
 use crate::redisjson::Format;
 
@@ -195,6 +196,8 @@ macro_rules! redis_json_module_create {
         }
 
         fn initialize(ctx: &Context, args: &[RedisString]) -> Status {
+            $crate::setup_panic_handler();
+
             ctx.log_notice(&format!("version: {} git sha: {} branch: {}",
                 $version,
                 match GIT_SHA { Some(val) => val, _ => "unknown"},
@@ -281,6 +284,40 @@ const fn dummy_init(_ctx: &Context, _args: &[RedisString]) -> Status {
 
 pub fn init_ijson_shared_string_cache(is_bigredis: bool) -> Result<(), String> {
     ijson::init_shared_string_cache(is_bigredis)
+}
+
+pub fn setup_panic_handler() {
+    use redis_module::logging::log_warning;
+    use std::panic;
+
+    let default_hook = panic::take_hook();
+
+    panic::set_hook(Box::new(move |panic_info| {
+        let payload = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "Unknown panic payload".to_string()
+        };
+
+        let location = panic_info
+            .location()
+            .map(|location| {
+                format!(
+                    " at {}:{}:{}",
+                    location.file(),
+                    location.line(),
+                    location.column()
+                )
+            })
+            .unwrap_or("UNKNOWN PANIC LOCATION".to_string());
+
+        let message = format!("PANIC in RedisJSON module: {payload}{location}");
+
+        log_warning(&message);
+        default_hook(panic_info);
+    }));
 }
 
 #[cfg(not(feature = "as-library"))]
