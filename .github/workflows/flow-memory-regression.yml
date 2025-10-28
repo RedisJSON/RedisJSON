@@ -50,6 +50,8 @@ jobs:
         run: |
           . "$HOME/.cargo/env"
           cargo build --release
+          # Copy librejson.so to rejson.so (expected by tests)
+          cp target/release/librejson.so target/release/rejson.so
       
       - name: Setup Python
         run: |
