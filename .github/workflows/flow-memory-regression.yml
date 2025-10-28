@@ -109,38 +109,67 @@ jobs:
             exit 0
           fi
           
-          echo "### 📊 PR Memory Overhead" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 Memory Regression Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Current:** ${CURRENT}x" >> $GITHUB_STEP_SUMMARY
+          echo "#### Comparison vs Nightly Baseline" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | This PR | Baseline | Change | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|---------|----------|--------|--------|" >> $GITHUB_STEP_SUMMARY
           
           if [ -f "baseline/memory_report.txt" ]; then
+            # Overall metric
             BASELINE=$(grep "METRIC:overall_overhead_ratio:" baseline/memory_report.txt | cut -d: -f3 || echo "")
-            
-            if [ -n "$BASELINE" ]; then
+            if [ -n "$BASELINE" ] && [ -n "$CURRENT" ]; then
               DIFF=$(echo "$CURRENT - $BASELINE" | bc -l)
               PERCENT=$(echo "scale=2; ($DIFF / $BASELINE) * 100" | bc -l)
-              
-              echo "**Nightly Baseline:** ${BASELINE}x" >> $GITHUB_STEP_SUMMARY
-              echo "**Change:** ${DIFF}x (${PERCENT}%)" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-              
               if [ $(echo "$PERCENT > 5" | bc -l) -eq 1 ]; then
-                echo "⚠️ **Memory increased by ${PERCENT}% vs nightly baseline**" >> $GITHUB_STEP_SUMMARY
-                echo "" >> $GITHUB_STEP_SUMMARY
-                echo "This is informational - PR passed budget checks." >> $GITHUB_STEP_SUMMARY
+                STATUS="⚠️ +${PERCENT}%"
               elif [ $(echo "$PERCENT < -5" | bc -l) -eq 1 ]; then
-                echo "✅ **Memory improved by ${PERCENT}%**" >> $GITHUB_STEP_SUMMARY
+                STATUS="✅ ${PERCENT}%"
               else
-                echo "✅ **Memory stable (${PERCENT}% change)**" >> $GITHUB_STEP_SUMMARY
+                STATUS="✅ Stable"
               fi
-            else
-              echo "ℹ️ Could not compare with baseline" >> $GITHUB_STEP_SUMMARY
+              echo "| **Overall Ratio** | ${CURRENT}x | ${BASELINE}x | ${DIFF}x (${PERCENT}%) | ${STATUS} |" >> $GITHUB_STEP_SUMMARY
             fi
-          else
-            echo "ℹ️ No nightly baseline found for comparison" >> $GITHUB_STEP_SUMMARY
+            
+            # Small doc metric
+            CURRENT_SMALL=$(grep "METRIC:small_doc_overhead:" pr_memory_report.txt | cut -d: -f3 || echo "")
+            BASELINE_SMALL=$(grep "METRIC:small_doc_overhead:" baseline/memory_report.txt | cut -d: -f3 || echo "")
+            if [ -n "$BASELINE_SMALL" ] && [ -n "$CURRENT_SMALL" ]; then
+              DIFF_SMALL=$(echo "$CURRENT_SMALL - $BASELINE_SMALL" | bc -l)
+              PERCENT_SMALL=$(echo "scale=2; ($DIFF_SMALL / $BASELINE_SMALL) * 100" | bc -l)
+              if [ $(echo "$PERCENT_SMALL > 5" | bc -l) -eq 1 ]; then
+                STATUS_SMALL="⚠️ +${PERCENT_SMALL}%"
+              elif [ $(echo "$PERCENT_SMALL < -5" | bc -l) -eq 1 ]; then
+                STATUS_SMALL="✅ ${PERCENT_SMALL}%"
+              else
+                STATUS_SMALL="✅ Stable"
+              fi
+              echo "| Small docs | ${CURRENT_SMALL}x | ${BASELINE_SMALL}x | ${DIFF_SMALL}x (${PERCENT_SMALL}%) | ${STATUS_SMALL} |" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            # Large doc metric
+            CURRENT_LARGE=$(grep "METRIC:large_doc_overhead:" pr_memory_report.txt | cut -d: -f3 || echo "")
+            BASELINE_LARGE=$(grep "METRIC:large_doc_overhead:" baseline/memory_report.txt | cut -d: -f3 || echo "")
+            if [ -n "$BASELINE_LARGE" ] && [ -n "$CURRENT_LARGE" ]; then
+              DIFF_LARGE=$(echo "$CURRENT_LARGE - $BASELINE_LARGE" | bc -l)
+              PERCENT_LARGE=$(echo "scale=2; ($DIFF_LARGE / $BASELINE_LARGE) * 100" | bc -l)
+              if [ $(echo "$PERCENT_LARGE > 5" | bc -l) -eq 1 ]; then
+                STATUS_LARGE="⚠️ +${PERCENT_LARGE}%"
+              elif [ $(echo "$PERCENT_LARGE < -5" | bc -l) -eq 1 ]; then
+                STATUS_LARGE="✅ ${PERCENT_LARGE}%"
+              else
+                STATUS_LARGE="✅ Stable"
+              fi
+              echo "| Large docs | ${CURRENT_LARGE}x | ${BASELINE_LARGE}x | ${DIFF_LARGE}x (${PERCENT_LARGE}%) | ${STATUS_LARGE} |" >> $GITHUB_STEP_SUMMARY
+            fi
+            
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "This PR's memory usage will be compared in nightly runs." >> $GITHUB_STEP_SUMMARY
+            echo "_Comparison against nightly baseline from main branch_" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| **Status** | Baseline not available |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "ℹ️ No nightly baseline found. This PR will create the first baseline after merging to main." >> $GITHUB_STEP_SUMMARY
           fi
       
       - name: Upload test logs on failure
