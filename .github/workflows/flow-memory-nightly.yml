@@ -78,20 +78,30 @@ jobs:
           source venv/bin/activate
           cd tests/pytest
           
+          echo "Starting memory report generation..."
+          
           # Run nightly memory report (PARALLEL=0 to avoid conflicts with output capture)
           PARALLEL=0 TEST=test_memory_nightly_report.py::test_nightly_memory_report \
-            bash tests.sh ../../target/release/rejson.so | tee ../../memory_report.txt
+            bash tests.sh ../../target/release/rejson.so 2>&1 | tee ../../memory_report.txt
           
-          echo "Report generated successfully"
+          echo "Report command completed with exit code: $?"
           
           # Debug: Check if file exists and has content
           cd ../..
-          echo "Debug: memory_report.txt size:"
-          ls -lh memory_report.txt
-          echo "Debug: First 50 lines of memory_report.txt:"
-          head -50 memory_report.txt
-          echo "Debug: Looking for METRIC lines:"
-          grep "METRIC:" memory_report.txt || echo "No METRIC lines found!"
+          echo "=== DEBUG: memory_report.txt status ==="
+          if [ -f memory_report.txt ]; then
+            echo "File exists. Size:"
+            ls -lh memory_report.txt
+            echo ""
+            echo "First 100 lines:"
+            head -100 memory_report.txt
+            echo ""
+            echo "Looking for METRIC lines:"
+            grep "METRIC:" memory_report.txt || echo "❌ No METRIC lines found!"
+          else
+            echo "❌ File does not exist!"
+          fi
+          echo "=== END DEBUG ==="
       
       - name: Extract Key Metrics
         id: metrics
