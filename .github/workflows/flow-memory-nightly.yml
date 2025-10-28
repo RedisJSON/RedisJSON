@@ -76,8 +76,8 @@ jobs:
           source venv/bin/activate
           cd tests/pytest
           
-          # Run nightly memory report
-          TEST=test_memory_nightly_report.py::test_nightly_memory_report \
+          # Run nightly memory report (PARALLEL=0 to avoid conflicts with output capture)
+          PARALLEL=0 TEST=test_memory_nightly_report.py::test_nightly_memory_report \
             bash tests.sh ../../target/release/rejson.so | tee ../../memory_report.txt
           
           echo "Report generated successfully"

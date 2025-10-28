@@ -17,11 +17,11 @@ These tests track and prevent memory regressions in RedisJSON by comparing memor
 
 **Usage**:
 ```bash
-# Run all regression tests
-TEST=test_memory_regression.py bash tests.sh
+# Run all regression tests (PARALLEL=0 recommended for memory tests)
+PARALLEL=0 TEST=test_memory_regression.py bash tests.sh
 
 # Run specific test
-TEST=test_memory_regression.py::test_memory_regression_all_sizes bash tests.sh
+PARALLEL=0 TEST=test_memory_regression.py::test_memory_regression_all_sizes bash tests.sh
 ```
 
 ### 2. `test_memory_overhead.py` 📊 **Run On-Demand**
@@ -33,7 +33,8 @@ TEST=test_memory_regression.py::test_memory_regression_all_sizes bash tests.sh
 
 **Usage**:
 ```bash
-TEST=test_memory_overhead.py bash tests.sh
+# PARALLEL=0 recommended for memory tests
+PARALLEL=0 TEST=test_memory_overhead.py bash tests.sh
 ```
 
 ### 3. `test_memory_nightly_report.py` 📈 **Run Nightly**
@@ -45,7 +46,8 @@ TEST=test_memory_overhead.py bash tests.sh
 
 **Usage**:
 ```bash
-TEST=test_memory_nightly_report.py::test_nightly_memory_report bash tests.sh
+# PARALLEL=0 recommended for memory tests
+PARALLEL=0 TEST=test_memory_nightly_report.py::test_nightly_memory_report bash tests.sh
 ```
 
 ## Integration with Existing Test Structure
@@ -195,18 +197,18 @@ MEMORY_BUDGETS = {
 ## Quick Commands
 
 ```bash
-# Run regression tests (for CI/CD)
+# Run regression tests (for CI/CD) - PARALLEL=0 recommended
 cd tests/pytest
-TEST=test_memory_regression.py bash tests.sh
+PARALLEL=0 TEST=test_memory_regression.py bash tests.sh
 
 # Run detailed analysis
-TEST=test_memory_overhead.py bash tests.sh
+PARALLEL=0 TEST=test_memory_overhead.py bash tests.sh
 
 # Run nightly report
-TEST=test_memory_nightly_report.py::test_nightly_memory_report bash tests.sh
+PARALLEL=0 TEST=test_memory_nightly_report.py::test_nightly_memory_report bash tests.sh
 
 # Run with specific module
-TEST=test_memory_regression.py bash tests.sh ../../target/release/rejson.so
+PARALLEL=0 TEST=test_memory_regression.py bash tests.sh ../../target/release/rejson.so
 ```
 
 ## Makefile Integration
@@ -217,11 +219,11 @@ Add to your `Makefile`:
 # Add to existing pytest target or create new target
 test-memory:
 	@echo "Running memory regression tests..."
-	cd tests/pytest && TEST=test_memory_regression.py bash tests.sh
+	cd tests/pytest && PARALLEL=0 TEST=test_memory_regression.py bash tests.sh
 
 test-memory-report:
 	@echo "Generating memory overhead report..."
-	cd tests/pytest && TEST=test_memory_nightly_report.py::test_nightly_memory_report bash tests.sh
+	cd tests/pytest && PARALLEL=0 TEST=test_memory_nightly_report.py::test_nightly_memory_report bash tests.sh
 ```
 
 Then run:
