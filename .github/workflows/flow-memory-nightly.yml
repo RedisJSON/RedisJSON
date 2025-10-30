@@ -81,6 +81,8 @@ jobs:
           echo "Starting memory report generation..."
           
           # Run nightly memory report (PARALLEL=0 to avoid conflicts with output capture)
+          # Use unbuffered Python output to ensure all print statements are captured
+          export PYTHONUNBUFFERED=1
           PARALLEL=0 TEST=test_memory_nightly_report.py::test_nightly_memory_report \
             bash tests.sh ../../target/release/rejson.so 2>&1 | tee ../../memory_report.txt
           
