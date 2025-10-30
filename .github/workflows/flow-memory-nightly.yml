@@ -79,8 +79,13 @@ jobs:
           source venv/bin/activate
           cd tests/pytest
           
-          echo "Starting memory report generation..."
+          set -x  # Enable debug mode to see all commands
+          
+          echo "=== STEP 1: Environment Check ==="
           echo "Working directory: $(pwd)"
+          echo "Python: $(which python3)"
+          echo "Module path: ../../target/release/rejson.so"
+          ls -la ../../target/release/rejson.so 2>&1 || echo "⚠️ Module file not found!"
           echo "Test file exists: $(ls -la test_memory_nightly_report.py 2>&1)"
           
           # Run nightly memory report (PARALLEL=0 to avoid conflicts with output capture)
@@ -88,9 +93,10 @@ jobs:
           export PYTHONUNBUFFERED=1
           
           # Clear any existing report file
-          rm -f ../../memory_report.txt
+          rm -f ../../memory_report.txt ../../test_output.log
           
-          echo "Running test..."
+          echo ""
+          echo "=== STEP 2: Running Test ==="
           # Don't fail immediately - we want to capture output even if test fails
           set +e
           PARALLEL=0 TEST=test_memory_nightly_report.py:test_nightly_memory_report \
@@ -98,33 +104,49 @@ jobs:
           
           TEST_EXIT=$?
           set -e
-          echo "Test exit code: $TEST_EXIT"
+          echo "Test command completed with exit code: $TEST_EXIT"
           
-          # Now capture output to report file
+          echo ""
+          echo "=== STEP 3: Capturing Test Output ==="
           cd ../..
-          echo "=== Capturing test output ==="
+          
           if [ -f test_output.log ]; then
-            echo "Test output log exists, size: $(wc -l < test_output.log) lines"
-            echo "Last 100 lines of test output (to see errors):"
+            LINES=$(wc -l < test_output.log)
+            BYTES=$(wc -c < test_output.log)
+            echo "✅ test_output.log exists: $LINES lines, $BYTES bytes"
+            echo ""
+            echo "--- First 50 lines of output ---"
+            head -50 test_output.log
+            echo ""
+            echo "--- Last 100 lines of output (errors usually here) ---"
             tail -100 test_output.log
             echo ""
-            echo "Looking for METRIC lines:"
+            echo "--- Searching for METRIC lines ---"
             grep "METRIC:" test_output.log | head -10 || echo "❌ No METRIC lines found!"
+            echo ""
             
             # Copy output to report file
             cp test_output.log memory_report.txt
+            echo "✅ Copied test_output.log to memory_report.txt"
           else
             echo "❌ test_output.log does not exist!"
-            echo "Test likely failed before creating output file"
-            echo "memory_report.txt" > memory_report.txt
+            echo "This means the test command failed before producing any output"
+            echo "Creating minimal report file"
+            echo "Test failed: test_output.log was not created" > memory_report.txt
           fi
           
-          # If test failed, show what went wrong
+          echo ""
+          echo "=== STEP 4: Final Status ==="
           if [ $TEST_EXIT -ne 0 ]; then
-            echo ""
             echo "⚠️ WARNING: Test failed with exit code $TEST_EXIT"
-            echo "Check the logs above to see the error"
+          else
+            echo "✅ Test completed successfully"
           fi
+          
+          echo ""
+          echo "Final memory_report.txt size: $(wc -c < memory_report.txt) bytes"
+          echo "First 20 lines of memory_report.txt:"
+          head -20 memory_report.txt || echo "(file is empty or unreadable)"
       
       - name: Extract Key Metrics
         id: metrics
