@@ -79,31 +79,38 @@ jobs:
           cd tests/pytest
           
           echo "Starting memory report generation..."
+          echo "Working directory: $(pwd)"
+          echo "Test file exists: $(ls -la test_memory_nightly_report.py 2>&1)"
           
           # Run nightly memory report (PARALLEL=0 to avoid conflicts with output capture)
           # Use unbuffered Python output to ensure all print statements are captured
           export PYTHONUNBUFFERED=1
+          
+          # Clear any existing report file
+          rm -f ../../memory_report.txt
+          
+          echo "Running test..."
           PARALLEL=0 TEST=test_memory_nightly_report.py::test_nightly_memory_report \
-            bash tests.sh ../../target/release/rejson.so 2>&1 | tee ../../memory_report.txt
+            bash tests.sh ../../target/release/rejson.so > ../../test_output.log 2>&1
           
-          echo "Report command completed with exit code: $?"
+          TEST_EXIT=$?
+          echo "Test exit code: $TEST_EXIT"
           
-          # Debug: Check if file exists and has content
+          # Now capture output to report file
           cd ../..
-          echo "=== DEBUG: memory_report.txt status ==="
-          if [ -f memory_report.txt ]; then
-            echo "File exists. Size:"
-            ls -lh memory_report.txt
-            echo ""
-            echo "First 100 lines:"
-            head -100 memory_report.txt
+          echo "=== Capturing test output ==="
+          if [ -f test_output.log ]; then
+            echo "Test output log exists, size: $(wc -l < test_output.log) lines"
+            cp test_output.log memory_report.txt
+            echo "First 200 lines of output:"
+            head -200 test_output.log
             echo ""
             echo "Looking for METRIC lines:"
-            grep "METRIC:" memory_report.txt || echo "❌ No METRIC lines found!"
+            grep "METRIC:" memory_report.txt | head -10 || echo "❌ No METRIC lines found!"
           else
-            echo "❌ File does not exist!"
+            echo "❌ test_output.log does not exist!"
+            echo "memory_report.txt" > memory_report.txt
           fi
-          echo "=== END DEBUG ==="
       
       - name: Extract Key Metrics
         id: metrics
