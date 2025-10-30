@@ -93,7 +93,7 @@ jobs:
           echo "Running test..."
           # Don't fail immediately - we want to capture output even if test fails
           set +e
-          PARALLEL=0 TEST=test_memory_nightly_report.py::test_nightly_memory_report \
+          PARALLEL=0 TEST=test_memory_nightly_report.py:test_nightly_memory_report \
             bash tests.sh ../../target/release/rejson.so > ../../test_output.log 2>&1
           
           TEST_EXIT=$?
