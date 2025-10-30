@@ -68,6 +68,7 @@ jobs:
       
       - name: Run Memory Report
         id: report
+        continue-on-error: true
         env:
           REDISJSON_VERSION: ${{ inputs.beta-version || steps.version.outputs.version }}
           GIT_COMMIT: ${{ steps.version.outputs.commit }}
@@ -90,10 +91,13 @@ jobs:
           rm -f ../../memory_report.txt
           
           echo "Running test..."
+          # Don't fail immediately - we want to capture output even if test fails
+          set +e
           PARALLEL=0 TEST=test_memory_nightly_report.py::test_nightly_memory_report \
             bash tests.sh ../../target/release/rejson.so > ../../test_output.log 2>&1
           
           TEST_EXIT=$?
+          set -e
           echo "Test exit code: $TEST_EXIT"
           
           # Now capture output to report file
@@ -101,15 +105,25 @@ jobs:
           echo "=== Capturing test output ==="
           if [ -f test_output.log ]; then
             echo "Test output log exists, size: $(wc -l < test_output.log) lines"
-            cp test_output.log memory_report.txt
-            echo "First 200 lines of output:"
-            head -200 test_output.log
+            echo "Last 100 lines of test output (to see errors):"
+            tail -100 test_output.log
             echo ""
             echo "Looking for METRIC lines:"
-            grep "METRIC:" memory_report.txt | head -10 || echo "❌ No METRIC lines found!"
+            grep "METRIC:" test_output.log | head -10 || echo "❌ No METRIC lines found!"
+            
+            # Copy output to report file
+            cp test_output.log memory_report.txt
           else
             echo "❌ test_output.log does not exist!"
+            echo "Test likely failed before creating output file"
             echo "memory_report.txt" > memory_report.txt
+          fi
+          
+          # If test failed, show what went wrong
+          if [ $TEST_EXIT -ne 0 ]; then
+            echo ""
+            echo "⚠️ WARNING: Test failed with exit code $TEST_EXIT"
+            echo "Check the logs above to see the error"
           fi
       
       - name: Extract Key Metrics
