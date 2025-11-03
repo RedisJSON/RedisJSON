@@ -282,5 +282,3 @@ jobs:
       overhead: ${{ steps.metrics.outputs.overhead }}
       small_overhead: ${{ steps.metrics.outputs.small }}
       large_overhead: ${{ steps.metrics.outputs.large }}
-
-# Trigger CI to validate memory regression test - 2025-11-03
