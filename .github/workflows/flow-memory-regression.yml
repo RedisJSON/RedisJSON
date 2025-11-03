@@ -101,26 +101,53 @@ jobs:
           source venv/bin/activate
           cd tests/pytest
           
+          echo "=== Running memory report test ==="
           # Generate quick report for comparison (PARALLEL=0 to avoid conflicts with output capture)
+          set +e  # Don't fail immediately
           QUICK=1 PARALLEL=0 TEST=test_memory_nightly_report.py:test_nightly_memory_report_summary_only \
-            bash tests.sh ../../target/release/rejson.so | tee ../../pr_memory_report.txt
+            bash tests.sh ../../target/release/rejson.so > ../../pr_memory_report.txt 2>&1
+          TEST_EXIT=$?
+          set -e
+          
+          echo "Test exit code: $TEST_EXIT"
+          echo "Report file size: $(wc -c < ../../pr_memory_report.txt) bytes"
+          echo ""
+          echo "=== First 30 lines of report ==="
+          head -30 ../../pr_memory_report.txt || true
+          echo ""
+          echo "=== Searching for METRIC lines ==="
+          grep "METRIC:" ../../pr_memory_report.txt || echo "No METRIC lines found!"
       
       - name: Compare with Nightly Baseline
         id: compare
         run: |
+          echo "=== Baseline Comparison Debug ==="
+          echo "Checking for pr_memory_report.txt..."
+          
           if [ ! -f "pr_memory_report.txt" ]; then
             echo "⚠️ Could not generate memory report" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ File pr_memory_report.txt does not exist"
             exit 0
           fi
           
+          echo "✅ File exists, size: $(wc -c < pr_memory_report.txt) bytes"
+          echo "Extracting CURRENT metrics..."
+          
           CURRENT=$(grep "METRIC:overall_overhead_ratio:" pr_memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
+          echo "CURRENT='$CURRENT'"
           
           if [ -z "$CURRENT" ]; then
             echo "⚠️ Could not extract current memory metrics" >> $GITHUB_STEP_SUMMARY
-            echo "Debug: pr_memory_report.txt contents:" >> $GITHUB_STEP_SUMMARY
-            cat pr_memory_report.txt >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Debug: pr_memory_report.txt contents (last 50 lines):**" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -50 pr_memory_report.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "❌ Failed to extract CURRENT metric"
             exit 0
           fi
+          
+          echo "✅ Successfully extracted CURRENT=$CURRENT"
           
           echo "### 📊 Memory Regression Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -129,7 +156,12 @@ jobs:
           echo "| Metric | This PR | Baseline | Change | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|--------|---------|----------|--------|--------|" >> $GITHUB_STEP_SUMMARY
           
+          # Extract small and large metrics too
+          CURRENT_SMALL=$(grep "METRIC:small_doc_overhead:" pr_memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
+          CURRENT_LARGE=$(grep "METRIC:large_doc_overhead:" pr_memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
+          
           if [ -f "baseline/memory_report.txt" ]; then
+            echo "✅ Baseline file found, performing comparison..."
             # Overall metric
             BASELINE=$(grep "METRIC:overall_overhead_ratio:" baseline/memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
             if [ -n "$BASELINE" ] && [ -n "$CURRENT" ]; then
@@ -146,7 +178,6 @@ jobs:
             fi
             
             # Small doc metric
-            CURRENT_SMALL=$(grep "METRIC:small_doc_overhead:" pr_memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
             BASELINE_SMALL=$(grep "METRIC:small_doc_overhead:" baseline/memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
             if [ -n "$BASELINE_SMALL" ] && [ -n "$CURRENT_SMALL" ]; then
               DIFF_SMALL=$(echo "$CURRENT_SMALL - $BASELINE_SMALL" | bc -l)
@@ -162,7 +193,6 @@ jobs:
             fi
             
             # Large doc metric
-            CURRENT_LARGE=$(grep "METRIC:large_doc_overhead:" pr_memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
             BASELINE_LARGE=$(grep "METRIC:large_doc_overhead:" baseline/memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
             if [ -n "$BASELINE_LARGE" ] && [ -n "$CURRENT_LARGE" ]; then
               DIFF_LARGE=$(echo "$CURRENT_LARGE - $BASELINE_LARGE" | bc -l)
@@ -180,7 +210,15 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "_Comparison against nightly baseline from main branch_" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| **Status** | Baseline not available |" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ No baseline file found, showing current values only..."
+            # Show current values without comparison
+            echo "| **Overall Ratio** | ${CURRENT}x | N/A | N/A | ℹ️ No baseline |" >> $GITHUB_STEP_SUMMARY
+            if [ -n "$CURRENT_SMALL" ]; then
+              echo "| Small docs | ${CURRENT_SMALL}x | N/A | N/A | ℹ️ No baseline |" >> $GITHUB_STEP_SUMMARY
+            fi
+            if [ -n "$CURRENT_LARGE" ]; then
+              echo "| Large docs | ${CURRENT_LARGE}x | N/A | N/A | ℹ️ No baseline |" >> $GITHUB_STEP_SUMMARY
+            fi
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "ℹ️ No nightly baseline found. This PR will create the first baseline after merging to main." >> $GITHUB_STEP_SUMMARY
           fi
