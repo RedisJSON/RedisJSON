@@ -113,10 +113,12 @@ jobs:
             exit 0
           fi
           
-          CURRENT=$(grep "METRIC:overall_overhead_ratio:" pr_memory_report.txt | cut -d: -f3 || echo "")
+          CURRENT=$(grep "METRIC:overall_overhead_ratio:" pr_memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
           
           if [ -z "$CURRENT" ]; then
             echo "⚠️ Could not extract current memory metrics" >> $GITHUB_STEP_SUMMARY
+            echo "Debug: pr_memory_report.txt contents:" >> $GITHUB_STEP_SUMMARY
+            cat pr_memory_report.txt >> $GITHUB_STEP_SUMMARY
             exit 0
           fi
           
@@ -129,7 +131,7 @@ jobs:
           
           if [ -f "baseline/memory_report.txt" ]; then
             # Overall metric
-            BASELINE=$(grep "METRIC:overall_overhead_ratio:" baseline/memory_report.txt | cut -d: -f3 || echo "")
+            BASELINE=$(grep "METRIC:overall_overhead_ratio:" baseline/memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
             if [ -n "$BASELINE" ] && [ -n "$CURRENT" ]; then
               DIFF=$(echo "$CURRENT - $BASELINE" | bc -l)
               PERCENT=$(echo "scale=2; ($DIFF / $BASELINE) * 100" | bc -l)
@@ -144,8 +146,8 @@ jobs:
             fi
             
             # Small doc metric
-            CURRENT_SMALL=$(grep "METRIC:small_doc_overhead:" pr_memory_report.txt | cut -d: -f3 || echo "")
-            BASELINE_SMALL=$(grep "METRIC:small_doc_overhead:" baseline/memory_report.txt | cut -d: -f3 || echo "")
+            CURRENT_SMALL=$(grep "METRIC:small_doc_overhead:" pr_memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
+            BASELINE_SMALL=$(grep "METRIC:small_doc_overhead:" baseline/memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
             if [ -n "$BASELINE_SMALL" ] && [ -n "$CURRENT_SMALL" ]; then
               DIFF_SMALL=$(echo "$CURRENT_SMALL - $BASELINE_SMALL" | bc -l)
               PERCENT_SMALL=$(echo "scale=2; ($DIFF_SMALL / $BASELINE_SMALL) * 100" | bc -l)
@@ -160,8 +162,8 @@ jobs:
             fi
             
             # Large doc metric
-            CURRENT_LARGE=$(grep "METRIC:large_doc_overhead:" pr_memory_report.txt | cut -d: -f3 || echo "")
-            BASELINE_LARGE=$(grep "METRIC:large_doc_overhead:" baseline/memory_report.txt | cut -d: -f3 || echo "")
+            CURRENT_LARGE=$(grep "METRIC:large_doc_overhead:" pr_memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
+            BASELINE_LARGE=$(grep "METRIC:large_doc_overhead:" baseline/memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
             if [ -n "$BASELINE_LARGE" ] && [ -n "$CURRENT_LARGE" ]; then
               DIFF_LARGE=$(echo "$CURRENT_LARGE - $BASELINE_LARGE" | bc -l)
               PERCENT_LARGE=$(echo "scale=2; ($DIFF_LARGE / $BASELINE_LARGE) * 100" | bc -l)
@@ -191,14 +193,14 @@ jobs:
           echo ""
           
           if [ -f "pr_memory_report.txt" ]; then
-            CURRENT=$(grep "METRIC:overall_overhead_ratio:" pr_memory_report.txt | cut -d: -f3 || echo "")
+            CURRENT=$(grep "METRIC:overall_overhead_ratio:" pr_memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
             if [ -n "$CURRENT" ]; then
               echo "**Current Overall Overhead:** ${CURRENT}x"
               echo ""
             fi
             
             if [ -f "baseline/memory_report.txt" ]; then
-              BASELINE=$(grep "METRIC:overall_overhead_ratio:" baseline/memory_report.txt | cut -d: -f3 || echo "")
+              BASELINE=$(grep "METRIC:overall_overhead_ratio:" baseline/memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
               if [ -n "$BASELINE" ] && [ -n "$CURRENT" ]; then
                 DIFF=$(echo "$CURRENT - $BASELINE" | bc -l)
                 PERCENT=$(echo "scale=2; ($DIFF / $BASELINE) * 100" | bc -l)
