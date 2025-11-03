@@ -157,10 +157,22 @@ jobs:
       - name: Extract Key Metrics
         id: metrics
         run: |
-          # Extract overall overhead
-          OVERHEAD=$(grep "METRIC:overall_overhead_ratio:" memory_report.txt | cut -d: -f3)
-          SMALL=$(grep "METRIC:small_doc_overhead:" memory_report.txt | cut -d: -f3)
-          LARGE=$(grep "METRIC:large_doc_overhead:" memory_report.txt | cut -d: -f3)
+          # Extract overall overhead (trim whitespace and take first line only)
+          OVERHEAD=$(grep "METRIC:overall_overhead_ratio:" memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]')
+          SMALL=$(grep "METRIC:small_doc_overhead:" memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]')
+          LARGE=$(grep "METRIC:large_doc_overhead:" memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]')
+          
+          # Validate that we got values
+          if [ -z "$OVERHEAD" ] || [ -z "$SMALL" ] || [ -z "$LARGE" ]; then
+            echo "⚠️ Warning: Could not extract all metrics"
+            echo "OVERHEAD='$OVERHEAD'"
+            echo "SMALL='$SMALL'"
+            echo "LARGE='$LARGE'"
+            # Set default values to avoid empty outputs
+            OVERHEAD="${OVERHEAD:-0}"
+            SMALL="${SMALL:-0}"
+            LARGE="${LARGE:-0}"
+          fi
           
           echo "overhead=$OVERHEAD" >> $GITHUB_OUTPUT
           echo "small=$SMALL" >> $GITHUB_OUTPUT
@@ -194,9 +206,9 @@ jobs:
       - name: Compare with Baseline
         id: compare
         run: |
-          CURRENT=$(grep "METRIC:overall_overhead_ratio:" memory_report.txt | cut -d: -f3)
-          CURRENT_SMALL=$(grep "METRIC:small_doc_overhead:" memory_report.txt | cut -d: -f3)
-          CURRENT_LARGE=$(grep "METRIC:large_doc_overhead:" memory_report.txt | cut -d: -f3)
+          CURRENT=$(grep "METRIC:overall_overhead_ratio:" memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]')
+          CURRENT_SMALL=$(grep "METRIC:small_doc_overhead:" memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]')
+          CURRENT_LARGE=$(grep "METRIC:large_doc_overhead:" memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]')
           
           echo "### 📊 Current Memory Overhead" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -208,9 +220,9 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           
           if [ -f "baseline/memory_report.txt" ]; then
-            BASELINE=$(grep "METRIC:overall_overhead_ratio:" baseline/memory_report.txt | cut -d: -f3)
-            BASELINE_SMALL=$(grep "METRIC:small_doc_overhead:" baseline/memory_report.txt | cut -d: -f3)
-            BASELINE_LARGE=$(grep "METRIC:large_doc_overhead:" baseline/memory_report.txt | cut -d: -f3)
+            BASELINE=$(grep "METRIC:overall_overhead_ratio:" baseline/memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]')
+            BASELINE_SMALL=$(grep "METRIC:small_doc_overhead:" baseline/memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]')
+            BASELINE_LARGE=$(grep "METRIC:large_doc_overhead:" baseline/memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]')
             
             DIFF=$(echo "$CURRENT - $BASELINE" | bc -l)
             PERCENT=$(echo "scale=2; ($DIFF / $BASELINE) * 100" | bc -l)
