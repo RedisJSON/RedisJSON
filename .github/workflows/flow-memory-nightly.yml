@@ -32,6 +32,12 @@ jobs:
           path: redis
           submodules: 'recursive'
       
+      - name: Build Redis
+        run: |
+          cd redis
+          make -j$(nproc)
+          sudo make install
+      
       - name: Get version info
         id: version
         run: |
