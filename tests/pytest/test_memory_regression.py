@@ -38,6 +38,12 @@ MEMORY_BUDGETS = {
     'array_1000': 2.5,    # Large arrays (measured: ~2.27x)
     'nested_5': 3.5,      # Nested objects (measured: ~3.19x)
     'nested_20': 3.5,     # Deep nesting (measured: ~2.99x)
+    'homogeneous_u8_100': 2.0,    # Homogeneous u8 arrays (optimized)
+    'homogeneous_u8_10000': 1.5,  # Large homogeneous u8 (better optimization)
+    'homogeneous_float_100': 2.0,   # Homogeneous float arrays
+    'homogeneous_float_10000': 1.5, # Large homogeneous float
+    'homogeneous_int_100': 2.0,     # Homogeneous int arrays
+    'homogeneous_int_10000': 1.5,   # Large homogeneous int
 }
 
 # Absolute memory limits in bytes for specific test cases
@@ -162,6 +168,27 @@ def get_nested_doc(depth):
             "nested": create_nested(current_depth + 1)
         }
     return create_nested(0)
+
+def get_homogeneous_u8_array(size):
+    """Homogeneous u8 array (0-255 values)"""
+    return {
+        "data": [i % 256 for i in range(size)],
+        "type": "u8"
+    }
+
+def get_homogeneous_float_array(size):
+    """Homogeneous float array"""
+    return {
+        "data": [float(i) * 1.5 for i in range(size)],
+        "type": "float"
+    }
+
+def get_homogeneous_int_array(size):
+    """Homogeneous int array"""
+    return {
+        "data": [i for i in range(size)],
+        "type": "int"
+    }
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -380,6 +407,28 @@ def test_memory_regression_nested(env):
     results = []
     results.append(measure_memory(env, get_nested_doc(5), 'nested_5'))
     results.append(measure_memory(env, get_nested_doc(20), 'nested_20'))
+    
+    for result in results:
+        env.assertTrue(result['passes_budget'],
+                       message=f"{result['test_name']} overhead {result['json_overhead_ratio']:.2f}x exceeds budget {result['budget_ratio']:.2f}x")
+
+
+def test_memory_regression_homogeneous_arrays(env):
+    """Test memory budget for homogeneous arrays (optimized storage)"""
+    env.skipOnCluster()
+    
+    results = []
+    # U8 arrays (0-255 values)
+    results.append(measure_memory(env, get_homogeneous_u8_array(100), 'homogeneous_u8_100'))
+    results.append(measure_memory(env, get_homogeneous_u8_array(10000), 'homogeneous_u8_10000'))
+    
+    # Float arrays
+    results.append(measure_memory(env, get_homogeneous_float_array(100), 'homogeneous_float_100'))
+    results.append(measure_memory(env, get_homogeneous_float_array(10000), 'homogeneous_float_10000'))
+    
+    # Int arrays
+    results.append(measure_memory(env, get_homogeneous_int_array(100), 'homogeneous_int_100'))
+    results.append(measure_memory(env, get_homogeneous_int_array(10000), 'homogeneous_int_10000'))
     
     for result in results:
         env.assertTrue(result['passes_budget'],

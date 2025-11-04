@@ -153,6 +153,54 @@ def get_test_documents():
             'doc': _create_nested(20),
             'category': 'nested',
             'description': 'Deeply nested (20 levels)'
+        },
+        'homogeneous_u8_small': {
+            'doc': {
+                "data": [i % 256 for i in range(100)],
+                "type": "u8"
+            },
+            'category': 'homogeneous',
+            'description': 'Small homogeneous u8 array (100 items, values 0-255)'
+        },
+        'homogeneous_u8_large': {
+            'doc': {
+                "data": [i % 256 for i in range(10000)],
+                "type": "u8"
+            },
+            'category': 'homogeneous',
+            'description': 'Large homogeneous u8 array (10K items, values 0-255)'
+        },
+        'homogeneous_float_small': {
+            'doc': {
+                "data": [float(i) * 1.5 for i in range(100)],
+                "type": "float"
+            },
+            'category': 'homogeneous',
+            'description': 'Small homogeneous float array (100 items)'
+        },
+        'homogeneous_float_large': {
+            'doc': {
+                "data": [float(i) * 1.5 for i in range(10000)],
+                "type": "float"
+            },
+            'category': 'homogeneous',
+            'description': 'Large homogeneous float array (10K items)'
+        },
+        'homogeneous_int_small': {
+            'doc': {
+                "data": [i for i in range(100)],
+                "type": "int"
+            },
+            'category': 'homogeneous',
+            'description': 'Small homogeneous int array (100 items)'
+        },
+        'homogeneous_int_large': {
+            'doc': {
+                "data": [i for i in range(10000)],
+                "type": "int"
+            },
+            'category': 'homogeneous',
+            'description': 'Large homogeneous int array (10K items)'
         }
     }
 
