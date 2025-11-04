@@ -179,7 +179,8 @@ def test_asm_extreme_string_pressure():
                     operation_counts[0] += 1
                     
                     # Read entire document (accesses all strings in cache)
-                    result = thread_conn.execute_command("JSON.GET", key)
+                    # Use explicit $ path to get JSONPath format (array)
+                    result = thread_conn.execute_command("JSON.GET", key, "$")
                     if result:
                         try:
                             doc = json.loads(result)
@@ -455,8 +456,8 @@ def test_asm_use_after_free_crash():
                         thread_conn.execute_command("JSON.GET", key, "$.string_10")
                         thread_conn.execute_command("JSON.GET", key, "$.string_20")
                     else:
-                        # Get entire document without path
-                        result = thread_conn.execute_command("JSON.GET", key)
+                        # Get entire document with explicit $ path
+                        result = thread_conn.execute_command("JSON.GET", key, "$")
                         if result:
                             _ = len(result)  # Force string access
                     
