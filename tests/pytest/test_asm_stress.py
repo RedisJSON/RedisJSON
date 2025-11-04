@@ -356,3 +356,274 @@ def wait_for_migration(conn, task_id, timeout=5):
         time.sleep(0.01)  # Very short sleep for rapid checking
     raise TimeoutError(f"Migration {task_id} did not complete")
 
+
+def test_asm_use_after_free_crash():
+    """
+    Attempt to trigger use-after-free crash by accessing keys during TRIM phase.
+    
+    Scenario:
+    1. Thread reads key, gets reference to shared strings
+    2. Migration moves key to other shard
+    3. TRIM phase frees the key and strings on source shard
+    4. Thread tries to format response with freed strings
+    5. Expected: CRASH (use-after-free)
+    """
+    env = Env(shardsCount=2, decodeResponses=True)
+    if env.env != "oss-cluster":
+        env.skip()
+
+    num_keys = 100
+    strings_per_doc = 50
+    
+    env.debugPrint(f"Creating {num_keys} keys with large strings...", force=True)
+    
+    with env.getClusterConnectionIfNeeded() as conn:
+        for i in range(num_keys):
+            hslot = i * (len(slot_table) - 1) // (num_keys - 1)
+            key = f"json:{{{slot_table[hslot]}}}"
+            
+            # Create large documents with many strings (lots of cache entries)
+            doc = {
+                f"string_{j}": f"Large string value {j} for key {i} " + ("X" * 500)
+                for j in range(strings_per_doc)
+            }
+            conn.execute_command("JSON.SET", key, "$", json.dumps(doc))
+    
+    env.debugPrint("Starting use-after-free test...", force=True)
+    
+    done = False
+    errors = []
+    crashes = []
+    reads_completed = [0]
+    
+    def aggressive_reader():
+        """Continuously read keys, especially during migration"""
+        with env.getClusterConnectionIfNeeded() as thread_conn:
+            while not done:
+                try:
+                    # Pick random key
+                    key_idx = random.randint(0, num_keys - 1)
+                    hslot = key_idx * (len(slot_table) - 1) // (num_keys - 1)
+                    key = f"json:{{{slot_table[hslot]}}}"
+                    
+                    # Deep JSONPath query to force string access
+                    result = thread_conn.execute_command("JSON.GET", key, "$")
+                    
+                    if result:
+                        # Force parsing to actually access the strings
+                        data = json.loads(result)
+                        if data and len(data) > 0:
+                            # Access nested strings to force cache usage
+                            for item in data[:5]:  # Check first 5 items
+                                if isinstance(item, str) and len(item) > 0:
+                                    _ = item[0]  # Force string access
+                    
+                    reads_completed[0] += 1
+                    
+                    # No sleep - maximize race condition window
+                    
+                except Exception as e:
+                    error_str = str(e)
+                    if "MOVED" not in error_str and "ASK" not in error_str and "CLUSTERDOWN" not in error_str:
+                        if "connection" in error_str.lower() or "broken pipe" in error_str.lower():
+                            crashes.append(f"Connection error (possible crash): {e}")
+                        else:
+                            errors.append(str(e))
+    
+    def rapid_deep_queries():
+        """Issue complex queries that traverse entire documents"""
+        with env.getClusterConnectionIfNeeded() as thread_conn:
+            while not done:
+                try:
+                    key_idx = random.randint(0, num_keys - 1)
+                    hslot = key_idx * (len(slot_table) - 1) // (num_keys - 1)
+                    key = f"json:{{{slot_table[hslot]}}}"
+                    
+                    # Different query types to access strings in different ways
+                    query_type = random.randint(0, 2)
+                    if query_type == 0:
+                        # Get entire document (accesses all strings)
+                        result = thread_conn.execute_command("JSON.GET", key, "$")
+                        if result:
+                            data = json.loads(result)
+                            # Access all string values
+                            if data and isinstance(data, list) and len(data) > 0:
+                                for val in list(data[0].values())[:10]:
+                                    _ = str(val)
+                    elif query_type == 1:
+                        # Get specific fields
+                        thread_conn.execute_command("JSON.GET", key, "$.string_10")
+                        thread_conn.execute_command("JSON.GET", key, "$.string_20")
+                    else:
+                        # Get entire document without path
+                        result = thread_conn.execute_command("JSON.GET", key)
+                        if result:
+                            _ = len(result)  # Force string access
+                    
+                    reads_completed[0] += 1
+                    
+                except Exception as e:
+                    error_str = str(e)
+                    if "MOVED" not in error_str and "ASK" not in error_str and "CLUSTERDOWN" not in error_str:
+                        if "connection" in error_str.lower() or "broken pipe" in error_str.lower():
+                            crashes.append(f"Connection error (possible crash): {e}")
+                        else:
+                            errors.append(str(e))
+    
+    # Start many reader threads
+    threads = [
+        threading.Thread(target=aggressive_reader),
+        threading.Thread(target=aggressive_reader),
+        threading.Thread(target=rapid_deep_queries),
+        threading.Thread(target=rapid_deep_queries),
+        threading.Thread(target=aggressive_reader),
+        threading.Thread(target=rapid_deep_queries),
+    ]
+    
+    for t in threads:
+        t.start()
+    
+    # Let readers get going
+    time.sleep(0.2)
+    
+    env.debugPrint("Starting migrations while threads are reading...", force=True)
+    
+    # Perform multiple rapid migrations while threads are actively reading
+    try:
+        for round_num in range(8):
+            env.debugPrint(f"Migration round {round_num + 1}/8 (reads so far: {reads_completed[0]})", force=True)
+            
+            # Migrate and immediately continue (don't wait long)
+            migrate_slots_rapid(env)
+            
+            # Very short pause - maximize chance of use-after-free
+            time.sleep(0.05)
+            
+            # Check if Redis crashed
+            try:
+                with env.getClusterConnectionIfNeeded() as conn:
+                    conn.execute_command("PING")
+            except Exception as e:
+                crashes.append(f"Redis shard appears to have crashed: {e}")
+                break
+                
+    finally:
+        done = True
+        for t in threads:
+            t.join(timeout=5)
+    
+    env.debugPrint(f"Total reads completed: {reads_completed[0]}", force=True)
+    env.debugPrint(f"Crashes detected: {len(crashes)}", force=True)
+    env.debugPrint(f"Errors: {len(errors)}", force=True)
+    
+    if crashes:
+        raise AssertionError(f"CRASH DETECTED! {len(crashes)} crashes: {crashes[:5]}")
+    
+    if errors:
+        # Show unique errors
+        unique_errors = list(set(errors))[:10]
+        env.debugPrint(f"Non-crash errors: {unique_errors}", force=True)
+
+
+def test_asm_read_during_trim():
+    """
+    Try to read keys at the exact moment they're being trimmed from source shard.
+    
+    The TRIM phase is when ASM deletes keys from the source shard after migration.
+    This is the most likely time for use-after-free bugs.
+    """
+    env = Env(shardsCount=2, decodeResponses=True)
+    if env.env != "oss-cluster":
+        env.skip()
+
+    # Create keys in specific slots that we'll migrate
+    target_slot_keys = [slot_table[5], slot_table[10], slot_table[15]]
+    
+    env.debugPrint(f"Creating keys in target slots: {target_slot_keys}", force=True)
+    
+    with env.getClusterConnectionIfNeeded() as conn:
+        for slot_key in target_slot_keys:
+            for i in range(30):
+                key = f"json:{{{slot_key}}}:{i}"
+                # Large document with many string fields
+                doc = {
+                    "id": i,
+                    "data": "Y" * 1000,  # Large string
+                    "nested": {
+                        f"field_{j}": f"Nested string {j} with data " + ("Z" * 200)
+                        for j in range(20)
+                    }
+                }
+                conn.execute_command("JSON.SET", key, "$", json.dumps(doc))
+    
+    done = False
+    errors = []
+    connection_errors = []
+    read_count = [0]
+    
+    def read_target_keys_aggressively():
+        """Hammer the specific keys being migrated"""
+        with env.getClusterConnectionIfNeeded() as thread_conn:
+            while not done:
+                try:
+                    slot_key = random.choice(target_slot_keys)
+                    key_num = random.randint(0, 29)
+                    key = f"json:{{{slot_key}}}:{key_num}"
+                    
+                    # Try multiple operations that access strings
+                    thread_conn.execute_command("JSON.GET", key, "$.nested")
+                    thread_conn.execute_command("JSON.GET", key, "$.data")
+                    thread_conn.execute_command("JSON.GET", key, "$")
+                    
+                    read_count[0] += 3
+                    
+                except Exception as e:
+                    error_str = str(e)
+                    if "connection" in error_str.lower() or "broken" in error_str.lower() or "reset" in error_str.lower():
+                        connection_errors.append(str(e))
+                    elif "MOVED" not in error_str and "ASK" not in error_str:
+                        errors.append(str(e))
+    
+    # Start threads hammering the keys
+    threads = [threading.Thread(target=read_target_keys_aggressively) for _ in range(10)]
+    for t in threads:
+        t.start()
+    
+    time.sleep(0.2)
+    
+    env.debugPrint("Starting migration of target slots...", force=True)
+    
+    # Get slot ranges for our target keys
+    first_conn = env.getConnection(0)
+    
+    try:
+        # Migrate multiple times to increase crash probability
+        for i in range(5):
+            env.debugPrint(f"Migration cycle {i+1}/5", force=True)
+            
+            # Start migration
+            migrate_slots_rapid(env)
+            
+            # Continue hammering during TRIM phase (very short window)
+            time.sleep(0.1)
+            
+            # Check if shard is still alive
+            try:
+                first_conn.execute_command("PING")
+            except Exception as e:
+                connection_errors.append(f"Shard crash detected: {e}")
+                break
+    finally:
+        done = True
+        for t in threads:
+            t.join(timeout=5)
+    
+    env.debugPrint(f"Total reads: {read_count[0]}", force=True)
+    env.debugPrint(f"Connection errors: {len(connection_errors)}", force=True)
+    
+    if connection_errors:
+        raise AssertionError(f"CONNECTION LOST - POSSIBLE CRASH! {len(connection_errors)} errors: {connection_errors[:5]}")
+    
+    if errors:
+        env.debugPrint(f"Other errors: {len(errors)}", force=True)
+
