@@ -133,7 +133,10 @@ update:
 lint:
 	$(SHOW)cargo fmt -- --check
 
-.PHONY: lint
+format:
+	$(SHOW)cargo fmt
+
+.PHONY: lint format
 
 #----------------------------------------------------------------------------------------------
 

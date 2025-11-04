@@ -38,3 +38,6 @@ wordlist.dic
 config.txt
 
 venv/
+dump.rdb
+memory_report*.json
+memory_report*.txt
