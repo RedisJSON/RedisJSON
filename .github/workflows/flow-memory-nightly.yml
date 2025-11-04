@@ -162,6 +162,12 @@ jobs:
           SMALL=$(grep "METRIC:small_doc_overhead:" memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]')
           LARGE=$(grep "METRIC:large_doc_overhead:" memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]')
           
+          # Extract homogeneous array metrics
+          HOMO_U8_SM=$(grep "METRIC:homogeneous_u8_small_overhead_ratio:" memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
+          HOMO_U8_LG=$(grep "METRIC:homogeneous_u8_large_overhead_ratio:" memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
+          HOMO_FLT=$(grep "METRIC:homogeneous_float_large_overhead_ratio:" memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
+          HOMO_INT=$(grep "METRIC:homogeneous_int_large_overhead_ratio:" memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
+          
           # Validate that we got values
           if [ -z "$OVERHEAD" ] || [ -z "$SMALL" ] || [ -z "$LARGE" ]; then
             echo "⚠️ Warning: Could not extract all metrics"
@@ -187,6 +193,18 @@ jobs:
           echo "|---------------|----------|" >> $GITHUB_STEP_SUMMARY
           echo "| Small | ${SMALL}x |" >> $GITHUB_STEP_SUMMARY
           echo "| Large | ${LARGE}x |" >> $GITHUB_STEP_SUMMARY
+          if [ -n "$HOMO_U8_SM" ]; then
+            echo "| Homo u8[100] | ${HOMO_U8_SM}x |" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ -n "$HOMO_U8_LG" ]; then
+            echo "| Homo u8[10K] | ${HOMO_U8_LG}x |" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ -n "$HOMO_FLT" ]; then
+            echo "| Homo float[10K] | ${HOMO_FLT}x |" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ -n "$HOMO_INT" ]; then
+            echo "| Homo int[10K] | ${HOMO_INT}x |" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "_RedisJSON uses ${OVERHEAD}x more memory than regular Redis strings_" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
