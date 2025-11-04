@@ -545,14 +545,20 @@ def test_nightly_memory_report(env):
 def test_nightly_memory_report_summary_only(env):
     """
     Generate summary-only report (faster, for quick checks).
+    Includes homogeneous arrays to track optimization.
     """
     env.skipOnCluster()
     
-    # Measure only key documents
+    # Measure key documents including homogeneous arrays
+    all_docs = get_test_documents()
     key_docs = {
-        'small': get_test_documents()['small'],
-        'medium': get_test_documents()['medium'],
-        'large': get_test_documents()['large']
+        'small': all_docs['small'],
+        'medium': all_docs['medium'],
+        'large': all_docs['large'],
+        'homogeneous_u8_small': all_docs['homogeneous_u8_small'],
+        'homogeneous_u8_large': all_docs['homogeneous_u8_large'],
+        'homogeneous_float_large': all_docs['homogeneous_float_large'],
+        'homogeneous_int_large': all_docs['homogeneous_int_large']
     }
     
     results = []

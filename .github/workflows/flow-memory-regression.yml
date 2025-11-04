@@ -160,6 +160,12 @@ jobs:
           CURRENT_SMALL=$(grep "METRIC:small_doc_overhead:" pr_memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
           CURRENT_LARGE=$(grep "METRIC:large_doc_overhead:" pr_memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
           
+          # Extract homogeneous array metrics
+          CURRENT_HOMO_U8_SM=$(grep "METRIC:homogeneous_u8_small_overhead_ratio:" pr_memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
+          CURRENT_HOMO_U8_LG=$(grep "METRIC:homogeneous_u8_large_overhead_ratio:" pr_memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
+          CURRENT_HOMO_FLT=$(grep "METRIC:homogeneous_float_large_overhead_ratio:" pr_memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
+          CURRENT_HOMO_INT=$(grep "METRIC:homogeneous_int_large_overhead_ratio:" pr_memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
+          
           if [ -f "baseline/memory_report.txt" ]; then
             echo "✅ Baseline file found, performing comparison..."
             # Overall metric
@@ -207,6 +213,66 @@ jobs:
               echo "| Large docs | ${CURRENT_LARGE}x | ${BASELINE_LARGE}x | ${DIFF_LARGE}x (${PERCENT_LARGE}%) | ${STATUS_LARGE} |" >> $GITHUB_STEP_SUMMARY
             fi
             
+            # Homogeneous u8 small array
+            BASELINE_HOMO_U8_SM=$(grep "METRIC:homogeneous_u8_small_overhead_ratio:" baseline/memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
+            if [ -n "$BASELINE_HOMO_U8_SM" ] && [ -n "$CURRENT_HOMO_U8_SM" ]; then
+              DIFF_HOMO=$(echo "$CURRENT_HOMO_U8_SM - $BASELINE_HOMO_U8_SM" | bc -l)
+              PERCENT_HOMO=$(echo "scale=2; ($DIFF_HOMO / $BASELINE_HOMO_U8_SM) * 100" | bc -l)
+              if [ $(echo "$PERCENT_HOMO > 5" | bc -l) -eq 1 ]; then
+                STATUS_HOMO="⚠️ +${PERCENT_HOMO}%"
+              elif [ $(echo "$PERCENT_HOMO < -5" | bc -l) -eq 1 ]; then
+                STATUS_HOMO="✅ ${PERCENT_HOMO}%"
+              else
+                STATUS_HOMO="✅ Stable"
+              fi
+              echo "| Homo u8[100] | ${CURRENT_HOMO_U8_SM}x | ${BASELINE_HOMO_U8_SM}x | ${DIFF_HOMO}x (${PERCENT_HOMO}%) | ${STATUS_HOMO} |" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            # Homogeneous u8 large array
+            BASELINE_HOMO_U8_LG=$(grep "METRIC:homogeneous_u8_large_overhead_ratio:" baseline/memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
+            if [ -n "$BASELINE_HOMO_U8_LG" ] && [ -n "$CURRENT_HOMO_U8_LG" ]; then
+              DIFF_HOMO=$(echo "$CURRENT_HOMO_U8_LG - $BASELINE_HOMO_U8_LG" | bc -l)
+              PERCENT_HOMO=$(echo "scale=2; ($DIFF_HOMO / $BASELINE_HOMO_U8_LG) * 100" | bc -l)
+              if [ $(echo "$PERCENT_HOMO > 5" | bc -l) -eq 1 ]; then
+                STATUS_HOMO="⚠️ +${PERCENT_HOMO}%"
+              elif [ $(echo "$PERCENT_HOMO < -5" | bc -l) -eq 1 ]; then
+                STATUS_HOMO="✅ ${PERCENT_HOMO}%"
+              else
+                STATUS_HOMO="✅ Stable"
+              fi
+              echo "| Homo u8[10K] | ${CURRENT_HOMO_U8_LG}x | ${BASELINE_HOMO_U8_LG}x | ${DIFF_HOMO}x (${PERCENT_HOMO}%) | ${STATUS_HOMO} |" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            # Homogeneous float large
+            BASELINE_HOMO_FLT=$(grep "METRIC:homogeneous_float_large_overhead_ratio:" baseline/memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
+            if [ -n "$BASELINE_HOMO_FLT" ] && [ -n "$CURRENT_HOMO_FLT" ]; then
+              DIFF_HOMO=$(echo "$CURRENT_HOMO_FLT - $BASELINE_HOMO_FLT" | bc -l)
+              PERCENT_HOMO=$(echo "scale=2; ($DIFF_HOMO / $BASELINE_HOMO_FLT) * 100" | bc -l)
+              if [ $(echo "$PERCENT_HOMO > 5" | bc -l) -eq 1 ]; then
+                STATUS_HOMO="⚠️ +${PERCENT_HOMO}%"
+              elif [ $(echo "$PERCENT_HOMO < -5" | bc -l) -eq 1 ]; then
+                STATUS_HOMO="✅ ${PERCENT_HOMO}%"
+              else
+                STATUS_HOMO="✅ Stable"
+              fi
+              echo "| Homo float[10K] | ${CURRENT_HOMO_FLT}x | ${BASELINE_HOMO_FLT}x | ${DIFF_HOMO}x (${PERCENT_HOMO}%) | ${STATUS_HOMO} |" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            # Homogeneous int large
+            BASELINE_HOMO_INT=$(grep "METRIC:homogeneous_int_large_overhead_ratio:" baseline/memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
+            if [ -n "$BASELINE_HOMO_INT" ] && [ -n "$CURRENT_HOMO_INT" ]; then
+              DIFF_HOMO=$(echo "$CURRENT_HOMO_INT - $BASELINE_HOMO_INT" | bc -l)
+              PERCENT_HOMO=$(echo "scale=2; ($DIFF_HOMO / $BASELINE_HOMO_INT) * 100" | bc -l)
+              if [ $(echo "$PERCENT_HOMO > 5" | bc -l) -eq 1 ]; then
+                STATUS_HOMO="⚠️ +${PERCENT_HOMO}%"
+              elif [ $(echo "$PERCENT_HOMO < -5" | bc -l) -eq 1 ]; then
+                STATUS_HOMO="✅ ${PERCENT_HOMO}%"
+              else
+                STATUS_HOMO="✅ Stable"
+              fi
+              echo "| Homo int[10K] | ${CURRENT_HOMO_INT}x | ${BASELINE_HOMO_INT}x | ${DIFF_HOMO}x (${PERCENT_HOMO}%) | ${STATUS_HOMO} |" >> $GITHUB_STEP_SUMMARY
+            fi
+            
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "_Comparison against nightly baseline from main branch_" >> $GITHUB_STEP_SUMMARY
           else
@@ -218,6 +284,18 @@ jobs:
             fi
             if [ -n "$CURRENT_LARGE" ]; then
               echo "| Large docs | ${CURRENT_LARGE}x | N/A | N/A | ℹ️ No baseline |" >> $GITHUB_STEP_SUMMARY
+            fi
+            if [ -n "$CURRENT_HOMO_U8_SM" ]; then
+              echo "| Homo u8[100] | ${CURRENT_HOMO_U8_SM}x | N/A | N/A | ℹ️ No baseline |" >> $GITHUB_STEP_SUMMARY
+            fi
+            if [ -n "$CURRENT_HOMO_U8_LG" ]; then
+              echo "| Homo u8[10K] | ${CURRENT_HOMO_U8_LG}x | N/A | N/A | ℹ️ No baseline |" >> $GITHUB_STEP_SUMMARY
+            fi
+            if [ -n "$CURRENT_HOMO_FLT" ]; then
+              echo "| Homo float[10K] | ${CURRENT_HOMO_FLT}x | N/A | N/A | ℹ️ No baseline |" >> $GITHUB_STEP_SUMMARY
+            fi
+            if [ -n "$CURRENT_HOMO_INT" ]; then
+              echo "| Homo int[10K] | ${CURRENT_HOMO_INT}x | N/A | N/A | ℹ️ No baseline |" >> $GITHUB_STEP_SUMMARY
             fi
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "ℹ️ No nightly baseline found. This PR will create the first baseline after merging to main." >> $GITHUB_STEP_SUMMARY
