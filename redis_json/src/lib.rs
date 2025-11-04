@@ -212,8 +212,23 @@ macro_rules! redis_json_module_create {
                     RedisValue::Array(a) => !a.is_empty(),
                     _ => false,
                 });
-            ctx.log_notice(&format!("Initialized shared string cache, thread safe: {is_bigredis}."));
-            if let Err(e) = $crate::init_ijson_shared_string_cache(is_bigredis) {
+            
+            // Check if cluster mode is enabled (required for ASM)
+            let is_cluster_enabled =
+                ctx.call("config", &["get", "cluster-enabled"])
+                .map_or(false, |res| match res {
+                    RedisValue::Array(a) => a.len() >= 2 && a[1] == RedisValue::SimpleStringStatic("yes"),
+                    _ => false,
+                });
+            
+            // Enable thread-safe cache if in cluster mode (for ASM) or bigredis
+            let thread_safe_cache = is_bigredis || is_cluster_enabled;
+            
+            ctx.log_notice(&format!(
+                "Initialized shared string cache, thread safe: {} (cluster: {}, bigredis: {}).",
+                thread_safe_cache, is_cluster_enabled, is_bigredis
+            ));
+            if let Err(e) = $crate::init_ijson_shared_string_cache(thread_safe_cache) {
                 ctx.log(RedisLogLevel::Warning, &format!("Failed initializing shared string cache, {e}."));
                 return Status::Err;
             }
