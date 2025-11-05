@@ -206,29 +206,10 @@ macro_rules! redis_json_module_create {
             export_shared_api(ctx);
             ctx.set_module_options(ModuleOptions::HANDLE_IO_ERRORS);
             ctx.log_notice("Enabled diskless replication");
-            let is_bigredis =
-                ctx.call("config", &["get", "bigredis-enabled"])
-                .map_or(false, |res| match res {
-                    RedisValue::Array(a) => !a.is_empty(),
-                    _ => false,
-                });
-            
-            // Check if cluster mode is enabled (required for ASM)
-            let is_cluster_enabled =
-                ctx.call("config", &["get", "cluster-enabled"])
-                .map_or(false, |res| match res {
-                    RedisValue::Array(a) => a.len() >= 2 && a[1] == RedisValue::SimpleStringStatic("yes"),
-                    _ => false,
-                });
-            
-            // Enable thread-safe cache if in cluster mode (for ASM) or bigredis
-            let thread_safe_cache = is_bigredis || is_cluster_enabled;
-            
-            ctx.log_notice(&format!(
-                "Initialized shared string cache, thread safe: {} (cluster: {}, bigredis: {}).",
-                thread_safe_cache, is_cluster_enabled, is_bigredis
-            ));
-            if let Err(e) = $crate::init_ijson_shared_string_cache(thread_safe_cache) {
+            // Always enable thread-safe cache for ASM support
+            // RwLock has zero overhead when there's no contention
+            ctx.log_notice("Initialized shared string cache, thread safe: true.");
+            if let Err(e) = $crate::init_ijson_shared_string_cache(true) {
                 ctx.log(RedisLogLevel::Warning, &format!("Failed initializing shared string cache, {e}."));
                 return Status::Err;
             }
