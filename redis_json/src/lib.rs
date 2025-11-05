@@ -241,7 +241,6 @@ macro_rules! redis_json_module_create {
             init: initialize,
             info: $info_func,
             commands: [
-                ["json.del", json_command!(json_del), "write", 1,1,1, ACL::Write, ACL::from("json")],
                 ["json.mget", json_command!(json_mget), "readonly", 1,1,1, ACL::Read, ACL::from("json")],
                 ["json.type", json_command!(json_type), "readonly", 1,1,1, ACL::Read, ACL::from("json")],
                 ["json.numincrby", json_command!(json_num_incrby), "write", 1,1,1, ACL::Write, ACL::from("json")],
@@ -260,7 +259,6 @@ macro_rules! redis_json_module_create {
                 ["json.objlen", json_command!(json_obj_len), "readonly", 1,1,1, ACL::Read, ACL::from("json")],
                 ["json.clear", json_command!(json_clear), "write", 1,1,1, ACL::Write, ACL::from("json")],
                 ["json.debug", json_command!(json_debug), "readonly", 2,2,1, ACL::Read, ACL::from("json")],
-                ["json.forget", json_command!(json_del), "write", 1,1,1, ACL::Write, ACL::from("json")],
                 ["json.resp", json_command!(json_resp), "readonly", 1,1,1, ACL::Read, ACL::from("json")],
             ],
         }

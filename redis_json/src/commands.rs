@@ -109,7 +109,7 @@ fn is_resp3(ctx: &Context) -> bool {
                 notes: "The key containing the JSON document",
                 flags: [ReadOnly, Access],
                 begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 1, steps: 1, limit: 1 }),
+                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
             }
         ],
         args: [
@@ -277,7 +277,7 @@ fn json_get_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
                 notes: "The key containing the JSON document",
                 flags: [ReadWrite],
                 begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 1, steps: 1, limit: 1 }),
+                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
             }
         ],
         args: [
@@ -439,7 +439,7 @@ fn json_set_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
                 notes: "The key containing the JSON document",
                 flags: [ReadWrite],
                 begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 1, steps: 1, limit: 1 }),
+                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
             }
         ],
         args: [
@@ -883,7 +883,55 @@ pub fn prepare_paths_for_updating(paths: &mut Vec<Vec<String>>) {
 ///
 /// JSON.DEL <key> [path]
 ///
-pub fn json_del<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+/// 
+macro_rules! json_del_command {
+    ($name:literal, $item:item) => {
+        #[command(
+            {
+                name: $name,
+                flags: [Write],
+                arity: -2,
+                complexity: "O(N) when path is evaluated to a single value where N is the size of the deleted value, O(N) when path is evaluated to multiple values, where N is the size of the key",
+                since: "1.0.0",
+                summary: "Delete a value",
+                key_spec: [
+                    {
+                        notes: "The key containing the JSON document",
+                        flags: [ReadWrite],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    { name: "key",  arg_type: Key,    key_spec_index: 0 },
+                    { name: "path", arg_type: String, flags: [Optional] }
+                ]
+            }
+        )]
+        $item
+    };
+}
+
+
+json_del_command!("JSON.DEL",
+pub fn json_del(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+    crate::run_on_manager!(
+        pre_command: || {},
+        get_manage: {
+            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            })
+        },
+        run: |mngr| json_del_impl(mngr, ctx, args),
+    )
+});
+
+json_del_command!("JSON.FORGET",
+pub fn json_forget(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+    json_del(ctx, args)
+});
+
+fn json_del_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;
