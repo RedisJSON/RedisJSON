@@ -308,9 +308,38 @@ fn json_get_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
                         name: "xx",
                         arg_type: PureToken,
                         token: "XX",
-                    }
-                ]
-            }
+                    }]
+                },
+                {
+                    name: "format",
+                    token: "FORMAT",
+                    arg_type: Block,
+                    flags: [Optional],
+                    subargs: [
+                        {
+                            name: "format-token",
+                            arg_type: OneOf,
+                            subargs: [
+                                {
+                                    name: "STRING",
+                                    arg_type: PureToken,
+                                    token: "STRING",
+                                },
+                                {
+                                    name: "JSON",
+                                    arg_type: PureToken,
+                                    token: "JSON",
+                                },
+                                {
+                                    name: "BSON",
+                                    arg_type: PureToken,
+                                    token: "BSON",
+                                }
+                            ]
+    
+                        }
+                    ]
+                }   
         ],
     }
 )]
@@ -326,9 +355,6 @@ pub fn json_set(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     )
 }
 
-///
-/// JSON.SET <key> <path> <json> [NX | XX | FORMAT <format>]
-///
 fn json_set_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
