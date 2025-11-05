@@ -426,7 +426,82 @@ fn json_set_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
 ///
 /// JSON.MERGE <key> <path> <json> [FORMAT <format>]
 ///
-pub fn json_merge<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+#[command(
+    {
+        name: "JSON.MERGE",
+        flags: [Write, DenyOOM],
+        arity: -4,
+        complexity: "O(M+N) when path is evaluated to a single value where M is the size of the original value (if it exists) and N is the size of the new value, O(M+N) when path is evaluated to multiple values where M is the size of the key and N is the size of the new value * the number of original values in the key",
+        since: "2.6.0",
+        summary: "Merge a given JSON value into matching paths. Consequently, JSON values at matching paths are updated, deleted, or expanded with new children",
+        key_spec: [
+            {
+                notes: "The key containing the JSON document",
+                flags: [ReadWrite],
+                begin_search: Index({ index: 1 }),
+                find_keys: Range({ last_key: 1, steps: 1, limit: 1 }),
+            }
+        ],
+        args: [
+            {
+                name: "key",
+                arg_type: Key,
+                key_spec_index: 0,
+            },
+            {
+                name: "path",
+                arg_type: String,
+            },
+            {
+                name: "json",
+                arg_type: String,
+            },
+            {
+                name: "format",
+                token: "FORMAT",
+                arg_type: Block,
+                flags: [Optional],
+                subargs: [
+                    {
+                        name: "format-token",
+                        arg_type: OneOf,
+                        subargs: [
+                            {
+                                name: "STRING",
+                                arg_type: PureToken,
+                                token: "STRING",
+                            },
+                            {
+                                name: "JSON",
+                                arg_type: PureToken,
+                                token: "JSON",
+                            },
+                            {
+                                name: "BSON",
+                                arg_type: PureToken,
+                                token: "BSON",
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+)]
+pub fn json_merge(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+    crate::run_on_manager!(
+        pre_command: || {},
+        get_manage: {
+            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            })
+        },
+        run: |mngr| json_merge_impl(mngr, ctx, args),
+    )
+}
+
+
+fn json_merge_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;
