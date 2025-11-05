@@ -205,7 +205,6 @@ pub fn json_get(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     )
 }
 
-/// Implementation of JSON.GET with Manager abstraction
 fn json_get_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
@@ -265,7 +264,72 @@ fn json_get_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
 ///
 /// JSON.SET <key> <path> <json> [NX | XX | FORMAT <format>]
 ///
-pub fn json_set<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+#[command(
+    {
+        name: "JSON.SET",
+        flags: [Write, DenyOOM],
+        arity: -4,
+        complexity: "O(M+N) where M is the size of the original value (if it exists) and N is the size of the new value",
+        since: "1.0.0",
+        summary: "Set the JSON value at path in key",
+        key_spec: [
+            {
+                notes: "The key containing the JSON document",
+                flags: [ReadWrite],
+                begin_search: Index({ index: 1 }),
+                find_keys: Range({ last_key: 1, steps: 1, limit: 1 }),
+            }
+        ],
+        args: [
+            {
+                name: "key",
+                arg_type: Key,
+                key_spec_index: 0,
+            },
+            {
+                name: "path",
+                arg_type: String,
+            },
+            {
+                name: "json",
+                arg_type: String,
+            },
+            {
+                name: "condition",
+                arg_type: OneOf,
+                flags: [Optional],
+                subargs: [
+                    {
+                        name: "nx",
+                        arg_type: PureToken,
+                        token: "NX",
+                    },
+                    {
+                        name: "xx",
+                        arg_type: PureToken,
+                        token: "XX",
+                    }
+                ]
+            }
+        ],
+    }
+)]
+pub fn json_set(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+    crate::run_on_manager!(
+        pre_command: || {},
+        get_manage: {
+            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            })
+        },
+        run: |mngr| json_set_impl(mngr, ctx, args),
+    )
+}
+
+///
+/// JSON.SET <key> <path> <json> [NX | XX | FORMAT <format>]
+///
+fn json_set_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;
