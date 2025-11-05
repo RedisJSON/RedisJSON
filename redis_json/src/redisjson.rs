@@ -160,8 +160,8 @@ pub const JSON_ROOT_PATH: Path = Path {
 impl Default for Path<'_> {
     fn default() -> Self {
         Path {
-            original_path: JSON_ROOT_PATH_LEGACY,
-            fixed_path: Some(JSON_ROOT_PATH_S.into()),
+            original_path: JSON_ROOT_PATH_S,
+            fixed_path: None,
         }
     }
 }
