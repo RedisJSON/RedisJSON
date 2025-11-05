@@ -331,7 +331,7 @@ def test_asm_with_mixed_json_operations():
                 operation_counts[op] += 1
                 
                 if op == "get":
-                    conn.execute_command("JSON.GET", key)
+                    conn.execute_command("JSON.GET", key, "$")
                 elif op == "set":
                     doc = {"value": random.randint(0, 1000), "op": "set"}
                     conn.execute_command("JSON.SET", key, "$", json.dumps(doc))
@@ -407,14 +407,14 @@ def test_asm_with_large_json_documents():
 
         # Verify data before migration
         test_key = f"json:{{{slot_table[0]}}}"
-        original_data = conn.execute_command("JSON.GET", test_key)
+        original_data = conn.execute_command("JSON.GET", test_key, "$")
 
     # Perform migration
     migrate_slots_back_and_forth(env)
 
     # Verify data after migration
     with env.getClusterConnectionIfNeeded() as conn:
-        migrated_data = conn.execute_command("JSON.GET", test_key)
+        migrated_data = conn.execute_command("JSON.GET", test_key, "$")
         assert original_data == migrated_data, "Data corruption detected in large document after migration"
 
 
