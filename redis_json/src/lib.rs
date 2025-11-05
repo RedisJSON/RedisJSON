@@ -158,6 +158,7 @@ macro_rules! redis_json_module_create {
         use std::collections::HashMap;
         use $crate::c_api::create_rmstring;
 
+        #[macro_export]
         macro_rules! json_command {
             ($cmd:ident) => {
                 |ctx: &Context, args: Vec<RedisString>| -> RedisResult {
@@ -241,7 +242,7 @@ macro_rules! redis_json_module_create {
             info: $info_func,
             commands: [
                 ["json.del", json_command!(json_del), "write", 1,1,1, ACL::Write, ACL::from("json")],
-                ["json.get", json_command!(json_get), "readonly", 1,1,1, ACL::Read, ACL::from("json")],
+                //["json.get", json_get, "readonly", 1,1,1, ACL::Read, ACL::from("json")],
                 ["json.mget", json_command!(json_mget), "readonly", 1,1,1, ACL::Read, ACL::from("json")],
                 ["json.set", json_command!(json_set), "write deny-oom", 1,1,1, ACL::Write, ACL::from("json")],
                 ["json.mset", json_command!(json_mset), "write deny-oom", 1,-1,3, ACL::Write, ACL::from("json")],

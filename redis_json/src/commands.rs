@@ -19,7 +19,9 @@ use crate::redisjson::{Format, Path, ReplyFormat, SetOptions, JSON_ROOT_PATH};
 use json_path::select_value::{SelectValue, SelectValueType, ValueRef};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
+use redis_module_macros::command;
 use std::cmp::Ordering;
+use std::marker::PhantomData;
 use std::str::FromStr;
 
 use json_path::{calc_once_with_paths, compile, json_path::UserPathTracker};
@@ -94,7 +96,117 @@ fn is_resp3(ctx: &Context) -> bool {
 ///         [FORMAT {STRING|EXPAND1|EXPAND}]      /* default is STRING */
 ///         [path ...]
 ///
-pub fn json_get<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+#[command(
+    {
+        name: "JSON.GET",
+        flags: [ReadOnly],
+        arity: -2,
+        complexity: "O(N) where N is the size of the JSON",
+        since: "1.0.0",
+        summary: "Get JSON value at path",
+        key_spec: [
+            {
+                notes: "The key containing the JSON document",
+                flags: [ReadOnly, Access],
+                begin_search: Index({ index: 1 }),
+                find_keys: Range({ last_key: 1, steps: 1, limit: 1 }),
+            }
+        ],
+        args: [
+            {
+                name: "key",
+                arg_type: Key,
+                key_spec_index: 0,
+            },
+            {
+                name: "indent",
+                token: "INDENT",
+                arg_type: Block,
+                flags: [Optional],
+                subargs: [
+                    {
+                        name: "indent",
+                        arg_type: String,
+                    }
+                ]
+            },
+            {
+                name: "newline",
+                token: "NEWLINE",
+                arg_type: Block,
+                flags: [Optional],
+                subargs: [
+                    {
+                        name: "newline",
+                        arg_type: String,
+                    }
+                ]
+            },
+            {
+                name: "space",
+                token: "SPACE",
+                arg_type: Block,
+                flags: [Optional],
+                subargs: [
+                    {
+                        name: "space",
+                        arg_type: String,
+                    }
+                ]
+            },
+            {
+                name: "format",
+                token: "FORMAT",
+                arg_type: Block,
+                flags: [Optional],
+                subargs: [
+                    {
+                        name: "format-token",
+                        arg_type: OneOf,
+                        subargs: [
+                            {
+                                name: "STRING",
+                                arg_type: PureToken,
+                                token: "STRING",
+                            },
+                            {
+                                name: "EXPAND1",
+                                arg_type: PureToken,
+                                token: "EXPAND1",
+                            },
+                            {
+                                name: "EXPAND",
+                                arg_type: PureToken,
+                                token: "EXPAND",
+                            }
+                        ]
+
+                    }
+                ]
+            }, 
+            {
+                name: "path",
+                arg_type: String,
+                flags: [Optional, Multiple],
+            }
+        ]
+    }
+)]
+pub fn json_get(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+    //TODO AVIV: solve this with the macro
+    crate::run_on_manager!(
+        pre_command: || {},
+        get_manage: {
+            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            })
+        },
+        run: |mngr| json_get_impl(mngr, ctx, args),
+    )
+}
+
+/// Implementation of JSON.GET with Manager abstraction
+fn json_get_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
 
