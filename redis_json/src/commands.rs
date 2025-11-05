@@ -584,7 +584,59 @@ fn json_merge_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>
 ///
 /// JSON.MSET <key> <path> <json> [[<key> <path> <json>]...]
 ///
-pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+#[command(
+    {
+        name: "JSON.MSET",
+        flags: [Write, DenyOOM],
+        arity: -4,
+        complexity: "O(K*(M+N)) where k is the number of keys in the command, when path is evaluated to a single value where M is the size of the original value (if it exists) and N is the size of the new value, or O(K*(M+N)) when path is evaluated to multiple values where M is the size of the key and N is the size of the new value * the number of original values in the key",
+        since: "2.6.0",
+        summary: "Set or update one or more JSON values according to the specified key-path-value triplets",
+        key_spec: [
+            {
+                notes: "The key containing the JSON document",
+                flags: [ReadWrite],
+                begin_search: Index({ index: 1 }),
+                find_keys: Range({ last_key: -1, steps: 3, limit: 0 }),
+            }
+        ],
+        args: [
+            {
+                name: "triplet",
+                arg_type: Block,
+                flags: [Multiple],
+                subargs: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
+                    },
+                    {
+                        name: "path",
+                        arg_type: String,
+                    },
+                    {
+                        name: "json",
+                        arg_type: String,
+                    }
+                ]
+            }
+        ]
+    }
+)]
+pub fn json_mset(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+    crate::run_on_manager!(
+        pre_command: || {},
+        get_manage: {
+            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            })
+        },
+        run: |mngr| json_mset_impl(mngr, ctx, args),
+    )
+}
+
+fn json_mset_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     if args.len() < 3 {
