@@ -80,7 +80,7 @@ jobs:
         continue-on-error: true
         with:
           workflow: event-nightly.yml
-          branch: main
+          branch: master
           name: memory-report-baseline
           path: baseline/
           if_no_artifact_found: ignore
