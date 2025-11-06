@@ -1292,12 +1292,14 @@ def test_asm_shared_string_cache_race():
     env.debugPrint(f"Errors: {len(errors)}", force=True)
     
     if crashes_detected[0]:
-        env.assertTrue(False, "CRASH DETECTED during shared string cache stress test!")
+        # Use env.assertEqual to avoid RLTest f-string bug
+        env.assertEqual(crashes_detected[0], 0)
     
     if errors:
         unique_errors = list(set(errors))[:20]
         env.debugPrint(f"Unique errors: {unique_errors}", force=True)
-        env.assertTrue(False, f"Detected {len(errors)} errors during shared string cache stress: {unique_errors[:5]}")
+        # Use env.assertEqual to avoid RLTest f-string bug
+        env.assertEqual(len(errors), 0)
     
     env.debugPrint("=== Shared String Cache Race Test PASSED ===", force=True)
 
@@ -1378,7 +1380,8 @@ def test_asm_string_cache_eviction_race():
     
     if errors:
         env.debugPrint(f"Sample errors: {errors[:5]}", force=True)
-        env.assertTrue(False, f"Detected {len(errors)} errors during cache eviction test")
+        # Use env.assertEqual to avoid RLTest f-string bug
+        env.assertEqual(len(errors), 0)
 
 
 def migrate_slots_back_and_forth(env):
@@ -1463,28 +1466,28 @@ def test_shared_strings_concurrent_writes_cluster():
         }
     }
     
-    conn = env.getConnection()
     errors = []
     success_count = [0]
     
     def write_worker(worker_id, iterations):
         """Worker thread that writes JSON documents"""
         try:
-            thread_conn = env.getConnection()
-            for i in range(iterations):
-                doc = template_json.copy()
-                doc["user_id"] = worker_id * 1000 + i
-                doc["username"] = f"user_{worker_id}_{i}"
-                
-                key = f"user:{worker_id}:{i}"
-                thread_conn.execute_command("JSON.SET", key, "$", json.dumps(doc))
-                
-                # Verify immediately
-                result = json.loads(thread_conn.execute_command("JSON.GET", key, "$"))
-                if result[0]["user_id"] != doc["user_id"]:
-                    errors.append(f"Data corruption in worker {worker_id} iteration {i}")
-                else:
-                    success_count[0] += 1
+            # Use cluster-aware connection to handle MOVED responses
+            with env.getClusterConnectionIfNeeded() as thread_conn:
+                for i in range(iterations):
+                    doc = template_json.copy()
+                    doc["user_id"] = worker_id * 1000 + i
+                    doc["username"] = f"user_{worker_id}_{i}"
+                    
+                    key = f"user:{worker_id}:{i}"
+                    thread_conn.execute_command("JSON.SET", key, "$", json.dumps(doc))
+                    
+                    # Verify immediately
+                    result = json.loads(thread_conn.execute_command("JSON.GET", key, "$"))
+                    if result[0]["user_id"] != doc["user_id"]:
+                        errors.append(f"Data corruption in worker {worker_id} iteration {i}")
+                    else:
+                        success_count[0] += 1
                     
         except Exception as e:
             errors.append(f"Worker {worker_id} error: {str(e)}")
@@ -1504,22 +1507,23 @@ def test_shared_strings_concurrent_writes_cluster():
     # While writes are happening, trigger migration
     time.sleep(0.5)
     
-    # Get cluster info and migrate slots
-    nodes_info = conn.execute_command("CLUSTER", "NODES").split("\n")
-    nodes = [line for line in nodes_info if line and "master" in line]
-    
-    if len(nodes) >= 2:
-        node1_id = nodes[0].split()[0]
-        node2_id = nodes[1].split()[0]
+    # Get cluster info and migrate slots using cluster-aware connection
+    with env.getClusterConnectionIfNeeded() as conn:
+        nodes_info = conn.execute_command("CLUSTER", "NODES").split("\n")
+        nodes = [line for line in nodes_info if line and "master" in line]
         
-        # Migrate some slots during writes
-        print("Migrating slots during concurrent writes...")
-        try:
-            conn.execute_command("CLUSTER", "SETSLOT", "100", "MIGRATING", node2_id)
-            conn.execute_command("CLUSTER", "SETSLOT", "100", "IMPORTING", node1_id)
-            conn.execute_command("CLUSTER", "SETSLOT", "100", "NODE", node2_id)
-        except Exception as e:
-            print(f"Migration command error (expected in some cases): {e}")
+        if len(nodes) >= 2:
+            node1_id = nodes[0].split()[0]
+            node2_id = nodes[1].split()[0]
+            
+            # Migrate some slots during writes
+            print("Migrating slots during concurrent writes...")
+            try:
+                conn.execute_command("CLUSTER", "SETSLOT", "100", "MIGRATING", node2_id)
+                conn.execute_command("CLUSTER", "SETSLOT", "100", "IMPORTING", node1_id)
+                conn.execute_command("CLUSTER", "SETSLOT", "100", "NODE", node2_id)
+            except Exception as e:
+                print(f"Migration command error (expected in some cases): {e}")
     
     # Wait for all workers
     for t in threads:
@@ -1527,7 +1531,8 @@ def test_shared_strings_concurrent_writes_cluster():
     
     if errors:
         print(f"❌ Errors detected: {errors}")
-        env.assertTrue(False, f"Race condition detected: {errors[0]}")
+        # Use env.assertEqual to avoid RLTest f-string bug
+        env.assertEqual(len(errors), 0)
     else:
         print(f"✅ All {success_count[0]} operations completed successfully")
         env.assertTrue(success_count[0] > 0)
@@ -1544,37 +1549,37 @@ def test_rapid_json_updates_shared_strings():
     if env.env != "oss-cluster":
         env.skip()
     
-    conn = env.getConnection()
-    
-    # Seed initial data
-    for i in range(10):
-        key = f"shared:key:{i}"
-        doc = {
-            "counter": 0,
-            "field_a": "value",
-            "field_b": "value", 
-            "field_c": "value",
-            "nested": {
-                "field_x": "value",
-                "field_y": "value",
-                "field_z": "value"
+    # Seed initial data using cluster-aware connection
+    with env.getClusterConnectionIfNeeded() as conn:
+        for i in range(10):
+            key = f"shared:key:{i}"
+            doc = {
+                "counter": 0,
+                "field_a": "value",
+                "field_b": "value", 
+                "field_c": "value",
+                "nested": {
+                    "field_x": "value",
+                    "field_y": "value",
+                    "field_z": "value"
+                }
             }
-        }
-        conn.execute_command("JSON.SET", key, "$", json.dumps(doc))
+            conn.execute_command("JSON.SET", key, "$", json.dumps(doc))
     
     errors = []
     
     def update_worker(worker_id, iterations):
         try:
-            thread_conn = env.getConnection()
-            for i in range(iterations):
-                key = f"shared:key:{i % 10}"
-                thread_conn.execute_command("JSON.NUMINCRBY", key, "$.counter", 1)
-                
-                result = thread_conn.execute_command("JSON.GET", key, "$")
-                if not result or "counter" not in result:
-                    errors.append(f"Worker {worker_id}: Structure corrupted at iteration {i}")
-                    return
+            # Use cluster-aware connection to handle MOVED responses
+            with env.getClusterConnectionIfNeeded() as thread_conn:
+                for i in range(iterations):
+                    key = f"shared:key:{i % 10}"
+                    thread_conn.execute_command("JSON.NUMINCRBY", key, "$.counter", 1)
+                    
+                    result = thread_conn.execute_command("JSON.GET", key, "$")
+                    if not result or "counter" not in result:
+                        errors.append(f"Worker {worker_id}: Structure corrupted at iteration {i}")
+                        return
                     
         except Exception as e:
             errors.append(f"Worker {worker_id} error: {str(e)}")
@@ -1595,17 +1600,20 @@ def test_rapid_json_updates_shared_strings():
     
     if errors:
         print(f"❌ Race condition errors: {errors}")
-        env.assertTrue(False, f"Race condition detected: {errors[0]}")
+        # Use env.assertEqual to avoid RLTest f-string bug
+        env.assertEqual(len(errors), 0)
     else:
-        total_updates = 0
-        for i in range(10):
-            key = f"shared:key:{i}"
-            result = json.loads(conn.execute_command("JSON.GET", key, "$.counter"))
-            total_updates += result[0]
-        
-        expected = num_workers * iterations
-        print(f"✅ All updates completed. Total: {total_updates} (expected: {expected})")
-        env.assertTrue(total_updates == expected)
+        # Verify total updates using cluster-aware connection
+        with env.getClusterConnectionIfNeeded() as conn:
+            total_updates = 0
+            for i in range(10):
+                key = f"shared:key:{i}"
+                result = json.loads(conn.execute_command("JSON.GET", key, "$.counter"))
+                total_updates += result[0]
+            
+            expected = num_workers * iterations
+            print(f"✅ All updates completed. Total: {total_updates} (expected: {expected})")
+            env.assertTrue(total_updates == expected)
 
 
 def test_string_cache_thread_safety_stress():
@@ -1622,7 +1630,6 @@ def test_string_cache_thread_safety_stress():
     if env.env != "oss-cluster":
         env.skip()
     
-    conn = env.getConnection()
     errors = []
     operation_counts = {"set": [0], "get": [0], "del": [0], "update": [0]}
     
@@ -1634,28 +1641,29 @@ def test_string_cache_thread_safety_stress():
     
     def stress_worker(worker_id, iterations):
         try:
-            thread_conn = env.getConnection()
-            for i in range(iterations):
-                op = random.choice(["set", "get", "update", "del"])
-                key = f"stress:{worker_id}:{i % 20}"
-                
-                try:
-                    if op == "set":
-                        doc = {field: f"value_{worker_id}_{i}" for field in common_fields}
-                        thread_conn.execute_command("JSON.SET", key, "$", json.dumps(doc))
-                        operation_counts["set"][0] += 1
-                    elif op == "get":
-                        thread_conn.execute_command("JSON.GET", key, "$")
-                        operation_counts["get"][0] += 1
-                    elif op == "update":
-                        thread_conn.execute_command("JSON.SET", key, "$.status", '"updated"')
-                        operation_counts["update"][0] += 1
-                    elif op == "del":
-                        thread_conn.execute_command("JSON.DEL", key)
-                        operation_counts["del"][0] += 1
-                except Exception as e:
-                    if "not exist" not in str(e).lower():
-                        errors.append(f"Worker {worker_id} op={op}: {str(e)}")
+            # Use cluster-aware connection to handle MOVED responses
+            with env.getClusterConnectionIfNeeded() as thread_conn:
+                for i in range(iterations):
+                    op = random.choice(["set", "get", "update", "del"])
+                    key = f"stress:{worker_id}:{i % 20}"
+                    
+                    try:
+                        if op == "set":
+                            doc = {field: f"value_{worker_id}_{i}" for field in common_fields}
+                            thread_conn.execute_command("JSON.SET", key, "$", json.dumps(doc))
+                            operation_counts["set"][0] += 1
+                        elif op == "get":
+                            thread_conn.execute_command("JSON.GET", key, "$")
+                            operation_counts["get"][0] += 1
+                        elif op == "update":
+                            thread_conn.execute_command("JSON.SET", key, "$.status", '"updated"')
+                            operation_counts["update"][0] += 1
+                        elif op == "del":
+                            thread_conn.execute_command("JSON.DEL", key)
+                            operation_counts["del"][0] += 1
+                    except Exception as e:
+                        if "not exist" not in str(e).lower():
+                            errors.append(f"Worker {worker_id} op={op}: {str(e)}")
         except Exception as e:
             errors.append(f"Worker {worker_id} fatal error: {str(e)}")
     
@@ -1675,7 +1683,8 @@ def test_string_cache_thread_safety_stress():
     
     if errors:
         print(f"❌ Race conditions: {errors[:5]}")
-        env.assertTrue(False, f"String cache race condition: {errors[0]}")
+        # Use env.assertEqual to avoid RLTest f-string bug
+        env.assertEqual(len(errors), 0)
     else:
         print(f"✅ Stress test passed!")
         print(f"   Operations: SET={operation_counts['set'][0]}, "

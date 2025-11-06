@@ -117,12 +117,13 @@ def test_concurrent_writes_shared_strings():
     # Check results
     if errors:
         print(f"❌ Race condition detected: {errors}")
-        env.assertTrue(False, f"Thread-safety violation: {errors[0]}")
+        # Use env.assertEqual to avoid RLTest f-string bug
+        env.assertEqual(len(errors), 0)
     
     expected = num_workers * writes_per_worker
     print(f"✅ All {success_count[0]} concurrent writes completed successfully")
-    env.assertTrue(success_count[0] == expected,
-                  f"Lost writes: {success_count[0]} vs {expected}")
+    # Use env.assertEqual to avoid RLTest f-string bug
+    env.assertEqual(success_count[0], expected)
 
 
 def test_mixed_operations_shared_cache():
@@ -202,11 +203,13 @@ def test_mixed_operations_shared_cache():
     # Check results
     if errors:
         print(f"❌ Race condition: {errors}")
-        env.assertTrue(False, f"Thread-safety violation: {errors[0]}")
+        # Use env.assertEqual to avoid RLTest f-string bug
+        env.assertEqual(len(errors), 0)
     
     print(f"✅ Completed: {read_count[0]} reads and {write_count[0]} writes")
-    env.assertTrue(read_count[0] > 0 and write_count[0] > 0, 
-                  "Some operations failed")
+    # Use env.assertTrue without message to avoid RLTest bug
+    env.assertTrue(read_count[0] > 0)
+    env.assertTrue(write_count[0] > 0)
 
 
 if __name__ == "__main__":
