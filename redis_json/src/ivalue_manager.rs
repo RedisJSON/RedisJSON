@@ -220,7 +220,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
                                         .unwrap()
                                         .get(index)
                                         .unwrap().clone();
-                                    let new_val = op2(num1 as f64, $in_value_f64);
+                                    let new_val = op2(num1 as f64, $in_value_f64).try_into()?;
                                     num1_slice.remove(index);
                                     num1_slice.insert(index, new_val)?;
                                     NumOpResult::F64(new_val)
@@ -248,7 +248,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
                                         .unwrap()
                                         .get(index)
                                         .unwrap().clone();
-                                    let new_val = op2(num1 as f64, $in_value_f64);
+                                    let new_val = op2(num1 as f64, $in_value_f64).try_into()?;
                                     num1_slice.remove(index);
                                     num1_slice.insert(index, new_val)?;
                                     NumOpResult::F64(new_val)
