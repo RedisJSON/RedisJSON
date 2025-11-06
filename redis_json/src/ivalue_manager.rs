@@ -203,48 +203,63 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         Ok(NumOpResult::INumber(new_val))
                     }
                     $(
-                        (PathValue::$si_variant(num1, index), num_2) => {
-                            let num1 = num1
-                                .as_mut_slice_of::<$si_type>()
-                                .unwrap()
-                                .get_mut(index)
-                                .unwrap();
+                        (PathValue::$si_variant(num1_slice, index), num_2) => {
                             let new_val = match num_2 {
                                 Some(num2) => {
+                                    let num1 = num1_slice
+                                        .as_mut_slice_of::<$si_type>()
+                                        .unwrap()
+                                        .get_mut(index)
+                                        .unwrap();
                                     *num1 = op1(*num1 as i64, num2) as $si_type;
                                     NumOpResult::I64(*num1 as i64)
                                 }
                                 None => {
-                                    *num1 = op2(*num1 as f64, $in_value_f64) as $si_type;
-                                    NumOpResult::I64(*num1 as i64)
+                                    let num1 = num1_slice
+                                        .as_mut_slice_of::<$si_type>()
+                                        .unwrap()
+                                        .get(index)
+                                        .unwrap().clone();
+                                    let new_val = op2(num1 as f64, $in_value_f64);
+                                    num1_slice.remove(index);
+                                    num1_slice.insert(index, new_val)?;
+                                    NumOpResult::F64(new_val)
                                 }
                             };
                             Ok(new_val)
                         }
                     )*
                     $(
-                        (PathValue::$ui_variant(num1, index), num_2) => {
-                            let num1 = num1
-                                .as_mut_slice_of::<$ui_type>()
-                                .unwrap()
-                                .get_mut(index)
-                                .unwrap();
+                        (PathValue::$ui_variant(num1_slice, index), num_2) => {
+
                             let new_val = match num_2 {
                                 Some(num2) => {
+                                    let num1 = num1_slice
+                                        .as_mut_slice_of::<$ui_type>()
+                                        .unwrap()
+                                        .get_mut(index)
+                                        .unwrap();
                                     *num1 = op1(*num1 as i64, num2) as $ui_type;
                                     NumOpResult::U64(*num1 as u64)
                                 }
                                 None => {
-                                    *num1 = op2(*num1 as f64, $in_value_f64) as $ui_type;
-                                    NumOpResult::U64(*num1 as u64)
+                                    let num1 = num1_slice
+                                        .as_mut_slice_of::<$ui_type>()
+                                        .unwrap()
+                                        .get(index)
+                                        .unwrap().clone();
+                                    let new_val = op2(num1 as f64, $in_value_f64);
+                                    num1_slice.remove(index);
+                                    num1_slice.insert(index, new_val)?;
+                                    NumOpResult::F64(new_val)
                                 }
                             };
                             Ok(new_val)
                         }
                     )*
                     $(
-                        (PathValue::$hf_variant(num1, index), _) => {
-                            let num1 = num1
+                        (PathValue::$hf_variant(num1_slice, index), _) => {
+                            let num1 = num1_slice
                                 .as_mut_slice_of::<$hf_type>()
                                 .unwrap()
                                 .get_mut(index)
@@ -255,8 +270,8 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         }
                     )*
                     $(
-                        (PathValue::$f_variant(num1, index), _) => {
-                            let num1 = num1
+                        (PathValue::$f_variant(num1_slice, index), _) => {
+                            let num1 = num1_slice
                                 .as_mut_slice_of::<$f_type>()
                                 .unwrap()
                                 .get_mut(index)
