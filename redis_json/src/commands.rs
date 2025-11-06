@@ -971,9 +971,53 @@ fn json_del_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
 }
 
 ///
-/// JSON.MGET <key> [key ...] <path>
+/// JSON.MGET <key> [key ...] path
 ///
-pub fn json_mget<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+#[command(
+    {
+        name: "JSON.MGET",
+        flags: [ReadOnly],
+        arity: -3,
+        complexity: "O(M*N) when path is evaluated to a single value where M is the number of keys and N is the size of the value, O(N1+N2+...+Nm) when path is evaluated to multiple values where m is the number of keys and Ni is the size of the i-th key",
+        since: "1.0.0",
+        summary: "Return the values at path from multiple key arguments",
+        key_spec: [
+            {
+                notes: "The key containing the JSON document",
+                flags: [ReadOnly, Access],
+                begin_search: Index({ index: 1 }),
+                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+            }
+        ],
+        args: [
+            {
+                name: "key",
+                arg_type: Key,
+                key_spec_index: 0,
+                flags: [Multiple],
+            },
+            {
+                name: "path",
+                arg_type: String,
+                flags: [Optional],
+            }
+        ]
+    }
+)]
+pub fn json_mget(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+    crate::run_on_manager!(
+        pre_command: || {},
+        get_manage: {
+            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            })
+        },
+        run: |mngr| json_mget_impl(mngr, ctx, args),
+    )
+}
+
+
+fn json_mget_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     if args.len() < 3 {
         return Err(RedisError::WrongArity);
     }
