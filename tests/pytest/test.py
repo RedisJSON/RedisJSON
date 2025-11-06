@@ -1597,14 +1597,22 @@ def testArrtNumericArrayTypesOperations(env):
         r.assertEqual(r.execute_command('JSON.GET', f'test_{numeric_type}', f'.[{len(array)}]'), str(value))
         r.assertEqual(r.execute_command('JSON.NUMINCRBY', f'test_{numeric_type}', f'.[{len(array)}]', 1), str(value + 1))
         r.assertEqual(r.execute_command('JSON.GET', f'test_{numeric_type}', f'.[{len(array)}]'), str(value + 1))
-        r.assertEqual(r.execute_command('JSON.NUMINCRBY', f'test_{numeric_type}', f'.[{len(array)}]', 1.0), str(value + 2))
-        r.assertEqual(r.execute_command('JSON.GET', f'test_{numeric_type}', f'.[{len(array)}]'), str(value + 2))
+        r.assertEqual(r.execute_command('JSON.NUMINCRBY', f'test_{numeric_type}', f'.[{len(array)}]', 1.0), str(float(value + 2)))
+        r.assertEqual(r.execute_command('JSON.GET', f'test_{numeric_type}', f'.[{len(array)}]'), str(float(value + 2)))
         r.assertOk(r.execute_command('JSON.SET', f'test_{numeric_type}', '.[0]', value))
         r.assertEqual(r.execute_command('JSON.GET', f'test_{numeric_type}', f'.[0]'), str(value))
         r.assertEqual(r.execute_command('JSON.ARRINSERT', f'test_{numeric_type}', '.', 0, value), len(array) + 2)
         r.assertEqual(r.execute_command('JSON.GET', f'test_{numeric_type}', f'.[0]'), str(value))
         r.assertEqual(r.execute_command('JSON.ARRTRIM', f'test_{numeric_type}', '.', 0, len(array) + 2), len(array) + 2)
 
+def testArrNumericArrayNumericOperstionsWithDoubleValues(env):
+    r = env
+    r.assertOk(r.execute_command('JSON.SET', 'test', '.', '[1,2,3,4,5]'))
+    r.assertEqual(r.execute_command('JSON.NUMINCRBY', 'test', '.[0]', 1.5), str(2.5))
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '.[0]'), str(2.5))
+    r.assertEqual(r.execute_command('JSON.NUMMULTBY', 'test', '.[1]', 3.2), str(6.4))
+    r.assertEqual(r.execute_command('JSON.GET', 'test', '.[1]'), str(6.4))
+   
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property
