@@ -241,7 +241,6 @@ macro_rules! redis_json_module_create {
             init: initialize,
             info: $info_func,
             commands: [
-                ["json.numincrby", json_command!(json_num_incrby), "write", 1,1,1, ACL::Write, ACL::from("json")],
                 ["json.toggle", json_command!(json_bool_toggle), "write deny-oom", 1,1,1, ACL::Write, ACL::from("json")],
                 ["json.nummultby", json_command!(json_num_multby), "write", 1,1,1, ACL::Write, ACL::from("json")],
                 ["json.numpowby", json_command!(json_num_powby), "write", 1,1,1, ACL::Write, ACL::from("json")],

@@ -1305,7 +1305,52 @@ where
 ///
 /// JSON.NUMINCRBY <key> <path> <number>
 ///
-pub fn json_num_incrby<M: Manager>(
+#[command(
+    {
+        name: "JSON.NUMINCRBY",
+        flags: [Write],
+        arity: -4,
+        complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
+        since: "1.0.0",
+        summary: "Increment the number value stored at path by number",
+        key_spec: [
+            {
+                flags: [ReadWrite],
+                begin_search: Index({ index: 1 }),
+                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+            }
+        ],
+        args: [
+            {
+                name: "key",
+                arg_type: Key,
+                key_spec_index: 0,
+            },
+            {
+                name: "path",
+                arg_type: String,
+            },
+            {
+                name: "number",
+                arg_type: Double,
+            },
+        ]
+    }
+    
+)]
+pub fn json_num_incrby(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+    crate::run_on_manager!(
+        pre_command: || {},
+        get_manage: {
+            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            })
+        },
+        run: |mngr| json_num_incrby_impl(mngr, ctx, args),
+    )
+}
+
+fn json_num_incrby_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
