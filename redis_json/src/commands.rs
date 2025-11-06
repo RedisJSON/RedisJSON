@@ -106,7 +106,6 @@ fn is_resp3(ctx: &Context) -> bool {
         summary: "Get JSON value at path",
         key_spec: [
             {
-                notes: "The key containing the JSON document",
                 flags: [ReadOnly, Access],
                 begin_search: Index({ index: 1 }),
                 find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
@@ -274,7 +273,6 @@ fn json_get_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
         summary: "Set the JSON value at path in key",
         key_spec: [
             {
-                notes: "The key containing the JSON document",
                 flags: [ReadWrite],
                 begin_search: Index({ index: 1 }),
                 find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
@@ -436,7 +434,6 @@ fn json_set_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
         summary: "Merge a given JSON value into matching paths. Consequently, JSON values at matching paths are updated, deleted, or expanded with new children",
         key_spec: [
             {
-                notes: "The key containing the JSON document",
                 flags: [ReadWrite],
                 begin_search: Index({ index: 1 }),
                 find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
@@ -594,7 +591,6 @@ fn json_merge_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>
         summary: "Set or update one or more JSON values according to the specified key-path-value triplets",
         key_spec: [
             {
-                notes: "The key containing the JSON document",
                 flags: [ReadWrite],
                 begin_search: Index({ index: 1 }),
                 find_keys: Range({ last_key: -1, steps: 3, limit: 0 }),
@@ -896,7 +892,6 @@ macro_rules! json_del_command {
                 summary: "Delete a value",
                 key_spec: [
                     {
-                        notes: "The key containing the JSON document",
                         flags: [ReadWrite],
                         begin_search: Index({ index: 1 }),
                         find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
@@ -1060,7 +1055,48 @@ fn json_mget_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
 ///
 /// JSON.TYPE <key> [path]
 ///
-pub fn json_type<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+#[command(
+    {
+        name: "JSON.TYPE",
+        flags: [ReadOnly],
+        arity: -2,
+        complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
+        since: "1.0.0",
+        summary: "Report the type of JSON value at path",
+        key_spec: [
+            {
+                flags: [ReadOnly, Access],
+                begin_search: Index({ index: 1 }),
+                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+            }
+        ],
+        args: [
+            {
+                name: "key",
+                arg_type: Key,
+                key_spec_index: 0,
+            },
+            {
+                name: "path",
+                arg_type: String,
+                flags: [Optional],
+            }
+        ]
+    }
+)]
+pub fn json_type(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+    crate::run_on_manager!(
+        pre_command: || {},
+        get_manage: {
+            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            })
+        },
+        run: |mngr| json_type_impl_start(mngr, ctx, args),
+    )
+}
+
+fn json_type_impl_start<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
     let path = args.next_str().map(Path::new).unwrap_or_default();
