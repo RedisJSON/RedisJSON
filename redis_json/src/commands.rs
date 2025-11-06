@@ -1361,7 +1361,52 @@ fn json_num_incrby_impl<M: Manager>(
 ///
 /// JSON.NUMMULTBY <key> <path> <number>
 ///
-pub fn json_num_multby<M: Manager>(
+#[command(
+    {
+        name: "JSON.NUMMULTBY",
+        flags: [Write],
+        arity: -4,
+        complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
+        since: "1.0.0",
+        summary: "Multiply the number value stored at path by number",
+        key_spec: [
+            {
+                flags: [ReadWrite],
+                begin_search: Index({ index: 1 }),
+                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+            }
+        ],
+        args: [
+            {
+                name: "key",
+                arg_type: Key,
+                key_spec_index: 0,
+            },
+            {
+                name: "path",
+                arg_type: String,
+            },
+            {
+                name: "number",
+                arg_type: Double,
+            },
+        ]
+    }
+    
+)]
+pub fn json_num_multby(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+    crate::run_on_manager!(
+        pre_command: || {},
+        get_manage: {
+            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            })
+        },
+        run: |mngr| json_num_multby_impl(mngr, ctx, args),
+    )
+}
+
+pub fn json_num_multby_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
