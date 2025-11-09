@@ -41,3 +41,4 @@ venv/
 dump.rdb
 memory_report*.json
 memory_report*.txt
+tests/pytest/nodes.conf
