@@ -1986,7 +1986,67 @@ pub enum ObjectLen {
 ///
 /// JSON.ARRINDEX <key> <path> <json-value> [start [stop]]
 ///
-pub fn json_arr_index<M: Manager>(
+#[command(
+    {
+        name: "JSON.ARRINDEX",
+        flags: [ReadOnly],
+        arity: -3,
+        complexity: "O(N) when path is evaluated to a single value where N is the size of the array, O(N) when path is evaluated to multiple values, where N is the size of the key",
+        since: "1.0.0",
+        summary: "Search for the first occurrence of a JSON value in an array",
+        key_spec: [
+            {
+                flags: [ReadOnly],
+                begin_search: Index({ index: 1 }),
+                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+            }
+        ],
+        args: [
+            {
+                name: "key",
+                arg_type: Key,
+                key_spec_index: 0,
+            },
+            {
+                name: "path",
+                arg_type: String,
+            },
+            {
+                name: "json-value",
+                arg_type: String,
+            },
+            {
+                name: "range",
+                arg_type: Block,
+                flags: [Optional],
+                subargs: [
+                    {
+                        name: "start",
+                        arg_type: Integer,
+                    },
+                    {
+                        name: "stop",
+                        arg_type: Integer,
+                        flags: [Optional],
+                    }
+                ]
+            }
+        ]
+    }
+)]
+pub fn json_arr_index(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+    crate::run_on_manager!(
+        pre_command: || {},
+        get_manage: {
+            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            })
+        },
+        run: |mngr| json_arr_index_impl(mngr, ctx, args),
+    )
+}
+
+fn json_arr_index_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
