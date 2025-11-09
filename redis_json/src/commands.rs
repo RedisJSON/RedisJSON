@@ -1472,7 +1472,47 @@ pub fn json_num_powby_impl<M: Manager>(
 //
 /// JSON.TOGGLE <key> <path>
 ///
-pub fn json_bool_toggle<M: Manager>(
+#[command(
+    {
+        name: "JSON.TOGGLE",
+        flags: [Write],
+        arity: 3,
+        complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
+        since: "2.0.0",
+        summary: "Toggle the boolean value stored at path",
+        key_spec: [
+            {
+                flags: [ReadWrite],
+                begin_search: Index({ index: 1 }),
+                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+            }
+        ],
+        args: [
+            {
+                name: "key",
+                arg_type: Key,
+                key_spec_index: 0,
+            },
+            {
+                name: "path",
+                arg_type: String,
+            },
+        ]
+    }
+)]
+pub fn json_bool_toggle(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+    crate::run_on_manager!(
+        pre_command: || {},
+        get_manage: {
+            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            })
+        },
+        run: |mngr| json_bool_toggle_impl_start(mngr, ctx, args),
+    )
+}
+
+fn json_bool_toggle_impl_start<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
