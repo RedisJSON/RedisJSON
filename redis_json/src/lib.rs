@@ -208,11 +208,11 @@ macro_rules! redis_json_module_create {
             ctx.log_notice("Enabled diskless replication");
             // Always enable thread-safe cache for ASM support
             // RwLock has zero overhead when there's no contention
-            ctx.log_notice("Initialized shared string cache, thread safe: true.");
             if let Err(e) = $crate::init_ijson_shared_string_cache(true) {
                 ctx.log(RedisLogLevel::Warning, &format!("Failed initializing shared string cache, {e}."));
                 return Status::Err;
             }
+            ctx.log_notice("Initialized shared string cache, thread safe: true.");
             $init_func(ctx, args)
         }
 
