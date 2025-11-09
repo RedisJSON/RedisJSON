@@ -59,6 +59,7 @@ jobs:
     runs-on: ubuntu24-arm64-4-16 # ubuntu24-arm64-2-8
     needs: setup-environment
     strategy:
+      fail-fast: false
       matrix:
         docker:
           - image: "ubuntu:bionic"
