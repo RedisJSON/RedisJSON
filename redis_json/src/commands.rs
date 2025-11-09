@@ -1092,11 +1092,11 @@ pub fn json_type(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
                 phantom: PhantomData,
             })
         },
-        run: |mngr| json_type_impl_start(mngr, ctx, args),
+        run: |mngr| json_type_command_impl(mngr, ctx, args),
     )
 }
 
-fn json_type_impl_start<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+fn json_type_command_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
     let path = args.next_str().map(Path::new).unwrap_or_default();
@@ -1508,11 +1508,11 @@ pub fn json_bool_toggle(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
                 phantom: PhantomData,
             })
         },
-        run: |mngr| json_bool_toggle_impl_start(mngr, ctx, args),
+        run: |mngr| json_bool_toggle_command_impl(mngr, ctx, args),
     )
 }
 
-fn json_bool_toggle_impl_start<M: Manager>(
+fn json_bool_toggle_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -1591,7 +1591,52 @@ where
 ///
 /// JSON.STRAPPEND <key> [path] <json-string>
 ///
-pub fn json_str_append<M: Manager>(
+#[command(
+    {
+        name: "JSON.STRAPPEND",
+        flags: [Write, DenyOOM],
+        arity: -3,
+        complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
+        since: "1.0.0",
+        summary: "Append the json-string values to the string at path",
+        key_spec: [
+            {
+                flags: [ReadWrite],
+                begin_search: Index({ index: 1 }),
+                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+            }
+        ],
+        args: [
+            {
+                name: "key",
+                arg_type: Key,
+                key_spec_index: 0,
+            },
+            {
+                name: "path",
+                arg_type: String,
+                flags: [Optional],
+            },
+            {
+                name: "json-string",
+                arg_type: String,
+            }
+        ]
+    }
+)]
+pub fn json_str_append(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+    crate::run_on_manager!(
+        pre_command: || {},
+        get_manage: {
+            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            })
+        },
+        run: |mngr| json_str_append_command_impl(mngr, ctx, args),
+    )
+}
+
+fn json_str_append_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
