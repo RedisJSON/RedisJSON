@@ -2961,7 +2961,31 @@ fn json_clear_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>
 /// MEMORY <key> [path]
 /// HELP
 ///
-pub fn json_debug<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+#[command(
+    {
+        name: "JSON.DEBUG",
+        flags: [ReadOnly],
+        arity: -2,
+        complexity: "N/A",
+        since: "1.0.0",
+        summary: "This is a container command for debugging related tasks",
+        key_spec: [   
+        ],
+    }
+)]
+pub fn json_debug(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+    crate::run_on_manager!(
+        pre_command: || {},
+        get_manage: {
+            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            })
+        },
+        run: |mngr| json_debug_impl(mngr, ctx, args),
+    )
+}
+
+fn json_debug_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     match args.next_str()?.to_uppercase().as_str() {
         "MEMORY" => {
