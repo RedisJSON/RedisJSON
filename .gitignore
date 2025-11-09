@@ -38,3 +38,4 @@ wordlist.dic
 config.txt
 
 venv/
+tests/pytest/nodes.conf
