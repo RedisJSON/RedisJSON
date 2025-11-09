@@ -3030,7 +3030,48 @@ fn json_debug_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>
 ///
 /// JSON.RESP <key> [path]
 ///
-pub fn json_resp<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+#[command(
+    {
+        name: "JSON.RESP",
+        flags: [ReadOnly],
+        arity: -2,
+        complexity: "O(N) when path is evaluated to a single value, where N is the size of the value, O(N) when path is evaluated to multiple values, where N is the size of the key",
+        since: "1.0.0",
+        summary: "Return the JSON in key in Redis serialization protocol specification form",
+        key_spec: [
+            {
+                flags: [ReadOnly],
+                begin_search: Index({ index: 1 }),
+                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+            }
+        ],
+        args: [
+            {
+                name: "key",
+                arg_type: Key,
+                key_spec_index: 0,
+            },
+            {
+                name: "path",
+                arg_type: String,
+                flags: [Optional],
+            }
+        ]
+    }
+)]
+pub fn json_resp(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+    crate::run_on_manager!(
+        pre_command: || {},
+        get_manage: {
+            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            })
+        },
+        run: |mngr| json_resp_impl(mngr, ctx, args),
+    )
+}
+
+fn json_resp_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;
