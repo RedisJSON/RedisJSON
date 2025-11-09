@@ -1816,7 +1816,52 @@ where
 ///
 /// JSON.ARRAPPEND <key> <path> <json> [json ...]
 ///
-pub fn json_arr_append<M: Manager>(
+#[command(
+    {
+        name: "JSON.ARRAPPEND",
+        flags: [Write, DenyOOM],
+        arity: -3,
+        complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
+        since: "1.0.0",
+        summary: "Append the JSON values into the array at path after the last element in it",
+        key_spec: [
+            {
+                flags: [ReadWrite],
+                begin_search: Index({ index: 1 }),
+                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+            }
+        ],
+        args: [
+            {
+                name: "key",
+                arg_type: Key,
+                key_spec_index: 0,
+            },
+            {
+                name: "path",
+                arg_type: String,
+            },
+            {
+                name: "json",
+                arg_type: String,
+                flags: [Multiple],
+            }
+        ]
+    }
+)]
+pub fn json_arr_append(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+    crate::run_on_manager!(
+        pre_command: || {},
+        get_manage: {
+            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            })
+        },
+        run: |mngr| json_arr_append_command_impl(mngr, ctx, args),
+    )
+}
+
+fn json_arr_append_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
