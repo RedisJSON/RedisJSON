@@ -98,7 +98,7 @@ fn is_resp3(ctx: &Context) -> bool {
 ///
 #[command(
     {
-        name: "JSON.GET",
+        name: "json.get",
         flags: [ReadOnly],
         arity: -2,
         complexity: "O(N) where N is the size of the JSON",
@@ -265,7 +265,7 @@ fn json_get_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
 ///
 #[command(
     {
-        name: "JSON.SET",
+        name: "json.set",
         flags: [Write, DenyOOM],
         arity: -4,
         complexity: "O(M+N) where M is the size of the original value (if it exists) and N is the size of the new value",
@@ -426,7 +426,7 @@ fn json_set_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
 ///
 #[command(
     {
-        name: "JSON.MERGE",
+        name: "json.merge",
         flags: [Write, DenyOOM],
         arity: -4,
         complexity: "O(M+N) when path is evaluated to a single value where M is the size of the original value (if it exists) and N is the size of the new value, O(M+N) when path is evaluated to multiple values where M is the size of the key and N is the size of the new value * the number of original values in the key",
@@ -583,7 +583,7 @@ fn json_merge_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>
 ///
 #[command(
     {
-        name: "JSON.MSET",
+        name: "json.mset",
         flags: [Write, DenyOOM],
         arity: -4,
         complexity: "O(K*(M+N)) where k is the number of keys in the command, when path is evaluated to a single value where M is the size of the original value (if it exists) and N is the size of the new value, or O(K*(M+N)) when path is evaluated to multiple values where M is the size of the key and N is the size of the new value * the number of original values in the key",
@@ -970,7 +970,7 @@ fn json_del_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
 ///
 #[command(
     {
-        name: "JSON.MGET",
+        name: "json.mget",
         flags: [ReadOnly],
         arity: -3,
         complexity: "O(M*N) when path is evaluated to a single value where M is the number of keys and N is the size of the value, O(N1+N2+...+Nm) when path is evaluated to multiple values where m is the number of keys and Ni is the size of the i-th key",
@@ -1057,7 +1057,7 @@ fn json_mget_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
 ///
 #[command(
     {
-        name: "JSON.TYPE",
+        name: "json.type",
         flags: [ReadOnly],
         arity: -2,
         complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
@@ -1307,7 +1307,7 @@ where
 ///
 #[command(
     {
-        name: "JSON.NUMINCRBY",
+        name: "json.numincrby",
         flags: [Write],
         arity: 4,
         complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
@@ -1363,7 +1363,7 @@ fn json_num_incrby_impl<M: Manager>(
 ///
 #[command(
     {
-        name: "JSON.NUMMULTBY",
+        name: "json.nummultby",
         flags: [Write],
         arity: 4,
         complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
@@ -1419,7 +1419,7 @@ pub fn json_num_multby_impl<M: Manager>(
 ///
 #[command(
     {
-        name: "JSON.NUMPOWBY",
+        name: "json.numpowby",
         flags: [Write],
         arity: 4,
         complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
@@ -1474,7 +1474,7 @@ pub fn json_num_powby_impl<M: Manager>(
 ///
 #[command(
     {
-        name: "JSON.TOGGLE",
+        name: "json.toggle",
         flags: [Write],
         arity: 3,
         complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
@@ -1593,7 +1593,7 @@ where
 ///
 #[command(
     {
-        name: "JSON.STRAPPEND",
+        name: "json.strappend",
         flags: [Write, DenyOOM],
         arity: -3,
         complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
@@ -1736,7 +1736,7 @@ where
 ///
 #[command(
     {
-        name: "JSON.STRLEN",
+        name: "json.strlen",
         flags: [ReadOnly],
         arity: -2,
         complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
@@ -1818,7 +1818,7 @@ where
 ///
 #[command(
     {
-        name: "JSON.ARRAPPEND",
+        name: "json.arrappend",
         flags: [Write, DenyOOM],
         arity: -3,
         complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
@@ -1988,7 +1988,7 @@ pub enum ObjectLen {
 ///
 #[command(
     {
-        name: "JSON.ARRINDEX",
+        name: "json.arrindex",
         flags: [ReadOnly],
         arity: -4,
         complexity: "O(N) when path is evaluated to a single value where N is the size of the array, O(N) when path is evaluated to multiple values, where N is the size of the key",
@@ -2088,7 +2088,7 @@ fn json_arr_index_impl<M: Manager>(
 ///
 #[command(
     {
-        name: "JSON.ARRINSERT",
+        name: "json.arrinsert",
         flags: [Write, DenyOOM],
         arity: -5,
         complexity: "O(N) when path is evaluated to a single value where N is the size of the array, O(N) when path is evaluated to multiple values, where N is the size of the key",
@@ -2233,7 +2233,7 @@ where
 ///
 #[command(
     {
-        name: "JSON.ARRLEN",
+        name: "json.arrlen",
         flags: [ReadOnly],
         arity: -2,
         complexity: "O(1) where path is evaluated to a single value, O(N) where path is evaluated to multiple values, where N is the size of the key",
@@ -2327,7 +2327,7 @@ fn json_arr_len_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisStrin
 ///
 #[command(
     {
-        name: "JSON.ARRPOP",
+        name: "json.arrpop",
         flags: [Write],
         arity: -2,
         complexity: "O(N) when path is evaluated to a single value where N is the size of the array and the specified index is not the last element, O(1) when path is evaluated to a single value and the specified index is the last element, or O(N) when path is evaluated to multiple values, where N is the size of the key",
@@ -2549,7 +2549,7 @@ where
 ///
 #[command(
     {
-        name: "JSON.ARRTRIM",
+        name: "json.arrtrim",
         flags: [Write],
         arity: 5,
         complexity: "O(N) when path is evaluated to a single value where N is the size of the array, O(N) when path is evaluated to multiple values, where N is the size of the key",
@@ -2681,7 +2681,7 @@ where
 ///
 #[command(
     {
-        name: "JSON.OBJKEYS",
+        name: "json.objkeys",
         flags: [ReadOnly],
         arity: -2,
         complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
@@ -2778,7 +2778,7 @@ where
 ///
 #[command(
     {
-        name: "JSON.OBJLEN",
+        name: "json.objlen",
         flags: [ReadOnly],
         arity: -2,
         complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
@@ -2873,7 +2873,7 @@ where
 ///
 #[command(
     {
-        name: "JSON.CLEAR",
+        name: "json.clear",
         flags: [Write],
         arity: -2,
         complexity: "O(N) when path is evaluated to a single value where N is the size of the values, O(N) when path is evaluated to multiple values, where N is the size of the key",
@@ -2963,7 +2963,7 @@ fn json_clear_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>
 ///
 #[command(
     {
-        name: "JSON.DEBUG",
+        name: "json.debug",
         flags: [ReadOnly],
         arity: -2,
         complexity: "N/A",
@@ -3032,7 +3032,7 @@ fn json_debug_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>
 ///
 #[command(
     {
-        name: "JSON.RESP",
+        name: "json.resp",
         flags: [ReadOnly],
         arity: -2,
         complexity: "O(N) when path is evaluated to a single value, where N is the size of the value, O(N) when path is evaluated to multiple values, where N is the size of the key",
