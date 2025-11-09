@@ -1119,7 +1119,7 @@ def test_asm_shared_string_cache_race():
         for i in range(num_duplicate_strings)
     ]
     
-    slots = slot_table()
+    slots = slot_table
     
     # Create initial data with LOTS of duplicate strings
     env.debugPrint(f"Creating {num_keys} keys with {num_duplicate_strings} shared strings...", force=True)
@@ -1321,7 +1321,7 @@ def test_asm_string_cache_eviction_race():
     num_keys = 100
     strings_per_key = 100  # Will exceed typical cache size
     
-    slots = slot_table()
+    slots = slot_table
     
     env.debugPrint(f"Creating {num_keys * strings_per_key} unique strings to force cache eviction...", force=True)
     
@@ -1395,7 +1395,7 @@ def migrate_slots_back_and_forth(env):
                     node_ids.append(node.split()[0])
             
             if len(node_ids) >= 2:
-                slots = slot_table()
+                slots = slot_table
                 for slot in slots[:10]:
                     # Forward
                     conn.execute_command("CLUSTER", "MIGRATION", "IMPORT-START", str(slot), node_ids[0])
