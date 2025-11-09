@@ -2871,7 +2871,48 @@ where
 ///
 /// JSON.CLEAR <key> [path ...]
 ///
-pub fn json_clear<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+#[command(
+    {
+        name: "JSON.CLEAR",
+        flags: [Write],
+        arity: -2,
+        complexity: "O(N) when path is evaluated to a single value where N is the size of the values, O(N) when path is evaluated to multiple values, where N is the size of the key",
+        since: "2.0.0",
+        summary: "Clear container values (arrays/objects) and set numeric values to 0",
+        key_spec: [
+            {
+                flags: [ReadWrite],
+                begin_search: Index({ index: 1 }),
+                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+            }
+        ],
+        args: [
+            {
+                name: "key",
+                arg_type: Key,
+                key_spec_index: 0,
+            },
+            {
+                name: "path",
+                arg_type: String,
+                flags: [Optional, Multiple],
+            }
+        ]
+    }
+)]
+pub fn json_clear(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+    crate::run_on_manager!(
+        pre_command: || {},
+        get_manage: {
+            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            })
+        },
+        run: |mngr| json_clear_impl(mngr, ctx, args),
+    )
+}
+
+fn json_clear_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
     let paths = args.try_fold::<_, _, Result<Vec<Path>, RedisError>>(

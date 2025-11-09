@@ -241,7 +241,6 @@ macro_rules! redis_json_module_create {
             init: initialize,
             info: $info_func,
             commands: [
-                ["json.clear", json_command!(json_clear), "write", 1,1,1, ACL::Write, ACL::from("json")],
                 ["json.debug", json_command!(json_debug), "readonly", 2,2,1, ACL::Read, ACL::from("json")],
                 ["json.resp", json_command!(json_resp), "readonly", 1,1,1, ACL::Read, ACL::from("json")],
             ],
