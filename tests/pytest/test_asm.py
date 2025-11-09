@@ -1662,7 +1662,9 @@ def test_string_cache_thread_safety_stress():
                             thread_conn.execute_command("JSON.DEL", key)
                             operation_counts["del"][0] += 1
                     except Exception as e:
-                        if "not exist" not in str(e).lower():
+                        error_str = str(e).lower()
+                        # Ignore expected errors: key doesn't exist, or trying to update non-existent path
+                        if "not exist" not in error_str and "must be created at the root" not in error_str:
                             errors.append(f"Worker {worker_id} op={op}: {str(e)}")
         except Exception as e:
             errors.append(f"Worker {worker_id} fatal error: {str(e)}")
