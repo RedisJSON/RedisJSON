@@ -2231,7 +2231,49 @@ where
 ///
 /// JSON.ARRLEN <key> [path]
 ///
-pub fn json_arr_len<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+#[command(
+    {
+        name: "JSON.ARRLEN",
+        flags: [ReadOnly],
+        arity: -2,
+        complexity: "O(1) where path is evaluated to a single value, O(N) where path is evaluated to multiple values, where N is the size of the key",
+        since: "1.0.0",
+        summary: "Report the length of the JSON array at path in key",
+        key_spec: [
+            {
+                flags: [ReadOnly],
+                begin_search: Index({ index: 1 }),
+                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+            }
+        ],
+        args: [
+            {
+                name: "key",
+                arg_type: Key,
+                key_spec_index: 0,
+            },
+            {
+                name: "path",
+                arg_type: String,
+                flags: [Optional],
+            }
+        ]
+    }
+)]
+
+pub fn json_arr_len(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+    crate::run_on_manager!(
+        pre_command: || {},
+        get_manage: {
+            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            })
+        },
+        run: |mngr| json_arr_len_impl(mngr, ctx, args),
+    )
+}
+
+fn json_arr_len_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
     let path = args.next_str().map(Path::new).unwrap_or_default();
