@@ -1990,7 +1990,7 @@ pub enum ObjectLen {
     {
         name: "JSON.ARRINDEX",
         flags: [ReadOnly],
-        arity: -3,
+        arity: -4,
         complexity: "O(N) when path is evaluated to a single value where N is the size of the array, O(N) when path is evaluated to multiple values, where N is the size of the key",
         since: "1.0.0",
         summary: "Search for the first occurrence of a JSON value in an array",
@@ -2086,7 +2086,55 @@ fn json_arr_index_impl<M: Manager>(
 ///
 /// JSON.ARRINSERT <key> <path> <index> <json> [json ...]
 ///
-pub fn json_arr_insert<M: Manager>(
+#[command(
+    {
+        name: "JSON.ARRINSERT",
+        flags: [Write, DenyOOM],
+        arity: -5,
+        complexity: "O(N) when path is evaluated to a single value where N is the size of the array, O(N) when path is evaluated to multiple values, where N is the size of the key",
+        since: "1.0.0",
+        summary: "Insert the json values into the array at path before the index (shifts to the right)",
+        key_spec: [
+            {
+                flags: [ReadWrite],
+                begin_search: Index({ index: 1 }),
+                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+            }
+        ],
+        args: [
+            {
+                name: "key",
+                arg_type: Key,
+                key_spec_index: 0,
+            },
+            {
+                name: "path",
+                arg_type: String,
+            },
+            {
+                name: "index",
+                arg_type: Integer,
+            },
+            {
+                name: "json",
+                arg_type: String,
+                flags: [Multiple],
+            }
+        ]
+    }
+)]
+pub fn json_arr_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+    crate::run_on_manager!(
+        pre_command: || {},
+        get_manage: {
+            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            })
+        },
+        run: |mngr| json_arr_insert_command_impl(mngr, ctx, args),
+    )
+}
+fn json_arr_insert_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
