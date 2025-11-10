@@ -190,6 +190,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "common"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "cpufeatures"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -756,6 +763,7 @@ dependencies = [
  "bitflags 2.6.0",
  "cc",
  "cfg-if",
+ "common",
  "enum-primitive-derive",
  "libc",
  "linkme",
@@ -772,6 +780,7 @@ dependencies = [
 name = "redis-module-macros"
 version = "99.99.99"
 dependencies = [
+ "common",
  "proc-macro2",
  "quote 1.0.37",
  "serde",

@@ -100,6 +100,7 @@ fn is_resp3(ctx: &Context) -> bool {
     {
         name: "json.get",
         flags: [ReadOnly],
+        acl_categories: [Read, Single("json")],
         arity: -2,
         complexity: "O(N) where N is the size of the JSON",
         since: "1.0.0",
@@ -267,6 +268,7 @@ fn json_get_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
     {
         name: "json.set",
         flags: [Write, DenyOOM],
+        acl_categories: [Write, Single("json")],
         arity: -4,
         complexity: "O(M+N) where M is the size of the original value (if it exists) and N is the size of the new value",
         since: "1.0.0",
@@ -428,6 +430,7 @@ fn json_set_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
     {
         name: "json.merge",
         flags: [Write, DenyOOM],
+        acl_categories: [Write, Single("json")],
         arity: -4,
         complexity: "O(M+N) when path is evaluated to a single value where M is the size of the original value (if it exists) and N is the size of the new value, O(M+N) when path is evaluated to multiple values where M is the size of the key and N is the size of the new value * the number of original values in the key",
         since: "2.6.0",
@@ -585,6 +588,7 @@ fn json_merge_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>
     {
         name: "json.mset",
         flags: [Write, DenyOOM],
+        acl_categories: [Write, Single("json")],
         arity: -4,
         complexity: "O(K*(M+N)) where k is the number of keys in the command, when path is evaluated to a single value where M is the size of the original value (if it exists) and N is the size of the new value, or O(K*(M+N)) when path is evaluated to multiple values where M is the size of the key and N is the size of the new value * the number of original values in the key",
         since: "2.6.0",
@@ -886,6 +890,7 @@ macro_rules! json_del_command {
             {
                 name: $name,
                 flags: [Write],
+                acl_categories: [Write, Single("json")],
                 arity: -2,
                 complexity: "O(N) when path is evaluated to a single value where N is the size of the deleted value, O(N) when path is evaluated to multiple values, where N is the size of the key",
                 since: "1.0.0",
@@ -908,7 +913,7 @@ macro_rules! json_del_command {
 }
 
 
-json_del_command!("JSON.DEL",
+json_del_command!("json.del",
 pub fn json_del(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     crate::run_on_manager!(
         pre_command: || {},
@@ -921,7 +926,7 @@ pub fn json_del(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     )
 });
 
-json_del_command!("JSON.FORGET",
+json_del_command!("json.forget",
 pub fn json_forget(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     json_del(ctx, args)
 });
@@ -972,6 +977,7 @@ fn json_del_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
     {
         name: "json.mget",
         flags: [ReadOnly],
+        acl_categories: [Read, Single("json")],
         arity: -3,
         complexity: "O(M*N) when path is evaluated to a single value where M is the number of keys and N is the size of the value, O(N1+N2+...+Nm) when path is evaluated to multiple values where m is the number of keys and Ni is the size of the i-th key",
         since: "1.0.0",
@@ -1059,6 +1065,7 @@ fn json_mget_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
     {
         name: "json.type",
         flags: [ReadOnly],
+        acl_categories: [Read, Single("json")],
         arity: -2,
         complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
         since: "1.0.0",
@@ -1309,6 +1316,7 @@ where
     {
         name: "json.numincrby",
         flags: [Write],
+        acl_categories: [Write, Single("json")],
         arity: 4,
         complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
         since: "1.0.0",
@@ -1365,6 +1373,7 @@ fn json_num_incrby_impl<M: Manager>(
     {
         name: "json.nummultby",
         flags: [Write],
+        acl_categories: [Write, Single("json")],
         arity: 4,
         complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
         since: "1.0.0",
@@ -1421,6 +1430,7 @@ pub fn json_num_multby_impl<M: Manager>(
     {
         name: "json.numpowby",
         flags: [Write],
+        acl_categories: [Write, Single("json")],
         arity: 4,
         complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
         since: "1.0.0",
@@ -1476,6 +1486,7 @@ pub fn json_num_powby_impl<M: Manager>(
     {
         name: "json.toggle",
         flags: [Write],
+        acl_categories: [Write, Single("json")],
         arity: 3,
         complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
         since: "2.0.0",
@@ -1595,6 +1606,7 @@ where
     {
         name: "json.strappend",
         flags: [Write, DenyOOM],
+        acl_categories: [Write, Single("json")],
         arity: -3,
         complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
         since: "1.0.0",
@@ -1738,6 +1750,7 @@ where
     {
         name: "json.strlen",
         flags: [ReadOnly],
+        acl_categories: [Read, Single("json")],
         arity: -2,
         complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
         since: "1.0.0",
@@ -1820,6 +1833,7 @@ where
     {
         name: "json.arrappend",
         flags: [Write, DenyOOM],
+        acl_categories: [Write, Single("json")],
         arity: -3,
         complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
         since: "1.0.0",
@@ -1990,6 +2004,7 @@ pub enum ObjectLen {
     {
         name: "json.arrindex",
         flags: [ReadOnly],
+        acl_categories: [Read, Single("json")],
         arity: -4,
         complexity: "O(N) when path is evaluated to a single value where N is the size of the array, O(N) when path is evaluated to multiple values, where N is the size of the key",
         since: "1.0.0",
@@ -2090,6 +2105,7 @@ fn json_arr_index_impl<M: Manager>(
     {
         name: "json.arrinsert",
         flags: [Write, DenyOOM],
+        acl_categories: [Write, Single("json")],
         arity: -5,
         complexity: "O(N) when path is evaluated to a single value where N is the size of the array, O(N) when path is evaluated to multiple values, where N is the size of the key",
         since: "1.0.0",
@@ -2235,6 +2251,7 @@ where
     {
         name: "json.arrlen",
         flags: [ReadOnly],
+        acl_categories: [Read, Single("json")],
         arity: -2,
         complexity: "O(1) where path is evaluated to a single value, O(N) where path is evaluated to multiple values, where N is the size of the key",
         since: "1.0.0",
@@ -2329,6 +2346,7 @@ fn json_arr_len_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisStrin
     {
         name: "json.arrpop",
         flags: [Write],
+        acl_categories: [Write, Single("json")],
         arity: -2,
         complexity: "O(N) when path is evaluated to a single value where N is the size of the array and the specified index is not the last element, O(1) when path is evaluated to a single value and the specified index is the last element, or O(N) when path is evaluated to multiple values, where N is the size of the key",
         since: "1.0.0",
@@ -2551,6 +2569,7 @@ where
     {
         name: "json.arrtrim",
         flags: [Write],
+        acl_categories: [Write, Single("json")],
         arity: 5,
         complexity: "O(N) when path is evaluated to a single value where N is the size of the array, O(N) when path is evaluated to multiple values, where N is the size of the key",
         since: "1.0.0",
@@ -2683,6 +2702,7 @@ where
     {
         name: "json.objkeys",
         flags: [ReadOnly],
+        acl_categories: [Read, Single("json")],
         arity: -2,
         complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
         since: "1.0.0",
@@ -2780,6 +2800,7 @@ where
     {
         name: "json.objlen",
         flags: [ReadOnly],
+        acl_categories: [Read, Single("json")],
         arity: -2,
         complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
         since: "1.0.0",
@@ -2875,6 +2896,7 @@ where
     {
         name: "json.clear",
         flags: [Write],
+        acl_categories: [Write, Single("json")],
         arity: -2,
         complexity: "O(N) when path is evaluated to a single value where N is the size of the values, O(N) when path is evaluated to multiple values, where N is the size of the key",
         since: "2.0.0",
@@ -2965,6 +2987,7 @@ fn json_clear_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>
     {
         name: "json.debug",
         flags: [ReadOnly],
+        acl_categories: [Read, Single("json")],
         arity: -2,
         complexity: "N/A",
         since: "1.0.0",
@@ -3034,6 +3057,7 @@ fn json_debug_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>
     {
         name: "json.resp",
         flags: [ReadOnly],
+        acl_categories: [Read, Single("json")],
         arity: -2,
         complexity: "O(N) when path is evaluated to a single value, where N is the size of the value, O(N) when path is evaluated to multiple values, where N is the size of the key",
         since: "1.0.0",
