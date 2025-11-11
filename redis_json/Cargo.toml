@@ -2,6 +2,8 @@
 name = "redis_json"
 version = "99.99.99"
 authors = [
+    "Aviv David <aviv.david@redis.com>",
+    "Ephraim Feldblum <ephraim.feldblum@redis.com>",
     "Guy Korland <guy.korland@redis.com>",
     "Meir Shpilraien <meir@redis.com>",
     "Omer Shadmi <omer.shadmi@redis.com>",
