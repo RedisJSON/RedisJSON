@@ -10,7 +10,6 @@
 use crate::defrag::defrag_info;
 use crate::error::Error;
 use crate::formatter::ReplyFormatOptions;
-use crate::ivalue_manager::RedisIValueJsonKeyManager;
 use crate::key_value::KeyValue;
 use crate::manager::{
     err_msg_json_path_doesnt_exist_with_param, err_msg_json_path_doesnt_exist_with_param_or,
@@ -20,9 +19,7 @@ use crate::redisjson::{Format, Path, ReplyFormat, SetOptions, JSON_ROOT_PATH};
 use json_path::select_value::{SelectValue, SelectValueType, ValueRef};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
-use redis_module_macros::command;
 use std::cmp::Ordering;
-use std::marker::PhantomData;
 use std::str::FromStr;
 
 use json_path::{calc_once_with_paths, compile, json_path::UserPathTracker};
@@ -67,30 +64,6 @@ const JSONGET_SUBCOMMANDS_MAXSTRLEN: usize = max_strlen(&[
     CMD_ARG_FORMAT,
 ]);
 
-type DefaultManager = RedisIValueJsonKeyManager<'static>;
-
-#[inline]
-fn dispatch_with_default_manager<F>(ctx: &Context, args: Vec<RedisString>, run: F) -> RedisResult
-where
-    F: FnOnce(DefaultManager, &Context, Vec<RedisString>) -> RedisResult,
-{
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(DefaultManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |manager| run(manager, ctx, args),
-    )
-}
-
-macro_rules! call_with_manager {
-    ($ctx:ident, $args:ident, $func:ident) => {{
-        dispatch_with_default_manager($ctx, $args, $func::<DefaultManager>)
-    }};
-}
-
 pub enum Values<'a, V: SelectValue> {
     Single(ValueRef<'a, V>),
     Multi(Vec<ValueRef<'a, V>>),
@@ -121,107 +94,109 @@ fn is_resp3(ctx: &Context) -> bool {
 ///         [FORMAT {STRING|EXPAND1|EXPAND}]      /* default is STRING */
 ///         [path ...]
 ///
-#[command(
-    {
-        name: "json.get",
-        flags: [ReadOnly],
-        acl_categories: [Read, Single("json")],
-        arity: -2,
-        complexity: "O(N) where N is the size of the JSON",
-        since: "1.0.0",
-        summary: "Get JSON value at path",
-        key_spec: [
+#[macro_export]
+macro_rules! json_get_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
             {
+                name: "json.get",
                 flags: [ReadOnly],
-                begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
-            }
-        ],
-        args: [
-            {
-                name: "key",
-                arg_type: Key,
-                key_spec_index: 0,
-            },
-            {
-                name: "indent",
-                token: "INDENT",
-                arg_type: Block,
-                flags: [Optional],
-                subargs: [
+                acl_categories: [Read, Single("json")],
+                arity: -2,
+                complexity: "O(N) where N is the size of the JSON",
+                since: "1.0.0",
+                summary: "Get JSON value at path",
+                key_spec: [
+                    {
+                        flags: [ReadOnly],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
+                    },
                     {
                         name: "indent",
-                        arg_type: String,
-                    }
-                ]
-            },
-            {
-                name: "newline",
-                token: "NEWLINE",
-                arg_type: Block,
-                flags: [Optional],
-                subargs: [
-                    {
-                        name: "newline",
-                        arg_type: String,
-                    }
-                ]
-            },
-            {
-                name: "space",
-                token: "SPACE",
-                arg_type: Block,
-                flags: [Optional],
-                subargs: [
-                    {
-                        name: "space",
-                        arg_type: String,
-                    }
-                ]
-            },
-            {
-                name: "format",
-                token: "FORMAT",
-                arg_type: Block,
-                flags: [Optional],
-                subargs: [
-                    {
-                        name: "format-token",
-                        arg_type: OneOf,
+                        token: "INDENT",
+                        arg_type: Block,
+                        flags: [Optional],
                         subargs: [
                             {
-                                name: "STRING",
-                                arg_type: PureToken,
-                                token: "STRING",
-                            },
-                            {
-                                name: "EXPAND1",
-                                arg_type: PureToken,
-                                token: "EXPAND1",
-                            },
-                            {
-                                name: "EXPAND",
-                                arg_type: PureToken,
-                                token: "EXPAND",
+                                name: "indent",
+                                arg_type: String,
                             }
                         ]
+                    },
+                    {
+                        name: "newline",
+                        token: "NEWLINE",
+                        arg_type: Block,
+                        flags: [Optional],
+                        subargs: [
+                            {
+                                name: "newline",
+                                arg_type: String,
+                            }
+                        ]
+                    },
+                    {
+                        name: "space",
+                        token: "SPACE",
+                        arg_type: Block,
+                        flags: [Optional],
+                        subargs: [
+                            {
+                                name: "space",
+                                arg_type: String,
+                            }
+                        ]
+                    },
+                    {
+                        name: "format",
+                        token: "FORMAT",
+                        arg_type: Block,
+                        flags: [Optional],
+                        subargs: [
+                            {
+                                name: "format-token",
+                                arg_type: OneOf,
+                                subargs: [
+                                    {
+                                        name: "STRING",
+                                        arg_type: PureToken,
+                                        token: "STRING",
+                                    },
+                                    {
+                                        name: "EXPAND1",
+                                        arg_type: PureToken,
+                                        token: "EXPAND1",
+                                    },
+                                    {
+                                        name: "EXPAND",
+                                        arg_type: PureToken,
+                                        token: "EXPAND",
+                                    }
+                                ]
 
+                            }
+                        ]
+                    },
+                    {
+                        name: "path",
+                        arg_type: String,
+                        flags: [Optional, Multiple],
                     }
                 ]
-            },
-            {
-                name: "path",
-                arg_type: String,
-                flags: [Optional, Multiple],
             }
-        ]
-    }
-)]
-pub fn json_get(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_get_impl)
+        )]
+        $item
+    };
 }
-
-fn json_get_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+pub fn json_get_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
 
@@ -280,90 +255,92 @@ fn json_get_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
 ///
 /// JSON.SET <key> <path> <json> [NX | XX | FORMAT <format>]
 ///
-#[command(
-    {
-        name: "json.set",
-        flags: [Write, DenyOOM],
-        acl_categories: [Write, Single("json")],
-        arity: -4,
-        complexity: "O(M+N) where M is the size of the original value (if it exists) and N is the size of the new value",
-        since: "1.0.0",
-        summary: "Set the JSON value at path in key",
-        key_spec: [
+#[macro_export]
+macro_rules! json_set_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
             {
-                flags: [ReadWrite],
-                begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
-            }
-        ],
-        args: [
-            {
-                name: "key",
-                arg_type: Key,
-                key_spec_index: 0,
-            },
-            {
-                name: "path",
-                arg_type: String,
-            },
-            {
-                name: "json",
-                arg_type: String,
-            },
-            {
-                name: "condition",
-                arg_type: OneOf,
-                flags: [Optional],
-                subargs: [
+                name: "json.set",
+                flags: [Write, DenyOOM],
+                acl_categories: [Write, Single("json")],
+                arity: -4,
+                complexity: "O(M+N) where M is the size of the original value (if it exists) and N is the size of the new value",
+                since: "1.0.0",
+                summary: "Set the JSON value at path in key",
+                key_spec: [
                     {
-                        name: "nx",
-                        arg_type: PureToken,
-                        token: "NX",
+                        flags: [ReadWrite],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
                     },
                     {
-                        name: "xx",
-                        arg_type: PureToken,
-                        token: "XX",
-                    }]
-                },
-                {
-                    name: "format",
-                    token: "FORMAT",
-                    arg_type: Block,
-                    flags: [Optional],
-                    subargs: [
+                        name: "path",
+                        arg_type: String,
+                    },
+                    {
+                        name: "json",
+                        arg_type: String,
+                    },
+                    {
+                        name: "condition",
+                        arg_type: OneOf,
+                        flags: [Optional],
+                        subargs: [
+                            {
+                                name: "nx",
+                                arg_type: PureToken,
+                                token: "NX",
+                            },
+                            {
+                                name: "xx",
+                                arg_type: PureToken,
+                                token: "XX",
+                            }]
+                        },
                         {
-                            name: "format-token",
-                            arg_type: OneOf,
+                            name: "format",
+                            token: "FORMAT",
+                            arg_type: Block,
+                            flags: [Optional],
                             subargs: [
                                 {
-                                    name: "STRING",
-                                    arg_type: PureToken,
-                                    token: "STRING",
-                                },
-                                {
-                                    name: "JSON",
-                                    arg_type: PureToken,
-                                    token: "JSON",
-                                },
-                                {
-                                    name: "BSON",
-                                    arg_type: PureToken,
-                                    token: "BSON",
+                                    name: "format-token",
+                                    arg_type: OneOf,
+                                    subargs: [
+                                        {
+                                            name: "STRING",
+                                            arg_type: PureToken,
+                                            token: "STRING",
+                                        },
+                                        {
+                                            name: "JSON",
+                                            arg_type: PureToken,
+                                            token: "JSON",
+                                        },
+                                        {
+                                            name: "BSON",
+                                            arg_type: PureToken,
+                                            token: "BSON",
+                                        }
+                                    ]
+
                                 }
                             ]
-
                         }
-                    ]
-                }
-        ],
-    }
-)]
-pub fn json_set(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_set_impl)
+                ],
+            }
+        )]
+        $item
+    };
 }
-
-fn json_set_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+pub fn json_set_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;
@@ -434,73 +411,80 @@ fn json_set_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
 ///
 /// JSON.MERGE <key> <path> <json> [FORMAT <format>]
 ///
-#[command(
-    {
-        name: "json.merge",
-        flags: [Write, DenyOOM],
-        acl_categories: [Write, Single("json")],
-        arity: -4,
-        complexity: "O(M+N) when path is evaluated to a single value where M is the size of the original value (if it exists) and N is the size of the new value, O(M+N) when path is evaluated to multiple values where M is the size of the key and N is the size of the new value * the number of original values in the key",
-        since: "2.6.0",
-        summary: "Merge a given JSON value into matching paths. Consequently, JSON values at matching paths are updated, deleted, or expanded with new children",
-        key_spec: [
+#[macro_export]
+macro_rules! json_merge_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
             {
-                flags: [ReadWrite],
-                begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
-            }
-        ],
-        args: [
-            {
-                name: "key",
-                arg_type: Key,
-                key_spec_index: 0,
-            },
-            {
-                name: "path",
-                arg_type: String,
-            },
-            {
-                name: "json",
-                arg_type: String,
-            },
-            {
-                name: "format",
-                token: "FORMAT",
-                arg_type: Block,
-                flags: [Optional],
-                subargs: [
+                name: "json.merge",
+                flags: [Write, DenyOOM],
+                acl_categories: [Write, Single("json")],
+                arity: -4,
+                complexity: "O(M+N) when path is evaluated to a single value where M is the size of the original value (if it exists) and N is the size of the new value, O(M+N) when path is evaluated to multiple values where M is the size of the key and N is the size of the new value * the number of original values in the key",
+                since: "2.6.0",
+                summary: "Merge a given JSON value into matching paths. Consequently, JSON values at matching paths are updated, deleted, or expanded with new children",
+                key_spec: [
                     {
-                        name: "format-token",
-                        arg_type: OneOf,
+                        flags: [ReadWrite],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
+                    },
+                    {
+                        name: "path",
+                        arg_type: String,
+                    },
+                    {
+                        name: "json",
+                        arg_type: String,
+                    },
+                    {
+                        name: "format",
+                        token: "FORMAT",
+                        arg_type: Block,
+                        flags: [Optional],
                         subargs: [
                             {
-                                name: "STRING",
-                                arg_type: PureToken,
-                                token: "STRING",
-                            },
-                            {
-                                name: "JSON",
-                                arg_type: PureToken,
-                                token: "JSON",
-                            },
-                            {
-                                name: "BSON",
-                                arg_type: PureToken,
-                                token: "BSON",
+                                name: "format-token",
+                                arg_type: OneOf,
+                                subargs: [
+                                    {
+                                        name: "STRING",
+                                        arg_type: PureToken,
+                                        token: "STRING",
+                                    },
+                                    {
+                                        name: "JSON",
+                                        arg_type: PureToken,
+                                        token: "JSON",
+                                    },
+                                    {
+                                        name: "BSON",
+                                        arg_type: PureToken,
+                                        token: "BSON",
+                                    }
+                                ]
                             }
                         ]
                     }
                 ]
             }
-        ]
-    }
-)]
-pub fn json_merge(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_merge_impl)
+        )]
+        $item
+    };
 }
 
-fn json_merge_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+pub fn json_merge_impl<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;
@@ -583,51 +567,58 @@ fn json_merge_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>
 ///
 /// JSON.MSET <key> <path> <json> [[<key> <path> <json>]...]
 ///
-#[command(
-    {
-        name: "json.mset",
-        flags: [Write, DenyOOM],
-        acl_categories: [Write, Single("json")],
-        arity: -4,
-        complexity: "O(K*(M+N)) where k is the number of keys in the command, when path is evaluated to a single value where M is the size of the original value (if it exists) and N is the size of the new value, or O(K*(M+N)) when path is evaluated to multiple values where M is the size of the key and N is the size of the new value * the number of original values in the key",
-        since: "2.6.0",
-        summary: "Set or update one or more JSON values according to the specified key-path-value triplets",
-        key_spec: [
+#[macro_export]
+macro_rules! json_mset_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
             {
-                flags: [ReadWrite],
-                begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: -1, steps: 3, limit: 0 }),
-            }
-        ],
-        args: [
-            {
-                name: "triplet",
-                arg_type: Block,
-                flags: [Multiple],
-                subargs: [
+                name: "json.mset",
+                flags: [Write, DenyOOM],
+                acl_categories: [Write, Single("json")],
+                arity: -4,
+                complexity: "O(K*(M+N)) where k is the number of keys in the command, when path is evaluated to a single value where M is the size of the original value (if it exists) and N is the size of the new value, or O(K*(M+N)) when path is evaluated to multiple values where M is the size of the key and N is the size of the new value * the number of original values in the key",
+                since: "2.6.0",
+                summary: "Set or update one or more JSON values according to the specified key-path-value triplets",
+                key_spec: [
                     {
-                        name: "key",
-                        arg_type: Key,
-                        key_spec_index: 0,
-                    },
+                        flags: [ReadWrite],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: -1, steps: 3, limit: 0 }),
+                    }
+                ],
+                args: [
                     {
-                        name: "path",
-                        arg_type: String,
-                    },
-                    {
-                        name: "json",
-                        arg_type: String,
+                        name: "triplet",
+                        arg_type: Block,
+                        flags: [Multiple],
+                        subargs: [
+                            {
+                                name: "key",
+                                arg_type: Key,
+                                key_spec_index: 0,
+                            },
+                            {
+                                name: "path",
+                                arg_type: String,
+                            },
+                            {
+                                name: "json",
+                                arg_type: String,
+                            }
+                        ]
                     }
                 ]
             }
-        ]
-    }
-)]
-pub fn json_mset(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_mset_impl)
+        )]
+        $item
+    };
 }
 
-fn json_mset_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+pub fn json_mset_impl<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     if args.len() < 3 {
@@ -875,9 +866,10 @@ pub fn prepare_paths_for_updating(paths: &mut Vec<Vec<String>>) {
 /// JSON.DEL <key> [path]
 ///
 ///
+#[macro_export]
 macro_rules! json_del_command {
     ($name:literal, $item:item) => {
-        #[command(
+        #[::redis_module_macros::command(
             {
                 name: $name,
                 flags: [Write],
@@ -903,21 +895,7 @@ macro_rules! json_del_command {
     };
 }
 
-json_del_command!(
-    "json.del",
-    pub fn json_del(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-        call_with_manager!(ctx, args, json_del_impl)
-    }
-);
-
-json_del_command!(
-    "json.forget",
-    pub fn json_forget(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-        json_del(ctx, args)
-    }
-);
-
-fn json_del_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+pub fn json_del_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;
@@ -959,43 +937,50 @@ fn json_del_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
 ///
 /// JSON.MGET <key> [key ...] path
 ///
-#[command(
-    {
-        name: "json.mget",
-        flags: [ReadOnly],
-        acl_categories: [Read, Single("json")],
-        arity: -3,
-        complexity: "O(M*N) when path is evaluated to a single value where M is the number of keys and N is the size of the value, O(N1+N2+...+Nm) when path is evaluated to multiple values where m is the number of keys and Ni is the size of the i-th key",
-        since: "1.0.0",
-        summary: "Return the values at path from multiple key arguments",
-        key_spec: [
+#[macro_export]
+macro_rules! json_mget_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
             {
-                notes: "The key containing the JSON document",
+                name: "json.mget",
                 flags: [ReadOnly],
-                begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                acl_categories: [Read, Single("json")],
+                arity: -3,
+                complexity: "O(M*N) when path is evaluated to a single value where M is the number of keys and N is the size of the value, O(N1+N2+...+Nm) when path is evaluated to multiple values where m is the number of keys and Ni is the size of the i-th key",
+                since: "1.0.0",
+                summary: "Return the values at path from multiple key arguments",
+                key_spec: [
+                    {
+                        notes: "The key containing the JSON document",
+                        flags: [ReadOnly],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
+                        flags: [Multiple],
+                    },
+                    {
+                        name: "path",
+                        arg_type: String,
+                        flags: [Optional],
+                    }
+                ]
             }
-        ],
-        args: [
-            {
-                name: "key",
-                arg_type: Key,
-                key_spec_index: 0,
-                flags: [Multiple],
-            },
-            {
-                name: "path",
-                arg_type: String,
-                flags: [Optional],
-            }
-        ]
-    }
-)]
-pub fn json_mget(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_mget_impl)
+        )]
+        $item
+    };
 }
 
-fn json_mget_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+pub fn json_mget_impl<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     if args.len() < 3 {
         return Err(RedisError::WrongArity);
     }
@@ -1038,41 +1023,44 @@ fn json_mget_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
 ///
 /// JSON.TYPE <key> [path]
 ///
-#[command(
-    {
-        name: "json.type",
-        flags: [ReadOnly],
-        acl_categories: [Read, Single("json")],
-        arity: -2,
-        complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
-        since: "1.0.0",
-        summary: "Report the type of JSON value at path",
-        key_spec: [
+#[macro_export]
+macro_rules! json_type_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
             {
+                name: "json.type",
                 flags: [ReadOnly],
-                begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                acl_categories: [Read, Single("json")],
+                arity: -2,
+                complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
+                since: "1.0.0",
+                summary: "Report the type of JSON value at path",
+                key_spec: [
+                    {
+                        flags: [ReadOnly],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
+                    },
+                    {
+                        name: "path",
+                        arg_type: String,
+                        flags: [Optional],
+                    }
+                ]
             }
-        ],
-        args: [
-            {
-                name: "key",
-                arg_type: Key,
-                key_spec_index: 0,
-            },
-            {
-                name: "path",
-                arg_type: String,
-                flags: [Optional],
-            }
-        ]
-    }
-)]
-pub fn json_type(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_type_command_impl)
+        )]
+        $item
+    };
 }
 
-fn json_type_command_impl<M: Manager>(
+pub fn json_type_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -1097,7 +1085,7 @@ fn json_type_command_impl<M: Manager>(
     }
 }
 
-fn json_type_impl<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
+pub fn json_type_impl<M>(redis_key: &M::ReadHolder, path: &str) -> RedisResult
 where
     M: Manager,
 {
@@ -1285,45 +1273,47 @@ where
 ///
 /// JSON.NUMINCRBY <key> <path> <number>
 ///
-#[command(
-    {
-        name: "json.numincrby",
-        flags: [Write],
-        acl_categories: [Write, Single("json")],
-        arity: 4,
-        complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
-        since: "1.0.0",
-        summary: "Increment the number value stored at path by number",
-        key_spec: [
+#[macro_export]
+macro_rules! json_numincrby_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
             {
-                flags: [ReadWrite],
-                begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                name: "json.numincrby",
+                flags: [Write],
+                acl_categories: [Write, Single("json")],
+                arity: 4,
+                complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
+                since: "1.0.0",
+                summary: "Increment the number value stored at path by number",
+                key_spec: [
+                    {
+                        flags: [ReadWrite],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
+                    },
+                    {
+                        name: "path",
+                        arg_type: String,
+                    },
+                    {
+                        name: "number",
+                        arg_type: Double,
+                    },
+                ]
             }
-        ],
-        args: [
-            {
-                name: "key",
-                arg_type: Key,
-                key_spec_index: 0,
-            },
-            {
-                name: "path",
-                arg_type: String,
-            },
-            {
-                name: "number",
-                arg_type: Double,
-            },
-        ]
-    }
-
-)]
-pub fn json_num_incrby(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_num_incrby_impl)
+        )]
+        $item
+    };
 }
 
-fn json_num_incrby_impl<M: Manager>(
+pub fn json_num_incrby_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -1334,42 +1324,44 @@ fn json_num_incrby_impl<M: Manager>(
 ///
 /// JSON.NUMMULTBY <key> <path> <number>
 ///
-#[command(
-    {
-        name: "json.nummultby",
-        flags: [Write],
-        acl_categories: [Write, Single("json")],
-        arity: 4,
-        complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
-        since: "1.0.0",
-        summary: "Multiply the number value stored at path by number",
-        key_spec: [
+#[macro_export]
+macro_rules! json_nummultby_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
             {
-                flags: [ReadWrite],
-                begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                name: "json.nummultby",
+                flags: [Write],
+                acl_categories: [Write, Single("json")],
+                arity: 4,
+                complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
+                since: "1.0.0",
+                summary: "Multiply the number value stored at path by number",
+                key_spec: [
+                    {
+                        flags: [ReadWrite],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
+                    },
+                    {
+                        name: "path",
+                        arg_type: String,
+                    },
+                    {
+                        name: "number",
+                        arg_type: Double,
+                    },
+                ]
             }
-        ],
-        args: [
-            {
-                name: "key",
-                arg_type: Key,
-                key_spec_index: 0,
-            },
-            {
-                name: "path",
-                arg_type: String,
-            },
-            {
-                name: "number",
-                arg_type: Double,
-            },
-        ]
-    }
-
-)]
-pub fn json_num_multby(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_num_multby_impl)
+        )]
+        $item
+    };
 }
 
 pub fn json_num_multby_impl<M: Manager>(
@@ -1383,43 +1375,46 @@ pub fn json_num_multby_impl<M: Manager>(
 ///
 /// JSON.NUMPOWBY <key> <path> <number>
 ///
-#[command(
-    {
-        name: "json.numpowby",
-        flags: [Write],
-        acl_categories: [Write, Single("json")],
-        arity: 4,
-        complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
-        since: "1.0.0",
-        summary: "Raise the number value stored at path to the power of number",
-        key_spec: [
+#[macro_export]
+macro_rules! json_numpowby_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
             {
-                flags: [ReadWrite],
-                begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                name: "json.numpowby",
+                flags: [Write],
+                acl_categories: [Write, Single("json")],
+                arity: 4,
+                complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
+                since: "1.0.0",
+                summary: "Raise the number value stored at path to the power of number",
+                key_spec: [
+                    {
+                        flags: [ReadWrite],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
+                    },
+                    {
+                        name: "path",
+                        arg_type: String,
+                    },
+                    {
+                        name: "number",
+                        arg_type: Double,
+                    },
+                ]
             }
-        ],
-        args: [
-            {
-                name: "key",
-                arg_type: Key,
-                key_spec_index: 0,
-            },
-            {
-                name: "path",
-                arg_type: String,
-            },
-            {
-                name: "number",
-                arg_type: Double,
-            },
-        ]
-    }
-
-)]
-pub fn json_num_powby(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_num_powby_impl)
+        )]
+        $item
+    };
 }
+
 pub fn json_num_powby_impl<M: Manager>(
     manager: M,
     ctx: &Context,
@@ -1431,40 +1426,43 @@ pub fn json_num_powby_impl<M: Manager>(
 //
 /// JSON.TOGGLE <key> <path>
 ///
-#[command(
-    {
-        name: "json.toggle",
-        flags: [Write],
-        acl_categories: [Write, Single("json")],
-        arity: 3,
-        complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
-        since: "2.0.0",
-        summary: "Toggle the boolean value stored at path",
-        key_spec: [
+#[macro_export]
+macro_rules! json_toggle_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
             {
-                flags: [ReadWrite],
-                begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                name: "json.toggle",
+                flags: [Write],
+                acl_categories: [Write, Single("json")],
+                arity: 3,
+                complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
+                since: "2.0.0",
+                summary: "Toggle the boolean value stored at path",
+                key_spec: [
+                    {
+                        flags: [ReadWrite],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
+                    },
+                    {
+                        name: "path",
+                        arg_type: String,
+                    },
+                ]
             }
-        ],
-        args: [
-            {
-                name: "key",
-                arg_type: Key,
-                key_spec_index: 0,
-            },
-            {
-                name: "path",
-                arg_type: String,
-            },
-        ]
-    }
-)]
-pub fn json_bool_toggle(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_bool_toggle_command_impl)
+        )]
+        $item
+    };
 }
 
-fn json_bool_toggle_command_impl<M: Manager>(
+pub fn json_bool_toggle_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -1543,45 +1541,48 @@ where
 ///
 /// JSON.STRAPPEND <key> [path] <json-string>
 ///
-#[command(
-    {
-        name: "json.strappend",
-        flags: [Write, DenyOOM],
-        acl_categories: [Write, Single("json")],
-        arity: -3,
-        complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
-        since: "1.0.0",
-        summary: "Append the json-string values to the string at path",
-        key_spec: [
+#[macro_export]
+macro_rules! json_strappend_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
             {
-                flags: [ReadWrite],
-                begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                name: "json.strappend",
+                flags: [Write, DenyOOM],
+                acl_categories: [Write, Single("json")],
+                arity: -3,
+                complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
+                since: "1.0.0",
+                summary: "Append the json-string values to the string at path",
+                key_spec: [
+                    {
+                        flags: [ReadWrite],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
+                    },
+                    {
+                        name: "path",
+                        arg_type: String,
+                        flags: [Optional],
+                    },
+                    {
+                        name: "json-string",
+                        arg_type: String,
+                    }
+                ]
             }
-        ],
-        args: [
-            {
-                name: "key",
-                arg_type: Key,
-                key_spec_index: 0,
-            },
-            {
-                name: "path",
-                arg_type: String,
-                flags: [Optional],
-            },
-            {
-                name: "json-string",
-                arg_type: String,
-            }
-        ]
-    }
-)]
-pub fn json_str_append(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_str_append_command_impl)
+        )]
+        $item
+    };
 }
 
-fn json_str_append_command_impl<M: Manager>(
+pub fn json_str_append_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -1679,40 +1680,44 @@ where
 ///
 /// JSON.STRLEN <key> [path]
 ///
-#[command(
-    {
-        name: "json.strlen",
-        flags: [ReadOnly],
-        acl_categories: [Read, Single("json")],
-        arity: -2,
-        complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
-        since: "1.0.0",
-        summary: "Report the length of the JSON String at path in key",
-        key_spec: [
+#[macro_export]
+macro_rules! json_strlen_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
             {
+                name: "json.strlen",
                 flags: [ReadOnly],
-                begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                acl_categories: [Read, Single("json")],
+                arity: -2,
+                complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
+                since: "1.0.0",
+                summary: "Report the length of the JSON String at path in key",
+                key_spec: [
+                    {
+                        flags: [ReadOnly],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
+                    },
+                    {
+                        name: "path",
+                        arg_type: String,
+                        flags: [Optional],
+                    }
+                ]
             }
-        ],
-        args: [
-            {
-                name: "key",
-                arg_type: Key,
-                key_spec_index: 0,
-            },
-            {
-                name: "path",
-                arg_type: String,
-                flags: [Optional],
-            }
-        ]
-    }
-)]
-pub fn json_str_len(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_str_len_command_impl)
+        )]
+        $item
+    };
 }
-fn json_str_len_command_impl<M: Manager>(
+
+pub fn json_str_len_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -1758,45 +1763,48 @@ where
 ///
 /// JSON.ARRAPPEND <key> <path> <json> [json ...]
 ///
-#[command(
-    {
-        name: "json.arrappend",
-        flags: [Write, DenyOOM],
-        acl_categories: [Write, Single("json")],
-        arity: -3,
-        complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
-        since: "1.0.0",
-        summary: "Append the JSON values into the array at path after the last element in it",
-        key_spec: [
+#[macro_export]
+macro_rules! json_arrappend_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
             {
-                flags: [ReadWrite],
-                begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                name: "json.arrappend",
+                flags: [Write, DenyOOM],
+                acl_categories: [Write, Single("json")],
+                arity: -3,
+                complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
+                since: "1.0.0",
+                summary: "Append the JSON values into the array at path after the last element in it",
+                key_spec: [
+                    {
+                        flags: [ReadWrite],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
+                    },
+                    {
+                        name: "path",
+                        arg_type: String,
+                    },
+                    {
+                        name: "json",
+                        arg_type: String,
+                        flags: [Multiple],
+                    }
+                ]
             }
-        ],
-        args: [
-            {
-                name: "key",
-                arg_type: Key,
-                key_spec_index: 0,
-            },
-            {
-                name: "path",
-                arg_type: String,
-            },
-            {
-                name: "json",
-                arg_type: String,
-                flags: [Multiple],
-            }
-        ]
-    }
-)]
-pub fn json_arr_append(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_arr_append_command_impl)
+        )]
+        $item
+    };
 }
 
-fn json_arr_append_command_impl<M: Manager>(
+pub fn json_arr_append_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -1921,60 +1929,63 @@ pub enum ObjectLen {
 ///
 /// JSON.ARRINDEX <key> <path> <json-value> [start [stop]]
 ///
-#[command(
-    {
-        name: "json.arrindex",
-        flags: [ReadOnly],
-        acl_categories: [Read, Single("json")],
-        arity: -4,
-        complexity: "O(N) when path is evaluated to a single value where N is the size of the array, O(N) when path is evaluated to multiple values, where N is the size of the key",
-        since: "1.0.0",
-        summary: "Search for the first occurrence of a JSON value in an array",
-        key_spec: [
+#[macro_export]
+macro_rules! json_arrindex_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
             {
+                name: "json.arrindex",
                 flags: [ReadOnly],
-                begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
-            }
-        ],
-        args: [
-            {
-                name: "key",
-                arg_type: Key,
-                key_spec_index: 0,
-            },
-            {
-                name: "path",
-                arg_type: String,
-            },
-            {
-                name: "json-value",
-                arg_type: String,
-            },
-            {
-                name: "range",
-                arg_type: Block,
-                flags: [Optional],
-                subargs: [
+                acl_categories: [Read, Single("json")],
+                arity: -4,
+                complexity: "O(N) when path is evaluated to a single value where N is the size of the array, O(N) when path is evaluated to multiple values, where N is the size of the key",
+                since: "1.0.0",
+                summary: "Search for the first occurrence of a JSON value in an array",
+                key_spec: [
                     {
-                        name: "start",
-                        arg_type: Integer,
+                        flags: [ReadOnly],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
                     },
                     {
-                        name: "stop",
-                        arg_type: Integer,
+                        name: "path",
+                        arg_type: String,
+                    },
+                    {
+                        name: "json-value",
+                        arg_type: String,
+                    },
+                    {
+                        name: "range",
+                        arg_type: Block,
                         flags: [Optional],
+                        subargs: [
+                            {
+                                name: "start",
+                                arg_type: Integer,
+                            },
+                            {
+                                name: "stop",
+                                arg_type: Integer,
+                                flags: [Optional],
+                            }
+                        ]
                     }
                 ]
             }
-        ]
-    }
-)]
-pub fn json_arr_index(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_arr_index_impl)
+        )]
+        $item
+    };
 }
 
-fn json_arr_index_impl<M: Manager>(
+pub fn json_arr_index_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -2014,48 +2025,53 @@ fn json_arr_index_impl<M: Manager>(
 ///
 /// JSON.ARRINSERT <key> <path> <index> <json> [json ...]
 ///
-#[command(
-    {
-        name: "json.arrinsert",
-        flags: [Write, DenyOOM],
-        acl_categories: [Write, Single("json")],
-        arity: -5,
-        complexity: "O(N) when path is evaluated to a single value where N is the size of the array, O(N) when path is evaluated to multiple values, where N is the size of the key",
-        since: "1.0.0",
-        summary: "Insert the json values into the array at path before the index (shifts to the right)",
-        key_spec: [
+
+#[macro_export]
+macro_rules! json_arrinsert_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
             {
-                flags: [ReadWrite],
-                begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                name: "json.arrinsert",
+                flags: [Write, DenyOOM],
+                acl_categories: [Write, Single("json")],
+                arity: -5,
+                complexity: "O(N) when path is evaluated to a single value where N is the size of the array, O(N) when path is evaluated to multiple values, where N is the size of the key",
+                since: "1.0.0",
+                summary: "Insert the json values into the array at path before the index (shifts to the right)",
+                key_spec: [
+                    {
+                        flags: [ReadWrite],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
+                    },
+                    {
+                        name: "path",
+                        arg_type: String,
+                    },
+                    {
+                        name: "index",
+                        arg_type: Integer,
+                    },
+                    {
+                        name: "json",
+                        arg_type: String,
+                        flags: [Multiple],
+                    }
+                ]
             }
-        ],
-        args: [
-            {
-                name: "key",
-                arg_type: Key,
-                key_spec_index: 0,
-            },
-            {
-                name: "path",
-                arg_type: String,
-            },
-            {
-                name: "index",
-                arg_type: Integer,
-            },
-            {
-                name: "json",
-                arg_type: String,
-                flags: [Multiple],
-            }
-        ]
-    }
-)]
-pub fn json_arr_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_arr_insert_command_impl)
+        )]
+        $item
+    };
 }
-fn json_arr_insert_command_impl<M: Manager>(
+
+pub fn json_arr_insert_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -2152,42 +2168,48 @@ where
 ///
 /// JSON.ARRLEN <key> [path]
 ///
-#[command(
-    {
-        name: "json.arrlen",
-        flags: [ReadOnly],
-        acl_categories: [Read, Single("json")],
-        arity: -2,
-        complexity: "O(1) where path is evaluated to a single value, O(N) where path is evaluated to multiple values, where N is the size of the key",
-        since: "1.0.0",
-        summary: "Report the length of the JSON array at path in key",
-        key_spec: [
+#[macro_export]
+macro_rules! json_arrlen_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
             {
+                name: "json.arrlen",
                 flags: [ReadOnly],
-                begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                acl_categories: [Read, Single("json")],
+                arity: -2,
+                complexity: "O(1) where path is evaluated to a single value, O(N) where path is evaluated to multiple values, where N is the size of the key",
+                since: "1.0.0",
+                summary: "Report the length of the JSON array at path in key",
+                key_spec: [
+                    {
+                        flags: [ReadOnly],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
+                    },
+                    {
+                        name: "path",
+                        arg_type: String,
+                        flags: [Optional],
+                    }
+                ]
             }
-        ],
-        args: [
-            {
-                name: "key",
-                arg_type: Key,
-                key_spec_index: 0,
-            },
-            {
-                name: "path",
-                arg_type: String,
-                flags: [Optional],
-            }
-        ]
-    }
-)]
-
-pub fn json_arr_len(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_arr_len_impl)
+        )]
+        $item
+    };
 }
 
-fn json_arr_len_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+pub fn json_arr_len_impl<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
     let path = args.next_str().map(Path::new).unwrap_or_default();
@@ -2239,80 +2261,85 @@ fn json_arr_len_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisStrin
 ///         [FORMAT {STRINGS|EXPAND1|EXPAND}]   /* default is STRINGS */
 ///         [path [index]]
 ///
-#[command(
-    {
-        name: "json.arrpop",
-        flags: [Write],
-        acl_categories: [Write, Single("json")],
-        arity: -2,
-        complexity: "O(N) when path is evaluated to a single value where N is the size of the array and the specified index is not the last element, O(1) when path is evaluated to a single value and the specified index is the last element, or O(N) when path is evaluated to multiple values, where N is the size of the key",
-        since: "1.0.0",
-        summary: "Remove and return the element at the specified index in the array at path",
-        key_spec: [
+
+#[macro_export]
+macro_rules! json_arrpop_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
             {
-                flags: [ReadWrite],
-                begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
-            }
-        ],
-        args: [
-            {
-                name: "key",
-                arg_type: Key,
-                key_spec_index: 0,
-            },
-            {
-                name: "format",
-                token: "FORMAT",
-                arg_type: Block,
-                flags: [Optional],
-                subargs: [
+                name: "json.arrpop",
+                flags: [Write],
+                acl_categories: [Write, Single("json")],
+                arity: -2,
+                complexity: "O(N) when path is evaluated to a single value where N is the size of the array and the specified index is not the last element, O(1) when path is evaluated to a single value and the specified index is the last element, or O(N) when path is evaluated to multiple values, where N is the size of the key",
+                since: "1.0.0",
+                summary: "Remove and return the element at the specified index in the array at path",
+                key_spec: [
                     {
-                        name: "format-token",
-                        arg_type: OneOf,
+                        flags: [ReadWrite],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
+                    },
+                    {
+                        name: "format",
+                        token: "FORMAT",
+                        arg_type: Block,
+                        flags: [Optional],
                         subargs: [
                             {
-                                name: "STRINGS",
-                                arg_type: PureToken,
-                                token: "STRINGS",
+                                name: "format-token",
+                                arg_type: OneOf,
+                                subargs: [
+                                    {
+                                        name: "STRINGS",
+                                        arg_type: PureToken,
+                                        token: "STRINGS",
+                                    },
+                                    {
+                                        name: "EXPAND1",
+                                        arg_type: PureToken,
+                                        token: "EXPAND1",
+                                    },
+                                    {
+                                        name: "EXPAND",
+                                        arg_type: PureToken,
+                                        token: "EXPAND",
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        name: "path_index",
+                        arg_type: Block,
+                        flags: [Optional],
+                        subargs: [
+                            {
+                                name: "path",
+                                arg_type: String,
                             },
                             {
-                                name: "EXPAND1",
-                                arg_type: PureToken,
-                                token: "EXPAND1",
-                            },
-                            {
-                                name: "EXPAND",
-                                arg_type: PureToken,
-                                token: "EXPAND",
+                                name: "index",
+                                arg_type: Integer,
+                                flags: [Optional],
                             }
                         ]
                     }
                 ]
-            },
-            {
-                name: "path_index",
-                arg_type: Block,
-                flags: [Optional],
-                subargs: [
-                    {
-                        name: "path",
-                        arg_type: String,
-                    },
-                    {
-                        name: "index",
-                        arg_type: Integer,
-                        flags: [Optional],
-                    }
-                ]
             }
-        ]
-    }
-)]
-pub fn json_arr_pop(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_arr_pop_command_impl)
+        )]
+        $item
+    };
 }
-fn json_arr_pop_command_impl<M: Manager>(
+
+pub fn json_arr_pop_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -2458,48 +2485,50 @@ where
 ///
 /// JSON.ARRTRIM <key> <path> <start> <stop>
 ///
-#[command(
-    {
-        name: "json.arrtrim",
-        flags: [Write],
-        acl_categories: [Write, Single("json")],
-        arity: 5,
-        complexity: "O(N) when path is evaluated to a single value where N is the size of the array, O(N) when path is evaluated to multiple values, where N is the size of the key",
-        since: "1.0.0",
-        summary: "Trim an array so that it contains only the specified inclusive range of elements",
-        key_spec: [
+#[macro_export]
+macro_rules! json_arrtrim_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
             {
-                flags: [ReadWrite],
-                begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                name: "json.arrtrim",
+                flags: [Write],
+                acl_categories: [Write, Single("json")],
+                arity: 5,
+                complexity: "O(N) when path is evaluated to a single value where N is the size of the array, O(N) when path is evaluated to multiple values, where N is the size of the key",
+                since: "1.0.0",
+                summary: "Trim an array so that it contains only the specified inclusive range of elements",
+                key_spec: [
+                    {
+                        flags: [ReadWrite],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
+                    },
+                    {
+                        name: "path",
+                        arg_type: String,
+                    },
+                    {
+                        name: "start",
+                        arg_type: Integer,
+                    },
+                    {
+                        name: "stop",
+                        arg_type: Integer,
+                    }
+                ]
             }
-        ],
-        args: [
-            {
-                name: "key",
-                arg_type: Key,
-                key_spec_index: 0,
-            },
-            {
-                name: "path",
-                arg_type: String,
-            },
-            {
-                name: "start",
-                arg_type: Integer,
-            },
-            {
-                name: "stop",
-                arg_type: Integer,
-            }
-        ]
-    }
-)]
-pub fn json_arr_trim(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_arr_trim_command_impl)
+        )]
+        $item
+    };
 }
-
-fn json_arr_trim_command_impl<M: Manager>(
+pub fn json_arr_trim_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -2587,41 +2616,43 @@ where
 ///
 /// JSON.OBJKEYS <key> [path]
 ///
-#[command(
-    {
-        name: "json.objkeys",
-        flags: [ReadOnly],
-        acl_categories: [Read, Single("json")],
-        arity: -2,
-        complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
-        since: "1.0.0",
-        summary: "Return the keys in the object that's referenced by path",
-        key_spec: [
+#[macro_export]
+macro_rules! json_objkeys_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
             {
+                name: "json.objkeys",
                 flags: [ReadOnly],
-                begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                acl_categories: [Read, Single("json")],
+                arity: -2,
+                complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
+                since: "1.0.0",
+                summary: "Return the keys in the object that's referenced by path",
+                key_spec: [
+                    {
+                        flags: [ReadOnly],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
+                    },
+                    {
+                        name: "path",
+                        arg_type: String,
+                        flags: [Optional],
+                    }
+                ]
             }
-        ],
-        args: [
-            {
-                name: "key",
-                arg_type: Key,
-                key_spec_index: 0,
-            },
-            {
-                name: "path",
-                arg_type: String,
-                flags: [Optional],
-            }
-        ]
-    }
-)]
-pub fn json_obj_keys(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_obj_keys_command_impl)
+        )]
+        $item
+    };
 }
-
-fn json_obj_keys_command_impl<M: Manager>(
+pub fn json_obj_keys_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -2681,41 +2712,44 @@ where
 ///
 /// JSON.OBJLEN <key> [path]
 ///
-#[command(
-    {
-        name: "json.objlen",
-        flags: [ReadOnly],
-        acl_categories: [Read, Single("json")],
-        arity: -2,
-        complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
-        since: "1.0.0",
-        summary: "Report the number of keys in the JSON object at path in key",
-        key_spec: [
+#[macro_export]
+macro_rules! json_objlen_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
             {
+                name: "json.objlen",
                 flags: [ReadOnly],
-                begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                acl_categories: [Read, Single("json")],
+                arity: -2,
+                complexity: "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
+                since: "1.0.0",
+                summary: "Report the number of keys in the JSON object at path in key",
+                key_spec: [
+                    {
+                        flags: [ReadOnly],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
+                    },
+                    {
+                        name: "path",
+                        arg_type: String,
+                        flags: [Optional],
+                    }
+                ]
             }
-        ],
-        args: [
-            {
-                name: "key",
-                arg_type: Key,
-                key_spec_index: 0,
-            },
-            {
-                name: "path",
-                arg_type: String,
-                flags: [Optional],
-            }
-        ]
-    }
-)]
-pub fn json_obj_len(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_obj_len_command_impl)
+        )]
+        $item
+    };
 }
 
-fn json_obj_len_command_impl<M: Manager>(
+pub fn json_obj_len_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -2773,41 +2807,48 @@ where
 ///
 /// JSON.CLEAR <key> [path ...]
 ///
-#[command(
-    {
-        name: "json.clear",
-        flags: [Write],
-        acl_categories: [Write, Single("json")],
-        arity: -2,
-        complexity: "O(N) when path is evaluated to a single value where N is the size of the values, O(N) when path is evaluated to multiple values, where N is the size of the key",
-        since: "2.0.0",
-        summary: "Clear container values (arrays/objects) and set numeric values to 0",
-        key_spec: [
+#[macro_export]
+macro_rules! json_clear_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
             {
-                flags: [ReadWrite],
-                begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                name: "json.clear",
+                flags: [Write],
+                acl_categories: [Write, Single("json")],
+                arity: -2,
+                complexity: "O(N) when path is evaluated to a single value where N is the size of the values, O(N) when path is evaluated to multiple values, where N is the size of the key",
+                since: "2.0.0",
+                summary: "Clear container values (arrays/objects) and set numeric values to 0",
+                key_spec: [
+                    {
+                        flags: [ReadWrite],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
+                    },
+                    {
+                        name: "path",
+                        arg_type: String,
+                        flags: [Optional, Multiple],
+                    }
+                ]
             }
-        ],
-        args: [
-            {
-                name: "key",
-                arg_type: Key,
-                key_spec_index: 0,
-            },
-            {
-                name: "path",
-                arg_type: String,
-                flags: [Optional, Multiple],
-            }
-        ]
-    }
-)]
-pub fn json_clear(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_clear_impl)
+        )]
+        $item
+    };
 }
 
-fn json_clear_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+pub fn json_clear_impl<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
     let paths = args.try_fold::<_, _, Result<Vec<Path>, RedisError>>(
@@ -2856,24 +2897,31 @@ fn json_clear_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>
 /// MEMORY <key> [path]
 /// HELP
 ///
-#[command(
-    {
-        name: "json.debug",
-        flags: [ReadOnly],
-        acl_categories: [Read, Single("json")],
-        arity: -2,
-        complexity: "N/A",
-        since: "1.0.0",
-        summary: "This is a container command for debugging related tasks",
-        key_spec: [
-        ],
-    }
-)]
-pub fn json_debug(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_debug_impl)
+#[macro_export]
+macro_rules! json_debug_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
+                    {
+                        name: "json.debug",
+                        flags: [ReadOnly],
+                        acl_categories: [Read, Single("json")],
+                        arity: -2,
+                        complexity: "N/A",
+                        since: "1.0.0",
+                        summary: "This is a container command for debugging related tasks",
+                        key_spec: [
+                        ],
+                    }
+                )]
+        $item
+    };
 }
 
-fn json_debug_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+pub fn json_debug_impl<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     match args.next_str()?.to_uppercase().as_str() {
         "MEMORY" => {
@@ -2918,41 +2966,48 @@ fn json_debug_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>
 ///
 /// JSON.RESP <key> [path]
 ///
-#[command(
-    {
-        name: "json.resp",
-        flags: [ReadOnly],
-        acl_categories: [Read, Single("json")],
-        arity: -2,
-        complexity: "O(N) when path is evaluated to a single value, where N is the size of the value, O(N) when path is evaluated to multiple values, where N is the size of the key",
-        since: "1.0.0",
-        summary: "Return the JSON in key in Redis serialization protocol specification form",
-        key_spec: [
+#[macro_export]
+macro_rules! json_resp_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
             {
+                name: "json.resp",
                 flags: [ReadOnly],
-                begin_search: Index({ index: 1 }),
-                find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                acl_categories: [Read, Single("json")],
+                arity: -2,
+                complexity: "O(N) when path is evaluated to a single value, where N is the size of the value, O(N) when path is evaluated to multiple values, where N is the size of the key",
+                since: "1.0.0",
+                summary: "Return the JSON in key in Redis serialization protocol specification form",
+                key_spec: [
+                    {
+                        flags: [ReadOnly],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
+                    },
+                    {
+                        name: "path",
+                        arg_type: String,
+                        flags: [Optional],
+                    }
+                ]
             }
-        ],
-        args: [
-            {
-                name: "key",
-                arg_type: Key,
-                key_spec_index: 0,
-            },
-            {
-                name: "path",
-                arg_type: String,
-                flags: [Optional],
-            }
-        ]
-    }
-)]
-pub fn json_resp(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    call_with_manager!(ctx, args, json_resp_impl)
+        )]
+        $item
+    };
 }
 
-fn json_resp_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+pub fn json_resp_impl<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;

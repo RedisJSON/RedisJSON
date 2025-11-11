@@ -174,6 +174,161 @@ macro_rules! redis_json_module_create {
             };
         }
 
+        // Wrap the commands in the macro that will generate the command info and register the command itself
+        // We can't call json_command from commands.rs
+
+        json_get_command!(
+            pub fn json_get(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_get_impl)(ctx, args)
+            }
+        );
+        
+        json_set_command!(
+            pub fn json_set(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_set_impl)(ctx, args)
+            }
+        );
+
+        json_merge_command!(
+            pub fn json_merge(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_merge_impl)(ctx, args)
+            }
+        );
+
+        json_mset_command!(
+            pub fn json_mset(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_mset_impl)(ctx, args)
+            }
+        );
+
+        json_mget_command!(
+            pub fn json_mget(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_mget_impl)(ctx, args)
+            }
+        );
+
+        json_type_command!(
+            pub fn json_type(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_type_command_impl)(ctx, args)
+            }
+        );
+        
+        json_del_command!(
+            "json.del",
+            pub fn json_del(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_del_impl)(ctx, args)
+            }
+        );
+        
+        json_del_command!(
+            "json.forget",
+            pub fn json_forget(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_del(ctx, args)
+            }
+        );
+
+        json_numincrby_command!(
+            pub fn json_num_incrby(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_num_incrby_impl)(ctx, args)
+            }
+        );
+
+        json_nummultby_command!(
+            pub fn json_num_multby(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_num_multby_impl)(ctx, args)
+            }
+        );
+
+        json_numpowby_command!(
+            pub fn json_num_powby(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_num_powby_impl)(ctx, args)
+            }
+        );
+
+        json_toggle_command!(
+            pub fn json_toggle(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_bool_toggle_command_impl)(ctx, args)
+            }
+        );
+
+        json_strappend_command!(
+            pub fn json_strappend(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_str_append_command_impl)(ctx, args)
+            }
+        );
+
+        json_strlen_command!(
+            pub fn json_strlen(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_str_len_command_impl)(ctx, args)
+            }
+        );
+
+        json_arrappend_command!(
+            pub fn json_arrappend(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_arr_append_command_impl)(ctx, args)
+            }
+        );
+
+        json_arrindex_command!(
+            pub fn json_arrindex(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_arr_index_impl)(ctx, args)
+            }
+        );
+
+        json_arrinsert_command!(
+            pub fn json_arrinsert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_arr_insert_command_impl)(ctx, args)
+            }
+        );
+
+        json_arrlen_command!(
+            pub fn json_arrlen(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_arr_len_impl)(ctx, args)
+            }
+        );
+
+        json_arrpop_command!(
+            pub fn json_arrpop(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_arr_pop_command_impl)(ctx, args)
+            }
+        );
+
+        json_arrtrim_command!(
+            pub fn json_arrtrim(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_arr_trim_command_impl)(ctx, args)
+            }
+        );
+
+        json_objkeys_command!(
+            pub fn json_objkeys(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_obj_keys_command_impl)(ctx, args)
+            }
+        );
+
+        json_objlen_command!(
+            pub fn json_objlen(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_obj_len_command_impl)(ctx, args)
+            }
+        );
+
+        json_clear_command!(
+            pub fn json_clear(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_clear_impl)(ctx, args)
+            }
+        );
+
+        json_debug_command!(
+            pub fn json_debug(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_debug_impl)(ctx, args)
+            }
+        );
+
+        json_resp_command!(
+            pub fn json_resp(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_resp_impl)(ctx, args)
+            }
+        );
+
         #[cfg(not(test))]
         macro_rules! get_allocator {
             () => {
