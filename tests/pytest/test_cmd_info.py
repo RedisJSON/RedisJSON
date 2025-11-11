@@ -84,7 +84,7 @@ class testCommandDocsAndHelp:
             "json.arrtrim",
             summary="Trim an array so that it contains only the specified inclusive range of elements",
             complexity="O(N) when path is evaluated to a single value where N is the size of the array, O(N) when path is evaluated to multiple values, where N is the size of the key",
-            arity=4,
+            arity=5,
             since="1.0.0",
             group="module",
         )
@@ -168,7 +168,7 @@ class testCommandDocsAndHelp:
             "json.merge",
             summary="Merge a given JSON value into matching paths. Consequently, JSON values at matching paths are updated, deleted, or expanded with new children",
             complexity="O(M+N) when path is evaluated to a single value where M is the size of the original value (if it exists) and N is the size of the new value, O(M+N) when path is evaluated to multiple values where M is the size of the key and N is the size of the new value * the number of original values in the key",
-            arity=4,
+            arity=-4,
             since="2.6.0",
             group="module",
         )
@@ -182,7 +182,7 @@ class testCommandDocsAndHelp:
             "json.mget",
             summary="Return the values at path from multiple key arguments",
             complexity="O(M*N) when path is evaluated to a single value where M is the number of keys and N is the size of the value, O(N1+N2+...+Nm) when path is evaluated to multiple values where m is the number of keys and Ni is the size of the i-th key",
-            arity=-2,
+            arity=-3,
             since="1.0.0",
             group="module",
         )
@@ -336,7 +336,7 @@ class testCommandDocsAndHelp:
             "json.toggle",
             summary="Toggle the boolean value stored at path",
             complexity="O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
-            arity=-2,
+            arity=3,
             since="2.0.0",
             group="module",
         )
