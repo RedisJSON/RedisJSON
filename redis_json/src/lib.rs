@@ -36,6 +36,17 @@ use crate::c_api::{
     json_api_open_key_internal, json_api_open_key_with_flags_internal, json_api_reset_iter,
     LLAPI_CTX,
 };
+
+use crate::commands::{
+    json_arr_append_command_impl, json_arr_index_command_impl, json_arr_insert_command_impl,
+    json_arr_len_command_impl, json_arr_pop_command_impl, json_arr_trim_command_impl,
+    json_bool_toggle_command_impl, json_clear_command_impl, json_debug_command_impl,
+    json_del_command_impl, json_get_command_impl, json_merge_command_impl, json_mget_command_impl,
+    json_mset_command_impl, json_num_incrby_command_impl, json_num_multby_command_impl,
+    json_num_powby_command_impl, json_obj_keys_command_impl, json_obj_len_command_impl,
+    json_resp_command_impl, json_set_command_impl, json_str_append_command_impl,
+    json_str_len_command_impl, json_type_command_impl,
+};
 use crate::redisjson::Format;
 
 mod array_index;
@@ -178,31 +189,31 @@ macro_rules! redis_json_module_create {
 
         json_get_command!(
             pub fn json_get(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-                json_command!(json_get_impl)(ctx, args)
+                json_command!(json_get_command_impl)(ctx, args)
             }
         );
 
         json_set_command!(
             pub fn json_set(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-                json_command!(json_set_impl)(ctx, args)
+                json_command!(json_set_command_impl)(ctx, args)
             }
         );
 
         json_merge_command!(
             pub fn json_merge(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-                json_command!(json_merge_impl)(ctx, args)
+                json_command!(json_merge_command_impl)(ctx, args)
             }
         );
 
         json_mset_command!(
             pub fn json_mset(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-                json_command!(json_mset_impl)(ctx, args)
+                json_command!(json_mset_command_impl)(ctx, args)
             }
         );
 
         json_mget_command!(
             pub fn json_mget(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-                json_command!(json_mget_impl)(ctx, args)
+                json_command!(json_mget_command_impl)(ctx, args)
             }
         );
 
@@ -215,7 +226,7 @@ macro_rules! redis_json_module_create {
         json_del_command!(
             "json.del",
             pub fn json_del(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-                json_command!(json_del_impl)(ctx, args)
+                json_command!(json_del_command_impl)(ctx, args)
             }
         );
 
@@ -228,19 +239,19 @@ macro_rules! redis_json_module_create {
 
         json_numincrby_command!(
             pub fn json_num_incrby(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-                json_command!(json_num_incrby_impl)(ctx, args)
+                json_command!(json_num_incrby_command_impl)(ctx, args)
             }
         );
 
         json_nummultby_command!(
             pub fn json_num_multby(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-                json_command!(json_num_multby_impl)(ctx, args)
+                json_command!(json_num_multby_command_impl)(ctx, args)
             }
         );
 
         json_numpowby_command!(
             pub fn json_num_powby(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-                json_command!(json_num_powby_impl)(ctx, args)
+                json_command!(json_num_powby_command_impl)(ctx, args)
             }
         );
 
@@ -270,7 +281,7 @@ macro_rules! redis_json_module_create {
 
         json_arrindex_command!(
             pub fn json_arrindex(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-                json_command!(json_arr_index_impl)(ctx, args)
+                json_command!(json_arr_index_command_impl)(ctx, args)
             }
         );
 
@@ -282,7 +293,7 @@ macro_rules! redis_json_module_create {
 
         json_arrlen_command!(
             pub fn json_arrlen(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-                json_command!(json_arr_len_impl)(ctx, args)
+                json_command!(json_arr_len_command_impl)(ctx, args)
             }
         );
 
@@ -312,19 +323,19 @@ macro_rules! redis_json_module_create {
 
         json_clear_command!(
             pub fn json_clear(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-                json_command!(json_clear_impl)(ctx, args)
+                json_command!(json_clear_command_impl)(ctx, args)
             }
         );
 
         json_debug_command!(
             pub fn json_debug(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-                json_command!(json_debug_impl)(ctx, args)
+                json_command!(json_debug_command_impl)(ctx, args)
             }
         );
 
         json_resp_command!(
             pub fn json_resp(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-                json_command!(json_resp_impl)(ctx, args)
+                json_command!(json_resp_command_impl)(ctx, args)
             }
         );
 

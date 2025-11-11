@@ -196,7 +196,11 @@ macro_rules! json_get_command {
         $item
     };
 }
-pub fn json_get_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+pub fn json_get_command_impl<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
 
@@ -340,7 +344,11 @@ macro_rules! json_set_command {
         $item
     };
 }
-pub fn json_set_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+pub fn json_set_command_impl<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;
@@ -480,7 +488,7 @@ macro_rules! json_merge_command {
     };
 }
 
-pub fn json_merge_impl<M: Manager>(
+pub fn json_merge_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -614,7 +622,7 @@ macro_rules! json_mset_command {
     };
 }
 
-pub fn json_mset_impl<M: Manager>(
+pub fn json_mset_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -895,7 +903,11 @@ macro_rules! json_del_command {
     };
 }
 
-pub fn json_del_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+pub fn json_del_command_impl<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;
@@ -975,7 +987,7 @@ macro_rules! json_mget_command {
     };
 }
 
-pub fn json_mget_impl<M: Manager>(
+pub fn json_mget_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -1312,7 +1324,7 @@ macro_rules! json_numincrby_command {
     };
 }
 
-pub fn json_num_incrby_impl<M: Manager>(
+pub fn json_num_incrby_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -1363,7 +1375,7 @@ macro_rules! json_nummultby_command {
     };
 }
 
-pub fn json_num_multby_impl<M: Manager>(
+pub fn json_num_multby_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -1414,7 +1426,7 @@ macro_rules! json_numpowby_command {
     };
 }
 
-pub fn json_num_powby_impl<M: Manager>(
+pub fn json_num_powby_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -1984,7 +1996,7 @@ macro_rules! json_arrindex_command {
     };
 }
 
-pub fn json_arr_index_impl<M: Manager>(
+pub fn json_arr_index_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -2204,7 +2216,7 @@ macro_rules! json_arrlen_command {
     };
 }
 
-pub fn json_arr_len_impl<M: Manager>(
+pub fn json_arr_len_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -2843,7 +2855,7 @@ macro_rules! json_clear_command {
     };
 }
 
-pub fn json_clear_impl<M: Manager>(
+pub fn json_clear_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -2916,7 +2928,7 @@ macro_rules! json_debug_command {
     };
 }
 
-pub fn json_debug_impl<M: Manager>(
+pub fn json_debug_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -3002,7 +3014,7 @@ macro_rules! json_resp_command {
     };
 }
 
-pub fn json_resp_impl<M: Manager>(
+pub fn json_resp_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
