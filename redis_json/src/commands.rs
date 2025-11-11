@@ -2900,18 +2900,18 @@ pub fn json_clear_impl<M: Manager>(
 macro_rules! json_debug_command {
     ($item:item) => {
         #[::redis_module_macros::command(
-                    {
-                        name: "json.debug",
-                        flags: [ReadOnly],
-                        acl_categories: [Read, Single("json")],
-                        arity: -2,
-                        complexity: "N/A",
-                        since: "1.0.0",
-                        summary: "This is a container command for debugging related tasks",
-                        key_spec: [
-                        ],
-                    }
-                )]
+                            {
+                                name: "json.debug",
+                                flags: [ReadOnly],
+                                acl_categories: [Read, Single("json")],
+                                arity: -2,
+                                complexity: "N/A",
+                                since: "1.0.0",
+                                summary: "This is a container command for debugging related tasks",
+                                key_spec: [
+                                ],
+                            }
+                        )]
         $item
     };
 }
