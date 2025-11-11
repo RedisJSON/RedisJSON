@@ -240,8 +240,6 @@ macro_rules! redis_json_module_create {
             init: json_init_config,
             init: initialize,
             info: $info_func,
-            commands: [
-            ],
         }
     }
 }

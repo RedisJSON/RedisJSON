@@ -10,6 +10,7 @@
 use crate::defrag::defrag_info;
 use crate::error::Error;
 use crate::formatter::ReplyFormatOptions;
+use crate::ivalue_manager::RedisIValueJsonKeyManager;
 use crate::key_value::KeyValue;
 use crate::manager::{
     err_msg_json_path_doesnt_exist_with_param, err_msg_json_path_doesnt_exist_with_param_or,
@@ -65,6 +66,30 @@ const JSONGET_SUBCOMMANDS_MAXSTRLEN: usize = max_strlen(&[
     CMD_ARG_SPACE,
     CMD_ARG_FORMAT,
 ]);
+
+type DefaultManager = RedisIValueJsonKeyManager<'static>;
+
+#[inline]
+fn dispatch_with_default_manager<F>(ctx: &Context, args: Vec<RedisString>, run: F) -> RedisResult
+where
+    F: FnOnce(DefaultManager, &Context, Vec<RedisString>) -> RedisResult,
+{
+    crate::run_on_manager!(
+        pre_command: || {},
+        get_manage: {
+            _ => Some(DefaultManager {
+                phantom: PhantomData,
+            })
+        },
+        run: |manager| run(manager, ctx, args),
+    )
+}
+
+macro_rules! call_with_manager {
+    ($ctx:ident, $args:ident, $func:ident) => {{
+        dispatch_with_default_manager($ctx, $args, $func::<DefaultManager>)
+    }};
+}
 
 pub enum Values<'a, V: SelectValue> {
     Single(ValueRef<'a, V>),
@@ -183,7 +208,7 @@ fn is_resp3(ctx: &Context) -> bool {
 
                     }
                 ]
-            }, 
+            },
             {
                 name: "path",
                 arg_type: String,
@@ -193,16 +218,7 @@ fn is_resp3(ctx: &Context) -> bool {
     }
 )]
 pub fn json_get(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    //TODO AVIV: solve this with the macro
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_get_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_get_impl)
 }
 
 fn json_get_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
@@ -336,23 +352,15 @@ fn json_get_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
                                     token: "BSON",
                                 }
                             ]
-    
+
                         }
                     ]
-                }   
+                }
         ],
     }
 )]
 pub fn json_set(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_set_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_set_impl)
 }
 
 fn json_set_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
@@ -489,17 +497,8 @@ fn json_set_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
     }
 )]
 pub fn json_merge(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_merge_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_merge_impl)
 }
-
 
 fn json_merge_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
@@ -625,15 +624,7 @@ fn json_merge_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>
     }
 )]
 pub fn json_mset(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_mset_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_mset_impl)
 }
 
 fn json_mset_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
@@ -883,7 +874,7 @@ pub fn prepare_paths_for_updating(paths: &mut Vec<Vec<String>>) {
 ///
 /// JSON.DEL <key> [path]
 ///
-/// 
+///
 macro_rules! json_del_command {
     ($name:literal, $item:item) => {
         #[command(
@@ -912,24 +903,19 @@ macro_rules! json_del_command {
     };
 }
 
+json_del_command!(
+    "json.del",
+    pub fn json_del(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+        call_with_manager!(ctx, args, json_del_impl)
+    }
+);
 
-json_del_command!("json.del",
-pub fn json_del(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_del_impl(mngr, ctx, args),
-    )
-});
-
-json_del_command!("json.forget",
-pub fn json_forget(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    json_del(ctx, args)
-});
+json_del_command!(
+    "json.forget",
+    pub fn json_forget(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+        json_del(ctx, args)
+    }
+);
 
 fn json_del_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let mut args = args.into_iter().skip(1);
@@ -1006,17 +992,8 @@ fn json_del_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
     }
 )]
 pub fn json_mget(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_mget_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_mget_impl)
 }
-
 
 fn json_mget_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     if args.len() < 3 {
@@ -1092,18 +1069,14 @@ fn json_mget_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>)
     }
 )]
 pub fn json_type(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_type_command_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_type_command_impl)
 }
 
-fn json_type_command_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+fn json_type_command_impl<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
     let path = args.next_str().map(Path::new).unwrap_or_default();
@@ -1344,18 +1317,10 @@ where
             },
         ]
     }
-    
+
 )]
 pub fn json_num_incrby(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_num_incrby_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_num_incrby_impl)
 }
 
 fn json_num_incrby_impl<M: Manager>(
@@ -1401,18 +1366,10 @@ fn json_num_incrby_impl<M: Manager>(
             },
         ]
     }
-    
+
 )]
 pub fn json_num_multby(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_num_multby_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_num_multby_impl)
 }
 
 pub fn json_num_multby_impl<M: Manager>(
@@ -1458,18 +1415,10 @@ pub fn json_num_multby_impl<M: Manager>(
             },
         ]
     }
-    
+
 )]
 pub fn json_num_powby(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_num_powby_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_num_powby_impl)
 }
 pub fn json_num_powby_impl<M: Manager>(
     manager: M,
@@ -1512,15 +1461,7 @@ pub fn json_num_powby_impl<M: Manager>(
     }
 )]
 pub fn json_bool_toggle(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_bool_toggle_command_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_bool_toggle_command_impl)
 }
 
 fn json_bool_toggle_command_impl<M: Manager>(
@@ -1637,15 +1578,7 @@ where
     }
 )]
 pub fn json_str_append(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_str_append_command_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_str_append_command_impl)
 }
 
 fn json_str_append_command_impl<M: Manager>(
@@ -1777,17 +1710,13 @@ where
     }
 )]
 pub fn json_str_len(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_str_len_command_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_str_len_command_impl)
 }
-fn json_str_len_command_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+fn json_str_len_command_impl<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
     let path = args.next_str().map(Path::new).unwrap_or_default();
@@ -1864,15 +1793,7 @@ where
     }
 )]
 pub fn json_arr_append(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_arr_append_command_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_arr_append_command_impl)
 }
 
 fn json_arr_append_command_impl<M: Manager>(
@@ -2050,15 +1971,7 @@ pub enum ObjectLen {
     }
 )]
 pub fn json_arr_index(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_arr_index_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_arr_index_impl)
 }
 
 fn json_arr_index_impl<M: Manager>(
@@ -2140,15 +2053,7 @@ fn json_arr_index_impl<M: Manager>(
     }
 )]
 pub fn json_arr_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_arr_insert_command_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_arr_insert_command_impl)
 }
 fn json_arr_insert_command_impl<M: Manager>(
     manager: M,
@@ -2279,15 +2184,7 @@ where
 )]
 
 pub fn json_arr_len(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_arr_len_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_arr_len_impl)
 }
 
 fn json_arr_len_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
@@ -2413,17 +2310,13 @@ fn json_arr_len_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisStrin
     }
 )]
 pub fn json_arr_pop(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_arr_pop_command_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_arr_pop_command_impl)
 }
-fn json_arr_pop_command_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+fn json_arr_pop_command_impl<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;
@@ -2603,18 +2496,14 @@ where
     }
 )]
 pub fn json_arr_trim(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_arr_trim_command_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_arr_trim_command_impl)
 }
 
-fn json_arr_trim_command_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+fn json_arr_trim_command_impl<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;
@@ -2729,18 +2618,14 @@ where
     }
 )]
 pub fn json_obj_keys(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_obj_keys_command_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_obj_keys_command_impl)
 }
 
-fn json_obj_keys_command_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+fn json_obj_keys_command_impl<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
     let path = args.next_str().map(Path::new).unwrap_or_default();
@@ -2827,18 +2712,14 @@ where
     }
 )]
 pub fn json_obj_len(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_obj_len_command_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_obj_len_command_impl)
 }
 
-fn json_obj_len_command_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+fn json_obj_len_command_impl<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
 
@@ -2923,15 +2804,7 @@ where
     }
 )]
 pub fn json_clear(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_clear_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_clear_impl)
 }
 
 fn json_clear_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
@@ -2992,20 +2865,12 @@ fn json_clear_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>
         complexity: "N/A",
         since: "1.0.0",
         summary: "This is a container command for debugging related tasks",
-        key_spec: [   
+        key_spec: [
         ],
     }
 )]
 pub fn json_debug(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_debug_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_debug_impl)
 }
 
 fn json_debug_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
@@ -3084,15 +2949,7 @@ fn json_debug_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>
     }
 )]
 pub fn json_resp(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
-    crate::run_on_manager!(
-        pre_command: || {},
-        get_manage: {
-            _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
-                phantom: PhantomData,
-            })
-        },
-        run: |mngr| json_resp_impl(mngr, ctx, args),
-    )
+    call_with_manager!(ctx, args, json_resp_impl)
 }
 
 fn json_resp_impl<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) -> RedisResult {
