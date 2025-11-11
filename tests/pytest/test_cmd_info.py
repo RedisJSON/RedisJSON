@@ -42,7 +42,7 @@ class testCommandDocsAndHelp:
             "json.arrinsert",
             summary="Insert the json values into the array at path before the index (shifts to the right)",
             complexity="O(N) when path is evaluated to a single value where N is the size of the array, O(N) when path is evaluated to multiple values, where N is the size of the key",
-            arity=-4,
+            arity=-5,
             since="1.0.0",
             group="module",
         )
