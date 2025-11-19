@@ -153,9 +153,9 @@ checksum = "46c5e41b57b8bba42a04676d81cb89e9ee8e859a1a66f80a5a72e1cb76b34d43"
 
 [[package]]
 name = "cc"
-version = "1.2.41"
+version = "1.2.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac9fe6cdbb24b6ade63616c0a0688e45bb56732262c158df3c0c4bea4ca47cb7"
+checksum = "35900b6c8d709fb1d854671ae27aeaa9eec2f8b01b364e1619a40da3e6fe2afe"
 dependencies = [
  "find-msvc-tools",
  "shlex",
@@ -185,6 +185,14 @@ dependencies = [
  "glob",
  "libc",
  "libloading",
+]
+
+[[package]]
+name = "common"
+version = "0.1.0"
+source = "git+https://github.com/RedisLabsModules/redismodule-rs?tag=v2.1.3#3ff28c8c2987ae07106025bcc8cb4c489094d10b"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -403,11 +411,11 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "home"
-version = "0.5.11"
+version = "0.5.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "589533453244b0995c858700322199b2becb13b627df2851f64a2775d024abcf"
+checksum = "cc627f471c528ff0c4a49e1d5e60450c8f6461dd6d10ba9dcd3a61d3dff7728d"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -819,14 +827,15 @@ dependencies = [
 
 [[package]]
 name = "redis-module"
-version = "2.1.2"
-source = "git+https://github.com/RedisLabsModules/redismodule-rs?tag=v2.1.2#556f420685b0b9662cdb816e22b1c55bc696a6dc"
+version = "2.1.3"
+source = "git+https://github.com/RedisLabsModules/redismodule-rs?tag=v2.1.3#3ff28c8c2987ae07106025bcc8cb4c489094d10b"
 dependencies = [
  "backtrace",
  "bindgen",
  "bitflags 2.10.0",
  "cc",
  "cfg-if",
+ "common",
  "enum-primitive-derive",
  "libc",
  "linkme",
@@ -842,8 +851,9 @@ dependencies = [
 [[package]]
 name = "redis-module-macros"
 version = "99.99.99"
-source = "git+https://github.com/RedisLabsModules/redismodule-rs?tag=v2.1.2#556f420685b0b9662cdb816e22b1c55bc696a6dc"
+source = "git+https://github.com/RedisLabsModules/redismodule-rs?tag=v2.1.3#3ff28c8c2987ae07106025bcc8cb4c489094d10b"
 dependencies = [
+ "common",
  "proc-macro2",
  "quote 1.0.41",
  "serde",
@@ -854,7 +864,7 @@ dependencies = [
 [[package]]
 name = "redis-module-macros-internals"
 version = "99.99.99"
-source = "git+https://github.com/RedisLabsModules/redismodule-rs?tag=v2.1.2#556f420685b0b9662cdb816e22b1c55bc696a6dc"
+source = "git+https://github.com/RedisLabsModules/redismodule-rs?tag=v2.1.3#3ff28c8c2987ae07106025bcc8cb4c489094d10b"
 dependencies = [
  "lazy_static",
  "proc-macro2",
@@ -1292,6 +1302,12 @@ dependencies = [
 [[package]]
 name = "windows-link"
 version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
+
+[[package]]
+name = "windows-sys"
+version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
 
