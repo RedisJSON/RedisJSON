@@ -12,6 +12,9 @@ serde_json = { version="1", features = ["unbounded_depth"]}
 serde = { version = "1", features = ["derive"] }
 serde_derive = "1"
 bson = "2.11"
+# Pin home crate to 0.5.11 for Alpine Linux Rust 1.87 compatibility
+# home@0.5.12+ requires Rust 1.88
+home = "=0.5.11"
 
 [workspace.package]
 edition = "2021"
