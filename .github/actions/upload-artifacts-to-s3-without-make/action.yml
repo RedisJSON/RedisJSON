@@ -49,10 +49,19 @@ runs:
           aws configure set region "$AWS_REGION"
 
           echo ::group::upload artifacts
-            SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
+            # For nightly/beta builds, upload snapshots; for release builds, upload both
+            if [[ -n "${{ inputs.beta-version }}" ]]; then
+              SNAPSHOT=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
+            else
+              SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
+            fi
           echo ::endgroup::
           echo ::group::upload staging release
-            STAGING=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
+            if [[ -n "${{ inputs.beta-version }}" ]]; then
+              STAGING=1 SNAPSHOT=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
+            else
+              STAGING=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
+            fi
           echo ::endgroup::
           
           echo ::group::upload production release
@@ -70,9 +79,33 @@ runs:
               BETA_VERSION="${{ inputs.beta-version }}"
               echo "Using provided beta version: ${BETA_VERSION}"
               
-              # Upload to beta folder
+              # Create copies with beta version name and move to artifacts/ (not snapshots/)
+              # This ensures upload goes to s3://.../beta/ not s3://.../beta/snapshots/
+              cd bin/artifacts/snapshots
+              for file in rejson-oss.*.zip rejson-oss.*.tgz; do
+                if [[ -f "$file" ]]; then
+                  # Replace branch name with beta version in filename
+                  # e.g., rejson-oss.Linux-rhel9-x86_64.fixS3Upload.zip -> rejson-oss.Linux-rhel9-x86_64.99.99.99.20251120.162724.560.zip
+                  beta_file=$(echo "$file" | sed "s/\.\([^.]*\)\.\(zip\|tgz\)$/.$BETA_VERSION.\2/")
+                  cp "$file" "../$beta_file"
+                  echo "Created beta version: $beta_file"
+                fi
+              done
+              cd ../../..
+              
+              # Upload to beta folder (without /snapshots/ subdirectory, so use SNAPSHOT=0)
               export BETA_VERSION="${BETA_VERSION}"
               BETA=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
+              
+              # Clean up beta-versioned copies from artifacts/
+              cd bin/artifacts
+              for file in rejson-oss.*.$BETA_VERSION.zip rejson-oss.*.$BETA_VERSION.tgz; do
+                if [[ -f "$file" ]]; then
+                  rm "$file"
+                  echo "Cleaned up: $file"
+                fi
+              done
+              cd ../..
             else
               echo "No beta version provided, skipping beta upload"
             fi

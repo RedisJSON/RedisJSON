@@ -98,7 +98,13 @@ jobs:
         run: |
           make test
       - name: Pack module
-        run: make pack BRANCH=$TAG_OR_BRANCH
+        run: |
+          if [[ -n "${{ inputs.beta-version }}" ]]; then
+            # For nightly builds: skip release artifacts, only create snapshots
+            RELEASE=0 SNAPSHOT=1 BRANCH=$TAG_OR_BRANCH make pack
+          else
+            make pack BRANCH=$TAG_OR_BRANCH
+          fi
       - name: Upload artifacts to S3
         uses: ./.github/actions/upload-artifacts-to-s3-without-make
         with:
@@ -168,7 +174,13 @@ jobs:
         run: |
           make test
       - name: Pack module
-        run: make pack BRANCH=$TAG_OR_BRANCH
+        run: |
+          if [[ -n "${{ inputs.beta-version }}" ]]; then
+            # For nightly builds: skip release artifacts, only create snapshots
+            RELEASE=0 SNAPSHOT=1 BRANCH=$TAG_OR_BRANCH make pack
+          else
+            make pack BRANCH=$TAG_OR_BRANCH
+          fi
       - name: Upload artifacts to S3
         uses: ./.github/actions/upload-artifacts-to-s3-without-make
         with:
