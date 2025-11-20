@@ -19,6 +19,8 @@ runs:
         git config --global --add safe.directory $GITHUB_WORKSPACE
         export PATH="$GITHUB_WORKSPACE/redis/src:$PATH"
         if [[ -n "${{ inputs.beta-version }}" ]]; then
-          export BETA_VERSION="${{ inputs.beta-version }}"
+          # For nightly builds: skip release artifacts, only create snapshots
+          RELEASE=0 SNAPSHOT=1 BRANCH=$TAG_OR_BRANCH SHOW=1 OSNICK=${{ matrix.docker.nick }} ./sbin/pack.sh $(realpath ./target/release/rejson.so)
+        else
+          BRANCH=$TAG_OR_BRANCH SHOW=1 OSNICK=${{ matrix.docker.nick }} ./sbin/pack.sh $(realpath ./target/release/rejson.so)
         fi
-        BRANCH=$TAG_OR_BRANCH SHOW=1 OSNICK=${{ matrix.docker.nick }} ./sbin/pack.sh $(realpath ./target/release/rejson.so)
