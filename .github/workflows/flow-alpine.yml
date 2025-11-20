@@ -114,6 +114,8 @@ jobs:
           make test
       - name: Pack module
         uses: ./.github/actions/make-pack
+        with:
+          beta-version: ${{ inputs.beta-version }}
       - name: Upload artifacts to S3
         uses: ./.github/actions/upload-artifacts-to-s3-without-make
         with:
