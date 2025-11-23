@@ -146,7 +146,6 @@ macro_rules! redis_json_module_create {
         use rawmod::ModuleOptions;
         use redis_module::redis_module;
         use redis_module::logging::RedisLogLevel;
-        use redis_module::RedisValue;
 
         use std::{
             ffi::{CStr, CString},
@@ -155,6 +154,7 @@ macro_rules! redis_json_module_create {
         use libc::size_t;
         use std::collections::HashMap;
         use $crate::c_api::create_rmstring;
+        use ijson;
 
         macro_rules! json_command {
             ($cmd:ident) => {
@@ -203,7 +203,7 @@ macro_rules! redis_json_module_create {
             ctx.set_module_options(ModuleOptions::HANDLE_IO_ERRORS);
             ctx.log_notice("Enabled diskless replication");
             // Always enable thread-safe cache for async flush support
-            if let Err(e) = $crate::init_ijson_shared_string_cache(true) {
+            if let Err(e) = ijson::init_shared_string_cache(true) {
                 ctx.log(RedisLogLevel::Warning, &format!("Failed initializing shared string cache, {e}."));
                 return Status::Err;
             }
