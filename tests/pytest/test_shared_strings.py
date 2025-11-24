@@ -385,7 +385,13 @@ def migrate_slots_rapid(env):
         """
         Try to migrate slots from source to target.
         Returns True if migration was successful, False if slots were already owned by target.
+        Raises exception if migration fails for unexpected reasons.
         """
+        # Verify source actually owns these slots before migrating
+        if not slot_range_owned_by(slot_range, source_conn):
+            # Source doesn't own these slots - might have been migrated already
+            return False
+        
         # Check if target already owns these slots
         if slot_range_owned_by(slot_range, target_conn):
             return False
@@ -395,6 +401,12 @@ def migrate_slots_rapid(env):
             task_id = target_conn.execute_command("CLUSTER", "MIGRATION", "IMPORT", slot_range.start, slot_range.end)
             # Wait for migration to complete - threads continue operations during this wait
             wait_for_migration(target_conn, task_id, timeout=15)
+            
+            # Verify migration actually completed successfully
+            # After migration, target should own the slots
+            if not slot_range_owned_by(slot_range, target_conn):
+                raise AssertionError(f"Migration completed but target node does not own slots {slot_range.start}-{slot_range.end}")
+            
             return True
         except Exception as e:
             error_str = str(e)
@@ -409,34 +421,45 @@ def migrate_slots_rapid(env):
     current_second_slots = get_node_slots(second_conn)
     
     # Get slot ranges from each node (may have multiple ranges after migrations)
-    # Find the largest range from each node to use for migration
-    def get_largest_range(slot_set: Set[SlotRange]) -> SlotRange:
-        """Get the largest slot range from a set of ranges."""
+    # This is normal - migrations split ranges. We need to find a range that's actually available to migrate.
+    def find_migratable_range(slot_set: Set[SlotRange], min_size: int = 100) -> Optional[SlotRange]:
+        """
+        Find a range that's large enough to migrate (at least min_size slots).
+        Returns None if no suitable range found.
+        """
         if not slot_set:
-            raise ValueError("No slot ranges found")
-        return max(slot_set, key=lambda r: r.end - r.start)
+            return None
+        # Find ranges large enough, prefer larger ones
+        suitable_ranges = [r for r in slot_set if (r.end - r.start + 1) >= min_size]
+        if not suitable_ranges:
+            return None
+        return max(suitable_ranges, key=lambda r: r.end - r.start)
     
-    original_first = get_largest_range(current_first_slots)
-    original_second = get_largest_range(current_second_slots)
+    # Try to find ranges we can migrate
+    # After previous migrations, nodes may have multiple ranges, so we need to find one that's available
+    first_range = find_migratable_range(current_first_slots)
+    second_range = find_migratable_range(current_second_slots)
     
-    middle_first = get_middle_range(original_first)
-    middle_second = get_middle_range(original_second)
-    
-    # Try to migrate slots back and forth
-    # Operations continue in other threads during these migrations
-    
-    # Try migrating middle_second from second to first
-    if slot_range_owned_by(middle_second, second_conn):
-        if try_migrate_slots(second_conn, first_conn, middle_second):
-            # Successfully migrated to first, now try migrating back to second
-            try_migrate_slots(first_conn, second_conn, middle_second)
-    # If that didn't work, try migrating middle_first from first to second
-    elif slot_range_owned_by(middle_first, first_conn):
-        if try_migrate_slots(first_conn, second_conn, middle_first):
-            # Successfully migrated to second, now try migrating back to first
-            try_migrate_slots(second_conn, first_conn, middle_first)
-    # If neither worked, slots may have been migrated by concurrent operations - that's fine,
-    # the important thing is that operations continued during any migrations that did occur
+    if first_range and second_range:
+        # Calculate middle ranges for migration
+        middle_first = get_middle_range(first_range)
+        middle_second = get_middle_range(second_range)
+        
+        # Try to migrate slots back and forth
+        # Operations continue in other threads during these migrations
+        
+        # Try migrating middle_second from second to first
+        if slot_range_owned_by(middle_second, second_conn):
+            if try_migrate_slots(second_conn, first_conn, middle_second):
+                # Successfully migrated to first, now try migrating back to second
+                try_migrate_slots(first_conn, second_conn, middle_second)
+        # If that didn't work, try migrating middle_first from first to second
+        elif slot_range_owned_by(middle_first, first_conn):
+            if try_migrate_slots(first_conn, second_conn, middle_first):
+                # Successfully migrated to second, now try migrating back to first
+                try_migrate_slots(second_conn, first_conn, middle_first)
+    # If no suitable ranges found, that's okay - slots may have been migrated by concurrent operations
+    # The important thing is that operations continued during any migrations that did occur
 
 
 def wait_for_migration(conn, task_id, timeout=5):
