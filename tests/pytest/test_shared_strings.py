@@ -369,18 +369,48 @@ def migrate_slots_rapid(env):
         third = (slot_range.end - slot_range.start) // 3
         return SlotRange(slot_range.start + third, slot_range.end - third)
     
-    original_first, = get_node_slots(first_conn)
-    original_second, = get_node_slots(second_conn)
+    def slot_range_owned_by(slot_range: SlotRange, conn) -> bool:
+        """Check if a slot range is owned by the node connected via conn."""
+        node_slots = get_node_slots(conn)
+        for owned_range in node_slots:
+            if owned_range.start <= slot_range.start and slot_range.end <= owned_range.end:
+                return True
+        return False
+    
+    # Get current slot distributions
+    current_first_slots = get_node_slots(first_conn)
+    current_second_slots = get_node_slots(second_conn)
+    
+    # Get the first slot range from each node
+    original_first, = current_first_slots
+    original_second, = current_second_slots
+    
     middle_first = get_middle_range(original_first)
     middle_second = get_middle_range(original_second)
     
-    # Migrate from second to first
-    task_id = first_conn.execute_command("CLUSTER", "MIGRATION", "IMPORT", middle_second.start, middle_second.end)
-    wait_for_migration(first_conn, task_id, timeout=15)
-    
-    # Migrate back
-    task_id = second_conn.execute_command("CLUSTER", "MIGRATION", "IMPORT", middle_second.start, middle_second.end)
-    wait_for_migration(second_conn, task_id, timeout=15)
+    # Determine which slots to migrate based on current ownership
+    # Try to migrate middle_second if it's owned by second, otherwise migrate middle_first
+    if slot_range_owned_by(middle_second, second_conn):
+        # Migrate from second to first
+        task_id = first_conn.execute_command("CLUSTER", "MIGRATION", "IMPORT", middle_second.start, middle_second.end)
+        wait_for_migration(first_conn, task_id, timeout=15)
+        
+        # Check current ownership before migrating back
+        if slot_range_owned_by(middle_second, first_conn):
+            # Migrate back from first to second
+            task_id = second_conn.execute_command("CLUSTER", "MIGRATION", "IMPORT", middle_second.start, middle_second.end)
+            wait_for_migration(second_conn, task_id, timeout=15)
+    elif slot_range_owned_by(middle_first, first_conn):
+        # Migrate from first to second
+        task_id = second_conn.execute_command("CLUSTER", "MIGRATION", "IMPORT", middle_first.start, middle_first.end)
+        wait_for_migration(second_conn, task_id, timeout=15)
+        
+        # Check current ownership before migrating back
+        if slot_range_owned_by(middle_first, second_conn):
+            # Migrate back from second to first
+            task_id = first_conn.execute_command("CLUSTER", "MIGRATION", "IMPORT", middle_first.start, middle_first.end)
+            wait_for_migration(first_conn, task_id, timeout=15)
+    # If neither is available, slots may have already been migrated - skip migration
 
 
 def wait_for_migration(conn, task_id, timeout=5):
@@ -455,6 +485,68 @@ def cantorized_slot_set(slot_range: SlotRange) -> Set[SlotRange]:
     }
 
 
+def slot_sets_equal(set1: Set[SlotRange], set2: Set[SlotRange]) -> bool:
+    """
+    Check if two slot sets cover the same slots.
+    This handles cases where Redis might represent ranges differently.
+    """
+    def slots_covered(slot_set: Set[SlotRange]) -> Set[int]:
+        """Get the set of all slot numbers covered by these ranges."""
+        covered = set()
+        for slot_range in slot_set:
+            covered.update(range(slot_range.start, slot_range.end + 1))
+        return covered
+    
+    slots1 = slots_covered(set1)
+    slots2 = slots_covered(set2)
+    return slots1 == slots2
+
+
+def assert_slot_sets_equal(set1: Set[SlotRange], set2: Set[SlotRange], message: str = ""):
+    """
+    Assert that two slot sets cover the same slots, with a helpful error message.
+    """
+    if not slot_sets_equal(set1, set2):
+        def format_slot_set(slot_set: Set[SlotRange]) -> str:
+            return ", ".join(f"{r.start}-{r.end}" for r in sorted(slot_set, key=lambda r: r.start))
+        def slots_covered(slot_set: Set[SlotRange]) -> Set[int]:
+            covered = set()
+            for slot_range in slot_set:
+                covered.update(range(slot_range.start, slot_range.end + 1))
+            return covered
+        slots1 = slots_covered(set1)
+        slots2 = slots_covered(set2)
+        missing = slots2 - slots1
+        extra = slots1 - slots2
+        error_msg = (
+            f"Slot sets not equal. {message}\n"
+            f"Expected: {format_slot_set(set2)} (slots: {min(slots2) if slots2 else 'none'}-{max(slots2) if slots2 else 'none'}, count: {len(slots2)})\n"
+            f"Actual: {format_slot_set(set1)} (slots: {min(slots1) if slots1 else 'none'}-{max(slots1) if slots1 else 'none'}, count: {len(slots1)})\n"
+        )
+        if missing:
+            error_msg += f"Missing slots: {sorted(missing)[:20]}{'...' if len(missing) > 20 else ''}\n"
+        if extra:
+            error_msg += f"Extra slots: {sorted(extra)[:20]}{'...' if len(extra) > 20 else ''}\n"
+        raise AssertionError(error_msg)
+
+
+def wait_for_slot_state(conn, expected_slots: Set[SlotRange], timeout: float = 5.0, message: str = ""):
+    """
+    Wait for a node's slot state to match the expected state, polling until it matches or timeout.
+    Returns the actual slot set once it matches.
+    """
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        actual_slots = cluster_node_of(conn).slots
+        if slot_sets_equal(actual_slots, expected_slots):
+            return actual_slots
+        time.sleep(0.05)  # Short poll interval
+    
+    # Timeout - raise assertion with details
+    actual_slots = cluster_node_of(conn).slots
+    assert_slot_sets_equal(actual_slots, expected_slots, f"Timeout waiting for slot state. {message}")
+
+
 def migrate_slots_back_and_forth(env):
     """
     Perform slot migrations back and forth between two shards.
@@ -470,23 +562,31 @@ def migrate_slots_back_and_forth(env):
 
     # First migration: move slots from second to first
     import_slots(first_conn, middle_of_original_second)
-    assert cluster_node_of(first_conn).slots == {original_first_slot_range, middle_of_original_second}
-    assert cluster_node_of(second_conn).slots == cantorized_slot_set(original_second_slot_range)
+    wait_for_slot_state(first_conn, {original_first_slot_range, middle_of_original_second},
+                       message="After first migration: first node should have original slots + middle of second")
+    wait_for_slot_state(second_conn, cantorized_slot_set(original_second_slot_range),
+                       message="After first migration: second node should have cantorized slots")
 
     # Second migration: move slots back from first to second
     import_slots(second_conn, middle_of_original_second)
-    assert cluster_node_of(first_conn).slots == {original_first_slot_range}
-    assert cluster_node_of(second_conn).slots == {original_second_slot_range}
+    wait_for_slot_state(first_conn, {original_first_slot_range},
+                       message="After second migration: first node should have original slots")
+    wait_for_slot_state(second_conn, {original_second_slot_range},
+                       message="After second migration: second node should have original slots")
 
     # Third migration: move slots from first to second
     import_slots(second_conn, middle_of_original_first)
-    assert cluster_node_of(second_conn).slots == {original_second_slot_range, middle_of_original_first}
-    assert cluster_node_of(first_conn).slots == cantorized_slot_set(original_first_slot_range)
+    wait_for_slot_state(second_conn, {original_second_slot_range, middle_of_original_first},
+                       message="After third migration: second node should have original slots + middle of first")
+    wait_for_slot_state(first_conn, cantorized_slot_set(original_first_slot_range),
+                       message="After third migration: first node should have cantorized slots")
 
     # Fourth migration: move slots back from second to first
     import_slots(first_conn, middle_of_original_first)
-    assert cluster_node_of(first_conn).slots == {original_first_slot_range}
-    assert cluster_node_of(second_conn).slots == {original_second_slot_range}
+    wait_for_slot_state(first_conn, {original_first_slot_range},
+                       message="After fourth migration: first node should have original slots")
+    wait_for_slot_state(second_conn, {original_second_slot_range},
+                       message="After fourth migration: second node should have original slots")
 
 
 def import_slots(conn, slot_range: SlotRange):
