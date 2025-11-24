@@ -408,9 +408,16 @@ def migrate_slots_rapid(env):
     current_first_slots = get_node_slots(first_conn)
     current_second_slots = get_node_slots(second_conn)
     
-    # Get the first slot range from each node
-    original_first, = current_first_slots
-    original_second, = current_second_slots
+    # Get slot ranges from each node (may have multiple ranges after migrations)
+    # Find the largest range from each node to use for migration
+    def get_largest_range(slot_set: Set[SlotRange]) -> SlotRange:
+        """Get the largest slot range from a set of ranges."""
+        if not slot_set:
+            raise ValueError("No slot ranges found")
+        return max(slot_set, key=lambda r: r.end - r.start)
+    
+    original_first = get_largest_range(current_first_slots)
+    original_second = get_largest_range(current_second_slots)
     
     middle_first = get_middle_range(original_first)
     middle_second = get_middle_range(original_second)
