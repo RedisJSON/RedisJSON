@@ -449,12 +449,14 @@ def migrate_slots_rapid(env):
         # Operations continue in other threads during these migrations
         
         # Try migrating middle_second from second to first
+        middle_second_succeeded = False
         if slot_range_owned_by(middle_second, second_conn):
             if try_migrate_slots(second_conn, first_conn, middle_second):
                 # Successfully migrated to first, now try migrating back to second
                 try_migrate_slots(first_conn, second_conn, middle_second)
+                middle_second_succeeded = True
         # If that didn't work, try migrating middle_first from first to second
-        elif slot_range_owned_by(middle_first, first_conn):
+        if not middle_second_succeeded and slot_range_owned_by(middle_first, first_conn):
             if try_migrate_slots(first_conn, second_conn, middle_first):
                 # Successfully migrated to second, now try migrating back to first
                 try_migrate_slots(second_conn, first_conn, middle_first)
