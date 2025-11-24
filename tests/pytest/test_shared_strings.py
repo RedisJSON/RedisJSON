@@ -355,7 +355,11 @@ def test_asm_read_during_trim_phase():
 
 
 def migrate_slots_rapid(env):
-    """Perform rapid slot migrations to maximize race condition window."""
+    """
+    Perform rapid slot migrations to maximize race condition window.
+    This function migrates slots back and forth while operations continue in other threads,
+    testing thread safety of shared strings during migration.
+    """
     first_conn, second_conn = env.getConnection(0), env.getConnection(1)
     
     def get_node_slots(conn):
@@ -377,6 +381,29 @@ def migrate_slots_rapid(env):
                 return True
         return False
     
+    def try_migrate_slots(source_conn, target_conn, slot_range: SlotRange):
+        """
+        Try to migrate slots from source to target.
+        Returns True if migration was successful, False if slots were already owned by target.
+        """
+        # Check if target already owns these slots
+        if slot_range_owned_by(slot_range, target_conn):
+            return False
+        
+        try:
+            # Start migration - operations continue in other threads during this
+            task_id = target_conn.execute_command("CLUSTER", "MIGRATION", "IMPORT", slot_range.start, slot_range.end)
+            # Wait for migration to complete - threads continue operations during this wait
+            wait_for_migration(target_conn, task_id, timeout=15)
+            return True
+        except Exception as e:
+            error_str = str(e)
+            # If slots are already owned, that's okay - just means they were migrated by another process
+            if "already the owner" in error_str.lower():
+                return False
+            # Re-raise other errors as they indicate real problems
+            raise
+    
     # Get current slot distributions
     current_first_slots = get_node_slots(first_conn)
     current_second_slots = get_node_slots(second_conn)
@@ -388,29 +415,21 @@ def migrate_slots_rapid(env):
     middle_first = get_middle_range(original_first)
     middle_second = get_middle_range(original_second)
     
-    # Determine which slots to migrate based on current ownership
-    # Try to migrate middle_second if it's owned by second, otherwise migrate middle_first
+    # Try to migrate slots back and forth
+    # Operations continue in other threads during these migrations
+    
+    # Try migrating middle_second from second to first
     if slot_range_owned_by(middle_second, second_conn):
-        # Migrate from second to first
-        task_id = first_conn.execute_command("CLUSTER", "MIGRATION", "IMPORT", middle_second.start, middle_second.end)
-        wait_for_migration(first_conn, task_id, timeout=15)
-        
-        # Check current ownership before migrating back
-        if slot_range_owned_by(middle_second, first_conn):
-            # Migrate back from first to second
-            task_id = second_conn.execute_command("CLUSTER", "MIGRATION", "IMPORT", middle_second.start, middle_second.end)
-            wait_for_migration(second_conn, task_id, timeout=15)
+        if try_migrate_slots(second_conn, first_conn, middle_second):
+            # Successfully migrated to first, now try migrating back to second
+            try_migrate_slots(first_conn, second_conn, middle_second)
+    # If that didn't work, try migrating middle_first from first to second
     elif slot_range_owned_by(middle_first, first_conn):
-        # Migrate from first to second
-        task_id = second_conn.execute_command("CLUSTER", "MIGRATION", "IMPORT", middle_first.start, middle_first.end)
-        wait_for_migration(second_conn, task_id, timeout=15)
-        
-        # Check current ownership before migrating back
-        if slot_range_owned_by(middle_first, second_conn):
-            # Migrate back from second to first
-            task_id = first_conn.execute_command("CLUSTER", "MIGRATION", "IMPORT", middle_first.start, middle_first.end)
-            wait_for_migration(first_conn, task_id, timeout=15)
-    # If neither is available, slots may have already been migrated - skip migration
+        if try_migrate_slots(first_conn, second_conn, middle_first):
+            # Successfully migrated to second, now try migrating back to first
+            try_migrate_slots(second_conn, first_conn, middle_first)
+    # If neither worked, slots may have been migrated by concurrent operations - that's fine,
+    # the important thing is that operations continued during any migrations that did occur
 
 
 def wait_for_migration(conn, task_id, timeout=5):
