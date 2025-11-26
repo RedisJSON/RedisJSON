@@ -271,8 +271,9 @@ const fn dummy_init(_ctx: &Context, _args: &[RedisString]) -> Status {
     Status::Ok
 }
 
-pub fn init_ijson_shared_string_cache(is_bigredis: bool) -> Result<(), String> {
-    ijson::init_shared_string_cache(is_bigredis)
+pub fn init_ijson_shared_string_cache(_is_bigredis: bool) -> Result<(), String> {
+    // ijson 0.1 doesn't have init_shared_string_cache, so this is a no-op
+    Ok(())
 }
 
 pub fn setup_panic_handler() {
