@@ -267,6 +267,10 @@ const fn dummy_init(_ctx: &Context, _args: &[RedisString]) -> Status {
     Status::Ok
 }
 
+pub fn init_ijson_shared_string_cache(is_bigredis: bool) -> Result<(), String> {
+    ijson::init_shared_string_cache(is_bigredis)
+}
+
 pub fn setup_panic_handler() {
     use redis_module::logging::log_warning;
     use std::panic;
