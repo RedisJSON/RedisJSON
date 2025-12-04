@@ -17,6 +17,9 @@
 >
 > See https://github.com/redis/redis
 
+> [!NOTE]
+> 32 bit systems are not supported.
+
 ## Overview
 
 RedisJSON is a [Redis](https://redis.io/) module that implements [ECMA-404 The JSON Data Interchange Standard](https://json.org/) as a native data type. It allows storing, updating, and fetching JSON values from Redis keys (documents).
