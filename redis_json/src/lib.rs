@@ -9,8 +9,6 @@
 
 extern crate redis_module;
 
-#[cfg(not(feature = "as-library"))]
-use commands::*;
 use redis_module::native_types::RedisType;
 use redis_module::raw::RedisModuleTypeMethods;
 #[cfg(not(feature = "as-library"))]
@@ -159,7 +157,6 @@ macro_rules! redis_json_module_create {
         use rawmod::ModuleOptions;
         use redis_module::redis_module;
         use redis_module::logging::RedisLogLevel;
-        use redis_module::RedisValue;
 
         use std::{
             ffi::{CStr, CString},
