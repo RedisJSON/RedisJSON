@@ -556,7 +556,7 @@ mod json_path_tests {
     #[test]
     fn test_expend_all() {
         setup();
-        verify_json!(path:"$.foo.*.val", 
+        verify_json!(path:"$.foo.*.val",
                            json:{"foo":{"bar1":{"val":[1,2,3]}, "bar2":{"val":[1,2,3]}}},
                            results:[[1,2,3], [1,2,3]]);
     }
@@ -564,7 +564,7 @@ mod json_path_tests {
     #[test]
     fn test_full_scan() {
         setup();
-        verify_json!(path:"$..val", 
+        verify_json!(path:"$..val",
                            json:{"foo":{"bar1":{"val":[1,2,3]}, "bar2":{"val":[1,2,3]}}, "val":[1,2,3]},
                            results:[[1,2,3], [1,2,3], [1,2,3]]);
     }
@@ -619,5 +619,57 @@ mod json_path_tests {
                             }
                           },
                            results:[[root, 3], [root, 4], [root, 5]]);
+    }
+
+    #[test]
+    fn test_backslash_escape_detailed() {
+        setup();
+        verify_json!(path:r#"$["\\"]"#, json:{"\\": 1, "\\\\": 2}, results:[1]);
+        verify_json!(path:r#"$["\\\\"]"#, json:{"\\": 1, "\\\\": 2}, results:[2]);
+        verify_json!(path:r#"$["\\\\\\"]"#, json:{"\\": 1, "\\\\": 2, "\\\\\\": 3}, results:[3]);
+        verify_json!(path:r#"$["\\\\\\\\"]"#, json:{"\\": 1, "\\\\": 2, "\\\\\\": 3, "\\\\\\\\": 4}, results:[4]);
+    }
+
+    #[test]
+    fn test_quote_escape() {
+        setup();
+        verify_json!(path:r#"$["\""]"#, json:{"\"": 1}, results:[1]);
+        verify_json!(path:r#"$["'"]"#, json:{"'": 1}, results:[1]);
+        verify_json!(path:r#"$['\'']"#, json:{"'": 1}, results:[1]);
+    }
+
+    #[test]
+    fn test_tab_escape() {
+        setup();
+        verify_json!(path:"$[\"\t\"]", json:{"\t": 1}, results:[1]);
+    }
+
+    #[test]
+    fn test_newline_escape() {
+        setup();
+        verify_json!(path:"$[\"\n\"]", json:{"\n": 1}, results:[1]);
+    }
+
+    #[test]
+    fn test_mixed_escapes() {
+        setup();
+        verify_json!(path:r#"$["\\\""]"#, json:{"\\\"": 1}, results:[1]);
+        verify_json!(path:r#"$["a\\b"]"#, json:{"a\\b": 1}, results:[1]);
+    }
+
+    #[test]
+    fn test_path_calculation_with_escapes() {
+        setup();
+        use crate::calc_once_paths;
+        use crate::compile;
+        let test_json = json!({"\\": 1, "\\\\": 2});
+        let query1 = compile(r#"$["\\"]"#).unwrap();
+        let paths1 = calc_once_paths(query1, &test_json);
+        assert_eq!(paths1.len(), 1);
+        assert_eq!(paths1[0], vec!["\\".to_string()]);
+        let query2 = compile(r#"$["\\\\"]"#).unwrap();
+        let paths2 = calc_once_paths(query2, &test_json);
+        assert_eq!(paths2.len(), 1);
+        assert_eq!(paths2[0], vec!["\\\\".to_string()]);
     }
 }

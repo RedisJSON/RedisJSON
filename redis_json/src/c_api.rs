@@ -953,9 +953,8 @@ mod tests {
                 phantom: PhantomData,
             });
 
-            let mut status = Status::Ok as c_int;
             for i in 0..array.len().unwrap() {
-                status = json_api_get_at(
+                let status = json_api_get_at(
                     RedisIValueJsonKeyManager {
                         phantom: PhantomData,
                     },
@@ -971,7 +970,7 @@ mod tests {
                     arrays[array_idx].get_index(i).unwrap().as_ref()
                 );
             }
-            status = json_api_get_at(
+            let status = json_api_get_at(
                 RedisIValueJsonKeyManager {
                     phantom: PhantomData,
                 },
