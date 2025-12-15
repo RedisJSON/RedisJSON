@@ -255,11 +255,7 @@ pub(crate) fn compile(path: &str) -> Result<Query<'_>, QueryCompilationError> {
                 pest::error::ErrorVariant::CustomError { ref message } => message.clone(),
             };
 
-            let final_msg = if pos == path.len() {
-                format!("\"{path} <<<<----\", {msg}.")
-            } else {
-                format!("\"{} ---->>>> {}\", {}.", &path[..pos], &path[pos..], msg)
-            };
+            let final_msg = format!("Error at position {}: {}", pos, msg);
             Err(QueryCompilationError {
                 location: pos,
                 message: final_msg,
