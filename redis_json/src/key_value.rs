@@ -376,7 +376,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         let first = self.get_first(path)?;
         match first.get_type() {
             SelectValueType::String => Ok(first.get_str().len()),
-            _ => Err(err_json(first.as_ref(), "string")),
+            _ => Err(err_json("string")),
         }
     }
 
@@ -384,7 +384,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         match self.get_first(path) {
             Ok(first) => match first.get_type() {
                 SelectValueType::Object => Ok(ObjectLen::Len(first.len().unwrap())),
-                _ => Err(err_json(first.as_ref(), "object")),
+                _ => Err(err_json("object")),
             },
             _ => Ok(ObjectLen::NoneExisting),
         }
@@ -415,7 +415,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     ) -> RedisResult {
         let arr = self.get_first(path)?;
         match Self::arr_first_index_single(arr.as_ref(), &json_value, start, end) {
-            FoundIndex::NotArray => Err(err_json(arr.as_ref(), "array")),
+            FoundIndex::NotArray => Err(err_json("array")),
             i => Ok(i.into()),
         }
     }
