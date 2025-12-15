@@ -15,8 +15,8 @@ use redis_module::raw::RedisModuleKey;
 use redis_module::rediserror::RedisError;
 use redis_module::{Context, RedisResult, RedisString};
 
-use crate::Format;
 use crate::error::Error;
+use crate::Format;
 
 pub struct SetUpdateInfo {
     pub path: Vec<String>,

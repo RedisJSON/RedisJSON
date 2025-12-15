@@ -704,7 +704,7 @@ fn find_paths<T: SelectValue, F: Fn(&ValueRef<'_, T>) -> bool>(
     path: &str,
     doc: &T,
     f: F,
-) -> Result<Vec<Vec<String>>, RedisError> {
+) -> RedisResult<Vec<Vec<String>>> {
     let query = match compile(path) {
         Ok(q) => q,
         Err(e) => return Err(RedisError::String(e.to_string())),
@@ -720,7 +720,7 @@ fn find_paths<T: SelectValue, F: Fn(&ValueRef<'_, T>) -> bool>(
 fn get_all_values_and_paths<'a, T: SelectValue>(
     path: &str,
     doc: &'a T,
-) -> Result<Vec<(ValueRef<'a, T>, Vec<String>)>, RedisError> {
+) -> RedisResult<Vec<(ValueRef<'a, T>, Vec<String>)>> {
     let query = match compile(path) {
         Ok(q) => q,
         Err(e) => return Err(RedisError::String(e.to_string())),
@@ -764,7 +764,7 @@ fn find_all_paths<T: SelectValue, F>(
     path: &str,
     doc: &T,
     f: F,
-) -> Result<Vec<Option<Vec<String>>>, RedisError>
+) -> RedisResult<Vec<Option<Vec<String>>>>
 where
     F: Fn(ValueRef<'_, T>) -> bool,
 {
@@ -779,7 +779,7 @@ fn find_all_values<'a, T: SelectValue, F>(
     path: &str,
     doc: &'a T,
     f: F,
-) -> Result<Vec<Option<ValueRef<'a, T>>>, RedisError>
+) -> RedisResult<Vec<Option<ValueRef<'a, T>>>>
 where
     F: Fn(ValueRef<'_, T>) -> bool,
 {
@@ -1005,7 +1005,7 @@ pub fn json_mget_command_impl<M: Manager>(
             return Err(RedisError::WrongArity);
         }
 
-        let results: Result<Vec<RedisValue>, RedisError> = keys
+        let results: RedisResult<Vec<_>> = keys
             .iter()
             .map(|key| {
                 manager
@@ -1197,7 +1197,7 @@ fn json_num_op_impl<M: Manager>(
     number: &str,
     op: NumOp,
     cmd: &str,
-) -> Result<Vec<Option<Number>>, RedisError> {
+) -> RedisResult<Vec<Option<Number>>> {
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
@@ -1787,14 +1787,12 @@ pub fn json_arr_append_command_impl<M: Manager>(
     // We require at least one JSON item to append
     args.peek().ok_or(RedisError::WrongArity)?;
 
-    let args = args.try_fold::<_, _, Result<_, RedisError>>(
-        Vec::with_capacity(args.len()),
-        |mut acc, arg| {
+    let args =
+        args.try_fold::<_, _, RedisResult<_>>(Vec::with_capacity(args.len()), |mut acc, arg| {
             let json = arg.try_as_str()?;
             acc.push(manager.from_str(json, Format::JSON, true)?);
             Ok(acc)
-        },
-    )?;
+        })?;
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
 
@@ -2040,14 +2038,12 @@ pub fn json_arr_insert_command_impl<M: Manager>(
 
     // We require at least one JSON item to insert
     args.peek().ok_or(RedisError::WrongArity)?;
-    let args = args.try_fold::<_, _, Result<_, RedisError>>(
-        Vec::with_capacity(args.len()),
-        |mut acc, arg| {
+    let args =
+        args.try_fold::<_, _, RedisResult<_>>(Vec::with_capacity(args.len()), |mut acc, arg| {
             let json = arg.try_as_str()?;
             acc.push(manager.from_str(json, Format::JSON, true)?);
             Ok(acc)
-        },
-    )?;
+        })?;
     let mut redis_key = manager.open_key_write(ctx, key)?;
     if path.is_legacy() {
         json_arr_insert_legacy(manager, &mut redis_key, ctx, path.get_path(), index, args)
@@ -2760,7 +2756,7 @@ pub fn json_clear_command_impl<M: Manager>(
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
-    let paths = args.try_fold::<_, _, Result<Vec<Path>, RedisError>>(
+    let paths = args.try_fold::<_, _, RedisResult<Vec<_>>>(
         Vec::with_capacity(args.len()),
         |mut acc, arg| {
             let s = arg.try_as_str()?;
@@ -2769,13 +2765,7 @@ pub fn json_clear_command_impl<M: Manager>(
         },
     )?;
 
-    let paths = if paths.is_empty() {
-        vec![Path::default()]
-    } else {
-        paths
-    };
-
-    let path = paths.first().unwrap().get_path();
+    let path = paths.first().unwrap_or(&JSON_ROOT_PATH).get_path();
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
 

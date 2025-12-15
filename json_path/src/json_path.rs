@@ -211,55 +211,31 @@ pub(crate) fn compile(path: &str) -> Result<Query<'_>, QueryCompilationError> {
         }
         // pest::error::Error
         Err(e) => {
-            let pos = match e.location {
+            let location = match e.location {
                 pest::error::InputLocation::Pos(pos) => pos,
                 pest::error::InputLocation::Span((pos, _end)) => pos,
             };
-            let msg = match e.variant {
+            let msg = match &e.variant {
                 pest::error::ErrorVariant::ParsingError {
-                    ref positives,
-                    ref negatives,
+                    positives,
+                    negatives,
                 } => {
-                    let positives = if positives.is_empty() {
-                        None
-                    } else {
-                        Some(
-                            positives
-                                .iter()
-                                .map(|v| format!("{v}"))
-                                .collect_vec()
-                                .join(", "),
-                        )
-                    };
-                    let negatives = if negatives.is_empty() {
-                        None
-                    } else {
-                        Some(
-                            negatives
-                                .iter()
-                                .map(|v| format!("{v}"))
-                                .collect_vec()
-                                .join(", "),
-                        )
-                    };
-
-                    match (positives, negatives) {
-                        (None, None) => "parsing error".to_string(),
-                        (Some(p), None) => format!("expected one of the following: {p}"),
-                        (None, Some(n)) => format!("unexpected tokens found: {n}"),
-                        (Some(p), Some(n)) => format!(
+                    let p = positives.into_iter().join(", ");
+                    let n = negatives.into_iter().join(", ");
+                    match (p.len(), n.len()) {
+                        (0, 0) => "parsing error".to_string(),
+                        (_, 0) => format!("expected one of the following: {p}"),
+                        (0, _) => format!("unexpected tokens found: {n}"),
+                        (_, _) => format!(
                             "expected one of the following: {p}, unexpected tokens found: {n}"
                         ),
                     }
                 }
-                pest::error::ErrorVariant::CustomError { ref message } => message.clone(),
+                pest::error::ErrorVariant::CustomError { message } => message.clone(),
             };
 
-            let final_msg = format!("Error at position {}: {}", pos, msg);
-            Err(QueryCompilationError {
-                location: pos,
-                message: final_msg,
-            })
+            let message = format!("Error at position {}: {}", location, msg);
+            Err(QueryCompilationError { location, message })
         }
     }
 }

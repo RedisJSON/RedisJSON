@@ -103,6 +103,7 @@ impl FromStr for ReplyFormat {
 ///
 /// Backwards compatibility converter for `RedisJSON` 1.x clients
 ///
+#[derive(Clone, Eq)]
 pub struct Path<'a> {
     original_path: &'a str,
     fixed_path: Option<String>,
@@ -171,8 +172,6 @@ impl PartialEq for Path<'_> {
         self.get_path() == other.get_path()
     }
 }
-
-impl Eq for Path<'_> {}
 
 impl Display for Path<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
