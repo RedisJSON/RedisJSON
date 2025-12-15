@@ -102,25 +102,20 @@ pub trait Manager {
     fn is_json(&self, key: *mut RedisModuleKey) -> Result<bool, RedisError>;
 }
 
-pub(crate) fn err_json<V: SelectValue>(value: &V, expected_value: &'static str) -> Error {
-    Error::from(err_msg_json_expected(
-        expected_value,
-        KeyValue::value_name(value),
+pub(crate) fn err_json<V: SelectValue>(value: &V, expected_value: &'static str) -> RedisError {
+    err_msg_json_expected(expected_value, KeyValue::value_name(value))
+}
+
+pub(crate) fn err_msg_json_expected(expected_value: &'static str, found: &str) -> RedisError {
+    RedisError::String(format!(
+        "WRONGTYPE wrong type of path value - expected {expected_value} but found {found}"
     ))
 }
 
-pub(crate) fn err_msg_json_expected(expected_value: &'static str, found: &str) -> String {
-    format!("WRONGTYPE wrong type of path value - expected {expected_value} but found {found}")
+pub(crate) fn err_invalid_path() -> RedisError {
+    RedisError::Str("ERR Path does not exist")
 }
 
-pub(crate) fn err_msg_json_path_doesnt_exist_with_param(path: &str) -> String {
-    format!("ERR Path '{path}' does not exist")
-}
-
-pub(crate) fn err_msg_json_path_doesnt_exist() -> String {
-    "ERR Path does not exist".to_string()
-}
-
-pub(crate) fn err_msg_json_path_doesnt_exist_with_param_or(path: &str, or: &str) -> String {
-    format!("ERR Path '{path}' does not exist or {or}")
+pub(crate) fn err_invalid_path_or(or: &str) -> RedisError {
+    RedisError::String(format!("ERR Path does not exist or {or}"))
 }

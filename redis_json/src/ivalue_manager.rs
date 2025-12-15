@@ -8,7 +8,7 @@
  */
 
 use crate::error::Error;
-use crate::manager::{err_json, err_msg_json_expected, err_msg_json_path_doesnt_exist};
+use crate::manager::{err_invalid_path, err_json, err_msg_json_expected};
 use crate::manager::{Manager, ReadHolder, WriteHolder};
 use crate::redisjson::normalize_arr_start_index;
 use crate::Format;
@@ -119,10 +119,7 @@ fn update<F, T>(path: Vec<String>, root: &mut IValue, func: F) -> RedisResult<T>
 where
     F: FnOnce(PathValue<'_, '_>) -> RedisResult<T>,
 {
-    follow_path(path, root).map_or_else(
-        || Err(RedisError::String(err_msg_json_path_doesnt_exist())),
-        func,
-    )
+    follow_path(path, root).map_or_else(|| Err(err_invalid_path()), func)
 }
 
 ///
@@ -442,7 +439,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 bool_mut.set(val);
                 Ok(val)
             } else {
-                Err(err_json(v, "bool").into())
+                Err(err_json(v, "bool"))
             }
         })
     }
@@ -459,12 +456,9 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                         *v_str = IString::intern(&new_str);
                         Ok(new_str.len())
                     })
-                    .unwrap_or_else(|| Err(err_json(v, "string").into()))
+                    .unwrap_or_else(|| Err(err_json(v, "string")))
             }),
-            _ => Err(RedisError::String(err_msg_json_expected(
-                "string",
-                val.as_str(),
-            ))),
+            _ => Err(err_msg_json_expected("string", val.as_str())),
         }
     }
 
@@ -479,7 +473,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                         .map_err(|e| RedisError::String(e.to_string()))?;
                     Ok(arr.len())
                 })
-                .unwrap_or_else(|| Err(err_json(v, "array").into()))
+                .unwrap_or_else(|| Err(err_json(v, "array")))
         })
     }
 
@@ -516,7 +510,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                     };
                     Ok(arr.len())
                 })
-                .unwrap_or_else(|| Err(err_json(v, "array").into()))
+                .unwrap_or_else(|| Err(err_json(v, "array")))
         })
     }
 
@@ -538,7 +532,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                     let index = normalize_arr_start_index(index, len) as usize;
                     array.remove(index)
                 })
-                .ok_or_else(|| err_json(v, "array").into())
+                .ok_or_else(|| err_json(v, "array"))
         })?;
         serialize_callback(res.as_ref())
     }
@@ -582,7 +576,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                     array.truncate(range.end - range.start);
                     array.len()
                 })
-                .ok_or_else(|| err_json(v, "array").into())
+                .ok_or_else(|| err_json(v, "array"))
         })
     }
 
