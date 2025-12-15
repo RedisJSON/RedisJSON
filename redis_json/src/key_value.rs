@@ -69,7 +69,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             SelectValueType::String => RedisValue::BulkString(v.get_str()),
 
             SelectValueType::Array => {
-                let mut res: Vec<RedisValue> = Vec::with_capacity(v.len().unwrap() + 1);
+                let mut res = Vec::with_capacity(v.len().unwrap() + 1);
                 res.push(RedisValue::SimpleStringStatic("["));
                 v.values()
                     .unwrap()
@@ -78,7 +78,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             }
 
             SelectValueType::Object => {
-                let mut res: Vec<RedisValue> = Vec::with_capacity(v.len().unwrap() + 1);
+                let mut res = Vec::with_capacity(v.len().unwrap() + 1);
                 res.push(RedisValue::SimpleStringStatic("{"));
                 for (k, v) in v.items().unwrap() {
                     res.push(RedisValue::BulkString(k.to_string()));

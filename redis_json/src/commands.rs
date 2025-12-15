@@ -68,10 +68,7 @@ pub enum Values<'a, V: SelectValue> {
 }
 
 impl<'a, V: SelectValue> Serialize for Values<'a, V> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
             Values::Single(v) => v.serialize(serializer),
             Values::Multi(v) => v.serialize(serializer),
@@ -1481,7 +1478,7 @@ fn json_bool_toggle_impl<M: Manager>(
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
     let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Bool)?;
-    let mut res: Vec<RedisValue> = vec![];
+    let mut res = vec![];
     let mut need_notify = false;
     for p in paths {
         res.push(match p {
@@ -1610,7 +1607,7 @@ fn json_str_append_impl<M: Manager>(
 
     let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::String)?;
 
-    let mut res: Vec<RedisValue> = vec![];
+    let mut res = vec![];
     let mut need_notify = false;
     for p in paths {
         res.push(match p {
@@ -1716,7 +1713,7 @@ fn json_str_len_impl<M: Manager>(redis_key: &M::ReadHolder, path: &str) -> Redis
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
     let values = find_all_values(path, root, |v| v.get_type() == SelectValueType::String)?;
-    let mut res: Vec<RedisValue> = vec![];
+    let mut res = vec![];
     for v in values {
         res.push(v.map_or(RedisValue::Null, |v| (v.get_str().len() as i64).into()));
     }
@@ -2066,7 +2063,7 @@ fn json_arr_insert_impl<M: Manager>(
 
     let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
 
-    let mut res: Vec<RedisValue> = vec![];
+    let mut res = vec![];
     let mut need_notify = false;
     for p in paths {
         res.push(match p {
@@ -2359,7 +2356,7 @@ fn json_arr_pop_impl<M: Manager>(
         .ok_or_else(RedisError::nonexistent_key)?;
 
     let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
-    let mut res: Vec<RedisValue> = vec![];
+    let mut res = vec![];
     let mut need_notify = false;
     for p in paths {
         res.push(match p {
@@ -2490,7 +2487,7 @@ fn json_arr_trim_impl<M: Manager>(
         .ok_or_else(RedisError::nonexistent_key)?;
 
     let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
-    let mut res: Vec<RedisValue> = vec![];
+    let mut res = vec![];
     let mut need_notify = false;
     for p in paths {
         res.push(match p {
@@ -2596,7 +2593,7 @@ fn json_obj_keys_impl<M: Manager>(redis_key: &mut M::ReadHolder, path: &str) -> 
         .ok_or_else(RedisError::nonexistent_key)?;
     let res: RedisValue = {
         let values = find_all_values(path, root, |v| v.get_type() == SelectValueType::Object)?;
-        let mut res: Vec<RedisValue> = vec![];
+        let mut res = vec![];
         for v in values {
             res.push(v.map_or(RedisValue::Null, |v| v.keys().unwrap().collect_vec().into()));
         }

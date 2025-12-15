@@ -26,16 +26,16 @@ macro_rules! value_ref_items {
             ValueRef::Borrowed(borrowed_val) => {
                 // For borrowed values, convert keys to owned for consistent return type
                 let iter = borrowed_val.items().unwrap();
-                let collected: Vec<_> = iter.map(|(k, v)| (Cow::Borrowed(k), v)).collect();
+                let collected = iter.map(|(k, v)| (Cow::Borrowed(k), v)).collect_vec();
                 Box::new(collected.into_iter())
                     as Box<dyn Iterator<Item = (Cow<'_, str>, ValueRef<'_, S>)>>
             }
             ValueRef::Owned(owned_val) => {
                 // For owned values, collect first to avoid lifetime issues
                 let iter = owned_val.items().unwrap();
-                let collected: Vec<_> = iter
+                let collected = iter
                     .map(|(k, v)| (Cow::Owned(k.to_string()), ValueRef::Owned(v.inner_cloned())))
-                    .collect();
+                    .collect_vec();
                 Box::new(collected.into_iter())
                     as Box<dyn Iterator<Item = (Cow<'_, str>, ValueRef<'_, S>)>>
             }
@@ -55,7 +55,9 @@ macro_rules! value_ref_values {
             ValueRef::Owned(owned_val) => {
                 // For owned values, we need to collect first to avoid lifetime issues
                 let iter = owned_val.values().unwrap();
-                let collected: Vec<_> = iter.map(|v| ValueRef::Owned(v.inner_cloned())).collect();
+                let collected = iter
+                    .map(|v| ValueRef::Owned(v.inner_cloned()))
+                    .collect_vec();
                 Box::new(collected.into_iter()) as Box<dyn Iterator<Item = ValueRef<'_, S>>>
             }
         }
