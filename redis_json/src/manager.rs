@@ -12,10 +12,9 @@ use redis_module::key::KeyFlags;
 use serde_json::Number;
 
 use redis_module::raw::RedisModuleKey;
-use redis_module::rediserror::RedisError;
+use redis_module::RedisError;
 use redis_module::{Context, RedisResult, RedisString};
 
-use crate::error::Error;
 use crate::Format;
 
 pub struct SetUpdateInfo {
@@ -81,7 +80,7 @@ pub trait Manager {
     fn open_key_write(&self, ctx: &Context, key: RedisString) -> RedisResult<Self::WriteHolder>;
     fn apply_changes(&self, ctx: &Context);
     #[allow(clippy::wrong_self_convention)]
-    fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> Result<Self::O, Error>;
+    fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> RedisResult<Self::O>;
     fn get_memory(v: &Self::V) -> RedisResult<usize>;
     fn is_json(&self, key: *mut RedisModuleKey) -> RedisResult<bool>;
 }

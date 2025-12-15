@@ -12,7 +12,6 @@ use serde_json::Value;
 
 use crate::{
     commands::{prepare_paths_for_updating, FoundIndex, ObjectLen, Values},
-    error::Error,
     formatter::{RedisJsonFormatter, ReplyFormatOptions},
     manager::{err_invalid_path, err_json, AddUpdateInfo, SetUpdateInfo, UpdateInfo},
     redisjson::{normalize_arr_indices, Path, ReplyFormat, SetOptions},
@@ -29,7 +28,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    pub fn get_first<'b>(&'a self, path: &'b str) -> Result<ValueRef<'a, V>, RedisError> {
+    pub fn get_first<'b>(&'a self, path: &'b str) -> RedisResult<ValueRef<'a, V>> {
         self.get_values(path)?
             .first()
             .cloned()
@@ -89,7 +88,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    pub fn get_values<'b>(&'a self, path: &'b str) -> Result<Vec<ValueRef<'a, V>>, Error> {
+    pub fn get_values<'b>(&'a self, path: &'b str) -> RedisResult<Vec<ValueRef<'a, V>>> {
         let query = compile(path)?;
         let results = calc_once(query, self.val.as_ref());
         Ok(results)
@@ -256,14 +255,14 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    fn find_add_paths(&mut self, path: &str) -> Result<Vec<UpdateInfo>, Error> {
+    fn find_add_paths(&mut self, path: &str) -> RedisResult<Vec<UpdateInfo>> {
         let mut query = compile(path)?;
         if !query.is_static() {
-            return Err("Err wrong static path".into());
+            return Err(RedisError::Str("Err wrong static path"));
         }
 
         if query.size() < 1 {
-            return Err("Err path must end with object key to set".into());
+            return Err(RedisError::Str("Err path must end with object key to set"));
         }
 
         let (last, token_type) = query.pop_last().unwrap();
@@ -299,7 +298,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 let res = calc_once_paths(query, self.val.as_ref());
 
                 if res.is_empty() {
-                    Err("ERR array index out of range".into())
+                    Err(RedisError::Str("ERR array index out of range"))
                 } else {
                     Ok(Vec::new())
                 }
@@ -307,7 +306,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    pub fn find_paths(&mut self, path: &str, option: SetOptions) -> Result<Vec<UpdateInfo>, Error> {
+    pub fn find_paths(&mut self, path: &str, option: SetOptions) -> RedisResult<Vec<UpdateInfo>> {
         if option != SetOptions::NotExists {
             let query = compile(path)?;
             let mut res = calc_once_paths(query, self.val.as_ref());
@@ -328,25 +327,17 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    pub fn to_string_single(
-        &self,
-        path: &str,
-        format: &ReplyFormatOptions,
-    ) -> Result<String, Error> {
+    pub fn to_string_single(&self, path: &str, format: &ReplyFormatOptions) -> RedisResult<String> {
         let result = self.get_first(path)?;
         Ok(Self::serialize_object(&result, format))
     }
 
-    pub fn to_string_multi(
-        &self,
-        path: &str,
-        format: &ReplyFormatOptions,
-    ) -> Result<String, Error> {
+    pub fn to_string_multi(&self, path: &str, format: &ReplyFormatOptions) -> RedisResult<String> {
         let results = self.get_values(path)?;
         Ok(Self::serialize_object(&results, format))
     }
 
-    pub fn get_type(&self, path: &str) -> Result<String, Error> {
+    pub fn get_type(&self, path: &str) -> RedisResult<String> {
         let first = self.get_first(path)?;
         let s = Self::value_name(first.as_ref());
         Ok(s.to_string())
@@ -372,7 +363,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    pub fn str_len(&self, path: &str) -> Result<usize, RedisError> {
+    pub fn str_len(&self, path: &str) -> RedisResult<usize> {
         let first = self.get_first(path)?;
         match first.get_type() {
             SelectValueType::String => Ok(first.get_str().len()),
@@ -380,7 +371,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    pub fn obj_len(&self, path: &str) -> Result<ObjectLen, RedisError> {
+    pub fn obj_len(&self, path: &str) -> RedisResult<ObjectLen> {
         match self.get_first(path) {
             Ok(first) => match first.get_type() {
                 SelectValueType::Object => Ok(ObjectLen::Len(first.len().unwrap())),
