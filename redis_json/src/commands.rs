@@ -2717,7 +2717,7 @@ macro_rules! json_clear_command {
                 name: "json.clear",
                 flags: [Write],
                 acl_categories: [Write, Single("json")],
-                arity: -1,
+                arity: -2,
                 complexity: "O(N) when path is evaluated to a single value where N is the size of the values, O(N) when path is evaluated to multiple values, where N is the size of the key",
                 since: "2.0.0",
                 summary: "Clear container values (arrays/objects) and set numeric values to 0",
@@ -2752,16 +2752,14 @@ pub fn json_clear_command_impl<M: Manager>(
     args: Vec<RedisString>,
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
+    if args.len() < 1 || args.len() > 2 {
+        return Err(RedisError::WrongArity);
+    }
+
     let key = args.next_arg()?;
 
     let path = args.next_str().map(Path::new).unwrap_or_default();
     let path = path.get_path();
-
-    if args.next().is_some() {
-        return Err(RedisError::Str(
-            "ERR JSON.CLEAR supports only a single optional path argument",
-        ));
-    }
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
 
