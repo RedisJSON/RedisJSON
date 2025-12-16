@@ -52,7 +52,6 @@ mod backward;
 pub mod c_api;
 pub mod commands;
 pub mod defrag;
-pub mod error;
 mod formatter;
 pub mod ivalue_manager;
 mod key_value;
