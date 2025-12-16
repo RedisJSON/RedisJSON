@@ -7,7 +7,7 @@
  * GNU Affero General Public License v3 (AGPLv3).
  */
 
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 use std::fmt::Debug;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
