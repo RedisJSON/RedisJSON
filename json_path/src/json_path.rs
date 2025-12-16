@@ -7,16 +7,16 @@
  * GNU Affero General Public License v3 (AGPLv3).
  */
 
+use crate::select_value::{SelectValue, SelectValueType, ValueRef};
 use itertools::Itertools;
+use log::trace;
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use pest_derive::Parser;
+use redis_module::rediserror::RedisError;
+use regex::Regex;
 use std::borrow::Cow;
 use std::cmp::Ordering;
-
-use crate::select_value::{SelectValue, SelectValueType, ValueRef};
-use log::trace;
-use regex::Regex;
 use std::fmt::Debug;
 
 // Macro to handle items() iterator for both Borrowed and Owned ValueRef cases
@@ -26,16 +26,16 @@ macro_rules! value_ref_items {
             ValueRef::Borrowed(borrowed_val) => {
                 // For borrowed values, convert keys to owned for consistent return type
                 let iter = borrowed_val.items().unwrap();
-                let collected: Vec<_> = iter.map(|(k, v)| (Cow::Borrowed(k), v)).collect();
+                let collected = iter.map(|(k, v)| (Cow::Borrowed(k), v)).collect_vec();
                 Box::new(collected.into_iter())
                     as Box<dyn Iterator<Item = (Cow<'_, str>, ValueRef<'_, S>)>>
             }
             ValueRef::Owned(owned_val) => {
                 // For owned values, collect first to avoid lifetime issues
                 let iter = owned_val.items().unwrap();
-                let collected: Vec<_> = iter
+                let collected = iter
                     .map(|(k, v)| (Cow::Owned(k.to_string()), ValueRef::Owned(v.inner_cloned())))
-                    .collect();
+                    .collect_vec();
                 Box::new(collected.into_iter())
                     as Box<dyn Iterator<Item = (Cow<'_, str>, ValueRef<'_, S>)>>
             }
@@ -55,7 +55,9 @@ macro_rules! value_ref_values {
             ValueRef::Owned(owned_val) => {
                 // For owned values, we need to collect first to avoid lifetime issues
                 let iter = owned_val.values().unwrap();
-                let collected: Vec<_> = iter.map(|v| ValueRef::Owned(v.inner_cloned())).collect();
+                let collected = iter
+                    .map(|v| ValueRef::Owned(v.inner_cloned()))
+                    .collect_vec();
                 Box::new(collected.into_iter()) as Box<dyn Iterator<Item = ValueRef<'_, S>>>
             }
         }
@@ -105,11 +107,16 @@ pub struct QueryCompilationError {
     message: String,
 }
 
+impl From<QueryCompilationError> for RedisError {
+    fn from(e: QueryCompilationError) -> Self {
+        Self::String(e.to_string())
+    }
+}
+
 impl<'i> Query<'i> {
     /// Pop the last element from the compiled json path.
     /// For example, if the json path is $.foo.bar then `pop_last`
-    /// will return bar and leave the json path query with foo only
-    /// ($.foo)
+    /// will return bar and leave the json path query with $.foo
     #[allow(dead_code)]
     pub fn pop_last(&mut self) -> Option<(String, JsonPathToken)> {
         self.root.next_back().and_then(|last| match last.as_rule() {
@@ -123,7 +130,7 @@ impl<'i> Query<'i> {
                 let first_on_list = last.into_inner().next();
                 first_on_list.map(|first| (first.as_str().to_string(), JsonPathToken::String))
             }
-            _ => panic!("pop last was used in a none static path"),
+            _ => panic!("pop last was used in a non-static path"),
         })
     }
 
@@ -138,11 +145,11 @@ impl<'i> Query<'i> {
         self.size()
     }
 
-    /// Results whether or not the compiled json path is static
-    /// Static path is a path that is promised to have at most a single result.
+    /// Returns whether the compiled json path is static
+    /// A static path is a path that is promised to have at most a single result.
     /// Example:
     ///     static path: $.foo.bar
-    ///     none static path: $.*.bar
+    ///     non-static path: $.*.bar
     #[allow(dead_code)]
     pub fn is_static(&mut self) -> bool {
         if self.is_static.is_some() {
@@ -174,7 +181,7 @@ impl std::fmt::Display for QueryCompilationError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         write!(
             f,
-            "Error occurred on position {}, {}",
+            "Error occurred at position {}, {}",
             self.location, self.message
         )
     }
@@ -211,59 +218,31 @@ pub(crate) fn compile(path: &str) -> Result<Query<'_>, QueryCompilationError> {
         }
         // pest::error::Error
         Err(e) => {
-            let pos = match e.location {
+            let location = match e.location {
                 pest::error::InputLocation::Pos(pos) => pos,
                 pest::error::InputLocation::Span((pos, _end)) => pos,
             };
-            let msg = match e.variant {
+            let msg = match &e.variant {
                 pest::error::ErrorVariant::ParsingError {
-                    ref positives,
-                    ref negatives,
+                    positives,
+                    negatives,
                 } => {
-                    let positives = if positives.is_empty() {
-                        None
-                    } else {
-                        Some(
-                            positives
-                                .iter()
-                                .map(|v| format!("{v}"))
-                                .collect_vec()
-                                .join(", "),
-                        )
-                    };
-                    let negatives = if negatives.is_empty() {
-                        None
-                    } else {
-                        Some(
-                            negatives
-                                .iter()
-                                .map(|v| format!("{v}"))
-                                .collect_vec()
-                                .join(", "),
-                        )
-                    };
-
-                    match (positives, negatives) {
-                        (None, None) => "parsing error".to_string(),
-                        (Some(p), None) => format!("expected one of the following: {p}"),
-                        (None, Some(n)) => format!("unexpected tokens found: {n}"),
-                        (Some(p), Some(n)) => format!(
+                    let p = positives.into_iter().join(", ");
+                    let n = negatives.into_iter().join(", ");
+                    match (p.len(), n.len()) {
+                        (0, 0) => "parsing error".to_string(),
+                        (_, 0) => format!("expected one of the following: {p}"),
+                        (0, _) => format!("unexpected tokens found: {n}"),
+                        (_, _) => format!(
                             "expected one of the following: {p}, unexpected tokens found: {n}"
                         ),
                     }
                 }
-                pest::error::ErrorVariant::CustomError { ref message } => message.clone(),
+                pest::error::ErrorVariant::CustomError { message } => message.clone(),
             };
 
-            let final_msg = if pos == path.len() {
-                format!("\"{path} <<<<----\", {msg}.")
-            } else {
-                format!("\"{} ---->>>> {}\", {}.", &path[..pos], &path[pos..], msg)
-            };
-            Err(QueryCompilationError {
-                location: pos,
-                message: final_msg,
-            })
+            let message = format!("Error at position {}: {}", location, msg);
+            Err(QueryCompilationError { location, message })
         }
     }
 }
