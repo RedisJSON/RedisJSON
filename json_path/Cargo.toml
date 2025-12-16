@@ -12,6 +12,9 @@ bson.workspace = true
 serde_json.workspace = true
 serde.workspace = true
 ijson.workspace = true
+redis-module = { git = "https://github.com/RedisLabsModules/redismodule-rs", tag = "v2.0.8", default-features = false, features = [
+    "min-redis-compatibility-version-7-2",
+] }
 log = "0.4"
 regex = "1"
 itertools = "0.13"

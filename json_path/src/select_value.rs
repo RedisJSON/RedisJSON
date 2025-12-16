@@ -4,7 +4,7 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 use std::fmt::Debug;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
