@@ -2707,7 +2707,7 @@ fn json_obj_len_legacy<M: Manager>(redis_key: &M::ReadHolder, path: &str) -> Red
 }
 
 ///
-/// JSON.CLEAR <key> [path ...]
+/// JSON.CLEAR <key> [path]
 ///
 #[macro_export]
 macro_rules! json_clear_command {
@@ -2717,7 +2717,7 @@ macro_rules! json_clear_command {
                 name: "json.clear",
                 flags: [Write],
                 acl_categories: [Write, Single("json")],
-                arity: -2,
+                arity: -1,
                 complexity: "O(N) when path is evaluated to a single value where N is the size of the values, O(N) when path is evaluated to multiple values, where N is the size of the key",
                 since: "2.0.0",
                 summary: "Clear container values (arrays/objects) and set numeric values to 0",
@@ -2737,7 +2737,7 @@ macro_rules! json_clear_command {
                     {
                         name: "path",
                         arg_type: String,
-                        flags: [Optional, Multiple],
+                        flags: [Optional],
                     }
                 ]
             }
@@ -2753,16 +2753,15 @@ pub fn json_clear_command_impl<M: Manager>(
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
     let key = args.next_arg()?;
-    let paths = args.try_fold::<_, _, RedisResult<Vec<_>>>(
-        Vec::with_capacity(args.len()),
-        |mut acc, arg| {
-            let s = arg.try_as_str()?;
-            acc.push(Path::new(s));
-            Ok(acc)
-        },
-    )?;
 
-    let path = paths.first().unwrap_or(&JSON_ROOT_PATH).get_path();
+    let path = args.next_str().map(Path::new).unwrap_or_default();
+    let path = path.get_path();
+
+    if args.next().is_some() {
+        return Err(RedisError::Str(
+            "ERR JSON.CLEAR supports only a single optional path argument",
+        ));
+    }
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
 
