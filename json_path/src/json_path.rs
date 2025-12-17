@@ -122,14 +122,14 @@ impl<'i> Query<'i> {
         self.root.next_back().and_then(|last| match last.as_rule() {
             Rule::literal => Some((last.as_str().to_string(), JsonPathToken::String)),
             Rule::number => Some((last.as_str().to_string(), JsonPathToken::Number)),
-            Rule::numbers_list => {
-                let first_on_list = last.into_inner().next();
-                first_on_list.map(|first| (first.as_str().to_string(), JsonPathToken::Number))
-            }
-            Rule::string_list => {
-                let first_on_list = last.into_inner().next();
-                first_on_list.map(|first| (first.as_str().to_string(), JsonPathToken::String))
-            }
+            Rule::numbers_list => last.into_inner().next().map(|rule| {
+                let stringified = rule.as_str().to_string();
+                (stringified, JsonPathToken::Number)
+            }),
+            Rule::string_list => last.into_inner().next().map(|rule| {
+                let unescaped = unescape_string_value(rule).into_owned();
+                (unescaped, JsonPathToken::String)
+            }),
             _ => panic!("pop last was used in a non-static path"),
         })
     }
@@ -200,6 +200,16 @@ impl std::fmt::Display for Rule {
             Self::filter => write!(f, "'[?(filter_expression)]'"),
             _ => write!(f, "{self:?}"),
         }
+    }
+}
+
+fn unescape_string_value<'a>(pair: Pair<'a, Rule>) -> Cow<'a, str> {
+    let s = pair.as_str();
+    match pair.as_rule() {
+        Rule::string_value => Cow::Borrowed(s),
+        Rule::string_value_escape_1 => Cow::Owned(s.replace("\\\\", "\\").replace("\\\"", "\"")),
+        Rule::string_value_escape_2 => Cow::Owned(s.replace("\\\\", "\\").replace("\\'", "'")),
+        _ => panic!("Unexpected rule in string: {:?}", pair.as_rule()),
     }
 }
 
@@ -668,17 +678,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
     ) {
         for c in curr.into_inner() {
-            let s = c.as_str();
-            let unescaped = match c.as_rule() {
-                Rule::string_value => Cow::Borrowed(s),
-                Rule::string_value_escape_1 => {
-                    Cow::Owned(s.replace("\\\\", "\\").replace("\\\"", "\""))
-                }
-                Rule::string_value_escape_2 => {
-                    Cow::Owned(s.replace("\\\\", "\\").replace("\\'", "'"))
-                }
-                _ => panic!("{c:?}"),
-            };
+            let unescaped = unescape_string_value(c);
             value_ref_get_key!(json, &unescaped).map(|val| {
                 let new_tracker = path_tracker
                     .as_ref()
@@ -797,13 +797,12 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             Rule::boolean_true => TermEvaluationResult::Bool(true),
             Rule::boolean_false => TermEvaluationResult::Bool(false),
             Rule::null => TermEvaluationResult::Null,
-            Rule::string_value => TermEvaluationResult::Str(term.as_str()),
-            Rule::string_value_escape_1 => TermEvaluationResult::String(
-                term.as_str().replace("\\\\", "\\").replace("\\'", "'"),
-            ),
-            Rule::string_value_escape_2 => TermEvaluationResult::String(
-                term.as_str().replace("\\\\", "\\").replace("\\\"", "\""),
-            ),
+            Rule::string_value | Rule::string_value_escape_1 | Rule::string_value_escape_2 => {
+                match unescape_string_value(term) {
+                    Cow::Borrowed(s) => TermEvaluationResult::Str(s),
+                    Cow::Owned(s) => TermEvaluationResult::String(s),
+                }
+            }
             Rule::from_current => match term.into_inner().next() {
                 Some(term) => {
                     let mut calc_data = PathCalculatorData {
@@ -1130,6 +1129,33 @@ mod json_path_compiler_tests {
         assert_eq!(
             query.unwrap().pop_last().unwrap(),
             ("foo".to_string(), JsonPathToken::String)
+        );
+    }
+
+    #[test]
+    fn test_compiler_pop_last_escaped_backslash() {
+        let query = compile(r#"$["\\"]"#);
+        assert_eq!(
+            query.unwrap().pop_last().unwrap(),
+            ("\\".to_string(), JsonPathToken::String)
+        );
+    }
+
+    #[test]
+    fn test_compiler_pop_last_escaped_double_backslash() {
+        let query = compile(r#"$["\\\\"]"#);
+        assert_eq!(
+            query.unwrap().pop_last().unwrap(),
+            ("\\\\".to_string(), JsonPathToken::String)
+        );
+    }
+
+    #[test]
+    fn test_compiler_pop_last_escaped_quote() {
+        let query = compile(r#"$["\""]"#);
+        assert_eq!(
+            query.unwrap().pop_last().unwrap(),
+            ("\"".to_string(), JsonPathToken::String)
         );
     }
 
