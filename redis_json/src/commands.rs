@@ -2707,7 +2707,7 @@ fn json_obj_len_legacy<M: Manager>(redis_key: &M::ReadHolder, path: &str) -> Red
 }
 
 ///
-/// JSON.CLEAR <key> [path ...]
+/// JSON.CLEAR <key> [path]
 ///
 #[macro_export]
 macro_rules! json_clear_command {
@@ -2737,7 +2737,7 @@ macro_rules! json_clear_command {
                     {
                         name: "path",
                         arg_type: String,
-                        flags: [Optional, Multiple],
+                        flags: [Optional],
                     }
                 ]
             }
@@ -2752,17 +2752,14 @@ pub fn json_clear_command_impl<M: Manager>(
     args: Vec<RedisString>,
 ) -> RedisResult {
     let mut args = args.into_iter().skip(1);
-    let key = args.next_arg()?;
-    let paths = args.try_fold::<_, _, RedisResult<Vec<_>>>(
-        Vec::with_capacity(args.len()),
-        |mut acc, arg| {
-            let s = arg.try_as_str()?;
-            acc.push(Path::new(s));
-            Ok(acc)
-        },
-    )?;
+    if args.len() < 1 || args.len() > 2 {
+        return Err(RedisError::WrongArity);
+    }
 
-    let path = paths.first().unwrap_or(&JSON_ROOT_PATH).get_path();
+    let key = args.next_arg()?;
+
+    let path = args.next_str().map(Path::new).unwrap_or_default();
+    let path = path.get_path();
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
 
