@@ -573,8 +573,8 @@ def testClear(env):
     # Clear root
     r.expect('JSON.SET', 'test', '.', r'{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}') \
         .ok()
-    # TODO: switch order of the following paths and expect .equals(2) when supporting multi-paths in JSON.CLEAR
-    r.expect('JSON.CLEAR', 'test', '$', '$.arr[2].n').equal(1)
+    r.expect('JSON.CLEAR', 'test', '$', '$.arr[2].n').raiseError()
+    r.expect('JSON.CLEAR', 'test', '$').equal(1)
     r.expect('JSON.GET', 'test', '$').equal('[{}]')
 
     r.expect('JSON.SET', 'test', '$', obj_content_legacy).ok()
