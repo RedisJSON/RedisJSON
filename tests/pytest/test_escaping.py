@@ -107,3 +107,29 @@ def test_raw_string_input(env):
     env.cmd('JSON.SET', 'test2', '$', r'{"\\":1}')
     result2 = env.cmd('JSON.GET', 'test2')
     env.assertEqual(result2, r'{"\\":1}')
+
+
+def test_json_set_create_backslash_key(env):
+    """Test creating a new key with backslash using JSON.SET with a path"""
+    # Set empty object
+    env.cmd('JSON.SET', 'mydoc', '$', '{}')
+
+    # Create a key with a single backslash
+    result = env.cmd('JSON.SET', 'mydoc', r'$["\\"]', '"x"')
+    env.assertEqual(result, 'OK')
+
+    # Get the value at the backslash key
+    result = env.cmd('JSON.GET', 'mydoc', r'$["\\"]')
+    env.assertEqual(result, '["x"]')
+
+    # Verify the full document has the backslash key
+    result = env.cmd('JSON.GET', 'mydoc')
+    env.assertEqual(result, r'{"\\":"x"}')
+
+    # Delete the backslash key
+    deleted = env.cmd('JSON.DEL', 'mydoc', r'$["\\"]')
+    env.assertEqual(deleted, 1)
+
+    # Verify the key was deleted (entire Redis key is removed when last property is deleted)
+    result = env.cmd('JSON.GET', 'mydoc')
+    env.assertEqual(result, None)
