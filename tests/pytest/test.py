@@ -862,9 +862,9 @@ def testLenCommands(env):
 
     # test elements with undefined lengths
     r.expect('JSON.ARRLEN', 'test', '.bool').raiseError().contains("not an array")
-    r.expect('JSON.STRLEN', 'test', '.none').raiseError().contains("expected string")
-    r.expect('JSON.OBJLEN', 'test', '.int').raiseError().contains("expected object")
-    r.expect('JSON.STRLEN', 'test', '.num').raiseError().contains("expected string")
+    r.expect('JSON.STRLEN', 'test', '.none').raiseError().contains("expected string but found null")
+    r.expect('JSON.OBJLEN', 'test', '.int').raiseError().contains("expected object but found integer")
+    r.expect('JSON.STRLEN', 'test', '.num').raiseError().contains("expected string but found number")
 
     # test a non existing key
     r.expect('JSON.ARRLEN', 'test', '.foo').raiseError().contains("does not exist")

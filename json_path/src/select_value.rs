@@ -7,7 +7,7 @@
  * GNU Affero General Public License v3 (AGPLv3).
  */
 
-use serde::{Serialize, Serializer};
+use serde::Serialize;
 use std::fmt::Debug;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -28,7 +28,10 @@ pub enum ValueRef<'a, T: SelectValue> {
 }
 
 impl<'a, T: SelectValue> Serialize for ValueRef<'a, T> {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
         self.as_ref().serialize(serializer)
     }
 }

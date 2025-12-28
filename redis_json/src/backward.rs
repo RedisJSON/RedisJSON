@@ -10,10 +10,11 @@
 use std::vec::Vec;
 
 use redis_module::raw;
-use redis_module::{RedisError, RedisResult};
 use serde_json::map::Map;
 use serde_json::Number;
 use serde_json::Value;
+
+use crate::error::Error;
 
 #[derive(Debug, PartialEq)]
 enum NodeType {
@@ -46,7 +47,7 @@ impl From<u64> for NodeType {
     }
 }
 
-pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> RedisResult<Value> {
+pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> Result<Value, Error> {
     let node_type = raw::load_unsigned(rdb)?.into();
     match node_type {
         NodeType::Null => Ok(Value::Null),
@@ -61,7 +62,7 @@ pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> RedisResult<Value> {
         NodeType::Number => {
             let n = raw::load_double(rdb)?;
             Ok(Value::Number(
-                Number::from_f64(n).ok_or_else(|| RedisError::Str("Can't load as float"))?,
+                Number::from_f64(n).ok_or_else(|| Error::from("Can't load as float"))?,
             ))
         }
         NodeType::String => {
@@ -74,7 +75,7 @@ pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> RedisResult<Value> {
             for _ in 0..len {
                 let t: NodeType = raw::load_unsigned(rdb)?.into();
                 if t != NodeType::KeyVal {
-                    return Err(RedisError::Str("Can't load old RedisJSON RDB"));
+                    return Err(Error::from("Can't load old RedisJSON RDB"));
                 }
                 let buffer = raw::load_string_buffer(rdb)?;
                 m.insert(buffer.to_string()?, json_rdb_load(rdb)?);
@@ -90,6 +91,6 @@ pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> RedisResult<Value> {
             }
             Ok(Value::Array(v))
         }
-        NodeType::KeyVal => Err(RedisError::Str("Can't load old RedisJSON RDB")),
+        NodeType::KeyVal => Err(Error::from("Can't load old RedisJSON RDB")),
     }
 }
