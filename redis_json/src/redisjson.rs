@@ -13,11 +13,12 @@
 // User-provided JSON is converted to a tree. This tree is stored transparently in Redis.
 // It can be operated on (e.g. INCR) and serialized back to JSON.
 
-use redis_module::{raw, RedisError};
+use redis_module::raw;
 
 use std::os::raw::{c_int, c_void};
 
 use crate::backward;
+use crate::error::Error;
 use crate::ivalue_manager::RedisIValueJsonKeyManager;
 use crate::manager::Manager;
 use serde::Serialize;
@@ -66,14 +67,14 @@ pub enum Format {
     BSON,
 }
 impl FromStr for Format {
-    type Err = RedisError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "STRING" => Ok(Self::STRING),
             "JSON" => Ok(Self::JSON),
             "BSON" => Ok(Self::BSON),
-            _ => Err(Self::Err::Str("ERR wrong format")),
+            _ => Err("ERR wrong format".into()),
         }
     }
 }
@@ -86,7 +87,7 @@ pub enum ReplyFormat {
     EXPAND,
 }
 impl FromStr for ReplyFormat {
-    type Err = RedisError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -94,7 +95,7 @@ impl FromStr for ReplyFormat {
             "STRINGS" => Ok(Self::STRINGS),
             "EXPAND1" => Ok(Self::EXPAND1),
             "EXPAND" => Ok(Self::EXPAND),
-            _ => Err(RedisError::Str("ERR wrong reply format")),
+            _ => Err("ERR wrong reply format".into()),
         }
     }
 }
@@ -102,7 +103,6 @@ impl FromStr for ReplyFormat {
 ///
 /// Backwards compatibility converter for `RedisJSON` 1.x clients
 ///
-#[derive(Clone, Eq)]
 pub struct Path<'a> {
     original_path: &'a str,
     fixed_path: Option<String>,
@@ -172,6 +172,8 @@ impl PartialEq for Path<'_> {
     }
 }
 
+impl Eq for Path<'_> {}
+
 impl Display for Path<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.get_path())
@@ -185,8 +187,6 @@ pub struct RedisJSON<T> {
 }
 
 pub mod type_methods {
-    use redis_module::RedisResult;
-
     use super::*;
     use std::{ffi::CString, ptr::null_mut};
 
@@ -207,7 +207,10 @@ pub mod type_methods {
     }
 
     #[allow(non_snake_case, unused)]
-    pub fn value_rdb_load_json(rdb: *mut raw::RedisModuleIO, encver: c_int) -> RedisResult<String> {
+    pub fn value_rdb_load_json(
+        rdb: *mut raw::RedisModuleIO,
+        encver: c_int,
+    ) -> Result<String, Error> {
         Ok(match encver {
             0 => {
                 let v = backward::json_rdb_load(rdb)?;

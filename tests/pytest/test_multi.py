@@ -1180,7 +1180,7 @@ def testErrorMessage(env):
     r.expect('JSON.OBJLEN', 'doc_none', '$.string').raiseError().contains("does not exist")
     r.expect('JSON.OBJLEN', 'hash_key', '.string').raiseError().contains("wrong Redis type")
 
-    r.expect('JSON.OBJLEN', 'doc1', '.boolean').raiseError().contains("expected object")
+    r.expect('JSON.OBJLEN', 'doc1', '.boolean').raiseError().contains("expected object but found boolean")
     r.assertEqual(r.execute_command('JSON.OBJLEN', 'doc1', '.nowhere'), None)
     r.assertEqual(r.execute_command('JSON.OBJLEN', 'doc_none', '.string'), None)
     """ Legacy 1.0.8:
@@ -1262,7 +1262,7 @@ def testErrorMessage(env):
     r.expect('JSON.STRLEN', 'doc_none', '$.object', '"abc"').raiseError().contains("doesn't exist")
     r.expect('JSON.STRLEN', 'hash_key', '$.object', '"abc"').raiseError().contains("wrong Redis type")
 
-    r.expect('JSON.STRLEN', 'doc1', '.object', '"abc"').raiseError().contains("expected string")
+    r.expect('JSON.STRLEN', 'doc1', '.object', '"abc"').raiseError().contains("expected string but found object")
     r.expect('JSON.STRLEN', 'doc1', '.nowhere', '"abc"').raiseError().contains("does not exist")
     r.assertEqual(r.execute_command('JSON.STRLEN', 'doc_none', '.object', '"abc"'), None)
     """ Legacy 1.0.8:

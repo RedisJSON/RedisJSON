@@ -7,8 +7,6 @@ members = [
 ]
 
 [workspace.dependencies]
-redis-module = { git="https://github.com/RedisLabsModules/redismodule-rs", tag="v2.1.3", default-features = false, features = ["min-redis-compatibility-version-7-4"] }
-redis-module-macros = { git="https://github.com/RedisLabsModules/redismodule-rs", tag="v2.1.3" }
 ijson = { git="https://github.com/RedisJSON/ijson", rev="5676f5929863113c2d0e38c8dc27632624217231", default-features=false}
 serde_json = { version="1", features = ["unbounded_depth"]}
 serde = { version = "1", features = ["derive"] }
