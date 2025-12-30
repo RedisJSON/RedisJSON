@@ -9,6 +9,7 @@ READIES=$ROOT/deps/readies
 . $READIES/shibumi/defs
 
 export PYTHONUNBUFFERED=1
+PYTHON=${PYTHON:-python3}
 
 VALGRIND_REDIS_VER=7.4
 SAN_REDIS_VER=7.4
@@ -304,9 +305,9 @@ run_env() {
 
 	local E=0
 	if [[ $NOP != 1 ]]; then
-		{ $OP python3 -m RLTest @$rltest_config; (( E |= $? )); } || true
+		{ $OP $PYTHON -m RLTest @$rltest_config; (( E |= $? )); } || true
 	else
-		$OP python3 -m RLTest @$rltest_config
+		$OP $PYTHON -m RLTest @$rltest_config
 	fi
 
 	[[ $KEEP != 1 ]] && rm -f $rltest_config
@@ -406,9 +407,9 @@ run_tests() {
 
 	local E=0
 	if [[ $NOP != 1 ]]; then
-		{ $OP python3 -m RLTest @$rltest_config; (( E |= $? )); } || true
+		{ $OP $PYTHON -m RLTest @$rltest_config; (( E |= $? )); } || true
 	else
-		$OP python3 -m RLTest @$rltest_config
+		$OP $PYTHON -m RLTest @$rltest_config
 	fi
 
 	[[ $KEEP != 1 ]] && rm -f $rltest_config

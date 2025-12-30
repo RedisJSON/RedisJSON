@@ -339,7 +339,8 @@ def testNumByCommands(env):
     res = r.execute_command('JSON.NUMPOWBY', 'doc1', '$.b[2].a', '2')
     r.assertEqual(res, '[null]')
     res = r.execute_command('JSON.NUMPOWBY', 'doc1', '$.b[1].a', '3')
-    r.assertEqual(res, '[5.960464477539062e16]')
+    # Some serializers emit `e+NN` while others emit `eNN`; both are valid.
+    r.assertEqual(res.replace('e+', 'e'), '[5.960464477539062e16]')
 
     # Test missing key
     r.expect('JSON.NUMINCRBY', 'non_existing_doc', '$..a', '2').raiseError()

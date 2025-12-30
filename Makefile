@@ -194,7 +194,10 @@ run:
 test: cargo_test pytest
 
 pytest:
-	$(SHOW)MODULE=$(abspath $(TARGET)) RLTEST_ARGS='--no-progress' $(realpath ./tests/pytest/tests.sh)
+	$(SHOW)rm -f $(ROOT)/bin/artifacts/tests/status
+	$(SHOW)MODULE=$(abspath $(TARGET)) RLTEST_ARGS='--no-progress' \
+		PYTHON=$(if $(wildcard $(ROOT)/venv/bin/python),$(ROOT)/venv/bin/python,python3) \
+		$(realpath ./tests/pytest/tests.sh)
 
 cargo_test:
 	$(SHOW)cargo $(CARGO_TOOLCHAIN) test --all
