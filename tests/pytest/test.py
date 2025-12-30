@@ -929,25 +929,21 @@ def testNumCommandOverflow(env):
     r.expect('JSON.NUMINCRBY', 'big_num', '.', '1.6350000000001313e+308').raiseError()
     r.expect('JSON.NUMMULTBY', 'big_num', '.', '2').raiseError()
     # (value remains)
-    # Some serializers emit `e+NN` while others emit `eNN`; both are valid.
-    r.assertEqual(r.execute_command('JSON.GET', 'big_num', '.').replace('e+', 'e'),
-                  '1.6350000000001313e308')
+    r.assertEqual(r.execute_command('JSON.GET', 'big_num', '.'), '1.6350000000001313e308')
 
     # test overflow on nested object value
     r.assertOk(r.execute_command('JSON.SET', 'nested_obj_big_num', '$', '{"l1":{"l2_a":1.6350000000001313e+308,"l2_b":2}}'))
     r.expect('JSON.NUMINCRBY', 'nested_obj_big_num', '$.l1.l2_a', '1.6350000000001313e+308').raiseError()
     r.expect('JSON.NUMMULTBY', 'nested_obj_big_num', '$.l1.l2_a', '2').raiseError()
     # (value remains)
-    r.assertEqual(r.execute_command('JSON.GET', 'nested_obj_big_num', '$').replace('e+', 'e'),
-                  '[{"l1":{"l2_a":1.6350000000001313e308,"l2_b":2}}]')
+    r.assertEqual(r.execute_command('JSON.GET', 'nested_obj_big_num', '$'), '[{"l1":{"l2_a":1.6350000000001313e308,"l2_b":2}}]')
 
     # test overflow on nested arr value
     r.assertOk(r.execute_command('JSON.SET', 'nested_arr_big_num', '$', '{"l1":{"l2":[0,1.6350000000001313e+308]}}'))
     r.expect('JSON.NUMINCRBY', 'nested_arr_big_num', '$.l1.l2[1]', '1.6350000000001313e+308').raiseError()
     r.expect('JSON.NUMMULTBY', 'nested_arr_big_num', '$.l1.l2[1]', '2').raiseError()
     # (value remains)
-    r.assertEqual(r.execute_command('JSON.GET', 'nested_arr_big_num', '$').replace('e+', 'e'),
-                  '[{"l1":{"l2":[0,1.6350000000001313e308]}}]')
+    r.assertEqual(r.execute_command('JSON.GET', 'nested_arr_big_num', '$'), '[{"l1":{"l2":[0,1.6350000000001313e308]}}]')
 
 
 def testStrCommands(env):
