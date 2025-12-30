@@ -69,6 +69,28 @@
     "since": "1.0.0",
     "group": "json"
   },
+  "JSON.FILTER": {
+    "summary": "Return the values at one or more paths from a key if the document matches filter expression",
+    "complexity": "O(N) where N is the document size when filter evaluates to single value, O(N*M) when filter or paths evaluate to multiple values where M is the number of paths.",
+    "arguments": [
+      {
+        "name": "key",
+        "type": "key"
+      },
+      {
+        "name": "path",
+        "type": "string",
+        "optional": true,
+        "multiple": true
+      },
+      {
+        "name": "filter_expr",
+        "type": "string"
+      }
+    ],
+    "since": "2.8.16",
+    "group": "json"
+  },
   "JSON.TOGGLE": {
     "summary": "Toggles a boolean value",
     "complexity": "O(1) when path is evaluated to a single value, O(N) when path is evaluated to multiple values, where N is the size of the key",
@@ -201,6 +223,27 @@
       }
     ],
     "since": "1.0.0",
+    "group": "json"
+  },
+  "JSON.MFILTER": {
+    "summary": "Return the values at path from multiple key arguments if they match filter expression",
+    "complexity": "O(M*N) where M is the number of keys and N is the size of the document. Both filter-expression and path are evaluated against each document, with filter evaluation occurring first. When filter or path evaluate to multiple values: O(N1+N2+...+Nm) where m is the number of keys and Ni is the size of the i-th key",
+    "arguments": [
+      {
+        "name": "key",
+        "type": "key",
+        "multiple": true
+      },
+      {
+        "name": "path",
+        "type": "string"
+      },
+      {
+        "name": "filter_expr",
+        "type": "string"
+      }
+    ],
+    "since": "2.8.16",
     "group": "json"
   },
   "JSON.NUMINCRBY": {
