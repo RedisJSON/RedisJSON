@@ -83,6 +83,32 @@ pub trait SelectValue: Debug + Eq + PartialEq + Default + Clone + Serialize {
     fn get_bool(&self) -> bool;
     fn get_long(&self) -> i64;
     fn get_double(&self) -> f64;
+
+    fn calculate_value_depth(&self) -> usize {
+        match self.get_type() {
+            SelectValueType::String
+            | SelectValueType::Bool
+            | SelectValueType::Long
+            | SelectValueType::Null
+            | SelectValueType::Double => 0,
+            SelectValueType::Array => {
+                1 + self
+                    .values()
+                    .unwrap()
+                    .map(|v| v.calculate_value_depth())
+                    .max()
+                    .unwrap_or_default()
+            }
+            SelectValueType::Object => {
+                1 + self
+                    .keys()
+                    .unwrap()
+                    .map(|k| self.get_key(k).unwrap().calculate_value_depth())
+                    .max()
+                    .unwrap_or_default()
+            }
+        }
+    }
 }
 
 pub fn is_equal<T1: SelectValue, T2: SelectValue>(a: &T1, b: &T2) -> bool {
@@ -111,3 +137,6 @@ pub fn is_equal<T1: SelectValue, T2: SelectValue>(a: &T1, b: &T2) -> bool {
             }
         }
 }
+
+#[allow(unused)]
+pub const MAX_DEPTH: usize = 128;
