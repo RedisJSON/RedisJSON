@@ -412,6 +412,17 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 Ok(false)
             }
         })
+        .or_else(|e| {
+            // If update fails because follow_path returned None (path doesn't exist or can't be traversed),
+            // return Ok(false) instead of propagating error. This allows JSON.MERGE to continue with
+            // other paths when using $.. expressions, where some paths might not be valid for merging.
+            // TODO: Properly handle this
+            if e.to_string() == err_invalid_path().to_string() {
+                Ok(false)
+            } else {
+                Err(e)
+            }
+        })
     }
 
     fn dict_add(&mut self, path: Vec<String>, key: &str, mut v: IValue) -> RedisResult<bool> {
