@@ -1619,19 +1619,19 @@ def testJsonDicLimitsInMSet(env):
     doc = nest_object(depth, 5, "__leaf", 42)
     doc_2 = nest_object(5, 5, "__leaf", 128)
     
-    r.expect('JSON.MSET', 'test_1', '$', doc, 'test_2', '$', doc_2).raiseError().contains("recursion limit exceeded")
+    r.expect('JSON.MSET', 'test_1{s}', '$', doc, 'test_2{s}', '$', doc_2).raiseError().contains("recursion limit exceeded")
 
     depth = 57
     doc = nest_object(depth, 5, "__leaf", 42)
-    r.expect('JSON.SET', 'test_1', '$', doc).ok()
+    r.expect('JSON.SET', 'test_1{s}', '$', doc).ok()
 
     depth = 100
     doc_2 = nest_object(depth, 5, "__leaf", 128)
 
     # TODO: when mset will be atomic, this should fail since test_1 doc is not updated due depth limit exceed
-    r.expect('JSON.MSET', 'test_1', '$..__leaf', doc_2, 'test_2', '$', doc_2).ok()
+    r.expect('JSON.MSET', 'test_1{s}', '$..__leaf', doc_2, 'test_2{s}', '$', doc_2).ok()
 
-    r.assertEqual(r.execute_command("JSON.GET", 'test_1', '$..__leaf'), '[42]')
+    r.assertEqual(r.execute_command("JSON.GET", 'test_1{s}', '$..__leaf'), '[42]')
 
 def testJsonDicLimitsInArrInsert(env):
     r = env
