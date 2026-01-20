@@ -364,10 +364,10 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     fn set_value(&mut self, path: Vec<String>, mut v: IValue) -> RedisResult<bool> {
         // Macro to generate repetitive match arms for array types
         macro_rules! handle_array_types {
-            ($val:expr, $v:expr, $root_depth:expr, $($variant:ident),+ $(,)?) => {
+            ($val:expr, $v:expr, $depth:expr, $($variant:ident),+ $(,)?) => {
                 {
                     let patch_depth = $v.calculate_value_depth();
-                    if $root_depth + patch_depth > MAX_DEPTH {
+                    if $depth - 1 + patch_depth >= MAX_DEPTH {
                         return Err(err_recursion_limit_exceeded());
                     }
                     match $val {
@@ -390,9 +390,9 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             self.set_root(v)
         } else {
             let root = self.get_value()?.unwrap();
-            Ok(update(path, root, |val, root_depth| {
+            Ok(update(path, root, |val, depth| {
                 handle_array_types!(
-                    val, v, root_depth, I8, U8, I16, U16, F16, BF16, I32, U32, F32, I64, U64, F64
+                    val, v, depth, I8, U8, I16, U16, F16, BF16, I32, U32, F32, I64, U64, F64
                 )
             })
             .is_ok())
@@ -401,11 +401,11 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
 
     fn merge_value(&mut self, path: Vec<String>, mut v: IValue) -> RedisResult<bool> {
         let root = self.get_value()?.unwrap();
-        update(path, root, |current, root_depth| {
+        update(path, root, |current, depth| {
             let PathValue::IValue(current) = current else {
                 return Err(RedisError::Str("bad object"));
             };
-            if can_merge(&current, &v, root_depth) {
+            if can_merge(&current, &v, depth) {
                 merge(current, v.take());
                 Ok(true)
             } else {
@@ -426,12 +426,12 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn dict_add(&mut self, path: Vec<String>, key: &str, mut v: IValue) -> RedisResult<bool> {
-        self.do_op(path, |val: PathValue<'_, '_>, root_depth| {
+        self.do_op(path, |val: PathValue<'_, '_>, depth| {
             let PathValue::IValue(val) = val else {
                 return Err(RedisError::Str("bad object"));
             };
             let patch_depth = v.calculate_value_depth();
-            if root_depth + patch_depth > MAX_DEPTH {
+            if depth + patch_depth >= MAX_DEPTH {
                 return Err(err_recursion_limit_exceeded());
             }
             val.as_object_mut().map_or(Ok(false), |o| {
@@ -503,7 +503,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 .map(|arr| {
                     if args
                         .iter()
-                        .any(|arg| depth + arg.calculate_value_depth() > MAX_DEPTH)
+                        .any(|arg| depth + arg.calculate_value_depth() >= MAX_DEPTH)
                     {
                         return Err(err_recursion_limit_exceeded());
                     }
@@ -531,7 +531,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                     }
                     if args
                         .iter()
-                        .any(|arg| depth + arg.calculate_value_depth() > MAX_DEPTH)
+                        .any(|arg| depth + arg.calculate_value_depth() >= MAX_DEPTH)
                     {
                         return Err(err_recursion_limit_exceeded());
                     }
@@ -662,17 +662,16 @@ impl ReadHolder<IValue> for IValueKeyHolderRead {
 }
 
 fn can_merge(doc: &IValue, patch: &IValue, current_depth: usize) -> bool {
-    if current_depth > MAX_DEPTH {
+    if current_depth >= MAX_DEPTH {
         return false;
     }
 
     if !patch.is_object() {
-        return current_depth + patch.calculate_value_depth() <= MAX_DEPTH;
+        return current_depth + patch.calculate_value_depth() < MAX_DEPTH;
     }
 
-    // Doc will become {} and get patch merged in
     if !doc.is_object() {
-        return current_depth + patch.calculate_value_depth() <= MAX_DEPTH;
+        return current_depth + patch.calculate_value_depth() < MAX_DEPTH;
     }
 
     let map = doc.as_object().unwrap();
