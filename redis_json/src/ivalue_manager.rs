@@ -700,7 +700,7 @@ fn merge(doc: &mut IValue, mut patch: IValue) {
                     map.entry(key.as_str()).or_insert(IValue::NULL),
                     value.take(),
                 )
-            };
+            }
         })
 }
 
