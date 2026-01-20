@@ -93,7 +93,7 @@ impl<'a, 'b: 'a> PathValue<'a, 'b> {
 
 fn follow_path(path: Vec<String>, root: &mut IValue) -> Option<(PathValue<'_, '_>, usize)> {
     path.into_iter().try_fold(
-        (PathValue::IValue(root), 1 as usize),
+        (PathValue::IValue(root), 0 as usize),
         |(target, depth), token| {
             let PathValue::IValue(target) = target else {
                 return None;
@@ -367,7 +367,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             ($val:expr, $v:expr, $depth:expr, $($variant:ident),+ $(,)?) => {
                 {
                     let patch_depth = $v.calculate_value_depth();
-                    if $depth - 1 + patch_depth >= MAX_DEPTH {
+                    if $depth + patch_depth >= MAX_DEPTH {
                         return Err(err_recursion_limit_exceeded());
                     }
                     match $val {
@@ -431,7 +431,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 return Err(RedisError::Str("bad object"));
             };
             let patch_depth = v.calculate_value_depth();
-            if depth + patch_depth >= MAX_DEPTH {
+            if depth + 1 + patch_depth >= MAX_DEPTH {
                 return Err(err_recursion_limit_exceeded());
             }
             val.as_object_mut().map_or(Ok(false), |o| {
@@ -503,7 +503,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 .map(|arr| {
                     if args
                         .iter()
-                        .any(|arg| depth + arg.calculate_value_depth() >= MAX_DEPTH)
+                        .any(|arg| depth + 1 + arg.calculate_value_depth() >= MAX_DEPTH)
                     {
                         return Err(err_recursion_limit_exceeded());
                     }
@@ -531,7 +531,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                     }
                     if args
                         .iter()
-                        .any(|arg| depth + arg.calculate_value_depth() >= MAX_DEPTH)
+                        .any(|arg| depth + 1 + arg.calculate_value_depth() >= MAX_DEPTH)
                     {
                         return Err(err_recursion_limit_exceeded());
                     }

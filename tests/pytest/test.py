@@ -1613,6 +1613,18 @@ def testJsonDocLimitsInSet(env):
     # Another check for recursion limit exceeded
     r.assertEqual(r.execute_command("JSON.SET", key, '$..__leaf', doc_2), None)
 
+    # Test wit hvalue in middle of the document
+    value = json.dumps(
+        {
+            "a":{"b": "c"}
+        }
+    )
+    r.expect('JSON.SET', key, '$', value).ok()
+    
+    depth = 128
+    doc = nest_object(depth, 5, "__leaf", 42)
+    r.assertEqual(r.execute_command('JSON.SET', key, '$.a', doc), None)
+
 def testJsonDicLimitsInMSet(env):
     r = env
     depth = 200
