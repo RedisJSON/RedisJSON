@@ -188,6 +188,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "common"
+version = "0.1.0"
+source = "git+https://github.com/RedisLabsModules/redismodule-rs?tag=v2.1.3#3ff28c8c2987ae07106025bcc8cb4c489094d10b"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "cpufeatures"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -468,6 +476,7 @@ dependencies = [
  "log",
  "pest",
  "pest_derive",
+ "redis-module",
  "regex",
  "serde",
  "serde_json",
@@ -794,14 +803,15 @@ dependencies = [
 
 [[package]]
 name = "redis-module"
-version = "2.1.2"
-source = "git+https://github.com/RedisLabsModules/redismodule-rs?tag=v2.1.2#556f420685b0b9662cdb816e22b1c55bc696a6dc"
+version = "2.1.3"
+source = "git+https://github.com/RedisLabsModules/redismodule-rs?tag=v2.1.3#3ff28c8c2987ae07106025bcc8cb4c489094d10b"
 dependencies = [
  "backtrace",
  "bindgen",
  "bitflags 2.9.4",
  "cc",
  "cfg-if",
+ "common",
  "enum-primitive-derive",
  "libc",
  "linkme",
@@ -817,8 +827,9 @@ dependencies = [
 [[package]]
 name = "redis-module-macros"
 version = "99.99.99"
-source = "git+https://github.com/RedisLabsModules/redismodule-rs?tag=v2.1.2#556f420685b0b9662cdb816e22b1c55bc696a6dc"
+source = "git+https://github.com/RedisLabsModules/redismodule-rs?tag=v2.1.3#3ff28c8c2987ae07106025bcc8cb4c489094d10b"
 dependencies = [
+ "common",
  "proc-macro2",
  "quote 1.0.41",
  "serde",
@@ -829,7 +840,7 @@ dependencies = [
 [[package]]
 name = "redis-module-macros-internals"
 version = "99.99.99"
-source = "git+https://github.com/RedisLabsModules/redismodule-rs?tag=v2.1.2#556f420685b0b9662cdb816e22b1c55bc696a6dc"
+source = "git+https://github.com/RedisLabsModules/redismodule-rs?tag=v2.1.3#3ff28c8c2987ae07106025bcc8cb4c489094d10b"
 dependencies = [
  "lazy_static",
  "proc-macro2",
@@ -839,7 +850,7 @@ dependencies = [
 
 [[package]]
 name = "redis_json"
-version = "8.2.8"
+version = "8.2.9"
 dependencies = [
  "bitflags 2.9.4",
  "bson",
