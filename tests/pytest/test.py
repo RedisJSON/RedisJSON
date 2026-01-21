@@ -1216,17 +1216,6 @@ def testNesting(env):
     res = r.execute_command('JSON.GET', 'test', '$..__leaf')
     r.assertEqual(res, '[42]')
 
-    # No overall max nesting level (can exceeded the single value max nesting level)
-    doc = nest_object(depth, 5, "__deep_leaf", 420)
-    r.execute_command('JSON.SET', 'test', '$..__leaf', doc)
-    res = r.execute_command('JSON.GET', 'test', '$..__deep_leaf')
-    r.assertEqual(res, '[420]')
-
-    doc = nest_object(depth, 5, "__helms_deep_leaf", 42000)
-    r.execute_command('JSON.SET', 'test', '$..__deep_leaf', doc)
-    res = r.execute_command('JSON.GET', 'test', '$..__helms_deep_leaf')
-    r.assertEqual(res, '[42000]')
-
     # Max nesting level for a single JSON value cannot be exceeded
     depth = 129
     doc = nest_object(depth, 5, "__leaf", 42)
@@ -1402,21 +1391,6 @@ def testMergeNested(env):
     r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_nested', '$.a.*', '{"f":{"t":6}}'))
     r.expect('JSON.GET', 'test_merge_nested').equal('{"a":{"b1":{"f":{"c1":1,"t":6}},"b2":{"f":{"c2":2,"t":6}}}}')
 
-
-def testRDBUnboundedDepth(env):
-    # Test RDB Unbounded Depth load
-    r = env
-    json_value = nest_object(128, 5, "__leaf", 42)
-    r.expect('JSON.SET', 'doc', '$', json_value).ok()
-
-    # concat the string_126 at the end of itself
-    json_value = nest_object(3, 5, "__deep_leaf", 420)
-    r.expect('JSON.SET', 'doc', '$..__leaf', json_value).ok()
-
-    # RDB dump and restore the key 'doc' and check that the key is still valid
-    dump = env.execute_command('dump', 'doc', **{NEVER_DECODE: []})
-    r.expect('RESTORE', 'doc1', 0, dump).ok()
-    r.expect('JSON.GET', 'doc1', '$..__leaf..__deep_leaf').equal('[420]')
 
 def testUnicodeCharacters(env):
     # Test unicode strings parsing and processing.
@@ -1612,7 +1586,93 @@ def testArrNumericArrayNumericOperstionsWithDoubleValues(env):
     r.assertEqual(r.execute_command('JSON.GET', 'test', '.[0]'), str(2.5))
     r.assertEqual(r.execute_command('JSON.NUMMULTBY', 'test', '.[1]', 3.2), str(6.4))
     r.assertEqual(r.execute_command('JSON.GET', 'test', '.[1]'), str(6.4))
-   
+
+def testJsonDocLimitsInSet(env):
+    """
+    Test that we cannot set a JSON document depth more than 128, nor query deeper than 128.
+    """
+    r = env
+    key = 'test'
+    depth = 128
+    doc = nest_object(depth, 5, "__leaf", 42)
+    r.expect('JSON.SET', key, '$', doc).ok()
+
+    # Cannot set a JSON document depth more than 128
+    new_leaf = json.dumps({'a': {}})
+    r.assertEqual(r.execute_command("JSON.SET", key, '$..__leaf', new_leaf), None)
+
+    # test get value
+    r.assertEqual(r.execute_command("JSON.GET", key, '$..__leaf'), '[42]')
+
+    depth = 57
+    doc = nest_object(depth, 5, "__leaf", 42)
+    r.expect('JSON.SET', key, '$', doc).ok()
+
+    depth = 100
+    doc_2 = nest_object(depth, 5, "__leaf", 128)
+    # Another check for recursion limit exceeded
+    r.assertEqual(r.execute_command("JSON.SET", key, '$..__leaf', doc_2), None)
+
+    # Test wit hvalue in middle of the document
+    value = json.dumps(
+        {
+            "a":{"b": "c"}
+        }
+    )
+    r.expect('JSON.SET', key, '$', value).ok()
+    
+    depth = 128
+    doc = nest_object(depth, 5, "__leaf", 42)
+    r.assertEqual(r.execute_command('JSON.SET', key, '$.a', doc), None)
+
+def testJsonDicLimitsInMSet(env):
+    r = env
+    depth = 200
+    doc = nest_object(depth, 5, "__leaf", 42)
+    doc_2 = nest_object(5, 5, "__leaf", 128)
+    
+    r.expect('JSON.MSET', 'test_1{s}', '$', doc, 'test_2{s}', '$', doc_2).raiseError().contains("recursion limit exceeded")
+
+    depth = 57
+    doc = nest_object(depth, 5, "__leaf", 42)
+    r.expect('JSON.SET', 'test_1{s}', '$', doc).ok()
+
+    depth = 100
+    doc_2 = nest_object(depth, 5, "__leaf", 128)
+
+    # TODO: when mset will be atomic, this should fail since test_1 doc is not updated due depth limit exceed
+    r.expect('JSON.MSET', 'test_1{s}', '$..__leaf', doc_2, 'test_2{s}', '$', doc_2).ok()
+
+    r.assertEqual(r.execute_command("JSON.GET", 'test_1{s}', '$..__leaf'), '[42]')
+
+def testJsonDicLimitsInArrInsert(env):
+    r = env
+    r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"a": [1,2,3,4,5]}'))
+    depth = 128
+    big_doc = nest_object(depth, 5, "__leaf", 42)
+    index = 5
+    r.expect('JSON.ARRINSERT', 'test', '.a', index, 6, 7, 8, big_doc).raiseError().contains("recursion limit exceeded")
+
+def testJsonDicLimitsInArrAppend(env):
+    r = env
+    r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"a": [1,2,3,4,5]}'))
+    depth = 128
+    big_doc = nest_object(depth, 5, "__leaf", 42)
+    r.expect('JSON.ARRAPPEND', 'test', '.a', 6, 7, 8, big_doc).raiseError().contains("recursion limit exceeded")
+
+def testJsonDicLimitsInMerge(env):
+    # test merge value at path $..__leaf
+    r = env
+    key = 'merge_depth_test'
+    base_doc = {
+        "branch": json.loads(nest_object(80, 3, "__leaf", "val2")),   # __leaf at depth 80 (will exceed with patch depth 60)
+    }
+    r.assertOk(r.execute_command('JSON.SET', key, '$', json.dumps(base_doc)))
+
+    merge_patch = json.loads(nest_object(60, 3, "__soemthing", "merged_value"))
+
+    # Merge should FAIL on because branch.__leaf + patch would exceed depth 128
+    r.expect('JSON.MERGE', key, '$..__leaf', json.dumps(merge_patch)).equal(None)
 
 # class CacheTestCase(BaseReJSONTest):
 #     @property
