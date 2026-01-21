@@ -4,9 +4,7 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
-use crate::error::Error;
-use crate::manager::{err_json, err_msg_json_expected, err_msg_json_path_doesnt_exist};
-use crate::manager::{Manager, ReadHolder, WriteHolder};
+use crate::manager::{err_invalid_path, err_json, Manager, ReadHolder, WriteHolder};
 use crate::redisjson::normalize_arr_start_index;
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
@@ -16,7 +14,7 @@ use ijson::{DestructuredMut, DestructuredRef, INumber, IObject, IString, IValue,
 use json_path::select_value::{SelectValue, SelectValueType};
 use redis_module::key::{verify_type, KeyFlags, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
-use redis_module::rediserror::RedisError;
+use redis_module::RedisError;
 use redis_module::{Context, NotifyEvent, RedisResult, RedisString};
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
@@ -42,11 +40,11 @@ pub struct IValueKeyHolderWrite<'a> {
 /// If the returned value from `func` is [`None`], the current value is removed.
 /// If the returned value from `func` is [`Err`], the current value remains (although it could be modified by `func`)
 ///
-fn replace<F: FnMut(&mut IValue) -> Result<Option<IValue>, Error>>(
+fn replace<F: FnMut(&mut IValue) -> RedisResult<Option<IValue>>>(
     path: &[String],
     root: &mut IValue,
     mut func: F,
-) -> Result<(), Error> {
+) -> RedisResult<()> {
     let mut target = root;
 
     let last_index = path.len().saturating_sub(1);
@@ -108,11 +106,11 @@ fn replace<F: FnMut(&mut IValue) -> Result<Option<IValue>, Error>>(
 /// If the returned value from `func` is [`None`], the current value is removed.
 /// If the returned value from `func` is [`Err`], the current value remains (although it could be modified by `func`)
 ///
-fn update<F: FnMut(&mut IValue) -> Result<Option<()>, Error>>(
+fn update<F: FnMut(&mut IValue) -> RedisResult<Option<()>>>(
     path: &[String],
     root: &mut IValue,
     mut func: F,
-) -> Result<(), Error> {
+) -> RedisResult<()> {
     let mut target = root;
 
     let last_index = path.len().saturating_sub(1);
@@ -166,15 +164,12 @@ fn update<F: FnMut(&mut IValue) -> Result<Option<()>, Error>>(
 impl<'a> IValueKeyHolderWrite<'a> {
     fn do_op<F>(&mut self, paths: &[String], mut op_fun: F) -> Result<(), RedisError>
     where
-        F: FnMut(&mut IValue) -> Result<Option<()>, Error>,
+        F: FnMut(&mut IValue) -> RedisResult<Option<()>>,
     {
         if paths.is_empty() {
             // updating the root require special treatment
             let root = self.get_value().unwrap().unwrap();
-            if op_fun(root)
-                .map_err(|err| RedisError::String(err.msg))?
-                .is_none()
-            {
+            if op_fun(root).map_err(|err| err)?.is_none() {
                 root.take();
             }
         } else {
@@ -218,7 +213,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
                 Ok(Some(()))
             })?;
             match res {
-                None => Err(RedisError::String(err_msg_json_path_doesnt_exist())),
+                None => Err(err_invalid_path()),
                 Some(n) => {
                     if let Some(n) = n.as_number() {
                         if !n.has_decimal_point() {
@@ -238,7 +233,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
         }
     }
 
-    fn get_json_holder(&mut self) -> Result<(), RedisError> {
+    fn get_json_holder(&mut self) -> RedisResult<()> {
         if self.val.is_none() {
             self.val = self.key.get_value::<RedisJSON<IValue>>(&REDIS_JSON_TYPE)?;
         }
@@ -266,7 +261,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
 }
 
 impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
-    fn notify_keyspace_event(&mut self, ctx: &Context, command: &str) -> Result<(), RedisError> {
+    fn notify_keyspace_event(&mut self, ctx: &Context, command: &str) -> RedisResult<()> {
         if ctx.notify_keyspace_event(NotifyEvent::MODULE, command, &self.key_name) != Status::Ok {
             Err(RedisError::Str("failed notify key space event"))
         } else {
@@ -274,12 +269,12 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         }
     }
 
-    fn delete(&mut self) -> Result<(), RedisError> {
+    fn delete(&mut self) -> RedisResult<()> {
         self.key.delete()?;
         Ok(())
     }
 
-    fn get_value(&mut self) -> Result<Option<&mut IValue>, RedisError> {
+    fn get_value(&mut self) -> RedisResult<Option<&mut IValue>> {
         self.get_json_holder()?;
 
         match &mut self.val {
@@ -382,7 +377,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             }
             Ok(Some(()))
         })?;
-        res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
+        res.ok_or_else(|| err_invalid_path())
     }
 
     fn str_append(&mut self, path: Vec<String>, val: String) -> Result<usize, RedisError> {
@@ -396,12 +391,9 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 *v_str = IString::intern(&new_str);
                 Ok(Some(()))
             })?;
-            res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
+            res.ok_or_else(|| err_invalid_path())
         } else {
-            Err(RedisError::String(err_msg_json_expected(
-                "string",
-                val.as_str(),
-            )))
+            Err(err_json("string"))
         }
     }
 
@@ -415,7 +407,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             res = Some(arr.len());
             Ok(Some(()))
         })?;
-        res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
+        res.ok_or_else(|| err_invalid_path())
     }
 
     fn arr_insert(
@@ -430,7 +422,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             let len = v.len().unwrap() as i64;
             let index = if index < 0 { len + index } else { index };
             if !(0..=len).contains(&index) {
-                return Err("ERR index out of bounds".into());
+                return Err(RedisError::Str("ERR index out of bounds"));
             }
             let mut index = index as usize;
             let curr = v.as_array_mut().unwrap();
@@ -442,7 +434,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             res = Some(curr.len());
             Ok(Some(()))
         })?;
-        res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
+        res.ok_or_else(|| err_invalid_path())
     }
 
     fn arr_pop<C: FnOnce(Option<&IValue>) -> RedisResult>(
@@ -463,7 +455,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 res = Some(array.remove(index).unwrap());
                 Ok(Some(()))
             } else {
-                Err(err_json(v, "array"))
+                Err(err_json("array"))
             }
         })?;
         serialize_callback(res.as_ref())
@@ -491,10 +483,10 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                 res = Some(array.len());
                 Ok(Some(()))
             } else {
-                Err(err_json(v, "array"))
+                Err(err_json("array"))
             }
         })?;
-        res.ok_or_else(|| RedisError::String(err_msg_json_path_doesnt_exist()))
+        res.ok_or_else(|| err_invalid_path())
     }
 
     fn clear(&mut self, path: Vec<String>) -> Result<usize, RedisError> {
@@ -528,7 +520,7 @@ pub struct IValueKeyHolderRead {
 }
 
 impl ReadHolder<IValue> for IValueKeyHolderRead {
-    fn get_value(&self) -> Result<Option<&IValue>, RedisError> {
+    fn get_value(&self) -> RedisResult<Option<&IValue>> {
         let key_value = self.key.get_value::<RedisJSON<IValue>>(&REDIS_JSON_TYPE)?;
         key_value.map_or(Ok(None), |v| Ok(Some(&v.data)))
     }
@@ -607,11 +599,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     type V = IValue;
     type O = IValue;
 
-    fn open_key_read(
-        &self,
-        ctx: &Context,
-        key: &RedisString,
-    ) -> Result<IValueKeyHolderRead, RedisError> {
+    fn open_key_read(&self, ctx: &Context, key: &RedisString) -> RedisResult<IValueKeyHolderRead> {
         let key = ctx.open_key(key);
         Ok(IValueKeyHolderRead { key })
     }
@@ -621,7 +609,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         ctx: &Context,
         key: &RedisString,
         flags: KeyFlags,
-    ) -> Result<Self::ReadHolder, RedisError> {
+    ) -> RedisResult<Self::ReadHolder> {
         let key = ctx.open_key_with_flags(key, flags);
         Ok(IValueKeyHolderRead { key })
     }
@@ -630,7 +618,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         &self,
         ctx: &Context,
         key: RedisString,
-    ) -> Result<IValueKeyHolderWrite<'a>, RedisError> {
+    ) -> RedisResult<IValueKeyHolderWrite<'a>> {
         let key_ptr = ctx.open_key_writable(&key);
         Ok(IValueKeyHolderWrite {
             key: key_ptr,
@@ -646,21 +634,22 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         ctx.replicate_verbatim();
     }
 
-    fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> Result<Self::O, Error> {
+    fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> RedisResult<Self::O> {
         match format {
             Format::JSON | Format::STRING => {
                 let mut deserializer = serde_json::Deserializer::from_str(val);
                 if !limit_depth {
                     deserializer.disable_recursion_limit();
                 }
-                IValue::deserialize(&mut deserializer).map_err(|e| e.into())
+                IValue::deserialize(&mut deserializer)
+                    .map_err(|e| RedisError::String(e.to_string()))
             }
             Format::BSON => from_document(
                 Document::from_reader(&mut Cursor::new(val.as_bytes()))
-                    .map_err(|e| e.to_string())?,
+                    .map_err(|e| RedisError::String(e.to_string()))?,
             )
             .map_or_else(
-                |e| Err(e.to_string().into()),
+                |e| Err(RedisError::String(e.to_string())),
                 |docs: Document| {
                     let v = docs.iter().next().map_or(IValue::NULL, |(_, b)| {
                         let v: serde_json::Value = b.clone().into();
@@ -683,7 +672,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         Ok(Self::get_memory_impl(v) + size_of::<IValue>())
     }
 
-    fn is_json(&self, key: *mut RedisModuleKey) -> Result<bool, RedisError> {
+    fn is_json(&self, key: *mut RedisModuleKey) -> RedisResult<bool> {
         match verify_type(key, &REDIS_JSON_TYPE) {
             Ok(_) => Ok(true),
             Err(_) => Ok(false),
