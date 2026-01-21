@@ -7,15 +7,15 @@
  * GNU Affero General Public License v3 (AGPLv3).
  */
 
+use crate::select_value::{SelectValue, SelectValueType};
 use itertools::Itertools;
+use log::trace;
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use pest_derive::Parser;
-use std::cmp::Ordering;
 use redis_module::rediserror::RedisError;
-use crate::select_value::{SelectValue, SelectValueType};
-use log::trace;
 use regex::Regex;
+use std::cmp::Ordering;
 use std::fmt::Debug;
 
 #[derive(Parser)]
