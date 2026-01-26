@@ -169,26 +169,20 @@ impl<'de, D: de::Deserializer<'de>> de::Deserializer<'de> for TrackingDeserializ
     where
         V: Visitor<'de>,
     {
-        self.tracker.enter();
-        let result = self.de.deserialize_map(TrackingVisitor {
+        self.de.deserialize_map(TrackingVisitor {
             inner: visitor,
-            tracker: self.tracker.clone(),
-        });
-        self.tracker.exit();
-        result
+            tracker: self.tracker,
+        })
     }
 
     fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
     {
-        self.tracker.enter();
-        let result = self.de.deserialize_seq(TrackingVisitor {
+        self.de.deserialize_seq(TrackingVisitor {
             inner: visitor,
-            tracker: self.tracker.clone(),
-        });
-        self.tracker.exit();
-        result
+            tracker: self.tracker,
+        })
     }
 
     fn deserialize_struct<V>(
@@ -200,17 +194,14 @@ impl<'de, D: de::Deserializer<'de>> de::Deserializer<'de> for TrackingDeserializ
     where
         V: Visitor<'de>,
     {
-        self.tracker.enter();
-        let result = self.de.deserialize_struct(
+        self.de.deserialize_struct(
             name,
             fields,
             TrackingVisitor {
                 inner: visitor,
-                tracker: self.tracker.clone(),
+                tracker: self.tracker,
             },
-        );
-        self.tracker.exit();
-        result
+        )
     }
 
     serde::forward_to_deserialize_any! {
