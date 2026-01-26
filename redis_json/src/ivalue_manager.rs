@@ -7,8 +7,10 @@
  * GNU Affero General Public License v3 (AGPLv3).
  */
 
+use crate::depth_tracking_de::DepthTrackingDeserializer;
 use crate::manager::{
-    err_invalid_path, err_json, err_recursion_limit_exceeded, Manager, ReadHolder, WriteHolder,
+    err_invalid_path, err_json, err_recursion_limit_exceeded, Manager, ReadHolder, ValueWithDepth,
+    WriteHolder,
 };
 use crate::redisjson::normalize_arr_start_index;
 use crate::Format;
@@ -361,13 +363,15 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         }
     }
 
-    fn set_value(&mut self, path: Vec<String>, mut v: IValue) -> RedisResult<bool> {
+    fn set_value(&mut self, path: Vec<String>, v: ValueWithDepth<IValue>) -> RedisResult<bool> {
+        let val_depth = v.depth();
+        let mut v = v.take();
+
         // Macro to generate repetitive match arms for array types
         macro_rules! handle_array_types {
-            ($val:expr, $v:expr, $depth:expr, $($variant:ident),+ $(,)?) => {
+            ($val:expr, $v:expr, $depth:expr, $val_depth:expr, $($variant:ident),+ $(,)?) => {
                 {
-                    let patch_depth = $v.calculate_value_depth();
-                    if $depth + patch_depth >= MAX_DEPTH {
+                    if $depth + $val_depth >= MAX_DEPTH {
                         return Err(err_recursion_limit_exceeded());
                     }
                     match $val {
@@ -392,21 +396,24 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             let root = self.get_value()?.unwrap();
             Ok(update(path, root, |val, depth| {
                 handle_array_types!(
-                    val, v, depth, I8, U8, I16, U16, F16, BF16, I32, U32, F32, I64, U64, F64
+                    val, v, depth, val_depth, I8, U8, I16, U16, F16, BF16, I32, U32, F32, I64, U64,
+                    F64
                 )
             })
             .is_ok())
         }
     }
 
-    fn merge_value(&mut self, path: Vec<String>, mut v: IValue) -> RedisResult<bool> {
+    fn merge_value(&mut self, path: Vec<String>, v: ValueWithDepth<IValue>) -> RedisResult<bool> {
+        let patch_depth = v.depth();
+        let v = v.take();
         let root = self.get_value()?.unwrap();
         update(path, root, |current, depth| {
             let PathValue::IValue(current) = current else {
                 return Err(RedisError::Str("bad object"));
             };
-            if can_merge(&current, &v, depth) {
-                merge(current, v.take());
+            if can_merge(&current, &v, patch_depth, depth) {
+                merge(current, v);
                 Ok(true)
             } else {
                 Ok(false)
@@ -425,13 +432,19 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         })
     }
 
-    fn dict_add(&mut self, path: Vec<String>, key: &str, mut v: IValue) -> RedisResult<bool> {
+    fn dict_add(
+        &mut self,
+        path: Vec<String>,
+        key: &str,
+        v: ValueWithDepth<IValue>,
+    ) -> RedisResult<bool> {
+        let val_depth = v.depth();
+        let mut v = v.take();
         self.do_op(path, |val: PathValue<'_, '_>, depth| {
             let PathValue::IValue(val) = val else {
                 return Err(RedisError::Str("bad object"));
             };
-            let patch_depth = v.calculate_value_depth();
-            if depth + 1 + patch_depth >= MAX_DEPTH {
+            if depth + 1 + val_depth >= MAX_DEPTH {
                 return Err(err_recursion_limit_exceeded());
             }
             val.as_object_mut().map_or(Ok(false), |o| {
@@ -494,21 +507,21 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         }
     }
 
-    fn arr_append(&mut self, path: Vec<String>, args: Vec<IValue>) -> RedisResult<usize> {
+    fn arr_append(
+        &mut self,
+        path: Vec<String>,
+        args: Vec<ValueWithDepth<IValue>>,
+    ) -> RedisResult<usize> {
         self.do_op(path, |v, depth| {
             let PathValue::IValue(v) = v else {
                 return Err(RedisError::Str("bad object"));
             };
             v.as_array_mut()
                 .map(|arr| {
-                    if args
-                        .iter()
-                        .any(|arg| depth + 1 + arg.calculate_value_depth() >= MAX_DEPTH)
-                    {
+                    if args.iter().any(|a| depth + 1 + a.depth() >= MAX_DEPTH) {
                         return Err(err_recursion_limit_exceeded());
                     }
-
-                    arr.try_extend(args)
+                    arr.try_extend(args.iter().cloned().map(|a| a.take()).collect::<Vec<_>>())
                         .map_err(|e| RedisError::String(e.to_string()))?;
                     Ok(arr.len())
                 })
@@ -516,27 +529,27 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         })
     }
 
-    fn arr_insert(&mut self, paths: Vec<String>, args: &[IValue], idx: i64) -> RedisResult<usize> {
+    fn arr_insert(
+        &mut self,
+        paths: Vec<String>,
+        args: &[ValueWithDepth<IValue>],
+        idx: i64,
+    ) -> RedisResult<usize> {
         self.do_op(paths, |v, depth| {
             let PathValue::IValue(v) = v else {
                 return Err(RedisError::Str("bad object"));
             };
             v.as_array_mut()
                 .map(|arr| {
-                    // Verify legal index in bounds
                     let len = arr.len() as _;
                     let idx = if idx < 0 { len + idx } else { idx };
                     if !(0..=len).contains(&idx) {
                         return Err(RedisError::Str("ERR index out of bounds"));
                     }
-                    if args
-                        .iter()
-                        .any(|arg| depth + 1 + arg.calculate_value_depth() >= MAX_DEPTH)
-                    {
+                    if args.iter().any(|a| depth + 1 + a.depth() >= MAX_DEPTH) {
                         return Err(err_recursion_limit_exceeded());
                     }
-
-                    arr.try_extend(args.iter().cloned())
+                    arr.try_extend(args.iter().cloned().map(|a| a.take()).collect::<Vec<_>>())
                         .map_err(|e| RedisError::String(e.to_string()))?;
                     use ijson::array::ArraySliceMut::*;
                     match arr.as_mut_slice() {
@@ -661,17 +674,17 @@ impl ReadHolder<IValue> for IValueKeyHolderRead {
     }
 }
 
-fn can_merge(doc: &IValue, patch: &IValue, current_depth: usize) -> bool {
+fn can_merge(doc: &IValue, patch: &IValue, patch_depth: usize, current_depth: usize) -> bool {
     if current_depth >= MAX_DEPTH {
         return false;
     }
 
     if !patch.is_object() {
-        return current_depth + patch.calculate_value_depth() < MAX_DEPTH;
+        return current_depth + patch_depth < MAX_DEPTH;
     }
 
     if !doc.is_object() {
-        return current_depth + patch.calculate_value_depth() < MAX_DEPTH;
+        return current_depth + patch_depth < MAX_DEPTH;
     }
 
     let map = doc.as_object().unwrap();
@@ -682,6 +695,7 @@ fn can_merge(doc: &IValue, patch: &IValue, current_depth: usize) -> bool {
             can_merge(
                 map.get(key.as_str()).unwrap_or(&IValue::NULL),
                 &value,
+                patch_depth,
                 current_depth + 1,
             )
         }
@@ -759,15 +773,21 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         ctx.replicate_verbatim();
     }
 
-    fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> RedisResult<Self::O> {
+    fn from_str(
+        &self,
+        val: &str,
+        format: Format,
+        limit_depth: bool,
+    ) -> RedisResult<ValueWithDepth<Self::O>> {
         match format {
             Format::JSON | Format::STRING => {
-                let mut deserializer = serde_json::Deserializer::from_str(val);
+                let mut deserializer = DepthTrackingDeserializer::from_str(val);
                 if !limit_depth {
                     deserializer.disable_recursion_limit();
                 }
                 IValue::deserialize(&mut deserializer)
                     .map_err(|e| RedisError::String(e.to_string()))
+                    .map(|v| ValueWithDepth::new(v, deserializer.max_depth()))
             }
             Format::BSON => from_document(
                 Document::from_reader(&mut Cursor::new(val.as_bytes()))
@@ -776,18 +796,21 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
             .map_or_else(
                 |e| Err(RedisError::String(e.to_string())),
                 |docs: Document| {
-                    let v = docs.iter().next().map_or(IValue::NULL, |(_, b)| {
-                        let v: serde_json::Value = b.clone().into();
-                        let mut out = serde_json::Serializer::new(Vec::new());
-                        v.serialize(&mut out).unwrap();
-                        self.from_str(
-                            &String::from_utf8(out.into_inner()).unwrap(),
-                            Format::JSON,
-                            limit_depth,
-                        )
-                        .unwrap()
-                    });
-                    Ok(v)
+                    let wrapped = docs.iter().next().map_or(
+                        ValueWithDepth::new(IValue::NULL, 0),
+                        |(_, b)| {
+                            let v: serde_json::Value = b.clone().into();
+                            let mut out = serde_json::Serializer::new(Vec::new());
+                            v.serialize(&mut out).unwrap();
+                            self.from_str(
+                                &String::from_utf8(out.into_inner()).unwrap(),
+                                Format::JSON,
+                                limit_depth,
+                            )
+                            .unwrap()
+                        },
+                    );
+                    Ok(wrapped)
                 },
             ),
         }

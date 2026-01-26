@@ -11,7 +11,8 @@ use crate::defrag::defrag_info;
 use crate::formatter::ReplyFormatOptions;
 use crate::key_value::KeyValue;
 use crate::manager::{
-    err_invalid_path, err_invalid_path_or, Manager, ReadHolder, UpdateInfo, WriteHolder,
+    err_invalid_path, err_invalid_path_or, Manager, ReadHolder, UpdateInfo, ValueWithDepth,
+    WriteHolder,
 };
 use crate::redisjson::{Format, Path, ReplyFormat, SetOptions, JSON_ROOT_PATH};
 use json_path::select_value::{SelectValue, SelectValueType, ValueRef};
@@ -676,7 +677,7 @@ pub fn json_mset_command_impl<M: Manager>(
 
 fn apply_updates<M: Manager>(
     redis_key: &mut M::WriteHolder,
-    value: M::O,
+    value: ValueWithDepth<M::O>,
     mut update_info: Vec<UpdateInfo>,
 ) -> bool {
     // If there is only one update info, we can avoid cloning the value
@@ -1805,7 +1806,7 @@ fn json_arr_append_legacy<M: Manager>(
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &Path,
-    args: Vec<M::O>,
+    args: Vec<ValueWithDepth<M::O>>,
 ) -> RedisResult {
     let root = redis_key
         .get_value()?
@@ -1836,7 +1837,7 @@ fn json_arr_append_impl<M: Manager>(
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
     path: &str,
-    args: Vec<M::O>,
+    args: Vec<ValueWithDepth<M::O>>,
 ) -> RedisResult {
     let root = redis_key
         .get_value()?
@@ -2055,7 +2056,7 @@ fn json_arr_insert_impl<M: Manager>(
     ctx: &Context,
     path: &str,
     index: i64,
-    args: Vec<M::O>,
+    args: Vec<ValueWithDepth<M::O>>,
 ) -> RedisResult {
     let root = redis_key
         .get_value()?
@@ -2088,7 +2089,7 @@ fn json_arr_insert_legacy<M: Manager>(
     ctx: &Context,
     path: &str,
     index: i64,
-    args: Vec<M::O>,
+    args: Vec<ValueWithDepth<M::O>>,
 ) -> RedisResult {
     let root = redis_key
         .get_value()?

@@ -52,6 +52,7 @@ mod backward;
 pub mod c_api;
 pub mod commands;
 pub mod defrag;
+pub mod depth_tracking_de;
 mod formatter;
 pub mod ivalue_manager;
 mod key_value;

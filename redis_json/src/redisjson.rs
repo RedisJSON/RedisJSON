@@ -199,7 +199,7 @@ pub mod type_methods {
                 };
                 let v = m.from_str(&json_string, Format::JSON, true);
                 v.map_or(null_mut(), |res| {
-                    Box::into_raw(Box::new(res)).cast::<libc::c_void>()
+                    Box::into_raw(Box::new(res.take())).cast::<libc::c_void>()
                 })
             }
             Err(_) => null_mut(),

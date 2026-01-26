@@ -38,17 +38,25 @@ pub trait ReadHolder<V: SelectValue> {
 pub trait WriteHolder<O: Clone, V: SelectValue> {
     fn delete(&mut self) -> RedisResult<()>;
     fn get_value(&mut self) -> RedisResult<Option<&mut V>>;
-    fn set_value(&mut self, path: Vec<String>, v: O) -> RedisResult<bool>;
-    fn merge_value(&mut self, path: Vec<String>, v: O) -> RedisResult<bool>;
-    fn dict_add(&mut self, path: Vec<String>, key: &str, v: O) -> RedisResult<bool>;
+    fn set_value(&mut self, path: Vec<String>, v: ValueWithDepth<O>) -> RedisResult<bool>;
+    fn merge_value(&mut self, path: Vec<String>, v: ValueWithDepth<O>) -> RedisResult<bool>;
+    fn dict_add(&mut self, path: Vec<String>, key: &str, v: ValueWithDepth<O>)
+        -> RedisResult<bool>;
+
     fn delete_path(&mut self, path: Vec<String>) -> RedisResult<bool>;
     fn incr_by(&mut self, path: Vec<String>, num: &str) -> RedisResult<Number>;
     fn mult_by(&mut self, path: Vec<String>, num: &str) -> RedisResult<Number>;
     fn pow_by(&mut self, path: Vec<String>, num: &str) -> RedisResult<Number>;
     fn bool_toggle(&mut self, path: Vec<String>) -> RedisResult<bool>;
     fn str_append(&mut self, path: Vec<String>, val: String) -> RedisResult<usize>;
-    fn arr_append(&mut self, path: Vec<String>, args: Vec<O>) -> RedisResult<usize>;
-    fn arr_insert(&mut self, path: Vec<String>, args: &[O], index: i64) -> RedisResult<usize>;
+    fn arr_append(&mut self, path: Vec<String>, args: Vec<ValueWithDepth<O>>)
+        -> RedisResult<usize>;
+    fn arr_insert(
+        &mut self,
+        path: Vec<String>,
+        args: &[ValueWithDepth<O>],
+        index: i64,
+    ) -> RedisResult<usize>;
     fn arr_pop<C: FnOnce(Option<&V>) -> RedisResult>(
         &mut self,
         path: Vec<String>,
@@ -58,6 +66,34 @@ pub trait WriteHolder<O: Clone, V: SelectValue> {
     fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> RedisResult<usize>;
     fn clear(&mut self, path: Vec<String>) -> RedisResult<usize>;
     fn notify_keyspace_event(&mut self, ctx: &Context, command: &str) -> RedisResult<()>;
+}
+
+#[derive(Clone, Debug)]
+pub struct ValueWithDepth<T> {
+    value: T,
+    depth: usize,
+}
+
+impl<T> ValueWithDepth<T> {
+    pub fn new(value: T, depth: usize) -> Self {
+        Self { value, depth }
+    }
+
+    pub fn depth(&self) -> usize {
+        self.depth
+    }
+
+    pub fn take(self) -> T {
+        self.value
+    }
+}
+
+// Deref for convenience
+impl<T> std::ops::Deref for ValueWithDepth<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
 }
 
 pub trait Manager {
@@ -80,7 +116,13 @@ pub trait Manager {
     fn open_key_write(&self, ctx: &Context, key: RedisString) -> RedisResult<Self::WriteHolder>;
     fn apply_changes(&self, ctx: &Context);
     #[allow(clippy::wrong_self_convention)]
-    fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> RedisResult<Self::O>;
+    fn from_str(
+        &self,
+        val: &str,
+        format: Format,
+        limit_depth: bool,
+    ) -> RedisResult<ValueWithDepth<Self::O>>;
+
     fn get_memory(v: &Self::V) -> RedisResult<usize>;
     fn is_json(&self, key: *mut RedisModuleKey) -> RedisResult<bool>;
 }
