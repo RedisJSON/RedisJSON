@@ -1,9 +1,0 @@
-6158:C 16 Oct 2025 13:09:10.932 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
-6159:C 16 Oct 2025 13:09:10.932 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
-6159:C 16 Oct 2025 13:09:10.932 * Redis version=7.1.242, bits=64, commit=1a589818, modified=0, pid=6159, just started
-6159:C 16 Oct 2025 13:09:10.932 * Configuration loaded
-6159:M 16 Oct 2025 13:09:10.933 * monotonic clock: POSIX clock_gettime
-6159:M 16 Oct 2025 13:09:10.934 # Failed to write PID file: Permission denied
-6159:M 16 Oct 2025 13:09:10.934 * Running mode=standalone, port=6379.
-6159:M 16 Oct 2025 13:09:10.935 # Module /tmp/rejson.so failed to load: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.33' not found (required by /tmp/rejson.so)
-6159:M 16 Oct 2025 13:09:10.935 # Can't load module from /tmp/rejson.so: server aborting
