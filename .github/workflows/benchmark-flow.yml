@@ -67,17 +67,6 @@ jobs:
       - name: System setup
         run: ./sbin/system-setup.py
 
-      - name: Get Redis
-        uses: actions/checkout@v4
-        with:
-          repository: redis/redis
-          ref: '7.2'
-          path: redis
-
-      - name: Build Redis
-        working-directory: redis
-        run: make install
-
       - name: Build RedisJSON
         run: |
           . $HOME/.cargo/env
@@ -104,6 +93,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.PERFORMANCE_EC2_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.PERFORMANCE_EC2_SECRET_KEY }}
           AWS_DEFAULT_REGION: ${{ secrets.PERFORMANCE_EC2_REGION }}
+          EC2_PRIVATE_PEM: ${{ secrets.PERFORMANCE_EC2_PRIVATE_PEM }}
           # Inputs
           PROFILE: ${{ inputs.profile_env }}
           BENCHMARK_GLOB: ${{ inputs.benchmark_glob }}
