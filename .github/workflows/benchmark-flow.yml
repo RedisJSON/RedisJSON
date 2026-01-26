@@ -43,26 +43,26 @@ jobs:
           git config --global --add safe.directory '*'
           git submodule update --init --recursive
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.PERFORMANCE_EC2_ACCESS_KEY }}
-          aws-secret-access-key: ${{ secrets.PERFORMANCE_EC2_SECRET_KEY }}
-          aws-region: us-east-2
+      # - name: Configure AWS credentials
+      #   uses: aws-actions/configure-aws-credentials@v4
+      #   with:
+      #     aws-access-key-id: ${{ secrets.PERFORMANCE_EC2_ACCESS_KEY }}
+      #     aws-secret-access-key: ${{ secrets.PERFORMANCE_EC2_SECRET_KEY }}
+      #     aws-region: us-east-2
 
-      - name: Ensure perf key exists and has correct permissions
-        run: |
-          # Ensure perf key exists and has correct permissions
-          PEM_FILE="/tmp/benchmarks.redislabs.pem"
-          if [ ! -f "$PEM_FILE" ]; then
-            echo "Private key not found, retrieving from AWS Secrets Manager..."
-            aws secretsmanager get-secret-value \
-              --secret-id perf-cto-us-east-2 \
-              --query SecretString \
-              --output text > "$PEM_FILE"
-          fi
-          chmod 400 "$PEM_FILE"
-          ls -la "$PEM_FILE"
+      # - name: Ensure perf key exists and has correct permissions
+      #   run: |
+      #     # Ensure perf key exists and has correct permissions
+      #     PEM_FILE="/tmp/benchmarks.redislabs.pem"
+      #     if [ ! -f "$PEM_FILE" ]; then
+      #       echo "Private key not found, retrieving from AWS Secrets Manager..."
+      #       aws secretsmanager get-secret-value \
+      #         --secret-id perf-cto-us-east-2 \
+      #         --query SecretString \
+      #         --output text > "$PEM_FILE"
+      #     fi
+      #     chmod 400 "$PEM_FILE"
+      #     ls -la "$PEM_FILE"
 
       - name: System setup
         run: ./sbin/system-setup.py
