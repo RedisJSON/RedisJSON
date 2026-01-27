@@ -3,13 +3,13 @@ name: Run RedisJSON Benchmarks
 on:
   workflow_dispatch:
     inputs:
-      extended:
+      run_profiler:
         type: boolean
-        description: 'Run extended benchmarks'
+        description: 'Run profiler benchmarks'
         default: false
   workflow_call:
     inputs:
-      extended:
+      run_profiler:
         type: boolean
         default: false
 
@@ -25,6 +25,7 @@ jobs:
       benchmark_runner_group_total: ${{ strategy.job-total }}
 
   benchmark-json-oss-standalone-profiler:
+    if: ${{ inputs.run_profiler }}
     strategy:
       matrix:
         member_id: [1, 2, 3]

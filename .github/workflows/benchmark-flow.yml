@@ -3,9 +3,6 @@ name: Run a Benchmark Flow
 on:
   workflow_call:
     inputs:
-      container:
-        type: string
-        default: redisfab/rmbuilder:6.2.7-x64-focal
       module_path:
         type: string
         default: bin/linux-x64-release/rejson.so
@@ -33,8 +30,7 @@ on:
 
 jobs:
   benchmark-steps:
-    runs-on: ubuntu-latest
-    container: ${{ inputs.container }}
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,19 +39,29 @@ jobs:
           git config --global --add safe.directory '*'
           git submodule update --init --recursive
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.PERFORMANCE_EC2_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.PERFORMANCE_EC2_SECRET_KEY }}
+          aws-region: ${{ secrets.PERFORMANCE_EC2_REGION }}
+
+      - name: Ensure perf key exists and has correct permissions
+        run: |
+          # Ensure perf key exists and has correct permissions
+          PEM_FILE="/tmp/benchmarks.redislabs.pem"
+          if [ ! -f "$PEM_FILE" ]; then
+            echo "Private key not found, retrieving from AWS Secrets Manager..."
+            aws secretsmanager get-secret-value \
+              --secret-id perf-cto-us-east-2 \
+              --query SecretString \
+              --output text > "$PEM_FILE"
+          fi
+          chmod 400 "$PEM_FILE"
+          ls -la "$PEM_FILE"
+
       - name: System setup
         run: ./sbin/system-setup.py
-
-      - name: Get Redis
-        uses: actions/checkout@v4
-        with:
-          repository: redis/redis
-          ref: '7.2'
-          path: redis
-
-      - name: Build Redis
-        working-directory: redis
-        run: make install
 
       - name: Build RedisJSON
         run: |
@@ -68,6 +74,9 @@ jobs:
           python3 -m pip install -r tests/benchmarks/requirements.txt
           VERSION=0.14.8 ./deps/readies/bin/getterraform
 
+
+
+          
       - name: Run CI benchmarks on aws for envs ${{ inputs.allowed_envs }}
         timeout-minutes: 240 # timeout for the step
         working-directory: tests/benchmarks
@@ -105,6 +114,7 @@ jobs:
 
       - name: Generate Pull Request Performance info
         if: github.event.number
+        continue-on-error: true
         env:
           PERFORMANCE_GH_TOKEN: ${{ secrets.PERFORMANCE_GH_TOKEN }}
           PERFORMANCE_WH_TOKEN: ${{ secrets.PERFORMANCE_WH_TOKEN }}
