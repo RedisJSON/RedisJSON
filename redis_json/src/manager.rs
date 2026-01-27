@@ -85,20 +85,16 @@ pub trait Manager {
     fn is_json(&self, key: *mut RedisModuleKey) -> RedisResult<bool>;
 }
 
-pub fn err_json(expected_value: &'static str) -> RedisError {
+pub(crate) fn err_json(expected_value: &'static str) -> RedisError {
     RedisError::String(format!(
         "WRONGTYPE wrong type of path value - expected {expected_value}"
     ))
 }
 
-pub fn err_invalid_path() -> RedisError {
+pub(crate) fn err_invalid_path() -> RedisError {
     RedisError::Str("ERR Path does not exist")
 }
 
-pub fn err_invalid_path_or(or: &str) -> RedisError {
+pub(crate) fn err_invalid_path_or(or: &str) -> RedisError {
     RedisError::String(format!("ERR Path does not exist or {or}"))
-}
-
-pub fn err_recursion_limit_exceeded() -> RedisError {
-    RedisError::Str("ERR recursion limit exceeded")
 }
