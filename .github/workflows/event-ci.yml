@@ -42,6 +42,7 @@ jobs:
     needs: [prepare-values]
     with:
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+    secrets: inherit
   linux-valgrind:
     uses: ./.github/workflows/flow-linux.yml
     needs: [prepare-values]
