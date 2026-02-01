@@ -27,5 +27,4 @@ RUN uv venv --python=3.9 /opt/.venv
 ENV VIRTUAL_ENV=/opt/.venv
 ENV PATH="/opt/.venv/bin:${PATH}"
 COPY requierments_docker.txt /workspace/requierments.txt
-RUN uv pip install Cython<3.0
 RUN uv pip install -r requierments.txt
