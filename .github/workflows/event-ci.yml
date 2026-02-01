@@ -37,6 +37,11 @@ jobs:
       arch: arm64
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
+  macos:
+    uses: ./.github/workflows/flow-macos.yml
+    needs: [prepare-values]
+    with:
+      redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
   linux-valgrind:
     uses: ./.github/workflows/flow-linux.yml
     needs: [prepare-values]
