@@ -2,19 +2,19 @@ FROM alpine:3
 
 WORKDIR /workspace
 
-# Install dependencies
+# Install dependencies - use Alpine's cargo package (pre-built for musl)
 RUN apk add --no-cache \
     bash \
     make \
-    libtool \
     tar \
-    cmake \
+    cargo \
     python3 \
     python3-dev \
     py3-pip \
     gcc \
     git \
     curl \
+    wget \
     build-base \
     autoconf \
     automake \
@@ -26,15 +26,7 @@ RUN apk add --no-cache \
     openssh \
     py-virtualenv \
     clang18-libclang \
-    gcompat \
-    libstdc++ \
-    libgcc \
-    g++ \
-    xz \
-    bsd-compat-headers \
-    clang18 \
-    jq \
-    cargo
+    jq
 
 # Install Redis (SANITIZER can be 'address' for ASAN builds)
 ARG REDIS_REF=unstable
@@ -42,10 +34,7 @@ ARG SANITIZER=
 COPY .install/install_redis.sh /tmp/install_redis.sh
 RUN chmod +x /tmp/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /tmp/install_redis.sh
 
-# Install Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
-RUN rustup update && rustup update nightly && rustup component add rust-src
+# Alpine's cargo package already includes Rust pre-built for musl - no need for rustup
 
 # Install uv and Python environment
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh

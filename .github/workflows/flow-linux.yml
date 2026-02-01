@@ -179,9 +179,14 @@ jobs:
             -e BRANCH=${{ env.BRANCH }} \
             -e VERSION=${{ env.VERSION }} \
             -e TAGGED=${{ env.TAGGED }} \
-            -e BETA_VERSION=${{ inputs.beta-version }} \
+            -e TAG_OR_BRANCH=${{ env.TAG_OR_BRANCH }} \
             ${{ env.DOCKER_IMAGE }} \
-            bash -c "git config --global --add safe.directory /workspace && make pack BRANCH=${{ env.TAG_OR_BRANCH }} SHOW=1"
+            bash -c "git config --global --add safe.directory /workspace && \
+              if [[ -n '${{ inputs.beta-version }}' ]]; then \
+                RELEASE=0 SNAPSHOT=1 BRANCH=\$TAG_OR_BRANCH SHOW=1 make pack; \
+              else \
+                BRANCH=\$TAG_OR_BRANCH SHOW=1 make pack; \
+              fi"
 
       - name: Upload artifacts to S3
         if: ${{ !inputs.run_valgrind }}
