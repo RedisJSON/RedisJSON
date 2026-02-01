@@ -203,7 +203,7 @@ pack_ramp() {
 				--debug \
 				--packname-file /tmp/ramp.fname \
 				-o $packfile_debug \
-				$MODULE \
+				$MODULE.debug \
 				>/tmp/ramp.err 2>&1 || true
 			EOF
 
