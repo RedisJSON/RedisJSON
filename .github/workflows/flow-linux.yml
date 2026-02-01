@@ -147,7 +147,7 @@ jobs:
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             ${{ env.DOCKER_IMAGE }} \
-            bash -c "cargo build --release && cp \$(realpath ./target/release)/librejson.so \$(realpath ./target/release)/rejson.so"
+            make build
 
       # - name: Run tests
       #   if: ${{ inputs.run-test }}
