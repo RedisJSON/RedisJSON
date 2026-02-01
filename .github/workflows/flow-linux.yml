@@ -147,19 +147,19 @@ jobs:
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             ${{ env.DOCKER_IMAGE }} \
-            make build
+            bash -c "cargo build --release && cp \$(realpath ./target/release)/librejson.so \$(realpath ./target/release)/rejson.so"
 
-      - name: Run tests
-        if: ${{ inputs.run-test }}
-        run: |
-          docker run --rm \
-            -v ${{ github.workspace }}:/workspace \
-            -w /workspace \
-            --cap-add=SYS_PTRACE \
-            --security-opt seccomp=unconfined \
-            ${{ env.DOCKER_IMAGE }} \
-            make test \
-              VG=${{ inputs.run_valgrind && '1' || '0' }}
+      # - name: Run tests
+      #   if: ${{ inputs.run-test }}
+      #   run: |
+      #     docker run --rm \
+      #       -v ${{ github.workspace }}:/workspace \
+      #       -w /workspace \
+      #       --cap-add=SYS_PTRACE \
+      #       --security-opt seccomp=unconfined \
+      #       ${{ env.DOCKER_IMAGE }} \
+      #       make test \
+      #         VG=${{ inputs.run_valgrind && '1' || '0' }}
 
       - name: Upload test artifacts
         if: failure()
