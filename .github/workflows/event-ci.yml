@@ -28,7 +28,6 @@ jobs:
     needs: [prepare-values]
     with:
       arch: x64
-      os: jammy rocky9 amazonlinux2 azurelinux3
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
   build-linux-arm64:
@@ -36,7 +35,6 @@ jobs:
     needs: [prepare-values]
     with:
       arch: arm64
-      os: azurelinux3
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
   linux-valgrind:
