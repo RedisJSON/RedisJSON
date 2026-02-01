@@ -1,0 +1,47 @@
+FROM ubuntu:22.04
+
+WORKDIR /workspace
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    make \
+    gcc \
+    g++ \
+    gdb \
+    clang \
+    valgrind \
+    git \
+    jq \
+    libssl-dev \
+    autoconf \
+    automake \
+    libtool \
+    cmake \
+    curl \
+    libblocksruntime-dev \
+    python3 \
+    python3-pip \
+    python3-venv \
+    unzip \
+    rsync
+
+# Install Redis (SANITIZER can be 'address' for ASAN builds)
+ARG REDIS_REF=unstable
+ARG SANITIZER=
+COPY .install/install_redis.sh /tmp/install_redis.sh
+RUN chmod +x /tmp/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /tmp/install_redis.sh
+
+# Install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN rustup update && rustup update nightly && rustup component add rust-src
+
+# Install uv and Python environment
+RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh
+ENV PATH="/usr/local/bin:${PATH}"
+RUN uv venv --python=3.9 /opt/.venv
+ENV VIRTUAL_ENV=/opt/.venv
+ENV PATH="/opt/.venv/bin:${PATH}"
+COPY requierments_docker.txt /workspace/requierments.txt
+RUN uv pip install -r requierments.txt
