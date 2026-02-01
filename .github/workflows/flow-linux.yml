@@ -147,7 +147,7 @@ jobs:
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             ${{ env.DOCKER_IMAGE }} \
-            bash -c ". \$HOME/.cargo/env && \
+            bash -c "if [ -f \$HOME/.cargo/env ]; then . \$HOME/.cargo/env; fi && \
               cargo build --release && \
               cp \$(realpath ./target/release)/librejson.so \$(realpath ./target/release)/rejson.so"
 
