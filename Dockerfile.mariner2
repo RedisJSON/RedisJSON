@@ -2,7 +2,8 @@ FROM mcr.microsoft.com/cbl-mariner/base/core:2.0
 
 WORKDIR /workspace
 
-RUN tdnf install --noplugins --skipsignature -y ca-certificates git
+RUN tdnf install -y git ca-certificates build-essential wget tar openssl-devel which unzip jq \
+    gcc g++ curl libffi-devel zlib-devel bzip2-devel
 
 # Install Redis (SANITIZER can be 'address' for ASAN builds)
 ARG REDIS_REF=unstable
