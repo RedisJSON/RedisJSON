@@ -12,7 +12,7 @@ RUN dnf install -y gcc-toolset-11-gcc gcc-toolset-11-gcc-c++ gcc-toolset-11-liba
 
 RUN cp /opt/rh/gcc-toolset-11/enable /etc/profile.d/gcc-toolset-11.sh
 COPY .install /workspace/.install
-RUN ./workspace/.install/install_cmake.sh
+RUN chmod +x /workspace/.install/install_cmake.sh && /workspace/.install/install_cmake.sh
 
 # Install Redis (SANITIZER can be 'address' for ASAN builds)
 ARG REDIS_REF=unstable

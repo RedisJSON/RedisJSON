@@ -9,7 +9,7 @@ RUN apt update -qq \
     rsync unzip cargo libclang-dev clang
 
 COPY .install /workspace/.install
-RUN ./workspace/.install/install_cmake.sh
+RUN chmod +x /workspace/.install/install_cmake.sh && /workspace/.install/install_cmake.sh
 
 # Install Redis (SANITIZER can be 'address' for ASAN builds)
 ARG REDIS_REF=unstable
