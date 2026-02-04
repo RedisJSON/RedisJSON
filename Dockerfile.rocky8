@@ -8,16 +8,17 @@ RUN dnf groupinstall "Development Tools" -yqq
 RUN dnf config-manager --set-enabled powertools
 RUN dnf install epel-release -yqq
 RUN dnf install -y gcc-toolset-11-gcc gcc-toolset-11-gcc-c++ gcc-toolset-11-libatomic-devel make wget git openssl openssl-devel \
-bzip2-devel libffi-devel zlib-devel tar xz which rsync cargo clang curl
+    bzip2-devel libffi-devel zlib-devel tar xz which rsync cargo clang curl
 
 RUN cp /opt/rh/gcc-toolset-11/enable /etc/profile.d/gcc-toolset-11.sh
 COPY .install /workspace/.install
-RUN source /workspace/.install/install_cmake.sh
+RUN ./workspace/.install/install_cmake.sh
 
 # Install Redis (SANITIZER can be 'address' for ASAN builds)
 ARG REDIS_REF=unstable
 ARG SANITIZER=
-RUN cd /workspace/.install && ./install_script.sh && cd ..
+COPY .install /workspace/.install
+RUN chmod +x /workspace/.install/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /workspace/.install/install_redis.sh
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"

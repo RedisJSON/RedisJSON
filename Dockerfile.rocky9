@@ -5,16 +5,16 @@ WORKDIR /workspace
 ENV DEBIAN_FRONTEND=noninteractive
 RUN dnf update -y
 RUN dnf install -y gcc-toolset-13-gcc gcc-toolset-13-gcc-c++ make wget git openssl openssl-devel which rsync unzip cargo clang
-RUN dnf install -y python3-pip
 RUN cp /opt/rh/gcc-toolset-13/enable /etc/profile.d/gcc-toolset-13.sh
 
 COPY .install /workspace/.install
-RUN source /workspace/.install/install_cmake.sh
+RUN ./workspace/.install/install_cmake.sh
 
 # Install Redis (SANITIZER can be 'address' for ASAN builds)
 ARG REDIS_REF=unstable
 ARG SANITIZER=
-RUN cd /workspace/.install && ./install_script.sh && cd ..
+COPY .install /workspace/.install
+RUN chmod +x /workspace/.install/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /workspace/.install/install_redis.sh
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"

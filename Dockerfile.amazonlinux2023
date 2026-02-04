@@ -10,7 +10,7 @@ RUN dnf install -y git make wget openssl openssl-devel which \
 ARG REDIS_REF=unstable
 ARG SANITIZER=
 COPY .install /workspace/.install
-RUN cd /workspace/.install && ./install_script.sh && cd ..
+RUN chmod +x /workspace/.install/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /workspace/.install/install_redis.sh
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"

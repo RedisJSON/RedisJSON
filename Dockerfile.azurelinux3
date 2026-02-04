@@ -18,12 +18,10 @@ RUN tdnf -y update && \
     build-essential \
     zlib-devel \
     bzip2-devel \
-    python3-devel \
     which \
     unzip \
     jq \
     ca-certificates \
-    python3-pip \
     rsync \
     tar
 
@@ -31,7 +29,7 @@ RUN tdnf -y update && \
 ARG REDIS_REF=unstable
 ARG SANITIZER=
 COPY .install /workspace/.install
-RUN cd /workspace/.install && ./install_script.sh && cd ..
+RUN chmod +x /workspace/.install/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /workspace/.install/install_redis.sh
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
@@ -40,7 +38,7 @@ RUN rustup update && rustup update nightly && rustup component add rust-src
 # Install uv and Python environment
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh
 ENV PATH="/usr/local/bin:${PATH}"
-RUN uv venv --python=3.9 /opt/.venv
+RUN uv venv --python=3.11 /opt/.venv
 ENV VIRTUAL_ENV=/opt/.venv
 ENV PATH="/opt/.venv/bin:${PATH}"
 COPY requierments_docker.txt /workspace/requierments.txt

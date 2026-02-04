@@ -5,7 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt update -qq \
     && apt upgrade -yqq \
-    && apt install -yqq wget make clang-format gcc python3 python3-venv python3-pip lcov git openssl libssl-dev \
+    && apt install -yqq wget make clang-format gcc lcov git openssl libssl-dev \
     unzip rsync build-essential gcc-10 g++-10 libclang-dev clang curl cmake jq automake libtool libev-dev libevent-dev \
     && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 60 --slave /usr/bin/g++ g++ /usr/bin/g++-10
 
@@ -13,7 +13,7 @@ RUN apt update -qq \
 ARG REDIS_REF=unstable
 ARG SANITIZER=
 COPY .install /workspace/.install
-RUN cd /workspace/.install && ./install_script.sh && cd ..
+RUN chmod +x /workspace/.install/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /workspace/.install/install_redis.sh
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
@@ -22,7 +22,7 @@ RUN rustup update && rustup update nightly && rustup component add rust-src
 # Install uv and Python environment
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh
 ENV PATH="/usr/local/bin:${PATH}"
-RUN uv venv --python=3.9 /opt/.venv
+RUN uv venv --python=3.11 /opt/.venv
 ENV VIRTUAL_ENV=/opt/.venv
 ENV PATH="/opt/.venv/bin:${PATH}"
 COPY requierments_docker.txt /workspace/requierments.txt
