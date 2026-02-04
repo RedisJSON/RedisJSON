@@ -2,23 +2,19 @@ FROM rockylinux:9
 
 WORKDIR /workspace
 
-# Install git first (needed for install_script.sh)
-RUN dnf install -y git
+ENV DEBIAN_FRONTEND=noninteractive
+RUN dnf update -y
+RUN dnf install -y gcc-toolset-13-gcc gcc-toolset-13-gcc-c++ make wget git openssl openssl-devel which rsync unzip cargo clang
+RUN dnf install -y python3-pip
+RUN cp /opt/rh/gcc-toolset-13/enable /etc/profile.d/gcc-toolset-13.sh
 
-# Copy and run install scripts
 COPY .install /workspace/.install
-RUN cd /workspace/.install && ./install_script.sh
-
-# Enable gcc-toolset-13 for all subsequent commands (if installed)
-ENV PATH="/opt/rh/gcc-toolset-13/root/usr/bin:${PATH}"
-ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-13/root/usr/lib64:${LD_LIBRARY_PATH}"
+RUN source /workspace/.install/install_cmake.sh
 
 # Install Redis (SANITIZER can be 'address' for ASAN builds)
 ARG REDIS_REF=unstable
 ARG SANITIZER=
-COPY .install/install_redis.sh /tmp/install_redis.sh
-RUN chmod +x /tmp/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /tmp/install_redis.sh
-
+RUN cd /workspace/.install && ./install_script.sh && cd ..
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"

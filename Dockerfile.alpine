@@ -31,9 +31,8 @@ RUN apk add --no-cache \
 # Install Redis (SANITIZER can be 'address' for ASAN builds)
 ARG REDIS_REF=unstable
 ARG SANITIZER=
-COPY .install/install_redis.sh /tmp/install_redis.sh
-RUN chmod +x /tmp/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /tmp/install_redis.sh
-
+COPY .install /workspace/.install
+RUN cd /workspace/.install && ./install_script.sh && cd ..
 # Alpine's cargo package already includes Rust pre-built for musl - no need for rustup
 
 # Install uv and Python environment

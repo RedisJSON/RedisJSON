@@ -2,23 +2,22 @@ FROM rockylinux:8
 
 WORKDIR /workspace
 
-# Install git first (needed for install_script.sh)
-RUN dnf install -y git
+RUN dnf update -y
 
-# Copy and run install scripts
+RUN dnf groupinstall "Development Tools" -yqq
+RUN dnf config-manager --set-enabled powertools
+RUN dnf install epel-release -yqq
+RUN dnf install -y gcc-toolset-11-gcc gcc-toolset-11-gcc-c++ gcc-toolset-11-libatomic-devel make wget git openssl openssl-devel \
+bzip2-devel libffi-devel zlib-devel tar xz which rsync cargo clang curl
+
+RUN cp /opt/rh/gcc-toolset-11/enable /etc/profile.d/gcc-toolset-11.sh
 COPY .install /workspace/.install
-RUN cd /workspace/.install && ./install_script.sh
-
-# Enable gcc-toolset-11 for all subsequent commands
-ENV PATH="/opt/rh/gcc-toolset-11/root/usr/bin:${PATH}"
-ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-11/root/usr/lib64:${LD_LIBRARY_PATH}"
+RUN source /workspace/.install/install_cmake.sh
 
 # Install Redis (SANITIZER can be 'address' for ASAN builds)
 ARG REDIS_REF=unstable
 ARG SANITIZER=
-COPY .install/install_redis.sh /tmp/install_redis.sh
-RUN chmod +x /tmp/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /tmp/install_redis.sh
-
+RUN cd /workspace/.install && ./install_script.sh && cd ..
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"

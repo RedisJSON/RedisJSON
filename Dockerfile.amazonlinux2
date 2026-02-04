@@ -2,23 +2,31 @@ FROM amazonlinux:2
 
 WORKDIR /workspace
 
-# Install git first (needed for install_script.sh)
-RUN yum install -y git
+ENV DEBIAN_FRONTEND=noninteractive
 
-# Copy and run install scripts
+RUN yum update -y
+# Install the RPM package that provides the Software Collections (SCL) required for devtoolset-11
+RUN yum install -y https://vault.centos.org/centos/7/extras/x86_64/Packages/centos-release-scl-rh-2-3.el7.centos.noarch.rpm
+
+# http://mirror.centos.org/centos/7/ is deprecated, so we changed the above link to `https://vault.centos.org`,
+# and we have to change the baseurl in the repo file to the working mirror (from mirror.centos.org to vault.centos.org)
+RUN sed -i 's/mirrorlist=/#mirrorlist=/g' /etc/yum.repos.d/CentOS-SCLo-scl-rh.repo                        # Disable mirrorlist
+RUN sed -i 's/#baseurl=http:\/\/mirror/baseurl=http:\/\/vault/g' /etc/yum.repos.d/CentOS-SCLo-scl-rh.repo # Enable a working baseurl
+
+RUN yum install -y wget git which devtoolset-11-gcc devtoolset-11-gcc-c++ devtoolset-11-make \
+    rsync unzip tar awscli clang curl openssl11 openssl11-devel
+
+RUN source /opt/rh/devtoolset-11/enable
+RUN cp /opt/rh/devtoolset-11/enable /etc/profile.d/scl-devtoolset-11.sh
+RUN ln -s `which openssl11` /usr/bin/openssl
+
 COPY .install /workspace/.install
-RUN cd /workspace/.install && ./install_script.sh
-
-# Enable devtoolset-11 for all subsequent commands
-ENV PATH="/opt/rh/devtoolset-11/root/usr/bin:${PATH}"
-ENV LD_LIBRARY_PATH="/opt/rh/devtoolset-11/root/usr/lib64:${LD_LIBRARY_PATH}"
+RUN source /workspace/.install/install_cmake.sh
 
 # Install Redis (SANITIZER can be 'address' for ASAN builds)
 ARG REDIS_REF=unstable
 ARG SANITIZER=
-COPY .install/install_redis.sh /tmp/install_redis.sh
-RUN chmod +x /tmp/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /tmp/install_redis.sh
-
+RUN cd /workspace/.install && ./install_script.sh && cd ..
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"

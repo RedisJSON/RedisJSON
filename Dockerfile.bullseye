@@ -3,19 +3,18 @@ FROM debian:bullseye
 WORKDIR /workspace
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install git first (needed for install_script.sh)
-RUN apt-get update && apt-get install -y git
+RUN apt update -qq \
+    && apt upgrade -yqq \
+    && apt install -yqq git wget curl build-essential lcov openssl libssl-dev \
+    rsync unzip cargo libclang-dev clang
 
-# Copy and run install scripts
 COPY .install /workspace/.install
-RUN cd /workspace/.install && ./install_script.sh
+RUN source /workspace/.install/install_cmake.sh
 
 # Install Redis (SANITIZER can be 'address' for ASAN builds)
 ARG REDIS_REF=unstable
 ARG SANITIZER=
-COPY .install/install_redis.sh /tmp/install_redis.sh
-RUN chmod +x /tmp/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /tmp/install_redis.sh
-
+RUN cd /workspace/.install && ./install_script.sh && cd ..
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"

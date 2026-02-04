@@ -2,19 +2,13 @@ FROM mcr.microsoft.com/cbl-mariner/base/core:2.0
 
 WORKDIR /workspace
 
-# Install git and ca-certificates first (needed for install_script.sh)
-RUN tdnf install -y git ca-certificates
-
-# Copy and run install scripts
-COPY .install /workspace/.install
-RUN cd /workspace/.install && ./install_script.sh
+RUN tdnf install --noplugins --skipsignature -y ca-certificates git
 
 # Install Redis (SANITIZER can be 'address' for ASAN builds)
 ARG REDIS_REF=unstable
 ARG SANITIZER=
-COPY .install/install_redis.sh /tmp/install_redis.sh
-RUN chmod +x /tmp/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /tmp/install_redis.sh
-
+COPY .install /workspace/.install
+RUN cd /workspace/.install && ./install_script.sh && cd ..
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
