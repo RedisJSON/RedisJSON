@@ -5,6 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt update -qq \
     && apt upgrade -yqq \
+    && apt-get update \ 
     && apt install -yqq git wget curl build-essential lcov openssl libssl-dev \
     rsync unzip cargo libclang-dev clang
 
