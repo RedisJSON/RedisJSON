@@ -1,0 +1,62 @@
+---
+description: Guidelines for writing and organizing tests in RedisJSON
+globs: tests/**/*.py
+alwaysApply: false
+---
+
+# Testing Guidelines
+
+## 1. Test Structure
+
+### 1.1 Flow Tests (Python)
+Flow tests are located in `tests/pytest/` and test the Redis module end-to-end through the Redis protocol.
+
+**Directory structure:**
+```
+tests/pytest/
+├── common.py          # Shared utilities and fixtures
+├── includes.py        # Common imports
+├── test.py            # Main integration tests
+├── test_*.py          # Feature-specific test files
+└── tests.sh           # Test runner script
+```
+
+**Running flow tests:**
+```bash
+# From project root
+MODULE=$(realpath ./target/release/rejson.so) ./tests/pytest/tests.sh
+```
+
+### 1.2 Rust Unit Tests
+Unit tests live alongside the code in `#[cfg(test)]` modules. Run with:
+```bash
+cargo test
+```
+
+## 2. Test Organization
+
+### 2.1 Name Tests Descriptively
+Test function names should describe what is being tested and the expected behavior.
+
+❌ BAD:
+```python
+def test_json():
+def test_1():
+def test_bug_fix():
+```
+
+✅ GOOD:
+```python
+def test_json_set_creates_new_key():
+def test_json_get_returns_null_for_missing_path():
+def test_json_arrappend_with_nested_array():
+```
+
+### 2.2 One Assertion Focus Per Test
+Each test should focus on verifying one specific behavior. Multiple related assertions are fine, but avoid testing unrelated behaviors in a single test.
+
+## 3. Test Files
+
+Test data files are in `tests/files/`:
+- `pass-*.json` - Valid JSON files for parsing tests
+- `fail-*.json` - Invalid JSON files for error handling tests
