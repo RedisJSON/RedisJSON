@@ -19,6 +19,7 @@ RUN chmod +x /workspace/.install/install_redis.sh && REDIS_REF=${REDIS_REF} SANI
 
 # Install Rust
 RUN chmod +x /workspace/.install/getrust.sh && /workspace/.install/getrust.sh
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Install uv and Python environment
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh
