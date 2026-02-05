@@ -13,7 +13,7 @@ COPY .install /workspace/.install
 RUN chmod +x /workspace/.install/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /workspace/.install/install_redis.sh
 
 # Install Rust
-RUN chmod +x /workspace/.install/getrust.sh && workspace/.install/getrust.sh
+RUN chmod +x /workspace/.install/getrust.sh && /workspace/.install/getrust.sh
 
 # Install uv and Python environment
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh
