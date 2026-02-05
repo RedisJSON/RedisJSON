@@ -1,0 +1,375 @@
+---
+description: Definitive guidelines for writing idiomatic, performant, and maintainable Rust code, focusing on modern best practices for structure, patterns, and error handling.
+globs: "**/*.rs"
+alwaysApply: false
+---
+# Rust Best Practices
+
+This guide outlines our team's definitive best practices for writing Rust code. Adhere to these principles to ensure consistency, performance, and maintainability across all projects.
+
+## 1. Code Organization and Structure
+
+### 1.1 Small, Cohesive Structs
+Design structs to be small and focused. Break down complex data into multiple smaller, composable structs. This improves borrow-checker ergonomics and API flexibility.
+
+❌ BAD:
+```rust
+pub struct OrderProcessor {
+    pub order_id: u64, pub customer_id: u64, pub items: Vec<String>,
+    pub total_amount: f64, pub payment_status: String,
+    pub shipping_address_street: String, pub shipping_address_city: String,
+}
+```
+
+✅ GOOD:
+```rust
+pub struct Order {
+    pub id: u64, pub customer_id: u64, pub items: Vec<String>,
+    pub total_amount: f64, pub payment_status: String,
+}
+pub struct Address { pub street: String, pub city: String }
+pub struct OrderProcessor {
+    pub order: Order,
+    pub shipping_address: Address,
+}
+```
+
+### 1.2 Minimal, Meaningful Comments
+Avoid redundant or obvious comments. Code should be self-documenting through clear naming and structure. Only add comments when they provide value that the code itself cannot convey.
+
+❌ BAD:
+```rust
+// Increment counter by 1
+counter += 1;
+
+// Check if user is valid
+if user.is_valid() { ... }
+
+// Loop through all items
+for item in items { ... }
+```
+
+✅ GOOD:
+```rust
+// Redis requires the path to be normalized before lookup
+let normalized = normalize_path(path);
+
+// SAFETY: pointer is valid because we hold the lock
+unsafe { *ptr = value; }
+
+// TODO(MOD-1234): Remove after migration is complete
+```
+
+Write comments for:
+- Non-obvious business logic or algorithms
+- Safety justifications for `unsafe` blocks
+- TODO/FIXME with ticket references
+- Public API documentation (`///` doc comments)
+
+## 2. Common Patterns and Anti-patterns
+
+### 2.1 Builder Pattern for Complex Construction
+Use the Builder pattern for structs with many optional fields or complex initialization logic. Avoid it for simple structs with one or two clear constructors.
+
+❌ BAD (for many fields):
+```rust
+pub struct Config { pub timeout: u64, pub retries: u8 }
+impl Config {
+    pub fn new(timeout: Option<u64>, retries: Option<u8>) -> Self { /* ... */ }
+}
+```
+
+✅ GOOD:
+```rust
+pub struct Config { pub timeout: u64, pub retries: u8 }
+impl Config { pub fn builder() -> ConfigBuilder { ConfigBuilder::default() } }
+
+#[derive(Default)] pub struct ConfigBuilder { pub timeout: Option<u64>, pub retries: Option<u8> }
+impl ConfigBuilder {
+    pub fn timeout(mut self, timeout: u64) -> Self { self.timeout = Some(timeout); self }
+    pub fn retries(mut self, retries: u8) -> Self { self.retries = Some(retries); self }
+    pub fn build(self) -> Result<Config, &'static str> {
+        Ok(Config { timeout: self.timeout.unwrap_or(1000), retries: self.retries.unwrap_or(3) })
+    }
+}
+```
+
+### 2.2 Point-Free Style (Function as Argument)
+When using `.map()`, `.filter()`, or similar combinators, prefer passing constructors or functions directly instead of wrapping them in a closure. This is called "point-free style" or "eta reduction".
+
+❌ BAD:
+```rust
+let paths: Vec<Path> = strings.iter().map(|s| Path::new(s)).collect();
+let numbers: Vec<i32> = strings.iter().map(|s| s.parse().unwrap()).collect();
+```
+
+✅ GOOD:
+```rust
+let paths: Vec<Path> = strings.iter().map(Path::new).collect();
+let value = args.next_str().map(Path::new).unwrap_or_default();
+```
+
+Note: This only works when the function signature matches exactly (single argument, correct type). Use a closure when you need additional logic or arguments.
+
+### 2.3 Prefer Functional Style Over Loops
+When transforming or filtering collections, prefer iterator combinators (`.map()`, `.filter()`, `.fold()`, etc.) over explicit `for` loops when the functional version is more readable. This often results in more concise, declarative code.
+
+❌ BAD:
+```rust
+let mut results = Vec::new();
+for item in items {
+    if item.is_valid() {
+        results.push(item.transform());
+    }
+}
+```
+
+✅ GOOD:
+```rust
+let results: Vec<_> = items.iter()
+    .filter(|item| item.is_valid())
+    .map(|item| item.transform())
+    .collect();
+```
+
+Use `for` loops when:
+- You need early `break`/`continue` with complex conditions
+- Side effects make the intent clearer imperatively
+- The functional chain becomes deeply nested or hard to follow
+
+### 2.4 Prefer `From`/`TryFrom` for Type Conversions
+Always implement `From` or `TryFrom` traits for type conversions instead of custom methods like `from_*()`, `to_*()`, or `into_*()`. This enables idiomatic usage with `.into()`, `?` operator, and generic code that relies on these standard traits.
+
+❌ BAD:
+```rust
+pub struct UserId(u64);
+
+impl UserId {
+    pub fn from_u64(value: u64) -> Self { UserId(value) }
+    pub fn to_u64(&self) -> u64 { self.0 }
+}
+
+// Usage
+let id = UserId::from_u64(42);
+```
+
+✅ GOOD:
+```rust
+pub struct UserId(u64);
+
+impl From<u64> for UserId {
+    fn from(value: u64) -> Self { UserId(value) }
+}
+
+impl From<UserId> for u64 {
+    fn from(id: UserId) -> Self { id.0 }
+}
+
+// Usage - enables idiomatic .into()
+let id: UserId = 42.into();
+let value: u64 = id.into();
+```
+
+Use `TryFrom` when conversion can fail:
+
+```rust
+impl TryFrom<i64> for UserId {
+    type Error = &'static str;
+    fn try_from(value: i64) -> Result<Self, Self::Error> {
+        if value < 0 {
+            Err("UserId cannot be negative")
+        } else {
+            Ok(UserId(value as u64))
+        }
+    }
+}
+
+// Usage - enables ? operator
+let id: UserId = some_i64.try_into()?;
+```
+
+Benefits:
+- Enables `.into()` and `.try_into()` ergonomics
+- Works with generic bounds (`T: Into<UserId>`)
+- Integrates with `?` operator for `TryFrom`
+- Standard, discoverable API
+
+### 2.5 Enums Without `Auto`/`Default` Variants - Use `Option` Instead
+When designing enums that represent explicit choices, do NOT add an `Auto` or `Default` variant. Instead, use `Option<EnumType>` in APIs where the value might not be specified. This makes the API explicit and prevents ambiguous "automatic" behavior.
+
+❌ BAD:
+```rust
+pub enum FpTypeHint {
+    Auto,  // What does "auto" even mean? Ambiguous!
+    F16,
+    BF16,
+    F32,
+    F64,
+}
+
+fn create_array(hint: FpTypeHint) {
+    match hint {
+        FpTypeHint::Auto => { /* unclear behavior */ }
+        // ...
+    }
+}
+```
+
+✅ GOOD:
+```rust
+pub enum FpTypeHint {
+    F16,
+    BF16,
+    F32,
+    F64,
+}
+
+// Use Option when the hint might not be provided
+fn create_array(hint: Option<FpTypeHint>) {
+    match hint {
+        Some(FpTypeHint::F16) => { /* explicit F16 */ }
+        Some(FpTypeHint::BF16) => { /* explicit BF16 */ }
+        Some(FpTypeHint::F32) => { /* explicit F32 */ }
+        Some(FpTypeHint::F64) => { /* explicit F64 */ }
+        None => { /* caller didn't specify - handle explicitly */ }
+    }
+}
+```
+
+This pattern:
+- Makes "no choice" explicit via `Option::None`
+- Avoids ambiguous `Auto` semantics that may change over time
+- Forces callers to be explicit about their intent
+- Makes API behavior predictable and documented
+
+Note: `Default` derive on the enum is acceptable when there's a clear, documented default value. The anti-pattern is adding an `Auto` variant that hides implementation-specific logic.
+
+## 3. Performance Considerations
+
+### 3.1 Default to `Vec` and `HashMap`
+Start with `Vec` for sequences and `HashMap` for maps. They are highly optimized and cover most use cases. Only switch to other collections (`VecDeque`, `BTreeMap`, `LinkedList`, etc.) when profiling shows a specific performance bottleneck or a unique functional requirement (e.g., sorted keys for `BTreeMap`).
+
+❌ BAD:
+```rust
+use std::collections::LinkedList; // Unnecessary for most simple lists
+fn process_items(items: LinkedList<String>) { /* ... */ }
+```
+
+✅ GOOD:
+```rust
+use std::collections::HashMap; // Default for key-value pairs
+fn process_items(items: Vec<String>) { /* ... */ }
+fn lookup_data(data: HashMap<String, u32>) { /* ... */ }
+```
+
+### 3.2 Pre-allocate Collection Capacity
+When the approximate size of a collection is known beforehand, pre-allocate its capacity to avoid frequent reallocations, which can be costly.
+
+❌ BAD:
+```rust
+let mut vec = Vec::new();
+for i in 0..1000 { vec.push(i); } // Potentially many reallocations
+```
+
+✅ GOOD:
+```rust
+let mut vec = Vec::with_capacity(1000);
+for i in 0..1000 { vec.push(i); } // Single allocation
+```
+
+## 4. Common Pitfalls and Gotchas
+
+### 4.1 Error Handling: `Result` for Recoverable Errors
+Always use `Result<T, E>` for errors that can be handled or propagated. Reserve `panic!` for unrecoverable bugs or situations indicating a programming error.
+
+❌ BAD:
+```rust
+fn load_config(path: &str) -> String {
+    std::fs::read_to_string(path).expect("Failed to read config")
+}
+```
+
+✅ GOOD:
+```rust
+fn load_config(path: &str) -> Result<String, std::io::Error> {
+    std::fs::read_to_string(path)
+}
+```
+
+### 4.2 Document `unsafe` Blocks
+Every `unsafe` block *must* be preceded by a `// SAFETY:` comment explaining *why* the code inside is sound and upholds Rust's safety invariants.
+
+❌ BAD:
+```rust
+let mut vec = vec![0];
+let ptr = vec.as_mut_ptr();
+unsafe { *ptr = 42; } // Missing safety justification
+```
+
+✅ GOOD:
+```rust
+let mut vec = vec![0];
+let ptr = vec.as_mut_ptr();
+// SAFETY: `ptr` is a valid pointer to `vec[0]`, and we are writing a valid
+// integer `42` to it. The vector has at least one element.
+unsafe { *ptr = 42; }
+```
+
+### 4.3 Use Existing Error Helper Functions
+Use the error helper functions defined in `manager.rs` instead of creating duplicate error strings. This ensures consistent error messages across the codebase.
+
+Available helpers (from `crate::manager`):
+- `err_json(expected_value)` - "WRONGTYPE wrong type of path value - expected {expected_value}"
+- `err_invalid_path()` - "ERR Path does not exist"
+- `err_invalid_path_or(or)` - "ERR Path does not exist or {or}"
+- `err_recursion_limit_exceeded()` - "ERR recursion limit exceeded"
+
+❌ BAD:
+```rust
+return Err(RedisError::String("WRONGTYPE wrong type of path value - expected string".into()));
+return Err(RedisError::Str("ERR Path does not exist"));
+```
+
+✅ GOOD:
+```rust
+use crate::manager::{err_json, err_invalid_path};
+
+return Err(err_json("string"));
+return Err(err_invalid_path());
+```
+
+## 5. Testing Approaches
+
+### 5.1 Unit Tests with `#[test]`
+Use `#[test]` for isolated unit tests, typically placed in a `tests` module within the same file as the code being tested.
+
+```rust
+// src/lib.rs
+pub fn add(a: i32, b: i32) -> i32 { a + b }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_add() {
+        assert_eq!(add(1, 2), 3);
+    }
+}
+```
+
+### 5.2 Example Tests with `rustdoc`
+Leverage `rustdoc` for documentation examples. These examples are compiled and run as tests, ensuring your documentation stays up-to-date and correct.
+
+```rust
+/// Adds two integers together.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(my_crate::add(5, 3), 8);
+/// ```
+pub fn add(a: i32, b: i32) -> i32 {
+    a + b
+}
+```
