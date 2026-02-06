@@ -23,23 +23,31 @@ jobs:
         id: set-env
         run: |
           echo "redis-ref=unstable" >> $GITHUB_OUTPUT  # todo change per version/tag
-  linux:
-    uses: ./.github/workflows/flow-linux-x86.yml
+  build-linux-x64:
+    uses: ./.github/workflows/flow-linux.yml
     needs: [prepare-values]
     with:
-      os: jammy rocky9 amazonlinux2 azurelinux3
+      arch: x64
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
-  azurelinux3-arm64:
-    uses: ./.github/workflows/flow-azurelinux3-arm.yml
+  build-linux-arm64:
+    uses: ./.github/workflows/flow-linux.yml
+    needs: [prepare-values]
+    with:
+      arch: arm64
+      redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+    secrets: inherit
+  macos:
+    uses: ./.github/workflows/flow-macos.yml
     needs: [prepare-values]
     with:
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
   linux-valgrind:
-    uses: ./.github/workflows/flow-linux-x86.yml
+    uses: ./.github/workflows/flow-linux.yml
     needs: [prepare-values]
     with:
+      arch: x64
       os: jammy
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
       run_valgrind: true
