@@ -1,0 +1,42 @@
+FROM amazonlinux:2
+
+WORKDIR /workspace
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN yum update -y
+# Install the RPM package that provides the Software Collections (SCL) required for devtoolset-11
+RUN yum install -y https://vault.centos.org/centos/7/extras/x86_64/Packages/centos-release-scl-rh-2-3.el7.centos.noarch.rpm
+
+# http://mirror.centos.org/centos/7/ is deprecated, so we changed the above link to `https://vault.centos.org`,
+# and we have to change the baseurl in the repo file to the working mirror (from mirror.centos.org to vault.centos.org)
+RUN sed -i 's/mirrorlist=/#mirrorlist=/g' /etc/yum.repos.d/CentOS-SCLo-scl-rh.repo                        # Disable mirrorlist
+RUN sed -i 's/#baseurl=http:\/\/mirror/baseurl=http:\/\/vault/g' /etc/yum.repos.d/CentOS-SCLo-scl-rh.repo # Enable a working baseurl
+
+RUN yum install -y wget git which devtoolset-11-gcc devtoolset-11-gcc-c++ devtoolset-11-make \
+    rsync unzip tar awscli clang curl openssl11 openssl11-devel
+
+RUN source /opt/rh/devtoolset-11/enable
+RUN cp /opt/rh/devtoolset-11/enable /etc/profile.d/scl-devtoolset-11.sh
+RUN ln -s `which openssl11` /usr/bin/openssl
+
+COPY .install /workspace/.install
+RUN chmod +x /workspace/.install/install_cmake.sh && /workspace/.install/install_cmake.sh
+
+# Install Redis (SANITIZER can be 'address' for ASAN builds)
+ARG REDIS_REF=unstable
+ARG SANITIZER=
+RUN chmod +x /workspace/.install/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /workspace/.install/install_redis.sh
+
+# Install Rust
+RUN chmod +x /workspace/.install/getrust.sh && /workspace/.install/getrust.sh
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Install uv and Python environment
+RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh
+ENV PATH="/usr/local/bin:${PATH}"
+RUN uv venv --python=3.11 /opt/.venv
+ENV VIRTUAL_ENV=/opt/.venv
+ENV PATH="/opt/.venv/bin:${PATH}"
+COPY requierments_docker.txt /workspace/requierments.txt
+RUN uv pip install -r requierments.txt

@@ -1,0 +1,10 @@
+setuptools
+pip
+jinja2
+addict
+toml
+ramp-packer==2.5.13
+RLTest ~= 0.7.2
+redis ~= 5.0.8
+six >= 1.10.0
+gevent >= 22.10.2
