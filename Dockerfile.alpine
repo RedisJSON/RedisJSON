@@ -1,0 +1,45 @@
+FROM alpine:3
+
+WORKDIR /workspace
+
+# Install dependencies - use Alpine's cargo package (pre-built for musl)
+RUN apk add --no-cache \
+    bash \
+    make \
+    tar \
+    cargo \
+    python3 \
+    python3-dev \
+    py3-pip \
+    gcc \
+    git \
+    curl \
+    wget \
+    build-base \
+    autoconf \
+    automake \
+    py3-cryptography \
+    linux-headers \
+    musl-dev \
+    libffi-dev \
+    openssl-dev \
+    openssh \
+    py-virtualenv \
+    clang18-libclang \
+    jq
+
+# Install Redis (SANITIZER can be 'address' for ASAN builds)
+ARG REDIS_REF=unstable
+ARG SANITIZER=
+COPY .install /workspace/.install
+RUN chmod +x /workspace/.install/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /workspace/.install/install_redis.sh
+# Alpine's cargo package already includes Rust pre-built for musl - no need for rustup
+
+# Install uv and Python environment
+RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh
+ENV PATH="/usr/local/bin:${PATH}"
+RUN uv venv --python=$(which python3) --system-site-packages /opt/.venv
+ENV VIRTUAL_ENV=/opt/.venv
+ENV PATH="/opt/.venv/bin:${PATH}"
+COPY requierments_docker.txt /workspace/requierments.txt
+RUN uv pip install -r requierments.txt
