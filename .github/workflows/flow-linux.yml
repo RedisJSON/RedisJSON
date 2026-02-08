@@ -160,7 +160,7 @@ jobs:
             --cap-add=SYS_PTRACE \
             --security-opt seccomp=unconfined \
             ${{ env.DOCKER_IMAGE }} \
-            bash -c "cargo test && MODULE=\$(realpath ./target/release/rejson.so) RLTEST_ARGS='--no-progress' \$(realpath ./tests/pytest/tests.sh) VG=${{ inputs.run_valgrind && '1' || '0' }}"
+            bash -c "cargo test --features test --all && MODULE=\$(realpath ./target/release/rejson.so) RLTEST_ARGS='--no-progress' \$(realpath ./tests/pytest/tests.sh) VG=${{ inputs.run_valgrind && '1' || '0' }}"
 
       - name: Upload test artifacts
         if: failure()
