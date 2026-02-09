@@ -4,7 +4,7 @@ OS_TYPE=$(uname -s)
 MODE=$1 # whether to install using sudo or not
 
 pip3 install --upgrade pip
-pip3 install -q --upgrade setuptools
+pip3 install -q --upgrade "setuptools<81"
 echo "pip version: $(pip3 --version)"
 echo "pip path: $(which pip3)"
 
