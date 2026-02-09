@@ -24,30 +24,21 @@ jobs:
         id: set-env
         run: |
           echo "redis-ref=unstable" >> $GITHUB_OUTPUT  # todo change per version/tag
-  linux:
-    uses: ./.github/workflows/flow-linux-x86.yml
+  build-linux-x64:
+    uses: ./.github/workflows/flow-linux.yml
     needs: [prepare-values]
     with:
+      arch: x64
       # os: jammy rocky9 amazonlinux2
-      os: bionic focal jammy rocky8 rocky9 bullseye amazonlinux2 mariner2 azurelinux3
+      os: bionic focal jammy rocky8 rocky9 bullseye amazonlinux2 mariner2 azurelinux3 alpine
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
-  ubuntu-arm64:
-    uses: ./.github/workflows/flow-linux-arm.yml
+  build-linux-arm64:
+    uses: ./.github/workflows/flow-linux.yml
     needs: [prepare-values]
     with:
-      redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
-    secrets: inherit
-  azurelinux3-arm64:
-    uses: ./.github/workflows/flow-azurelinux3-arm.yml
-    needs: [prepare-values]
-    with:
-      redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
-    secrets: inherit
-  alpine:
-    uses: ./.github/workflows/flow-alpine.yml
-    needs: [prepare-values]
-    with:
+      arch: arm64
+      os: bionic focal jammy rocky9 azurelinux3 alpine
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
   macos:
@@ -57,9 +48,10 @@ jobs:
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
   linux-valgrind:
-    uses: ./.github/workflows/flow-linux-x86.yml
+    uses: ./.github/workflows/flow-linux.yml
     needs: [prepare-values]
     with:
+      arch: x64
       os: jammy
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
       run_valgrind: true
