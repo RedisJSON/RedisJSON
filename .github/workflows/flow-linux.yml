@@ -1,0 +1,203 @@
+name: Flow Linux
+
+permissions:
+  id-token: write
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      redis-ref:
+        description: 'Redis ref to checkout'
+        type: string
+        required: true
+      arch:
+        description: 'Architecture (x64 or arm64)'
+        type: string
+        required: true
+        default: 'x64'
+      os:
+        description: 'OS to build on (space-separated, e.g. "focal jammy rocky9")'
+        type: string
+        required: false
+        default: ''
+      run-test:
+        description: 'Run tests'
+        type: boolean
+        default: true
+      run_valgrind:
+        description: 'Run valgrind on the tests'
+        type: boolean
+        default: false
+      beta-version:
+        description: 'Beta version for S3 uploads'
+        type: string
+        required: false
+        default: ''
+  workflow_call:
+    inputs:
+      redis-ref:
+        description: 'Redis ref to checkout'
+        type: string
+        required: true
+      arch:
+        description: 'Architecture (x64 or arm64)'
+        type: string
+        required: true
+      os:
+        description: 'OS to build on (space-separated, e.g. "focal jammy rocky9")'
+        type: string
+        required: false
+        default: ''
+      run-test:
+        description: 'Run tests'
+        type: boolean
+        default: true
+      run_valgrind:
+        description: 'Run valgrind on the tests'
+        type: boolean
+        default: false
+      beta-version:
+        description: 'Beta version for S3 uploads'
+        type: string
+        required: false
+        default: ''
+
+jobs:
+  setup-environment:
+    runs-on: ubuntu-latest
+    outputs:
+      redis-ref: ${{ steps.set-env.outputs.redis-ref }}
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      runner: ${{ steps.set-runner.outputs.runner }}
+      TAGGED: ${{ steps.set-env.outputs.TAGGED }}
+      TAG: ${{ steps.set-env.outputs.TAG }}
+      BRANCH: ${{ steps.set-env.outputs.BRANCH }}
+      TAG_OR_BRANCH: ${{ steps.set-env.outputs.TAG }}${{ steps.set-env.outputs.BRANCH }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: set env
+        id: set-env
+        uses: ./.github/actions/setup-env
+        with:
+          github-ref: ${{ github.ref }}
+          redis-ref: ${{ inputs.redis-ref }}
+          beta-version: ${{ inputs.beta-version }}
+      - name: Set runner
+        id: set-runner
+        run: |
+          if [ "${{ inputs.arch }}" == "arm64" ]; then
+            echo "runner=ubuntu24-arm64-4-16" >> $GITHUB_OUTPUT
+          else
+            echo "runner=ubuntu-latest" >> $GITHUB_OUTPUT
+          fi
+      - name: Set matrix
+        id: set-matrix
+        run: |
+          OS="${{ inputs.os }}"
+          if [ -z "${OS}" ]; then
+            if [ "${{ inputs.arch }}" == "arm64" ]; then
+              OS="bionic focal jammy rocky9 azurelinux3 amazonlinux2023 alpine"
+            else
+              OS="bionic focal jammy rocky8 rocky9 bullseye amazonlinux2 amazonlinux2023 mariner2 azurelinux3 alpine"
+            fi
+          fi
+          # Convert space-separated list to JSON array
+          MATRIX="["
+          for os in $OS; do
+            MATRIX="${MATRIX}{\"os\": \"${os}\"},"
+          done
+          MATRIX="${MATRIX%,}]"
+          echo "matrix=${MATRIX}" >> $GITHUB_OUTPUT
+          echo "Generated matrix for ${{ inputs.arch }}: ${MATRIX}"
+
+  build-linux:
+    name: ${{ inputs.arch }}-${{ matrix.platform.os }}, ${{ needs.setup-environment.outputs.redis-ref }}
+    runs-on: ${{ needs.setup-environment.outputs.runner }}
+    needs: setup-environment
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJson(needs.setup-environment.outputs.matrix) }}
+    env:
+      TAGGED: ${{ needs.setup-environment.outputs.TAGGED }}
+      VERSION: ${{ needs.setup-environment.outputs.TAG }}
+      BRANCH: ${{ needs.setup-environment.outputs.BRANCH }}
+      TAG_OR_BRANCH: ${{ needs.setup-environment.outputs.TAG_OR_BRANCH }}
+      REDIS_REF: ${{ needs.setup-environment.outputs.redis-ref }}
+      DOCKER_IMAGE: redisjson-${{ matrix.platform.os }}:latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - name: Build Docker Image
+        run: |
+          docker build \
+            -f Dockerfile.${{ matrix.platform.os }} \
+            --build-arg REDIS_REF=${{ env.REDIS_REF }} \
+            -t ${{ env.DOCKER_IMAGE }} \
+            .
+
+      - name: Build module
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            ${{ env.DOCKER_IMAGE }} \
+            bash -c "if [ -f \$HOME/.cargo/env ]; then . \$HOME/.cargo/env; fi && \
+              cargo build --release && \
+              cp \$(realpath ./target/release)/librejson.so \$(realpath ./target/release)/rejson.so"
+
+      - name: Run tests
+        if: ${{ inputs.run-test }}
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            --cap-add=SYS_PTRACE \
+            --security-opt seccomp=unconfined \
+            ${{ env.DOCKER_IMAGE }} \
+            bash -c "cargo test && MODULE=\$(realpath ./target/release/rejson.so) RLTEST_ARGS='--no-progress' \$(realpath ./tests/pytest/tests.sh) VG=${{ inputs.run_valgrind && '1' || '0' }}"
+
+      - name: Upload test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-artifacts-${{ inputs.arch }}-${{ matrix.platform.os }}
+          path: |
+            tests/**/logs/
+            tests/**/*.log
+
+      - name: Pack module
+        if: ${{ !inputs.run_valgrind }}
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            -e BRANCH=${{ env.BRANCH }} \
+            -e VERSION=${{ env.VERSION }} \
+            -e TAGGED=${{ env.TAGGED }} \
+            -e TAG_OR_BRANCH=${{ env.TAG_OR_BRANCH }} \
+            ${{ env.DOCKER_IMAGE }} \
+            bash -c "git config --global --add safe.directory /workspace && \
+              if [[ -n '${{ inputs.beta-version }}' ]]; then \
+                RELEASE=0 SNAPSHOT=1 BRANCH=\$TAG_OR_BRANCH SHOW=1 ./sbin/pack.sh \$(realpath ./target/release/rejson.so); \
+              else \
+                BRANCH=\$TAG_OR_BRANCH SHOW=1 ./sbin/pack.sh \$(realpath ./target/release/rejson.so); \
+              fi"
+
+      - name: Upload artifacts to S3
+        if: ${{ !inputs.run_valgrind }}
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
+            -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
+            -e GITHUB_REF=${{ github.ref }} \
+            -e BETA_VERSION=${{ inputs.beta-version }} \
+            ${{ env.DOCKER_IMAGE }} \
+            bash -c "git config --global --add safe.directory /workspace && ./sbin/upload-artifacts-s3"
