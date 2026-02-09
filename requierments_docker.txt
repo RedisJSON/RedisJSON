@@ -1,4 +1,4 @@
-setuptools
+setuptools<81
 pip
 jinja2
 addict
