@@ -1,0 +1,59 @@
+#!/bin/bash
+set -e
+
+if [[ $1 == --help || $1 == help ]]; then
+    cat <<-END
+		Upload artifacts to S3 (for Docker-based CI)
+
+		Required environment variables:
+		  AWS_ACCESS_KEY_ID       AWS access key
+		  AWS_SECRET_ACCESS_KEY   AWS secret key
+		  GITHUB_REF              GitHub ref (for release detection)
+
+		Optional environment variables:
+		  BETA_VERSION            Beta version string for beta uploads
+
+	END
+    exit 0
+fi
+
+if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+    echo "Missing AWS credentials"
+    exit 1
+fi
+
+export AWS_REGION="us-east-1"
+
+echo "Configuring AWS CLI..."
+pip3 install -q --upgrade pip
+pip3 install -q --no-cache-dir awscli
+aws configure set aws_access_key_id "$AWS_ACCESS_KEY_ID"
+aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY"
+aws configure set region "$AWS_REGION"
+
+echo "::group::upload artifacts"
+SNAPSHOT=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
+echo "::endgroup::"
+
+echo "::group::upload staging release"
+STAGING=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
+echo "::endgroup::"
+
+echo "::group::upload production release"
+PATTERN="refs/tags/v[0-9]+.*"
+if [[ $GITHUB_REF =~ $PATTERN ]]; then
+    echo "This is a tagged build"
+    SHOW=1 VERBOSE=1 RELEASE=1 ./sbin/upload-artifacts
+fi
+echo "::endgroup::"
+
+echo "::group::upload to beta folder"
+if [[ -n "$BETA_VERSION" ]]; then
+    echo "Using beta version: ${BETA_VERSION}"
+    BETA=1 SHOW=1 VERBOSE=1 ./sbin/upload-artifacts
+else
+    echo "No beta version provided, skipping beta upload"
+fi
+echo "::endgroup::"
+
+echo "S3 upload complete"
