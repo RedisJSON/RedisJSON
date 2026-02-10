@@ -197,7 +197,7 @@ pub mod type_methods {
                 let m = RedisIValueJsonKeyManager {
                     phantom: PhantomData,
                 };
-                let v = m.from_str(&json_string, Format::JSON, true);
+                let v = m.from_str(&json_string, Format::JSON, true, None, false);
                 v.map_or(null_mut(), |res| {
                     Box::into_raw(Box::new(res)).cast::<libc::c_void>()
                 })

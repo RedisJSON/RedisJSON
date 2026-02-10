@@ -15,13 +15,16 @@ use crate::Format;
 use crate::REDIS_JSON_TYPE;
 use bson::{from_document, Document};
 use ijson::array::{ArrayTag, IArray, TryExtend};
-use ijson::{DestructuredMut, INumber, IObject, IString, IValue};
+use ijson::{
+    DestructuredMut, FPHAConfig, FloatType, INumber, IObject, IString, IValue, IValueDeserSeed,
+};
 use json_path::select_value::{SelectValue, SelectValueType, MAX_DEPTH};
 use redis_module::key::{verify_type, KeyFlags, RedisKey, RedisKeyWritable};
 use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::RedisError;
 use redis_module::{Context, NotifyEvent, RedisResult, RedisString};
-use serde::{Deserialize, Serialize};
+use serde::de::DeserializeSeed;
+use serde::Serialize;
 use serde_json::Number;
 use std::io::Cursor;
 use std::marker::PhantomData;
@@ -35,6 +38,7 @@ pub struct IValueKeyHolderWrite<'a> {
     key: RedisKeyWritable,
     key_name: RedisString,
     val: Option<&'a mut RedisJSON<IValue>>,
+    fpha_type: Option<FloatType>,
 }
 
 #[derive(Debug)]
@@ -759,14 +763,24 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         ctx.replicate_verbatim();
     }
 
-    fn from_str(&self, val: &str, format: Format, limit_depth: bool) -> RedisResult<Self::O> {
+    fn from_str(
+        &self,
+        val: &str,
+        format: Format,
+        limit_depth: bool,
+        fpha_type: Option<FloatType>,
+        fpha_fallback: bool,
+    ) -> RedisResult<Self::O> {
         match format {
             Format::JSON | Format::STRING => {
                 let mut deserializer = serde_json::Deserializer::from_str(val);
                 if !limit_depth {
                     deserializer.disable_recursion_limit();
                 }
-                IValue::deserialize(&mut deserializer)
+                let fpha_config =
+                    fpha_type.map(|ft| FPHAConfig::new_with_type(ft).with_fallback(fpha_fallback));
+                IValueDeserSeed::new(fpha_config)
+                    .deserialize(&mut deserializer)
                     .map_err(|e| RedisError::String(e.to_string()))
             }
             Format::BSON => from_document(
@@ -784,6 +798,8 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                             &String::from_utf8(out.into_inner()).unwrap(),
                             Format::JSON,
                             limit_depth,
+                            fpha_type,
+                            fpha_fallback,
                         )
                         .unwrap()
                     });

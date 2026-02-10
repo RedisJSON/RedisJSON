@@ -134,6 +134,39 @@
           }
         ],
         "optional": true
+      },
+      {
+        "name": "fpha",
+        "type": "block",
+        "arguments": [
+          {
+            "name": "fpha-type",
+            "type": "oneof",
+            "arguments": [
+              {
+                "name": "FP16",
+                "type": "pure-token",
+                "token": "FP16"
+              },
+              {
+                "name": "BF16",
+                "type": "pure-token",
+                "token": "BF16"
+              },
+              {
+                "name": "FP32",
+                "type": "pure-token",
+                "token": "FP32"
+              },
+              {
+                "name": "FP64",
+                "type": "pure-token",
+                "token": "FP64"
+              }
+            ]
+          }
+        ],
+        "optional": true
       }
     ],
     "since": "1.0.0",
