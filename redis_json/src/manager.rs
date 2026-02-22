@@ -87,7 +87,6 @@ pub trait Manager {
         format: Format,
         limit_depth: bool,
         fpha_type: Option<FloatType>,
-        fpha_fallback: bool,
     ) -> RedisResult<Self::O>;
     fn get_memory(v: &Self::V) -> RedisResult<usize>;
     fn is_json(&self, key: *mut RedisModuleKey) -> RedisResult<bool>;

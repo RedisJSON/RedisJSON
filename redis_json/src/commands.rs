@@ -417,7 +417,7 @@ pub fn json_set_command_impl<M: Manager>(
     let mut redis_key = manager.open_key_write(ctx, key)?;
     let current = redis_key.get_value()?;
 
-    let val = manager.from_str(value, format, true, fpha_type, false)?;
+    let val = manager.from_str(value, format, true, fpha_type)?;
 
     match (current, set_option) {
         (Some(doc), op) => {
@@ -554,7 +554,7 @@ pub fn json_merge_command_impl<M: Manager>(
     let mut redis_key = manager.open_key_write(ctx, key)?;
     let current = redis_key.get_value()?;
 
-    let val = manager.from_str(value, format, true, None, false)?;
+    let val = manager.from_str(value, format, true, None)?;
 
     match current {
         Some(doc) => {
@@ -696,7 +696,7 @@ pub fn json_mset_command_impl<M: Manager>(
 
         // Parse the input and validate it's valid JSON
         let value_str = args.next_str()?;
-        let value = manager.from_str(value_str, Format::JSON, true, None, false)?;
+        let value = manager.from_str(value_str, Format::JSON, true, None)?;
 
         actions.push((redis_key, update_info, value));
     }
@@ -1832,7 +1832,7 @@ pub fn json_arr_append_command_impl<M: Manager>(
     let args =
         args.try_fold::<_, _, RedisResult<_>>(Vec::with_capacity(args.len()), |mut acc, arg| {
             let json = arg.try_as_str()?;
-            acc.push(manager.from_str(json, Format::JSON, true, None, false)?);
+            acc.push(manager.from_str(json, Format::JSON, true, None)?);
             Ok(acc)
         })?;
 
@@ -2082,7 +2082,7 @@ pub fn json_arr_insert_command_impl<M: Manager>(
     let args =
         args.try_fold::<_, _, RedisResult<_>>(Vec::with_capacity(args.len()), |mut acc, arg| {
             let json = arg.try_as_str()?;
-            acc.push(manager.from_str(json, Format::JSON, true, None, false)?);
+            acc.push(manager.from_str(json, Format::JSON, true, None)?);
             Ok(acc)
         })?;
     let mut redis_key = manager.open_key_write(ctx, key)?;

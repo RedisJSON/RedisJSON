@@ -63,7 +63,7 @@ pub const GIT_BRANCH: Option<&str> = std::option_env!("GIT_BRANCH");
 pub const MODULE_NAME: &str = "ReJSON";
 pub const MODULE_TYPE_NAME: &str = "ReJSON-RL";
 
-pub const REDIS_JSON_TYPE_VERSION: i32 = 3;
+pub const REDIS_JSON_TYPE_VERSION: i32 = 4;
 
 pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
     MODULE_TYPE_NAME,

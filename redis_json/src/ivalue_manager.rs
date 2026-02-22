@@ -38,7 +38,6 @@ pub struct IValueKeyHolderWrite<'a> {
     key: RedisKeyWritable,
     key_name: RedisString,
     val: Option<&'a mut RedisJSON<IValue>>,
-    fpha_type: Option<FloatType>,
 }
 
 #[derive(Debug)]
@@ -769,7 +768,6 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         format: Format,
         limit_depth: bool,
         fpha_type: Option<FloatType>,
-        fpha_fallback: bool,
     ) -> RedisResult<Self::O> {
         match format {
             Format::JSON | Format::STRING => {
@@ -777,8 +775,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                 if !limit_depth {
                     deserializer.disable_recursion_limit();
                 }
-                let fpha_config =
-                    fpha_type.map(|ft| FPHAConfig::new_with_type(ft).with_fallback(fpha_fallback));
+                let fpha_config = fpha_type.map(FPHAConfig::new_with_type);
                 IValueDeserSeed::new(fpha_config)
                     .deserialize(&mut deserializer)
                     .map_err(|e| RedisError::String(e.to_string()))
@@ -799,7 +796,6 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                             Format::JSON,
                             limit_depth,
                             fpha_type,
-                            fpha_fallback,
                         )
                         .unwrap()
                     });
