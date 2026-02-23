@@ -696,6 +696,23 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         }
     }
 
+    /// Parse a string as i64, saturating to i64::MAX or i64::MIN on overflow
+    /// instead of panicking.
+    fn parse_index(s: &str) -> i64 {
+        s.parse::<i64>().unwrap_or_else(|_| {
+            if s.starts_with('-') {
+                i64::MIN
+            } else {
+                i64::MAX
+            }
+        })
+    }
+
+    /// Parse a string as usize, saturating to usize::MAX on overflow.
+    fn parse_step(s: &str) -> usize {
+        s.parse::<usize>().unwrap_or(usize::MAX)
+    }
+
     fn calc_indexes<'j: 'i, 'k, 'l, S: SelectValue>(
         &self,
         pairs: Pairs<'i, Rule>,
@@ -709,7 +726,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         }
         let n = json.len().unwrap();
         for c in curr.into_inner() {
-            let i = Self::calc_abs_index(c.as_str().parse::<i64>().unwrap(), n);
+            let i = Self::calc_abs_index(Self::parse_index(c.as_str()), n);
             value_ref_get_index!(json, i).map(|e| {
                 let new_tracker = path_tracker.as_ref().map(|pt| create_index_tracker(i, pt));
                 self.calc_internal(pairs.clone(), e, new_tracker, calc_data);
@@ -735,38 +752,38 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 let mut curr = curr.into_inner();
                 let start = 0;
                 let end =
-                    Self::calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
+                    Self::calc_abs_index(Self::parse_index(curr.next().unwrap().as_str()), n);
                 let step = curr
                     .next()
-                    .map_or(1, |s| s.as_str().parse::<usize>().unwrap());
+                    .map_or(1, |s| Self::parse_step(s.as_str()));
                 (start, end, step)
             }
             Rule::all_range => {
                 let mut curr = curr.into_inner();
                 let step = curr
                     .next()
-                    .map_or(1, |s| s.as_str().parse::<usize>().unwrap());
+                    .map_or(1, |s| Self::parse_step(s.as_str()));
                 (0, n, step)
             }
             Rule::left_range => {
                 let mut curr = curr.into_inner();
                 let start =
-                    Self::calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
+                    Self::calc_abs_index(Self::parse_index(curr.next().unwrap().as_str()), n);
                 let end = n;
                 let step = curr
                     .next()
-                    .map_or(1, |s| s.as_str().parse::<usize>().unwrap());
+                    .map_or(1, |s| Self::parse_step(s.as_str()));
                 (start, end, step)
             }
             Rule::full_range => {
                 let mut curr = curr.into_inner();
                 let start =
-                    Self::calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
+                    Self::calc_abs_index(Self::parse_index(curr.next().unwrap().as_str()), n);
                 let end =
-                    Self::calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
+                    Self::calc_abs_index(Self::parse_index(curr.next().unwrap().as_str()), n);
                 let step = curr
                     .next()
-                    .map_or(1, |s| s.as_str().parse::<usize>().unwrap());
+                    .map_or(1, |s| Self::parse_step(s.as_str()));
                 (start, end, step)
             }
             _ => panic!("{curr:?}"),
