@@ -628,50 +628,46 @@ pub fn json_mset_command_impl<M: Manager>(
         return Err(RedisError::WrongArity);
     }
 
-    // Collect all the actions from the args (redis_key, update_info, value)
-    let mut actions = Vec::new();
+    // Parse and validate all (key, path, value) triples without opening any keys,
+    // so we don't hold write locks while consuming remaining arguments.
+    let mut parsed: Vec<(RedisString, String, M::O)> = Vec::new();
     while let Ok(key) = args.next_arg() {
-        let mut redis_key = manager.open_key_write(ctx, key)?;
+        let path_str = args.next_str()?.to_string();
+        let value_str = args.next_str()?;
+        let value = manager.from_str(value_str, Format::JSON, true)?;
+        parsed.push((key, path_str, value));
+    }
 
-        // Verify the key is a JSON type
+    // Open each key, validate path, and apply the update sequentially,
+    // releasing the write lock before moving to the next key.
+    for (key, path_str, value) in parsed {
+        let mut redis_key = manager.open_key_write(ctx, key)?;
         let key_value = redis_key.get_value()?;
 
-        // Verify the path is valid and get all the update info
-        let path = Path::new(args.next_str()?);
+        let path = Path::new(&path_str);
         let update_info = if path == JSON_ROOT_PATH {
             None
-        } else if let Some(value) = key_value {
-            Some(KeyValue::new(value).find_paths(path.get_path(), SetOptions::None)?)
+        } else if let Some(existing) = key_value {
+            Some(KeyValue::new(existing).find_paths(path.get_path(), SetOptions::None)?)
         } else {
             return Err(RedisError::Str(
                 "ERR new objects must be created at the root",
             ));
         };
 
-        // Parse the input and validate it's valid JSON
-        let value_str = args.next_str()?;
-        let value = manager.from_str(value_str, Format::JSON, true)?;
-
-        actions.push((redis_key, update_info, value));
+        let updated = if let Some(update_info) = update_info {
+            !update_info.is_empty() && apply_updates::<M>(&mut redis_key, value, update_info)
+        } else {
+            // In case it is a root path
+            redis_key.set_value(Vec::new(), value)?
+        };
+        if updated {
+            redis_key.notify_keyspace_event(ctx, "json.mset")?;
+        }
     }
 
-    let res = actions
-        .into_iter()
-        .fold(REDIS_OK, |res, (mut redis_key, update_info, value)| {
-            let updated = if let Some(update_info) = update_info {
-                !update_info.is_empty() && apply_updates::<M>(&mut redis_key, value, update_info)
-            } else {
-                // In case it is a root path
-                redis_key.set_value(Vec::new(), value)?
-            };
-            if updated {
-                redis_key.notify_keyspace_event(ctx, "json.mset")?
-            }
-            res
-        });
-
     manager.apply_changes(ctx);
-    res
+    REDIS_OK
 }
 
 fn apply_updates<M: Manager>(
