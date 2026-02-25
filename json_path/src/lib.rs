@@ -123,7 +123,7 @@ mod json_path_tests {
         let _ = env_logger::try_init();
     }
 
-    fn perform_search<'a>(path: &str, json: &'a Value) -> Vec<Value> {
+    fn perform_search(path: &str, json: &Value) -> Vec<Value> {
         let query = json_path::compile(path).unwrap();
         let path_calculator = create(&query);
         path_calculator

@@ -237,8 +237,8 @@ pub(crate) fn compile(path: &str) -> Result<Query<'_>, QueryCompilationError> {
                     positives,
                     negatives,
                 } => {
-                    let p = positives.into_iter().join(", ");
-                    let n = negatives.into_iter().join(", ");
+                    let p = positives.iter().join(", ");
+                    let n = negatives.iter().join(", ");
                     match (p.len(), n.len()) {
                         (0, 0) => "parsing error".to_string(),
                         (_, 0) => format!("expected one of the following: {p}"),
@@ -584,7 +584,7 @@ impl<'a, S: SelectValue> Iterator for UnifiedIter<'a, S> {
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             UnifiedIter::Array(iter) => iter.next().map(|(i, v)| Item::ArrayItem(i, v)),
-            UnifiedIter::Object(iter) => iter.next().map(|(k, v)| Item::ObjectItem(k.into(), v)),
+            UnifiedIter::Object(iter) => iter.next().map(|(k, v)| Item::ObjectItem(k, v)),
         }
     }
 }
@@ -958,8 +958,9 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
     }
 
     fn populate_path_tracker(pt: &PathTracker<'_, '_>, upt: &mut UPTG::PT) {
-        pt.parent
-            .map(|parent| Self::populate_path_tracker(parent, upt));
+        if let Some(parent) = pt.parent {
+            Self::populate_path_tracker(parent, upt)
+        }
         match pt.element {
             PathTrackerElement::Index(i) => upt.add_index(i),
             PathTrackerElement::Key(ref k) => upt.add_str(k),
