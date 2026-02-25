@@ -270,6 +270,7 @@ pub trait UserPathTrackerGenerator {
 
 /* Dummy path tracker, indicating that there is no need to track results paths. */
 pub struct DummyTracker;
+
 impl UserPathTracker for DummyTracker {
     fn add_str(&mut self, _s: &str) {}
     fn add_index(&mut self, _i: usize) {}
@@ -280,6 +281,7 @@ impl UserPathTracker for DummyTracker {
 
 /* A dummy path tracker generator, indicating that there is no need to track results paths. */
 pub struct DummyTrackerGenerator;
+
 impl UserPathTrackerGenerator for DummyTrackerGenerator {
     type PT = DummyTracker;
     fn generate(&self) -> Self::PT {
@@ -287,17 +289,20 @@ impl UserPathTrackerGenerator for DummyTrackerGenerator {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq)]
 pub enum PTrackerElement {
     Key(String),
     Index(usize),
 }
 
+#[allow(dead_code)]
 /* An actual representation of a path that the user gets as a result. */
 #[derive(Debug, PartialEq, Eq)]
 pub struct PTracker {
     pub elements: Vec<PTrackerElement>,
 }
+
 impl UserPathTracker for PTracker {
     fn add_str(&mut self, s: &str) {
         self.elements.push(PTrackerElement::Key(s.to_string()));
@@ -318,8 +323,10 @@ impl UserPathTracker for PTracker {
     }
 }
 
+#[allow(dead_code)]
 /* Used to generate paths trackers. */
 pub struct PTrackerGenerator;
+
 impl UserPathTrackerGenerator for PTrackerGenerator {
     type PT = PTracker;
     fn generate(&self) -> Self::PT {
