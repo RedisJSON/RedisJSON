@@ -697,7 +697,9 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
     }
 
     /// Parse a string as i64, saturating to i64::MAX or i64::MIN on overflow
-    /// instead of panicking.
+    /// instead of panicking. The PEG grammar (`number` rule) already guarantees
+    /// the input is well-formed (optional '-' followed by ASCII digits), so
+    /// overflow is the only reason parsing can fail.
     fn parse_index(s: &str) -> i64 {
         s.parse::<i64>().unwrap_or_else(|_| {
             if s.starts_with('-') {
@@ -708,7 +710,9 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         })
     }
 
-    /// Parse a string as usize, saturating to usize::MAX on overflow.
+    /// Parse a string as usize, saturating to usize::MAX on overflow. The PEG
+    /// grammar (`pos_number` rule) guarantees only ASCII digits reach here, so
+    /// overflow is the only reason parsing can fail.
     fn parse_step(s: &str) -> usize {
         s.parse::<usize>().unwrap_or(usize::MAX)
     }
