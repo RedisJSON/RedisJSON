@@ -237,7 +237,11 @@ fn array_index_overflow_does_not_crash() {
     // clamp gracefully.
 
     // Overflowing end index in slice — should clamp to array length
-    select_and_then_compare("$[0:40000000000000000000]", json.clone(), json!(["a", "b", "c"]));
+    select_and_then_compare(
+        "$[0:40000000000000000000]",
+        json.clone(),
+        json!(["a", "b", "c"]),
+    );
 
     // Overflowing start index — clamps beyond array, returns nothing
     select_and_then_compare("$[40000000000000000000:]", json.clone(), json!([]));
@@ -246,7 +250,11 @@ fn array_index_overflow_does_not_crash() {
     select_and_then_compare("$[40000000000000000000]", json.clone(), json!([]));
 
     // Overflowing negative index — clamps to 0
-    select_and_then_compare("$[-40000000000000000000:]", json.clone(), json!(["a", "b", "c"]));
+    select_and_then_compare(
+        "$[-40000000000000000000:]",
+        json.clone(),
+        json!(["a", "b", "c"]),
+    );
 
     // Overflowing full range
     select_and_then_compare(

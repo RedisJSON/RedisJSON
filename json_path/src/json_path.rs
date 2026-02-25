@@ -755,18 +755,13 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             Rule::right_range => {
                 let mut curr = curr.into_inner();
                 let start = 0;
-                let end =
-                    Self::calc_abs_index(Self::parse_index(curr.next().unwrap().as_str()), n);
-                let step = curr
-                    .next()
-                    .map_or(1, |s| Self::parse_step(s.as_str()));
+                let end = Self::calc_abs_index(Self::parse_index(curr.next().unwrap().as_str()), n);
+                let step = curr.next().map_or(1, |s| Self::parse_step(s.as_str()));
                 (start, end, step)
             }
             Rule::all_range => {
                 let mut curr = curr.into_inner();
-                let step = curr
-                    .next()
-                    .map_or(1, |s| Self::parse_step(s.as_str()));
+                let step = curr.next().map_or(1, |s| Self::parse_step(s.as_str()));
                 (0, n, step)
             }
             Rule::left_range => {
@@ -774,20 +769,15 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 let start =
                     Self::calc_abs_index(Self::parse_index(curr.next().unwrap().as_str()), n);
                 let end = n;
-                let step = curr
-                    .next()
-                    .map_or(1, |s| Self::parse_step(s.as_str()));
+                let step = curr.next().map_or(1, |s| Self::parse_step(s.as_str()));
                 (start, end, step)
             }
             Rule::full_range => {
                 let mut curr = curr.into_inner();
                 let start =
                     Self::calc_abs_index(Self::parse_index(curr.next().unwrap().as_str()), n);
-                let end =
-                    Self::calc_abs_index(Self::parse_index(curr.next().unwrap().as_str()), n);
-                let step = curr
-                    .next()
-                    .map_or(1, |s| Self::parse_step(s.as_str()));
+                let end = Self::calc_abs_index(Self::parse_index(curr.next().unwrap().as_str()), n);
+                let step = curr.next().map_or(1, |s| Self::parse_step(s.as_str()));
                 (start, end, step)
             }
             _ => panic!("{curr:?}"),
