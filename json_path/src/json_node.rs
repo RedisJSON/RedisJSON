@@ -164,7 +164,7 @@ impl SelectValue for IValue {
     }
 
     fn contains_key(&self, key: &str) -> bool {
-        self.as_object().map_or(false, |o| o.contains_key(key))
+        self.as_object().is_some_and(|o| o.contains_key(key))
     }
 
     fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = ValueRef<'a, Self>> + 'a>> {

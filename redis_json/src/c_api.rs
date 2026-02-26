@@ -932,7 +932,7 @@ mod tests {
     #[test]
     fn test_json_api_get_at() {
         // Test both string and int arrays
-        let arrays = vec![
+        let arrays = [
             IValue::from(vec![
                 IValue::from("aaa"),
                 IValue::from("bbb"),
