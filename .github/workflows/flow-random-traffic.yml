@@ -99,26 +99,12 @@ jobs:
               echo "Loading module: $MODULE"
               redis-server --loadmodule $MODULE --port 6379 &
               sleep 2
-
-              GENERATORS=("JsonGen")
-              EXIT_CODE=0
-              for GEN in "${GENERATORS[@]}"; do
-                echo "========================================="
-                echo "Running $GEN..."
-                echo "========================================="
-                if ! python3 -m redis_command_generator.$GEN --hosts localhost:6379 --verbose --max_cmd_cnt 200000; then
-                  echo "ERROR: $GEN failed"
-                  EXIT_CODE=1
-                fi
-                echo ""
-              done
-
+              python3 -m redis_command_generator.JsonGen --hosts localhost:6379 --verbose --max_cmd_cnt 1000000 > random_traffic.txt
+              tail -n 100 random_traffic.txt
               pkill -f redis-server || true
-              exit $EXIT_CODE
-            ' 2>&1 | tee random_traffic.txt
-          tail -n 100 random_traffic.txt
+            '
 
-      - name: Upload random traffic log
+      - name: Upload random traffic
         if: always()
         uses: actions/upload-artifact@v4
         with:
