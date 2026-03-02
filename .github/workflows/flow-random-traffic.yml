@@ -1,0 +1,112 @@
+name: Flow Random Traffic
+
+on:
+  workflow_dispatch:
+    inputs:
+      redis-ref:
+        description: 'Redis ref to checkout'
+        default: 'unstable'
+      timeout-minutes:
+        description: 'Timeout in minutes'
+        default: '30'
+      os:
+        description: 'OS to run on (leave empty for random)'
+        default: ''
+  workflow_call:
+    inputs:
+      redis-ref:
+        description: 'Redis ref to checkout'
+        type: string
+        default: 'unstable'
+      timeout-minutes:
+        description: 'Timeout in minutes'
+        type: string
+        default: '30'
+      beta-version:
+        description: 'Beta version for S3 uploads'
+        type: string
+        required: false
+      os:
+        description: 'OS to run on (leave empty for random)'
+        type: string
+        default: ''
+
+jobs:
+  pick-os:
+    runs-on: ubuntu-latest
+    outputs:
+      os: ${{ steps.pick-os.outputs.os }}
+    steps:
+      - name: Pick OS
+        id: pick-os
+        env:
+          INPUT_OS: ${{ inputs.os }}
+        run: |
+          if [ -n "$INPUT_OS" ]; then
+            echo "os=${INPUT_OS}" >> $GITHUB_OUTPUT
+            echo "Using specified OS: ${INPUT_OS}"
+          else
+            OS_LIST=(bionic focal jammy rocky8 rocky9 bullseye amazonlinux2 amazonlinux2023 azurelinux3 mariner2 alpine)
+            RANDOM_INDEX=$((RANDOM % ${#OS_LIST[@]}))
+            SELECTED=${OS_LIST[$RANDOM_INDEX]}
+            echo "os=${SELECTED}" >> $GITHUB_OUTPUT
+            echo "Randomly selected OS: ${SELECTED}"
+          fi
+
+  run-random-traffic:
+    name: random-traffic (${{ needs.pick-os.outputs.os }})
+    needs: pick-os
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(inputs.timeout-minutes || '30') }}
+    env:
+      DOCKER_IMAGE: redisjson-${{ needs.pick-os.outputs.os }}:latest
+      REDIS_REF: ${{ inputs.redis-ref || 'unstable' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - name: Build Docker Image
+        env:
+          SELECTED_OS: ${{ needs.pick-os.outputs.os }}
+        run: |
+          docker build \
+            -f "Dockerfile.${SELECTED_OS}" \
+            --build-arg REDIS_REF="${REDIS_REF}" \
+            -t "${DOCKER_IMAGE}" \
+            .
+
+      - name: Build module
+        run: |
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/workspace" \
+            -w /workspace \
+            "${DOCKER_IMAGE}" \
+            bash -c "if [ -f \$HOME/.cargo/env ]; then . \$HOME/.cargo/env; fi && \
+              cargo build --release && \
+              cp \$(realpath ./target/release)/librejson.so \$(realpath ./target/release)/rejson.so"
+
+      - name: Run Random Traffic
+        run: |
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/workspace" \
+            -w /workspace \
+            "${DOCKER_IMAGE}" \
+            bash -ec '
+              pip install redis-command-generator
+              MODULE=$(realpath ./target/release/rejson.so)
+              echo "Loading module: $MODULE"
+              redis-server --loadmodule $MODULE --port 6379 &
+              sleep 2
+              python3 -m redis_command_generator.JsonGen --hosts localhost:6379 --verbose --max_cmd_cnt 1000000 > random_traffic.txt
+              tail -n 100 random_traffic.txt
+              pkill -f redis-server || true
+            '
+
+      - name: Upload random traffic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: random-traffic-${{ needs.pick-os.outputs.os }}-log
+          path: random_traffic.txt
