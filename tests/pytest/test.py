@@ -366,8 +366,13 @@ def testBackwardRDB(env):
 
     r = env
     res = r.execute_command('JSON.GET', 'complex')
-    data = json.loads(res)
-    r.assertEqual(data, {"a":{"b":[{"c":{"d":[1,'2'],"e":None}},True],"a":'a'},"b":1,"c":True,"d":None})
+    r.assertEqual(json.loads(res), {"a":{"b":[{"c":{"d":[1,'2'],"e":None}},True],"a":'a'},"b":1,"c":True,"d":None})
+
+    env.execute_command('DEBUG', 'RELOAD')
+
+    res = r.execute_command('JSON.GET', 'complex')
+    r.assertEqual(json.loads(res), {"a":{"b":[{"c":{"d":[1,'2'],"e":None}},True],"a":'a'},"b":1,"c":True,"d":None})
+
 
 def testSetBSON(env):
     r = env

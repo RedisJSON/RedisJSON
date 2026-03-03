@@ -55,6 +55,39 @@ def test_json_arrappend_with_nested_array():
 ### 2.2 One Assertion Focus Per Test
 Each test should focus on verifying one specific behavior. Multiple related assertions are fine, but avoid testing unrelated behaviors in a single test.
 
+### 2.3 Use Fluent Assertion Style
+Prefer the fluent `env.expect(...)` API over `env.cmd()` with separate assertions. This provides clearer intent and better error messages.
+
+**For successful commands:**
+```python
+env.expect('JSON.SET', 'key', '$', '{"a":1}').ok()
+env.expect('JSON.GET', 'key', '$').equal('[{"a":1}]')
+```
+
+**For error cases:**
+```python
+env.expect('JSON.SET', 'key', '$.missing', '1').raiseError().contains('does not exist')
+env.expect('JSON.GET', 'bad', '$').raiseError().contains('WRONGTYPE')
+```
+
+❌ BAD:
+```python
+result = env.cmd('JSON.SET', 'key', '$', '{}')
+env.assertEqual(result, 'OK')
+
+try:
+    env.cmd('JSON.SET', 'key', '$.bad', '1')
+    env.assertTrue(False)
+except Exception as e:
+    env.assertContains('does not exist', str(e))
+```
+
+✅ GOOD:
+```python
+env.expect('JSON.SET', 'key', '$', '{}').ok()
+env.expect('JSON.SET', 'key', '$.bad', '1').raiseError().contains('does not exist')
+```
+
 ## 3. Test Files
 
 Test data files are in `tests/files/`:
