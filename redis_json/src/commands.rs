@@ -628,19 +628,14 @@ pub fn json_mset_command_impl<M: Manager>(
         return Err(RedisError::WrongArity);
     }
 
-    // Parse and validate all (key, path, value) triples without opening any keys,
-    // so we don't hold write locks while consuming remaining arguments.
-    let mut parsed: Vec<(RedisString, String, M::O)> = Vec::new();
+    let mut parsed: Vec<(RedisString, String, String)> = Vec::new();
     while let Ok(key) = args.next_arg() {
         let path_str = args.next_str()?.to_string();
-        let value_str = args.next_str()?;
-        let value = manager.from_str(value_str, Format::JSON, true)?;
-        parsed.push((key, path_str, value));
+        let value_str = args.next_str()?.to_string();
+        parsed.push((key, path_str, value_str));
     }
 
-    // Open each key, validate path, and apply the update sequentially,
-    // releasing the write lock before moving to the next key.
-    for (key, path_str, value) in parsed {
+    for (key, path_str, value_str) in parsed {
         let mut redis_key = manager.open_key_write(ctx, key)?;
         let key_value = redis_key.get_value()?;
 
@@ -654,6 +649,8 @@ pub fn json_mset_command_impl<M: Manager>(
                 "ERR new objects must be created at the root",
             ));
         };
+
+        let value = manager.from_str(&value_str, Format::JSON, true)?;
 
         let updated = if let Some(update_info) = update_info {
             !update_info.is_empty() && apply_updates::<M>(&mut redis_key, value, update_info)
