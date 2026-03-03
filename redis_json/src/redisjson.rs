@@ -248,8 +248,8 @@ pub mod type_methods {
             4 => {
                 let buf =
                     raw::load_string_buffer(rdb).map_err(|e| RedisError::String(e.to_string()))?;
-                let value = ijson::decode(buf.as_ref())
-                    .map_err(|e| RedisError::String(e.to_string()))?;
+                let value =
+                    ijson::decode(buf.as_ref()).map_err(|e| RedisError::String(e.to_string()))?;
                 let mut out = serde_json::Serializer::new(Vec::new());
                 value.serialize(&mut out).unwrap();
                 String::from_utf8(out.into_inner()).unwrap()
