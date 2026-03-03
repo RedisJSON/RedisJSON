@@ -635,36 +635,38 @@ pub fn json_mset_command_impl<M: Manager>(
         parsed.push((key, path_str, value_str));
     }
 
-    for (key, path_str, value_str) in parsed {
-        let mut redis_key = manager.open_key_write(ctx, key)?;
-        let key_value = redis_key.get_value()?;
+    let res = parsed
+        .into_iter()
+        .fold(REDIS_OK, |res, (key, path_str, value_str)| {
+            let mut redis_key = manager.open_key_write(ctx, key)?;
+            let key_value = redis_key.get_value()?;
 
-        let path = Path::new(&path_str);
-        let update_info = if path == JSON_ROOT_PATH {
-            None
-        } else if let Some(existing) = key_value {
-            Some(KeyValue::new(existing).find_paths(path.get_path(), SetOptions::None)?)
-        } else {
-            return Err(RedisError::Str(
-                "ERR new objects must be created at the root",
-            ));
-        };
+            let path = Path::new(&path_str);
+            let update_info = if path == JSON_ROOT_PATH {
+                None
+            } else if let Some(existing) = key_value {
+                Some(KeyValue::new(existing).find_paths(path.get_path(), SetOptions::None)?)
+            } else {
+                return Err(RedisError::Str(
+                    "ERR new objects must be created at the root",
+                ));
+            };
 
-        let value = manager.from_str(&value_str, Format::JSON, true)?;
+            let value = manager.from_str(&value_str, Format::JSON, true)?;
 
-        let updated = if let Some(update_info) = update_info {
-            !update_info.is_empty() && apply_updates::<M>(&mut redis_key, value, update_info)
-        } else {
-            // In case it is a root path
-            redis_key.set_value(Vec::new(), value)?
-        };
-        if updated {
-            redis_key.notify_keyspace_event(ctx, "json.mset")?;
-        }
-    }
+            let updated = if let Some(update_info) = update_info {
+                !update_info.is_empty() && apply_updates::<M>(&mut redis_key, value, update_info)
+            } else {
+                redis_key.set_value(Vec::new(), value)?
+            };
+            if updated {
+                redis_key.notify_keyspace_event(ctx, "json.mset")?;
+            }
+            res
+        });
 
     manager.apply_changes(ctx);
-    REDIS_OK
+    res
 }
 
 fn apply_updates<M: Manager>(
