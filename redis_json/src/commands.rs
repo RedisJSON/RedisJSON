@@ -679,7 +679,6 @@ pub fn json_mset_command_impl<M: Manager>(
         let path_str = args.next_str()?.to_string();
         let value_str = args.next_str()?.to_string();
         parsed.push((key, path_str, value_str));
-
     }
 
     let res = parsed
@@ -699,7 +698,7 @@ pub fn json_mset_command_impl<M: Manager>(
                 ));
             };
 
-            let value = manager.from_str(&value_str, Format::JSON, true)?;
+            let value = manager.from_str(&value_str, Format::JSON, true, None)?;
 
             let updated = if let Some(update_info) = update_info {
                 !update_info.is_empty() && apply_updates::<M>(&mut redis_key, value, update_info)
