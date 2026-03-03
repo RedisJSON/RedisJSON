@@ -14,6 +14,7 @@ use crate::manager::{
     err_invalid_path, err_invalid_path_or, Manager, ReadHolder, UpdateInfo, WriteHolder,
 };
 use crate::redisjson::{Format, Path, ReplyFormat, SetOptions, JSON_ROOT_PATH};
+use ijson::FloatType;
 use json_path::select_value::{SelectValue, SelectValueType, ValueRef};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
@@ -304,6 +305,40 @@ macro_rules! json_set_command {
                             }]
                         },
                         {
+                            name: "fpha",
+                            token: "FPHA",
+                            arg_type: Block,
+                            flags: [Optional],
+                            subargs: [
+                                {
+                                    name: "fpha-type",
+                                    arg_type: OneOf,
+                                    subargs: [
+                                        {
+                                            name: "BF16",
+                                            arg_type: PureToken,
+                                            token: "BF16",
+                                        },
+                                        {
+                                            name: "FP16",
+                                            arg_type: PureToken,
+                                            token: "FP16",
+                                        },
+                                        {
+                                            name: "FP32",
+                                            arg_type: PureToken,
+                                            token: "FP32",
+                                        },
+                                        {
+                                            name: "FP64",
+                                            arg_type: PureToken,
+                                            token: "FP64",
+                                        },
+                                    ]
+                                }
+                            ]
+                        },
+                        {
                             name: "format",
                             token: "FORMAT",
                             arg_type: Block,
@@ -352,7 +387,7 @@ pub fn json_set_command_impl<M: Manager>(
 
     let mut format = Format::JSON;
     let mut set_option = SetOptions::None;
-
+    let mut fpha_type = None;
     while let Some(s) = args.next() {
         match s.try_as_str()? {
             arg if arg.eq_ignore_ascii_case("NX") && set_option == SetOptions::None => {
@@ -364,6 +399,17 @@ pub fn json_set_command_impl<M: Manager>(
             arg if arg.eq_ignore_ascii_case("FORMAT") => {
                 format = Format::from_str(args.next_str()?)?;
             }
+            arg if arg.eq_ignore_ascii_case("FPHA") => {
+                fpha_type = {
+                    match args.next_str()?.to_uppercase().as_str() {
+                        "BF16" => Some(FloatType::BF16),
+                        "FP16" => Some(FloatType::F16),
+                        "FP32" => Some(FloatType::F32),
+                        "FP64" => Some(FloatType::F64),
+                        _ => return Err(RedisError::Str("ERR invalid FPHA type")),
+                    }
+                }
+            }
             _ => return Err(RedisError::Str("ERR syntax error")),
         };
     }
@@ -371,7 +417,7 @@ pub fn json_set_command_impl<M: Manager>(
     let mut redis_key = manager.open_key_write(ctx, key)?;
     let current = redis_key.get_value()?;
 
-    let val = manager.from_str(value, format, true)?;
+    let val = manager.from_str(value, format, true, fpha_type)?;
 
     match (current, set_option) {
         (Some(doc), op) => {
@@ -508,7 +554,7 @@ pub fn json_merge_command_impl<M: Manager>(
     let mut redis_key = manager.open_key_write(ctx, key)?;
     let current = redis_key.get_value()?;
 
-    let val = manager.from_str(value, format, true)?;
+    let val = manager.from_str(value, format, true, None)?;
 
     match current {
         Some(doc) => {
@@ -633,6 +679,7 @@ pub fn json_mset_command_impl<M: Manager>(
         let path_str = args.next_str()?.to_string();
         let value_str = args.next_str()?.to_string();
         parsed.push((key, path_str, value_str));
+
     }
 
     let res = parsed
@@ -1782,7 +1829,7 @@ pub fn json_arr_append_command_impl<M: Manager>(
     let args =
         args.try_fold::<_, _, RedisResult<_>>(Vec::with_capacity(args.len()), |mut acc, arg| {
             let json = arg.try_as_str()?;
-            acc.push(manager.from_str(json, Format::JSON, true)?);
+            acc.push(manager.from_str(json, Format::JSON, true, None)?);
             Ok(acc)
         })?;
 
@@ -2032,7 +2079,7 @@ pub fn json_arr_insert_command_impl<M: Manager>(
     let args =
         args.try_fold::<_, _, RedisResult<_>>(Vec::with_capacity(args.len()), |mut acc, arg| {
             let json = arg.try_as_str()?;
-            acc.push(manager.from_str(json, Format::JSON, true)?);
+            acc.push(manager.from_str(json, Format::JSON, true, None)?);
             Ok(acc)
         })?;
     let mut redis_key = manager.open_key_write(ctx, key)?;

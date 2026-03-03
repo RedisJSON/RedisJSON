@@ -188,21 +188,35 @@ pub mod type_methods {
     use redis_module::RedisResult;
 
     use super::*;
-    use std::{ffi::CString, ptr::null_mut};
+    use std::ptr::null_mut;
 
     pub extern "C" fn rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
-        let json_string = value_rdb_load_json(rdb, encver);
-        match json_string {
-            Ok(json_string) => {
+        let result = load_rdb_value(rdb, encver);
+        result.map_or(null_mut(), |v| {
+            Box::into_raw(Box::new(v)).cast::<libc::c_void>()
+        })
+    }
+
+    fn load_rdb_value(
+        rdb: *mut raw::RedisModuleIO,
+        encver: c_int,
+    ) -> Option<RedisJSON<ijson::IValue>> {
+        match encver {
+            4 => {
+                let buf = raw::load_string_buffer(rdb).ok()?;
+                let data = ijson::decode(buf.as_ref()).ok()?;
+                Some(RedisJSON { data })
+            }
+            0 | 2 | 3 => {
+                let json_string = value_rdb_load_json(rdb, encver).ok()?;
                 let m = RedisIValueJsonKeyManager {
                     phantom: PhantomData,
                 };
-                let v = m.from_str(&json_string, Format::JSON, true);
-                v.map_or(null_mut(), |res| {
-                    Box::into_raw(Box::new(res)).cast::<libc::c_void>()
-                })
+                m.from_str(&json_string, Format::JSON, true, None)
+                    .ok()
+                    .map(|data| RedisJSON { data })
             }
-            Err(_) => null_mut(),
+            _ => None,
         }
     }
 
@@ -231,7 +245,16 @@ pub mod type_methods {
                 let data = raw::load_string(rdb)?;
                 data.try_as_str()?.to_string()
             }
-            _ => panic!("Can't load old RedisJSON RDB"),
+            4 => {
+                let buf =
+                    raw::load_string_buffer(rdb).map_err(|e| RedisError::String(e.to_string()))?;
+                let value =
+                    ijson::decode(buf.as_ref()).map_err(|e| RedisError::String(e.to_string()))?;
+                let mut out = serde_json::Serializer::new(Vec::new());
+                value.serialize(&mut out).unwrap();
+                String::from_utf8(out.into_inner()).unwrap()
+            }
+            _ => return Err(RedisError::String(format!("unsupported encver {encver}"))),
         })
     }
 
@@ -250,14 +273,9 @@ pub mod type_methods {
     /// # Safety
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
-        let mut out = serde_json::Serializer::new(Vec::new());
-
         let v = unsafe { &*value.cast::<RedisJSON<ijson::IValue>>() };
-        v.data.serialize(&mut out).unwrap();
-        let json = String::from_utf8(out.into_inner()).unwrap();
-
-        let cjson = CString::new(json).unwrap();
-        raw::save_string(rdb, cjson.to_str().unwrap());
+        let binary = ijson::encode(&v.data);
+        raw::save_slice(rdb, &binary);
     }
 
     /// # Safety
