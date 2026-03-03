@@ -93,7 +93,7 @@ impl<'a, 'b: 'a> PathValue<'a, 'b> {
 
 fn follow_path(path: Vec<String>, root: &mut IValue) -> Option<(PathValue<'_, '_>, usize)> {
     path.into_iter().try_fold(
-        (PathValue::IValue(root), 0 as usize),
+        (PathValue::IValue(root), 0_usize),
         |(target, depth), token| {
             let PathValue::IValue(target) = target else {
                 return None;
@@ -309,11 +309,11 @@ impl<'a> IValueKeyHolderWrite<'a> {
                 } else {
                     n.to_i64().map(Into::into)
                 }
-                .ok_or_else(|| RedisError::Str("result is not a number")),
+                .ok_or(RedisError::Str("result is not a number")),
                 NumOpResult::U64(n) => Ok(n.into()),
                 NumOpResult::I64(n) => Ok(n.into()),
                 NumOpResult::F64(n) => Ok(serde_json::Number::from_f64(n)
-                    .ok_or_else(|| RedisError::Str("result is not a number"))?),
+                    .ok_or(RedisError::Str("result is not a number"))?),
             }
         } else {
             Err(RedisError::Str("bad input number"))
@@ -405,7 +405,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             let PathValue::IValue(current) = current else {
                 return Err(RedisError::Str("bad object"));
             };
-            if can_merge(&current, &v, depth) {
+            if can_merge(current, &v, depth) {
                 merge(current, v.take());
                 Ok(true)
             } else {
@@ -681,7 +681,7 @@ fn can_merge(doc: &IValue, patch: &IValue, current_depth: usize) -> bool {
         } else {
             can_merge(
                 map.get(key.as_str()).unwrap_or(&IValue::NULL),
-                &value,
+                value,
                 current_depth + 1,
             )
         }

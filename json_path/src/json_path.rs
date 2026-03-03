@@ -237,8 +237,8 @@ pub(crate) fn compile(path: &str) -> Result<Query<'_>, QueryCompilationError> {
                     positives,
                     negatives,
                 } => {
-                    let p = positives.into_iter().join(", ");
-                    let n = negatives.into_iter().join(", ");
+                    let p = positives.iter().join(", ");
+                    let n = negatives.iter().join(", ");
                     match (p.len(), n.len()) {
                         (0, 0) => "parsing error".to_string(),
                         (_, 0) => format!("expected one of the following: {p}"),
@@ -270,6 +270,7 @@ pub trait UserPathTrackerGenerator {
 
 /* Dummy path tracker, indicating that there is no need to track results paths. */
 pub struct DummyTracker;
+
 impl UserPathTracker for DummyTracker {
     fn add_str(&mut self, _s: &str) {}
     fn add_index(&mut self, _i: usize) {}
@@ -280,6 +281,7 @@ impl UserPathTracker for DummyTracker {
 
 /* A dummy path tracker generator, indicating that there is no need to track results paths. */
 pub struct DummyTrackerGenerator;
+
 impl UserPathTrackerGenerator for DummyTrackerGenerator {
     type PT = DummyTracker;
     fn generate(&self) -> Self::PT {
@@ -287,17 +289,20 @@ impl UserPathTrackerGenerator for DummyTrackerGenerator {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq)]
 pub enum PTrackerElement {
     Key(String),
     Index(usize),
 }
 
+#[allow(dead_code)]
 /* An actual representation of a path that the user gets as a result. */
 #[derive(Debug, PartialEq, Eq)]
 pub struct PTracker {
     pub elements: Vec<PTrackerElement>,
 }
+
 impl UserPathTracker for PTracker {
     fn add_str(&mut self, s: &str) {
         self.elements.push(PTrackerElement::Key(s.to_string()));
@@ -318,8 +323,10 @@ impl UserPathTracker for PTracker {
     }
 }
 
+#[allow(dead_code)]
 /* Used to generate paths trackers. */
 pub struct PTrackerGenerator;
+
 impl UserPathTrackerGenerator for PTrackerGenerator {
     type PT = PTracker;
     fn generate(&self) -> Self::PT {
@@ -577,7 +584,7 @@ impl<'a, S: SelectValue> Iterator for UnifiedIter<'a, S> {
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             UnifiedIter::Array(iter) => iter.next().map(|(i, v)| Item::ArrayItem(i, v)),
-            UnifiedIter::Object(iter) => iter.next().map(|(k, v)| Item::ObjectItem(k.into(), v)),
+            UnifiedIter::Object(iter) => iter.next().map(|(k, v)| Item::ObjectItem(k, v)),
         }
     }
 }
@@ -696,6 +703,27 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         }
     }
 
+    /// Parse a string as i64, saturating to i64::MAX or i64::MIN on overflow
+    /// instead of panicking. The PEG grammar (`number` rule) already guarantees
+    /// the input is well-formed (optional '-' followed by ASCII digits), so
+    /// overflow is the only reason parsing can fail.
+    fn parse_index(s: &str) -> i64 {
+        s.parse::<i64>().unwrap_or_else(|_| {
+            if s.starts_with('-') {
+                i64::MIN
+            } else {
+                i64::MAX
+            }
+        })
+    }
+
+    /// Parse a string as usize, saturating to usize::MAX on overflow. The PEG
+    /// grammar (`pos_number` rule) guarantees only ASCII digits reach here, so
+    /// overflow is the only reason parsing can fail.
+    fn parse_step(s: &str) -> usize {
+        s.parse::<usize>().unwrap_or(usize::MAX)
+    }
+
     fn calc_indexes<'j: 'i, 'k, 'l, S: SelectValue>(
         &self,
         pairs: Pairs<'i, Rule>,
@@ -709,7 +737,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         }
         let n = json.len().unwrap();
         for c in curr.into_inner() {
-            let i = Self::calc_abs_index(c.as_str().parse::<i64>().unwrap(), n);
+            let i = Self::calc_abs_index(Self::parse_index(c.as_str()), n);
             value_ref_get_index!(json, i).map(|e| {
                 let new_tracker = path_tracker.as_ref().map(|pt| create_index_tracker(i, pt));
                 self.calc_internal(pairs.clone(), e, new_tracker, calc_data);
@@ -734,39 +762,29 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             Rule::right_range => {
                 let mut curr = curr.into_inner();
                 let start = 0;
-                let end =
-                    Self::calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
-                let step = curr
-                    .next()
-                    .map_or(1, |s| s.as_str().parse::<usize>().unwrap());
+                let end = Self::calc_abs_index(Self::parse_index(curr.next().unwrap().as_str()), n);
+                let step = curr.next().map_or(1, |s| Self::parse_step(s.as_str()));
                 (start, end, step)
             }
             Rule::all_range => {
                 let mut curr = curr.into_inner();
-                let step = curr
-                    .next()
-                    .map_or(1, |s| s.as_str().parse::<usize>().unwrap());
+                let step = curr.next().map_or(1, |s| Self::parse_step(s.as_str()));
                 (0, n, step)
             }
             Rule::left_range => {
                 let mut curr = curr.into_inner();
                 let start =
-                    Self::calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
+                    Self::calc_abs_index(Self::parse_index(curr.next().unwrap().as_str()), n);
                 let end = n;
-                let step = curr
-                    .next()
-                    .map_or(1, |s| s.as_str().parse::<usize>().unwrap());
+                let step = curr.next().map_or(1, |s| Self::parse_step(s.as_str()));
                 (start, end, step)
             }
             Rule::full_range => {
                 let mut curr = curr.into_inner();
                 let start =
-                    Self::calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
-                let end =
-                    Self::calc_abs_index(curr.next().unwrap().as_str().parse::<i64>().unwrap(), n);
-                let step = curr
-                    .next()
-                    .map_or(1, |s| s.as_str().parse::<usize>().unwrap());
+                    Self::calc_abs_index(Self::parse_index(curr.next().unwrap().as_str()), n);
+                let end = Self::calc_abs_index(Self::parse_index(curr.next().unwrap().as_str()), n);
+                let step = curr.next().map_or(1, |s| Self::parse_step(s.as_str()));
                 (start, end, step)
             }
             _ => panic!("{curr:?}"),
@@ -940,8 +958,9 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
     }
 
     fn populate_path_tracker(pt: &PathTracker<'_, '_>, upt: &mut UPTG::PT) {
-        pt.parent
-            .map(|parent| Self::populate_path_tracker(parent, upt));
+        if let Some(parent) = pt.parent {
+            Self::populate_path_tracker(parent, upt)
+        }
         match pt.element {
             PathTrackerElement::Index(i) => upt.add_index(i),
             PathTrackerElement::Key(ref k) => upt.add_str(k),

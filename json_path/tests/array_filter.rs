@@ -227,6 +227,51 @@ fn array_multiple_key() {
 }
 
 #[test]
+fn array_index_overflow_does_not_crash() {
+    setup();
+
+    let json = json!(["a", "b", "c"]);
+
+    // MOD-7982: These overflowing indices previously caused a panic via
+    // parse::<i64>().unwrap(). They should now return empty results or
+    // clamp gracefully.
+
+    // Overflowing end index in slice — should clamp to array length
+    select_and_then_compare(
+        "$[0:40000000000000000000]",
+        json.clone(),
+        json!(["a", "b", "c"]),
+    );
+
+    // Overflowing start index — clamps beyond array, returns nothing
+    select_and_then_compare("$[40000000000000000000:]", json.clone(), json!([]));
+
+    // Overflowing single index — out of bounds, returns nothing
+    select_and_then_compare("$[40000000000000000000]", json.clone(), json!([]));
+
+    // Overflowing negative index — clamps to 0
+    select_and_then_compare(
+        "$[-40000000000000000000:]",
+        json.clone(),
+        json!(["a", "b", "c"]),
+    );
+
+    // Overflowing full range
+    select_and_then_compare(
+        "$[0:40000000000000000000:1]",
+        json.clone(),
+        json!(["a", "b", "c"]),
+    );
+
+    // Exact reproduction of the crash from MOD-7982
+    select_and_then_compare(
+        "$[0:40000000000000000000].id",
+        json!([{"id": 1}, {"id": 2}]),
+        json!([1, 2]),
+    );
+}
+
+#[test]
 fn bugs40_bracket_notation_after_recursive_descent() {
     setup();
 

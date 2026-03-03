@@ -864,7 +864,6 @@ pub fn prepare_paths_for_updating(paths: &mut Vec<Vec<String>>) {
 ///
 /// JSON.DEL <key> [path]
 ///
-///
 #[macro_export]
 macro_rules! json_del_command {
     ($name:literal, $item:item) => {
@@ -1972,7 +1971,6 @@ pub fn json_arr_index_command_impl<M: Manager>(
 ///
 /// JSON.ARRINSERT <key> <path> <index> <json> [json ...]
 ///
-
 #[macro_export]
 macro_rules! json_arrinsert_command {
     ($item:item) => {
@@ -2191,7 +2189,6 @@ pub fn json_arr_len_command_impl<M: Manager>(
 ///         [FORMAT {STRINGS|EXPAND1|EXPAND}]   /* default is STRINGS */
 ///         [path [index]]
 ///
-
 #[macro_export]
 macro_rules! json_arrpop_command {
     ($item:item) => {

@@ -61,7 +61,7 @@ pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> RedisResult<Value> {
         NodeType::Number => {
             let n = raw::load_double(rdb)?;
             Ok(Value::Number(
-                Number::from_f64(n).ok_or_else(|| RedisError::Str("Can't load as float"))?,
+                Number::from_f64(n).ok_or(RedisError::Str("Can't load as float"))?,
             ))
         }
         NodeType::String => {
