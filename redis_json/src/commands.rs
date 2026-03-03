@@ -657,10 +657,11 @@ pub fn json_mset_command_impl<M: Manager>(
             let updated = if let Some(update_info) = update_info {
                 !update_info.is_empty() && apply_updates::<M>(&mut redis_key, value, update_info)
             } else {
+                // In case it is a root path
                 redis_key.set_value(Vec::new(), value)?
             };
             if updated {
-                redis_key.notify_keyspace_event(ctx, "json.mset")?;
+                redis_key.notify_keyspace_event(ctx, "json.mset")?
             }
             res
         });
