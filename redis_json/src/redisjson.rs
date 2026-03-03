@@ -204,7 +204,7 @@ pub mod type_methods {
         match encver {
             4 => {
                 let buf = raw::load_string_buffer(rdb).ok()?;
-                let data = ijson::decode_compressed(buf.as_ref()).ok()?;
+                let data = ijson::decode(buf.as_ref()).ok()?;
                 Some(RedisJSON { data })
             }
             0 | 2 | 3 => {
@@ -277,7 +277,7 @@ pub mod type_methods {
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
         let v = unsafe { &*value.cast::<RedisJSON<ijson::IValue>>() };
-        let binary = ijson::encode_compressed(&v.data);
+        let binary = ijson::encode(&v.data);
         raw::save_slice(rdb, &binary);
     }
 
