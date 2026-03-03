@@ -221,10 +221,7 @@ pub mod type_methods {
     }
 
     #[allow(non_snake_case, unused)]
-    pub fn value_rdb_load_json(
-        rdb: *mut raw::RedisModuleIO,
-        encver: c_int,
-    ) -> RedisResult<String> {
+    pub fn value_rdb_load_json(rdb: *mut raw::RedisModuleIO, encver: c_int) -> RedisResult<String> {
         Ok(match encver {
             0 => {
                 let v = backward::json_rdb_load(rdb)?;
@@ -249,8 +246,8 @@ pub mod type_methods {
                 data.try_as_str()?.to_string()
             }
             4 => {
-                let buf = raw::load_string_buffer(rdb)
-                    .map_err(|e| RedisError::String(e.to_string()))?;
+                let buf =
+                    raw::load_string_buffer(rdb).map_err(|e| RedisError::String(e.to_string()))?;
                 let value = ijson::decode_compressed(buf.as_ref())
                     .map_err(|e| RedisError::String(e.to_string()))?;
                 let mut out = serde_json::Serializer::new(Vec::new());
