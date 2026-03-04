@@ -4,7 +4,6 @@
  * the Server Side Public License v1 (SSPLv1).
  */
 
-
 use json_path::select_value::SelectValue;
 use redis_module::key::KeyFlags;
 use serde_json::Number;
