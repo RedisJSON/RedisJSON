@@ -317,36 +317,38 @@ pub fn json_mset<M: Manager>(manager: M, ctx: &Context, args: Vec<RedisString>) 
         return Err(RedisError::WrongArity);
     }
 
-    // Collect all the actions from the args (redis_key, update_info, value)
-    let mut actions = Vec::new();
+    // Parse the arguments, validate the keys and the paths
+    let mut parsed: Vec<(RedisString, Option<Vec<UpdateInfo>>, String)> = Vec::new();
     while let Ok(key) = args.next_arg() {
-        let mut redis_key = manager.open_key_write(ctx, key)?;
-
-        // Verify the key is a JSON type
+        let mut redis_key = manager.open_key_write(ctx, key.clone())?;
         let key_value = redis_key.get_value()?;
 
-        // Verify the path is valid and get all the update info
-        let path = Path::new(args.next_str()?);
+        // Validate the path
+        let path_str = args.next_str()?.to_string();
+        let path = Path::new(&path_str);
         let update_info = if path.get_path() == JSON_ROOT_PATH {
             None
-        } else if let Some(value) = key_value {
-            Some(KeyValue::new(value).find_paths(path.get_path(), SetOptions::None)?)
+        } else if let Some(existing) = key_value {
+            Some(KeyValue::new(existing).find_paths(path.get_path(), SetOptions::None)?)
         } else {
             return Err(RedisError::Str(
                 "ERR new objects must be created at the root",
             ));
         };
 
-        // Parse the input and validate it's valid JSON
-        let value_str = args.next_str()?;
-        let value = manager.from_str(value_str, Format::JSON, true)?;
-
-        actions.push((redis_key, update_info, value));
+        let value_str = args.next_str()?.to_string();
+        // Validate the value(We deliberately do not store the created value, and recreate it again later)
+        let _ = manager.from_str(&value_str, Format::JSON, true)?;
+        parsed.push((key, update_info, value_str));
     }
 
-    let res = actions
+    let res = parsed
         .into_iter()
-        .fold(REDIS_OK, |res, (mut redis_key, update_info, value)| {
+        .fold(REDIS_OK, |res, (key, update_info, value_str)| {
+            let mut redis_key = manager.open_key_write(ctx, key)?;
+
+            let value = manager.from_str(&value_str, Format::JSON, true)?;
+
             let updated = if let Some(update_info) = update_info {
                 !update_info.is_empty() && apply_updates::<M>(&mut redis_key, value, update_info)
             } else {
