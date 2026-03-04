@@ -674,29 +674,35 @@ pub fn json_mset_command_impl<M: Manager>(
         return Err(RedisError::WrongArity);
     }
 
-    let mut parsed: Vec<(RedisString, String, String)> = Vec::new();
+    // Parse the arguments, validate the keys and the paths
+    let mut parsed: Vec<(RedisString, Option<Vec<UpdateInfo>>, String)> = Vec::new();
     while let Ok(key) = args.next_arg() {
+        let mut redis_key = manager.open_key_write(ctx, key.clone())?;
+        let key_value = redis_key.get_value()?;
+
+        // Validate the path
         let path_str = args.next_str()?.to_string();
+        let path = Path::new(&path_str);
+        let update_info = if path == JSON_ROOT_PATH {
+            None
+        } else if let Some(existing) = key_value {
+            Some(KeyValue::new(existing).find_paths(path.get_path(), SetOptions::None)?)
+        } else {
+            return Err(RedisError::Str(
+                "ERR new objects must be created at the root",
+            ));
+        };
+
         let value_str = args.next_str()?.to_string();
-        parsed.push((key, path_str, value_str));
+        // Validate the value(We deliberately do not store the created value, and recreate it again later)
+        let _ = manager.from_str(&value_str, Format::JSON, true, None)?;
+        parsed.push((key, update_info, value_str));
     }
 
     let res = parsed
         .into_iter()
-        .fold(REDIS_OK, |res, (key, path_str, value_str)| {
+        .fold(REDIS_OK, |res, (key, update_info, value_str)| {
             let mut redis_key = manager.open_key_write(ctx, key)?;
-            let key_value = redis_key.get_value()?;
-
-            let path = Path::new(&path_str);
-            let update_info = if path == JSON_ROOT_PATH {
-                None
-            } else if let Some(existing) = key_value {
-                Some(KeyValue::new(existing).find_paths(path.get_path(), SetOptions::None)?)
-            } else {
-                return Err(RedisError::Str(
-                    "ERR new objects must be created at the root",
-                ));
-            };
 
             let value = manager.from_str(&value_str, Format::JSON, true, None)?;
 
