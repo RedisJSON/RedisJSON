@@ -7,7 +7,6 @@
  * GNU Affero General Public License v3 (AGPLv3).
  */
 
-pub use ijson::FloatType;
 use json_path::select_value::SelectValue;
 use redis_module::key::KeyFlags;
 use serde_json::Number;
