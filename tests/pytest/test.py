@@ -6,6 +6,7 @@ import sys
 import os
 import redis
 import json
+import numpy as np
 import time
 from RLTest import Env
 from includes import *
@@ -949,6 +950,28 @@ def testNumCommandOverflow(env):
     r.expect('JSON.NUMMULTBY', 'nested_arr_big_num', '$.l1.l2[1]', '2').raiseError()
     # (value remains)
     r.assertEqual(r.execute_command('JSON.GET', 'nested_arr_big_num', '$'), '[{"l1":{"l2":[0,1.6350000000001313e308]}}]')
+
+
+def testNumCommandIntegerOverflow(env):
+    r = env
+    MAX_I64 = np.iinfo(np.int64).max
+    MIN_I64 = np.iinfo(np.int64).min
+
+    r.expect('JSON.SET', 'int_ovf', '.', str(MAX_I64)).ok()
+    r.expect('JSON.NUMINCRBY', 'int_ovf', '.', '1').raiseError().contains('overflow')
+    r.expect('JSON.GET', 'int_ovf', '.').equal(str(MAX_I64))
+
+    r.expect('JSON.SET', 'int_udf', '.', str(MIN_I64)).ok()
+    r.expect('JSON.NUMINCRBY', 'int_udf', '.', '-1').raiseError().contains('overflow')
+    r.expect('JSON.GET', 'int_udf', '.').equal(str(MIN_I64))
+
+    r.expect('JSON.SET', 'mult_ovf', '.', str(MAX_I64)).ok()
+    r.expect('JSON.NUMMULTBY', 'mult_ovf', '.', '2').raiseError().contains('overflow')
+    r.expect('JSON.GET', 'mult_ovf', '.').equal(str(MAX_I64))
+
+    r.expect('JSON.SET', 'mult_neg_ovf', '.', str(MIN_I64)).ok()
+    r.expect('JSON.NUMMULTBY', 'mult_neg_ovf', '.', '2').raiseError().contains('overflow')
+    r.expect('JSON.GET', 'mult_neg_ovf', '.').equal(str(MIN_I64))
 
 
 def testStrCommands(env):
