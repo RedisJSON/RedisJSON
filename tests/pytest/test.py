@@ -6,6 +6,7 @@ import sys
 import os
 import redis
 import json
+import numpy as np
 import time
 from RLTest import Env
 from includes import *
@@ -951,6 +952,28 @@ def testNumCommandOverflow(env):
     r.assertEqual(r.execute_command('JSON.GET', 'nested_arr_big_num', '$'), '[{"l1":{"l2":[0,1.6350000000001313e308]}}]')
 
 
+def testNumCommandIntegerOverflow(env):
+    r = env
+    MAX_I64 = np.iinfo(np.int64).max
+    MIN_I64 = np.iinfo(np.int64).min
+
+    r.expect('JSON.SET', 'int_ovf', '.', str(MAX_I64)).ok()
+    r.expect('JSON.NUMINCRBY', 'int_ovf', '.', '1').raiseError().contains('overflow')
+    r.expect('JSON.GET', 'int_ovf', '.').equal(str(MAX_I64))
+
+    r.expect('JSON.SET', 'int_udf', '.', str(MIN_I64)).ok()
+    r.expect('JSON.NUMINCRBY', 'int_udf', '.', '-1').raiseError().contains('overflow')
+    r.expect('JSON.GET', 'int_udf', '.').equal(str(MIN_I64))
+
+    r.expect('JSON.SET', 'mult_ovf', '.', str(MAX_I64)).ok()
+    r.expect('JSON.NUMMULTBY', 'mult_ovf', '.', '2').raiseError().contains('overflow')
+    r.expect('JSON.GET', 'mult_ovf', '.').equal(str(MAX_I64))
+
+    r.expect('JSON.SET', 'mult_neg_ovf', '.', str(MIN_I64)).ok()
+    r.expect('JSON.NUMMULTBY', 'mult_neg_ovf', '.', '2').raiseError().contains('overflow')
+    r.expect('JSON.GET', 'mult_neg_ovf', '.').equal(str(MIN_I64))
+
+
 def testStrCommands(env):
     """Test JSON.STRAPPEND and JSON.STRLEN commands"""
     r = env
@@ -1423,11 +1446,10 @@ def test_promote_u64_to_f64(env):
     r.assertEqual(val, i64max)                            # i64 + i64 no overflow
     r.assertNotEqual(val, float(i64max))                  # i64max is not representable as f64
     r.expect('JSON.TYPE', 'num', '$').equal(['integer'])  # no promotion
-    res = r.execute_command('JSON.NUMINCRBY', 'num', '$', 1)
+    r.expect('JSON.NUMINCRBY', 'num', '$', 1).raiseError().contains('overflow')
+    res = r.execute_command('JSON.GET', 'num', '$')
     val = json.loads(res)[0]
-    r.assertEqual(val, -(i64max + 1))                     # i64 + i64 overflow wraps. as prior, not breaking
-    r.assertNotEqual(val, i64max + 1)                     # i64 + i64 is not promoted to u64
-    r.assertNotEqual(val, float(i64max) + float(1))       # i64 + i64 is not promoted to f64
+    r.assertEqual(val, i64max)                            # value unchanged after overflow
     r.expect('JSON.TYPE', 'num', '$').equal(['integer'])  # no promotion
 
     # i64 + u64 used to have inconsistent behavior

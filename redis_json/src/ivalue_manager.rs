@@ -175,7 +175,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
         op2: F2,
     ) -> RedisResult<Number>
     where
-        F1: FnOnce(i64, i64) -> i64,
+        F1: FnOnce(i64, i64) -> Option<i64>,
         F2: FnOnce(f64, f64) -> f64,
     {
         let in_value = &serde_json::from_str(num)?;
@@ -197,7 +197,9 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         let new_val = match (v.get_type(), in_value.as_i64()) {
                             (SelectValueType::Long, Some(num2)) => {
                                 let num1 = v.get_long();
-                                Ok(op1(num1, num2).into())
+                                Ok(op1(num1, num2)
+                                    .ok_or(crate::manager::err_numeric_overflow())?
+                                    .into())
                             }
                             _ => {
                                 let num1 = v.get_double();
@@ -218,7 +220,9 @@ impl<'a> IValueKeyHolderWrite<'a> {
                                         .unwrap()
                                         .get_mut(index)
                                         .unwrap();
-                                    *num1 = op1(*num1 as i64, num2) as $si_type;
+                                    let result = op1(*num1 as i64, num2)
+                                        .ok_or(crate::manager::err_numeric_overflow())?;
+                                    *num1 = result as $si_type;
                                     NumOpResult::I64(*num1 as i64)
                                 }
                                 None => {
@@ -246,7 +250,9 @@ impl<'a> IValueKeyHolderWrite<'a> {
                                         .unwrap()
                                         .get_mut(index)
                                         .unwrap();
-                                    *num1 = op1(*num1 as i64, num2) as $ui_type;
+                                    let result = op1(*num1 as i64, num2)
+                                        .ok_or(crate::manager::err_numeric_overflow())?;
+                                    *num1 = result as $ui_type;
                                     NumOpResult::U64(*num1 as u64)
                                 }
                                 None => {
@@ -452,15 +458,15 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn incr_by(&mut self, path: Vec<String>, num: &str) -> RedisResult<Number> {
-        self.do_num_op(path, num, i64::wrapping_add, |f1, f2| f1 + f2)
+        self.do_num_op(path, num, i64::checked_add, |f1, f2| f1 + f2)
     }
 
     fn mult_by(&mut self, path: Vec<String>, num: &str) -> RedisResult<Number> {
-        self.do_num_op(path, num, i64::wrapping_mul, |f1, f2| f1 * f2)
+        self.do_num_op(path, num, i64::checked_mul, |f1, f2| f1 * f2)
     }
 
     fn pow_by(&mut self, path: Vec<String>, num: &str) -> RedisResult<Number> {
-        self.do_num_op(path, num, |i1, i2| i1.pow(i2 as u32), f64::powf)
+        self.do_num_op(path, num, |i1, i2| i1.checked_pow(i2 as u32), f64::powf)
     }
 
     fn bool_toggle(&mut self, path: Vec<String>) -> RedisResult<bool> {
