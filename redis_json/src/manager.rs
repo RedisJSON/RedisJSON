@@ -110,7 +110,6 @@ pub fn err_recursion_limit_exceeded() -> RedisError {
     RedisError::Str("ERR recursion limit exceeded")
 }
 
-
 pub fn err_numeric_overflow() -> RedisError {
     RedisError::Str("ERR numeric overflow")
 }
