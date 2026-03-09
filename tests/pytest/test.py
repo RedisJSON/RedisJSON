@@ -6,7 +6,7 @@ import sys
 import os
 import redis
 import json
-import numpy as np
+
 import time
 from RLTest import Env
 from includes import *
@@ -954,8 +954,8 @@ def testNumCommandOverflow(env):
 
 def testNumCommandIntegerOverflow(env):
     r = env
-    MAX_I64 = np.iinfo(np.int64).max
-    MIN_I64 = np.iinfo(np.int64).min
+    MAX_I64 = 2**63 - 1
+    MIN_I64 = -(2**63)
 
     r.expect('JSON.SET', 'int_ovf', '.', str(MAX_I64)).ok()
     r.expect('JSON.NUMINCRBY', 'int_ovf', '.', '1').raiseError().contains('overflow')
