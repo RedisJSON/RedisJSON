@@ -978,6 +978,66 @@ def testNumCommandIntegerOverflow(env):
     r.expect('JSON.GET', 'pow_ovf', '.').equal(str(MAX_I64))  
 
 
+def testTypedArrayNumOpPromotion(env):
+    """Test that numeric operations on typed arrays promote instead of wrapping (MOD-14427)"""
+    r = env
+
+    # u8 array: 250 + 50 = 300 (overflows u8 max 255, should promote)
+    r.expect('JSON.SET', 'u8', '.', '[250]').ok()
+    r.expect('JSON.NUMINCRBY', 'u8', '.[0]', 50).equal('300')
+    r.expect('JSON.GET', 'u8', '.[0]').equal('300')
+
+    # i8 array: 127 + 1 = 128 (overflows i8 max 127, should promote)
+    r.expect('JSON.SET', 'i8_max', '.', '[127]').ok()
+    r.expect('JSON.NUMINCRBY', 'i8_max', '.[0]', 1).equal('128')
+    r.expect('JSON.GET', 'i8_max', '.[0]').equal('128')
+
+    # i8 array: -128 + (-1) = -129 (underflows i8 min -128, should promote)
+    r.expect('JSON.SET', 'i8_min', '.', '[-128]').ok()
+    r.expect('JSON.NUMINCRBY', 'i8_min', '.[0]', -1).equal('-129')
+    r.expect('JSON.GET', 'i8_min', '.[0]').equal('-129')
+
+    # i16 array: 32767 + 1 = 32768 (overflows i16 max, should promote)
+    r.expect('JSON.SET', 'i16_max', '.', '[32767]').ok()
+    r.expect('JSON.NUMINCRBY', 'i16_max', '.[0]', 1).equal('32768')
+    r.expect('JSON.GET', 'i16_max', '.[0]').equal('32768')
+
+    # u16 array: 65535 + 1 = 65536 (overflows u16 max, should promote)
+    r.expect('JSON.SET', 'u16_max', '.', '[65535]').ok()
+    r.expect('JSON.NUMINCRBY', 'u16_max', '.[0]', 1).equal('65536')
+    r.expect('JSON.GET', 'u16_max', '.[0]').equal('65536')
+
+    # i32 array: 2147483647 + 1 = 2147483648 (overflows i32 max, should promote)
+    r.expect('JSON.SET', 'i32_max', '.', '[2147483647]').ok()
+    r.expect('JSON.NUMINCRBY', 'i32_max', '.[0]', 1).equal('2147483648')
+    r.expect('JSON.GET', 'i32_max', '.[0]').equal('2147483648')
+
+    # u32 array: 4294967295 + 1 = 4294967296 (overflows u32 max, should promote)
+    r.expect('JSON.SET', 'u32_max', '.', '[4294967295]').ok()
+    r.expect('JSON.NUMINCRBY', 'u32_max', '.[0]', 1).equal('4294967296')
+    r.expect('JSON.GET', 'u32_max', '.[0]').equal('4294967296')
+
+    # NUMMULTBY: u8 array 200 * 2 = 400 (overflows u8, should promote)
+    r.expect('JSON.SET', 'mult_u8', '.', '[200]').ok()
+    r.expect('JSON.NUMMULTBY', 'mult_u8', '.[0]', 2).equal('400')
+    r.expect('JSON.GET', 'mult_u8', '.[0]').equal('400')
+
+    # NUMMULTBY: i8 array 100 * 2 = 200 (overflows i8 max 127, should promote)
+    r.expect('JSON.SET', 'mult_i8', '.', '[100]').ok()
+    r.expect('JSON.NUMMULTBY', 'mult_i8', '.[0]', 2).equal('200')
+    r.expect('JSON.GET', 'mult_i8', '.[0]').equal('200')
+
+    # Multi-element array: promotion should preserve all elements
+    r.expect('JSON.SET', 'multi', '.', '[1, 2, 250]').ok()
+    r.expect('JSON.NUMINCRBY', 'multi', '.[2]', 50).equal('300')
+    r.expect('JSON.GET', 'multi', '.').equal('[1,2,300]')
+
+    # Subsequent operations on promoted array should work
+    r.expect('JSON.NUMINCRBY', 'multi', '.[0]', 1000).equal('1001')
+    r.expect('JSON.GET', 'multi', '.').equal('[1001,2,300]')
+
+
+
 def testStrCommands(env):
     """Test JSON.STRAPPEND and JSON.STRLEN commands"""
     r = env

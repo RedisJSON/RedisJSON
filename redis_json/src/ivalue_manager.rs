@@ -212,18 +212,25 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         Ok(NumOpResult::INumber(new_val))
                     }
                     $(
+                        #[allow(irrefutable_let_patterns)]
                         (PathValue::$si_variant(num1_slice, index), num_2) => {
                             let new_val = match num_2 {
                                 Some(num2) => {
-                                    let num1 = num1_slice
+                                    // SAFETY: index is in bounds and type is checked at creation of PathValue
+                                    let current = num1_slice
                                         .as_mut_slice_of::<$si_type>()
                                         .unwrap()
                                         .get_mut(index)
                                         .unwrap();
-                                    let result = op1(*num1 as i64, num2)
+                                    let result = op1(*current as i64, num2)
                                         .ok_or(crate::manager::err_numeric_overflow())?;
-                                    *num1 = result as $si_type;
-                                    NumOpResult::I64(*num1 as i64)
+                                    if let Ok(narrowed) = <$si_type>::try_from(result) {
+                                        *current = narrowed;
+                                    } else {
+                                        num1_slice.remove(index);
+                                        num1_slice.insert(index, result)?;
+                                    }
+                                    NumOpResult::I64(result)
                                 }
                                 None => {
                                     let num1 = num1_slice
@@ -241,19 +248,25 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         }
                     )*
                     $(
+                        #[allow(irrefutable_let_patterns)]
                         (PathValue::$ui_variant(num1_slice, index), num_2) => {
-
                             let new_val = match num_2 {
                                 Some(num2) => {
-                                    let num1 = num1_slice
+                                    // SAFETY: index is in bounds and type is checked at creation of PathValue
+                                    let current = num1_slice
                                         .as_mut_slice_of::<$ui_type>()
                                         .unwrap()
                                         .get_mut(index)
                                         .unwrap();
-                                    let result = op1(*num1 as i64, num2)
+                                    let result = op1(*current as i64, num2)
                                         .ok_or(crate::manager::err_numeric_overflow())?;
-                                    *num1 = result as $ui_type;
-                                    NumOpResult::U64(*num1 as u64)
+                                    if let Ok(narrowed) = <$ui_type>::try_from(result) {
+                                        *current = narrowed;
+                                    } else {
+                                        num1_slice.remove(index);
+                                        num1_slice.insert(index, result)?;
+                                    }
+                                    NumOpResult::I64(result)
                                 }
                                 None => {
                                     let num1 = num1_slice
