@@ -1036,6 +1036,34 @@ def testTypedArrayNumOpPromotion(env):
     r.expect('JSON.NUMINCRBY', 'multi', '.[0]', 1000).equal('1001')
     r.expect('JSON.GET', 'multi', '.').equal('[1001,2,300]')
 
+    # i64 max overflow should still error (not promote)
+    MAX_I64 = 2**63 - 1
+    r.expect('JSON.SET', 'i64arr', '.', '[' + str(MAX_I64) + ']').ok()
+    r.expect('JSON.NUMINCRBY', 'i64arr', '.[0]', 1).raiseError().contains('overflow')
+    r.expect('JSON.GET', 'i64arr', '.[0]').equal(str(MAX_I64))
+
+    # U64 array with value > i64::MAX: operations should compute correctly
+    U64_VAL = 2**63  # i64::MAX + 1, doesn't fit in i64
+    r.expect('JSON.SET', 'u64_large', '.', '[' + str(U64_VAL) + ']').ok()
+    r.expect('JSON.NUMINCRBY', 'u64_large', '.[0]', 1).equal(str(U64_VAL + 1))
+    r.expect('JSON.GET', 'u64_large', '.[0]').equal(str(U64_VAL + 1))
+
+    # U64 decrement should work correctly
+    r.expect('JSON.SET', 'u64_dec', '.', '[' + str(U64_VAL) + ']').ok()
+    r.expect('JSON.NUMINCRBY', 'u64_dec', '.[0]', -1).equal(str(U64_VAL - 1))
+    r.expect('JSON.GET', 'u64_dec', '.[0]').equal(str(U64_VAL - 1))
+
+    # U64 + large u64 operand (operand > i64::MAX): multi-element array forces U64 type,
+    # then increment a small element by a large u64 operand to exercise the op4 path
+    r.expect('JSON.SET', 'u64_both', '.', '[' + str(U64_VAL) + ', 5]').ok()
+    r.expect('JSON.NUMINCRBY', 'u64_both', '.[1]', U64_VAL).equal(str(U64_VAL + 5))
+    r.expect('JSON.GET', 'u64_both', '.[1]').equal(str(U64_VAL + 5))
+
+    # U64 overflow should error
+    U64_MAX = 2**64 - 1
+    r.expect('JSON.SET', 'u64_ovf', '.', '[' + str(U64_MAX) + ']').ok()
+    r.expect('JSON.NUMINCRBY', 'u64_ovf', '.[0]', 1).raiseError().contains('overflow')
+    r.expect('JSON.GET', 'u64_ovf', '.[0]').equal(str(U64_MAX))
 
 
 def testStrCommands(env):

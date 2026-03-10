@@ -167,16 +167,20 @@ impl<'a> IValueKeyHolderWrite<'a> {
         update(paths, root, op_fun)
     }
 
-    fn do_num_op<F1, F2>(
+    fn do_num_op<F1, F2, F3, F4>(
         &mut self,
         path: Vec<String>,
         num: &str,
         op1: F1,
         op2: F2,
+        op3: F3,
+        op4: F4,
     ) -> RedisResult<Number>
     where
         F1: FnOnce(i64, i64) -> Option<i64>,
         F2: FnOnce(f64, f64) -> f64,
+        F3: FnOnce(u64, i64) -> Option<u64>,
+        F4: FnOnce(u64, u64) -> Option<u64>,
     {
         let in_value = &serde_json::from_str(num)?;
         use half::{bf16, f16};
@@ -283,6 +287,48 @@ impl<'a> IValueKeyHolderWrite<'a> {
                             Ok(new_val)
                         }
                     )*
+                    // Special case for u64 array, handling i64 overflow where num2 is valid u64
+                    (PathValue::U64(num1_slice, index), num_2) => {
+                        let new_val = match num_2 {
+                            Some(num2) => {
+                                // SAFETY: index is in bounds and type is checked at creation of PathValue
+                                let current = num1_slice
+                                    .as_mut_slice_of::<u64>()
+                                    .unwrap()
+                                    .get_mut(index)
+                                    .unwrap();
+                                let result = op3(*current, num2)
+                                    .ok_or(crate::manager::err_numeric_overflow())?;
+                                *current = result;
+                                NumOpResult::U64(result)
+                            }
+                            None if in_value.as_u64().is_some() => {
+                                // SAFETY: index is in bounds and type is checked at creation of PathValue
+                                let current = num1_slice
+                                    .as_mut_slice_of::<u64>()
+                                    .unwrap()
+                                    .get_mut(index)
+                                    .unwrap();
+                                let num2_u64 = in_value.as_u64().unwrap();
+                                let result = op4(*current, num2_u64)
+                                    .ok_or(crate::manager::err_numeric_overflow())?;
+                                *current = result;
+                                NumOpResult::U64(result)
+                            }
+                            None => {
+                                let num1 = num1_slice
+                                    .as_mut_slice_of::<u64>()
+                                    .unwrap()
+                                    .get(index)
+                                    .unwrap().clone();
+                                let new_val = op2(num1 as f64, $in_value_f64).try_into()?;
+                                num1_slice.remove(index);
+                                num1_slice.insert(index, new_val)?;
+                                NumOpResult::F64(new_val)
+                            }
+                        };
+                        Ok(new_val)
+                    }
                     $(
                         (PathValue::$hf_variant(num1_slice, index), _) => {
                             let num1 = num1_slice
@@ -320,7 +366,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
                     in_value.as_i64(),
                     in_value_f64,
                     signed_int: [I8 => i8, I16 => i16, I32 => i32, I64 => i64],
-                    unsigned_int: [U8 => u8, U16 => u16, U32 => u32, U64 => u64],
+                    unsigned_int: [U8 => u8, U16 => u16, U32 => u32],
                     half_float: [F16 => f16, BF16 => bf16],
                     float: [F32 => f32, F64 => f64]
                 )
@@ -471,15 +517,48 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn incr_by(&mut self, path: Vec<String>, num: &str) -> RedisResult<Number> {
-        self.do_num_op(path, num, i64::checked_add, |f1, f2| f1 + f2)
+        self.do_num_op(
+            path,
+            num,
+            i64::checked_add,
+            |f1, f2| f1 + f2,
+            |u1, i2| {
+                if i2 >= 0 {
+                    u1.checked_add(i2 as u64)
+                } else {
+                    u1.checked_sub(i2.unsigned_abs())
+                }
+            },
+            u64::checked_add,
+        )
     }
 
     fn mult_by(&mut self, path: Vec<String>, num: &str) -> RedisResult<Number> {
-        self.do_num_op(path, num, i64::checked_mul, |f1, f2| f1 * f2)
+        self.do_num_op(
+            path,
+            num,
+            i64::checked_mul,
+            |f1, f2| f1 * f2,
+            |u1, i2| {
+                if i2 >= 0 {
+                    u1.checked_mul(i2 as u64)
+                } else {
+                    None
+                }
+            },
+            u64::checked_mul,
+        )
     }
 
     fn pow_by(&mut self, path: Vec<String>, num: &str) -> RedisResult<Number> {
-        self.do_num_op(path, num, |i1, i2| i1.checked_pow(i2 as u32), f64::powf)
+        self.do_num_op(
+            path,
+            num,
+            |i1, i2| i1.checked_pow(i2 as u32),
+            f64::powf,
+            |u1, i2| u1.checked_pow(u32::try_from(i2).ok()?),
+            |u1, u2| u1.checked_pow(u32::try_from(u2).ok()?),
+        )
     }
 
     fn bool_toggle(&mut self, path: Vec<String>) -> RedisResult<bool> {
