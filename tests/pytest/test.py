@@ -973,6 +973,10 @@ def testNumCommandIntegerOverflow(env):
     r.expect('JSON.NUMMULTBY', 'mult_neg_ovf', '.', '2').raiseError().contains('overflow')
     r.expect('JSON.GET', 'mult_neg_ovf', '.').equal(str(MIN_I64))
 
+    r.expect('JSON.SET', 'pow_ovf', '.', str(MAX_I64)).ok()  
+    r.expect('JSON.NUMPOWBY', 'pow_ovf', '.', '2').raiseError().contains('overflow')  
+    r.expect('JSON.GET', 'pow_ovf', '.').equal(str(MAX_I64))  
+
 
 def testStrCommands(env):
     """Test JSON.STRAPPEND and JSON.STRLEN commands"""
