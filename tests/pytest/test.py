@@ -978,6 +978,157 @@ def testNumCommandIntegerOverflow(env):
     r.expect('JSON.GET', 'pow_ovf', '.').equal(str(MAX_I64))  
 
 
+def testTypedArrayNumOpPromotionI8(env):
+    """Test i8 typed array numeric operations promote on overflow"""
+    r = env
+
+    r.expect('JSON.SET', 'i8_max', '.', '[127]').ok()
+    r.expect('JSON.NUMINCRBY', 'i8_max', '.[0]', 1).equal('128')
+    r.expect('JSON.GET', 'i8_max', '.[0]').equal('128')
+
+    r.expect('JSON.SET', 'i8_min', '.', '[-128]').ok()
+    r.expect('JSON.NUMINCRBY', 'i8_min', '.[0]', -1).equal('-129')
+    r.expect('JSON.GET', 'i8_min', '.[0]').equal('-129')
+
+    r.expect('JSON.SET', 'mult_i8', '.', '[100]').ok()
+    r.expect('JSON.NUMMULTBY', 'mult_i8', '.[0]', 2).equal('200')
+    r.expect('JSON.GET', 'mult_i8', '.[0]').equal('200')
+
+def testTypedArrayNumOpPromotionU8(env):
+    """Test u8 typed array numeric operations promote on overflow"""
+    r = env
+
+    r.expect('JSON.SET', 'u8', '.', '[250]').ok()
+    r.expect('JSON.NUMINCRBY', 'u8', '.[0]', 50).equal('300')
+    r.expect('JSON.GET', 'u8', '.[0]').equal('300')
+
+    r.expect('JSON.SET', 'mult_u8', '.', '[200]').ok()
+    r.expect('JSON.NUMMULTBY', 'mult_u8', '.[0]', 2).equal('400')
+    r.expect('JSON.GET', 'mult_u8', '.[0]').equal('400')
+
+    # Multi-element array: promotion should preserve all elements
+    r.expect('JSON.SET', 'multi', '.', '[1, 2, 250]').ok()
+    r.expect('JSON.NUMINCRBY', 'multi', '.[2]', 50).equal('300')
+    r.expect('JSON.GET', 'multi', '.').equal('[1,2,300]')
+
+    # Subsequent operations on promoted array should work
+    r.expect('JSON.NUMINCRBY', 'multi', '.[0]', 1000).equal('1001')
+    r.expect('JSON.GET', 'multi', '.').equal('[1001,2,300]')
+
+def testTypedArrayNumOpPromotionI16(env):
+    """Test i16 typed array numeric operations promote on overflow"""
+    r = env
+
+    r.expect('JSON.SET', 'i16_max', '.', '[32767]').ok()
+    r.expect('JSON.NUMINCRBY', 'i16_max', '.[0]', 1).equal('32768')
+    r.expect('JSON.GET', 'i16_max', '.[0]').equal('32768')
+
+def testTypedArrayNumOpPromotionU16(env):
+    """Test u16 typed array numeric operations promote on overflow"""
+    r = env
+
+    r.expect('JSON.SET', 'u16_max', '.', '[65535]').ok()
+    r.expect('JSON.NUMINCRBY', 'u16_max', '.[0]', 1).equal('65536')
+    r.expect('JSON.GET', 'u16_max', '.[0]').equal('65536')
+
+def testTypedArrayNumOpPromotionI32(env):
+    """Test i32 typed array numeric operations promote on overflow"""
+    r = env
+
+    r.expect('JSON.SET', 'i32_max', '.', '[2147483647]').ok()
+    r.expect('JSON.NUMINCRBY', 'i32_max', '.[0]', 1).equal('2147483648')
+    r.expect('JSON.GET', 'i32_max', '.[0]').equal('2147483648')
+
+def testTypedArrayNumOpPromotionU32(env):
+    """Test u32 typed array numeric operations promote on overflow"""
+    r = env
+
+    r.expect('JSON.SET', 'u32_max', '.', '[4294967295]').ok()
+    r.expect('JSON.NUMINCRBY', 'u32_max', '.[0]', 1).equal('4294967296')
+    r.expect('JSON.GET', 'u32_max', '.[0]').equal('4294967296')
+
+def testTypedArrayNumOpPromotionI64(env):
+    """Test i64 typed array numeric operations promote on overflow"""
+    r = env
+
+    MAX_I64 = 2**63 - 1
+    r.expect('JSON.SET', 'i64arr', '.', '[' + str(MAX_I64) + ']').ok()
+    r.expect('JSON.NUMINCRBY', 'i64arr', '.[0]', 1).equal(str(MAX_I64 + 1))
+    r.expect('JSON.GET', 'i64arr', '.[0]').equal(str(MAX_I64 + 1))
+
+def testTypedArrayNumOpU64(env):
+    """Test u64 typed array numeric operations with large values"""
+    r = env
+
+    U64_VAL = 2**63  # i64::MAX + 1, doesn't fit in i64
+
+    # Increment should compute correctly
+    r.expect('JSON.SET', 'u64_large', '.', '[' + str(U64_VAL) + ']').ok()
+    r.expect('JSON.NUMINCRBY', 'u64_large', '.[0]', 1).equal(str(U64_VAL + 1))
+    r.expect('JSON.GET', 'u64_large', '.[0]').equal(str(U64_VAL + 1))
+
+    # Decrement should work correctly
+    r.expect('JSON.SET', 'u64_dec', '.', '[' + str(U64_VAL) + ']').ok()
+    r.expect('JSON.NUMINCRBY', 'u64_dec', '.[0]', -1).equal(str(U64_VAL - 1))
+    r.expect('JSON.GET', 'u64_dec', '.[0]').equal(str(U64_VAL - 1))
+
+    # Large u64 operand (> i64::MAX): multi-element array forces U64 type,
+    # then increment a small element by a large u64 operand
+    r.expect('JSON.SET', 'u64_both', '.', '[' + str(U64_VAL) + ', 5]').ok()
+    r.expect('JSON.NUMINCRBY', 'u64_both', '.[1]', U64_VAL).equal(str(U64_VAL + 5))
+    r.expect('JSON.GET', 'u64_both', '.[1]').equal(str(U64_VAL + 5))
+
+    # Overflow should error
+    U64_MAX = 2**64 - 1
+    r.expect('JSON.SET', 'u64_ovf', '.', '[' + str(U64_MAX) + ']').ok()
+    r.expect('JSON.NUMINCRBY', 'u64_ovf', '.[0]', 1).raiseError().contains('overflow')
+    r.expect('JSON.GET', 'u64_ovf', '.[0]').equal(str(U64_MAX))
+
+def testTypedArrayNumOpPromotionF16(env):
+    """Test f16 typed array numeric operations promote on overflow"""
+    r = env
+
+    # f16 max is ~65504, adding 10000 to 60000 overflows f16 but fits f32/f64
+    r.expect('JSON.SET', 'f16_ovf', '$', '[60000.0, 1.0]', 'FPHA', 'FP16').ok()
+    r.expect('JSON.NUMINCRBY', 'f16_ovf', '$[0]', 10000.0).noError()
+    res = r.execute_command('JSON.GET', 'f16_ovf', '$[0]')
+    val = json.loads(res)[0]
+    r.assertNotEqual(val, float('inf'))
+    r.assertTrue(abs(val - 70000.0) / 70000.0 < 0.01)
+
+def testTypedArrayNumOpPromotionBF16(env):
+    """Test bf16 typed array numeric operations promote on overflow"""
+    r = env
+
+    # bf16 max is ~3.39e38, multiplying by 2 overflows bf16 but fits f64
+    r.expect('JSON.SET', 'bf16_ovf', '$', '[3.0e38, 1.5]', 'FPHA', 'BF16').ok()
+    r.expect('JSON.NUMMULTBY', 'bf16_ovf', '$[0]', 2).noError()
+    res = r.execute_command('JSON.GET', 'bf16_ovf', '$[0]')
+    val = json.loads(res)[0]
+    r.assertNotEqual(val, float('inf'))
+    r.assertTrue(abs(val - 6.0e38) / 6.0e38 < 0.1)
+
+def testTypedArrayNumOpPromotionF32(env):
+    """Test f32 typed array numeric operations promote on overflow"""
+    r = env
+
+    # f32 max is ~3.4e38, multiplying by 2 overflows f32 but fits f64
+    r.expect('JSON.SET', 'f32_ovf', '$', '[3.0e38, 1.5]', 'FPHA', 'FP32').ok()
+    r.expect('JSON.NUMMULTBY', 'f32_ovf', '$[0]', 2).noError()
+    res = r.execute_command('JSON.GET', 'f32_ovf', '$[0]')
+    val = json.loads(res)[0]
+    r.assertNotEqual(val, float('inf'))
+    r.assertTrue(abs(val - 6.0e38) / 6.0e38 < 1e-6)
+
+def testTypedArrayNumOpOverflowF64(env):
+    """Test f64 typed array numeric operations error on true overflow"""
+    r = env
+
+    # f64 overflow produces inf, which should error
+    r.expect('JSON.SET', 'f64_ovf', '$', '[1.7e308, 1.0]', 'FPHA', 'FP64').ok()
+    r.expect('JSON.NUMMULTBY', 'f64_ovf', '$[0]', 2).raiseError().contains('numeric overflow')
+
+
 def testStrCommands(env):
     """Test JSON.STRAPPEND and JSON.STRLEN commands"""
     r = env

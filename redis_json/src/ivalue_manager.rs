@@ -171,11 +171,11 @@ impl<'a> IValueKeyHolderWrite<'a> {
         &mut self,
         path: Vec<String>,
         num: &str,
-        op1: F1,
-        op2: F2,
+        op_int: F1,
+        op_float: F2,
     ) -> RedisResult<Number>
     where
-        F1: FnOnce(i64, i64) -> Option<i64>,
+        F1: FnOnce(i128, i128) -> Option<i128>,
         F2: FnOnce(f64, f64) -> f64,
     {
         let in_value = &serde_json::from_str(num)?;
@@ -185,26 +185,25 @@ impl<'a> IValueKeyHolderWrite<'a> {
         macro_rules! generate_array_match_arms {
             (
                 $v:expr,
-                $num_2:expr,
                 $in_value_f64:expr,
-                signed_int: [$($si_variant:ident => $si_type:ty),* $(,)?],
-                unsigned_int: [$($ui_variant:ident => $ui_type:ty),* $(,)?],
+                integer: [$($int_variant:ident => $int_type:ty),* $(,)?],
                 half_float: [$($hf_variant:ident => $hf_type:ty),* $(,)?],
                 float: [$($f_variant:ident => $f_type:ty),* $(,)?]
             ) => {
-                match ($v, $num_2) {
-                    (PathValue::IValue(v), _) => {
+                match $v {
+                    PathValue::IValue(v) => {
                         let new_val = match (v.get_type(), in_value.as_i64()) {
                             (SelectValueType::Long, Some(num2)) => {
                                 let num1 = v.get_long();
-                                Ok(op1(num1, num2)
+                                Ok(op_int(num1 as i128, num2 as i128)
+                                    .and_then(|r| i64::try_from(r).ok())
                                     .ok_or(crate::manager::err_numeric_overflow())?
                                     .into())
                             }
                             _ => {
                                 let num1 = v.get_double();
                                 let num2 = in_value.as_f64().unwrap();
-                                INumber::try_from(op2(num1, num2))
+                                INumber::try_from(op_float(num1, num2))
                                     .map_err(|_| RedisError::Str("result is not a number"))
                             }
                         }?;
@@ -212,56 +211,45 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         Ok(NumOpResult::INumber(new_val))
                     }
                     $(
-                        (PathValue::$si_variant(num1_slice, index), num_2) => {
-                            let new_val = match num_2 {
-                                Some(num2) => {
-                                    let num1 = num1_slice
-                                        .as_mut_slice_of::<$si_type>()
-                                        .unwrap()
-                                        .get_mut(index)
-                                        .unwrap();
-                                    let result = op1(*num1 as i64, num2)
-                                        .ok_or(crate::manager::err_numeric_overflow())?;
-                                    *num1 = result as $si_type;
-                                    NumOpResult::I64(*num1 as i64)
-                                }
-                                None => {
-                                    let num1 = num1_slice
-                                        .as_mut_slice_of::<$si_type>()
-                                        .unwrap()
-                                        .get(index)
-                                        .unwrap().clone();
-                                    let new_val = op2(num1 as f64, $in_value_f64).try_into()?;
-                                    num1_slice.remove(index);
-                                    num1_slice.insert(index, new_val)?;
-                                    NumOpResult::F64(new_val)
-                                }
-                            };
-                            Ok(new_val)
-                        }
-                    )*
-                    $(
-                        (PathValue::$ui_variant(num1_slice, index), num_2) => {
+                        PathValue::$int_variant(num1_slice, index) => {
+                            let num2_i128 = in_value.as_i64().map(|v| v as i128)
+                                .or_else(|| in_value.as_u64().map(|v| v as i128));
 
-                            let new_val = match num_2 {
+                            let new_val = match num2_i128 {
                                 Some(num2) => {
-                                    let num1 = num1_slice
-                                        .as_mut_slice_of::<$ui_type>()
+                                    // SAFETY: index is in bounds and type is checked at creation of PathValue
+                                    let current = num1_slice
+                                        .as_mut_slice_of::<$int_type>()
                                         .unwrap()
                                         .get_mut(index)
                                         .unwrap();
-                                    let result = op1(*num1 as i64, num2)
+                                    let result = op_int(*current as i128, num2)
                                         .ok_or(crate::manager::err_numeric_overflow())?;
-                                    *num1 = result as $ui_type;
-                                    NumOpResult::U64(*num1 as u64)
+                                    let ret = i64::try_from(result).map(NumOpResult::I64)
+                                        .or_else(|_| u64::try_from(result).map(NumOpResult::U64))
+                                        .map_err(|_| crate::manager::err_numeric_overflow())?;
+                                    if let Ok(fit_val) = <$int_type>::try_from(result) {
+                                        *current = fit_val;
+                                    } else {
+                                        // If the result is not a $int_type, we need remove the current value and insert the new value
+                                        // Promotion mechanism will promote the array to the smallest type that can fit the result
+                                        num1_slice.remove(index);
+                                        match ret {
+                                            NumOpResult::I64(v) => num1_slice.insert(index, v)?,
+                                            NumOpResult::U64(v) => num1_slice.insert(index, v)?,
+                                            _ => unreachable!(),
+                                        }
+                                    }
+                                    ret
                                 }
+                                // Not an integer
                                 None => {
                                     let num1 = num1_slice
-                                        .as_mut_slice_of::<$ui_type>()
+                                        .as_mut_slice_of::<$int_type>()
                                         .unwrap()
                                         .get(index)
                                         .unwrap().clone();
-                                    let new_val = op2(num1 as f64, $in_value_f64).try_into()?;
+                                    let new_val = op_float(num1 as f64, $in_value_f64).try_into()?;
                                     num1_slice.remove(index);
                                     num1_slice.insert(index, new_val)?;
                                     NumOpResult::F64(new_val)
@@ -271,27 +259,45 @@ impl<'a> IValueKeyHolderWrite<'a> {
                         }
                     )*
                     $(
-                        (PathValue::$hf_variant(num1_slice, index), _) => {
+                        PathValue::$hf_variant(num1_slice, index) => {
                             let num1 = num1_slice
                                 .as_mut_slice_of::<$hf_type>()
                                 .unwrap()
                                 .get_mut(index)
                                 .unwrap();
-                            let new_val = op2(f64::from(*num1), $in_value_f64);
-                            *num1 = <$hf_type>::from_f64(new_val);
-                            Ok(NumOpResult::F64(f64::from(*num1)))
+                            let new_val = op_float(f64::from(*num1), $in_value_f64);
+                            if !new_val.is_finite() {
+                                return Err(RedisError::Str("result is not a number"));
+                            }
+                            let narrowed = <$hf_type>::from_f64(new_val);
+                            if narrowed.is_finite() {
+                                *num1 = narrowed;
+                            } else {
+                                num1_slice.remove(index);
+                                num1_slice.insert(index, new_val)?;
+                            }
+                            Ok(NumOpResult::F64(new_val))
                         }
                     )*
                     $(
-                        (PathValue::$f_variant(num1_slice, index), _) => {
+                        PathValue::$f_variant(num1_slice, index) => {
                             let num1 = num1_slice
                                 .as_mut_slice_of::<$f_type>()
                                 .unwrap()
                                 .get_mut(index)
                                 .unwrap();
-                            let new_val = op2(f64::from(*num1), $in_value_f64);
-                            *num1 = new_val as $f_type;
-                            Ok(NumOpResult::F64(*num1 as f64))
+                            let new_val = op_float(f64::from(*num1), $in_value_f64);
+                            if !new_val.is_finite() {
+                                return Err(crate::manager::err_numeric_overflow());
+                            }
+                            let narrowed = new_val as $f_type;
+                            if narrowed.is_finite() {
+                                *num1 = narrowed;
+                            } else {
+                                num1_slice.remove(index);
+                                num1_slice.insert(index, new_val)?;
+                            }
+                            Ok(NumOpResult::F64(new_val))
                         }
                     )*
                 }
@@ -304,10 +310,11 @@ impl<'a> IValueKeyHolderWrite<'a> {
                 // SAFETY: index is in bounds and type is checked at creation of PathValue
                 generate_array_match_arms!(
                     v,
-                    in_value.as_i64(),
                     in_value_f64,
-                    signed_int: [I8 => i8, I16 => i16, I32 => i32, I64 => i64],
-                    unsigned_int: [U8 => u8, U16 => u16, U32 => u32, U64 => u64],
+                    integer: [
+                        I8 => i8, U8 => u8, I16 => i16, U16 => u16,
+                        I32 => i32, U32 => u32, I64 => i64, U64 => u64,
+                    ],
                     half_float: [F16 => f16, BF16 => bf16],
                     float: [F32 => f32, F64 => f64]
                 )
@@ -458,15 +465,20 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn incr_by(&mut self, path: Vec<String>, num: &str) -> RedisResult<Number> {
-        self.do_num_op(path, num, i64::checked_add, |f1, f2| f1 + f2)
+        self.do_num_op(path, num, i128::checked_add, |f1, f2| f1 + f2)
     }
 
     fn mult_by(&mut self, path: Vec<String>, num: &str) -> RedisResult<Number> {
-        self.do_num_op(path, num, i64::checked_mul, |f1, f2| f1 * f2)
+        self.do_num_op(path, num, i128::checked_mul, |f1, f2| f1 * f2)
     }
 
     fn pow_by(&mut self, path: Vec<String>, num: &str) -> RedisResult<Number> {
-        self.do_num_op(path, num, |i1, i2| i1.checked_pow(i2 as u32), f64::powf)
+        self.do_num_op(
+            path,
+            num,
+            |i1, i2| i1.checked_pow(u32::try_from(i2).ok()?),
+            f64::powf,
+        )
     }
 
     fn bool_toggle(&mut self, path: Vec<String>) -> RedisResult<bool> {
