@@ -266,8 +266,17 @@ impl<'a> IValueKeyHolderWrite<'a> {
                                 .get_mut(index)
                                 .unwrap();
                             let new_val = op_float(f64::from(*num1), $in_value_f64);
-                            *num1 = <$hf_type>::from_f64(new_val);
-                            Ok(NumOpResult::F64(f64::from(*num1)))
+                            if !new_val.is_finite() {
+                                return Err(RedisError::Str("result is not a number"));
+                            }
+                            let narrowed = <$hf_type>::from_f64(new_val);
+                            if narrowed.is_finite() {
+                                *num1 = narrowed;
+                            } else {
+                                num1_slice.remove(index);
+                                num1_slice.insert(index, new_val)?;
+                            }
+                            Ok(NumOpResult::F64(new_val))
                         }
                     )*
                     $(
@@ -278,8 +287,17 @@ impl<'a> IValueKeyHolderWrite<'a> {
                                 .get_mut(index)
                                 .unwrap();
                             let new_val = op_float(f64::from(*num1), $in_value_f64);
-                            *num1 = new_val as $f_type;
-                            Ok(NumOpResult::F64(*num1 as f64))
+                            if !new_val.is_finite() {
+                                return Err(crate::manager::err_numeric_overflow());
+                            }
+                            let narrowed = new_val as $f_type;
+                            if narrowed.is_finite() {
+                                *num1 = narrowed;
+                            } else {
+                                num1_slice.remove(index);
+                                num1_slice.insert(index, new_val)?;
+                            }
+                            Ok(NumOpResult::F64(new_val))
                         }
                     )*
                 }
