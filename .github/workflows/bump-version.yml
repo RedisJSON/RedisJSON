@@ -32,8 +32,6 @@ concurrency:
 jobs:
   validate-and-check:
     runs-on: ubuntu-latest
-    permissions:
-      actions: read
     outputs:
       release_branch: ${{ steps.derive-branch.outputs.release_branch }}
     steps:
