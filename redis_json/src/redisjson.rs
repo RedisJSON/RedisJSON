@@ -205,7 +205,7 @@ pub mod type_methods {
                 let data = raw::load_string(rdb)?;
                 data.try_as_str()?.to_string()
             }
-            _ => panic!("Can't load old RedisJSON RDB"),
+            v => panic!("Can't load old RedisJSON RDB: {}", v),
         })
     }
 
