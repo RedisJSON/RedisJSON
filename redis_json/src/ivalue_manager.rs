@@ -272,11 +272,12 @@ impl<'a> IValueKeyHolderWrite<'a> {
                             let narrowed = <$hf_type>::from_f64(new_val);
                             if narrowed.is_finite() {
                                 *num1 = narrowed;
+                                Ok(NumOpResult::F64(f64::from(narrowed)))
                             } else {
                                 num1_slice.remove(index);
                                 num1_slice.insert(index, new_val)?;
+                                Ok(NumOpResult::F64(new_val))
                             }
-                            Ok(NumOpResult::F64(new_val))
                         }
                     )*
                     $(
@@ -293,11 +294,12 @@ impl<'a> IValueKeyHolderWrite<'a> {
                             let narrowed = new_val as $f_type;
                             if narrowed.is_finite() {
                                 *num1 = narrowed;
+                                Ok(NumOpResult::F64(narrowed as f64))
                             } else {
                                 num1_slice.remove(index);
                                 num1_slice.insert(index, new_val)?;
+                                Ok(NumOpResult::F64(new_val))
                             }
-                            Ok(NumOpResult::F64(new_val))
                         }
                     )*
                 }
