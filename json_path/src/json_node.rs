@@ -153,32 +153,7 @@ impl SelectValue for Value {
             }
         }
     }
-
-    fn calculate_value_depth(&self) -> usize {
-        match self.get_type() {
-            SelectValueType::String
-            | SelectValueType::Bool
-            | SelectValueType::Long
-            | SelectValueType::Null
-            | SelectValueType::Double => 0,
-            SelectValueType::Array => {
-                1 + self
-                    .values()
-                    .unwrap()
-                    .map(|v| v.calculate_value_depth())
-                    .max()
-                    .unwrap_or_default()
-            }
-            SelectValueType::Object => {
-                1 + self
-                    .keys()
-                    .unwrap()
-                    .map(|k| self.get_key(k).unwrap().calculate_value_depth())
-                    .max()
-                    .unwrap_or_default()
-            }
-        }
-    }
+ 
 }
 
 impl<'a> From<ArrayIterItem<'a>> for ValueRef<'a, IValue> {
