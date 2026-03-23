@@ -82,4 +82,25 @@ def test_fpha_rdb_save_load_after_type_change(env):
     for _ in env.retry_with_rdb_reload():
         env.assertExists("fp16_rdb")
         env.expect("JSON.GET", "fp16_rdb", "$[0]").noError()
-        
+
+
+def test_fpha_json_get_short_float_serialization(env):
+    """FPHA typed arrays must serialize via JSON.GET with short decimals (not f64 noise)."""
+    payload = "[0.3,0.1,0.7,1.0,2.5,100.0]"
+    expected = "[[0.3,0.1,0.7,1.0,2.5,100.0]]"
+    for fpha in ("FP32", "FP16", "BF16", "FP64"):
+        key = "mod14559_" + fpha.lower()
+        env.expect("JSON.SET", key, "$", payload, "FPHA", fpha).ok()
+        env.expect("JSON.GET", key, "$").equal(expected)
+
+
+def test_fpha_json_get_negative_short_floats(env):
+    """Same short serialization for negative typed floats."""
+    payload = "[-0.3,-0.1,-1.0,-2.5,-100.0]"
+    expected = "[[-0.3,-0.1,-1.0,-2.5,-100.0]]"
+    for fpha in ("FP32", "FP16", "BF16", "FP64"):
+        key = "mod14559_neg_" + fpha.lower()
+        env.expect("JSON.SET", key, "$", payload, "FPHA", fpha).ok()
+        env.expect("JSON.GET", key, "$").equal(expected)
+
+
