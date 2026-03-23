@@ -79,27 +79,24 @@ fn replace<F: FnMut(&mut IValue) -> Result<Option<IValue>, Error>>(
             // Value::Array(ref mut vec) => {
             ValueType::Array => {
                 let arr = target_once.as_array_mut().unwrap();
-                if let Ok(x) = token.parse::<usize>() {
-                    if is_last {
-                        if x < arr.len() {
-                            let v = &mut arr.as_mut_slice()[x];
-                            match (func)(v) {
-                                Ok(res) => {
-                                    if let Some(res) = res {
-                                        *v = res;
-                                    } else {
-                                        arr.remove(x);
-                                    }
+                let idx = token.parse::<usize>()?;
+                if is_last {
+                    if idx < arr.len() {
+                        let v = &mut arr.as_mut_slice()[idx];
+                        match (func)(v) {
+                            Ok(res) => {
+                                if let Some(res) = res {
+                                    *v = res;
+                                } else {
+                                    arr.remove(idx);
                                 }
-                                Err(err) => return Err(err),
                             }
+                            Err(err) => return Err(err),
                         }
-                        return Ok(());
                     }
-                    arr.get_mut(x)
-                } else {
-                    panic!("Array index should have been parsed successfully before reaching here")
+                    return Ok(());
                 }
+                arr.get_mut(idx)
             }
             _ => None,
         };
@@ -153,25 +150,22 @@ fn update<F: FnMut(&mut IValue) -> Result<Option<()>, Error>>(
             }
             ValueType::Array => {
                 let arr = target_once.as_array_mut().unwrap();
-                if let Ok(x) = token.parse::<usize>() {
-                    if is_last {
-                        if x < arr.len() {
-                            let v = &mut arr.as_mut_slice()[x];
-                            match (func)(v) {
-                                Ok(res) => {
-                                    if res.is_none() {
-                                        arr.remove(x);
-                                    }
+                let idx = token.parse::<usize>()?;
+                if is_last {
+                    if idx < arr.len() {
+                        let v = &mut arr.as_mut_slice()[idx];
+                        match (func)(v) {
+                            Ok(res) => {
+                                if res.is_none() {
+                                    arr.remove(idx);
                                 }
-                                Err(err) => return Err(err),
                             }
+                            Err(err) => return Err(err),
                         }
-                        return Ok(());
                     }
-                    arr.get_mut(x)
-                } else {
-                    panic!("Array index should have been parsed successfully before reaching here")
+                    return Ok(());
                 }
+                arr.get_mut(idx)
             }
             _ => None,
         };
