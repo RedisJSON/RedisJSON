@@ -71,10 +71,7 @@ fn replace<F: FnMut(&mut IValue) -> Result<Option<IValue>, Error>>(
             }
             ValueType::Array => {
                 let arr = target_once.as_array_mut().unwrap();
-                let idx = token.parse::<usize>().expect(&format!(
-                    "An array index is parsed successfully. Array = {:?}, index = {:?}",
-                    arr, token
-                ));
+                let idx = token.parse::<usize>()?;
                 if is_last {
                     if idx < arr.len() {
                         let v = &mut arr.as_mut_slice()[idx];
@@ -135,10 +132,7 @@ fn update<F: FnMut(&mut IValue) -> Result<Option<()>, Error>>(
             }
             ValueType::Array => {
                 let arr = target_once.as_array_mut().unwrap();
-                let idx = token.parse::<usize>().expect(&format!(
-                    "An array index is parsed successfully. Array = {:?}, index = {:?}",
-                    arr, token
-                ));
+                let idx = token.parse::<usize>()?;
                 if is_last {
                     if idx < arr.len() {
                         let v = &mut arr.as_mut_slice()[idx];
