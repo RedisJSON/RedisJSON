@@ -11,7 +11,6 @@
 extern crate serde_json;
 
 use common::{read_json, select_and_then_compare, setup};
-
 mod common;
 
 #[test]
@@ -409,4 +408,13 @@ fn op_object_or_nonexisting_default() {
             { "id" : 2, "name" : "Gray Berry" }
         ]),
     );
+}
+
+#[test]
+fn github_issue_968_recursive_descent_filter_no_duplicate_scalars() {
+    setup();
+
+    select_and_then_compare(r#"$..[?@>=1]"#, json!([1, 2, 3]), json!([1, 2, 3]));
+
+    select_and_then_compare(r#"$..[?@>=1]"#, json!({ "a": [1, 2, 3] }), json!([1, 2, 3]));
 }

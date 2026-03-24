@@ -1310,6 +1310,18 @@ def testCrashInParserMOD2099(env):
     r.assertEqual(res, '[]')
 
 
+def testGithubIssue968RecursiveDescentFilterNoDuplicates(env):
+    """GitHub RedisJSON#968: JSON.GET with $..[?@>=1] must not list each scalar twice."""
+    r = env
+    r.assertOk(r.execute_command('JSON.SET', 'arr', '$', '[1,2,3]'))
+    res = r.execute_command('JSON.GET', 'arr', '$..[?@>=1]')
+    r.assertEqual(res, '[1,2,3]')
+
+    r.assertOk(r.execute_command('JSON.SET', 'obj', '$', '{"a":{"x":{"i":10}}, "b":{"x":{"i":20, "j":5}}}'))
+    res = r.execute_command('JSON.GET', 'obj', '$..x[?@>=1]')
+    r.assertEqual(res, '[10,20,5]')
+
+
 def testInfoEverything(env):
 
     r = env
