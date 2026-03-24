@@ -609,6 +609,33 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         }
     }
 
+    fn next_segment_is_filter(pairs: &Pairs<'i, Rule>) -> bool {
+        pairs.peek().is_some_and(|p| p.as_rule() == Rule::filter)
+    }
+
+    fn is_leaf_json<S: SelectValue>(json: &ValueRef<'_, S>) -> bool {
+        match json.get_type() {
+            SelectValueType::Null
+            | SelectValueType::Bool
+            | SelectValueType::Long
+            | SelectValueType::Double
+            | SelectValueType::String => true,
+            SelectValueType::Array | SelectValueType::Object => false,
+        }
+    }
+
+    /// `false` when the next segment is `[?…]` and `child` is a leaf — parent already evaluated the
+    /// filter on that leaf during `..` descent.
+    fn needs_calc_internal_on_descent_child<S: SelectValue>(
+        next_is_filter: bool,
+        child: &ValueRef<'_, S>,
+    ) -> bool {
+        match (next_is_filter, Self::is_leaf_json(child)) {
+            (true, true) => false,
+            (_, _) => true,
+        }
+    }
+
     fn calc_full_scan<'j, 'k, 'l, S: SelectValue>(
         &self,
         pairs: Pairs<'i, Rule>,
@@ -616,18 +643,39 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         path_tracker: Option<PathTracker<'l, 'k>>,
         calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
     ) {
+        let next_filter = Self::next_segment_is_filter(&pairs);
         match json.get_type() {
             SelectValueType::Object => {
+                // Children of an object: array-valued properties still need `calc_internal` when the
+                // next segment is a filter (object filter expansion uses each value as @.
                 for (key, val) in value_ref_items!(json) {
                     let path_tracker = path_tracker.as_ref().map(|pt| create_str_tracker(key, pt));
-                    self.calc_internal(pairs.clone(), val.clone(), path_tracker.clone(), calc_data);
+                    if Self::needs_calc_internal_on_descent_child(next_filter, &val) {
+                        self.calc_internal(
+                            pairs.clone(),
+                            val.clone(),
+                            path_tracker.clone(),
+                            calc_data,
+                        );
+                    }
                     self.calc_full_scan(pairs.clone(), val, path_tracker, calc_data);
                 }
             }
             SelectValueType::Array => {
+                // Under an array parent, filter expansion already evaluated each direct child; skip
+                // redundant `calc_internal` only for leaf children. Nested arrays still
+                // need `calc_internal` — the parent step evaluates the filter on the array as a
+                // whole, not on each inner scalar.
                 for (i, v) in value_ref_values!(json).enumerate() {
                     let path_tracker = path_tracker.as_ref().map(|pt| create_index_tracker(i, pt));
-                    self.calc_internal(pairs.clone(), v.clone(), path_tracker.clone(), calc_data);
+                    if Self::needs_calc_internal_on_descent_child(next_filter, &v) {
+                        self.calc_internal(
+                            pairs.clone(),
+                            v.clone(),
+                            path_tracker.clone(),
+                            calc_data,
+                        );
+                    }
                     self.calc_full_scan(pairs.clone(), v, path_tracker, calc_data);
                 }
             }
