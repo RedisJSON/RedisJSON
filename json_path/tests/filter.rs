@@ -411,7 +411,7 @@ fn op_object_or_nonexisting_default() {
 }
 
 #[test]
-fn github_issue_968_recursive_descent_filter_no_duplicate_scalars() {
+fn recursive_descent_filter_no_duplicate_scalars() {
     setup();
 
     select_and_then_compare(r#"$..[?@>=1]"#, json!([1, 2, 3]), json!([1, 2, 3]));
