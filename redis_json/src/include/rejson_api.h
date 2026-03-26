@@ -167,6 +167,8 @@ typedef struct RedisJSONAPI {
   ////////////////
   // Return a pointer to the array and the length of the array
   // If `json` is not an array, return NULL and set len to 0
+  // If type is JSONArrayType::Heterogeneous, do not use the returned buffer,
+  // use the previous array API to get the values(e.g. getAt, etc.)
   const void* (*getArray)(RedisJSON json, size_t *len, JSONArrayType *type);
 
 } RedisJSONAPI;
