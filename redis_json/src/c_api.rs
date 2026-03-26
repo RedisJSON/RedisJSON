@@ -411,7 +411,7 @@ pub fn json_api_get_array<M: Manager>(
     _: M,
     json: *const c_void,
     len: *mut size_t,
-    array_type: *mut c_void,
+    array_type: *mut JSONArrayType,
 ) -> *const c_void {
     let json = unsafe { &*(json.cast::<M::V>()) };
     let json_array_type = json.get_array_type();
@@ -419,7 +419,7 @@ pub fn json_api_get_array<M: Manager>(
     match (json_array_type, array_len) {
         (Some(json_array_type), Some(array_len)) => {
             unsafe {
-                *(array_type.cast::<JSONArrayType>()) = json_array_type;
+                *array_type = json_array_type;
                 *len = array_len as size_t;
             }
             json.get_array()
@@ -443,6 +443,7 @@ macro_rules! redis_json_module_export_shared_api {
     ) => {
         use std::ptr::NonNull;
         use crate::c_api::REDIS_JSONAPI_LATEST_API_VER;
+        use json_path::select_value::JSONArrayType;
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_openKey(
@@ -781,7 +782,7 @@ macro_rules! redis_json_module_export_shared_api {
         }
 
         #[no_mangle]
-        pub extern "C" fn JSONAPI_getArray(json: *const c_void, len: *mut size_t, array_type: *mut c_void) -> *const c_void {
+        pub extern "C" fn JSONAPI_getArray(json: *const c_void, len: *mut size_t, array_type: *mut JSONArrayType) -> *const c_void {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
@@ -914,7 +915,7 @@ macro_rules! redis_json_module_export_shared_api {
             pub freeJson: extern "C" fn(json: *mut c_void),
 
             // V7 entries
-            pub getArray: extern "C" fn(json: *const c_void, len: *mut size_t, array_type: *mut c_void) -> *const c_void,
+            pub getArray: extern "C" fn(json: *const c_void, len: *mut size_t, array_type: *mut JSONArrayType) -> *const c_void,
         }
     };
 }
@@ -923,11 +924,38 @@ macro_rules! redis_json_module_export_shared_api {
 mod tests {
     use std::marker::PhantomData;
 
+    use half::{bf16, f16};
     use ijson::IValue;
 
     use crate::ivalue_manager::RedisIValueJsonKeyManager;
 
     use super::*;
+
+    macro_rules! test_array_type {
+        ($call_get_array:ident; $($variant:ident => $primitive_type:ty : $values:expr),* $(,)?) => {
+            $(
+                {
+                    let values: Vec<$primitive_type> = $values;
+                    let array = IValue::from(values.clone());
+                    let (result_ptr, len, array_type) = $call_get_array(&array);
+                    assert_eq!(
+                        result_ptr,
+                        array.get_array(),
+                        "get_array data pointer ({})",
+                        stringify!($variant)
+                    );
+                    assert_ne!(result_ptr, null(), "{}", stringify!($variant));
+                    assert_eq!(len, values.len() as size_t, "{}", stringify!($variant));
+                    assert_eq!(array_type, JSONArrayType::$variant, "{}", stringify!($variant));
+                    assert_eq!(
+                        unsafe { *result_ptr.cast::<$primitive_type>() },
+                        values[0],
+                        "{}", stringify!($variant)
+                    );
+                }
+            )*
+        };
+    }
 
     #[test]
     fn test_json_api_alloc_and_deref() {
@@ -1016,7 +1044,7 @@ mod tests {
 
     #[test]
     fn test_json_api_get_array() {
-        let call_get_array = |value: &IValue| -> (*const c_void, size_t, JSONArrayType) {
+        fn call_get_array(value: &IValue) -> (*const c_void, size_t, JSONArrayType) {
             let mut len: size_t = 0;
             let mut array_type_val = JSONArrayType::Heterogeneous;
             let result_ptr = json_api_get_array(
@@ -1025,10 +1053,17 @@ mod tests {
                 },
                 value as *const IValue as *const c_void,
                 &mut len,
-                &mut array_type_val as *mut JSONArrayType as *mut c_void,
+                &mut array_type_val,
             );
             (result_ptr, len, array_type_val)
-        };
+        }
+
+        // Empty array
+        let empty = IValue::from(Vec::<IValue>::new());
+        let (result_ptr, len, array_type) = call_get_array(&empty);
+        assert_eq!(result_ptr, empty.get_array());
+        assert_eq!(len, 0);
+        assert_eq!(array_type, JSONArrayType::Heterogeneous);
 
         // Heterogeneous array
         let array = IValue::from(vec![
@@ -1046,19 +1081,24 @@ mod tests {
         assert!(std::ptr::eq(first, &array[0]));
         assert_eq!(first, &IValue::from("aaa"));
 
-        // Homogeneous array
-        let array = IValue::from(vec![IValue::from(1), IValue::from(2), IValue::from(3)]);
-        let (result_ptr, len, array_type) = call_get_array(&array);
-        assert_eq!(result_ptr, array.get_array());
-        assert_ne!(result_ptr, null());
-        assert_eq!(len, 3);
-        assert_eq!(array_type, JSONArrayType::I8);
-        assert_eq!(unsafe { *result_ptr.cast::<i8>() }, 1i8);
+        test_array_type! { call_get_array;
+            I8 => i8 : vec![1i8, 2i8, 3i8],
+            U8 => u8 : vec![1u8, 2u8, 3u8],
+            I16 => i16 : vec![1000i16, 1001i16, 1002i16],
+            U16 => u16 : vec![1000u16, 1001u16, 1002u16],
+            F16 => f16 : vec![f16::from_f32(1.25), f16::from_f32(2.5)],
+            BF16 => bf16 : vec![bf16::from_f32(1.25), bf16::from_f32(2.5)],
+            I32 => i32 : vec![1_000_000i32, 2_000_000i32],
+            U32 => u32 : vec![1_000_000u32, 2_000_000u32],
+            F32 => f32 : vec![1.25f32, 2.5f32],
+            I64 => i64 : vec![1i64 << 40, 2i64 << 40],
+            U64 => u64 : vec![1u64 << 40, 2u64 << 40],
+            F64 => f64 : vec![1.25f64, 2.5f64],
+        }
 
         // Non-array
         let non_array = IValue::from("aaa");
         let (result_ptr, len, _) = call_get_array(&non_array);
         assert_eq!(result_ptr, null());
-        assert_eq!(len, 0);
     }
 }
