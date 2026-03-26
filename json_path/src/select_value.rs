@@ -8,7 +8,7 @@
  */
 
 use serde::{Serialize, Serializer};
-use std::fmt::Debug;
+use std::{ffi::c_void, fmt::Debug};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum SelectValueType {
@@ -64,6 +64,25 @@ impl<'a, T: SelectValue> PartialEq<&T> for ValueRef<'a, T> {
     }
 }
 
+#[repr(C)]
+#[allow(unused)]
+#[derive(Debug, PartialEq, Eq)]
+pub enum JSONArrayType {
+    Heterogeneous = 0,
+    I8 = 1,
+    U8 = 2,
+    I16 = 3,
+    U16 = 4,
+    F16 = 5,
+    BF16 = 6,
+    I32 = 7,
+    U32 = 8,
+    F32 = 9,
+    I64 = 10,
+    U64 = 11,
+    F64 = 12,
+}
+
 #[allow(unused)]
 pub trait SelectValue: Debug + Eq + PartialEq + Default + Clone + Serialize {
     fn get_type(&self) -> SelectValueType;
@@ -83,6 +102,8 @@ pub trait SelectValue: Debug + Eq + PartialEq + Default + Clone + Serialize {
     fn get_bool(&self) -> bool;
     fn get_long(&self) -> i64;
     fn get_double(&self) -> f64;
+    fn get_array(&self) -> *const c_void;
+    fn get_array_type(&self) -> Option<JSONArrayType>;
 
     fn calculate_value_depth(&self) -> usize {
         match self.get_type() {
