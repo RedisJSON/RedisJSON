@@ -424,7 +424,12 @@ pub fn json_api_get_array<M: Manager>(
             }
             json.get_array()
         }
-        _ => null(),
+        _ => {
+            unsafe {
+                *len = 0;
+            }
+            null()
+        }
     }
 }
 
@@ -1100,5 +1105,6 @@ mod tests {
         let non_array = IValue::from("aaa");
         let (result_ptr, len, _) = call_get_array(&non_array);
         assert_eq!(result_ptr, null());
+        assert_eq!(len, 0);
     }
 }

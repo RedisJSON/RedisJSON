@@ -165,6 +165,8 @@ typedef struct RedisJSONAPI {
   ////////////////
   // V7 entries //
   ////////////////
+  // Return a pointer to the array and the length of the array
+  // If `json` is not an array, return NULL and set len to 0
   const void* (*getArray)(RedisJSON json, size_t *len, JSONArrayType *type);
 
 } RedisJSONAPI;
