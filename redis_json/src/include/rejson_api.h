@@ -53,7 +53,7 @@ typedef enum JSONArrayType {
   U64 = 11,
   /// Array contains f64 values
   F64 = 12,
-} ArrayType;
+} JSONArrayType;
 
 typedef const void* RedisJSON;
 typedef RedisJSON* RedisJSONPtr;
