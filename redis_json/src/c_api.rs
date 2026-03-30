@@ -1050,8 +1050,8 @@ mod tests {
     #[test]
     fn test_json_api_get_array() {
         fn call_get_array(value: &IValue) -> (*const c_void, size_t, JSONArrayType) {
-            let mut len: size_t = 0;
-            let mut array_type_val = JSONArrayType::Heterogeneous;
+            let mut len: size_t = size_t::MAX;
+            let mut array_type_val = JSONArrayType::I32; // Some unexpected initial value, to check if the value is written when should
             let result_ptr = json_api_get_array(
                 RedisIValueJsonKeyManager {
                     phantom: PhantomData,
