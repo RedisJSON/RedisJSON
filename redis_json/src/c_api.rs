@@ -153,8 +153,8 @@ pub fn json_api_open_key_with_flags_internal<M: Manager>(
 pub fn json_api_get_len<M: Manager>(_: M, json: *const c_void, count: *mut libc::size_t) -> c_int {
     let json = unsafe { &*(json.cast::<M::V>()) };
     let len = match json.get_type() {
-        SelectValueType::String => Some(json.get_str().len()),
-        SelectValueType::Array | SelectValueType::Object => Some(json.len().unwrap()),
+        SelectValueType::String => json.as_str().map(|s| s.len()),
+        SelectValueType::Array | SelectValueType::Object => json.len(),
         _ => None,
     };
     match len {
@@ -179,9 +179,12 @@ pub fn json_api_get_string<M: Manager>(
     let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
         SelectValueType::String => {
-            let s = json.as_str();
-            set_string(s, str, len);
-            Status::Ok as c_int
+            if let Some(s) = json.as_str() {
+                set_string(s, str, len);
+                Status::Ok as c_int
+            } else {
+                Status::Err as c_int
+            }
         }
         _ => Status::Err as c_int,
     }
@@ -219,8 +222,12 @@ pub fn json_api_get_int<M: Manager>(_: M, json: *const c_void, val: *mut c_longl
     let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
         SelectValueType::Long => {
-            unsafe { *val = json.get_long() };
-            Status::Ok as c_int
+            if let Some(v) = json.get_long() {
+                unsafe { *val = v };
+                Status::Ok as c_int
+            } else {
+                Status::Err as c_int
+            }
         }
         _ => Status::Err as c_int,
     }
@@ -231,12 +238,20 @@ pub fn json_api_get_double<M: Manager>(_: M, json: *const c_void, val: *mut c_do
     let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
         SelectValueType::Double => {
-            unsafe { *val = json.get_double() };
-            Status::Ok as c_int
+            if let Some(v) = json.get_double() {
+                unsafe { *val = v };
+                Status::Ok as c_int
+            } else {
+                Status::Err as c_int
+            }
         }
         SelectValueType::Long => {
-            unsafe { *val = json.get_long() as f64 };
-            Status::Ok as c_int
+            if let Some(v) = json.get_long() {
+                unsafe { *val = v as f64 };
+                Status::Ok as c_int
+            } else {
+                Status::Err as c_int
+            }
         }
         _ => Status::Err as c_int,
     }
@@ -247,8 +262,12 @@ pub fn json_api_get_boolean<M: Manager>(_: M, json: *const c_void, val: *mut c_i
     let json = unsafe { &*(json.cast::<M::V>()) };
     match json.get_type() {
         SelectValueType::Bool => {
-            unsafe { *val = json.get_bool() as c_int };
-            Status::Ok as c_int
+            if let Some(v) = json.get_bool() {
+                unsafe { *val = v as c_int };
+                Status::Ok as c_int
+            } else {
+                Status::Err as c_int
+            }
         }
         _ => Status::Err as c_int,
     }
@@ -309,11 +328,16 @@ pub fn json_api_reset_iter<M: Manager>(_: M, iter: *mut c_void) {
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -> *const c_void {
-    let v = unsafe { &*(val.cast::<M::V>()) };
-    let path = unsafe { CStr::from_ptr(path).to_str().unwrap() };
-    let query = match compile(path) {
-        Ok(q) => q,
-        Err(_) => return null(),
+    let (v, path) = unsafe {
+        let v = &*(val.cast::<M::V>());
+        let Ok(path) = CStr::from_ptr(path).to_str() else {
+            return null();
+        };
+        (v, path)
+    };
+
+    let Ok(query) = compile(path) else {
+        return null();
     };
     let path_calculator = create(&query);
     let res = path_calculator.calc(v);
@@ -331,7 +355,10 @@ pub fn json_api_is_json<M: Manager>(m: M, key: *mut rawmod::RedisModuleKey) -> c
 pub fn json_api_get_key_value<M: Manager>(_: M, val: *const c_void) -> *const c_void {
     let json = unsafe { &*(val.cast::<M::V>()) };
     match json.get_type() {
-        SelectValueType::Object => Box::into_raw(Box::new(json.items().unwrap())).cast::<c_void>(),
+        SelectValueType::Object => json
+            .items()
+            .map(|items| Box::into_raw(Box::new(items)).cast::<c_void>().cast_const())
+            .unwrap_or(null()),
         _ => null(),
     }
 }
@@ -494,7 +521,10 @@ macro_rules! redis_json_module_export_shared_api {
             ctx: *mut rawmod::RedisModuleCtx,
             path: *const c_char,
         ) -> *mut c_void {
-            let key = unsafe { CStr::from_ptr(path).to_str().unwrap() };
+            let key = match unsafe { CStr::from_ptr(path).to_str() } {
+                Ok(key) => key,
+                Err(_) => return std::ptr::null_mut(),
+            };
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
                 get_manage: {
@@ -686,7 +716,12 @@ macro_rules! redis_json_module_export_shared_api {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
         pub extern "C" fn JSONAPI_pathParse(path: *const c_char, ctx: *mut rawmod::RedisModuleCtx, err_msg: *mut *mut rawmod::RedisModuleString) -> *const c_void {
-            let path = unsafe { CStr::from_ptr(path).to_str().unwrap() };
+            let path = match unsafe { CStr::from_ptr(path).to_str() } {
+                Ok(path) => path,
+                Err(_) => {
+                    return std::ptr::null();
+                }
+            };
             match json_path::compile(path) {
                 Ok(q) => Box::into_raw(Box::new(q)).cast::<c_void>(),
                 Err(e) => {

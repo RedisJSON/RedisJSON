@@ -100,39 +100,41 @@ impl SelectValue for Value {
         }
     }
 
-    fn get_str(&self) -> String {
+    fn get_str(&self) -> Option<String> {
         match self {
-            Self::String(s) => s.to_string(),
-            _ => panic!("not a string"),
+            Self::String(s) => Some(s.to_string()),
+            _ => None,
         }
     }
 
-    fn as_str(&self) -> &str {
+    fn as_str(&self) -> Option<&str> {
         match self {
-            Self::String(s) => s.as_str(),
-            _ => panic!("not a string"),
+            Self::String(s) => Some(s.as_str()),
+            _ => None,
         }
     }
 
-    fn get_bool(&self) -> bool {
+    fn get_bool(&self) -> Option<bool> {
         match self {
-            Self::Bool(b) => *b,
-            _ => panic!("not a bool"),
+            Self::Bool(b) => Some(*b),
+            _ => None,
         }
     }
 
-    fn get_long(&self) -> i64 {
+    fn get_long(&self) -> Option<i64> {
         match self {
-            Self::Number(n) if n.is_i64() => n.as_i64().unwrap(),
-            _ => panic!("not a long"),
+            Self::Number(n) if n.is_i64() => n.as_i64(),
+            Self::Number(_) => None,
+            _ => None,
         }
     }
 
-    fn get_double(&self) -> f64 {
+    fn get_double(&self) -> Option<f64> {
         match self {
-            Self::Number(n) if n.is_f64() => n.as_f64().unwrap(),
-            Self::Number(n) if n.is_u64() => n.as_u64().unwrap() as _,
-            _ => panic!("not a double"),
+            Self::Number(n) if n.is_f64() => n.as_f64(),
+            Self::Number(n) if n.is_u64() => n.as_u64().map(|u| u as f64),
+            Self::Number(_) => None,
+            _ => None,
         }
     }
 
@@ -241,27 +243,30 @@ impl SelectValue for IValue {
         Some(self.as_number()?.has_decimal_point())
     }
 
-    fn get_str(&self) -> String {
-        self.as_string().expect("not a string").to_string()
+    fn get_str(&self) -> Option<String> {
+        self.as_string().map(|s| s.to_string())
     }
 
-    fn as_str(&self) -> &str {
-        self.as_string().expect("not a string").as_str()
+    fn as_str(&self) -> Option<&str> {
+        self.as_string().map(IString::as_str)
     }
 
-    fn get_bool(&self) -> bool {
-        self.to_bool().expect("not a bool")
+    fn get_bool(&self) -> Option<bool> {
+        self.to_bool()
     }
 
-    fn get_long(&self) -> i64 {
-        self.as_number()
-            .expect("not a number")
-            .to_i64()
-            .expect("not a long")
+    fn get_long(&self) -> Option<i64> {
+        match self.type_() {
+            ValueType::Number => self.as_number().and_then(|n| n.to_i64()),
+            _ => None,
+        }
     }
 
-    fn get_double(&self) -> f64 {
-        self.as_number().expect("not a number").to_f64_lossy()
+    fn get_double(&self) -> Option<f64> {
+        match self.type_() {
+            ValueType::Number => self.as_number().map(|n| n.to_f64_lossy()),
+            _ => None,
+        }
     }
 
     fn get_array(&self) -> *const c_void {

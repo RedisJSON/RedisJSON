@@ -757,6 +757,7 @@ fn find_paths<T: SelectValue, F: Fn(&ValueRef<'_, T>) -> bool>(
     let res = calc_once_with_paths(query, doc);
     Ok(res
         .into_iter()
+        // SAFETY: `calc_once_with_paths` is guaranteed to return a path tracker
         .filter_map(|e| f(&e.res).then_some(e.path_tracker.unwrap().to_string_path()))
         .collect())
 }
@@ -773,6 +774,7 @@ fn get_all_values_and_paths<'a, T: SelectValue>(
     let res = calc_once_with_paths(query, doc);
     Ok(res
         .into_iter()
+        // SAFETY: `calc_once_with_paths` is guaranteed to return a path tracker
         .map(|e| (e.res, e.path_tracker.unwrap().to_string_path()))
         .collect())
 }
@@ -1290,17 +1292,20 @@ fn json_num_op_legacy<M: Manager>(
         v.get_type() == SelectValueType::Double || v.get_type() == SelectValueType::Long
     })?;
     if !paths.is_empty() {
-        let mut res = None;
-        for p in paths {
-            res = Some(match op {
-                NumOp::Incr => redis_key.incr_by(p, number)?,
-                NumOp::Mult => redis_key.mult_by(p, number)?,
-                NumOp::Pow => redis_key.pow_by(p, number)?,
-            });
-        }
+        let res = paths
+            .into_iter()
+            .try_fold(None::<Number>, |_, p| -> RedisResult<Option<Number>> {
+                Ok(Some(match op {
+                    NumOp::Incr => redis_key.incr_by(p, number)?,
+                    NumOp::Mult => redis_key.mult_by(p, number)?,
+                    NumOp::Pow => redis_key.pow_by(p, number)?,
+                }))
+            })?
+            // SAFETY: res is modified to Some if there is at least one path
+            .unwrap();
         redis_key.notify_keyspace_event(ctx, cmd)?;
         manager.apply_changes(ctx);
-        Ok(res.unwrap().to_string().into())
+        Ok(res.to_string().into())
     } else {
         Err(err_invalid_path_or("does not contains a number"))
     }
@@ -1691,6 +1696,7 @@ fn json_str_append_legacy<M: Manager>(
         }
         redis_key.notify_keyspace_event(ctx, "json.strappend")?;
         manager.apply_changes(ctx);
+        // SAFETY: res is modified to Some if there is at least one path
         Ok(res.unwrap().into())
     } else {
         Err(err_invalid_path_or("not a string"))
@@ -1762,7 +1768,14 @@ fn json_str_len_impl<M: Manager>(redis_key: &M::ReadHolder, path: &str) -> Redis
     let values = find_all_values(path, root, |v| v.get_type() == SelectValueType::String)?;
     let mut res = vec![];
     for v in values {
-        res.push(v.map_or(RedisValue::Null, |v| (v.get_str().len() as i64).into()));
+        res.push(v.map_or(RedisValue::Null, |v| {
+            v.get_str()
+                .map(|s| (s.len() as i64).into())
+                .unwrap_or_else(|| {
+                    debug_assert!(false, "String type returned None from get_str()");
+                    RedisValue::Null
+                })
+        }));
     }
     Ok(res.into())
 }
@@ -2220,7 +2233,16 @@ pub fn json_arr_len_command_impl<M: Manager>(
     let mut res = vec![];
     for v in values {
         let cur_val: RedisValue = match v {
-            Some(v) => (v.len().unwrap() as i64).into(),
+            Some(v) => match v.len() {
+                Some(len) => (len as i64).into(),
+                None => {
+                    debug_assert!(false, "Array type returned None from len()");
+                    if is_legacy {
+                        return Err(err_invalid_path_or("not an array"));
+                    }
+                    RedisValue::Null
+                }
+            },
             _ => {
                 if is_legacy {
                     return Err(err_invalid_path_or("not an array"));
@@ -2572,6 +2594,7 @@ fn json_arr_trim_legacy<M: Manager>(
         }
         redis_key.notify_keyspace_event(ctx, "json.arrtrim")?;
         manager.apply_changes(ctx);
+        // SAFETY: res is modified to Some if there is at least one path
         Ok(res.unwrap().into())
     }
 }
@@ -2640,7 +2663,11 @@ fn json_obj_keys_impl<M: Manager>(redis_key: &mut M::ReadHolder, path: &str) -> 
         let values = find_all_values(path, root, |v| v.get_type() == SelectValueType::Object)?;
         let mut res = vec![];
         for v in values {
-            res.push(v.map_or(RedisValue::Null, |v| v.keys().unwrap().collect_vec().into()));
+            res.push(v.map_or(RedisValue::Null, |v| {
+                v.keys()
+                    .map(|k| k.collect_vec().into())
+                    .unwrap_or(RedisValue::Null)
+            }));
         }
         res.into()
     };
@@ -2654,7 +2681,10 @@ fn json_obj_keys_legacy<M: Manager>(redis_key: &mut M::ReadHolder, path: &str) -
     };
     let value = match KeyValue::new(root).get_first(path) {
         Ok(v) => match v.get_type() {
-            SelectValueType::Object => v.keys().unwrap().collect_vec().into(),
+            SelectValueType::Object => v
+                .keys()
+                .map(|k| k.collect_vec().into())
+                .ok_or_else(|| err_invalid_path_or("not an object"))?,
             _ => {
                 return Err(err_invalid_path_or("not an object"));
             }
@@ -2729,7 +2759,12 @@ fn json_obj_len_impl<M: Manager>(redis_key: &M::ReadHolder, path: &str) -> Redis
             .iter()
             .map(|v| {
                 v.as_ref().map_or(RedisValue::Null, |v| {
-                    RedisValue::Integer(v.len().unwrap() as i64)
+                    v.len()
+                        .map(|l| RedisValue::Integer(l as i64))
+                        .unwrap_or_else(|| {
+                            debug_assert!(false, "Object type returned None from len()");
+                            RedisValue::Null
+                        })
                 })
             })
             .collect_vec()
@@ -2813,9 +2848,9 @@ pub fn json_clear_command_impl<M: Manager>(
         .ok_or_else(RedisError::nonexistent_key)?;
 
     let paths = find_paths(path, root, |v| match v.get_type() {
-        SelectValueType::Array | SelectValueType::Object => v.len().unwrap() > 0,
-        SelectValueType::Long => v.get_long() != 0,
-        SelectValueType::Double => v.get_double() != 0.0,
+        SelectValueType::Array | SelectValueType::Object => v.len().is_some_and(|n| n > 0),
+        SelectValueType::Long => v.get_long().map(|n| n != 0).unwrap_or(false),
+        SelectValueType::Double => v.get_double().map(|n| n != 0.0).unwrap_or(false),
         _ => false,
     })?;
     let cleared = paths

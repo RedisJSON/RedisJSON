@@ -107,7 +107,7 @@ pub fn calc_once_paths<S: SelectValue>(q: Query, json: &S) -> Vec<Vec<String>> {
     }
     .calc_with_paths_on_root(ValueRef::Borrowed(json), root)
     .into_iter()
-    .map(|e| e.path_tracker.unwrap().to_string_path())
+    .filter_map(|e| e.path_tracker.map(|pt| pt.to_string_path()))
     .collect()
 }
 
