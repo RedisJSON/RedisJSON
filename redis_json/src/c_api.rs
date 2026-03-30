@@ -19,12 +19,15 @@ use std::{
 
 use crate::formatter::ReplyFormatOptions;
 use crate::key_value::KeyValue;
-use json_path::select_value::{SelectValue, SelectValueType, ValueRef};
+use json_path::select_value::{JSONArrayType, SelectValue, SelectValueType, ValueRef};
 use json_path::{compile, create};
 use redis_module::raw as rawmod;
 use redis_module::{key::KeyFlags, Context, RedisString, Status};
 
 use crate::manager::{Manager, ReadHolder};
+
+pub const REDIS_JSONAPI_LATEST_API_VER: usize = 7;
+
 //
 // structs
 //
@@ -38,23 +41,6 @@ pub enum JSONType {
     Object = 4,
     Array = 5,
     Null = 6,
-}
-
-#[repr(C)]
-pub enum JSONPrimitiveType {
-    Heterogeneous = 0,
-    I8 = 1,
-    U8 = 2,
-    I16 = 3,
-    U16 = 4,
-    F16 = 5,
-    BF16 = 6,
-    I32 = 7,
-    U32 = 8,
-    F32 = 9,
-    I64 = 10,
-    U64 = 11,
-    F64 = 12,
 }
 
 struct ResultsIterator<'a, V: SelectValue> {
@@ -421,6 +407,32 @@ pub fn json_api_free_json<M: Manager>(_: M, json: *mut c_void) {
     }
 }
 
+pub fn json_api_get_array<M: Manager>(
+    _: M,
+    json: *const c_void,
+    len: *mut size_t,
+    array_type: *mut JSONArrayType,
+) -> *const c_void {
+    let json = unsafe { &*(json.cast::<M::V>()) };
+    let json_array_type = json.get_array_type();
+    let array_len = json.len();
+    match (json_array_type, array_len) {
+        (Some(json_array_type), Some(array_len)) => {
+            unsafe {
+                *array_type = json_array_type;
+                *len = array_len as size_t;
+            }
+            json.get_array()
+        }
+        _ => {
+            unsafe {
+                *len = 0;
+            }
+            null()
+        }
+    }
+}
+
 pub fn get_llapi_ctx() -> Context {
     Context::new(unsafe { LLAPI_CTX.unwrap() })
 }
@@ -435,6 +447,8 @@ macro_rules! redis_json_module_export_shared_api {
         pre_command_function: $pre_command_function_expr:expr,
     ) => {
         use std::ptr::NonNull;
+        use crate::c_api::REDIS_JSONAPI_LATEST_API_VER;
+        use json_path::select_value::JSONArrayType;
 
         #[no_mangle]
         pub extern "C" fn JSONAPI_openKey(
@@ -772,6 +786,18 @@ macro_rules! redis_json_module_export_shared_api {
             )
         }
 
+        #[no_mangle]
+        pub extern "C" fn JSONAPI_getArray(json: *const c_void, len: *mut size_t, array_type: *mut JSONArrayType) -> *const c_void {
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
+                run: |mngr|{json_api_get_array(mngr, json, len, array_type)},
+            )
+        }
+
         // The apiname argument of export_shared_api should be a string literal with static lifetime
         static mut VEC_EXPORT_SHARED_API_NAME : Vec<CString> = Vec::new();
 
@@ -782,7 +808,7 @@ macro_rules! redis_json_module_export_shared_api {
                     std::ptr::null_mut(),
                 ));
 
-                for v in 1..7 {
+                for v in 1..=REDIS_JSONAPI_LATEST_API_VER {
                     let version = format!("RedisJSON_V{}", v);
                     VEC_EXPORT_SHARED_API_NAME.push(CString::new(version.as_str()).unwrap());
                     ctx.export_shared_api(
@@ -828,6 +854,8 @@ macro_rules! redis_json_module_export_shared_api {
             getAt: JSONAPI_getAt,
             nextKeyValue: JSONAPI_nextKeyValue,
             freeJson: JSONAPI_freeJson,
+            // V7 entries
+            getArray: JSONAPI_getArray,
         };
 
         #[repr(C)]
@@ -891,6 +919,8 @@ macro_rules! redis_json_module_export_shared_api {
             ) -> c_int,
             pub freeJson: extern "C" fn(json: *mut c_void),
 
+            // V7 entries
+            pub getArray: extern "C" fn(json: *const c_void, len: *mut size_t, array_type: *mut JSONArrayType) -> *const c_void,
         }
     };
 }
@@ -899,11 +929,38 @@ macro_rules! redis_json_module_export_shared_api {
 mod tests {
     use std::marker::PhantomData;
 
+    use half::{bf16, f16};
     use ijson::IValue;
 
     use crate::ivalue_manager::RedisIValueJsonKeyManager;
 
     use super::*;
+
+    macro_rules! test_array_type {
+        ($call_get_array:ident; $($variant:ident => $primitive_type:ty : $values:expr),* $(,)?) => {
+            $(
+                {
+                    let values: Vec<$primitive_type> = $values;
+                    let array = IValue::from(values.clone());
+                    let (result_ptr, len, array_type) = $call_get_array(&array);
+                    assert_eq!(
+                        result_ptr,
+                        array.get_array(),
+                        "get_array data pointer ({})",
+                        stringify!($variant)
+                    );
+                    assert_ne!(result_ptr, null(), "{}", stringify!($variant));
+                    assert_eq!(len, values.len() as size_t, "{}", stringify!($variant));
+                    assert_eq!(array_type, JSONArrayType::$variant, "{}", stringify!($variant));
+                    assert_eq!(
+                        unsafe { *result_ptr.cast::<$primitive_type>() },
+                        values[0],
+                        "{}", stringify!($variant)
+                    );
+                }
+            )*
+        };
+    }
 
     #[test]
     fn test_json_api_alloc_and_deref() {
@@ -988,5 +1045,66 @@ mod tests {
                 result_wrapper,
             );
         }
+    }
+
+    #[test]
+    fn test_json_api_get_array() {
+        fn call_get_array(value: &IValue) -> (*const c_void, size_t, JSONArrayType) {
+            let mut len: size_t = size_t::MAX;
+            let mut array_type_val = JSONArrayType::I32; // Some unexpected initial value, to check if the value is written when should
+            let result_ptr = json_api_get_array(
+                RedisIValueJsonKeyManager {
+                    phantom: PhantomData,
+                },
+                value as *const IValue as *const c_void,
+                &mut len,
+                &mut array_type_val,
+            );
+            (result_ptr, len, array_type_val)
+        }
+
+        // Empty array
+        let empty = IValue::from(Vec::<IValue>::new());
+        let (result_ptr, len, array_type) = call_get_array(&empty);
+        assert_eq!(result_ptr, empty.get_array());
+        assert_eq!(len, 0);
+        assert_eq!(array_type, JSONArrayType::Heterogeneous);
+
+        // Heterogeneous array
+        let array = IValue::from(vec![
+            IValue::from("aaa"),
+            IValue::from("bbb"),
+            IValue::from("ccc"),
+            IValue::from("ddd"),
+        ]);
+        let (result_ptr, len, array_type) = call_get_array(&array);
+        assert_eq!(result_ptr, array.get_array());
+        assert_ne!(result_ptr, null());
+        assert_eq!(len, 4);
+        assert_eq!(array_type, JSONArrayType::Heterogeneous);
+        let first = unsafe { &*result_ptr.cast::<IValue>() };
+        assert!(std::ptr::eq(first, &array[0]));
+        assert_eq!(first, &IValue::from("aaa"));
+
+        test_array_type! { call_get_array;
+            I8 => i8 : vec![1i8, 2i8, 3i8],
+            U8 => u8 : vec![1u8, 2u8, 3u8],
+            I16 => i16 : vec![1000i16, 1001i16, 1002i16],
+            U16 => u16 : vec![1000u16, 1001u16, 1002u16],
+            F16 => f16 : vec![f16::from_f32(1.25), f16::from_f32(2.5)],
+            BF16 => bf16 : vec![bf16::from_f32(1.25), bf16::from_f32(2.5)],
+            I32 => i32 : vec![1_000_000i32, 2_000_000i32],
+            U32 => u32 : vec![1_000_000u32, 2_000_000u32],
+            F32 => f32 : vec![1.25f32, 2.5f32],
+            I64 => i64 : vec![1i64 << 40, 2i64 << 40],
+            U64 => u64 : vec![1u64 << 40, 2u64 << 40],
+            F64 => f64 : vec![1.25f64, 2.5f64],
+        }
+
+        // Non-array
+        let non_array = IValue::from("aaa");
+        let (result_ptr, len, _) = call_get_array(&non_array);
+        assert_eq!(result_ptr, null());
+        assert_eq!(len, 0);
     }
 }
