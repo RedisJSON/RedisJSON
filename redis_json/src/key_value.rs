@@ -238,7 +238,8 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                     value
                         .values()
                         .map(|vals| {
-                            vals.map(|v| Self::value_to_resp3(v.as_ref(), format)).collect()
+                            vals.map(|v| Self::value_to_resp3(v.as_ref(), format))
+                                .collect()
                         })
                         .unwrap_or_default(),
                 ),
@@ -402,10 +403,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     pub fn str_len(&self, path: &str) -> RedisResult<usize> {
         let first = self.get_first(path)?;
         match first.get_type() {
-            SelectValueType::String => Ok(first
-                .get_str()
-                .ok_or_else(|| err_json("string"))?
-                .len()),
+            SelectValueType::String => Ok(first.get_str().ok_or_else(|| err_json("string"))?.len()),
             _ => Err(err_json("string")),
         }
     }

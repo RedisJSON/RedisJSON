@@ -547,7 +547,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             (TermEvaluationResult::Value(v), TermEvaluationResult::Str(regex)) => {
                 match v.get_type() {
                     SelectValueType::String => {
-                        v.as_str().map_or(false, |s| Self::re_is_match(regex, s))
+                        v.as_str().is_some_and(|s| Self::re_is_match(regex, s))
                     }
                     _ => false,
                 }

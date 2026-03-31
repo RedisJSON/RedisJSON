@@ -89,6 +89,7 @@ pub trait SelectValue: Debug + Eq + PartialEq + Default + Clone + Serialize {
     fn contains_key(&self, key: &str) -> bool;
     fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = ValueRef<'a, Self>> + 'a>>;
     fn keys<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a str> + 'a>>;
+    #[allow(clippy::type_complexity)]
     fn items<'a>(&'a self) -> Option<Box<dyn Iterator<Item = (&'a str, ValueRef<'a, Self>)> + 'a>>;
     fn len(&self) -> Option<usize>;
     fn is_empty(&self) -> Option<bool>;
@@ -149,18 +150,14 @@ pub fn is_equal<T1: SelectValue, T2: SelectValue>(a: &T1, b: &T2) -> bool {
                     a.get_bool().is_some() && b.get_bool().is_some(),
                     "get_type/getter mismatch in is_equal"
                 );
-                a.get_bool()
-                    .zip(b.get_bool())
-                    .is_some_and(|(x, y)| x == y)
+                a.get_bool().zip(b.get_bool()).is_some_and(|(x, y)| x == y)
             }
             SelectValueType::Long => {
                 debug_assert!(
                     a.get_long().is_some() && b.get_long().is_some(),
                     "get_type/getter mismatch in is_equal"
                 );
-                a.get_long()
-                    .zip(b.get_long())
-                    .is_some_and(|(x, y)| x == y)
+                a.get_long().zip(b.get_long()).is_some_and(|(x, y)| x == y)
             }
             SelectValueType::Double => {
                 debug_assert!(
@@ -176,9 +173,7 @@ pub fn is_equal<T1: SelectValue, T2: SelectValue>(a: &T1, b: &T2) -> bool {
                     a.get_str().is_some() && b.get_str().is_some(),
                     "get_type/getter mismatch in is_equal"
                 );
-                a.get_str()
-                    .zip(b.get_str())
-                    .is_some_and(|(x, y)| x == y)
+                a.get_str().zip(b.get_str()).is_some_and(|(x, y)| x == y)
             }
             SelectValueType::Array => match (a.len(), b.len()) {
                 (Some(alen), Some(blen)) if alen == blen => match (a.values(), b.values()) {

@@ -434,6 +434,7 @@ pub fn json_api_free_json<M: Manager>(_: M, json: *mut c_void) {
     }
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn json_api_get_array<M: Manager>(
     _: M,
     json: *const c_void,
@@ -474,7 +475,7 @@ macro_rules! redis_json_module_export_shared_api {
         pre_command_function: $pre_command_function_expr:expr,
     ) => {
         use std::ptr::NonNull;
-        use crate::c_api::REDIS_JSONAPI_LATEST_API_VER;
+        use $crate::c_api::REDIS_JSONAPI_LATEST_API_VER;
         use json_path::select_value::JSONArrayType;
 
         #[no_mangle]

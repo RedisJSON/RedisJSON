@@ -900,6 +900,7 @@ pub fn prepare_paths_for_updating(paths: &mut Vec<Vec<String>>) {
         }
     });
 
+    #[allow(clippy::skip_while_next)]
     paths.retain(|v| {
         let path = v.join(",");
         string_paths

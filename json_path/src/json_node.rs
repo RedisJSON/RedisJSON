@@ -24,6 +24,8 @@ impl SelectValue for Value {
             Self::Object(_) => SelectValueType::Object,
             Self::Number(n) if n.is_i64() => SelectValueType::Long,
             Self::Number(n) if n.is_f64() | n.is_u64() => SelectValueType::Double,
+            #[allow(clippy::panic)]
+            // Code is unused, but we need to satisfy the trait...
             _ => panic!("bad type for Number value"),
         }
     }
