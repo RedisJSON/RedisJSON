@@ -125,12 +125,7 @@ pub trait SelectValue: Debug + Eq + PartialEq + Default + Clone + Serialize {
                     .map(|keys| {
                         keys.map(|k| {
                             let v = self.get_key(k);
-                            debug_assert!(
-                                v.is_some(),
-                                "key {:?} in keys() but get_key() returned None",
-                                k
-                            );
-                            v.map_or(0, |v| v.calculate_value_depth())
+                            v.map(|v| v.calculate_value_depth()).unwrap_or(0)
                         })
                         .max()
                         .unwrap_or(0)

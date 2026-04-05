@@ -105,15 +105,18 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         Ok(results)
     }
 
-    pub fn serialize_object<O: Serialize>(o: &O, format: &ReplyFormatOptions) -> String {
+    pub fn serialize_object<O: Serialize>(
+        o: &O,
+        format: &ReplyFormatOptions,
+    ) -> RedisResult<String> {
         // When using the default formatting, we can use serde_json's default serializer
         if format.no_formatting() {
-            serde_json::to_string(o).unwrap()
+            Ok(serde_json::to_string(o)?)
         } else {
             let formatter = RedisJsonFormatter::new(format);
             let mut out = serde_json::Serializer::with_formatter(Vec::new(), formatter);
-            o.serialize(&mut out).unwrap();
-            String::from_utf8(out.into_inner()).unwrap()
+            o.serialize(&mut out)?;
+            Ok(String::from_utf8(out.into_inner())?)
         }
     }
 
@@ -170,7 +173,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 .collect();
             RedisValue::Map(map)
         } else {
-            Self::serialize_object(&temp_doc, format).into()
+            Self::serialize_object(&temp_doc, format)?.into()
         };
         Ok(res)
     }
@@ -274,7 +277,9 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                     .get_double()
                     .map(RedisValue::Float)
                     .unwrap_or(RedisValue::Null),
-                _ => RedisValue::BulkString(Self::serialize_object(value, format)),
+                _ => RedisValue::BulkString(
+                    Self::serialize_object(value, format).unwrap_or("".to_string()),
+                ),
             }
         }
     }
@@ -366,12 +371,12 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
 
     pub fn to_string_single(&self, path: &str, format: &ReplyFormatOptions) -> RedisResult<String> {
         let result = self.get_first(path)?;
-        Ok(Self::serialize_object(&result, format))
+        Ok(Self::serialize_object(&result, format)?.into())
     }
 
     pub fn to_string_multi(&self, path: &str, format: &ReplyFormatOptions) -> RedisResult<String> {
         let results = self.get_values(path)?;
-        Ok(Self::serialize_object(&results, format))
+        Ok(Self::serialize_object(&results, format)?.into())
     }
 
     pub fn get_type(&self, path: &str) -> RedisResult<String> {
