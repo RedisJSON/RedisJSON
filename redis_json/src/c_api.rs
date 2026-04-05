@@ -197,7 +197,9 @@ pub fn json_api_get_json<M: Manager>(
     str: *mut *mut rawmod::RedisModuleString,
 ) -> c_int {
     let json = unsafe { &*(json.cast::<M::V>()) };
-    let res = KeyValue::<M::V>::serialize_object(json, &ReplyFormatOptions::default());
+    let Ok(res) = KeyValue::<M::V>::serialize_object(json, &ReplyFormatOptions::default()) else {
+        return Status::Err as c_int;
+    };
     create_rmstring(ctx, &res, str)
 }
 
@@ -211,7 +213,11 @@ pub fn json_api_get_json_from_iter<M: Manager>(
     if iter.pos >= iter.results.len() {
         Status::Err as c_int
     } else {
-        let res = KeyValue::<M::V>::serialize_object(&iter.results, &ReplyFormatOptions::default());
+        let Ok(res) =
+            KeyValue::<M::V>::serialize_object(&iter.results, &ReplyFormatOptions::default())
+        else {
+            return Status::Err as c_int;
+        };
         create_rmstring(ctx, &res, str);
         Status::Ok as c_int
     }

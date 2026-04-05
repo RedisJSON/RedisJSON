@@ -371,12 +371,12 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
 
     pub fn to_string_single(&self, path: &str, format: &ReplyFormatOptions) -> RedisResult<String> {
         let result = self.get_first(path)?;
-        Ok(Self::serialize_object(&result, format)?.into())
+        Self::serialize_object(&result, format)
     }
 
     pub fn to_string_multi(&self, path: &str, format: &ReplyFormatOptions) -> RedisResult<String> {
         let results = self.get_values(path)?;
-        Ok(Self::serialize_object(&results, format)?.into())
+        Self::serialize_object(&results, format)
     }
 
     pub fn get_type(&self, path: &str) -> RedisResult<String> {
