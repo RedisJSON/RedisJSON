@@ -1758,11 +1758,15 @@ pub fn json_str_len_command_impl<M: Manager>(
     if path.is_legacy() {
         json_str_len_legacy::<M>(&key, path.get_path())
     } else {
-        json_str_len_impl::<M>(&key, path.get_path())
+        json_str_len_impl::<M>(&key, ctx, path.get_path())
     }
 }
 
-fn json_str_len_impl<M: Manager>(redis_key: &M::ReadHolder, path: &str) -> RedisResult {
+fn json_str_len_impl<M: Manager>(
+    redis_key: &M::ReadHolder,
+    ctx: &Context,
+    path: &str,
+) -> RedisResult {
     let root = redis_key
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
@@ -1773,7 +1777,7 @@ fn json_str_len_impl<M: Manager>(redis_key: &M::ReadHolder, path: &str) -> Redis
             v.get_str()
                 .map(|s| (s.len() as i64).into())
                 .unwrap_or_else(|| {
-                    debug_assert!(false, "String type returned None from get_str()");
+                    ctx.log_warning("String type returned None from get_str()");
                     RedisValue::Null
                 })
         }));
@@ -2240,7 +2244,7 @@ pub fn json_arr_len_command_impl<M: Manager>(
                     if is_legacy {
                         return Err(err_invalid_path_or("not an array"));
                     }
-                    debug_assert!(false, "Array type returned None from len()");
+                    ctx.log_warning("Array type returned None from len()");
                     RedisValue::Null
                 }
             },
@@ -2749,11 +2753,15 @@ pub fn json_obj_len_command_impl<M: Manager>(
     if path.is_legacy() {
         json_obj_len_legacy::<M>(&key, path.get_path())
     } else {
-        json_obj_len_impl::<M>(&key, path.get_path())
+        json_obj_len_impl::<M>(&key, ctx, path.get_path())
     }
 }
 
-fn json_obj_len_impl<M: Manager>(redis_key: &M::ReadHolder, path: &str) -> RedisResult {
+fn json_obj_len_impl<M: Manager>(
+    redis_key: &M::ReadHolder,
+    ctx: &Context,
+    path: &str,
+) -> RedisResult {
     let root = redis_key.get_value()?;
     let res = match root {
         Some(root) => find_all_values(path, root, |v| v.get_type() == SelectValueType::Object)?
@@ -2763,7 +2771,7 @@ fn json_obj_len_impl<M: Manager>(redis_key: &M::ReadHolder, path: &str) -> Redis
                     v.len()
                         .map(|l| RedisValue::Integer(l as i64))
                         .unwrap_or_else(|| {
-                            debug_assert!(false, "Object type returned None from len()");
+                            ctx.log_warning("Object type returned None from len()");
                             RedisValue::Null
                         })
                 })
