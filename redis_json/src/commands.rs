@@ -2237,10 +2237,10 @@ pub fn json_arr_len_command_impl<M: Manager>(
             Some(v) => match v.len() {
                 Some(len) => (len as i64).into(),
                 None => {
-                    debug_assert!(false, "Array type returned None from len()");
                     if is_legacy {
                         return Err(err_invalid_path_or("not an array"));
                     }
+                    debug_assert!(false, "Array type returned None from len()");
                     RedisValue::Null
                 }
             },
