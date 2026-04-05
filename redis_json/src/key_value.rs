@@ -277,9 +277,9 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                     .get_double()
                     .map(RedisValue::Float)
                     .unwrap_or(RedisValue::Null),
-                _ => RedisValue::BulkString(
-                    Self::serialize_object(value, format).unwrap_or("".to_string()),
-                ),
+                _ => Self::serialize_object(value, format)
+                    .map(RedisValue::BulkString)
+                    .unwrap_or(RedisValue::Null),
             }
         }
     }
