@@ -1241,7 +1241,9 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
     pub fn calc_paths<'j: 'i, S: SelectValue>(&self, json: &'j S) -> Vec<Vec<String>> {
         self.calc_with_paths(ValueRef::Borrowed(json))
             .into_iter()
-            .filter_map(|e| e.path_tracker.map(|pt| pt.to_string_path()))
+            // SAFETY: Calculator must be built with a path tracker (e.g. `create_with_generator`);
+            // each result should therefore carry `path_tracker` like `calc_once_paths`.
+            .map(|e| e.path_tracker.unwrap().to_string_path())
             .collect()
     }
 }

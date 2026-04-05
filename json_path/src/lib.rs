@@ -107,7 +107,9 @@ pub fn calc_once_paths<S: SelectValue>(q: Query, json: &S) -> Vec<Vec<String>> {
     }
     .calc_with_paths_on_root(ValueRef::Borrowed(json), root)
     .into_iter()
-    .filter_map(|e| e.path_tracker.map(|pt| pt.to_string_path()))
+    // SAFETY: `PTrackerGenerator` is configured above: every match must have a path tracker so
+    // path count stays aligned with the value match count (callers rely on this).
+    .map(|e| e.path_tracker.unwrap().to_string_path())
     .collect()
 }
 
@@ -671,5 +673,55 @@ mod json_path_tests {
         let paths2 = calc_once_paths(query2, &test_json);
         assert_eq!(paths2.len(), 1);
         assert_eq!(paths2[0], vec!["\\\\".to_string()]);
+    }
+
+    /// Guards the invariant used by `calc_once_paths` / `calc_paths`: with `PTrackerGenerator`,
+    /// every match has a path tracker and the path list is the same length as the value list.
+    #[test]
+    fn calc_once_paths_aligns_with_matches_and_every_tracker_present() {
+        setup();
+        use crate::{calc_once, calc_once_paths, calc_once_with_paths};
+
+        let cases = vec![
+            ("$", json!({"a": 1})),
+            ("$.a", json!({"a": 1})),
+            ("$..*", json!({"a": {"b": 2}})),
+            ("$.arr[*]", json!({"arr": [1, 2, 3]})),
+        ];
+
+        for (path, doc) in cases {
+            let n_vals = calc_once(json_path::compile(path).unwrap(), &doc).len();
+            let n_paths = calc_once_paths(json_path::compile(path).unwrap(), &doc).len();
+            assert_eq!(
+                n_vals, n_paths,
+                "value vs path count mismatch for path {path:?}"
+            );
+            let with_paths = calc_once_with_paths(json_path::compile(path).unwrap(), &doc);
+            assert_eq!(
+                with_paths.len(),
+                n_vals,
+                "calc_once_with_paths length for {path:?}"
+            );
+            assert!(
+                with_paths.iter().all(|e| e.path_tracker.is_some()),
+                "expected every result to have path_tracker for path {path:?}"
+            );
+        }
+    }
+
+    /// `PathCalculator::calc_paths` (used with `create_with_generator`) must satisfy the same
+    /// tracker invariant as `calc_once_paths`.
+    #[test]
+    fn calc_paths_on_generator_aligns_with_matches() {
+        setup();
+        use crate::calc_once;
+
+        let path = "$..*";
+        let doc = json!({"x": {"y": 1}});
+        let q = json_path::compile(path).unwrap();
+        let calculator = create_with_generator(&q);
+        let string_paths = calculator.calc_paths(&doc);
+        let n_vals = calc_once(q, &doc).len();
+        assert_eq!(string_paths.len(), n_vals, "calc_paths vs calc_once count");
     }
 }
