@@ -136,7 +136,9 @@ where
 /// Removes a value at a given `path`, starting from `root`
 ///
 fn remove(mut path: Vec<String>, root: &mut IValue) -> bool {
-    let token = path.pop().unwrap();
+    let Some(token) = path.pop() else {
+        return false;
+    };
     follow_path(path, root)
         .and_then(|(target, _depth)| {
             let PathValue::IValue(target) = target else {
@@ -163,7 +165,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
     where
         F: FnOnce(PathValue<'_, '_>, usize) -> RedisResult<T>,
     {
-        let root = self.get_value()?.unwrap();
+        let root = self.get_value()?.ok_or(RedisError::nonexistent_key())?;
         update(paths, root, op_fun)
     }
 
@@ -194,17 +196,21 @@ impl<'a> IValueKeyHolderWrite<'a> {
                     PathValue::IValue(v) => {
                         let new_val = match (v.get_type(), in_value.as_i64()) {
                             (SelectValueType::Long, Some(num2)) => {
-                                let num1 = v.get_long();
+                                let num1 = v
+                                    .get_long()
+                                    .ok_or(crate::manager::err_not_a_number())?;
                                 Ok(op_int(num1 as i128, num2 as i128)
                                     .and_then(|r| i64::try_from(r).ok())
                                     .ok_or(crate::manager::err_numeric_overflow())?
                                     .into())
                             }
                             _ => {
-                                let num1 = v.get_double();
-                                let num2 = in_value.as_f64().unwrap();
+                                let num1 = v
+                                    .get_double()
+                                    .ok_or(crate::manager::err_not_a_number())?;
+                                let num2 = in_value.as_f64().ok_or(crate::manager::err_not_a_number())?;
                                 INumber::try_from(op_float(num1, num2))
-                                    .map_err(|_| RedisError::Str("result is not a number"))
+                                    .map_err(|_| crate::manager::err_not_a_number())
                             }
                         }?;
                         *v = IValue::from(new_val.clone());
@@ -267,7 +273,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
                                 .unwrap();
                             let new_val = op_float(f64::from(*num1), $in_value_f64);
                             if !new_val.is_finite() {
-                                return Err(RedisError::Str("result is not a number"));
+                                return Err(crate::manager::err_not_a_number());
                             }
                             let narrowed = <$hf_type>::from_f64(new_val);
                             if narrowed.is_finite() {
@@ -307,7 +313,9 @@ impl<'a> IValueKeyHolderWrite<'a> {
         }
 
         if let serde_json::Value::Number(in_value) = in_value {
-            let in_value_f64 = in_value.as_f64().unwrap();
+            let in_value_f64 = in_value
+                .as_f64()
+                .ok_or(crate::manager::err_not_a_number())?;
             let n = self.do_op(path, |v, _depth| {
                 // SAFETY: index is in bounds and type is checked at creation of PathValue
                 generate_array_match_arms!(
@@ -327,11 +335,12 @@ impl<'a> IValueKeyHolderWrite<'a> {
                 } else {
                     n.to_i64().map(Into::into)
                 }
-                .ok_or(RedisError::Str("result is not a number")),
+                .ok_or(crate::manager::err_not_a_number()),
                 NumOpResult::U64(n) => Ok(n.into()),
                 NumOpResult::I64(n) => Ok(n.into()),
-                NumOpResult::F64(n) => Ok(serde_json::Number::from_f64(n)
-                    .ok_or(RedisError::Str("result is not a number"))?),
+                NumOpResult::F64(n) => {
+                    Ok(serde_json::Number::from_f64(n).ok_or(crate::manager::err_not_a_number())?)
+                }
             }
         } else {
             Err(RedisError::Str("bad input number"))
@@ -407,7 +416,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             // update the root
             self.set_root(v)
         } else {
-            let root = self.get_value()?.unwrap();
+            let root = self.get_value()?.ok_or(RedisError::nonexistent_key())?;
             Ok(update(path, root, |val, depth| {
                 handle_array_types!(
                     val, v, depth, I8, U8, I16, U16, F16, BF16, I32, U32, F32, I64, U64, F64
@@ -418,10 +427,10 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn merge_value(&mut self, path: Vec<String>, mut v: IValue) -> RedisResult<bool> {
-        let root = self.get_value()?.unwrap();
+        let root = self.get_value()?.ok_or(RedisError::nonexistent_key())?;
         update(path, root, |current, depth| {
             let PathValue::IValue(current) = current else {
-                return Err(RedisError::Str("bad object"));
+                return Err(crate::manager::err_bad_object());
             };
             if can_merge(current, &v, depth) {
                 merge(current, v.take());
@@ -446,7 +455,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     fn dict_add(&mut self, path: Vec<String>, key: &str, mut v: IValue) -> RedisResult<bool> {
         self.do_op(path, |val: PathValue<'_, '_>, depth| {
             let PathValue::IValue(val) = val else {
-                return Err(RedisError::Str("bad object"));
+                return Err(crate::manager::err_bad_object());
             };
             let patch_depth = v.calculate_value_depth();
             if depth + 1 + patch_depth >= MAX_DEPTH {
@@ -463,7 +472,8 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn delete_path(&mut self, path: Vec<String>) -> RedisResult<bool> {
-        self.get_value().map(|root| remove(path, root.unwrap()))
+        let root = self.get_value()?.ok_or(RedisError::nonexistent_key())?;
+        Ok(remove(path, root))
     }
 
     fn incr_by(&mut self, path: Vec<String>, num: &str) -> RedisResult<Number> {
@@ -486,7 +496,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     fn bool_toggle(&mut self, path: Vec<String>) -> RedisResult<bool> {
         self.do_op(path, |v, _depth| {
             let PathValue::IValue(v) = v else {
-                return Err(RedisError::Str("bad object"));
+                return Err(crate::manager::err_bad_object());
             };
             if let DestructuredMut::Bool(mut bool_mut) = v.destructure_mut() {
                 //Using DestructuredMut in order to modify a `Bool` variant
@@ -503,7 +513,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
         match serde_json::from_str(&val)? {
             serde_json::Value::String(s) => self.do_op(path, |v, _depth| {
                 let PathValue::IValue(v) = v else {
-                    return Err(RedisError::Str("bad object"));
+                    return Err(crate::manager::err_bad_object());
                 };
                 v.as_string_mut()
                     .map(|v_str| {
@@ -520,7 +530,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     fn arr_append(&mut self, path: Vec<String>, args: Vec<IValue>) -> RedisResult<usize> {
         self.do_op(path, |v, depth| {
             let PathValue::IValue(v) = v else {
-                return Err(RedisError::Str("bad object"));
+                return Err(crate::manager::err_bad_object());
             };
             v.as_array_mut()
                 .map(|arr| {
@@ -542,7 +552,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     fn arr_insert(&mut self, paths: Vec<String>, args: &[IValue], idx: i64) -> RedisResult<usize> {
         self.do_op(paths, |v, depth| {
             let PathValue::IValue(v) = v else {
-                return Err(RedisError::Str("bad object"));
+                return Err(crate::manager::err_bad_object());
             };
             v.as_array_mut()
                 .map(|arr| {
@@ -589,7 +599,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     {
         let res = self.do_op(path, |v, _depth| {
             let PathValue::IValue(v) = v else {
-                return Err(RedisError::Str("bad object"));
+                return Err(crate::manager::err_bad_object());
             };
             v.as_array_mut()
                 .map(|array| {
@@ -609,7 +619,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     fn arr_trim(&mut self, path: Vec<String>, start: i64, stop: i64) -> RedisResult<usize> {
         self.do_op(path, |v, _depth| {
             let PathValue::IValue(v) = v else {
-                return Err(RedisError::Str("bad object"));
+                return Err(crate::manager::err_bad_object());
             };
             v.as_array_mut()
                 .map(|array| {
@@ -652,7 +662,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     fn clear(&mut self, path: Vec<String>) -> RedisResult<usize> {
         self.do_op(path, |v, _depth| {
             let PathValue::IValue(v) = v else {
-                return Err(RedisError::Str("bad object"));
+                return Err(crate::manager::err_bad_object());
             };
             match v.destructure_mut() {
                 DestructuredMut::Object(obj) => {
@@ -807,19 +817,15 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
             .map_or_else(
                 |e| Err(RedisError::String(e.to_string())),
                 |docs: Document| {
-                    let v = docs.iter().next().map_or(IValue::NULL, |(_, b)| {
+                    docs.iter().next().map_or(Ok(IValue::NULL), |(_, b)| {
                         let v: serde_json::Value = b.clone().into();
                         let mut out = serde_json::Serializer::new(Vec::new());
-                        v.serialize(&mut out).unwrap();
-                        self.from_str(
-                            &String::from_utf8(out.into_inner()).unwrap(),
-                            Format::JSON,
-                            limit_depth,
-                            fpha_type,
-                        )
-                        .unwrap()
-                    });
-                    Ok(v)
+                        v.serialize(&mut out)
+                            .map_err(|e| RedisError::String(e.to_string()))?;
+                        let s = String::from_utf8(out.into_inner())
+                            .map_err(|e| RedisError::String(e.to_string()))?;
+                        self.from_str(&s, Format::JSON, limit_depth, fpha_type)
+                    })
                 },
             ),
         }

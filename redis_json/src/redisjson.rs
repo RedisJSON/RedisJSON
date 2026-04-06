@@ -227,8 +227,8 @@ pub mod type_methods {
                 let v = backward::json_rdb_load(rdb)?;
 
                 let mut out = serde_json::Serializer::new(Vec::new());
-                v.serialize(&mut out).unwrap();
-                String::from_utf8(out.into_inner()).unwrap()
+                v.serialize(&mut out)?;
+                String::from_utf8(out.into_inner())?
             }
             2 => {
                 let data = raw::load_string(rdb)?;
@@ -251,8 +251,8 @@ pub mod type_methods {
                 let value =
                     ijson::decode(buf.as_ref()).map_err(|e| RedisError::String(e.to_string()))?;
                 let mut out = serde_json::Serializer::new(Vec::new());
-                value.serialize(&mut out).unwrap();
-                String::from_utf8(out.into_inner()).unwrap()
+                value.serialize(&mut out)?;
+                String::from_utf8(out.into_inner())?
             }
             _ => return Err(RedisError::String(format!("unsupported encver {encver}"))),
         })

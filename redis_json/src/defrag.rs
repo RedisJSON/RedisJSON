@@ -57,7 +57,7 @@ fn defrag_end(defrag_ctx: &DefragContext) {
     defrag_stats.defrag_ended += 1;
 }
 
-#[allow(non_snake_case, unused)]
+#[allow(non_snake_case, unused, clippy::missing_safety_doc)]
 pub unsafe extern "C" fn defrag(
     ctx: *mut raw::RedisModuleDefragCtx,
     key: *mut raw::RedisModuleString,

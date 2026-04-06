@@ -24,18 +24,26 @@ macro_rules! value_ref_items {
     ($value_ref:expr) => {{
         match $value_ref {
             ValueRef::Borrowed(borrowed_val) => {
-                // For borrowed values, convert keys to owned for consistent return type
-                let iter = borrowed_val.items().unwrap();
-                let collected = iter.map(|(k, v)| (Cow::Borrowed(k), v)).collect_vec();
+                // For borrowed values, convert keys to owned for consistent return type.
+                // Empty when `get_type` and `items()` disagree (defensive).
+                let collected = borrowed_val
+                    .items()
+                    .map(|iter| iter.map(|(k, v)| (Cow::Borrowed(k), v)).collect_vec())
+                    .unwrap_or_default();
                 Box::new(collected.into_iter())
                     as Box<dyn Iterator<Item = (Cow<'_, str>, ValueRef<'_, S>)>>
             }
             ValueRef::Owned(owned_val) => {
                 // For owned values, collect first to avoid lifetime issues
-                let iter = owned_val.items().unwrap();
-                let collected = iter
-                    .map(|(k, v)| (Cow::Owned(k.to_string()), ValueRef::Owned(v.inner_cloned())))
-                    .collect_vec();
+                let collected = owned_val
+                    .items()
+                    .map(|iter| {
+                        iter.map(|(k, v)| {
+                            (Cow::Owned(k.to_string()), ValueRef::Owned(v.inner_cloned()))
+                        })
+                        .collect_vec()
+                    })
+                    .unwrap_or_default();
                 Box::new(collected.into_iter())
                     as Box<dyn Iterator<Item = (Cow<'_, str>, ValueRef<'_, S>)>>
             }
@@ -48,16 +56,17 @@ macro_rules! value_ref_values {
     ($value_ref:expr) => {{
         match $value_ref {
             ValueRef::Borrowed(borrowed_val) => {
-                // For borrowed values, we can iterate directly
-                let iter = borrowed_val.values().unwrap();
-                Box::new(iter) as Box<dyn Iterator<Item = ValueRef<'_, S>>>
+                // Empty iterator when not a container; filter branch uses `get_type` but values may be absent.
+                match borrowed_val.values() {
+                    Some(iter) => Box::new(iter) as Box<dyn Iterator<Item = ValueRef<'_, S>>>,
+                    None => Box::new(std::iter::empty()) as Box<dyn Iterator<Item = ValueRef<'_, S>>>,
+                }
             }
             ValueRef::Owned(owned_val) => {
-                // For owned values, we need to collect first to avoid lifetime issues
-                let iter = owned_val.values().unwrap();
-                let collected = iter
-                    .map(|v| ValueRef::Owned(v.inner_cloned()))
-                    .collect_vec();
+                let collected = owned_val
+                    .values()
+                    .map(|iter| iter.map(|v| ValueRef::Owned(v.inner_cloned())).collect_vec())
+                    .unwrap_or_default();
                 Box::new(collected.into_iter()) as Box<dyn Iterator<Item = ValueRef<'_, S>>>
             }
         }
@@ -130,7 +139,7 @@ impl<'i> Query<'i> {
                 let unescaped = unescape_string_value(rule).into_owned();
                 (unescaped, JsonPathToken::String)
             }),
-            _ => panic!("pop last was used in a non-static path"),
+            _ => None,
         })
     }
 
@@ -138,11 +147,10 @@ impl<'i> Query<'i> {
     /// Example: $.foo.bar has 2 elements
     #[allow(dead_code)]
     pub fn size(&mut self) -> usize {
-        if self.size.is_some() {
-            return self.size.unwrap();
+        if self.size.is_none() {
+            self.is_static();
         }
-        self.is_static();
-        self.size()
+        self.size.unwrap_or(0)
     }
 
     /// Returns whether the compiled json path is static
@@ -152,8 +160,8 @@ impl<'i> Query<'i> {
     ///     non-static path: $.*.bar
     #[allow(dead_code)]
     pub fn is_static(&mut self) -> bool {
-        if self.is_static.is_some() {
-            return self.is_static.unwrap();
+        if let Some(b) = self.is_static {
+            return b;
         }
         let mut size = 0;
         let mut is_static = true;
@@ -173,7 +181,7 @@ impl<'i> Query<'i> {
         }
         self.size = Some(size);
         self.is_static = Some(is_static);
-        self.is_static()
+        is_static
     }
 }
 
@@ -209,7 +217,10 @@ fn unescape_string_value<'a>(pair: Pair<'a, Rule>) -> Cow<'a, str> {
         Rule::string_value => Cow::Borrowed(s),
         Rule::string_value_escape_1 => Cow::Owned(s.replace("\\\\", "\\").replace("\\\"", "\"")),
         Rule::string_value_escape_2 => Cow::Owned(s.replace("\\\\", "\\").replace("\\'", "'")),
-        _ => panic!("Unexpected rule in string: {:?}", pair.as_rule()),
+        other => unreachable!(
+            "unescape_string_value: unexpected rule {:?} (expected string leaf rule)",
+            other
+        ),
     }
 }
 
@@ -219,7 +230,10 @@ pub(crate) fn compile(path: &str) -> Result<Query<'_>, QueryCompilationError> {
     let query = JsonPathParser::parse(Rule::query, path);
     match query {
         Ok(mut q) => {
-            let root = q.next().unwrap();
+            let root = q.next().ok_or_else(|| QueryCompilationError {
+                location: 0,
+                message: "internal: empty JSONPath parse result".to_string(),
+            })?;
             Ok(Query {
                 root: root.into_inner(),
                 is_static: None,
@@ -440,18 +454,42 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
                 CmpResult::Ord(Ordering::Equal)
             }
             (TermEvaluationResult::Value(v), _) => match v.get_type() {
-                SelectValueType::Long => TermEvaluationResult::Integer(v.get_long()).cmp(s),
-                SelectValueType::Double => TermEvaluationResult::Float(v.get_double()).cmp(s),
-                SelectValueType::String => TermEvaluationResult::Str(v.as_str()).cmp(s),
-                SelectValueType::Bool => TermEvaluationResult::Bool(v.get_bool()).cmp(s),
+                SelectValueType::Long => v
+                    .get_long()
+                    .map(|n| TermEvaluationResult::Integer(n).cmp(s))
+                    .unwrap_or(CmpResult::NotComparable),
+                SelectValueType::Double => v
+                    .get_double()
+                    .map(|f| TermEvaluationResult::Float(f).cmp(s))
+                    .unwrap_or(CmpResult::NotComparable),
+                SelectValueType::String => v
+                    .as_str()
+                    .map(|st| TermEvaluationResult::Str(st).cmp(s))
+                    .unwrap_or(CmpResult::NotComparable),
+                SelectValueType::Bool => v
+                    .get_bool()
+                    .map(|b| TermEvaluationResult::Bool(b).cmp(s))
+                    .unwrap_or(CmpResult::NotComparable),
                 SelectValueType::Null => TermEvaluationResult::Null.cmp(s),
                 _ => CmpResult::NotComparable,
             },
             (_, TermEvaluationResult::Value(v)) => match v.get_type() {
-                SelectValueType::Long => self.cmp(&TermEvaluationResult::Integer(v.get_long())),
-                SelectValueType::Double => self.cmp(&TermEvaluationResult::Float(v.get_double())),
-                SelectValueType::String => self.cmp(&TermEvaluationResult::Str(v.as_str())),
-                SelectValueType::Bool => self.cmp(&TermEvaluationResult::Bool(v.get_bool())),
+                SelectValueType::Long => v
+                    .get_long()
+                    .map(|n| self.cmp(&TermEvaluationResult::Integer(n)))
+                    .unwrap_or(CmpResult::NotComparable),
+                SelectValueType::Double => v
+                    .get_double()
+                    .map(|f| self.cmp(&TermEvaluationResult::Float(f)))
+                    .unwrap_or(CmpResult::NotComparable),
+                SelectValueType::String => v
+                    .as_str()
+                    .map(|st| self.cmp(&TermEvaluationResult::Str(st)))
+                    .unwrap_or(CmpResult::NotComparable),
+                SelectValueType::Bool => v
+                    .get_bool()
+                    .map(|b| self.cmp(&TermEvaluationResult::Bool(b)))
+                    .unwrap_or(CmpResult::NotComparable),
                 SelectValueType::Null => self.cmp(&TermEvaluationResult::Null),
                 _ => CmpResult::NotComparable,
             },
@@ -508,15 +546,19 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
         match (self, s) {
             (TermEvaluationResult::Value(v), TermEvaluationResult::Str(regex)) => {
                 match v.get_type() {
-                    SelectValueType::String => Self::re_is_match(regex, v.as_str()),
+                    SelectValueType::String => {
+                        v.as_str().is_some_and(|s| Self::re_is_match(regex, s))
+                    }
                     _ => false,
                 }
             }
             (TermEvaluationResult::Value(v1), TermEvaluationResult::Value(v2)) => {
                 match (v1.get_type(), v2.get_type()) {
-                    (SelectValueType::String, SelectValueType::String) => {
-                        Self::re_is_match(v2.as_str(), v1.as_str())
-                    }
+                    (SelectValueType::String, SelectValueType::String) => v1
+                        .as_str()
+                        .zip(v2.as_str())
+                        .map(|(s1, s2)| Self::re_is_match(s2, s1))
+                        .unwrap_or(false),
                     (_, _) => false,
                 }
             }
@@ -735,7 +777,9 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         if json.get_type() != SelectValueType::Array {
             return;
         }
-        let n = json.len().unwrap();
+        let Some(n) = json.len() else {
+            return;
+        };
         for c in curr.into_inner() {
             let i = Self::calc_abs_index(Self::parse_index(c.as_str()), n);
             value_ref_get_index!(json, i).map(|e| {
@@ -756,38 +800,60 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         if json.get_type() != SelectValueType::Array {
             return;
         }
-        let n = json.len().unwrap();
-        let curr = curr.into_inner().next().unwrap();
-        let (start, end, step) = match curr.as_rule() {
+        let Some(n) = json.len() else {
+            return;
+        };
+        let Some(range_spec) = curr.into_inner().next() else {
+            trace!("calc_range: missing range specification");
+            return;
+        };
+        let (start, end, step) = match range_spec.as_rule() {
             Rule::right_range => {
-                let mut curr = curr.into_inner();
+                let mut it = range_spec.into_inner();
                 let start = 0;
-                let end = Self::calc_abs_index(Self::parse_index(curr.next().unwrap().as_str()), n);
-                let step = curr.next().map_or(1, |s| Self::parse_step(s.as_str()));
+                let Some(p) = it.next() else {
+                    trace!("calc_range right_range: missing end index");
+                    return;
+                };
+                let end = Self::calc_abs_index(Self::parse_index(p.as_str()), n);
+                let step = it.next().map_or(1, |s| Self::parse_step(s.as_str()));
                 (start, end, step)
             }
             Rule::all_range => {
-                let mut curr = curr.into_inner();
-                let step = curr.next().map_or(1, |s| Self::parse_step(s.as_str()));
+                let mut it = range_spec.into_inner();
+                let step = it.next().map_or(1, |s| Self::parse_step(s.as_str()));
                 (0, n, step)
             }
             Rule::left_range => {
-                let mut curr = curr.into_inner();
-                let start =
-                    Self::calc_abs_index(Self::parse_index(curr.next().unwrap().as_str()), n);
+                let mut it = range_spec.into_inner();
+                let Some(p) = it.next() else {
+                    trace!("calc_range left_range: missing start index");
+                    return;
+                };
+                let start = Self::calc_abs_index(Self::parse_index(p.as_str()), n);
                 let end = n;
-                let step = curr.next().map_or(1, |s| Self::parse_step(s.as_str()));
+                let step = it.next().map_or(1, |s| Self::parse_step(s.as_str()));
                 (start, end, step)
             }
             Rule::full_range => {
-                let mut curr = curr.into_inner();
-                let start =
-                    Self::calc_abs_index(Self::parse_index(curr.next().unwrap().as_str()), n);
-                let end = Self::calc_abs_index(Self::parse_index(curr.next().unwrap().as_str()), n);
-                let step = curr.next().map_or(1, |s| Self::parse_step(s.as_str()));
+                let mut it = range_spec.into_inner();
+                let Some(p1) = it.next() else {
+                    trace!("calc_range full_range: missing start");
+                    return;
+                };
+                let Some(p2) = it.next() else {
+                    trace!("calc_range full_range: missing end");
+                    return;
+                };
+                let start = Self::calc_abs_index(Self::parse_index(p1.as_str()), n);
+                let end = Self::calc_abs_index(Self::parse_index(p2.as_str()), n);
+                let step = it.next().map_or(1, |s| Self::parse_step(s.as_str()));
                 (start, end, step)
             }
-            _ => panic!("{curr:?}"),
+            other => {
+                trace!("calc_range: unexpected inner rule {:?}", other);
+                return;
+            }
         };
 
         for i in (start..end).step_by(step) {
@@ -808,8 +874,10 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             Rule::decimal => {
                 if let Ok(i) = term.as_str().parse::<i64>() {
                     TermEvaluationResult::Integer(i)
+                } else if let Ok(f) = term.as_str().parse::<f64>() {
+                    TermEvaluationResult::Float(f)
                 } else {
-                    TermEvaluationResult::Float(term.as_str().parse::<f64>().unwrap())
+                    TermEvaluationResult::Invalid
                 }
             }
             Rule::boolean_true => TermEvaluationResult::Bool(true),
@@ -828,10 +896,13 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                         root: json.clone(),
                     };
                     self.calc_internal(term.into_inner(), json, None, &mut calc_data);
-                    if calc_data.results.len() == 1 {
-                        TermEvaluationResult::Value(calc_data.results.pop().unwrap().res)
-                    } else {
-                        TermEvaluationResult::Invalid
+                    match calc_data.results.len() {
+                        1 => calc_data
+                            .results
+                            .pop()
+                            .map(|r| TermEvaluationResult::Value(r.res))
+                            .unwrap_or(TermEvaluationResult::Invalid),
+                        _ => TermEvaluationResult::Invalid,
                     }
                 }
                 None => TermEvaluationResult::Value(json),
@@ -848,16 +919,20 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                         None,
                         &mut new_calc_data,
                     );
-                    if new_calc_data.results.len() == 1 {
-                        TermEvaluationResult::Value(new_calc_data.results.pop().unwrap().res)
-                    } else {
-                        TermEvaluationResult::Invalid
+                    match new_calc_data.results.len() {
+                        1 => new_calc_data
+                            .results
+                            .pop()
+                            .map(|r| TermEvaluationResult::Value(r.res))
+                            .unwrap_or(TermEvaluationResult::Invalid),
+                        _ => TermEvaluationResult::Invalid,
                     }
                 }
                 None => TermEvaluationResult::Value(calc_data.root.clone()),
             },
             _ => {
-                panic!("{term:?}")
+                trace!("evaluate_single_term: unhandled rule {:?}", term.as_rule());
+                TermEvaluationResult::Invalid
             }
         }
     }
@@ -869,13 +944,19 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
     ) -> bool {
         let mut curr = curr.into_inner();
-        let term1 = curr.next().unwrap();
+        let Some(term1) = curr.next() else {
+            trace!("evaluate_single_filter: missing first term");
+            return false;
+        };
         trace!("evaluate_single_filter term1 {:?}", &term1);
         let term1_val = self.evaluate_single_term(term1, json.clone(), calc_data);
         trace!("evaluate_single_filter term1_val {:?}", &term1_val);
         if let Some(op) = curr.next() {
             trace!("evaluate_single_filter op {:?}", &op);
-            let term2 = curr.next().unwrap();
+            let Some(term2) = curr.next() else {
+                trace!("evaluate_single_filter: missing second term");
+                return false;
+            };
             trace!("evaluate_single_filter term2 {:?}", &term2);
             let term2_val = self.evaluate_single_term(term2, json, calc_data);
             trace!("evaluate_single_filter term2_val {:?}", &term2_val);
@@ -887,7 +968,13 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 Rule::eq => term1_val.eq(&term2_val),
                 Rule::ne => term1_val.ne(&term2_val),
                 Rule::re => term1_val.re(&term2_val),
-                _ => panic!("{op:?}"),
+                _ => {
+                    trace!(
+                        "evaluate_single_filter: unknown comparison op {:?}",
+                        op.as_rule()
+                    );
+                    false
+                }
             }
         } else {
             !matches!(term1_val, TermEvaluationResult::Invalid)
@@ -900,7 +987,10 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         json: ValueRef<'j, S>,
         calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
     ) -> bool {
-        let first_filter = curr.next().unwrap();
+        let Some(first_filter) = curr.next() else {
+            trace!("evaluate_filter: missing first operand");
+            return false;
+        };
         trace!("evaluate_filter first_filter {:?}", &first_filter);
         let mut first_result = match first_filter.as_rule() {
             Rule::single_filter => {
@@ -909,7 +999,13 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             Rule::filter => {
                 self.evaluate_filter(first_filter.into_inner(), json.clone(), calc_data)
             }
-            _ => panic!("{first_filter:?}"),
+            _ => {
+                trace!(
+                    "evaluate_filter: unexpected first rule {:?}",
+                    first_filter.as_rule()
+                );
+                false
+            }
         };
         trace!("evaluate_filter first_result {:?}", &first_result);
 
@@ -926,7 +1022,10 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             match relation.as_rule() {
                 Rule::and => {
                     // Consume the operand even if not needed for evaluation
-                    let second_filter = curr.next().unwrap();
+                    let Some(second_filter) = curr.next() else {
+                        trace!("evaluate_filter &&: missing operand");
+                        return false;
+                    };
                     trace!("evaluate_filter && second_filter {:?}", &second_filter);
                     if !first_result {
                         continue; // Skip eval till next OR
@@ -940,7 +1039,13 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                             json.clone(),
                             calc_data,
                         ),
-                        _ => panic!("{second_filter:?}"),
+                        _ => {
+                            trace!(
+                                "evaluate_filter &&: unexpected rule {:?}",
+                                second_filter.as_rule()
+                            );
+                            false
+                        }
                     };
                 }
                 Rule::or => {
@@ -951,7 +1056,13 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                     // Tail recursion with the rest of the expression to give precedence to AND
                     return self.evaluate_filter(curr, json, calc_data);
                 }
-                _ => panic!("{relation:?}"),
+                _ => {
+                    trace!(
+                        "evaluate_filter: unexpected relation {:?}",
+                        relation.as_rule()
+                    );
+                    return false;
+                }
             }
         }
         first_result
@@ -969,7 +1080,13 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
     }
 
     fn generate_path(&self, pt: PathTracker) -> UPTG::PT {
-        let mut upt = self.tracker_generator.as_ref().unwrap().generate();
+        // Invariant: `generate_path` is only used when building tracked results; the calculator
+        // must have been created with a real `tracker_generator` (not the `calc_once` dummy config).
+        let mut upt = self
+            .tracker_generator
+            .as_ref()
+            .expect("internal: generate_path requires tracker_generator")
+            .generate();
         Self::populate_path_tracker(&pt, &mut upt);
         upt
     }
@@ -1067,7 +1184,9 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                             path_tracker: path_tracker.map(|pt| self.generate_path(pt)),
                         });
                     }
-                    _ => panic!("{curr:?}"),
+                    _ => {
+                        trace!("calc_internal: unhandled rule {:?}", curr.as_rule());
+                    }
                 }
             }
             None => {
@@ -1100,7 +1219,15 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         &self,
         json: ValueRef<'j, S>,
     ) -> Vec<CalculationResult<'j, S, UPTG::PT>> {
-        self.calc_with_paths_on_root(json, self.query.unwrap().root.clone())
+        // Invariant: only valid on calculators from `create` / `create_with_generator` (hold `query`).
+        // Not for the internal `calc_once` configuration with `query: None`.
+        let root = self
+            .query
+            .as_ref()
+            .expect("internal: calc_with_paths requires compiled query")
+            .root
+            .clone();
+        self.calc_with_paths_on_root(json, root)
     }
 
     pub fn calc<'j: 'i, S: SelectValue>(&self, json: &'j S) -> Vec<ValueRef<'j, S>> {
@@ -1114,6 +1241,8 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
     pub fn calc_paths<'j: 'i, S: SelectValue>(&self, json: &'j S) -> Vec<Vec<String>> {
         self.calc_with_paths(ValueRef::Borrowed(json))
             .into_iter()
+            // SAFETY: Calculator must be built with a path tracker (e.g. `create_with_generator`);
+            // each result should therefore carry `path_tracker` like `calc_once_paths`.
             .map(|e| e.path_tracker.unwrap().to_string_path())
             .collect()
     }
