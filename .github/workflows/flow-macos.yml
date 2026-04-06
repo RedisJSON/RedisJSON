@@ -48,18 +48,18 @@ jobs:
           beta-version: ${{ inputs.beta-version }}
           redis-ref: ${{ inputs.redis-ref }}
   build-macos:
-    name: Build for ${{ matrix.runner }} (${{ matrix.arch }})
+    name: Build for ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { runner: macos-14, arch: arm64 }
-          - { runner: macos-15, arch: arm64 }
-          - { runner: macos-26, arch: arm64 }
-          - { runner: macos-14-large, arch: intel }
-          - { runner: macos-15-intel, arch: intel }
-          - { runner: macos-26-intel, arch: intel }
-    runs-on: ${{ matrix.runner }}
+        os:
+          - macos-14
+          - macos-15
+          - macos-26
+          - macos-14-large
+          - macos-15-intel
+          - macos-26-intel
+    runs-on: ${{ matrix.os }}
     needs: setup-environment
     env:
       TAGGED: ${{ needs.setup-environment.outputs.TAGGED }}
@@ -94,9 +94,9 @@ jobs:
         run: |
           echo ::group::Activate virtual environment
             python3 -m venv venv
-            echo "source venv/bin/activate" >> ~/.bashrc
-            echo "source venv/bin/activate" >> ~/.zshrc
-            . venv/bin/activate
+            echo "source ${GITHUB_WORKSPACE}/venv/bin/activate" >> ~/.bashrc
+            echo "source ${GITHUB_WORKSPACE}/venv/bin/activate" >> ~/.zshrc
+            . "${GITHUB_WORKSPACE}/venv/bin/activate"
           echo ::endgroup::
           echo ::group::Install python dependencies
             ./.install/common_installations.sh
@@ -109,6 +109,10 @@ jobs:
           path: redis
       - name: Build Redis
         working-directory: redis
+        env:
+          # Intel runners put Homebrew llvm@18 on PATH; its libc++ breaks redis/deps/fast_float.
+          CC: /usr/bin/clang
+          CXX: /usr/bin/clang++
         run: make install
       - name: Build module
         run: |
