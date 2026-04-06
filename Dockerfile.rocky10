@@ -1,5 +1,5 @@
-# Rocky Linux 10.x — Redis 8.8 support matrix
-FROM rockylinux:10
+# Rocky Linux 10.x — Redis 8.8 support matrix (official library tag may lag; quay is canonical)
+FROM quay.io/rockylinux/rockylinux:10
 
 WORKDIR /workspace
 
