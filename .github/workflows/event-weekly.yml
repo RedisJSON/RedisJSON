@@ -29,8 +29,7 @@ jobs:
     needs: [prepare-values]
     with:
       arch: x64
-      # os: jammy rocky9 amazonlinux2
-      os: bionic focal jammy rocky8 rocky9 bullseye amazonlinux2 mariner2 azurelinux3 alpine
+      os: jammy noble resolute rocky8 rocky9 rocky10 alma8 alma9 alma10 bookworm trixie alpine
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
   build-linux-arm64:
@@ -38,7 +37,7 @@ jobs:
     needs: [prepare-values]
     with:
       arch: arm64
-      os: bionic focal jammy rocky9 azurelinux3 alpine
+      os: jammy noble resolute rocky8 rocky9 rocky10 alma8 alma9 alma10 bookworm trixie alpine
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
   macos:

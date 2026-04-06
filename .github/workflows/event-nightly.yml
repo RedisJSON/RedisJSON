@@ -46,6 +46,7 @@ jobs:
     needs: [prepare-values]
     with:
       arch: x64
+      os: jammy noble resolute rocky8 rocky9 rocky10 alma8 alma9 alma10 bookworm trixie alpine
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
       beta-version: ${{needs.prepare-values.outputs.beta-version}}
     secrets: inherit

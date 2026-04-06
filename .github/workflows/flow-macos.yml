@@ -47,13 +47,19 @@ jobs:
           github-ref: ${{ github.ref }}
           beta-version: ${{ inputs.beta-version }}
           redis-ref: ${{ inputs.redis-ref }}
-  build-macos-arm:
-    name: Build for ${{ matrix.os }} (arm64)
+  build-macos:
+    name: Build for ${{ matrix.runner }} (${{ matrix.arch }})
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, macos-15, macos-26]
-    runs-on: ${{ matrix.os }}
+        include:
+          - { runner: macos-14, arch: arm64 }
+          - { runner: macos-15, arch: arm64 }
+          - { runner: macos-26, arch: arm64 }
+          - { runner: macos-14-large, arch: intel }
+          - { runner: macos-15-intel, arch: intel }
+          - { runner: macos-26-intel, arch: intel }
+    runs-on: ${{ matrix.runner }}
     needs: setup-environment
     env:
       TAGGED: ${{ needs.setup-environment.outputs.TAGGED }}

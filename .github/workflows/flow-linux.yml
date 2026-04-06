@@ -17,7 +17,7 @@ on:
         required: true
         default: 'x64'
       os:
-        description: 'OS to build on (space-separated, e.g. "focal jammy rocky9")'
+        description: 'OS to build on (space-separated, e.g. "jammy noble resolute rocky10")'
         type: string
         required: false
         default: ''
@@ -45,7 +45,7 @@ on:
         type: string
         required: true
       os:
-        description: 'OS to build on (space-separated, e.g. "focal jammy rocky9")'
+        description: 'OS to build on (space-separated, e.g. "jammy noble resolute rocky10")'
         type: string
         required: false
         default: ''
@@ -98,9 +98,9 @@ jobs:
           OS="${{ inputs.os }}"
           if [ -z "${OS}" ]; then
             if [ "${{ inputs.arch }}" == "arm64" ]; then
-              OS="bionic focal jammy rocky9 azurelinux3 amazonlinux2023 alpine"
+              OS="jammy noble resolute rocky8 rocky9 rocky10 alma8 alma9 alma10 bookworm trixie alpine"
             else
-              OS="bionic focal jammy rocky8 rocky9 bullseye amazonlinux2 amazonlinux2023 mariner2 azurelinux3 alpine"
+              OS="jammy noble resolute rocky8 rocky9 rocky10 alma8 alma9 alma10 bookworm trixie alpine"
             fi
           fi
           # Convert space-separated list to JSON array
