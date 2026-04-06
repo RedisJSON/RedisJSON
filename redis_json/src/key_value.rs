@@ -53,35 +53,46 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         match v.get_type() {
             SelectValueType::Null => RedisValue::Null,
 
-            SelectValueType::Bool => {
-                let bool_val = v.get_bool();
-                match bool_val {
-                    true => RedisValue::SimpleString("true".to_string()),
-                    false => RedisValue::SimpleString("false".to_string()),
-                }
-            }
+            SelectValueType::Bool => match v.get_bool() {
+                Some(true) => RedisValue::SimpleString("true".to_string()),
+                Some(false) => RedisValue::SimpleString("false".to_string()),
+                None => RedisValue::Null,
+            },
 
-            SelectValueType::Long => RedisValue::Integer(v.get_long()),
+            SelectValueType::Long => v
+                .get_long()
+                .map(RedisValue::Integer)
+                .unwrap_or(RedisValue::Null),
 
-            SelectValueType::Double => RedisValue::Float(v.get_double()),
+            SelectValueType::Double => v
+                .get_double()
+                .map(RedisValue::Float)
+                .unwrap_or(RedisValue::Null),
 
-            SelectValueType::String => RedisValue::BulkString(v.get_str()),
+            SelectValueType::String => v
+                .get_str()
+                .map(RedisValue::BulkString)
+                .unwrap_or(RedisValue::Null),
 
             SelectValueType::Array => {
-                let mut res = Vec::with_capacity(v.len().unwrap() + 1);
+                let cap = v.len().map_or(1, |n| n + 1);
+                let mut res = Vec::with_capacity(cap);
                 res.push(RedisValue::SimpleStringStatic("["));
-                v.values()
-                    .unwrap()
-                    .for_each(|v| res.push(Self::resp_serialize_inner(v.as_ref())));
+                if let Some(values) = v.values() {
+                    values.for_each(|v| res.push(Self::resp_serialize_inner(v.as_ref())));
+                }
                 RedisValue::Array(res)
             }
 
             SelectValueType::Object => {
-                let mut res = Vec::with_capacity(v.len().unwrap() + 1);
+                let cap = v.len().map_or(1, |n| n + 1);
+                let mut res = Vec::with_capacity(cap);
                 res.push(RedisValue::SimpleStringStatic("{"));
-                for (k, v) in v.items().unwrap() {
-                    res.push(RedisValue::BulkString(k.to_string()));
-                    res.push(Self::resp_serialize_inner(v.as_ref()));
+                if let Some(items) = v.items() {
+                    for (k, v) in items {
+                        res.push(RedisValue::BulkString(k.to_string()));
+                        res.push(Self::resp_serialize_inner(v.as_ref()));
+                    }
                 }
                 RedisValue::Array(res)
             }
@@ -94,15 +105,18 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         Ok(results)
     }
 
-    pub fn serialize_object<O: Serialize>(o: &O, format: &ReplyFormatOptions) -> String {
+    pub fn serialize_object<O: Serialize>(
+        o: &O,
+        format: &ReplyFormatOptions,
+    ) -> RedisResult<String> {
         // When using the default formatting, we can use serde_json's default serializer
         if format.no_formatting() {
-            serde_json::to_string(o).unwrap()
+            Ok(serde_json::to_string(o)?)
         } else {
             let formatter = RedisJsonFormatter::new(format);
             let mut out = serde_json::Serializer::with_formatter(Vec::new(), formatter);
-            o.serialize(&mut out).unwrap();
-            String::from_utf8(out.into_inner()).unwrap()
+            o.serialize(&mut out)?;
+            Ok(String::from_utf8(out.into_inner())?)
         }
     }
 
@@ -159,7 +173,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 .collect();
             RedisValue::Map(map)
         } else {
-            Self::serialize_object(&temp_doc, format).into()
+            Self::serialize_object(&temp_doc, format)?.into()
         };
         Ok(res)
     }
@@ -207,37 +221,65 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         if format.format == ReplyFormat::EXPAND {
             match value.get_type() {
                 SelectValueType::Null => RedisValue::Null,
-                SelectValueType::Bool => RedisValue::Bool(value.get_bool()),
-                SelectValueType::Long => RedisValue::Integer(value.get_long()),
-                SelectValueType::Double => RedisValue::Float(value.get_double()),
-                SelectValueType::String => RedisValue::BulkString(value.get_str()),
+                SelectValueType::Bool => value
+                    .get_bool()
+                    .map(RedisValue::Bool)
+                    .unwrap_or(RedisValue::Null),
+                SelectValueType::Long => value
+                    .get_long()
+                    .map(RedisValue::Integer)
+                    .unwrap_or(RedisValue::Null),
+                SelectValueType::Double => value
+                    .get_double()
+                    .map(RedisValue::Float)
+                    .unwrap_or(RedisValue::Null),
+                SelectValueType::String => value
+                    .get_str()
+                    .map(RedisValue::BulkString)
+                    .unwrap_or(RedisValue::Null),
                 SelectValueType::Array => RedisValue::Array(
                     value
                         .values()
-                        .unwrap()
-                        .map(|v| Self::value_to_resp3(v.as_ref(), format))
-                        .collect(),
+                        .map(|vals| {
+                            vals.map(|v| Self::value_to_resp3(v.as_ref(), format))
+                                .collect()
+                        })
+                        .unwrap_or_default(),
                 ),
                 SelectValueType::Object => RedisValue::Map(
                     value
                         .items()
-                        .unwrap()
-                        .map(|(k, v)| {
-                            (
-                                RedisValueKey::String(k.to_string()),
-                                Self::value_to_resp3(v.as_ref(), format),
-                            )
+                        .map(|items| {
+                            items
+                                .map(|(k, v)| {
+                                    (
+                                        RedisValueKey::String(k.to_string()),
+                                        Self::value_to_resp3(v.as_ref(), format),
+                                    )
+                                })
+                                .collect()
                         })
-                        .collect(),
+                        .unwrap_or_default(),
                 ),
             }
         } else {
             match value.get_type() {
                 SelectValueType::Null => RedisValue::Null,
-                SelectValueType::Bool => RedisValue::Bool(value.get_bool()),
-                SelectValueType::Long => RedisValue::Integer(value.get_long()),
-                SelectValueType::Double => RedisValue::Float(value.get_double()),
-                _ => RedisValue::BulkString(Self::serialize_object(value, format)),
+                SelectValueType::Bool => value
+                    .get_bool()
+                    .map(RedisValue::Bool)
+                    .unwrap_or(RedisValue::Null),
+                SelectValueType::Long => value
+                    .get_long()
+                    .map(RedisValue::Integer)
+                    .unwrap_or(RedisValue::Null),
+                SelectValueType::Double => value
+                    .get_double()
+                    .map(RedisValue::Float)
+                    .unwrap_or(RedisValue::Null),
+                _ => Self::serialize_object(value, format)
+                    .map(RedisValue::BulkString)
+                    .unwrap_or(RedisValue::Null),
             }
         }
     }
@@ -329,12 +371,12 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
 
     pub fn to_string_single(&self, path: &str, format: &ReplyFormatOptions) -> RedisResult<String> {
         let result = self.get_first(path)?;
-        Ok(Self::serialize_object(&result, format))
+        Self::serialize_object(&result, format)
     }
 
     pub fn to_string_multi(&self, path: &str, format: &ReplyFormatOptions) -> RedisResult<String> {
         let results = self.get_values(path)?;
-        Ok(Self::serialize_object(&results, format))
+        Self::serialize_object(&results, format)
     }
 
     pub fn get_type(&self, path: &str) -> RedisResult<String> {
@@ -366,7 +408,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     pub fn str_len(&self, path: &str) -> RedisResult<usize> {
         let first = self.get_first(path)?;
         match first.get_type() {
-            SelectValueType::String => Ok(first.get_str().len()),
+            SelectValueType::String => Ok(first.get_str().ok_or_else(|| err_json("string"))?.len()),
             _ => Err(err_json("string")),
         }
     }
@@ -374,7 +416,10 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     pub fn obj_len(&self, path: &str) -> RedisResult<ObjectLen> {
         match self.get_first(path) {
             Ok(first) => match first.get_type() {
-                SelectValueType::Object => Ok(ObjectLen::Len(first.len().unwrap())),
+                SelectValueType::Object => first
+                    .len()
+                    .map(ObjectLen::Len)
+                    .ok_or_else(|| err_json("object")),
                 _ => Err(err_json("object")),
             },
             _ => Ok(ObjectLen::NoneExisting),
@@ -417,7 +462,10 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             return FoundIndex::NotArray;
         }
 
-        let len = arr.len().unwrap() as i64;
+        let Some(len_u) = arr.len() else {
+            return FoundIndex::NotArray;
+        };
+        let len = len_u as i64;
         if len == 0 {
             return FoundIndex::NotFound;
         }

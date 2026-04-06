@@ -113,3 +113,11 @@ pub fn err_recursion_limit_exceeded() -> RedisError {
 pub fn err_numeric_overflow() -> RedisError {
     RedisError::Str("ERR numeric overflow")
 }
+
+pub fn err_not_a_number() -> RedisError {
+    RedisError::Str("ERR result is not a number")
+}
+
+pub fn err_bad_object() -> RedisError {
+    RedisError::Str("ERR bad object type")
+}
