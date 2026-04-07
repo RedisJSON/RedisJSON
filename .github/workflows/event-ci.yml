@@ -71,6 +71,9 @@ jobs:
   linter:
     uses: ./.github/workflows/flow-linter.yml
     secrets: inherit
+  clippy:
+    uses: ./.github/workflows/flow-clippy.yml
+    secrets: inherit
   memory-regression:
     needs: [prepare-values, docs-only]
     if: ${{ needs.docs-only.outputs.only-docs-changed == 'false' && !github.event.pull_request.draft }}
