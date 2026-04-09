@@ -680,9 +680,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 .pop()
                 .map(|r| TermEvaluationResult::Value(r.res))
                 .unwrap_or(TermEvaluationResult::Invalid),
-            _ => TermEvaluationResult::NodeList(
-                results.into_iter().map(|r| r.res).collect(),
-            ),
+            _ => TermEvaluationResult::NodeList(results.into_iter().map(|r| r.res).collect()),
         }
     }
 
