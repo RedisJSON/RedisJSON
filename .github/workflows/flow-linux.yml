@@ -177,6 +177,7 @@ jobs:
           docker run --rm \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
+            -e OSNICK=${{ matrix.platform.os }} \
             -e BRANCH=${{ env.BRANCH }} \
             -e VERSION=${{ env.VERSION }} \
             -e TAGGED=${{ env.TAGGED }} \
@@ -195,6 +196,7 @@ jobs:
           docker run --rm \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
+            -e OSNICK=${{ matrix.platform.os }} \
             -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
             -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
             -e GITHUB_REF=${{ github.ref }} \
