@@ -406,6 +406,9 @@ enum TermEvaluationResult<'i, 'j, S: SelectValue> {
     Value(ValueRef<'j, S>),
     Bool(bool),
     Null,
+    /// Multiple results from a non-singular query (e.g. `@.*`, `@..key`).
+    /// Per RFC 9535, comparisons succeed if ANY element satisfies the condition.
+    NodeList(Vec<ValueRef<'j, S>>),
     Invalid,
 }
 
@@ -496,36 +499,45 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             (_, _) => CmpResult::NotComparable,
         }
     }
-    fn gt(&self, s: &Self) -> bool {
-        match self.cmp(s) {
-            CmpResult::Ord(o) => o.is_gt(),
-            CmpResult::NotComparable => false,
+    fn ord_cmp_matches(&self, s: &Self, pred: fn(Ordering) -> bool) -> bool {
+        match (self, s) {
+            (TermEvaluationResult::NodeList(list), _) => list
+                .iter()
+                .any(|v| TermEvaluationResult::Value(v.clone()).ord_cmp_matches(s, pred)),
+            (_, TermEvaluationResult::NodeList(list)) => list
+                .iter()
+                .any(|v| self.ord_cmp_matches(&TermEvaluationResult::Value(v.clone()), pred)),
+            _ => match self.cmp(s) {
+                CmpResult::Ord(o) => pred(o),
+                CmpResult::NotComparable => false,
+            },
         }
+    }
+
+    fn gt(&self, s: &Self) -> bool {
+        self.ord_cmp_matches(s, Ordering::is_gt)
     }
 
     fn ge(&self, s: &Self) -> bool {
-        match self.cmp(s) {
-            CmpResult::Ord(o) => o.is_ge(),
-            CmpResult::NotComparable => false,
-        }
+        self.ord_cmp_matches(s, Ordering::is_ge)
     }
 
     fn lt(&self, s: &Self) -> bool {
-        match self.cmp(s) {
-            CmpResult::Ord(o) => o.is_lt(),
-            CmpResult::NotComparable => false,
-        }
+        self.ord_cmp_matches(s, Ordering::is_lt)
     }
 
     fn le(&self, s: &Self) -> bool {
-        match self.cmp(s) {
-            CmpResult::Ord(o) => o.is_le(),
-            CmpResult::NotComparable => false,
-        }
+        self.ord_cmp_matches(s, Ordering::is_le)
     }
 
     fn eq(&self, s: &Self) -> bool {
         match (self, s) {
+            (TermEvaluationResult::NodeList(list), _) => list
+                .iter()
+                .any(|v| TermEvaluationResult::Value(v.clone()).eq(s)),
+            (_, TermEvaluationResult::NodeList(list)) => list
+                .iter()
+                .any(|v| self.eq(&TermEvaluationResult::Value(v.clone()))),
             (TermEvaluationResult::Value(v1), TermEvaluationResult::Value(v2)) => v1 == v2,
             (_, _) => match self.cmp(s) {
                 CmpResult::Ord(o) => o.is_eq(),
@@ -567,7 +579,15 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
     }
 
     fn re(&self, s: &Self) -> bool {
-        self.re_match(s)
+        match (self, s) {
+            (TermEvaluationResult::NodeList(list), _) => list
+                .iter()
+                .any(|v| TermEvaluationResult::Value(v.clone()).re(s)),
+            (_, TermEvaluationResult::NodeList(list)) => list
+                .iter()
+                .any(|v| self.re(&TermEvaluationResult::Value(v.clone()))),
+            _ => self.re_match(s),
+        }
     }
 }
 
@@ -648,6 +668,21 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         PathCalculator {
             query: Some(query),
             tracker_generator: Some(tracker_generator),
+        }
+    }
+
+    fn results_to_term<'j, S: SelectValue>(
+        mut results: Vec<CalculationResult<'j, S, UPTG::PT>>,
+    ) -> TermEvaluationResult<'static, 'j, S> {
+        match results.len() {
+            0 => TermEvaluationResult::Invalid,
+            1 => results
+                .pop()
+                .map(|r| TermEvaluationResult::Value(r.res))
+                .unwrap_or(TermEvaluationResult::Invalid),
+            _ => TermEvaluationResult::NodeList(
+                results.into_iter().map(|r| r.res).collect(),
+            ),
         }
     }
 
@@ -896,14 +931,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                         root: json.clone(),
                     };
                     self.calc_internal(term.into_inner(), json, None, &mut calc_data);
-                    match calc_data.results.len() {
-                        1 => calc_data
-                            .results
-                            .pop()
-                            .map(|r| TermEvaluationResult::Value(r.res))
-                            .unwrap_or(TermEvaluationResult::Invalid),
-                        _ => TermEvaluationResult::Invalid,
-                    }
+                    Self::results_to_term(calc_data.results)
                 }
                 None => TermEvaluationResult::Value(json),
             },
@@ -919,14 +947,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                         None,
                         &mut new_calc_data,
                     );
-                    match new_calc_data.results.len() {
-                        1 => new_calc_data
-                            .results
-                            .pop()
-                            .map(|r| TermEvaluationResult::Value(r.res))
-                            .unwrap_or(TermEvaluationResult::Invalid),
-                        _ => TermEvaluationResult::Invalid,
-                    }
+                    Self::results_to_term(new_calc_data.results)
                 }
                 None => TermEvaluationResult::Value(calc_data.root.clone()),
             },
@@ -1169,14 +1190,10 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                                     }
                                 }
                             }
-                        } else if self.evaluate_filter(curr.into_inner(), json.clone(), calc_data) {
-                            trace!(
-                                "calc_internal type {:?} path_tracker {:?}",
-                                json_type,
-                                &path_tracker
-                            );
-                            self.calc_internal(pairs, json, path_tracker, calc_data);
                         }
+                        // Per RFC 9535 s2.3.5.2: "The filter selector works
+                        // with arrays and objects exclusively. [...] Applied
+                        // to a primitive value, it selects nothing."
                     }
                     Rule::EOI => {
                         calc_data.results.push(CalculationResult {
