@@ -54,10 +54,7 @@ OS=$($READIES/bin/platform --os)
 [[ $OSNICK == ol8 ]]     && OSNICK=rhel8
 [[ $OSNICK == rocky8 ]]  && OSNICK=rhel8
 [[ $OSNICK == rocky9 ]]  && OSNICK=rhel9
-[[ $OSNICK == alma8 ]]   && OSNICK=rhel8
-[[ $OSNICK == alma9 ]]   && OSNICK=rhel9
 [[ $OSNICK == rocky10 ]] && OSNICK=rhel10
-[[ $OSNICK == alma10 ]]  && OSNICK=rhel10
 
 PLATFORM="$OS-$OSNICK-$ARCH"
 
