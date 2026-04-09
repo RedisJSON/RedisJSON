@@ -519,6 +519,114 @@ fn filter_with_wildcard_subpath() {
         ]),
         json!([{"d": {"v": 3}, "e": {"v": 4}}]),
     );
+
+    // --- Coverage for right-side NodeList in ordering comparisons ---
+    // Value < NodeList: scalar on left, wildcard multi-result on right
+    select_and_then_compare(
+        "$[?(@.x < @.*.y)]",
+        json!([
+            {"x": 1, "a": {"y": 5}, "b": {"y": 10}},
+            {"x": 100, "a": {"y": 5}, "b": {"y": 10}},
+        ]),
+        json!([{"x": 1, "a": {"y": 5}, "b": {"y": 10}}]),
+    );
+
+    // Value >= NodeList
+    select_and_then_compare(
+        "$[?(@.x >= @.*.y)]",
+        json!([
+            {"x": 5, "a": {"y": 5}, "b": {"y": 10}},
+            {"x": 1, "a": {"y": 5}, "b": {"y": 10}},
+        ]),
+        json!([{"x": 5, "a": {"y": 5}, "b": {"y": 10}}]),
+    );
+
+    // Value <= NodeList
+    select_and_then_compare(
+        "$[?(@.x <= @.*.y)]",
+        json!([
+            {"x": 10, "a": {"y": 5}, "b": {"y": 10}},
+            {"x": 100, "a": {"y": 5}, "b": {"y": 10}},
+        ]),
+        json!([{"x": 10, "a": {"y": 5}, "b": {"y": 10}}]),
+    );
+
+    // --- Coverage for right-side NodeList in equality ---
+    // Value == NodeList: matches if any element in NodeList equals the scalar
+    select_and_then_compare(
+        "$[?(@.x == @.*.y)]",
+        json!([
+            {"x": 5, "a": {"y": 5}, "b": {"y": 10}},
+            {"x": 99, "a": {"y": 5}, "b": {"y": 10}},
+        ]),
+        json!([{"x": 5, "a": {"y": 5}, "b": {"y": 10}}]),
+    );
+
+    // --- Coverage for root-reference ($) producing NodeList ---
+    // $.bounds.* yields [3, 15]; filter keeps data elements > any bound
+    select_and_then_compare(
+        "$.data[?(@ > $.bounds.*)]",
+        json!({"data": [1, 5, 20], "bounds": [3, 15]}),
+        json!([5, 20]),
+    );
+
+    // --- Coverage for NodeList vs NodeList ordering ---
+    // Both sides are wildcards, comparison succeeds if ANY pair matches
+    select_and_then_compare(
+        "$[?(@.*.x > @.*.y)]",
+        json!([
+            {"a": {"x": 1}, "b": {"x": 10}, "c": {"y": 5}, "d": {"y": 20}},
+            {"a": {"x": 1}, "b": {"x": 2}, "c": {"y": 100}, "d": {"y": 200}},
+        ]),
+        // First element: 10 > 5 is true → match
+        // Second element: max x=2, min y=100, no x > any y → no match
+        json!([{"a": {"x": 1}, "b": {"x": 10}, "c": {"y": 5}, "d": {"y": 20}}]),
+    );
+
+    // --- Coverage for NodeList vs NodeList equality ---
+    select_and_then_compare(
+        "$[?(@.*.x == @.*.y)]",
+        json!([
+            {"a": {"x": 1}, "b": {"x": 2}, "c": {"y": 2}, "d": {"y": 3}},
+            {"a": {"x": 10}, "c": {"y": 20}},
+        ]),
+        // First element: x=2 matches y=2 → match
+        // Second element: x=10 ≠ y=20 → no match
+        json!([{"a": {"x": 1}, "b": {"x": 2}, "c": {"y": 2}, "d": {"y": 3}}]),
+    );
+
+    // --- Coverage for NodeList left with lt ---
+    select_and_then_compare(
+        "$[?(@.*.x < 10)]",
+        json!([
+            {"a": {"x": 5}, "b": {"x": 15}},
+            {"a": {"x": 20}, "b": {"x": 30}},
+        ]),
+        // First element: 5 < 10 → match
+        json!([{"a": {"x": 5}, "b": {"x": 15}}]),
+    );
+
+    // --- Coverage for NodeList left with ge ---
+    select_and_then_compare(
+        "$[?(@.*.x >= 10)]",
+        json!([
+            {"a": {"x": 3}, "b": {"x": 10}},
+            {"a": {"x": 1}, "b": {"x": 2}},
+        ]),
+        // First element: 10 >= 10 → match
+        json!([{"a": {"x": 3}, "b": {"x": 10}}]),
+    );
+
+    // --- Coverage for NodeList left with le ---
+    select_and_then_compare(
+        "$[?(@.*.x <= 10)]",
+        json!([
+            {"a": {"x": 5}, "b": {"x": 15}},
+            {"a": {"x": 20}, "b": {"x": 30}},
+        ]),
+        // First element: 5 <= 10 → match
+        json!([{"a": {"x": 5}, "b": {"x": 15}}]),
+    );
 }
 
 #[test]
@@ -578,5 +686,124 @@ fn regex_with_nodelist_pattern() {
         json!([
             {"a": "foobar", "x": {"pat": "^foo"}, "y": {"pat": "^nope"}}
         ]),
+    );
+}
+
+#[test]
+fn gh963_wildcard_and_recursive_descent_in_filter() {
+    setup();
+
+    let doc = json!([
+        [{"code":1},{"code":3}],
+        [{"mode":{"code":4}},{"code":2}],
+        [{"code":0},{"code":2}]
+    ]);
+
+    // @.*.code>2: wildcard over array elements, then .code
+    select_and_then_compare(
+        "$[?(@.*.code>2)]",
+        doc.clone(),
+        json!([
+            [{"code":1},{"code":3}]
+        ]),
+    );
+
+    // @..code>2: recursive descent finds all nested "code" values
+    select_and_then_compare(
+        "$[?(@..code>2)]",
+        doc.clone(),
+        json!([
+            [{"code":1},{"code":3}],
+            [{"mode":{"code":4}},{"code":2}]
+        ]),
+    );
+
+    // Equality variant: @.*.code==2
+    select_and_then_compare(
+        "$[?(@.*.code==2)]",
+        doc.clone(),
+        json!([
+            [{"mode":{"code":4}},{"code":2}],
+            [{"code":0},{"code":2}]
+        ]),
+    );
+
+    // Less-than: @.*.code<2
+    select_and_then_compare(
+        "$[?(@.*.code<2)]",
+        doc.clone(),
+        json!([
+            [{"code":1},{"code":3}],
+            [{"code":0},{"code":2}]
+        ]),
+    );
+}
+
+#[test]
+fn nodelist_with_not_comparable_types() {
+    setup();
+
+    // NodeList containing mixed types — non-comparable pairs should not match
+    select_and_then_compare(
+        "$[?(@.*.v > 5)]",
+        json!([
+            {"a": {"v": "hello"}, "b": {"v": 10}},
+            {"a": {"v": null}, "b": {"v": 3}},
+        ]),
+        // First: "hello" > 5 is not comparable, but 10 > 5 is true → match
+        // Second: null > 5 is not comparable, 3 > 5 is false → no match
+        json!([{"a": {"v": "hello"}, "b": {"v": 10}}]),
+    );
+
+    // NodeList where ALL elements are non-comparable
+    select_and_then_compare(
+        "$[?(@.*.v > 5)]",
+        json!([
+            {"a": {"v": "hello"}, "b": {"v": true}},
+        ]),
+        json!([]),
+    );
+
+    // NodeList eq with mixed types
+    select_and_then_compare(
+        "$[?(@.*.v == true)]",
+        json!([
+            {"a": {"v": true}, "b": {"v": 42}},
+            {"a": {"v": 1}, "b": {"v": "yes"}},
+        ]),
+        json!([{"a": {"v": true}, "b": {"v": 42}}]),
+    );
+}
+
+#[test]
+fn nodelist_empty_and_single() {
+    setup();
+
+    // Sub-path that produces 0 results → Invalid → no match
+    select_and_then_compare(
+        "$[?(@.*.nonexistent > 0)]",
+        json!([{"a": {"x": 1}}, {"b": {"x": 2}}]),
+        json!([]),
+    );
+
+    // Sub-path that produces exactly 1 result → Value (not NodeList)
+    select_and_then_compare(
+        "$[?(@.a.x > 5)]",
+        json!([{"a": {"x": 10}}, {"a": {"x": 3}}]),
+        json!([{"a": {"x": 10}}]),
+    );
+
+    // Root-reference producing 0 results → Invalid
+    select_and_then_compare(
+        "$.data[?(@ > $.nonexistent.*)]",
+        json!({"data": [1, 2, 3]}),
+        json!([]),
+    );
+
+    // Root-reference producing exactly 1 result → Value
+    select_and_then_compare(
+        "$.data[?(@ > $.threshold)]",
+        json!({"data": [1, 5, 20], "threshold": 10}),
+        json!([20]),
     );
 }
