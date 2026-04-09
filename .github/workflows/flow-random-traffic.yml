@@ -46,7 +46,7 @@ jobs:
             echo "os=${INPUT_OS}" >> $GITHUB_OUTPUT
             echo "Using specified OS: ${INPUT_OS}"
           else
-            OS_LIST=(bionic focal jammy noble resolute rocky8 rocky9 rocky10 alma8 alma9 alma10 bullseye bookworm trixie amazonlinux2 amazonlinux2023 mariner2 azurelinux3 alpine)
+            OS_LIST=(bionic focal jammy rocky8 rocky9 bullseye amazonlinux2 amazonlinux2023 mariner2 azurelinux3 alpine noble resolute rocky10 alma8 alma9 alma10 bookworm trixie)
             RANDOM_INDEX=$((RANDOM % ${#OS_LIST[@]}))
             SELECTED=${OS_LIST[$RANDOM_INDEX]}
             echo "os=${SELECTED}" >> $GITHUB_OUTPUT
