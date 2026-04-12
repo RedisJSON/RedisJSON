@@ -82,6 +82,7 @@ fi
 [[ $OSNICK == centos7 ]] && OSNICK=rhel7
 [[ $OSNICK == centos8 ]] && OSNICK=rhel8
 [[ $OSNICK == centos9 ]] && OSNICK=rhel9
+[[ $OSNICK == centos10 ]] && OSNICK=rhel10
 [[ $OSNICK == ol8 ]]     && OSNICK=rhel8
 [[ $OSNICK == rocky8 ]]  && OSNICK=rhel8
 [[ $OSNICK == rocky9 ]]  && OSNICK=rhel9
