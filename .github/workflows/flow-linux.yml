@@ -174,16 +174,9 @@ jobs:
       - name: Pack module
         if: ${{ !inputs.run_valgrind }}
         run: |
-          OSNICK_FLAG=""
-          case "${{ matrix.platform.os }}" in
-            alma8|alma9|alma10)
-              OSNICK_FLAG="-e OSNICK=${{ matrix.platform.os }}"
-              ;;
-          esac
           docker run --rm \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
-            $OSNICK_FLAG \
             -e BRANCH=${{ env.BRANCH }} \
             -e VERSION=${{ env.VERSION }} \
             -e TAGGED=${{ env.TAGGED }} \
@@ -199,16 +192,9 @@ jobs:
       - name: Upload artifacts to S3
         if: ${{ !inputs.run_valgrind }}
         run: |
-          OSNICK_FLAG=""
-          case "${{ matrix.platform.os }}" in
-            alma8|alma9|alma10)
-              OSNICK_FLAG="-e OSNICK=${{ matrix.platform.os }}"
-              ;;
-          esac
           docker run --rm \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
-            $OSNICK_FLAG \
             -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
             -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
             -e GITHUB_REF=${{ github.ref }} \

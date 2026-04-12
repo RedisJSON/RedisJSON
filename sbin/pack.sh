@@ -65,7 +65,7 @@ ARCH=$(uname -m)
 OS=$($READIES/bin/platform --os)
 [[ $OS == linux ]] && OS=Linux
 
-[[ -z $OSNICK ]] && OSNICK=$($READIES/bin/platform --osnick)
+OSNICK=$($READIES/bin/platform --osnick)
 [[ $OSNICK == trusty ]]  && OSNICK=ubuntu14.04
 [[ $OSNICK == xenial ]]  && OSNICK=ubuntu16.04
 [[ $OSNICK == bionic ]]  && OSNICK=ubuntu18.04
