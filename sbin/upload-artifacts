@@ -40,7 +40,7 @@ ARCH=$($READIES/bin/platform --arch)
 OS=$($READIES/bin/platform --os)
 [[ $OS == linux ]] && OS="Linux"
 
-[[ -z ${OSNICK:-} ]] && OSNICK=$($READIES/bin/platform --osnick)
+[[ -z $OSNICK ]] && OSNICK=$($READIES/bin/platform --osnick)
 if [[ -r /etc/os-release ]]; then
 	# shellcheck disable=SC1091
 	. /etc/os-release

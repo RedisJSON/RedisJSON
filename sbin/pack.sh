@@ -65,7 +65,7 @@ ARCH=$(uname -m)
 OS=$($READIES/bin/platform --os)
 [[ $OS == linux ]] && OS=Linux
 
-[[ -z ${OSNICK:-} ]] && OSNICK=$($READIES/bin/platform --osnick)
+OSNICK=$($READIES/bin/platform --osnick)
 # platform reports centosN on Alma; use real ID from the image
 if [[ -r /etc/os-release ]]; then
 	# shellcheck disable=SC1091
