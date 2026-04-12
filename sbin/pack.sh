@@ -65,7 +65,13 @@ ARCH=$(uname -m)
 OS=$($READIES/bin/platform --os)
 [[ $OS == linux ]] && OS=Linux
 
-OSNICK=$($READIES/bin/platform --osnick)
+[[ -z ${OSNICK:-} ]] && OSNICK=$($READIES/bin/platform --osnick)
+# platform reports centosN on Alma; use real ID from the image
+if [[ -r /etc/os-release ]]; then
+	# shellcheck disable=SC1091
+	. /etc/os-release
+	[[ ${ID:-} == almalinux ]] && OSNICK=alma${VERSION_ID%%.*}
+fi
 [[ $OSNICK == trusty ]]  && OSNICK=ubuntu14.04
 [[ $OSNICK == xenial ]]  && OSNICK=ubuntu16.04
 [[ $OSNICK == bionic ]]  && OSNICK=ubuntu18.04
