@@ -847,10 +847,29 @@ where
         .collect()
 }
 
-/// Deeper (longer) paths first, higher array indices first within the same parent.
-/// This ordering ensures mutations on children happen before parents, and
-/// higher-index siblings before lower-index ones, so that no earlier mutation
-/// invalidates a later path.
+/// Comparator for safe in-place mutation ordering of JSON paths.
+///
+/// Produces: deeper (longer) paths first, higher array indices first within the
+/// same parent.  This ordering ensures mutations on children happen before
+/// parents, and higher-index siblings before lower-index ones, so that no
+/// earlier mutation invalidates a later path.
+///
+/// **Why this matters** – array-mutating commands (ARRPOP, ARRTRIM, ARRINSERT)
+/// change element count/indices.  A recursive path such as `$..* ` can match
+/// both a parent array *and* its children.  If we mutated the parent first
+/// (e.g. popping an element), the child paths that were resolved *before* the
+/// mutation would now point at the wrong indices — or at out-of-bounds
+/// positions.  Processing deeper / higher-index paths first guarantees every
+/// path is still valid at the moment it is used.
+///
+/// Example with `ARRPOP k $..* -1` on `{"a":[[1,2,3],[4,5,6]]}`:
+///   Matched paths (unordered): `$.a` → `[[1,2,3],[4,5,6]]`,
+///                               `$.a[0]` → `[1,2,3]`,
+///                               `$.a[1]` → `[4,5,6]`
+///   Sorted (deepest + highest-index first): `$.a[1]`, `$.a[0]`, `$.a`
+///   Mutations:  pop `$.a[1]` → `[4,5]`,
+///               pop `$.a[0]` → `[1,2]`,
+///               pop `$.a`    → `[[1,2]]`   (parent is last, indices still valid)
 fn compare_paths_for_mutation(v1: &[String], v2: &[String]) -> Ordering {
     v1.iter()
         .zip_longest(v2.iter())
@@ -885,10 +904,16 @@ fn compare_paths_for_mutation(v1: &[String], v2: &[String]) -> Ordering {
         .into_inner()
 }
 
-/// Sort (original_index, path) pairs for safe in-place mutation: deeper paths
-/// first, higher array indices first within the same parent. Results should be
-/// placed back at their original indices to preserve the response order expected
-/// by callers.
+/// Sort `(original_index, path)` pairs for safe in-place mutation.
+///
+/// Ordering: deeper paths first, higher array indices first within the same
+/// parent (see [`compare_paths_for_mutation`]).
+///
+/// Each pair carries the position the path had in the original match list so
+/// that, after mutations are applied in safe order, results can be written back
+/// to `res[original_index]`.  This preserves the reply order the client expects
+/// (i-th reply element corresponds to the i-th matched path) while still
+/// executing mutations in an order that keeps every path valid.
 fn sort_paths_for_mutation(indexed_paths: &mut [(usize, Vec<String>)]) {
     if indexed_paths.len() < 2 {
         return;
