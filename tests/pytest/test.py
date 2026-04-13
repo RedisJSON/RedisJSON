@@ -1570,7 +1570,7 @@ def testMergeNested(env):
     r.expect('JSON.GET', 'test_merge_nested').equal('{"a":{"b":{"f1":{"b1":1,"c1":3},"f2":{"b2":2,"c2":4}}}}')
 
     # Test with simple nested merge on dynamic path
-    r.assertOk(r.execute_command('JSON.SET', 'test_merge_nested', '$', '{"a":{"b1":{"f":{"c1":1}}, "b2":{"f":{"c2":2}}}}}'))
+    r.assertOk(r.execute_command('JSON.SET', 'test_merge_nested', '$', '{"a":{"b1":{"f":{"c1":1}}, "b2":{"f":{"c2":2}}}}'))
     r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_nested', '$.a.*', '{"f":{"t":6}}'))
     r.expect('JSON.GET', 'test_merge_nested').equal('{"a":{"b1":{"f":{"c1":1,"t":6}},"b2":{"f":{"c2":2,"t":6}}}}')
 
