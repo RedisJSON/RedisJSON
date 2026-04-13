@@ -38,12 +38,18 @@ jobs:
         with:
           github-ref: ${{ github.ref }}
           redis-ref: ${{ inputs.redis-ref }}
-  build-macos-arm:
-    name: Build for ${{ matrix.os }} (arm64)
+  build-macos:
+    name: Build for ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, macos-15, macos-26]
+        os:
+          - macos-14
+          - macos-15
+          - macos-26
+          - macos-14-large
+          - macos-15-intel
+          - macos-26-intel
     runs-on: ${{ matrix.os }}
     needs: setup-environment
     env:
@@ -79,9 +85,9 @@ jobs:
         run: |
           echo ::group::Activate virtual environment
             python3 -m venv venv
-            echo "source venv/bin/activate" >> ~/.bashrc
-            echo "source venv/bin/activate" >> ~/.zshrc
-            . venv/bin/activate
+            echo "source ${GITHUB_WORKSPACE}/venv/bin/activate" >> ~/.bashrc
+            echo "source ${GITHUB_WORKSPACE}/venv/bin/activate" >> ~/.zshrc
+            . "${GITHUB_WORKSPACE}/venv/bin/activate"
           echo ::endgroup::
           echo ::group::Install python dependencies
             ./.install/common_installations.sh
@@ -94,16 +100,41 @@ jobs:
           path: redis
       - name: Build Redis
         working-directory: redis
-        run: make install
+        run: |
+          if [[ "${{ matrix.os }}" == macos-26* ]]; then
+            _SDK="$(xcrun --sdk macosx --show-sdk-path)"
+            export SDKROOT="$_SDK"
+            export CC=/usr/bin/clang CXX=/usr/bin/clang++
+          fi
+          make install
       - name: Build module
         run: |
+          if [[ "${{ matrix.os }}" == macos-26* ]]; then
+            _SDK="$(xcrun --sdk macosx --show-sdk-path)"
+            export SDKROOT="$_SDK"
+            export BINDGEN_EXTRA_CLANG_ARGS="-isysroot ${_SDK}"
+            export CC=/usr/bin/clang CXX=/usr/bin/clang++
+          fi
           make build
       - name: Test
         if: ${{inputs.run-test}}
         run: |
+          if [[ "${{ matrix.os }}" == macos-26* ]]; then
+            _SDK="$(xcrun --sdk macosx --show-sdk-path)"
+            export SDKROOT="$_SDK"
+            export BINDGEN_EXTRA_CLANG_ARGS="-isysroot ${_SDK}"
+            export CC=/usr/bin/clang CXX=/usr/bin/clang++
+          fi
           make test
       - name: Pack module
-        run: make pack BRANCH=$TAG_OR_BRANCH
+        run: |
+          if [[ "${{ matrix.os }}" == macos-26* ]]; then
+            _SDK="$(xcrun --sdk macosx --show-sdk-path)"
+            export SDKROOT="$_SDK"
+            export BINDGEN_EXTRA_CLANG_ARGS="-isysroot ${_SDK}"
+            export CC=/usr/bin/clang CXX=/usr/bin/clang++
+          fi
+          make pack BRANCH=$TAG_OR_BRANCH
       - name: Upload artifacts to S3
         uses: ./.github/actions/upload-artifacts-to-s3-without-make
         with:
