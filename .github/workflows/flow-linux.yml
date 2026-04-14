@@ -181,6 +181,7 @@ jobs:
             -e VERSION=${{ env.VERSION }} \
             -e TAGGED=${{ env.TAGGED }} \
             -e TAG_OR_BRANCH=${{ env.TAG_OR_BRANCH }} \
+            -e BETA_VERSION=${{ inputs.beta-version }} \
             ${{ env.DOCKER_IMAGE }} \
             bash -c "git config --global --add safe.directory /workspace && \
               if [[ -n '${{ inputs.beta-version }}' ]]; then \
