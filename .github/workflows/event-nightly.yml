@@ -27,7 +27,12 @@ jobs:
       redis-ref: ${{ steps.set-env.outputs.redis-ref }}
       beta-timestamp: ${{ steps.set-env.outputs.beta-timestamp }}
       beta-version: ${{ steps.set-env.outputs.beta-version }}
+      module-version: ${{ steps.get-version.outputs.module-version }}
+      snapshot-template: ${{ steps.set-env.outputs.snapshot-template }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: set env
         id: set-env
         run: |
@@ -41,6 +46,25 @@ jobs:
           echo "beta-timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
           echo "beta-version=${BETA_VERSION}" >> $GITHUB_OUTPUT
           echo "Generated beta version: ${BETA_VERSION}"
+
+          BRANCH_NAME="${{ github.ref_name }}"
+          BRANCH_NAME="${BRANCH_NAME//[^A-Za-z0-9._-]/_}"
+          SNAPSHOT_TEMPLATE="redisjson/snapshots/rejson-oss.@OS.${BRANCH_NAME}.${TIMESTAMP}.${WORKFLOW_NUM}.zip"
+          echo "snapshot-template=${SNAPSHOT_TEMPLATE}" >> $GITHUB_OUTPUT
+          echo "Snapshot template: ${SNAPSHOT_TEMPLATE}"
+
+      - name: Extract module version
+        id: get-version
+        run: |
+          MODULE_VERSION=$(python3 -c "import toml; print(toml.load('redis_json/Cargo.toml')['package']['version'])")
+          echo "module-version=${MODULE_VERSION}" >> $GITHUB_OUTPUT
+          echo "Module version: ${MODULE_VERSION}"
+
+      - name: Summary
+        run: |
+          echo "### Nightly Build Info" >> $GITHUB_STEP_SUMMARY
+          echo "- **Module Version:** ${{ steps.get-version.outputs.module-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Snapshot Template:** \`${{ steps.set-env.outputs.snapshot-template }}\`" >> $GITHUB_STEP_SUMMARY
   build-linux-x64:
     uses: ./.github/workflows/flow-linux.yml
     needs: [prepare-values]
