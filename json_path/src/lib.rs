@@ -516,14 +516,18 @@ mod json_path_tests {
     #[test]
     fn test_filter_bool() {
         setup();
-        verify_json!(path:"$.*[?(@==true)]", json:{"a":true, "b":false}, results:[true]);
-        verify_json!(path:"$.*[?(@==false)]", json:{"a":true, "b":false}, results:[false]);
+        // Filter on container children (array elements)
+        verify_json!(path:"$[?(@==true)]", json:[true, false], results:[true]);
+        verify_json!(path:"$[?(@==false)]", json:[true, false], results:[false]);
+        // Filter by object field value
+        verify_json!(path:"$[?(@.a==true)]", json:[{"a":true}, {"a":false}], results:[{"a":true}]);
     }
 
     #[test]
     fn test_filter_null() {
         setup();
-        verify_json!(path:"$.*[?(@==null)]", json:{"a":null}, results:[null]);
+        // Filter on container children (array elements)
+        verify_json!(path:"$[?(@==null)]", json:[null, 1], results:[null]);
         verify_json!(path:"$[?(@.*==null)]", json:[{"a":10}, {"b":null}, {"c":30}], results:[{"b": null}]);
     }
 
