@@ -408,21 +408,12 @@ fn op_string_regexp_match() {
     );
 
     select_and_then_compare(
-        // Recursive visit all JSON types
+        // Recursive visit all JSON types (each matching leaf once, no duplicates)
         r#"$..[?(@ =~ "^[Ee]c.*")]"#,
         json!({
             "arr": ["eclectic", 54, "elit", 96.33, {"eclipse":"ecstatic"}, "esse", true, "culpa", "echo", ["ecu", "eching", "plan"], "Ecuador", null, "etc"],
         }),
-        json!([
-            "eclectic", "echo", "Ecuador",  // "arr" filtered
-            "eclectic", // "arr" content flattened - 1st level
-            "ecstatic", // "arr" content flattened - "eclipse" filtered
-            "ecstatic", // "arr" content flattened - "eclipse" flattened
-            "echo",     // "arr" content flattened - 1st level
-            "ecu", "eching", // "arr" content flattened - anonymous array filtered
-            "ecu", "eching",  // "arr" content flattened - anonymous array flattened
-            "Ecuador"  // "arr" content flattened - 1st level
-        ]),
+        json!(["eclectic", "echo", "Ecuador", "ecstatic", "ecu", "eching"]),
     );
 }
 
