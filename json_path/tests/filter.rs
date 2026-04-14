@@ -410,3 +410,173 @@ fn op_object_or_nonexisting_default() {
         ]),
     );
 }
+
+#[test]
+fn recursive_descent_filter_no_duplicate_scalars() {
+    setup();
+
+    // GH#968 $..[?@>=1] must not list each scalar twice
+    select_and_then_compare(r#"$..[?@>=1]"#, json!([1, 2, 3]), json!([1, 2, 3]));
+
+    select_and_then_compare(r#"$..[?@>=1]"#, json!({ "a": [1, 2, 3] }), json!([1, 2, 3]));
+
+    // Nested containers: each scalar appears once
+    select_and_then_compare(r#"$..[?@>=1]"#, json!([[1, 2], 3]), json!([3, 1, 2]));
+
+    // Mixed object + array nesting
+    select_and_then_compare(
+        r#"$..[?@>=1]"#,
+        json!({"a": 1, "b": [2, 3]}),
+        json!([1, 2, 3]),
+    );
+
+    select_and_then_compare(
+        r#"$..[?@==@]"#,
+        json!({"a":[1,2,3,["b",4],{"c":5},{"d":null}], "e":6}),
+        json!([
+            [1,2,3,["b",4],{"c":5},{"d":null}], 6,
+            1, 2, 3, ["b",4], {"c":5}, {"d":null},
+            "b", 4, 5, null
+        ]),
+    );
+}
+
+#[test]
+fn filter_with_wildcard_subpath() {
+    setup();
+
+    // GH#963: @.* in filter should match when ANY child satisfies the condition.
+    // Previously, @.*.x producing multiple results was treated as Invalid (always false).
+    select_and_then_compare(
+        "$[?(@.*.x > 10)]",
+        json!([
+            {"a": {"x": 5}, "b": {"x": 15}},
+            {"c": {"x": 3}},
+            {"d": {"x": 20}, "e": {"x": 1}}
+        ]),
+        json!([
+            {"a": {"x": 5}, "b": {"x": 15}},
+            {"d": {"x": 20}, "e": {"x": 1}}
+        ]),
+    );
+
+    // Single result still works as before
+    select_and_then_compare(
+        "$[?(@.x > 10)]",
+        json!([{"x": 5}, {"x": 15}, {"x": 3}]),
+        json!([{"x": 15}]),
+    );
+
+    // Wildcard + equality
+    select_and_then_compare(
+        "$[?(@.*.v == 42)]",
+        json!([
+            {"a": {"v": 1}, "b": {"v": 42}},
+            {"c": {"v": 7}}
+        ]),
+        json!([{"a": {"v": 1}, "b": {"v": 42}}]),
+    );
+
+    // Recursive descent in filter sub-path: @..key
+    select_and_then_compare(
+        "$[?(@..code > 2)]",
+        json!([
+            {"mode": {"code": 4}},
+            {"code": 1},
+            {"nested": {"deep": {"code": 10}}}
+        ]),
+        json!([
+            {"mode": {"code": 4}},
+            {"nested": {"deep": {"code": 10}}}
+        ]),
+    );
+
+    // Wildcard sub-path with regex
+    select_and_then_compare(
+        r#"$[?(@.* =~ "^foo")]"#,
+        json!([
+            {"a": "foobar", "b": "baz"},
+            {"c": "qux"}
+        ]),
+        json!([{"a": "foobar", "b": "baz"}]),
+    );
+
+    // Wildcard sub-path where no child matches
+    select_and_then_compare(
+        "$[?(@.*.x > 100)]",
+        json!([{"a": {"x": 1}, "b": {"x": 2}}]),
+        json!([]),
+    );
+
+    // NodeList ne: per RFC 9535, != is !(==), so NodeList([1,2]) != 1 is false
+    // because NodeList([1,2]) == 1 is true (element 1 matches).
+    select_and_then_compare(
+        "$[?(@.*.v != 1)]",
+        json!([
+            {"a": {"v": 1}, "b": {"v": 2}},
+            {"c": {"v": 1}},
+            {"d": {"v": 3}, "e": {"v": 4}}
+        ]),
+        json!([{"d": {"v": 3}, "e": {"v": 4}}]),
+    );
+}
+
+#[test]
+fn recursive_descent_filter_on_objects() {
+    setup();
+
+    // Recursive descent with filter on nested objects (no scalars involved)
+    select_and_then_compare(
+        "$..[?(@.active==true)]",
+        json!({
+            "users": [
+                {"name": "Alice", "active": true},
+                {"name": "Bob", "active": false}
+            ]
+        }),
+        json!([{"name": "Alice", "active": true}]),
+    );
+
+    // Recursive descent with comparison filter on mixed nesting
+    select_and_then_compare(
+        "$..[?(@.score > 80)]",
+        json!({
+            "teams": {
+                "a": [{"score": 90}, {"score": 70}],
+                "b": [{"score": 85}]
+            }
+        }),
+        json!([{"score": 90}, {"score": 85}]),
+    );
+}
+
+#[test]
+fn regex_with_nodelist_pattern() {
+    setup();
+
+    // Right side of =~ is a NodeList: match if ANY pattern matches the value.
+    select_and_then_compare(
+        r#"$[?(@.val =~ @.*.pat)]"#,
+        json!([
+            {"val": "abc", "x": {"pat": "^a"}, "y": {"pat": "^z"}},
+            {"val": "xyz", "x": {"pat": "^a"}, "y": {"pat": "^x"}},
+            {"val": "nope", "x": {"pat": "^a"}, "y": {"pat": "^z"}}
+        ]),
+        json!([
+            {"val": "abc", "x": {"pat": "^a"}, "y": {"pat": "^z"}},
+            {"val": "xyz", "x": {"pat": "^a"}, "y": {"pat": "^x"}}
+        ]),
+    );
+
+    // Both sides are NodeLists: left @.* produces multiple strings,
+    // right @.*.pat produces multiple regex patterns.
+    select_and_then_compare(
+        r#"$[?(@.* =~ @.*.pat)]"#,
+        json!([
+            {"a": "foobar", "x": {"pat": "^foo"}, "y": {"pat": "^nope"}}
+        ]),
+        json!([
+            {"a": "foobar", "x": {"pat": "^foo"}, "y": {"pat": "^nope"}}
+        ]),
+    );
+}
