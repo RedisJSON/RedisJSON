@@ -1366,3 +1366,45 @@ def testFilterDup_issue667(env):
     r.assertEqual(res, '[{"name":{"first":"A","middle":"A","last":"Pronto"},"rank":8},{"name":{"first":"A","middle":"A","last":"Pronto"},"rank":90}]')
 
 
+def test_arr_pop_recursive_descent_nested_arrays(env):
+    """Mutations via $..* must process deeper paths before shallower ones
+    so that earlier mutations don't invalidate later paths."""
+    r = env
+
+    # Parent array contains child arrays — $..* matches all of them.
+    # Without deepest-first ordering, popping from the parent first shifts
+    # child indices and causes wrong elements to be popped or errors.
+    r.expect('JSON.SET', 'k', '$', '{"a":[[1,2,3],[4,5,6]]}').ok()
+    res = r.execute_command('JSON.ARRPOP', 'k', '$..*', '-1')
+    # $.a matches [[1,2,3],[4,5,6]], $.a[0] matches [1,2,3], $.a[1] matches [4,5,6]
+    # Deepest-first: pop children → [1,2] and [4,5], then pop parent → [[1,2]]
+    r.assertEqual(len([x for x in res if x is not None]), 3)
+    result = json.loads(r.execute_command('JSON.GET', 'k', '$'))
+    r.assertEqual(result[0]['a'], [[1, 2]])
+
+
+def test_arr_trim_recursive_descent_nested_arrays(env):
+    """ARRTRIM via $..* must process deeper paths before shallower ones."""
+    r = env
+
+    r.expect('JSON.SET', 'k', '$', '{"a":[[1,2,3],[4,5,6]]}').ok()
+    # Trim all matched arrays to keep only first element
+    res = r.execute_command('JSON.ARRTRIM', 'k', '$..*', '0', '0')
+    r.assertEqual(len([x for x in res if x is not None]), 3)
+    result = json.loads(r.execute_command('JSON.GET', 'k', '$'))
+    # Deepest-first: children trimmed to [1] and [4], then parent trimmed to [[1]]
+    r.assertEqual(result[0]['a'], [[1]])
+
+
+def test_arr_insert_recursive_descent_nested_arrays(env):
+    """ARRINSERT via $..* must process deeper paths before shallower ones."""
+    r = env
+
+    r.expect('JSON.SET', 'k', '$', '{"a":[[1,2],[3,4]]}').ok()
+    res = r.execute_command('JSON.ARRINSERT', 'k', '$..*', '0', '99')
+    r.assertEqual(len([x for x in res if x is not None]), 3)
+    result = json.loads(r.execute_command('JSON.GET', 'k', '$'))
+    # Children inserted first (each gets 99 at index 0), then parent
+    r.assertEqual(result[0]['a'], [99, [99, 1, 2], [99, 3, 4]])
+
+
