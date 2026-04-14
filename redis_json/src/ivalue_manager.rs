@@ -806,9 +806,13 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                     deserializer.disable_recursion_limit();
                 }
                 let fpha_config = fpha_type.map(FPHAConfig::new_with_type);
-                IValueDeserSeed::new(fpha_config)
+                let result = IValueDeserSeed::new(fpha_config)
                     .deserialize(&mut deserializer)
-                    .map_err(|e| RedisError::String(e.to_string()))
+                    .map_err(|e| RedisError::String(e.to_string()))?;
+                deserializer
+                    .end()
+                    .map_err(|e| RedisError::String(e.to_string()))?;
+                Ok(result)
             }
             Format::BSON => from_document(
                 Document::from_reader(&mut Cursor::new(val.as_bytes()))
