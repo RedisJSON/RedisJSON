@@ -65,6 +65,23 @@ jobs:
           echo "### Nightly Build Info" >> $GITHUB_STEP_SUMMARY
           echo "- **Module Version:** ${{ steps.get-version.outputs.module-version }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Snapshot Template:** \`${{ steps.set-env.outputs.snapshot-template }}\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Create build metadata
+        run: |
+          echo '{}' | jq \
+            --arg snapshot_template "$SNAPSHOT_TEMPLATE" \
+            --arg module_version "$MODULE_VERSION" \
+            '{snapshot_template: $snapshot_template, module_version: $module_version}' \
+            > build-metadata.json
+        env:
+          SNAPSHOT_TEMPLATE: ${{ steps.set-env.outputs.snapshot-template }}
+          MODULE_VERSION: ${{ steps.get-version.outputs.module-version }}
+  
+      - name: Upload build metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-metadata
+          path: build-metadata.json
   build-linux-x64:
     uses: ./.github/workflows/flow-linux.yml
     needs: [prepare-values]
