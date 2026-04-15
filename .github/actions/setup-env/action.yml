@@ -9,6 +9,9 @@ inputs:
   redis-ref:
     description: Redis ref
     required: false
+  beta-version:
+    description: 'Beta version for S3 uploads'
+    required: false
 
 outputs:
   TAGGED:
