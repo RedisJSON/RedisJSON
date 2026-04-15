@@ -17,6 +17,7 @@ on:
     inputs:
       redis-ref:
         description: 'Redis ref to checkout'
+        type: string
         required: true
         default: '8.2'
 jobs:
@@ -24,17 +25,53 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       redis-ref: ${{ steps.set-env.outputs.redis-ref }}
+      beta-timestamp: ${{ steps.set-env.outputs.beta-timestamp }}
+      beta-version: ${{ steps.set-env.outputs.beta-version }}
+      module-version: ${{ steps.get-version.outputs.module-version }}
+      snapshot-template: ${{ steps.set-env.outputs.snapshot-template }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: set env
         id: set-env
         run: |
           echo "redis-ref=${{ inputs.redis-ref || '8.2' }}" >> $GITHUB_OUTPUT
+          
+          # Generate timestamp at workflow start for consistent beta versioning
+          TIMESTAMP=$(date -u +"%Y%m%d.%H%M%S")
+          WORKFLOW_NUM=${{ github.run_number }}
+          BETA_VERSION="99.99.99.${TIMESTAMP}.${WORKFLOW_NUM}"
+          
+          echo "beta-timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
+          echo "beta-version=${BETA_VERSION}" >> $GITHUB_OUTPUT
+          echo "Generated beta version: ${BETA_VERSION}"
+
+          BRANCH_NAME="${{ github.ref_name }}"
+          BRANCH_NAME="${BRANCH_NAME//[^A-Za-z0-9._-]/_}"
+          SNAPSHOT_TEMPLATE="rejson-oss/snapshots/rejson-oss.@OS.${BRANCH_NAME}.${TIMESTAMP}.${WORKFLOW_NUM}.zip"
+          echo "snapshot-template=${SNAPSHOT_TEMPLATE}" >> $GITHUB_OUTPUT
+          echo "Snapshot template: ${SNAPSHOT_TEMPLATE}"
+
+      - name: Extract module version
+        id: get-version
+        run: |
+          MODULE_VERSION=$(grep '^version' redis_json/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "module-version=${MODULE_VERSION}" >> $GITHUB_OUTPUT
+          echo "Module version: ${MODULE_VERSION}"
+
+      - name: Summary
+        run: |
+          echo "### Nightly Build Info" >> $GITHUB_STEP_SUMMARY
+          echo "- **Module Version:** ${{ steps.get-version.outputs.module-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Snapshot Template:** \`${{ steps.set-env.outputs.snapshot-template }}\`" >> $GITHUB_STEP_SUMMARY
   build-linux-x64:
     uses: ./.github/workflows/flow-linux.yml
     needs: [prepare-values]
     with:
       arch: x64
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+      beta-version: ${{needs.prepare-values.outputs.beta-version}}
     secrets: inherit
   build-linux-arm64:
     uses: ./.github/workflows/flow-linux.yml
@@ -42,12 +79,14 @@ jobs:
     with:
       arch: arm64
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+      beta-version: ${{needs.prepare-values.outputs.beta-version}}
     secrets: inherit
   macos:
     uses: ./.github/workflows/flow-macos.yml
     needs: [prepare-values]
     with:
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+      beta-version: ${{needs.prepare-values.outputs.beta-version}}
     secrets: inherit
   linux-valgrind:
     uses: ./.github/workflows/flow-linux.yml
@@ -57,6 +96,7 @@ jobs:
       os: jammy
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
       run_valgrind: true
+      beta-version: ${{needs.prepare-values.outputs.beta-version}}
     secrets: inherit
   linux-sanitizer:
     uses: ./.github/workflows/flow-sanitizer.yml
@@ -64,6 +104,7 @@ jobs:
     with:
       container: ubuntu:jammy
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+      beta-version: ${{needs.prepare-values.outputs.beta-version}}
     secrets: inherit
   spellcheck:
     uses: ./.github/workflows/flow-spellcheck.yml
