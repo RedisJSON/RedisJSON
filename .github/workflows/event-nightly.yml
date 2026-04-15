@@ -56,7 +56,7 @@ jobs:
       - name: Extract module version
         id: get-version
         run: |
-          MODULE_VERSION=$(grep '^version' redis_json/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          MODULE_VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
           echo "module-version=${MODULE_VERSION}" >> $GITHUB_OUTPUT
           echo "Module version: ${MODULE_VERSION}"
 
