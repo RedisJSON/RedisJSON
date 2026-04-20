@@ -91,16 +91,10 @@ jobs:
       beta-version: ${{needs.prepare-values.outputs.beta-version}}
     secrets: inherit
   ubuntu-arm64:
-    uses: ./.github/workflows/flow-linux-arm.yml
+    uses: ./.github/workflows/flow-linux.yml
     needs: [prepare-values]
     with:
-      redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
-      beta-version: ${{needs.prepare-values.outputs.beta-version}}
-    secrets: inherit
-  azurelinux3-arm64:
-    uses: ./.github/workflows/flow-azurelinux3-arm.yml
-    needs: [prepare-values]
-    with:
+      arch: arm64
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
       beta-version: ${{needs.prepare-values.outputs.beta-version}}
     secrets: inherit
@@ -108,7 +102,6 @@ jobs:
     uses: ./.github/workflows/flow-macos.yml
     needs: [prepare-values]
     with:
-      arch: arm64
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
       beta-version: ${{needs.prepare-values.outputs.beta-version}}
     secrets: inherit
