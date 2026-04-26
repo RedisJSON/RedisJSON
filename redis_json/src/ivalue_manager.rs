@@ -413,8 +413,12 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                 if !limit_depth {
                     deserializer.disable_recursion_limit();
                 }
-                IValue::deserialize(&mut deserializer)
-                    .map_err(|e| RedisError::String(e.to_string()))
+                let result = IValue::deserialize(&mut deserializer)
+                    .map_err(|e| RedisError::String(e.to_string()))?;
+                deserializer
+                    .end()
+                    .map_err(|e| RedisError::String(e.to_string()))?;
+                Ok(result)
             }
             Format::BSON => from_document(
                 Document::from_reader(&mut Cursor::new(val.as_bytes()))
