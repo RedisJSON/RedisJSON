@@ -1401,7 +1401,7 @@ def testMergeNested(env):
     r.expect('JSON.GET', 'test_merge_nested').equal('{"a":{"b":{"f1":{"b1":1,"c1":3},"f2":{"b2":2,"c2":4}}}}')
 
     # Test with simple nested merge on dynamic path
-    r.assertOk(r.execute_command('JSON.SET', 'test_merge_nested', '$', '{"a":{"b1":{"f":{"c1":1}}, "b2":{"f":{"c2":2}}}}}'))
+    r.assertOk(r.execute_command('JSON.SET', 'test_merge_nested', '$', '{"a":{"b1":{"f":{"c1":1}}, "b2":{"f":{"c2":2}}}}'))
     r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_nested', '$.a.*', '{"f":{"t":6}}'))
     r.expect('JSON.GET', 'test_merge_nested').equal('{"a":{"b1":{"f":{"c1":1,"t":6}},"b2":{"f":{"c2":2,"t":6}}}}')
 
@@ -1527,6 +1527,24 @@ def test_mset_replication_in_aof(env):
         aof_content = [l for l in fd.readlines() if 'JSON.MSET' in l]
         assert(len(aof_content) == 1)
 
+
+def test_json_set_rejects_trailing_characters(env):
+    """Literals with trailing characters must be rejected, not silently truncated."""
+    r = env
+    r.expect('JSON.SET', 'k', '$', 'trueabc').raiseError()
+    r.expect('JSON.SET', 'k', '$', 'falseabc').raiseError()
+    r.expect('JSON.SET', 'k', '$', 'nullabc').raiseError()
+    r.expect('JSON.SET', 'k', '$', '[1,2,3]1').raiseError()
+    r.expect('JSON.SET', 'k', '$', '{"a":1}x').raiseError()
+    r.expect('JSON.SET', 'k', '$', '123abc').raiseError()
+
+    # Valid values must still be accepted
+    r.expect('JSON.SET', 'k', '$', 'true').ok()
+    r.expect('JSON.SET', 'k', '$', 'false').ok()
+    r.expect('JSON.SET', 'k', '$', 'null').ok()
+    r.expect('JSON.SET', 'k', '$', '[1,2,3]').ok()
+    r.expect('JSON.SET', 'k', '$', '{"a":1}').ok()
+    r.expect('JSON.SET', 'k', '$', '123').ok()
 
 def test_recursive_descent(env):
     r = env
