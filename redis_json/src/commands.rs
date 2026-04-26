@@ -799,6 +799,80 @@ where
         .collect()
 }
 
+/// Comparator for safe in-place mutation ordering of JSON paths.
+///
+/// Produces: deeper (longer) paths first, higher array indices first within the
+/// same parent.  This ordering ensures mutations on children happen before
+/// parents, and higher-index siblings before lower-index ones, so that no
+/// earlier mutation invalidates a later path.
+///
+/// **Why this matters** – array-mutating commands (ARRPOP, ARRTRIM, ARRINSERT)
+/// change element count/indices.  A recursive path such as `$..* ` can match
+/// both a parent array *and* its children.  If we mutated the parent first
+/// (e.g. popping an element), the child paths that were resolved *before* the
+/// mutation would now point at the wrong indices — or at out-of-bounds
+/// positions.  Processing deeper / higher-index paths first guarantees every
+/// path is still valid at the moment it is used.
+///
+/// Example with `ARRPOP k $..* -1` on `{"a":[[1,2,3],[4,5,6]]}`:
+///   Matched paths (unordered): `$.a` → `[[1,2,3],[4,5,6]]`,
+///                               `$.a[0]` → `[1,2,3]`,
+///                               `$.a[1]` → `[4,5,6]`
+///   Sorted (deepest + highest-index first): `$.a[1]`, `$.a[0]`, `$.a`
+///   Mutations:  pop `$.a[1]` → `[4,5]`,
+///               pop `$.a[0]` → `[1,2]`,
+///               pop `$.a`    → `[[1,2]]`   (parent is last, indices still valid)
+fn compare_paths_for_mutation(v1: &[String], v2: &[String]) -> Ordering {
+    v1.iter()
+        .zip_longest(v2.iter())
+        .fold_while(Ordering::Equal, |_acc, v| {
+            match v {
+                EitherOrBoth::Left(_) => Done(Ordering::Less), // Shorter paths after longer paths
+                EitherOrBoth::Right(_) => Done(Ordering::Greater), // Shorter paths after longer paths
+                EitherOrBoth::Both(p1, p2) => {
+                    let i1 = p1.parse::<usize>();
+                    let i2 = p2.parse::<usize>();
+                    match (i1, i2) {
+                        (Err(_), Err(_)) => match p1.cmp(p2) {
+                            // String compare
+                            Ordering::Less => Done(Ordering::Less),
+                            Ordering::Equal => Continue(Ordering::Equal),
+                            Ordering::Greater => Done(Ordering::Greater),
+                        },
+                        (Ok(_), Err(_)) => Done(Ordering::Greater), //String before Numeric
+                        (Err(_), Ok(_)) => Done(Ordering::Less),    //String before Numeric
+                        (Ok(i1), Ok(i2)) => {
+                            // Numeric compare - higher indices before lower ones
+                            match i2.cmp(&i1) {
+                                Ordering::Greater => Done(Ordering::Greater),
+                                Ordering::Less => Done(Ordering::Less),
+                                Ordering::Equal => Continue(Ordering::Equal),
+                            }
+                        }
+                    }
+                }
+            }
+        })
+        .into_inner()
+}
+
+/// Sort `(original_index, path)` pairs for safe in-place mutation.
+///
+/// Ordering: deeper paths first, higher array indices first within the same
+/// parent (see [`compare_paths_for_mutation`]).
+///
+/// Each pair carries the position the path had in the original match list so
+/// that, after mutations are applied in safe order, results can be written back
+/// to `res[original_index]`.  This preserves the reply order the client expects
+/// (i-th reply element corresponds to the i-th matched path) while still
+/// executing mutations in an order that keeps every path valid.
+fn sort_paths_for_mutation(indexed_paths: &mut [(usize, Vec<String>)]) {
+    if indexed_paths.len() < 2 {
+        return;
+    }
+    indexed_paths.sort_by(|(_, v1), (_, v2)| compare_paths_for_mutation(v1, v2));
+}
+
 /// Sort the paths so higher indices precede lower indices on the same array,
 /// And longer paths precede shorter paths
 /// And if a path is a sub-path of the other, then only paths with shallower hierarchy (closer to the top-level) remain
@@ -807,39 +881,7 @@ pub fn prepare_paths_for_updating(paths: &mut Vec<Vec<String>>) {
         // No need to reorder when there are less than 2 paths
         return;
     }
-    paths.sort_by(|v1, v2| {
-        v1.iter()
-            .zip_longest(v2.iter())
-            .fold_while(Ordering::Equal, |_acc, v| {
-                match v {
-                    EitherOrBoth::Left(_) => Done(Ordering::Less), // Shorter paths after longer paths
-                    EitherOrBoth::Right(_) => Done(Ordering::Greater), // Shorter paths after longer paths
-                    EitherOrBoth::Both(p1, p2) => {
-                        let i1 = p1.parse::<usize>();
-                        let i2 = p2.parse::<usize>();
-                        match (i1, i2) {
-                            (Err(_), Err(_)) => match p1.cmp(p2) {
-                                // String compare
-                                Ordering::Less => Done(Ordering::Less),
-                                Ordering::Equal => Continue(Ordering::Equal),
-                                Ordering::Greater => Done(Ordering::Greater),
-                            },
-                            (Ok(_), Err(_)) => Done(Ordering::Greater), //String before Numeric
-                            (Err(_), Ok(_)) => Done(Ordering::Less),    //String before Numeric
-                            (Ok(i1), Ok(i2)) => {
-                                // Numeric compare - higher indices before lower ones
-                                match i2.cmp(&i1) {
-                                    Ordering::Greater => Done(Ordering::Greater),
-                                    Ordering::Less => Done(Ordering::Less),
-                                    Ordering::Equal => Continue(Ordering::Equal),
-                                }
-                            }
-                        }
-                    }
-                }
-            })
-            .into_inner()
-    });
+    paths.sort_by(|v1, v2| compare_paths_for_mutation(v1, v2));
     // Remove paths which are nested by others (on each sub-tree only top most ancestor should be deleted)
     // (TODO: Add a mode in which the jsonpath selector will already skip nested paths)
     let mut string_paths = paths.iter().map(|v| v.join(",")).collect_vec();
@@ -2065,16 +2107,19 @@ fn json_arr_insert_impl<M: Manager>(
 
     let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
 
-    let mut res = vec![];
+    let mut res = vec![RedisValue::Null; paths.len()];
     let mut need_notify = false;
-    for p in paths {
-        res.push(match p {
-            Some(p) => {
-                need_notify = true;
-                (redis_key.arr_insert(p, &args, index)? as i64).into()
-            }
-            _ => RedisValue::Null,
-        });
+
+    let mut indexed: Vec<(usize, Vec<String>)> = paths
+        .into_iter()
+        .enumerate()
+        .filter_map(|(i, p)| p.map(|path| (i, path)))
+        .collect();
+    sort_paths_for_mutation(&mut indexed);
+
+    for (orig_idx, p) in indexed {
+        need_notify = true;
+        res[orig_idx] = (redis_key.arr_insert(p, &args, index)? as i64).into();
     }
 
     if need_notify {
@@ -2096,10 +2141,11 @@ fn json_arr_insert_legacy<M: Manager>(
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
+    let mut paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
     if paths.is_empty() {
         return Err(err_invalid_path_or("not an array"));
     }
+    paths.sort_by(|v1, v2| compare_paths_for_mutation(v1, v2));
     let res = paths
         .into_iter()
         .try_fold(0, |_, p| redis_key.arr_insert(p, &args, index))?;
@@ -2358,22 +2404,27 @@ fn json_arr_pop_impl<M: Manager>(
         .ok_or_else(RedisError::nonexistent_key)?;
 
     let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
-    let mut res = vec![];
+    let mut res = vec![RedisValue::Null; paths.len()];
     let mut need_notify = false;
-    for p in paths {
-        res.push(match p {
-            Some(p) => redis_key.arr_pop(p, index, |v| {
-                v.map_or(Ok(RedisValue::Null), |v| {
-                    need_notify = true;
-                    if format_options.is_resp3_reply() {
-                        Ok(KeyValue::value_to_resp3(v, format_options))
-                    } else {
-                        Ok(serde_json::to_string(&v)?.into())
-                    }
-                })
-            })?,
-            _ => RedisValue::Null, // Not an array
-        });
+
+    let mut indexed: Vec<(usize, Vec<String>)> = paths
+        .into_iter()
+        .enumerate()
+        .filter_map(|(i, p)| p.map(|path| (i, path)))
+        .collect();
+    sort_paths_for_mutation(&mut indexed);
+
+    for (orig_idx, p) in indexed {
+        res[orig_idx] = redis_key.arr_pop(p, index, |v| {
+            v.map_or(Ok(RedisValue::Null), |v| {
+                need_notify = true;
+                if format_options.is_resp3_reply() {
+                    Ok(KeyValue::value_to_resp3(v, format_options))
+                } else {
+                    Ok(serde_json::to_string(&v)?.into())
+                }
+            })
+        })?;
     }
     if need_notify {
         redis_key.notify_keyspace_event(ctx, "json.arrpop")?;
@@ -2393,8 +2444,9 @@ fn json_arr_pop_legacy<M: Manager>(
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
+    let mut paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
     if !paths.is_empty() {
+        paths.sort_by(|v1, v2| compare_paths_for_mutation(v1, v2));
         let mut res = Ok(().into());
         for p in paths {
             res = Ok(redis_key.arr_pop(p, index, |v| match v {
@@ -2489,16 +2541,19 @@ fn json_arr_trim_impl<M: Manager>(
         .ok_or_else(RedisError::nonexistent_key)?;
 
     let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
-    let mut res = vec![];
+    let mut res = vec![RedisValue::Null; paths.len()];
     let mut need_notify = false;
-    for p in paths {
-        res.push(match p {
-            Some(p) => {
-                need_notify = true;
-                (redis_key.arr_trim(p, start, stop)?).into()
-            }
-            _ => RedisValue::Null,
-        });
+
+    let mut indexed: Vec<(usize, Vec<String>)> = paths
+        .into_iter()
+        .enumerate()
+        .filter_map(|(i, p)| p.map(|path| (i, path)))
+        .collect();
+    sort_paths_for_mutation(&mut indexed);
+
+    for (orig_idx, p) in indexed {
+        need_notify = true;
+        res[orig_idx] = (redis_key.arr_trim(p, start, stop)?).into();
     }
     if need_notify {
         redis_key.notify_keyspace_event(ctx, "json.arrtrim")?;
@@ -2519,10 +2574,11 @@ fn json_arr_trim_legacy<M: Manager>(
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
+    let mut paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
     if paths.is_empty() {
         Err(err_invalid_path_or("not an array"))
     } else {
+        paths.sort_by(|v1, v2| compare_paths_for_mutation(v1, v2));
         let mut res = None;
         for p in paths {
             res = Some(redis_key.arr_trim(p, start, stop)?);
