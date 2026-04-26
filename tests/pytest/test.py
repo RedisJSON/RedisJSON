@@ -1350,6 +1350,26 @@ def test_promote_u64_to_f64(env):
     r.assertEqual(val, float(2 * i64max + 3))            # u64 + u64 promotes to f64. as prior, not breaking
     r.expect('JSON.TYPE', 'num', '$').equal(['number'])  # promoted
 
+
+
+def test_json_set_rejects_trailing_characters(env):
+    """Literals with trailing characters must be rejected, not silently truncated."""
+    r = env
+    r.expect('JSON.SET', 'k', '$', 'trueabc').raiseError()
+    r.expect('JSON.SET', 'k', '$', 'falseabc').raiseError()
+    r.expect('JSON.SET', 'k', '$', 'nullabc').raiseError()
+    r.expect('JSON.SET', 'k', '$', '[1,2,3]1').raiseError()
+    r.expect('JSON.SET', 'k', '$', '{"a":1}x').raiseError()
+    r.expect('JSON.SET', 'k', '$', '123abc').raiseError()
+
+    # Valid values must still be accepted
+    r.expect('JSON.SET', 'k', '$', 'true').ok()
+    r.expect('JSON.SET', 'k', '$', 'false').ok()
+    r.expect('JSON.SET', 'k', '$', 'null').ok()
+    r.expect('JSON.SET', 'k', '$', '[1,2,3]').ok()
+    r.expect('JSON.SET', 'k', '$', '{"a":1}').ok()
+    r.expect('JSON.SET', 'k', '$', '123').ok()
+
 def test_json_del_matches_with_numeric_pathes(env):
     r = env
     r.expect(

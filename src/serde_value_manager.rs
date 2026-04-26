@@ -486,7 +486,10 @@ impl<'a> Manager for RedisJsonKeyManager<'a> {
                 if !limit_depth {
                     deserializer.disable_recursion_limit();
                 }
-                Value::deserialize(&mut deserializer).map_err(|e| e.into())
+                let result =
+                    Value::deserialize(&mut deserializer).map_err(|e| -> Error { e.into() })?;
+                deserializer.end().map_err(|e| -> Error { e.into() })?;
+                Ok(result)
             }
             Format::BSON => from_document(
                 Document::from_reader(&mut Cursor::new(val.as_bytes()))
