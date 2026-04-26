@@ -1,0 +1,292 @@
+name: Test Summary
+
+on:
+  workflow_call:
+    inputs:
+      redis-ref:
+        description: 'Redis ref that was tested'
+        required: true
+        type: string
+      send-slack-message:
+        description: 'Whether to send Slack message'
+        required: false
+        type: boolean
+        default: false
+      job-failures:
+        description: 'Space-separated list of failed upstream job names'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  test-summary:
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Download all test results
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+      
+      - name: Get commit information
+        id: commit
+        run: |
+          COMMIT_SHA=$(git rev-parse --short HEAD)
+          COMMIT_MSG=$(git log -1 --pretty=format:"%s" | head -c 100)
+          echo "sha=$COMMIT_SHA" >> $GITHUB_OUTPUT
+          echo "message=$COMMIT_MSG" >> $GITHUB_OUTPUT
+          echo "Commit: $COMMIT_SHA - $COMMIT_MSG"
+      
+      - name: Aggregate test results
+        id: aggregate
+        run: |
+          # Create summary JSON
+          SUMMARY_FILE="test-summary.json"
+          
+          # Initialize arrays - ensure it's valid JSON
+          echo "[]" > "$SUMMARY_FILE"
+          
+          # Validate the initial file
+          if ! jq empty "$SUMMARY_FILE" 2>/dev/null; then
+            echo "Warning: Invalid initial summary file, resetting"
+            echo "[]" > "$SUMMARY_FILE"
+          fi
+          
+          # Process all test result artifacts
+          TOTAL_PASSED=0
+          TOTAL_FAILED=0
+          TOTAL_SKIPPED=0
+          
+          # Find all test result JSON files
+          for result_file in test-results-*/test-results-*.json; do
+            if [ -f "$result_file" ]; then
+              echo "Processing: $result_file"
+              
+              # Validate JSON file first
+              if ! command -v jq >/dev/null 2>&1 || ! jq empty "$result_file" 2>/dev/null; then
+                echo "Warning: Invalid JSON in $result_file, skipping"
+                continue
+              fi
+              
+              # Extract OS name from path or get from JSON
+              OS_NAME=$(basename "$result_file" .json | sed 's/test-results-//')
+              
+              # Read and add OS field if not present
+              if command -v jq >/dev/null 2>&1; then
+                # Get OS name from JSON if available, otherwise use filename
+                JSON_OS=$(jq -r '.os // empty' "$result_file" 2>/dev/null || echo "")
+                if [ -z "$JSON_OS" ] || [ "$JSON_OS" = "null" ]; then
+                  JSON_OS="$OS_NAME"
+                fi
+                
+                # Create entry with OS name
+                ENTRY=$(jq -c ". + {os: \"$JSON_OS\"}" "$result_file" 2>/dev/null)
+                
+                if [ -n "$ENTRY" ] && [ "$ENTRY" != "null" ] && [ "$ENTRY" != "" ]; then
+                  # Add to summary array using jq properly
+                  # Use jq to append the entry to the existing array
+                  jq --argjson entry "$ENTRY" '. + [$entry]' "$SUMMARY_FILE" > "${SUMMARY_FILE}.tmp" 2>/dev/null
+                  
+                  # Validate and move
+                  if [ -f "${SUMMARY_FILE}.tmp" ] && jq empty "${SUMMARY_FILE}.tmp" 2>/dev/null; then
+                    mv "${SUMMARY_FILE}.tmp" "$SUMMARY_FILE"
+                  else
+                    echo "Warning: Failed to add entry to summary for $result_file, trying fallback"
+                    # Fallback: read current array, add entry manually
+                    CURRENT=$(cat "$SUMMARY_FILE" 2>/dev/null || echo "[]")
+                    echo "$CURRENT" | jq --argjson entry "$ENTRY" '. + [$entry]' > "${SUMMARY_FILE}.tmp" 2>/dev/null
+                    if [ -f "${SUMMARY_FILE}.tmp" ] && jq empty "${SUMMARY_FILE}.tmp" 2>/dev/null; then
+                      mv "${SUMMARY_FILE}.tmp" "$SUMMARY_FILE"
+                    else
+                      echo "Warning: Could not add entry for $result_file"
+                      rm -f "${SUMMARY_FILE}.tmp"
+                    fi
+                  fi
+                  
+                  # Accumulate totals
+                  PASSED=$(jq -r '.passed // 0' "$result_file" 2>/dev/null || echo "0")
+                  FAILED=$(jq -r '.failed // 0' "$result_file" 2>/dev/null || echo "0")
+                  SKIPPED=$(jq -r '.skipped // 0' "$result_file" 2>/dev/null || echo "0")
+                  
+                  # Ensure values are valid numbers
+                  PASSED=${PASSED:-0}
+                  FAILED=${FAILED:-0}
+                  SKIPPED=${SKIPPED:-0}
+                  
+                  TOTAL_PASSED=$((TOTAL_PASSED + PASSED))
+                  TOTAL_FAILED=$((TOTAL_FAILED + FAILED))
+                  TOTAL_SKIPPED=$((TOTAL_SKIPPED + SKIPPED))
+                fi
+              else
+                # Fallback: use sed/awk if jq not available
+                PASSED=$(grep -o '"passed":[0-9]*' "$result_file" | grep -o '[0-9]*' | head -1 || echo "0")
+                FAILED=$(grep -o '"failed":[0-9]*' "$result_file" | grep -o '[0-9]*' | head -1 || echo "0")
+                SKIPPED=$(grep -o '"skipped":[0-9]*' "$result_file" | grep -o '[0-9]*' | head -1 || echo "0")
+                
+                PASSED=${PASSED:-0}
+                FAILED=${FAILED:-0}
+                SKIPPED=${SKIPPED:-0}
+                
+                TOTAL_PASSED=$((TOTAL_PASSED + PASSED))
+                TOTAL_FAILED=$((TOTAL_FAILED + FAILED))
+                TOTAL_SKIPPED=$((TOTAL_SKIPPED + SKIPPED))
+              fi
+            fi
+          done
+          
+          # Output totals
+          echo "total_passed=$TOTAL_PASSED" >> $GITHUB_OUTPUT
+          echo "total_failed=$TOTAL_FAILED" >> $GITHUB_OUTPUT
+          echo "total_skipped=$TOTAL_SKIPPED" >> $GITHUB_OUTPUT
+          echo "summary_file=$SUMMARY_FILE" >> $GITHUB_OUTPUT
+          
+          echo "Summary: Passed=$TOTAL_PASSED, Failed=$TOTAL_FAILED, Skipped=$TOTAL_SKIPPED"
+      
+      - name: Format and send Slack message
+        if: always() && inputs.send-slack-message == true
+        run: |
+          echo "=== Starting Slack message step ==="
+          echo "Summary file output: ${{ steps.aggregate.outputs.summary_file }}"
+          echo "Total passed: ${{ steps.aggregate.outputs.total_passed }}"
+          echo "Total failed: ${{ steps.aggregate.outputs.total_failed }}"
+          echo "Total skipped: ${{ steps.aggregate.outputs.total_skipped }}"
+          
+          # Read summary file
+          SUMMARY_FILE="${{ steps.aggregate.outputs.summary_file }}"
+          
+          if [ -z "$SUMMARY_FILE" ]; then
+            echo "ERROR: Summary file output is empty"
+            SUMMARY_FILE="test-summary.json"
+          fi
+          
+          echo "Using summary file: $SUMMARY_FILE"
+          
+          # Build message
+          NIGHTLY_NAME="Event Nightly"
+          REPO_NAME="${{ github.repository }}"
+          REDIS_VERSION="${{ inputs.redis-ref }}"
+          COMMIT_SHA="${{ steps.commit.outputs.sha }}"
+          COMMIT_MSG="${{ steps.commit.outputs.message }}"
+          WORKFLOW_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          
+          # Title format: repo name, nightly name, Redis version, commit number and message
+          TITLE="*${REPO_NAME}* - ${NIGHTLY_NAME} | Redis: ${REDIS_VERSION} | Build: ${COMMIT_SHA} - ${COMMIT_MSG}"
+          
+          # Build per-OS summary for failed OSs only
+          # An OS is considered failed if: failed > 0 OR passed = 0 OR status = "error" OR status = "unknown"
+          FAILED_OS_SUMMARY=""
+          FULL_OS_SUMMARY=""
+          
+          if [ -f "$SUMMARY_FILE" ] && command -v jq >/dev/null 2>&1; then
+            # Build full summary for all OSs (for the expandable section)
+            FULL_OS_SUMMARY=$(jq -r '.[] | 
+              "• *\(.os // "unknown")*\n" +
+              "  " + (if (.passed // 0) == 0 then "⚠️" else "✅" end) + " Passed: \(.passed // 0)" +
+              (if (.failed // 0) > 0 then " | ❌ Failed: \(.failed // 0)" else "" end) +
+              (if (.skipped // 0) > 0 then " | ⏭️ Skipped: \(.skipped // 0)" else "" end)' "$SUMMARY_FILE" | tr '\n' '\n')
+            
+            # Build summary for failed OSs only
+            FAILED_OS_SUMMARY=$(jq -r '.[] | 
+              select((.failed // 0) > 0 or (.passed // 0) == 0 or (.status // "") == "error" or (.status // "") == "unknown") |
+              "• *\(.os // "unknown")*\n" +
+              (if ((.status // "") == "error" or (.status // "") == "unknown") then
+                "  ⚠️ Status: " + (.status // "unknown")
+              else
+                "  " + (if (.passed // 0) == 0 then "⚠️" else "✅" end) + " Passed: \(.passed // 0)" +
+                (if (.failed // 0) > 0 then " | ❌ Failed: \(.failed // 0)" else "" end) +
+                (if (.skipped // 0) > 0 then " | ⏭️ Skipped: \(.skipped // 0)" else "" end)
+              end)' "$SUMMARY_FILE" | tr '\n' '\n')
+            
+            # If no failed OSs, set a message
+            if [ -z "$FAILED_OS_SUMMARY" ] || [ "$FAILED_OS_SUMMARY" = "" ]; then
+              FAILED_OS_SUMMARY="✅ All OSs passed successfully!"
+            fi
+          else
+            # Fallback: simple text
+            FAILED_OS_SUMMARY="Test results available. Check workflow for details."
+            FULL_OS_SUMMARY="Test results available. Check workflow for details."
+          fi
+          
+          # Include upstream job failures in the report
+          JOB_FAILURES=$(echo "${{ inputs.job-failures }}" | xargs)
+          if [ -n "$JOB_FAILURES" ]; then
+            JOB_FAIL_LIST=""
+            for job in $JOB_FAILURES; do
+              JOB_FAIL_LIST+="• *${job}* — ❌ job failed"$'\n'
+            done
+            if [ "$FAILED_OS_SUMMARY" = "✅ All OSs passed successfully!" ]; then
+              FAILED_OS_SUMMARY="$JOB_FAIL_LIST"
+            else
+              FAILED_OS_SUMMARY="${JOB_FAIL_LIST}${FAILED_OS_SUMMARY}"
+            fi
+          fi
+          
+          # Overall summary
+          TOTAL_PASSED="${{ steps.aggregate.outputs.total_passed }}"
+          TOTAL_FAILED="${{ steps.aggregate.outputs.total_failed }}"
+          TOTAL_SKIPPED="${{ steps.aggregate.outputs.total_skipped }}"
+          
+          OVERALL_SUMMARY="*Overall Summary:*\n✅ Passed: ${TOTAL_PASSED} | ❌ Failed: ${TOTAL_FAILED} | ⏭️ Skipped: ${TOTAL_SKIPPED}"
+          
+          # Build full message text
+          MESSAGE_TEXT="${TITLE}\n\n${OVERALL_SUMMARY}\n\n*Failed OSs:*\n${FAILED_OS_SUMMARY}\n\n<${WORKFLOW_URL}|View Full Summary>"
+          
+          # Build Slack payload with blocks
+          # Escape special characters for JSON using jq for proper escaping
+          COMMIT_MSG_ESC=$(echo "$COMMIT_MSG" | jq -Rs . | sed 's/^"//;s/"$//')
+          FAILED_OS_SUMMARY_ESC=$(echo "$FAILED_OS_SUMMARY" | jq -Rs . | sed 's/^"//;s/"$//')
+          FULL_OS_SUMMARY_ESC=$(echo "$FULL_OS_SUMMARY" | jq -Rs . | sed 's/^"//;s/"$//')
+          
+          # Build JSON payload using printf to avoid heredoc YAML parsing issues
+          PAYLOAD=$(printf '{"text":"Event Nightly Test Results","blocks":[{"type":"header","text":{"type":"plain_text","text":"%s - Event Nightly"}},{"type":"section","fields":[{"type":"mrkdwn","text":"*Redis Version:*\n%s"},{"type":"mrkdwn","text":"*Build:*\n%s"}]},{"type":"section","text":{"type":"mrkdwn","text":"*Commit:* %s"}},{"type":"divider"},{"type":"section","text":{"type":"mrkdwn","text":"*Overall Summary*\n✅ Passed: %s | ❌ Failed: %s | ⏭️ Skipped: %s"}},{"type":"section","text":{"type":"mrkdwn","text":"<%s|View Workflow Run>"}},{"type":"divider"},{"type":"section","text":{"type":"mrkdwn","text":"*Failed OSs:*\n%s"}},{"type":"actions","elements":[{"type":"button","text":{"type":"plain_text","text":"Show Full Summary","emoji":true},"url":"%s","style":"primary"}]}]}' \
+            "$REPO_NAME" \
+            "$REDIS_VERSION" \
+            "$COMMIT_SHA" \
+            "$COMMIT_MSG_ESC" \
+            "$TOTAL_PASSED" \
+            "$TOTAL_FAILED" \
+            "$TOTAL_SKIPPED" \
+            "$WORKFLOW_URL" \
+            "$FAILED_OS_SUMMARY_ESC" \
+            "$WORKFLOW_URL")
+          
+          # Send to Slack
+          WEBHOOK_URL="${{ secrets.DATATYPES_SLACK_WEBHOOK_URL }}"
+          echo "Checking webhook URL..."
+          if [ -z "$WEBHOOK_URL" ] || [ "$WEBHOOK_URL" = "" ]; then
+            echo "ERROR: DATATYPES_SLACK_WEBHOOK_URL secret not set or empty"
+            echo "Message would be:"
+            echo "$MESSAGE_TEXT"
+            exit 1
+          fi
+          
+          echo "Webhook URL found (length: ${#WEBHOOK_URL})"
+          echo "Sending Slack message..."
+          
+          # Send with better error handling
+          HTTP_CODE=$(curl -s -o /tmp/slack_response.txt -w "%{http_code}" \
+            -X POST -H 'Content-type: application/json' \
+            --data "$PAYLOAD" \
+            "$WEBHOOK_URL")
+          
+          echo "HTTP response code: $HTTP_CODE"
+          
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Slack message sent successfully"
+            cat /tmp/slack_response.txt
+          else
+            echo "❌ Failed to send Slack message. HTTP code: $HTTP_CODE"
+            echo "Response:"
+            cat /tmp/slack_response.txt || echo "No response body"
+            echo "Payload (first 200 chars):"
+            echo "$PAYLOAD" | head -c 200
+            exit 1
+          fi
