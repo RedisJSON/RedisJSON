@@ -413,9 +413,9 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
 
     fn eq(&self, s: &Self) -> bool {
         match (self, s) {
-            (TermEvaluationResult::NodeList(list), _) => list
-                .iter()
-                .any(|v| TermEvaluationResult::Value(*v).eq(s)),
+            (TermEvaluationResult::NodeList(list), _) => {
+                list.iter().any(|v| TermEvaluationResult::Value(*v).eq(s))
+            }
             (_, TermEvaluationResult::NodeList(list)) => list
                 .iter()
                 .any(|v| self.eq(&TermEvaluationResult::Value(*v))),
@@ -457,9 +457,9 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
 
     fn re(&self, s: &Self) -> bool {
         match (self, s) {
-            (TermEvaluationResult::NodeList(list), _) => list
-                .iter()
-                .any(|v| TermEvaluationResult::Value(*v).re(s)),
+            (TermEvaluationResult::NodeList(list), _) => {
+                list.iter().any(|v| TermEvaluationResult::Value(*v).re(s))
+            }
             (_, TermEvaluationResult::NodeList(list)) => list
                 .iter()
                 .any(|v| self.re(&TermEvaluationResult::Value(*v))),
@@ -883,12 +883,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                         results: Vec::new(),
                         root: calc_data.root,
                     };
-                    self.calc_internal(
-                        term.into_inner(),
-                        calc_data.root,
-                        None,
-                        &mut new_calc_data,
-                    );
+                    self.calc_internal(term.into_inner(), calc_data.root, None, &mut new_calc_data);
                     Self::results_to_term(new_calc_data.results)
                 }
                 None => TermEvaluationResult::Value(calc_data.root),
