@@ -734,6 +734,40 @@ where
         .collect::<Vec<Option<&T>>>()
 }
 
+/// Comparator for safe in-place mutation ordering of JSON paths.
+///
+/// Produces: deeper (longer) paths first, higher array indices first within the
+/// same parent. This ordering ensures mutations on children happen before
+/// parents, and higher-index siblings before lower-index ones, so that no
+/// earlier mutation invalidates a later path.
+fn compare_paths_for_mutation(v1: &[String], v2: &[String]) -> Ordering {
+    v1.iter()
+        .zip_longest(v2.iter())
+        .fold_while(Ordering::Equal, |_acc, v| match v {
+            EitherOrBoth::Left(_) => Done(Ordering::Less),
+            EitherOrBoth::Right(_) => Done(Ordering::Greater),
+            EitherOrBoth::Both(p1, p2) => {
+                let i1 = p1.parse::<usize>();
+                let i2 = p2.parse::<usize>();
+                match (i1, i2) {
+                    (Err(_), Err(_)) => match p1.cmp(p2) {
+                        Ordering::Less => Done(Ordering::Less),
+                        Ordering::Equal => Continue(Ordering::Equal),
+                        Ordering::Greater => Done(Ordering::Greater),
+                    },
+                    (Ok(_), Err(_)) => Done(Ordering::Greater),
+                    (Err(_), Ok(_)) => Done(Ordering::Less),
+                    (Ok(i1), Ok(i2)) => match i2.cmp(&i1) {
+                        Ordering::Greater => Done(Ordering::Greater),
+                        Ordering::Less => Done(Ordering::Less),
+                        Ordering::Equal => Continue(Ordering::Equal),
+                    },
+                }
+            }
+        })
+        .into_inner()
+}
+
 fn find_all_paths<T: SelectValue, F: FnMut(&T) -> bool>(
     path: &str,
     doc: &T,
@@ -1537,16 +1571,20 @@ where
 
     let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
 
-    let mut res: Vec<RedisValue> = vec![];
+    let paths_len = paths.len();
+    let mut res: Vec<RedisValue> = (0..paths_len).map(|_| RedisValue::Null).collect();
     let mut need_notify = false;
-    for p in paths {
-        res.push(match p {
-            Some(p) => {
-                need_notify = true;
-                (redis_key.arr_insert(p, &args, index)? as i64).into()
-            }
-            _ => RedisValue::Null,
-        });
+
+    let mut indexed: Vec<(usize, Vec<String>)> = paths
+        .into_iter()
+        .enumerate()
+        .filter_map(|(i, p)| p.map(|path| (i, path)))
+        .collect();
+    indexed.sort_by(|(_, v1), (_, v2)| compare_paths_for_mutation(v1, v2));
+
+    for (orig_idx, p) in indexed {
+        need_notify = true;
+        res[orig_idx] = (redis_key.arr_insert(p, &args, index)? as i64).into();
     }
 
     if need_notify {
@@ -1569,12 +1607,13 @@ where
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
+    let mut paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
     if paths.is_empty() {
         Err(RedisError::String(
             err_msg_json_path_doesnt_exist_with_param_or(path, "not an array"),
         ))
     } else {
+        paths.sort_by(|v1, v2| compare_paths_for_mutation(v1, v2));
         let mut res = None;
         for p in paths {
             res = Some(redis_key.arr_insert(p, &args, index)?);
@@ -1673,19 +1712,25 @@ where
         .ok_or_else(RedisError::nonexistent_key)?;
 
     let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
-    let mut res: Vec<RedisValue> = vec![];
+    let paths_len = paths.len();
+    let mut res: Vec<RedisValue> = (0..paths_len).map(|_| RedisValue::Null).collect();
     let mut need_notify = false;
-    for p in paths {
-        res.push(match p {
-            Some(p) => match redis_key.arr_pop(p, index)? {
-                Some(v) => {
-                    need_notify = true;
-                    v.into()
-                }
-                _ => RedisValue::Null, // Empty array
-            },
-            _ => RedisValue::Null, // Not an array
-        });
+
+    let mut indexed: Vec<(usize, Vec<String>)> = paths
+        .into_iter()
+        .enumerate()
+        .filter_map(|(i, p)| p.map(|path| (i, path)))
+        .collect();
+    indexed.sort_by(|(_, v1), (_, v2)| compare_paths_for_mutation(v1, v2));
+
+    for (orig_idx, p) in indexed {
+        res[orig_idx] = match redis_key.arr_pop(p, index)? {
+            Some(v) => {
+                need_notify = true;
+                v.into()
+            }
+            _ => RedisValue::Null,
+        };
     }
     if need_notify {
         redis_key.apply_changes(ctx, "json.arrpop")?;
@@ -1706,8 +1751,9 @@ where
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
+    let mut paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
     if !paths.is_empty() {
+        paths.sort_by(|v1, v2| compare_paths_for_mutation(v1, v2));
         let mut res = None;
         for p in paths {
             res = Some(redis_key.arr_pop(p, index)?);
@@ -1760,16 +1806,20 @@ where
         .ok_or_else(RedisError::nonexistent_key)?;
 
     let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
-    let mut res: Vec<RedisValue> = vec![];
+    let paths_len = paths.len();
+    let mut res: Vec<RedisValue> = (0..paths_len).map(|_| RedisValue::Null).collect();
     let mut need_notify = false;
-    for p in paths {
-        res.push(match p {
-            Some(p) => {
-                need_notify = true;
-                (redis_key.arr_trim(p, start, stop)?).into()
-            }
-            _ => RedisValue::Null,
-        });
+
+    let mut indexed: Vec<(usize, Vec<String>)> = paths
+        .into_iter()
+        .enumerate()
+        .filter_map(|(i, p)| p.map(|path| (i, path)))
+        .collect();
+    indexed.sort_by(|(_, v1), (_, v2)| compare_paths_for_mutation(v1, v2));
+
+    for (orig_idx, p) in indexed {
+        need_notify = true;
+        res[orig_idx] = (redis_key.arr_trim(p, start, stop)?).into();
     }
     if need_notify {
         redis_key.apply_changes(ctx, "json.arrtrim")?;
@@ -1791,8 +1841,9 @@ where
         .get_value()?
         .ok_or_else(RedisError::nonexistent_key)?;
 
-    let paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
+    let mut paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
     if !paths.is_empty() {
+        paths.sort_by(|v1, v2| compare_paths_for_mutation(v1, v2));
         let mut res = None;
         for p in paths {
             res = Some(redis_key.arr_trim(p, start, stop)?);

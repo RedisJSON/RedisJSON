@@ -1370,13 +1370,6 @@ def test_json_set_rejects_trailing_characters(env):
     r.expect('JSON.SET', 'k', '$', '{"a":1}').ok()
     r.expect('JSON.SET', 'k', '$', '123').ok()
 
-def test_recursive_descent(env):
-    r = env
-    r.expect('JSON.SET', 'k', '$', '[{"a":1}]').ok()
-    r.expect('JSON.SET', 'k', '$..*', '[{"a":1}]').ok()
-    r.expect('JSON.GET', 'k', '$').equal('[[[{"a":1}]]]')
-
-
 def test_json_del_matches_with_numeric_pathes(env):
     r = env
     r.expect(

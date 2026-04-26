@@ -703,6 +703,23 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde::Deserialize;
+
+    #[test]
+    fn test_trailing_chars_rejected() {
+        let inputs = ["trueabc", "falseabc", "nullabc", "[1,2,3]1", "123abc"];
+        for input in inputs {
+            let mut d = serde_json::Deserializer::from_str(input);
+            let result = IValue::deserialize(&mut d);
+            assert!(result.is_ok(), "Deserialization failed for '{}'", input);
+            let end_result = d.end();
+            assert!(
+                end_result.is_err(),
+                "end() should reject trailing chars for '{}' but got Ok",
+                input
+            );
+        }
+    }
 
     #[test]
     fn test_get_memory() {
