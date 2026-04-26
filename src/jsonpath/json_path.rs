@@ -336,7 +336,7 @@ enum TermEvaluationResult<'i, 'j, S: SelectValue> {
     Null,
     /// Multiple results from a non-singular query (e.g. `@.*`, `@..key`).
     /// Per RFC 9535, comparisons succeed if ANY element satisfies the condition.
-    NodeList(Vec<ValueRef<'j, S>>),
+    NodeList(Vec<&'j S>),
     Invalid,
 }
 
@@ -402,10 +402,10 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
         match (self, s) {
             (TermEvaluationResult::NodeList(list), _) => list
                 .iter()
-                .any(|v| TermEvaluationResult::Value(v.clone()).ord_cmp_matches(s, pred)),
+                .any(|v| TermEvaluationResult::Value(*v).ord_cmp_matches(s, pred)),
             (_, TermEvaluationResult::NodeList(list)) => list
                 .iter()
-                .any(|v| self.ord_cmp_matches(&TermEvaluationResult::Value(v.clone()), pred)),
+                .any(|v| self.ord_cmp_matches(&TermEvaluationResult::Value(*v), pred)),
             _ => match self.cmp(s) {
                 CmpResult::Ord(o) => pred(o),
                 CmpResult::NotCmparable => false,
@@ -433,10 +433,10 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
         match (self, s) {
             (TermEvaluationResult::NodeList(list), _) => list
                 .iter()
-                .any(|v| TermEvaluationResult::Value(v.clone()).eq(s)),
+                .any(|v| TermEvaluationResult::Value(*v).eq(s)),
             (_, TermEvaluationResult::NodeList(list)) => list
                 .iter()
-                .any(|v| self.eq(&TermEvaluationResult::Value(v.clone()))),
+                .any(|v| self.eq(&TermEvaluationResult::Value(*v))),
             (TermEvaluationResult::Value(v1), TermEvaluationResult::Value(v2)) => v1 == v2,
             (_, _) => match self.cmp(s) {
                 CmpResult::Ord(o) => o.is_eq(),
@@ -477,10 +477,10 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
         match (self, s) {
             (TermEvaluationResult::NodeList(list), _) => list
                 .iter()
-                .any(|v| TermEvaluationResult::Value(v.clone()).re(s)),
+                .any(|v| TermEvaluationResult::Value(*v).re(s)),
             (_, TermEvaluationResult::NodeList(list)) => list
                 .iter()
-                .any(|v| self.re(&TermEvaluationResult::Value(v.clone()))),
+                .any(|v| self.re(&TermEvaluationResult::Value(*v))),
             _ => self.re_match(s),
         }
     }
@@ -903,7 +903,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                     };
                     self.calc_internal(
                         term.into_inner(),
-                        calc_data.root.clone(),
+                        calc_data.root,
                         None,
                         &mut new_calc_data,
                     );
