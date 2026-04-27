@@ -120,8 +120,30 @@ TARGET=$(BINDIR)/$(MODULE_NAME)
 
 #----------------------------------------------------------------------------------------------
 
+#----------------------------------------------------------------------------------------------
+# `setup` mirrors the .github/workflows/flow-macos.yml flow (CI is the ground
+# truth). Three phases:
+#   1. `./install_script.sh` -> sources .install/<os>.sh (brew/apt installs only)
+#   2. ensure Rust/cargo is installed (CI runners ship with it; local devs may not)
+#   3. local `venv/` + `common_installations.sh` -> pip deps inside the venv
+# After setup, activate the venv before running tests:
+#     . src/venv/bin/activate && make test
+# This avoids `sbin/setup` -> readies/getpy3 which is broken on macOS+Python>=3.13
+# (PEP 668 + missing `python3-pip`/`python3-virtualenv` brew formulas).
+#----------------------------------------------------------------------------------------------
+
 setup:
-	$(SHOW)./sbin/setup
+	$(SHOW)cd .install && ./install_script.sh
+	$(SHOW)if ! command -v cargo >/dev/null 2>&1 && [ ! -x "$$HOME/.cargo/bin/cargo" ]; then \
+		echo "==> Rust/cargo not found, installing via rustup"; \
+		curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable; \
+		echo "==> Rust installed. Add this to your shell rc to make it persistent:"; \
+		echo "        . \"\$$HOME/.cargo/env\""; \
+	else \
+		echo "==> Rust/cargo already installed: $$(command -v cargo || echo $$HOME/.cargo/bin/cargo)"; \
+	fi
+	$(SHOW)test -d venv || python3 -m venv venv
+	$(SHOW). ./venv/bin/activate && ./.install/common_installations.sh
 
 update:
 	$(SHOW)cargo update
