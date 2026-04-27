@@ -1,0 +1,152 @@
+name: Capture Test Results
+description: Capture test output and parse results for Slack notification
+
+inputs:
+  os-name:
+    description: 'OS name/platform identifier'
+    required: true
+    type: string
+  test-log-dir:
+    description: 'Directory containing test logs'
+    required: false
+    default: 'tests/pytest/logs'
+
+outputs:
+  results-file:
+    description: 'Path to the results JSON file'
+    value: 'test-results.json'
+
+runs:
+  using: composite
+  steps:
+    - name: Capture and parse test results
+      shell: bash
+      id: parse
+      run: |
+        OS_NAME="${{ inputs.os-name }}"
+        # Sanitize OS name for artifact (remove invalid characters like :, /, etc.)
+        OS_NAME_SANITIZED=$(echo "$OS_NAME" | sed 's/[:/\\<>|*?]/_/g' | sed 's/__*/_/g' | sed 's/^_//' | sed 's/_$//')
+        # Use job name and OS name to create unique artifact name
+        # Include job name to ensure uniqueness across different workflows/jobs
+        JOB_NAME="${{ github.job }}"
+        JOB_NAME_SANITIZED=$(echo "$JOB_NAME" | sed 's/[^a-zA-Z0-9_-]/_/g' | sed 's/__*/_/g' | sed 's/^_//' | sed 's/_$//')
+        # Create unique artifact name: job-name-os-name
+        # This ensures artifacts from different jobs don't conflict
+        ARTIFACT_NAME="test-results-${JOB_NAME_SANITIZED}-${OS_NAME_SANITIZED}"
+        TEST_LOG_DIR="${{ inputs.test-log-dir }}"
+        # Use sanitized name for file path to avoid filesystem issues
+        RESULTS_FILE="test-results-${OS_NAME_SANITIZED}.json"
+        # Ensure we're in a safe directory
+        cd "$GITHUB_WORKSPACE" || cd /tmp || cd .
+        
+        # Try to find test output in logs
+        # RLTest typically outputs to stdout, but logs might be in the log directory
+        TEST_OUTPUT=""
+        
+        # Look for test summary in log files
+        if [ -d "$TEST_LOG_DIR" ]; then
+          # Find the most recent log file (cross-platform: works on both GNU and BSD find)
+          # Use find with -exec stat for cross-platform compatibility
+          # Try BSD format first (macOS), then GNU format (Linux) as fallback
+          LATEST_LOG=""
+          # Try BSD/macOS stat format first: stat -f '%m %N' (modification time, filename)
+          LATEST_LOG=$(find "$TEST_LOG_DIR" -name "*.log" -type f -exec stat -f '%m %N' {} + 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2- || echo "")
+          # Fallback: if BSD format failed, try GNU/Linux stat format: stat -c '%Y %n'
+          if [ -z "$LATEST_LOG" ] || [ ! -f "$LATEST_LOG" ]; then
+            LATEST_LOG=$(find "$TEST_LOG_DIR" -name "*.log" -type f -exec stat -c '%Y %n' {} + 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2- || echo "")
+          fi
+          if [ -n "$LATEST_LOG" ] && [ -f "$LATEST_LOG" ]; then
+            # Extract last 100 lines which should contain the summary
+            TEST_OUTPUT=$(tail -100 "$LATEST_LOG" 2>/dev/null || echo "")
+          fi
+        fi
+        
+        # If we didn't find logs, try to capture from GitHub Actions output
+        # This is a fallback - we'll parse whatever we can find
+        if [ -z "$TEST_OUTPUT" ]; then
+          # Try to find any test output files
+          TEST_OUTPUT=$(find . -name "*.log" -o -name "*test*output*" 2>/dev/null | head -1 | xargs tail -100 2>/dev/null || echo "")
+        fi
+        
+        # Also check for test output file from run-tests action
+        if [ -f "$GITHUB_WORKSPACE/test_output.log" ]; then
+          TEST_OUTPUT=$(cat "$GITHUB_WORKSPACE/test_output.log" || echo "")
+        fi
+        
+        # Parse the output using the parse script
+        PARSE_SCRIPT="$GITHUB_WORKSPACE/.github/scripts/parse-test-results.sh"
+        if [ ! -f "$PARSE_SCRIPT" ]; then
+          PARSE_SCRIPT="$GITHUB_ACTION_PATH/../../scripts/parse-test-results.sh"
+        fi
+        
+        # Ensure RESULTS_FILE is in a safe location with sanitized name
+        RESULTS_FILE_ABS="$GITHUB_WORKSPACE/$RESULTS_FILE"
+        
+        if [ -n "$TEST_OUTPUT" ] && [ -f "$PARSE_SCRIPT" ]; then
+          echo "$TEST_OUTPUT" | bash "$PARSE_SCRIPT" "" "$RESULTS_FILE_ABS"
+        else
+          # If no output found, create empty results
+          printf '{"os":"%s","passed":0,"failed":0,"skipped":0,"total":0,"status":"unknown"}\n' "$OS_NAME" > "$RESULTS_FILE_ABS"
+        fi
+        
+        # Update RESULTS_FILE to absolute path
+        RESULTS_FILE="$RESULTS_FILE_ABS"
+        
+        # Add OS name to results
+        if [ -f "$RESULTS_FILE" ]; then
+          # Use jq if available, otherwise use sed with proper escaping
+          if command -v jq >/dev/null 2>&1; then
+            jq ". + {\"os\": \"$OS_NAME\"}" "$RESULTS_FILE" > "${RESULTS_FILE}.tmp" && mv "${RESULTS_FILE}.tmp" "$RESULTS_FILE"
+          else
+            # Fallback: manually add OS field using sed (cross-platform compatible)
+            # Escape special characters in OS_NAME for sed replacement
+            # Escape backslashes and ampersands in the replacement string
+            OS_NAME_ESC=$(echo "$OS_NAME" | sed 's/\\/\\\\/g; s/&/\\&/g; s/"/\\"/g')
+            # Use temporary file approach for cross-platform compatibility
+            # This works on both macOS (BSD sed) and Linux (GNU sed)
+            sed "s|^{|{ \"os\": \"${OS_NAME_ESC}\",|" "$RESULTS_FILE" > "${RESULTS_FILE}.tmp" && mv "${RESULTS_FILE}.tmp" "$RESULTS_FILE"
+          fi
+        fi
+        
+        # Ensure file exists and set outputs
+        if [ ! -f "$RESULTS_FILE" ]; then
+          echo "Warning: Results file not created: $RESULTS_FILE"
+          # Create empty file as fallback
+          printf '{"os":"%s","passed":0,"failed":0,"skipped":0,"total":0,"status":"error"}\n' "$OS_NAME" > "$RESULTS_FILE"
+        fi
+        
+        # Always set outputs (file should exist now)
+        echo "results-file=$RESULTS_FILE" >> $GITHUB_OUTPUT
+        echo "Results captured: $RESULTS_FILE"
+        
+        # Copy file to workspace root so it can be accessed outside container if needed
+        # This helps with containers that have GLIBC/permission issues
+        if [ -f "$RESULTS_FILE" ]; then
+          cp "$RESULTS_FILE" "$GITHUB_WORKSPACE/" || true
+          # Also try copying with sanitized name for easier access
+          cp "$RESULTS_FILE" "$GITHUB_WORKSPACE/test-results-${OS_NAME_SANITIZED}.json" || true
+          # Also copy to a well-known location
+          mkdir -p "$GITHUB_WORKSPACE/.test-results" || true
+          cp "$RESULTS_FILE" "$GITHUB_WORKSPACE/.test-results/test-results-${OS_NAME_SANITIZED}.json" || true
+        fi
+        
+        echo "os-name-sanitized=$OS_NAME_SANITIZED" >> $GITHUB_OUTPUT
+        echo "artifact-name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+        
+        # Check if we're in a container with GLIBC/permission issues
+        # Older containers may not be able to use actions/upload-artifact
+        CHECK_GLIBC=$(ldd --version 2>/dev/null | head -1 || echo "unknown")
+        echo "GLIBC check: $CHECK_GLIBC"
+        echo "Container check: $([ -f /.dockerenv ] && echo 'yes' || echo 'no')"
+        
+    - name: Upload test results artifact
+      continue-on-error: true
+      if: always() && steps.parse.outputs.results-file != '' && steps.parse.outputs.results-file != 'null'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.parse.outputs.artifact-name }}
+        path: ${{ steps.parse.outputs.results-file }}
+        if-no-files-found: warn
+      env:
+        # Try to work around GLIBC issues in older containers
+        NODE_OPTIONS: ""

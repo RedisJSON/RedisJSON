@@ -135,6 +135,11 @@ jobs:
             export CC=/usr/bin/clang CXX=/usr/bin/clang++
           fi
           make test
+      - name: Capture test results
+        if: always()
+        uses: ./.github/actions/capture-test-results
+        with:
+          os-name: ${{ matrix.os }}
       - name: Pack module
         run: |
           if [[ "${{ matrix.os }}" == macos-26* ]]; then

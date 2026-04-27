@@ -162,6 +162,12 @@ jobs:
             ${{ env.DOCKER_IMAGE }} \
             bash -c "cargo test && MODULE=\$(realpath ./target/release/rejson.so) RLTEST_ARGS='--no-progress' \$(realpath ./tests/pytest/tests.sh) VG=${{ inputs.run_valgrind && '1' || '0' }}"
 
+      - name: Capture test results
+        if: always()
+        uses: ./.github/actions/capture-test-results
+        with:
+          os-name: ${{ inputs.arch }}-${{ matrix.platform.os }}
+
       - name: Upload test artifacts
         if: failure()
         uses: actions/upload-artifact@v4
