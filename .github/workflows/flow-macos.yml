@@ -128,13 +128,14 @@ jobs:
       - name: Test
         if: ${{inputs.run-test}}
         run: |
+          set -o pipefail
           if [[ "${{ matrix.os }}" == macos-26* ]]; then
             _SDK="$(xcrun --sdk macosx --show-sdk-path)"
             export SDKROOT="$_SDK"
             export BINDGEN_EXTRA_CLANG_ARGS="-isysroot ${_SDK}"
             export CC=/usr/bin/clang CXX=/usr/bin/clang++
           fi
-          make test
+          make test 2>&1 | tee test_output.log
       - name: Capture test results
         if: always()
         uses: ./.github/actions/capture-test-results

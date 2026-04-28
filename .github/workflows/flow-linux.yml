@@ -154,13 +154,14 @@ jobs:
       - name: Run tests
         if: ${{ inputs.run-test }}
         run: |
+          set -o pipefail
           docker run --rm \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             --cap-add=SYS_PTRACE \
             --security-opt seccomp=unconfined \
             ${{ env.DOCKER_IMAGE }} \
-            bash -c "cargo test && MODULE=\$(realpath ./target/release/rejson.so) RLTEST_ARGS='--no-progress' \$(realpath ./tests/pytest/tests.sh) VG=${{ inputs.run_valgrind && '1' || '0' }}"
+            bash -c "cargo test && MODULE=\$(realpath ./target/release/rejson.so) RLTEST_ARGS='--no-progress' \$(realpath ./tests/pytest/tests.sh) VG=${{ inputs.run_valgrind && '1' || '0' }}" 2>&1 | tee test_output.log
 
       - name: Capture test results
         if: always()
