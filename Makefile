@@ -123,8 +123,10 @@ TARGET=$(BINDIR)/$(MODULE_NAME)
 #----------------------------------------------------------------------------------------------
 # `setup` mirrors the .github/workflows/flow-macos.yml flow (CI is the ground
 # truth). Three phases:
-#   1. `./install_script.sh` -> sources .install/<os>.sh (brew/apt installs only)
-#   2. ensure Rust/cargo is installed (CI runners ship with it; local devs may not)
+#   1. `.install/install_script.sh` -> abstract deps from dependencies.yaml (+ quirks)
+#      or legacy `.install/<os>.sh`
+#   2. ensure Rust/cargo on PATH — same as Docker/CI: `.install/getrust.sh` when missing,
+#      then `source ~/.cargo/env` (that script pins toolchain via rust-toolchain.toml)
 #   3. local `venv/` + `common_installations.sh` -> pip deps inside the venv
 # After setup, activate the venv before running tests:
 #     . src/venv/bin/activate && make test
@@ -134,14 +136,20 @@ TARGET=$(BINDIR)/$(MODULE_NAME)
 
 setup:
 	$(SHOW)cd .install && ./install_script.sh
-	$(SHOW)if ! command -v cargo >/dev/null 2>&1 && [ ! -x "$$HOME/.cargo/bin/cargo" ]; then \
-		echo "==> Rust/cargo not found, installing via rustup"; \
-		curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable; \
-		echo "==> Rust installed. Add this to your shell rc to make it persistent:"; \
-		echo "        . \"\$$HOME/.cargo/env\""; \
-	else \
-		echo "==> Rust/cargo already installed: $$(command -v cargo || echo $$HOME/.cargo/bin/cargo)"; \
-	fi
+	$(SHOW)set -e; \
+		cd $(ROOT); \
+		if [ -f "$$HOME/.cargo/env" ]; then . "$$HOME/.cargo/env"; fi; \
+		if command -v cargo >/dev/null 2>&1; then \
+			echo "==> Rust/cargo on PATH: $$(command -v cargo) ($$(cargo --version))"; \
+		elif [ -x "$$HOME/.cargo/bin/cargo" ]; then \
+			export PATH="$$HOME/.cargo/bin:$$PATH"; \
+			echo "==> Using $$(command -v cargo) ($$(cargo --version))"; \
+		else \
+			echo "==> Rust/cargo not found; running .install/getrust.sh (same entrypoint as Docker)"; \
+			chmod +x .install/getrust.sh && .install/getrust.sh; \
+			. "$$HOME/.cargo/env"; \
+			echo "==> cargo: $$(command -v cargo) ($$(cargo --version))"; \
+		fi
 	$(SHOW)test -d venv || python3 -m venv venv
 	$(SHOW). ./venv/bin/activate && ./.install/common_installations.sh
 

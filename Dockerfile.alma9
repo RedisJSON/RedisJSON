@@ -1,29 +1,31 @@
+# AlmaLinux 9.x
 FROM almalinux:9
 
 WORKDIR /workspace
-
 ENV DEBIAN_FRONTEND=noninteractive
-RUN dnf -y update
-RUN dnf install -y gcc-toolset-13-gcc gcc-toolset-13-gcc-c++ make wget git openssl openssl-devel which rsync unzip cargo clang jq
-RUN cp /opt/rh/gcc-toolset-13/enable /etc/profile.d/gcc-toolset-13.sh
 
+# Install build/test deps via the unified abstract installer; quirks/alma9.sh
+# pulls gcc-toolset-13 and drops a /etc/profile.d snippet enabling it.
+COPY dependencies.yaml /workspace/dependencies.yaml
 COPY .install /workspace/.install
+RUN bash /workspace/.install/install_script.sh
 RUN chmod +x /workspace/.install/install_cmake.sh && /workspace/.install/install_cmake.sh
 
-# Install Redis (SANITIZER can be 'address' for ASAN builds)
+ENV PATH="/opt/rh/gcc-toolset-13/root/usr/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-13/root/usr/lib64:${LD_LIBRARY_PATH}"
+
 ARG REDIS_REF=unstable
 ARG SANITIZER=
 RUN chmod +x /workspace/.install/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /workspace/.install/install_redis.sh
 
-# Install Rust
+# Rust toolchain via rustup (see rust-toolchain.toml).
 RUN chmod +x /workspace/.install/getrust.sh && /workspace/.install/getrust.sh
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-# Install uv and Python environment
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh
 ENV PATH="/usr/local/bin:${PATH}"
 RUN uv venv --python=3.11 /opt/.venv
 ENV VIRTUAL_ENV=/opt/.venv
 ENV PATH="/opt/.venv/bin:${PATH}"
 COPY requierments_docker.txt /workspace/requierments.txt
-RUN uv pip install -r requierments.txt
+RUN uv pip install setuptools wheel "Cython<3.0" && uv pip install --no-build-isolation -r requierments.txt

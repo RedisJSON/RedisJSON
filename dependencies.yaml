@@ -1,0 +1,343 @@
+# RedisJSON dependencies.
+#
+# This is the source of truth for what the module needs in order to build and
+# test. It is consumed by .install/install_script.sh (and indirectly by `make
+# setup` and by Dockerfile.<osnick> images). When you add or remove a
+# build-time dependency, edit this file --- not the per-OS shell scripts.
+#
+# The script picks the right concrete package per OS using `package_map`
+# below. OSes listed under `migrated_osnicks` go through this YAML pipeline;
+# any OS not listed continues to use its legacy .install/<distro>_<ver>.sh
+# script unchanged, so migration is incremental.
+#
+# OS-specific extras that don't fit the abstract->concrete table go in
+# .install/quirks/<osnick>.sh (run after the standard package install).
+
+# ----------------------------------------------------------------------------
+# Abstract system packages required to build RedisJSON.
+# Names here are looked up in `package_map` below.
+# ----------------------------------------------------------------------------
+system:
+  - gcc
+  - clang
+  - gdb
+  - make
+  - cmake
+  - autoconf
+  - automake
+  - libtool
+  - openssl_dev
+  - zlib_dev
+  - bzip2_dev
+  - libffi_dev
+  - libclang_dev
+  - python3
+  - git
+  - curl
+  - wget
+  - jq
+  - tar
+  - unzip
+  - rsync
+  - which
+  - valgrind
+  - lcov
+  - blocksruntime_dev
+  - readline_dev
+  - coreutils
+  # Formatting / RedisJSON-native libs (ev/event loops in tests/tooling).
+  - clang_format
+  - libev_dev
+  - libevent_dev
+
+# Python requirement files to install via pip after system deps are present.
+# Paths are relative to the module src root.
+python:
+  - tests/pytest/requirements.txt
+  - .install/build_package_requirements.txt
+
+# OSes that go through the abstract YAML pipeline.
+# OSes not listed here keep using the legacy .install/<distro>_<ver>.sh
+# script during migration; remove the legacy script and add the osnick here
+# to migrate that OS.
+migrated_osnicks:
+  # Ubuntu / Debian
+  - bionic       # 18.04  (needs quirks/bionic.sh: universe gcc-8 + cmake-from-source)
+  - focal        # 20.04  (needs quirks/focal.sh:  gcc-10 update-alternatives)
+  - jammy        # 22.04
+  - noble        # 24.04
+  - resolute     # 26.04
+  - bullseye     # debian 11
+  - bookworm     # debian 12  (Dockerfile runs install_cmake.sh post-install)
+  - trixie       # debian 13  (Dockerfile runs install_cmake.sh post-install)
+  # Alpine
+  - alpine
+  # Red Hat family
+  - alma8        # AlmaLinux 8   (needs quirks/alma8.sh:  gcc-toolset-11)
+  - alma9        # AlmaLinux 9   (needs quirks/alma9.sh:  gcc-toolset-13)
+  - alma10       # AlmaLinux 10
+  - rocky8       # Rocky Linux 8 (needs quirks/rocky8.sh: gcc-toolset-11)
+  - rocky9       # Rocky Linux 9 (needs quirks/rocky9.sh: gcc-toolset-13)
+  - rocky10      # Rocky Linux 10
+  - amazonlinux2       # AmazonLinux 2 (needs quirks/amazonlinux2.sh: devtoolset-11 + cmake3 + epel)
+  - amazonlinux2023
+  # Microsoft
+  - mariner2     # CBL-Mariner 2  (tdnf)
+  - azurelinux3  # Azure Linux 3  (tdnf)
+  # macOS (homebrew). Needs quirks/macos.sh for the PATH/profile updates the
+  # abstract installer can't express.
+  - macos
+
+# ----------------------------------------------------------------------------
+# Map of abstract dependency names to concrete packages per package manager.
+# An empty list (or the value `skip`) means "no install needed for this PM"
+# (already provided by the base image, or no equivalent package).
+# ----------------------------------------------------------------------------
+package_map:
+  # ---- compilers / build essentials --------------------------------------
+  gcc:
+    # macOS already ships Apple clang (/usr/bin/cc); installing GNU gcc via
+    # brew shadows nothing useful and breaks builds that hard-code cc.
+    apt:  [build-essential]
+    dnf:  [gcc, gcc-c++, make]
+    yum:  [gcc, gcc-c++, make]
+    tdnf: [build-essential, make]
+    apk:  [build-base, g++]
+    brew: skip
+  clang:
+    # Pin to llvm@18 so PATH munging in quirks/macos.sh keeps finding
+    # $(brew --prefix)/opt/llvm@18/bin (matches the legacy macos.sh).
+    apt:  [clang]
+    dnf:  [clang]
+    yum:  [clang]
+    tdnf: [clang]
+    apk:  [clang18, clang18-libclang]
+    brew: [llvm@18]
+  make:
+    # On macOS replaces BSD make with GNU make at
+    # $(brew --prefix)/opt/make/libexec/gnubin/make.
+    apt:  [make]
+    dnf:  [make]
+    yum:  [make]
+    tdnf: [make]
+    apk:  [make]
+    brew: [make]
+  gdb:
+    apt:  [gdb]
+    dnf:  [gdb]
+    yum:  [gdb]
+    tdnf: [gdb]
+    apk:  [gdb]
+    brew: skip
+  cmake:
+    apt:  [cmake]
+    dnf:  [cmake]
+    yum:  [cmake]
+    tdnf: [cmake]
+    apk:  [cmake]
+    brew: [cmake]
+  autoconf:
+    apt:  [autoconf]
+    dnf:  [autoconf]
+    yum:  [autoconf]
+    tdnf: [autoconf]
+    apk:  [autoconf]
+    brew: [autoconf]
+  automake:
+    apt:  [automake]
+    dnf:  [automake]
+    yum:  [automake]
+    tdnf: [automake]
+    apk:  [automake]
+    brew: [automake]
+  libtool:
+    apt:  [libtool]
+    dnf:  [libtool]
+    yum:  [libtool]
+    tdnf: [libtool]
+    apk:  [libtool]
+    brew: [libtool]
+
+  # ---- libraries ---------------------------------------------------------
+  openssl_dev:
+    apt:  [openssl, libssl-dev]
+    dnf:  [openssl, openssl-devel]
+    yum:  [openssl, openssl-devel]
+    tdnf: [openssl, openssl-devel]
+    apk:  [openssl, openssl-dev]
+    brew: [openssl@3]
+  zlib_dev:
+    apt:  [zlib1g-dev]
+    dnf:  [zlib-devel]
+    yum:  [zlib-devel]
+    tdnf: [zlib-devel]
+    apk:  [zlib-dev]
+    brew: [zlib]
+  bzip2_dev:
+    apt:  [libbz2-dev]
+    dnf:  [bzip2-devel]
+    yum:  [bzip2-devel]
+    tdnf: [bzip2-devel]
+    apk:  [bzip2-dev]
+    brew: [bzip2]
+  libffi_dev:
+    apt:  [libffi-dev]
+    dnf:  [libffi-devel]
+    yum:  [libffi-devel]
+    tdnf: [libffi-devel]
+    apk:  [libffi-dev]
+    brew: [libffi]
+  libclang_dev:
+    # llvm@18 (resolved by `clang` above) already ships libclang on macOS;
+    # don't install plain `llvm` too or brew installs two side-by-side LLVMs.
+    apt:  [libclang-dev]
+    dnf:  [clang-devel]
+    yum:  [clang-devel]
+    tdnf: [clang-devel]
+    apk:  [clang18-libclang]
+    brew: skip
+  blocksruntime_dev:
+    # macOS: Apple clang ships BlocksRuntime + Block.h inside the Xcode SDK,
+    # so no brew formula is needed (and `libblocksruntime` doesn't exist in
+    # homebrew core anyway). The legacy .install/macos.sh tried to install it
+    # and silently failed.
+    apt:  [libblocksruntime-dev]
+    dnf:  []   # not packaged on RHEL-likes; clang -fblocks works without it
+    yum:  []
+    tdnf: []
+    apk:  []
+    brew: skip
+  readline_dev:
+    # Only Azure Linux 3's Python build setup currently asks for it; cheap
+    # extra elsewhere if it's available.
+    apt:  []
+    dnf:  []
+    yum:  []
+    tdnf: [readline-devel]
+    apk:  []
+    brew: skip
+  coreutils:
+    # macOS-only: GNU coreutils replacement so build scripts that expect
+    # gnu-flavoured ls/sed/etc. work. Linux ships these by default.
+    apt:  []
+    dnf:  []
+    yum:  []
+    tdnf: []
+    apk:  []
+    brew: [coreutils]
+
+  clang_format:
+    apt:  [clang-format]
+    dnf:  [clang-tools-extra]
+    yum:  []
+    tdnf: []
+    apk:  []
+    brew: [clang-format]
+
+  libev_dev:
+    apt:  [libev-dev]
+    dnf:  [libev-devel]
+    yum:  [libev-devel]
+    tdnf: [libev-devel]
+    apk:  [libev-dev]
+    brew: [libev]
+
+  libevent_dev:
+    apt:  [libevent-dev]
+    dnf:  [libevent-devel]
+    yum:  [libevent-devel]
+    tdnf: [libevent-devel]
+    apk:  [libevent-dev]
+    brew: [libevent]
+
+  # ---- Python ------------------------------------------------------------
+  python3:
+    # macOS: deliberately skip. GH Actions runners (and most dev Macs) ship a
+    # Python.framework whose `/usr/local/bin/python3.11` symlink collides
+    # with brew's `python@3.11`, making `brew install python@3.11` fail at
+    # the link step. We rely on whatever python3 is already on PATH; the
+    # legacy `.install/macos.sh` did the same for years. If a user has no
+    # python3, `make setup`'s `python3 -m venv` will give a clear error.
+    apt:  [python3, python3-pip, python3-venv, python3-dev]
+    dnf:  [python3, python3-pip, python3-devel]
+    yum:  [python3, python3-pip, python3-devel]
+    tdnf: [python3, python3-pip, python3-devel]
+    apk:  [python3, python3-dev, py3-pip, py-virtualenv]
+    brew: skip
+
+  # ---- networking / misc tools ------------------------------------------
+  git:
+    apt:  [git]
+    dnf:  [git]
+    yum:  [git]
+    tdnf: [git]
+    apk:  [git]
+    brew: [git]
+  curl:
+    apt:  [curl, ca-certificates]
+    dnf:  [curl, ca-certificates]
+    yum:  [curl, ca-certificates]
+    tdnf: [curl, ca-certificates]
+    apk:  [curl, ca-certificates]
+    brew: [curl]
+  wget:
+    apt:  [wget]
+    dnf:  [wget]
+    yum:  [wget]
+    tdnf: [wget]
+    apk:  [wget]
+    brew: [wget]
+  jq:
+    apt:  [jq]
+    dnf:  [jq]
+    yum:  [jq]
+    tdnf: [jq]
+    apk:  [jq]
+    brew: [jq]
+  tar:
+    apt:  [tar]
+    dnf:  [tar]
+    yum:  [tar]
+    tdnf: [tar]
+    apk:  [tar]
+    brew: skip
+  unzip:
+    apt:  [unzip]
+    dnf:  [unzip]
+    yum:  [unzip]
+    tdnf: [unzip]
+    apk:  [unzip]
+    brew: skip
+  rsync:
+    apt:  [rsync]
+    dnf:  [rsync]
+    yum:  [rsync]
+    tdnf: [rsync]
+    apk:  [rsync]
+    brew: [rsync]
+  which:
+    apt:  []   # debianutils ships /usr/bin/which by default
+    dnf:  [which]
+    yum:  [which]
+    tdnf: [which]
+    apk:  []   # busybox provides `which`
+    brew: skip
+
+  # ---- testing / coverage ------------------------------------------------
+  valgrind:
+    apt:  [valgrind]
+    dnf:  [valgrind]
+    yum:  [valgrind]
+    tdnf: [valgrind]
+    apk:  []
+    brew: skip
+  lcov:
+    # lcov isn't packaged on RHEL10/AlmaLinux10/RockyLinux10 base repos and we
+    # don't want to require EPEL just for coverage. Drop it on dnf/yum/tdnf;
+    # CI lanes that actually need lcov can install it explicitly.
+    apt:  [lcov]
+    dnf:  []
+    yum:  []
+    tdnf: []
+    apk:  [lcov]
+    brew: [lcov]
