@@ -3,36 +3,26 @@ FROM ubuntu:22.04
 WORKDIR /workspace
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    make \
-    gcc \
-    g++ \
-    gdb \
-    clang \
-    valgrind \
-    git \
-    jq \
-    libssl-dev \
-    autoconf \
-    automake \
-    libtool \
-    cmake \
-    curl \
-    wget \
-    libblocksruntime-dev \
-    unzip \
-    rsync
+# Make apt resilient to transient network/CDN failures (e.g. archive.ubuntu.com /
+# deb.debian.org "Connection reset by peer" on GitHub Actions runners). See MOD-14715.
+RUN printf 'Acquire::Retries "3";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' \
+    > /etc/apt/apt.conf.d/80-retries
+
+# Install build/test deps via the unified abstract installer (see
+# dependencies.yaml). Ubuntu jammy is in `migrated_osnicks`, so this resolves
+# the abstract list against apt and runs a single apt-get install.
+COPY dependencies.yaml /workspace/dependencies.yaml
+COPY rust-toolchain.toml /workspace/rust-toolchain.toml
+COPY .install /workspace/.install
+RUN bash /workspace/.install/install_script.sh
+# rustc/cargo from rustup (install_script.sh ran getrust.sh)
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Install Redis (SANITIZER can be 'address' for ASAN builds)
 ARG REDIS_REF=unstable
 ARG SANITIZER=
-COPY .install /workspace/.install
-RUN chmod +x /workspace/.install/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /workspace/.install/install_redis.sh
 
-# Install Rust
-RUN chmod +x /workspace/.install/getrust.sh && /workspace/.install/getrust.sh
-ENV PATH="/root/.cargo/bin:${PATH}"
+RUN chmod +x .install/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} .install/install_redis.sh
 
 # Install uv and Python environment
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh
@@ -40,5 +30,5 @@ ENV PATH="/usr/local/bin:${PATH}"
 RUN uv venv --python=3.11 /opt/.venv
 ENV VIRTUAL_ENV=/opt/.venv
 ENV PATH="/opt/.venv/bin:${PATH}"
-COPY requierments_docker.txt /workspace/requierments.txt
-RUN uv pip install -r requierments.txt
+COPY requierments_docker.txt /workspace/requirements.txt
+RUN uv pip install -r requirements.txt

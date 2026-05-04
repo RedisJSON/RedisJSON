@@ -1,29 +1,26 @@
-# AlmaLinux 10.x — Redis 8.8 support matrix
+# AlmaLinux 10.x
 FROM almalinux:10
 
 WORKDIR /workspace
-
 ENV DEBIAN_FRONTEND=noninteractive
-RUN dnf -y update
-RUN dnf install -y gcc gcc-c++ make wget git openssl openssl-devel which rsync unzip cargo clang jq
 
+# Install build/test deps via the unified abstract installer.
+COPY dependencies.yaml /workspace/dependencies.yaml
+COPY rust-toolchain.toml /workspace/rust-toolchain.toml
 COPY .install /workspace/.install
+RUN bash /workspace/.install/install_script.sh
+# rustc/cargo from rustup (install_script.sh ran getrust.sh)
+ENV PATH="/root/.cargo/bin:${PATH}"
 RUN chmod +x /workspace/.install/install_cmake.sh && /workspace/.install/install_cmake.sh
 
-# Install Redis (SANITIZER can be 'address' for ASAN builds)
 ARG REDIS_REF=unstable
 ARG SANITIZER=
 RUN chmod +x /workspace/.install/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /workspace/.install/install_redis.sh
 
-# Install Rust
-RUN chmod +x /workspace/.install/getrust.sh && /workspace/.install/getrust.sh
-ENV PATH="/root/.cargo/bin:${PATH}"
-
-# Install uv and Python environment
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh
 ENV PATH="/usr/local/bin:${PATH}"
 RUN uv venv --python=3.11 /opt/.venv
 ENV VIRTUAL_ENV=/opt/.venv
 ENV PATH="/opt/.venv/bin:${PATH}"
-COPY requierments_docker.txt /workspace/requierments.txt
-RUN uv pip install -r requierments.txt
+COPY requierments_docker.txt /workspace/requirements.txt
+RUN uv pip install -r requirements.txt
