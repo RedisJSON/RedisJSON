@@ -20,10 +20,8 @@ ARG SANITIZER=
 
 RUN chmod +x .install/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} .install/install_redis.sh
 
-# Rust via rustup (musl targets); pin matches rust-toolchain.toml — must be present in WORKDIR for getrust.sh.
-COPY rust-toolchain.toml /workspace/rust-toolchain.toml
-RUN chmod +x .install/getrust.sh && .install/getrust.sh
-ENV PATH="/root/.cargo/bin:${PATH}"
+# Rust/cargo from Alpine packages (`cargo` in dependencies.yaml). Same unified installer as other OSes,
+# but no rustup here — musl rustup breaks bindgen/libclang; distro toolchain matches the legacy Alpine Docker flow.
 
 # Use system Python with venv (like the old flow-alpine workflow)
 # uv's managed Python has clang-specific flags that cause build issues

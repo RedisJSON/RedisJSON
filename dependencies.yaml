@@ -49,6 +49,8 @@ system:
   - clang_format
   - libev_dev
   - libevent_dev
+  # Alpine only: distro rustc/cargo (musl). Glibc Docker images use rustup (.install/getrust.sh); local dev uses make setup → getrust.sh.
+  - cargo
 
 # Python requirement files to install via pip after system deps are present.
 # Paths are relative to the module src root.
@@ -249,6 +251,14 @@ package_map:
     tdnf: [libevent-devel]
     apk:  [libevent-dev]
     brew: [libevent]
+
+  cargo:
+    apt:  skip
+    dnf:  skip
+    yum:  skip
+    tdnf: skip
+    apk:  [cargo]
+    brew: skip
 
   # ---- Python ------------------------------------------------------------
   python3:

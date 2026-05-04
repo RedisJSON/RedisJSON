@@ -18,6 +18,7 @@ ARG SANITIZER=
 RUN chmod +x /workspace/.install/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /workspace/.install/install_redis.sh
 
 # Rust toolchain via rustup (see rust-toolchain.toml).
+COPY rust-toolchain.toml /workspace/rust-toolchain.toml
 RUN chmod +x /workspace/.install/getrust.sh && /workspace/.install/getrust.sh
 ENV PATH="/root/.cargo/bin:${PATH}"
 
