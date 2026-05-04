@@ -16,7 +16,7 @@ RUN chmod +x /workspace/.install/install_cmake.sh && /workspace/.install/install
 # Expose the toolset on PATH for subsequent RUNs (the profile.d snippet only
 # fires for login shells).
 ENV PATH="/opt/rh/gcc-toolset-11/root/usr/bin:${PATH}"
-ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-11/root/usr/lib64:${LD_LIBRARY_PATH}"
+ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-11/root/usr/lib64"
 
 ARG REDIS_REF=unstable
 ARG SANITIZER=

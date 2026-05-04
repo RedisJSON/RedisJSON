@@ -13,7 +13,7 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 RUN chmod +x /workspace/.install/install_cmake.sh && /workspace/.install/install_cmake.sh
 
 ENV PATH="/opt/rh/gcc-toolset-13/root/usr/bin:${PATH}"
-ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-13/root/usr/lib64:${LD_LIBRARY_PATH}"
+ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-13/root/usr/lib64"
 
 ARG REDIS_REF=unstable
 ARG SANITIZER=

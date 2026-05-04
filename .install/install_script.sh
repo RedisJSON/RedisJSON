@@ -185,6 +185,26 @@ fi
 
 echo "install_script.sh: installing abstract deps for $OSNICK via $PM"
 
+# EL9+ minimal installs (VMs, containers) often only have BaseOS+AppStream enabled.
+# libev-devel / libevent-devel are in CRB — needed for local `make setup` and Docker.
+enable_el_dnf_crb() {
+    case "$OSNICK" in
+        rocky9|rocky10|alma9|alma10)
+            [ "$PM" = "dnf" ] || return 0
+            echo "install_script.sh: enabling CRB for $OSNICK (libev/libevent -devel)"
+            $MODE dnf -y install dnf-plugins-core || true
+            if ! $MODE dnf config-manager --set-enabled crb 2>/dev/null; then
+                $MODE dnf -y install crb || true
+                if [ -x /usr/bin/crb ]; then
+                    $MODE /usr/bin/crb enable || true
+                fi
+            fi
+            $MODE dnf -y makecache || true
+            ;;
+    esac
+}
+enable_el_dnf_crb
+
 # Pure-awk YAML extraction. Handles the (limited) shape of dependencies.yaml:
 #
 #   system:
