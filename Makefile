@@ -1,6 +1,11 @@
 
 ROOT=.
 
+CARGO_HOME ?= $(HOME)/.cargo
+ifneq ($(wildcard $(CARGO_HOME)/bin),)
+export PATH := $(CARGO_HOME)/bin:$(PATH)
+endif
+
 include $(ROOT)/deps/readies/mk/main
 
 #----------------------------------------------------------------------------------------------
