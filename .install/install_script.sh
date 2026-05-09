@@ -186,7 +186,7 @@ fi
 echo "install_script.sh: installing abstract deps for $OSNICK via $PM"
 
 # EL9+ minimal installs (VMs, containers) often only have BaseOS+AppStream enabled.
-# libev-devel / libevent-devel are in CRB — needed for local `make setup` and Docker.
+# libev-devel / libevent-devel are in CRB — needed for local `make bootstrap` and Docker.
 enable_el_dnf_crb() {
     case "$OSNICK" in
         rocky9|rocky10|alma9|alma10)
@@ -399,7 +399,7 @@ else
 fi
 
 # Note: Python requirement files are listed under `python:` in
-# dependencies.yaml but are installed by `make setup` (via
+# dependencies.yaml but are installed by `make bootstrap` (via
 # .install/common_installations.sh) inside its venv, not from here. This keeps
 # install_script.sh focused on system packages and lets Docker images that
 # manage their own Python environment (uv, venv) skip the duplicate work.

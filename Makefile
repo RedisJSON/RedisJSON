@@ -11,7 +11,7 @@ include $(ROOT)/deps/readies/mk/main
 #----------------------------------------------------------------------------------------------
 
 define HELPTEXT
-make setup         # dependencies.yaml + install_script.sh (+ quirks), Rust, pip in ./venv
+make bootstrap     # dependencies.yaml + install_script.sh (+ quirks), Rust, pip in ./venv
 
 make build
   NIGHTLY=1        # use nightly toolchain
@@ -129,7 +129,7 @@ TARGET=$(BINDIR)/$(MODULE_NAME)
 # runs getrust.sh for non-Alpine. Activate cargo for this make process:
 #----------------------------------------------------------------------------------------------
 
-setup:
+bootstrap:
 	$(SHOW)cd .install && \
 		if [ "$$(uname -s)" = Darwin ]; then ./install_script.sh; \
 		elif [ "$$(id -u)" -eq 0 ]; then ./install_script.sh; \
@@ -137,14 +137,14 @@ setup:
 	$(SHOW)set -e; \
 		cd $(ROOT); \
 		if [ -f "$$HOME/.cargo/env" ]; then . "$$HOME/.cargo/env"; fi; \
-		command -v cargo >/dev/null 2>&1 || { echo "cargo not on PATH after setup; try: source \"$$HOME/.cargo/env\"" >&2; exit 1; }
+		command -v cargo >/dev/null 2>&1 || { echo "cargo not on PATH after bootstrap; try: source \"$$HOME/.cargo/env\"" >&2; exit 1; }
 	$(SHOW)test -d venv || python3 -m venv venv
 	$(SHOW). ./venv/bin/activate && ./.install/common_installations.sh
 
 update:
 	$(SHOW)cargo update
 
-.PHONY: setup update
+.PHONY: bootstrap update
 
 #----------------------------------------------------------------------------------------------
 
