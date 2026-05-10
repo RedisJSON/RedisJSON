@@ -6,6 +6,27 @@ ifneq ($(wildcard $(CARGO_HOME)/bin),)
 export PATH := $(CARGO_HOME)/bin:$(PATH)
 endif
 
+# Standalone `make bootstrap` with no python3 yet: skip Readies; install_script.sh
+# + Rust first, then venv (same recipe as below).
+ifeq ($(MAKECMDGOALS),bootstrap)
+override ROOT:=$(shell cd $(ROOT) && pwd)
+
+bootstrap:
+	@cd $(ROOT)/.install && \
+		if [ "$$(uname -s)" = Darwin ]; then ./install_script.sh; \
+		elif [ "$$(id -u)" -eq 0 ]; then ./install_script.sh; \
+		else ./install_script.sh sudo; fi
+	@set -e; \
+		cd $(ROOT); \
+		if [ -f "$$HOME/.cargo/env" ]; then . "$$HOME/.cargo/env"; fi; \
+		command -v cargo >/dev/null 2>&1 || { echo "cargo not on PATH after bootstrap; try: source \"$$HOME/.cargo/env\"" >&2; exit 1; }
+	@test -d $(ROOT)/venv || (cd $(ROOT) && python3 -m venv venv)
+	@cd $(ROOT) && . ./venv/bin/activate && ./.install/common_installations.sh
+
+.PHONY: bootstrap
+
+else
+
 include $(ROOT)/deps/readies/mk/main
 
 #----------------------------------------------------------------------------------------------
@@ -310,3 +331,5 @@ info:
 	$(SHOW)python3 -m pip list -v
 
 .PHONY: info
+
+endif
