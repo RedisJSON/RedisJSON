@@ -9,7 +9,6 @@
 
 use libc::size_t;
 use std::ffi::CString;
-use std::ops::Deref;
 use std::os::raw::{c_double, c_int, c_longlong};
 use std::ptr::{null, null_mut};
 use std::{
@@ -79,13 +78,6 @@ impl<V: SelectValue> Default for ValueWrapper<V> {
 impl<V: SelectValue> Drop for ValueWrapper<V> {
     fn drop(&mut self) {
         self.drop_inner();
-    }
-}
-
-impl<V: SelectValue> Deref for ValueWrapper<V> {
-    type Target = V;
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*(self.value.cast::<V>()) }
     }
 }
 
