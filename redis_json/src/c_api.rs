@@ -70,8 +70,8 @@ impl<V: SelectValue> From<ValueRef<'_, V>> for ValueWrapper<V> {
 impl<V: SelectValue> Default for ValueWrapper<V> {
     fn default() -> Self {
         Self {
-            value: Box::into_raw(Box::new(V::default())),
-            should_drop: true,
+            value: null(),
+            should_drop: false,
         }
     }
 }
@@ -1015,10 +1015,7 @@ mod tests {
 
         let json_ptr = unsafe { *json_ptr_ptr };
 
-        let value = unsafe { &*(json_ptr as *const IValue) };
-
-        // Should be NULL (the default value)
-        assert_eq!(value, &IValue::NULL);
+        assert_eq!(json_ptr, null());
 
         json_api_free_json(
             RedisIValueJsonKeyManager {
