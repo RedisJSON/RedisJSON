@@ -80,7 +80,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Set version
+      - name: Check version
         shell: python
         env:
           VERSION: ${{ inputs.version }}
@@ -100,25 +100,18 @@ jobs:
 
           content = version_file.read_text()
           current = re.search(r'version = "(\d+)\.(\d+)\.(\d+)"', content)
-          if current:
-              print(f"Current version: {current.group(1)}.{current.group(2)}.{current.group(3)}")
+          if not current:
+              print(f"::error::Could not parse version from {version_file}")
+              sys.exit(1)
 
-          content = re.sub(
-              r'version = "\d+\.\d+\.\d+"',
-              f'version = "{major}.{minor}.{patch}"',
-              content,
-              count=1
-          )
-          version_file.write_text(content)
-          print(f"Updated to version {major}.{minor}.{patch}")
+          found = f"{current.group(1)}.{current.group(2)}.{current.group(3)}"
+          print(f"Version in file: {found}")
 
-      - name: Commit version bump
-        working-directory: release-branch
-        env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          git add redis_json/Cargo.toml
-          git commit -m "bump version v$VERSION"
+          if found != f"{major}.{minor}.{patch}":
+              print(f"::error::Cargo.toml has {found} but expected {major}.{minor}.{patch}")
+              sys.exit(1)
+
+          print(f"Version {major}.{minor}.{patch} verified in Cargo.toml")
 
       - name: Create annotated tag
         working-directory: release-branch
