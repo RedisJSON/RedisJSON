@@ -6,7 +6,7 @@ on:
       redis-ref:
         description: 'Redis ref to checkout'
         type: string
-        default: 'unstable'
+        default: '8.8'
       beta-version:
         description: 'Beta version for reporting'
         type: string

@@ -5,7 +5,7 @@ on:
     inputs:
       redis-ref:
         description: 'Redis ref to checkout'
-        default: 'unstable'
+        default: '8.8'
       timeout-minutes:
         description: 'Timeout in minutes'
         default: '30'
@@ -17,7 +17,7 @@ on:
       redis-ref:
         description: 'Redis ref to checkout'
         type: string
-        default: 'unstable'
+        default: '8.8'
       timeout-minutes:
         description: 'Timeout in minutes'
         type: string
@@ -60,7 +60,7 @@ jobs:
     timeout-minutes: ${{ fromJSON(inputs.timeout-minutes || '30') }}
     env:
       DOCKER_IMAGE: redisjson-${{ needs.pick-os.outputs.os }}:latest
-      REDIS_REF: ${{ inputs.redis-ref || 'unstable' }}
+      REDIS_REF: ${{ inputs.redis-ref || '8.8' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

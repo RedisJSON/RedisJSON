@@ -6,7 +6,7 @@ on:
       redis-ref:
         description: 'Redis ref to checkout'
         type: string
-        default: 'unstable'
+        default: '8.8'
       os:
         description: 'OS to run on (ubuntu-latest, macos-latest)'
         type: string

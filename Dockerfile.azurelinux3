@@ -26,7 +26,7 @@ RUN tdnf -y update && \
     tar
 
 # Install Redis (SANITIZER can be 'address' for ASAN builds)
-ARG REDIS_REF=unstable
+ARG REDIS_REF=8.8
 ARG SANITIZER=
 COPY .install /workspace/.install
 RUN chmod +x /workspace/.install/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /workspace/.install/install_redis.sh
