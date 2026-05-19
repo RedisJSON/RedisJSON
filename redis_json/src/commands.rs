@@ -2947,6 +2947,7 @@ macro_rules! json_debug_command {
                                 complexity: "N/A",
                                 since: "1.0.0",
                                 summary: "This is a container command for debugging related tasks",
+                                tips: "dont-cache",
                                 key_spec: [
                                 ],
                             }
