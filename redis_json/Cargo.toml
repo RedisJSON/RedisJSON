@@ -1,6 +1,6 @@
 [package]
 name = "redis_json"
-version = "8.7.91"
+version = "8.8.0"
 authors = [
     "Aviv David <aviv.david@redis.com>",
     "Ephraim Feldblum <ephraim.feldblum@redis.com>",
