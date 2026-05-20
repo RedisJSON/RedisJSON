@@ -2947,7 +2947,7 @@ macro_rules! json_debug_command {
                                 complexity: "N/A",
                                 since: "1.0.0",
                                 summary: "This is a container command for debugging related tasks",
-                                tips: "dont-cache",
+                                tips: "dont_cache",
                                 key_spec: [
                                     {
                                         flags: [ReadOnly, Access],
@@ -2962,20 +2962,8 @@ macro_rules! json_debug_command {
                                         subargs: [
                                             {
                                                 name: "memory",
-                                                arg_type: Block,
+                                                arg_type: PureToken,
                                                 token: "MEMORY",
-                                                subargs: [
-                                                    {
-                                                        name: "key",
-                                                        arg_type: Key,
-                                                        key_spec_index: 0,
-                                                    },
-                                                    {
-                                                        name: "path",
-                                                        arg_type: String,
-                                                        flags: [Optional],
-                                                    }
-                                                ]
                                             },
                                             {
                                                 name: "help",
@@ -2983,6 +2971,17 @@ macro_rules! json_debug_command {
                                                 token: "HELP",
                                             }
                                         ]
+                                    },
+                                    {
+                                        name: "key",
+                                        arg_type: Key,
+                                        key_spec_index: 0,
+                                        flags: [Optional],
+                                    },
+                                    {
+                                        name: "path",
+                                        arg_type: String,
+                                        flags: [Optional],
                                     }
                                 ],
                             }
