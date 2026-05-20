@@ -14,7 +14,7 @@ RUN apt update -qq \
     && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 60 --slave /usr/bin/g++ g++ /usr/bin/g++-10
 
 # Install Redis (SANITIZER can be 'address' for ASAN builds)
-ARG REDIS_REF=8.8
+ARG REDIS_REF=unstable
 ARG SANITIZER=
 COPY .install /workspace/.install
 RUN chmod +x /workspace/.install/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /workspace/.install/install_redis.sh
