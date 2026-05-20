@@ -13,7 +13,7 @@ on:
       redis-ref:
         description: 'Redis ref to checkout'
         required: true
-        default: '8.8'
+        default: 'unstable'
 
 jobs:
   prepare-values:
@@ -24,7 +24,7 @@ jobs:
       - name: set env
         id: set-env
         run: |
-          echo "redis-ref=8.8" >> $GITHUB_OUTPUT  # todo change per version/tag
+          echo "redis-ref=unstable" >> $GITHUB_OUTPUT  # todo change per version/tag
   build-linux-x64:
     uses: ./.github/workflows/flow-linux.yml
     needs: [prepare-values]
