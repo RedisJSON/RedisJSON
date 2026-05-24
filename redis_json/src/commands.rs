@@ -2947,7 +2947,42 @@ macro_rules! json_debug_command {
                                 complexity: "N/A",
                                 since: "1.0.0",
                                 summary: "This is a container command for debugging related tasks",
+                                tips: "dont_cache",
                                 key_spec: [
+                                    {
+                                        flags: [ReadOnly],
+                                        begin_search: Keyword({ keyword: "MEMORY", startfrom: 1 }),
+                                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                                    }
+                                ],
+                                args: [
+                                    {
+                                        name: "subcommand",
+                                        arg_type: OneOf,
+                                        subargs: [
+                                            {
+                                                name: "memory",
+                                                arg_type: PureToken,
+                                                token: "MEMORY",
+                                            },
+                                            {
+                                                name: "help",
+                                                arg_type: PureToken,
+                                                token: "HELP",
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        name: "key",
+                                        arg_type: Key,
+                                        key_spec_index: 0,
+                                        flags: [Optional],
+                                    },
+                                    {
+                                        name: "path",
+                                        arg_type: String,
+                                        flags: [Optional],
+                                    }
                                 ],
                             }
                         )]
