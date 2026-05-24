@@ -63,7 +63,7 @@ jobs:
       REDIS_REF: ${{ inputs.redis-ref || 'unstable' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: 'recursive'
 
@@ -106,7 +106,7 @@ jobs:
 
       - name: Upload random traffic
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: random-traffic-${{ needs.pick-os.outputs.os }}-log
           path: random_traffic.txt

@@ -10,7 +10,7 @@ jobs:
       run:
         shell: bash -l -eo pipefail {0}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       with:
         submodules: recursive
         fetch-depth: 0 # fetch all history for accurate results
@@ -29,7 +29,7 @@ jobs:
     - name: Build and test
       run: make coverage QUICK=1 SHOW=1
     - name: Upload coverage
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v5
       with:
         file: bin/linux-x64-debug-cov/cov.info
         fail_ci_if_error: true # Fail on upload errors

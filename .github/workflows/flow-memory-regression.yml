@@ -20,12 +20,12 @@ jobs:
     
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: 'recursive'
       
       - name: Get Redis
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: redis/redis
           ref: ${{ inputs.redis-ref }}
@@ -76,7 +76,7 @@ jobs:
       
       - name: Download Nightly Baseline from Main Branch
         id: download-baseline
-        uses: dawidd6/action-download-artifact@v3
+        uses: dawidd6/action-download-artifact@v20
         continue-on-error: true
         with:
           workflow: event-nightly.yml
@@ -319,7 +319,7 @@ jobs:
       
       - name: Upload test logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: memory-regression-logs-${{ inputs.os }}-${{ github.sha }}
           path: tests/pytest/logs/*.log*

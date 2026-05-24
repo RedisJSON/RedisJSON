@@ -56,7 +56,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout release branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ needs.validate-and-check.outputs.release_branch }}
           path: release-branch

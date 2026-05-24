@@ -39,7 +39,7 @@ jobs:
       TAG_OR_BRANCH: ${{ steps.set-env.outputs.TAG }}${{ steps.set-env.outputs.BRANCH }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: set env
         id: set-env
         uses: ./.github/actions/setup-env
@@ -72,11 +72,11 @@ jobs:
         shell: bash -l -eo pipefail {0}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: 'recursive'
       - name: Deps checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: setup
           sparse-checkout-cone-mode: false
@@ -87,7 +87,7 @@ jobs:
         working-directory: setup/.install
         run: ./install_script.sh
       - name: Full checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
       - name: Setup common
@@ -104,7 +104,7 @@ jobs:
             pip install -r tests/pytest/requirements.txt
           echo ::endgroup::
       - name: Get Redis
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: redis/redis
           ref: ${{ needs.setup-environment.outputs.redis-ref }}

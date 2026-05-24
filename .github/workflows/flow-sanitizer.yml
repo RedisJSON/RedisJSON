@@ -30,7 +30,7 @@ jobs:
       - name: Install pre-checkout dependencies
         run: apt-get update -qq && apt-get install -yqq git ca-certificates
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           submodules: recursive
