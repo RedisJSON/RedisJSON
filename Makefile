@@ -1,12 +1,38 @@
 
 ROOT=.
 
+CARGO_HOME ?= $(HOME)/.cargo
+ifneq ($(wildcard $(CARGO_HOME)/bin),)
+export PATH := $(CARGO_HOME)/bin:$(PATH)
+endif
+
+# Standalone `make bootstrap` with no python3 yet: skip Readies; install_script.sh
+# + Rust first, then venv (same recipe as below).
+ifeq ($(MAKECMDGOALS),bootstrap)
+override ROOT:=$(shell cd $(ROOT) && pwd)
+
+bootstrap:
+	@cd $(ROOT)/.install && \
+		if [ "$$(uname -s)" = Darwin ]; then ./install_script.sh; \
+		elif [ "$$(id -u)" -eq 0 ]; then ./install_script.sh; \
+		else ./install_script.sh sudo; fi
+	@set -e; \
+		cd $(ROOT); \
+		if [ -f "$$HOME/.cargo/env" ]; then . "$$HOME/.cargo/env"; fi; \
+		command -v cargo >/dev/null 2>&1 || { echo "cargo not on PATH after bootstrap; try: source \"$$HOME/.cargo/env\"" >&2; exit 1; }
+	@test -d $(ROOT)/venv || (cd $(ROOT) && python3 -m venv venv)
+	@cd $(ROOT) && . ./venv/bin/activate && ./.install/common_installations.sh
+
+.PHONY: bootstrap
+
+else
+
 include $(ROOT)/deps/readies/mk/main
 
 #----------------------------------------------------------------------------------------------
 
 define HELPTEXT
-make setup         # install prerequisites
+make bootstrap     # dependencies.yaml + install_script.sh (+ quirks), Rust, pip in ./venv
 
 make build
   NIGHTLY=1        # use nightly toolchain
@@ -119,14 +145,27 @@ export CARGO_TARGET_DIR=$(BINDIR)/target
 TARGET=$(BINDIR)/$(MODULE_NAME)
 
 #----------------------------------------------------------------------------------------------
+# Same pattern as RedisTimeSeries: abstract deps via `.install/install_script.sh`,
+# then venv + `.install/common_installations.sh`. RedisJSON's install_script also
+# runs getrust.sh for non-Alpine. Activate cargo for this make process:
+#----------------------------------------------------------------------------------------------
 
-setup:
-	$(SHOW)./sbin/setup
+bootstrap:
+	$(SHOW)cd .install && \
+		if [ "$$(uname -s)" = Darwin ]; then ./install_script.sh; \
+		elif [ "$$(id -u)" -eq 0 ]; then ./install_script.sh; \
+		else ./install_script.sh sudo; fi
+	$(SHOW)set -e; \
+		cd $(ROOT); \
+		if [ -f "$$HOME/.cargo/env" ]; then . "$$HOME/.cargo/env"; fi; \
+		command -v cargo >/dev/null 2>&1 || { echo "cargo not on PATH after bootstrap; try: source \"$$HOME/.cargo/env\"" >&2; exit 1; }
+	$(SHOW)test -d venv || python3 -m venv venv
+	$(SHOW). ./venv/bin/activate && ./.install/common_installations.sh
 
 update:
 	$(SHOW)cargo update
 
-.PHONY: setup update
+.PHONY: bootstrap update
 
 #----------------------------------------------------------------------------------------------
 
@@ -292,3 +331,5 @@ info:
 	$(SHOW)python3 -m pip list -v
 
 .PHONY: info
+
+endif
