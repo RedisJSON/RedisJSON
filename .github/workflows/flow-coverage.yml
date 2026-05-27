@@ -31,6 +31,6 @@ jobs:
     - name: Upload coverage
       uses: codecov/codecov-action@v5
       with:
-        file: bin/linux-x64-debug-cov/cov.info
+        files: bin/linux-x64-debug-cov/cov.info
         fail_ci_if_error: true # Fail on upload errors
         token: ${{ secrets.CODECOV_TOKEN }}
