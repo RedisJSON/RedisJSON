@@ -48,7 +48,7 @@ runs:
         echo ::endgroup::
 
     - name: Get Redis
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         repository: redis/redis
         ref: ${{ inputs.redis-ref }}
@@ -99,14 +99,14 @@ runs:
 
     - name: Upload test artifacts (node20 supported)
       if: steps.node20.outputs.supported == 'true' && steps.test.outcome == 'failure'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: Test logs ${{ steps.artifact-names.outputs.name }}
         path: tests/**/logs/*.log*
         if-no-files-found: ignore
     - name: Upload test artifacts (node20 unsupported)
       if: steps.node20.outputs.supported == 'false' && steps.test.outcome == 'failure'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: Test logs ${{ steps.artifact-names.outputs.name }}
         path: tests/**/logs/*.log*

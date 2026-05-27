@@ -19,7 +19,7 @@ runs:
           sed -e 's/[":\/\\<>\|*?]/_/g' -e 's/__*/_/g' -e 's/^_//' -e 's/_$//')" >> $GITHUB_OUTPUT
     - name: Upload test artifacts
       if: inputs.image != 'amazonlinux:2' && inputs.image != 'ubuntu:bionic'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: Test logs ${{ steps.artifact-names.outputs.name }}
         path: tests/**/logs/*.log*

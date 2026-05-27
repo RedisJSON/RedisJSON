@@ -142,7 +142,7 @@ runs:
     - name: Upload test results artifact
       continue-on-error: true
       if: always() && steps.parse.outputs.results-file != '' && steps.parse.outputs.results-file != 'null'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: ${{ steps.parse.outputs.artifact-name }}
         path: ${{ steps.parse.outputs.results-file }}

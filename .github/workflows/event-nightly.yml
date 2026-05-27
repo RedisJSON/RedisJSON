@@ -37,7 +37,7 @@ jobs:
       snapshot-template: ${{ steps.set-env.outputs.snapshot-template }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: set env
         id: set-env
@@ -84,7 +84,7 @@ jobs:
           MODULE_VERSION: ${{ steps.get-version.outputs.module-version }}
   
       - name: Upload build metadata
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-metadata
           path: build-metadata.json
