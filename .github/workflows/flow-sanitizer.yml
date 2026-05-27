@@ -27,10 +27,13 @@ jobs:
     container:
       image: ${{ inputs.container }}
     steps:
+      - name: Install pre-checkout dependencies
+        run: apt-get update -qq && apt-get install -yqq git ca-certificates
       - name: checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: recursive
       - uses: ./.github/actions/san-run-tests
         with:
           container: ${{ inputs.container }}

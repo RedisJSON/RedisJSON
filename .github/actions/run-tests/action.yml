@@ -9,16 +9,24 @@ inputs:
 runs:
   using: composite
   steps:
+    # Caller contract: `.install/install_script.sh` MUST have already run in this
+    # job (it provisions system deps, the uv-managed venv at <repo>/venv via
+    # lib/setup-python.sh, and the rust toolchain). Any earlier `actions/checkout`
+    # in this job must use `clean: false` so the venv survives.
     - name: Run tests
       shell: bash
       run: |
         echo ::group::Activate virtual environment
-          python3 -m venv venv
-          echo "source $PWD/venv/bin/activate" >> ~/.bash_profile
+          if [ ! -d venv ]; then
+            echo "::error::venv missing; install_script.sh must run before this action (and earlier checkouts must use clean: false)" >&2
+            exit 1
+          fi
+          # Append only if not already present — multiple invocations of
+          # this action otherwise stack duplicate `source` lines.
+          activate_line="source $PWD/venv/bin/activate"
+          touch ~/.bash_profile
+          grep -qxF "$activate_line" ~/.bash_profile || echo "$activate_line" >> ~/.bash_profile
           . venv/bin/activate
-        echo ::endgroup::
-        echo ::group::Install python dependencies
-          ./.install/common_installations.sh
         echo ::endgroup::
         echo ::group::Unit tests
           . $HOME/.cargo/env

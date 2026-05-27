@@ -29,6 +29,21 @@ $MODE rustup component add rust-src
 $MODE rustup component add rustfmt
 $MODE rustup component add clippy
 
+# Symlink the toolchain into /usr/local/bin so it's on every shell's PATH —
+# not just bash-login shells that source ~/.cargo/env. This is what makes
+# `make build` work in the same shell session that just ran `make bootstrap`
+# (and also covers direct `make -C modules/<name>` calls, CI runners, and
+# any future script that shells out to cargo/rustc). $MODE handles
+# sudo-vs-no-sudo identically to the rest of the script. Best-effort: if
+# /usr/local/bin isn't writable the symlink silently no-ops; later login
+# shells still pick up cargo via the ~/.cargo/env hook above, but the
+# current shell would then not have cargo on PATH.
+for bin in rustc cargo rustup rustfmt cargo-fmt clippy-driver cargo-clippy; do
+    if [ -e "$HOME/.cargo/bin/$bin" ]; then
+        $MODE ln -sf "$HOME/.cargo/bin/$bin" "/usr/local/bin/$bin" 2>/dev/null || true
+    fi
+done
+
 # Verify cargo installation
 cargo --version
 

@@ -18,6 +18,33 @@ SAN_REDIS_SUFFIX=7.4
 
 cd $HERE
 
+# EL8/RHEL: default `python3` may be 3.6; RLTest may be installed only in venv or 3.11+.
+pick_rltest_python() {
+	local p
+	if [[ -n "${RLTEST_PYTHON:-}" ]]; then
+		echo "${RLTEST_PYTHON}"
+		return
+	fi
+	if [[ -x "$ROOT/venv/bin/python" ]] && "$ROOT/venv/bin/python" -c 'import RLTest' &>/dev/null; then
+		echo "$ROOT/venv/bin/python"
+		return
+	fi
+	for p in python3.12 python3.11 python3.10 python3.9 python3; do
+		if command -v "$p" &>/dev/null && "$p" -c 'import RLTest' &>/dev/null; then
+			command -v "$p"
+			return
+		fi
+	done
+	# All candidates (incl. python3 itself) lack RLTest — fail loudly here
+	# instead of returning a python that will hit ModuleNotFoundError later.
+	echo "tests.sh: ERROR: RLTest not found in \$ROOT/venv or any of python3.{12,11,10,9}/python3" >&2
+	echo "tests.sh:   Install RLTest into one of these (e.g. \`pip install RLTest\`) or set RLTEST_PYTHON=<path>" >&2
+	exit 1
+}
+# RLTEST_PY is computed lazily on first use (see run_env / run_tests) so callers
+# can still override RLTEST_PYTHON via env/CLI after this script's prelude runs.
+RLTEST_PY=""
+
 #----------------------------------------------------------------------------------------------
 
 help() {
@@ -64,6 +91,7 @@ help() {
 		RLTEST=path|'view'    Take RLTest from repo path or from local view
 		RLTEST_DEBUG=1        Show debugging printouts from tests
 		RLTEST_ARGS=args      Extra RLTest args
+		RLTEST_PYTHON=path    Python for `python -m RLTest` (default: venv or first with RLTest)
 
 		PARALLEL=1            Runs tests in parallel
 		SLOW=1                Do not test in parallel
@@ -302,11 +330,16 @@ run_env() {
 		[[ -n $VG_OPTIONS ]] && { echo "VG_OPTIONS: $VG_OPTIONS"; echo; }
 	fi
 
+	# `pick_rltest_python` runs in a $() subshell, so its `exit 1` only kills
+	# the subshell. Catch the non-zero exit on the assignment to propagate
+	# the failure (and the already-emitted stderr message) to the parent.
+	[[ -z "$RLTEST_PY" ]] && { RLTEST_PY="$(pick_rltest_python)" || exit 1; }
+
 	local E=0
 	if [[ $NOP != 1 ]]; then
-		{ $OP python3 -m RLTest @$rltest_config; (( E |= $? )); } || true
+		{ $OP "$RLTEST_PY" -m RLTest @$rltest_config; (( E |= $? )); } || true
 	else
-		$OP python3 -m RLTest @$rltest_config
+		$OP "$RLTEST_PY" -m RLTest @$rltest_config
 	fi
 
 	[[ $KEEP != 1 ]] && rm -f $rltest_config
@@ -404,11 +437,16 @@ run_tests() {
 
 	[[ $RLEC == 1 ]] && export RLEC_CLUSTER=1
 
+	# `pick_rltest_python` runs in a $() subshell, so its `exit 1` only kills
+	# the subshell. Catch the non-zero exit on the assignment to propagate
+	# the failure (and the already-emitted stderr message) to the parent.
+	[[ -z "$RLTEST_PY" ]] && { RLTEST_PY="$(pick_rltest_python)" || exit 1; }
+
 	local E=0
 	if [[ $NOP != 1 ]]; then
-		{ $OP python3 -m RLTest @$rltest_config; (( E |= $? )); } || true
+		{ $OP "$RLTEST_PY" -m RLTest @$rltest_config; (( E |= $? )); } || true
 	else
-		$OP python3 -m RLTest @$rltest_config
+		$OP "$RLTEST_PY" -m RLTest @$rltest_config
 	fi
 
 	[[ $KEEP != 1 ]] && rm -f $rltest_config
