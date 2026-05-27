@@ -18,13 +18,6 @@ jobs:
       working-directory: .install
       run: |
         ./install_script.sh sudo
-    - name: Setup common
-      run: |
-        ./.install/common_installations.sh sudo
-    - name: Get Rust
-      working-directory: .install
-      run: |
-        ./getrust.sh sudo
     - name: Install clang 18
       working-directory: .install
       run: |

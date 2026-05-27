@@ -1,12 +1,35 @@
 
 ROOT=.
 
+CARGO_HOME ?= $(HOME)/.cargo
+ifneq ($(wildcard $(CARGO_HOME)/bin),)
+export PATH := $(CARGO_HOME)/bin:$(PATH)
+endif
+
+# Standalone `make bootstrap` with no python3 yet: skip Readies; run
+# .install/install_script.sh (system packages, uv venv + pip, Rust via getrust on
+# non-Alpine). Same recipe as the main Makefile bootstrap target below.
+ifneq (,$(filter bootstrap,$(MAKECMDGOALS)))
+override ROOT:=$(shell cd $(ROOT) && pwd)
+INSTALL_SCRIPT_MODE ?= $(if $(filter Linux,$(shell uname -s)),sudo,)
+
+bootstrap:
+	@rm -rf $(ROOT)/venv
+	@cd $(ROOT)/.install && ./install_script.sh $(INSTALL_SCRIPT_MODE)
+
+.PHONY: bootstrap
+
+else
+
 include $(ROOT)/deps/readies/mk/main
 
 #----------------------------------------------------------------------------------------------
 
 define HELPTEXT
-make setup         # install prerequisites
+make bootstrap     # .install/install_script.sh (os packages, uv venv + pip, Rust)
+                   # NOTE: cannot be chained with other targets in a single
+                   # invocation (short-circuits the Readies include); run
+                   # `make bootstrap` first, then `make build` etc. separately.
 
 make build
   NIGHTLY=1        # use nightly toolchain
@@ -118,15 +141,13 @@ endif
 export CARGO_TARGET_DIR=$(BINDIR)/target
 TARGET=$(BINDIR)/$(MODULE_NAME)
 
-#----------------------------------------------------------------------------------------------
-
-setup:
-	$(SHOW)./sbin/setup
+# `make bootstrap` is defined at the top of this file, inside the ifneq that
+# short-circuits the readies/Python-requiring include path.
 
 update:
 	$(SHOW)cargo update
 
-.PHONY: setup update
+.PHONY: update
 
 #----------------------------------------------------------------------------------------------
 
@@ -292,3 +313,5 @@ info:
 	$(SHOW)python3 -m pip list -v
 
 .PHONY: info
+
+endif

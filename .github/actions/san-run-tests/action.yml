@@ -46,20 +46,6 @@ runs:
         echo ::group::OS-Specific Setup
           ./install_script.sh ${{ steps.mode.outputs.mode }}
         echo ::endgroup::
-        echo ::group::Get Rust
-          ./getrust.sh ${{ steps.mode.outputs.mode }}
-        echo ::endgroup::
-
-    - name: Full checkout (node20 supported)
-      if: steps.node20.outputs.supported == 'true'
-      uses: actions/checkout@v4
-      with:
-        submodules: recursive
-    - name: Full checkout (node20 unsupported)
-      if: steps.node20.outputs.supported == 'false'
-      uses: actions/checkout@v4
-      with:
-        submodules: recursive
 
     - name: Get Redis
       uses: actions/checkout@v4
@@ -88,12 +74,20 @@ runs:
       id: test
       run: |
         echo ::group::Activate virtual environment
-          python3 -m venv venv
-          echo "source $PWD/venv/bin/activate" >> ~/.bash_profile
+          # venv was created and populated by install_script.sh's
+          # lib/setup-python.sh (uv venv + pinned pip + build_package_requirements.txt
+          # + tests/pytest/requirements.txt). Just activate it here and write a
+          # bash_profile shim so subsequent shell steps pick it up.
+          if [ ! -d venv ]; then
+            echo "::error::venv missing; install_script.sh must run before this step" >&2
+            exit 1
+          fi
+          # Append only if not already present — multiple invocations of
+          # this action otherwise stack duplicate `source` lines.
+          activate_line="source $PWD/venv/bin/activate"
+          touch ~/.bash_profile
+          grep -qxF "$activate_line" ~/.bash_profile || echo "$activate_line" >> ~/.bash_profile
           source venv/bin/activate
-        echo ::endgroup::
-        echo ::group::Install python dependencies
-          ./.install/common_installations.sh
         echo ::endgroup::
         echo ::group::Unit tests
           . "$HOME/.cargo/env"
@@ -102,8 +96,6 @@ runs:
         echo ::group::Flow tests
           make pytest LOG=1 CLEAR_LOGS=0 SAN=${{ inputs.san }} ${{ inputs.test-config }}
         echo ::endgroup::
-      env:
-        PIP_BREAK_SYSTEM_PACKAGES: 1
 
     - name: Upload test artifacts (node20 supported)
       if: steps.node20.outputs.supported == 'true' && steps.test.outcome == 'failure'

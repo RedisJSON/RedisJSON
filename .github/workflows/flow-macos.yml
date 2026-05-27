@@ -99,7 +99,9 @@ jobs:
             . "${GITHUB_WORKSPACE}/venv/bin/activate"
           echo ::endgroup::
           echo ::group::Install python dependencies
-            ./.install/common_installations.sh
+            pip install --upgrade pip wheel "setuptools<81"
+            pip install -r .install/build_package_requirements.txt
+            pip install -r tests/pytest/requirements.txt
           echo ::endgroup::
       - name: Get Redis
         uses: actions/checkout@v4
