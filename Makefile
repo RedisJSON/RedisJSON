@@ -27,6 +27,9 @@ include $(ROOT)/deps/readies/mk/main
 
 define HELPTEXT
 make bootstrap     # .install/install_script.sh (os packages, uv venv + pip, Rust)
+                   # NOTE: cannot be chained with other targets in a single
+                   # invocation (short-circuits the Readies include); run
+                   # `make bootstrap` first, then `make build` etc. separately.
 
 make build
   NIGHTLY=1        # use nightly toolchain

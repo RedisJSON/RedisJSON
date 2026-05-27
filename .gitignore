@@ -42,3 +42,8 @@ dump.rdb
 memory_report*.json
 memory_report*.txt
 tests/pytest/nodes.conf
+
+# `touch .prepared` marker created by redis-core's modules/common.mk when this
+# repo is consumed as a bundled module (signals "already cloned"). Never
+# meant to live in the source tree.
+.prepared

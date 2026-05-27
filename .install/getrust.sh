@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 MODE=$1 # whether to install using sudo or not
 
