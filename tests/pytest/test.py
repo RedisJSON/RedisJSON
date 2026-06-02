@@ -2,6 +2,7 @@
 
 from functools import reduce
 import random
+import struct
 import sys
 import os
 import redis
@@ -373,6 +374,113 @@ def testBackwardRDB(env):
 
     res = r.execute_command('JSON.GET', 'complex')
     r.assertEqual(json.loads(res), {"a":{"b":[{"c":{"d":[1,'2'],"e":None}},True],"a":'a'},"b":1,"c":True,"d":None})
+
+RDB_TYPE_MODULE_2 = 7
+RDB_MODULE_OPCODE_UINT = 2
+# NodeType discriminants from redis_json/src/backward.rs
+NODETYPE_DICT = 0x20
+NODETYPE_ARRAY = 0x40
+
+
+def _rdb_save_len(n):
+    """Encode an integer the way Redis' rdbSaveLen does."""
+    if n < (1 << 6):
+        return bytes([n])
+    elif n < (1 << 14):
+        return bytes([0x40 | (n >> 8), n & 0xFF])
+    elif n <= 0xFFFFFFFF:
+        return bytes([0x80]) + struct.pack('>I', n)
+    else:
+        return bytes([0x81]) + struct.pack('>Q', n)
+
+
+def _rdb_load_len(buf, off):
+    """Decode an rdbSaveLen-encoded integer; returns (value, next_offset)."""
+    b = buf[off]
+    kind = (b & 0xC0) >> 6
+    if kind == 0:
+        return b & 0x3F, off + 1
+    elif kind == 1:
+        return ((b & 0x3F) << 8) | buf[off + 1], off + 2
+    elif b == 0x80:
+        return struct.unpack('>I', buf[off + 1:off + 5])[0], off + 5
+    elif b == 0x81:
+        return struct.unpack('>Q', buf[off + 1:off + 9])[0], off + 9
+    raise ValueError("unexpected rdb length encoding: 0x%02x" % b)
+
+
+def _crc64_jones(data):
+    """Redis' CRC-64/Jones (poly 0xad93d23594c935a9, reflected in/out, init 0)."""
+    reflected_poly = 0
+    for i in range(64):
+        if (0xad93d23594c935a9 >> i) & 1:
+            reflected_poly |= 1 << (63 - i)
+    crc = 0
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            if crc & 1:
+                crc = (crc >> 1) ^ reflected_poly
+            else:
+                crc >>= 1
+    return crc & 0xFFFFFFFFFFFFFFFF
+
+
+# Sanity-check the CRC implementation against the known CRC-64/Jones check value so a wrong
+# checksum never silently turns into "RESTORE failed for the wrong reason".
+assert _crc64_jones(b"123456789") == 0xe9c6d914c4b8d9ca
+
+
+def _build_legacy_restore_payload(genuine_dump, node_discriminant, length):
+    """Forge a DUMP payload that drives the legacy encver=0 loader with `length` elements."""
+    assert genuine_dump[0] == RDB_TYPE_MODULE_2, \
+        "expected RDB_TYPE_MODULE_2, got 0x%02x" % genuine_dump[0]
+    module_id, _ = _rdb_load_len(genuine_dump, 1)
+    # Clear the low 10 bits -> encver=0 -> backward::json_rdb_load path.
+    module_id_encver0 = module_id & 0xFFFFFFFFFFFFFC00
+    rdb_version = genuine_dump[-10:-8]  # reuse the running server's RDB version footer
+
+    body = (_rdb_save_len(RDB_MODULE_OPCODE_UINT) + _rdb_save_len(node_discriminant) +
+            _rdb_save_len(RDB_MODULE_OPCODE_UINT) + _rdb_save_len(length))
+
+    payload = (bytes([RDB_TYPE_MODULE_2]) +
+               (bytes([0x81]) + struct.pack('>Q', module_id_encver0)) +
+               body + rdb_version)
+    return payload + struct.pack('<Q', _crc64_jones(payload))
+
+
+def _restore_huge_legacy_container_does_not_crash(env, node_discriminant):
+    env.skipOnCluster()
+    if env.useAof:
+        env.skip()
+
+    conn = env.getConnection()
+    conn.execute_command('JSON.SET', 'tmp', '$', '[0]')
+    genuine_dump = conn.execute_command('DUMP', 'tmp', NEVER_DECODE=True)
+
+    # 2^62 overflows isize::MAX in Vec::with_capacity (and IndexMap if preserve_order is ever
+    # enabled); it also far exceeds LEGACY_MAX_LEN so the new bound check rejects it.
+    payload = _build_legacy_restore_payload(genuine_dump, node_discriminant, 2 ** 62)
+
+    # Must be rejected with an error, NOT abort the server.
+    try:
+        conn.execute_command('RESTORE', 'evil', '0', payload)
+        env.assertTrue(False, message="RESTORE of crafted legacy payload should have failed")
+    except redis.exceptions.ResponseError:
+        pass
+
+    # The server must still be alive and serving after the rejected RESTORE.
+    env.assertEqual(conn.execute_command('PING'), True)
+    conn.execute_command('JSON.SET', 'after', '$', '{"ok":1}')
+    env.assertEqual(json.loads(conn.execute_command('JSON.GET', 'after')), {"ok": 1})
+
+
+def testRestoreLegacyRdbHugeArrayDoesNotCrash(env):
+    _restore_huge_legacy_container_does_not_crash(env, NODETYPE_ARRAY)
+
+
+def testRestoreLegacyRdbHugeDictDoesNotCrash(env):
+    _restore_huge_legacy_container_does_not_crash(env, NODETYPE_DICT)
 
 
 def testSetBSON(env):
