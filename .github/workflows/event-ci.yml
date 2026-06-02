@@ -19,10 +19,12 @@ jobs:
     outputs:
       redis-ref: ${{ steps.set-env.outputs.redis-ref }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: set env
         id: set-env
         run: |
-          echo "redis-ref=unstable" >> $GITHUB_OUTPUT  # todo change per version/tag
+          echo "redis-ref=$(.install/get-redis-ref.sh)" >> $GITHUB_OUTPUT
   build-linux-x64:
     uses: ./.github/workflows/flow-linux.yml
     needs: [prepare-values]
