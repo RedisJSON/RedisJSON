@@ -17,8 +17,10 @@ RUN chmod +x /workspace/.install/install_cmake.sh && /workspace/.install/install
 ENV PATH="/opt/rh/gcc-toolset-11/root/usr/bin:${PATH}"
 ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-11/root/usr/lib64"
 
-ARG REDIS_REF=unstable
+# Empty default: install_redis.sh falls back to pack/ramp.yml (single source of truth)
+ARG REDIS_REF=
 ARG SANITIZER=
+COPY pack/ramp.yml /workspace/pack/ramp.yml
 RUN chmod +x /workspace/.install/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /workspace/.install/install_redis.sh
 
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh

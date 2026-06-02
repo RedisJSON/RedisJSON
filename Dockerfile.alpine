@@ -13,9 +13,11 @@ COPY .install /workspace/.install
 RUN bash /workspace/.install/install_script.sh
 
 # Install Redis (SANITIZER can be 'address' for ASAN builds)
-ARG REDIS_REF=unstable
+# Empty default: install_redis.sh falls back to pack/ramp.yml (single source of truth)
+ARG REDIS_REF=
 ARG SANITIZER=
 
+COPY pack/ramp.yml /workspace/pack/ramp.yml
 RUN chmod +x /workspace/.install/install_redis.sh && REDIS_REF=${REDIS_REF} SANITIZER=${SANITIZER} /workspace/.install/install_redis.sh
 
 # Use system Python with venv (like the old flow-alpine workflow)
