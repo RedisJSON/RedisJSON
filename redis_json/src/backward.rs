@@ -17,7 +17,7 @@ use serde_json::Value;
 
 /// Upper bound on element/entry counts accepted from the legacy (encver=0) RDB
 /// stream before allocation.
-const LEGACY_MAX_LEN: u64 = 1 << 20;
+const LEGACY_MAX_LEN: u64 = 1_048_576; // 1 << 20;
 
 #[derive(Debug, PartialEq)]
 enum NodeType {
@@ -99,7 +99,7 @@ pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> RedisResult<Value> {
                     "Can't load old RedisJSON RDB: array length too large",
                 ));
             }
-            let mut v = Vec::<Value>::new();
+            let mut v = Vec::new();
             v.try_reserve_exact(len as usize)?;
             for _ in 0..len {
                 let nested = json_rdb_load(rdb)?;
