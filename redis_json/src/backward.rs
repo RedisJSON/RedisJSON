@@ -15,7 +15,6 @@ use serde_json::map::Map;
 use serde_json::Number;
 use serde_json::Value;
 
-
 #[derive(Debug, PartialEq)]
 enum NodeType {
     Null,
