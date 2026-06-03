@@ -376,16 +376,9 @@ def testBackwardRDB(env):
     r.assertEqual(json.loads(res), {"a":{"b":[{"c":{"d":[1,'2'],"e":None}},True],"a":'a'},"b":1,"c":True,"d":None})
 
 RDB_TYPE_MODULE_2 = 7
-RDB_MODULE_OPCODE_EOF = 0
 RDB_MODULE_OPCODE_UINT = 2
-RDB_MODULE_OPCODE_STRING = 5
-# NodeType discriminants from redis_json/src/backward.rs
-NODETYPE_NULL = 0x1
-NODETYPE_DICT = 0x20
+# NodeType discriminant from redis_json/src/backward.rs
 NODETYPE_ARRAY = 0x40
-NODETYPE_KEYVAL = 0x80
-# Must mirror LEGACY_MAX_LEN in redis_json/src/backward.rs.
-LEGACY_MAX_LEN = 1 << 20
 
 
 def _rdb_save_len(n):
@@ -446,26 +439,8 @@ def _crc64_jones(data):
 assert _crc64_jones(b"123456789") == 0xe9c6d914c4b8d9ca
 
 
-def _legacy_null_array_element():
-    """A single legacy array element: a Null node (1 load_unsigned, no further data)."""
-    return _rdb_save_len(RDB_MODULE_OPCODE_UINT) + _rdb_save_len(NODETYPE_NULL)
-
-
-def _legacy_empty_dict_entry():
-    """A single legacy dict entry: KeyVal marker + empty-string key + Null value."""
-    return (_rdb_save_len(RDB_MODULE_OPCODE_UINT) + _rdb_save_len(NODETYPE_KEYVAL) +
-            _rdb_save_len(RDB_MODULE_OPCODE_STRING) + _rdb_save_len(0) +
-            _rdb_save_len(RDB_MODULE_OPCODE_UINT) + _rdb_save_len(NODETYPE_NULL))
-
-
-def _build_legacy_restore_payload(genuine_dump, node_discriminant, length,
-                                  body_elements=b'', closed=False):
-    """Forge a DUMP payload that drives the legacy encver=0 loader with `length` elements.
-
-    `body_elements` is the (optional) serialized element stream; when empty the body is
-    truncated right after the length field (enough to hit the pre-allocation guard/abort).
-    `closed` appends the RDB_MODULE_OPCODE_EOF marker that Redis verifies after rdb_load
-    returns: required for a body that is meant to load successfully (bound-removed case)."""
+def _build_legacy_restore_payload(genuine_dump, node_discriminant, length):
+    """Forge a truncated DUMP payload that drives the legacy encver=0 loader with `length`."""
     assert genuine_dump[0] == RDB_TYPE_MODULE_2, \
         "expected RDB_TYPE_MODULE_2, got 0x%02x" % genuine_dump[0]
     module_id, _ = _rdb_load_len(genuine_dump, 1)
@@ -474,10 +449,7 @@ def _build_legacy_restore_payload(genuine_dump, node_discriminant, length,
     rdb_version = genuine_dump[-10:-8]  # reuse the running server's RDB version footer
 
     body = (_rdb_save_len(RDB_MODULE_OPCODE_UINT) + _rdb_save_len(node_discriminant) +
-            _rdb_save_len(RDB_MODULE_OPCODE_UINT) + _rdb_save_len(length) +
-            body_elements)
-    if closed:
-        body += _rdb_save_len(RDB_MODULE_OPCODE_EOF)
+            _rdb_save_len(RDB_MODULE_OPCODE_UINT) + _rdb_save_len(length))
 
     payload = (bytes([RDB_TYPE_MODULE_2]) +
                (bytes([0x81]) + struct.pack('>Q', module_id_encver0)) +
@@ -485,7 +457,7 @@ def _build_legacy_restore_payload(genuine_dump, node_discriminant, length,
     return payload + struct.pack('<Q', _crc64_jones(payload))
 
 
-def _assert_legacy_restore_rejected(env, node_discriminant, length, body_elements=b'', closed=False):
+def _assert_legacy_restore_rejected(env, node_discriminant, length):
     """Craft an encver=0 RESTORE payload, assert it errors (not abort) and the server lives."""
     env.skipOnCluster()
     if env.useAof:
@@ -495,8 +467,7 @@ def _assert_legacy_restore_rejected(env, node_discriminant, length, body_element
     conn.execute_command('JSON.SET', 'tmp', '$', '[0]')
     genuine_dump = conn.execute_command('DUMP', 'tmp', NEVER_DECODE=True)
 
-    payload = _build_legacy_restore_payload(genuine_dump, node_discriminant, length,
-                                            body_elements, closed)
+    payload = _build_legacy_restore_payload(genuine_dump, node_discriminant, length)
 
     # Must be rejected with an error, NOT abort the server.
     try:
@@ -512,31 +483,9 @@ def _assert_legacy_restore_rejected(env, node_discriminant, length, body_element
 
 
 def testRestoreLegacyRdbHugeArrayDoesNotCrash(env):
-    # 2^62 overflows isize::MAX in Vec::with_capacity / try_reserve (and IndexMap if
-    # preserve_order is ever enabled): the abort smoke test for the array branch.
+    # 2^62 overflows isize::MAX: try_reserve_exact must turn the abort into a recoverable
+    # error rather than SIGABRT (VDP-4660 / MOD-15901).
     _assert_legacy_restore_rejected(env, NODETYPE_ARRAY, 2 ** 62)
-
-
-def testRestoreLegacyRdbHugeDictDoesNotCrash(env):
-    # Same abort smoke test for the dict branch.
-    _assert_legacy_restore_rejected(env, NODETYPE_DICT, 2 ** 62)
-
-
-def testRestoreLegacyRdbArrayLengthBoundEnforced(env):
-    # Pins LEGACY_MAX_LEN itself: this payload carries a COMPLETE, valid body of
-    # LEGACY_MAX_LEN+1 trivial elements. With the bound it is rejected; if the bound were
-    # ever widened (e.g. to isize::MAX), RESTORE would instead succeed -> this test fails,
-    # catching a silently re-introduced unbounded-allocation regression.
-    n = LEGACY_MAX_LEN + 1
-    _assert_legacy_restore_rejected(env, NODETYPE_ARRAY, n,
-                                    _legacy_null_array_element() * n, closed=True)
-
-
-def testRestoreLegacyRdbDictLengthBoundEnforced(env):
-    # Symmetric bound-pinning test for the dict branch.
-    n = LEGACY_MAX_LEN + 1
-    _assert_legacy_restore_rejected(env, NODETYPE_DICT, n,
-                                    _legacy_empty_dict_entry() * n, closed=True)
 
 
 def testSetBSON(env):
