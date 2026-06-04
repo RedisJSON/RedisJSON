@@ -85,7 +85,8 @@ pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> RedisResult<Value> {
         }
         NodeType::Array => {
             let len = raw::load_unsigned(rdb)?;
-            let mut v = Vec::with_capacity(len as usize);
+            let mut v = Vec::new();
+            v.try_reserve_exact(len as usize)?;
             for _ in 0..len {
                 let nested = json_rdb_load(rdb)?;
                 v.push(nested);
