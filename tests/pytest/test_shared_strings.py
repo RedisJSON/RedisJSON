@@ -355,44 +355,75 @@ def test_asm_read_during_trim_phase():
 
 
 def migrate_slots_rapid(env):
-    """Perform rapid slot migrations to maximize race condition window."""
+    """Perform rapid slot migrations to maximize the race-condition window.
+
+    Round-trips the middle third of the second node's slots (second -> first ->
+    second). After each IMPORT we wait both for the importing node's migration
+    task to finish and for the *source* node to actually relinquish the slots
+    before issuing the next IMPORT.
+
+    The source-side wait is the fix for MOD-15155: CLUSTER MIGRATION status is
+    eventually consistent across the cluster, so a node can still believe it owns
+    a slot range right after the migration "completed" on the other node. Issuing
+    the next IMPORT in that window is rejected with "this node is already the
+    owner of the slot range". Waiting on the source's actual slot ownership also
+    makes a genuinely stuck migration obvious: the wait times out reporting the
+    expected vs. actual ownership instead of surfacing later as a confusing
+    "already the owner" error on the following IMPORT.
+    """
     first_conn, second_conn = env.getConnection(0), env.getConnection(1)
-    
-    def get_node_slots(conn):
-        for line in conn.execute_command("cluster", "nodes").splitlines():
-            node = ClusterNode.from_str(line)
-            if "myself" in node.flags:
-                return node.slots
-        raise ValueError("No node with 'myself' flag found")
-    
-    def get_middle_range(slot_range: SlotRange) -> SlotRange:
-        third = (slot_range.end - slot_range.start) // 3
-        return SlotRange(slot_range.start + third, slot_range.end - third)
-    
-    original_first, = get_node_slots(first_conn)
-    original_second, = get_node_slots(second_conn)
-    middle_first = get_middle_range(original_first)
-    middle_second = get_middle_range(original_second)
-    
-    # Migrate from second to first
+    timeout = 60 if VALGRIND else 15
+
+    original_first, = cluster_node_of(first_conn).slots
+    original_second, = cluster_node_of(second_conn).slots
+    middle_second = middle_slot_range(original_second)
+
+    # Migrate middle_second from second to first.
     task_id = first_conn.execute_command("CLUSTER", "MIGRATION", "IMPORT", middle_second.start, middle_second.end)
-    wait_for_migration(first_conn, task_id, timeout=15)
-    
-    # Migrate back
+    wait_for_migration(first_conn, task_id, timeout=timeout)
+    # Wait for the source (second) to give up the slots before migrating back.
+    # A timeout here means the first migration itself got stuck.
+    wait_for_slots(second_conn, cantorized_slot_set(original_second), timeout=timeout)
+
+    # Migrate middle_second back from first to second (restore original ownership).
     task_id = second_conn.execute_command("CLUSTER", "MIGRATION", "IMPORT", middle_second.start, middle_second.end)
-    wait_for_migration(second_conn, task_id, timeout=15)
+    wait_for_migration(second_conn, task_id, timeout=timeout)
+    # Wait for the source (first) to give up the slots so the next round starts clean.
+    wait_for_slots(first_conn, {original_first}, timeout=timeout)
 
 
 def wait_for_migration(conn, task_id, timeout=5):
-    """Wait for migration to complete."""
+    """Wait for the migration task to report completion on `conn`."""
     start = time.time()
+    state = None
     while time.time() - start < timeout:
         status, = conn.execute_command("CLUSTER", "MIGRATION", "STATUS", "ID", task_id)
         status_dict = {key: value for key, value in zip(status[0::2], status[1::2])}
-        if status_dict["state"] == "completed":
+        state = status_dict["state"]
+        if state == "completed":
             return
         time.sleep(0.01)  # Very short sleep for rapid checking
-    raise TimeoutError(f"Migration {task_id} did not complete")
+    raise TimeoutError(f"Migration {task_id} did not complete within {timeout}s (last state: {state})")
+
+
+def wait_for_slots(conn, expected_slots: Set[SlotRange], timeout=15):
+    """Wait until the node behind `conn` owns exactly `expected_slots`.
+
+    Slot ownership propagates eventually after a CLUSTER MIGRATION, so polling
+    the node's own view (CLUSTER NODES) is more reliable than trusting a single
+    migration-task status. Raises TimeoutError reporting expected vs. actual
+    ownership, which pinpoints a stuck migration."""
+    start = time.time()
+    actual = None
+    while time.time() - start < timeout:
+        actual = cluster_node_of(conn).slots
+        if actual == expected_slots:
+            return
+        time.sleep(0.01)
+    raise TimeoutError(
+        f"Slot ownership did not converge within {timeout}s: "
+        f"expected {expected_slots}, got {actual}"
+    )
 
 
 # Helper functions
