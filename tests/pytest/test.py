@@ -1621,6 +1621,25 @@ def testFilterStructuredLiterals(env):
     # Ordering against a structured literal is not comparable -> no match
     r.expect('JSON.GET', 'doc', '$.arrs[?(@ > [1])]').equal('[]')
 
+def testFilterNegation(env):
+    # Test logical negation `!` in filter expressions
+    r = env
+    doc = [{"a": 1, "b": 1}, {"b": 2}, {"a": 1}, {"c": 3}]
+    r.expect('JSON.SET', 'doc', '$', json.dumps(doc)).ok()
+    # Existence negation
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'doc', '$[?!@.a]')),
+                  [{"b": 2}, {"c": 3}])
+    # Double negation -> existence
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'doc', '$[?!!@.a]')),
+                  [{"a": 1, "b": 1}, {"a": 1}])
+    # Negated comparison (parenthesized and bare)
+    r.expect('JSON.GET', 'doc', '$[?!(@.a==1)]').equal('[{"b":2},{"c":3}]')
+    r.expect('JSON.GET', 'doc', '$[?!@.a==1]').equal('[{"b":2},{"c":3}]')
+    # Precedence: !@.a && @.b  ==>  (!@.a) && @.b
+    r.expect('JSON.GET', 'doc', '$[?!@.a && @.b]').equal('[{"b":2}]')
+    # !(@.a || @.b)
+    r.expect('JSON.GET', 'doc', '$[?!(@.a || @.b)]').equal('[{"c":3}]')
+
 def testMerge(env):
     # Test JSON.MERGE
     r = env

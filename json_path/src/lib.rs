@@ -496,6 +496,45 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_filter_negation_existence() {
+        setup();
+        verify_json!(path:"$[?!@.a]", json:[{"a":1},{"b":2}], results:[{"b":2}]);
+    }
+
+    #[test]
+    fn test_filter_negation_double() {
+        setup();
+        verify_json!(path:"$[?!!@.a]", json:[{"a":1},{"b":2}], results:[{"a":1}]);
+    }
+
+    #[test]
+    fn test_filter_negation_comparison_parenthesized() {
+        setup();
+        verify_json!(path:"$[?!(@.a==1)]", json:[{"a":1},{"a":2}], results:[{"a":2}]);
+    }
+
+    #[test]
+    fn test_filter_negation_comparison_bare() {
+        setup();
+        // `!` applied directly to a comparison negates the whole comparison
+        verify_json!(path:"$[?!@.a==1]", json:[{"a":1},{"a":2}], results:[{"a":2}]);
+    }
+
+    #[test]
+    fn test_filter_negation_precedence_with_and() {
+        setup();
+        // !@.a && @.b  ==>  (!@.a) && @.b
+        verify_json!(path:"$[?!@.a && @.b]", json:[{"a":1,"b":1},{"b":1},{"a":1}], results:[{"b":1}]);
+    }
+
+    #[test]
+    fn test_filter_negation_with_parens_or() {
+        setup();
+        // !(@.a || @.b)
+        verify_json!(path:"$[?!(@.a || @.b)]", json:[{"a":1},{"b":2},{"c":3}], results:[{"c":3}]);
+    }
+
+    #[test]
     fn test_filter_with_full_scan() {
         setup();
         verify_json!(path:"$..[?(@.code==\"2\")].code", json:[{"code":"1"},{"code":"2"}], results:["2"]);

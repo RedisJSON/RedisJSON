@@ -1057,6 +1057,31 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         }
     }
 
+    /// Evaluate a single filter operand: a comparison/existence test (`single_filter`),
+    /// a parenthesized sub-filter (`filter`), or a negated operand (`negation`).
+    fn evaluate_filter_operand<'j: 'i, S: SelectValue>(
+        &self,
+        operand: Pair<'i, Rule>,
+        json: ValueRef<'j, S>,
+        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+    ) -> bool {
+        match operand.as_rule() {
+            Rule::single_filter => self.evaluate_single_filter(operand, json, calc_data),
+            Rule::filter => self.evaluate_filter(operand.into_inner(), json, calc_data),
+            Rule::negation => match operand.into_inner().next() {
+                Some(inner) => !self.evaluate_filter_operand(inner, json, calc_data),
+                None => {
+                    trace!("evaluate_filter_operand: negation without operand");
+                    false
+                }
+            },
+            other => {
+                trace!("evaluate_filter_operand: unexpected rule {other:?}");
+                false
+            }
+        }
+    }
+
     fn evaluate_filter<'j: 'i, S: SelectValue>(
         &self,
         mut curr: Pairs<'i, Rule>,
@@ -1068,21 +1093,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             return false;
         };
         trace!("evaluate_filter first_filter {:?}", &first_filter);
-        let mut first_result = match first_filter.as_rule() {
-            Rule::single_filter => {
-                self.evaluate_single_filter(first_filter, json.clone(), calc_data)
-            }
-            Rule::filter => {
-                self.evaluate_filter(first_filter.into_inner(), json.clone(), calc_data)
-            }
-            _ => {
-                trace!(
-                    "evaluate_filter: unexpected first rule {:?}",
-                    first_filter.as_rule()
-                );
-                false
-            }
-        };
+        let mut first_result = self.evaluate_filter_operand(first_filter, json.clone(), calc_data);
         trace!("evaluate_filter first_result {:?}", &first_result);
 
         // Evaluate filter operands with operator (relation) precedence of AND before OR, e.g.,
@@ -1106,23 +1117,8 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                     if !first_result {
                         continue; // Skip eval till next OR
                     }
-                    first_result = match second_filter.as_rule() {
-                        Rule::single_filter => {
-                            self.evaluate_single_filter(second_filter, json.clone(), calc_data)
-                        }
-                        Rule::filter => self.evaluate_filter(
-                            second_filter.into_inner(),
-                            json.clone(),
-                            calc_data,
-                        ),
-                        _ => {
-                            trace!(
-                                "evaluate_filter &&: unexpected rule {:?}",
-                                second_filter.as_rule()
-                            );
-                            false
-                        }
-                    };
+                    first_result =
+                        self.evaluate_filter_operand(second_filter, json.clone(), calc_data);
                 }
                 Rule::or => {
                     trace!("evaluate_filter ||");

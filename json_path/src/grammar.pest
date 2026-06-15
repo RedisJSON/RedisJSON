@@ -55,7 +55,10 @@ filter_relation = _{and | or}
     and = {"&&"}
     or  = {"||"}
 
-inner_filter = _{single_filter | "(" ~ filter ~ ")"}
+// Logical negation: `!` applies to a test or parenthesized filter, binding tighter than && / ||
+negation = {"!" ~ inner_filter}
+
+inner_filter = _{negation | single_filter | "(" ~ filter ~ ")"}
 
 filter = {inner_filter ~ (filter_relation ~ inner_filter)*}
 
