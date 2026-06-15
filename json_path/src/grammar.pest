@@ -56,7 +56,27 @@ function_call = {function_name ~ "(" ~ (term ~ ("," ~ term)*)? ~ ")"}
 
 term = _{select_term | decimal | string | boolean | null | array_literal | object_literal | function_call}
 
-single_filter = {term ~ op ~ term | term}
+// Arithmetic over filter operands. Operators must be space-separated, since the path
+// `literal` charset already includes + - / % (so `@.a+1` is a field name, while
+// `@.a + 1` is addition). Precedence: unary, then * / %, then + -.
+// Division/modulo by zero (and any non-numeric operand) yields Nothing, so the
+// comparison is false and the node is skipped (unlike PostgreSQL, which errors).
+add = @{"+"}
+sub = @{"-"}
+mul = @{"*"}
+div = @{"/"}
+rem = @{"%"}
+add_op = _{add | sub}
+mul_op = _{mul | div | rem}
+neg = @{"-"}
+pos = @{"+"}
+unary_op = _{neg | pos}
+arith_primary = _{"(" ~ arith_expr ~ ")" | term}
+arith_factor = {unary_op? ~ arith_primary}
+arith_term = {arith_factor ~ (mul_op ~ arith_factor)*}
+arith_expr = {arith_term ~ (add_op ~ arith_term)*}
+
+single_filter = {arith_expr ~ op ~ arith_expr | arith_expr}
 
 filter_relation = _{and | or}
     and = {"&&"}

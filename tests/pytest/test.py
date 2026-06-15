@@ -1680,6 +1680,24 @@ def testFilterMembership(env):
     r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [1.0, 2.0, 3.0]})).ok()
     r.expect('JSON.GET', 'doc', '$.a[?@ in [1,2]]').equal('[1.0,2.0]')
 
+def testFilterArithmetic(env):
+    # Test arithmetic operators in filters: + - * / % and unary, with precedence
+    r = env
+    r.expect('JSON.SET', 'doc', '$', json.dumps([{"a": 2, "b": 3}, {"a": 5, "b": 2}])).ok()
+    r.expect('JSON.GET', 'doc', '$[?@.a + 1 == 3]').equal('[{"a":2,"b":3}]')
+    r.expect('JSON.GET', 'doc', '$[?@.a - 1 == 4]').equal('[{"a":5,"b":2}]')
+    # * binds tighter than +
+    r.expect('JSON.GET', 'doc', '$[?@.a + @.b * 2 == 8]').equal('[{"a":2,"b":3}]')
+    # parentheses override precedence
+    r.expect('JSON.GET', 'doc', '$[?(@.a + @.b) * 2 == 10]').equal('[{"a":2,"b":3}]')
+    # division is float; modulo; unary minus
+    r.expect('JSON.SET', 'doc', '$', json.dumps([{"a": 8}, {"a": 3}])).ok()
+    r.expect('JSON.GET', 'doc', '$[?@.a / 2 == 4]').equal('[{"a":8}]')
+    r.expect('JSON.GET', 'doc', '$[?@.a % 2 == 0]').equal('[{"a":8}]')
+    r.expect('JSON.GET', 'doc', '$[?-@.a == -3]').equal('[{"a":3}]')
+    # division by zero -> no match
+    r.expect('JSON.GET', 'doc', '$[?@.a / 0 == 0]').equal('[]')
+
 def testMerge(env):
     # Test JSON.MERGE
     r = env

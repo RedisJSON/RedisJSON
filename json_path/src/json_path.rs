@@ -290,6 +290,100 @@ fn value_as_number<V: SelectValue>(v: &V) -> Option<Num> {
     }
 }
 
+impl Num {
+    fn as_f64(self) -> f64 {
+        match self {
+            Num::Int(i) => i as f64,
+            Num::Float(f) => f,
+        }
+    }
+}
+
+/// Apply a binary arithmetic operator to two numbers. Integer operands stay integer
+/// for `+ - *` (falling back to float on overflow) and `%`; division is always float.
+///
+/// Division/modulo by zero returns `None`, which the caller turns into `Invalid`
+/// (RFC 9535 "Nothing"): the surrounding comparison then evaluates to false and the
+/// node is skipped. NOTE: this differs from PostgreSQL SQL/JSON path, which raises a
+/// hard "division by zero" error. We return Nothing instead because the path
+/// evaluator has no error channel — every operand resolves to a value or to Nothing,
+/// never to an error — so a single bad element cannot abort the whole command. (Same
+/// rule applies to any non-numeric arithmetic operand, e.g. `@.str * 2` → Nothing.)
+fn num_binop<'i, 'j, S: SelectValue>(
+    operator: Rule,
+    a: Num,
+    b: Num,
+) -> Option<TermEvaluationResult<'i, 'j, S>> {
+    use Num::Int;
+    match operator {
+        Rule::add | Rule::sub | Rule::mul => {
+            if let (Int(x), Int(y)) = (a, b) {
+                let checked = match operator {
+                    Rule::add => x.checked_add(y),
+                    Rule::sub => x.checked_sub(y),
+                    Rule::mul => x.checked_mul(y),
+                    _ => unreachable!("num_binop: outer arm guarantees add/sub/mul"),
+                };
+                if let Some(v) = checked {
+                    return Some(TermEvaluationResult::Integer(v));
+                }
+            }
+            let (x, y) = (a.as_f64(), b.as_f64());
+            let v = match operator {
+                Rule::add => x + y,
+                Rule::sub => x - y,
+                Rule::mul => x * y,
+                _ => unreachable!("num_binop: outer arm guarantees add/sub/mul"),
+            };
+            Some(TermEvaluationResult::Float(v))
+        }
+        Rule::div => {
+            let y = b.as_f64();
+            (y != 0.0).then(|| TermEvaluationResult::Float(a.as_f64() / y))
+        }
+        Rule::rem => match (a, b) {
+            (Int(x), Int(y)) => (y != 0).then(|| TermEvaluationResult::Integer(x % y)),
+            _ => {
+                let y = b.as_f64();
+                (y != 0.0).then(|| TermEvaluationResult::Float(a.as_f64() % y))
+            }
+        },
+        _ => None,
+    }
+}
+
+/// Apply a binary arithmetic operator to two term results (both must be numbers).
+fn arith_binop<'i, 'j, S: SelectValue>(
+    operator: Rule,
+    a: &TermEvaluationResult<'i, 'j, S>,
+    b: &TermEvaluationResult<'i, 'j, S>,
+) -> TermEvaluationResult<'i, 'j, S> {
+    match (a.as_number(), b.as_number()) {
+        (Some(x), Some(y)) => num_binop(operator, x, y).unwrap_or(TermEvaluationResult::Invalid),
+        _ => TermEvaluationResult::Invalid,
+    }
+}
+
+/// Apply a unary `+`/`-` to a term result (must be a number).
+fn arith_unary<'i, 'j, S: SelectValue>(
+    operator: Rule,
+    v: TermEvaluationResult<'i, 'j, S>,
+) -> TermEvaluationResult<'i, 'j, S> {
+    match v.as_number() {
+        Some(Num::Int(n)) => match operator {
+            Rule::neg => n
+                .checked_neg()
+                .map_or_else(|| TermEvaluationResult::Float(-(n as f64)), TermEvaluationResult::Integer),
+            _ => TermEvaluationResult::Integer(n),
+        },
+        Some(Num::Float(f)) => match operator {
+            Rule::neg => TermEvaluationResult::Float(-f),
+            _ => TermEvaluationResult::Float(f),
+        },
+        None => TermEvaluationResult::Invalid,
+    }
+}
+
 /// RFC 9535 `length()` on a value: chars for strings, element/member count for
 /// arrays/objects, `None` (Nothing) otherwise. Generic over any `SelectValue`.
 fn value_length<V: SelectValue>(v: &V) -> Option<usize> {
@@ -1237,6 +1331,88 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         }
     }
 
+    /// Evaluate an arithmetic expression: `arith_term ((+|-) arith_term)*` (left-assoc).
+    fn evaluate_arith_expr<'j: 'i, S: SelectValue>(
+        &self,
+        expr: Pair<'i, Rule>,
+        json: ValueRef<'j, S>,
+        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+    ) -> TermEvaluationResult<'i, 'j, S> {
+        let mut inner = expr.into_inner();
+        let Some(first) = inner.next() else {
+            return TermEvaluationResult::Invalid;
+        };
+        let mut acc = self.evaluate_arith_term(first, json.clone(), calc_data);
+        while let Some(op) = inner.next() {
+            let Some(rhs) = inner.next() else {
+                return TermEvaluationResult::Invalid;
+            };
+            let rhs = self.evaluate_arith_term(rhs, json.clone(), calc_data);
+            acc = arith_binop(op.as_rule(), &acc, &rhs);
+        }
+        acc
+    }
+
+    /// Evaluate an arithmetic term: `arith_factor ((*|/|%) arith_factor)*` (left-assoc).
+    fn evaluate_arith_term<'j: 'i, S: SelectValue>(
+        &self,
+        term: Pair<'i, Rule>,
+        json: ValueRef<'j, S>,
+        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+    ) -> TermEvaluationResult<'i, 'j, S> {
+        let mut inner = term.into_inner();
+        let Some(first) = inner.next() else {
+            return TermEvaluationResult::Invalid;
+        };
+        let mut acc = self.evaluate_arith_factor(first, json.clone(), calc_data);
+        while let Some(op) = inner.next() {
+            let Some(rhs) = inner.next() else {
+                return TermEvaluationResult::Invalid;
+            };
+            let rhs = self.evaluate_arith_factor(rhs, json.clone(), calc_data);
+            acc = arith_binop(op.as_rule(), &acc, &rhs);
+        }
+        acc
+    }
+
+    /// Evaluate an arithmetic factor: an optional unary `+`/`-` applied to a primary
+    /// (a parenthesized expression or a term).
+    fn evaluate_arith_factor<'j: 'i, S: SelectValue>(
+        &self,
+        factor: Pair<'i, Rule>,
+        json: ValueRef<'j, S>,
+        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+    ) -> TermEvaluationResult<'i, 'j, S> {
+        let mut inner = factor.into_inner();
+        let Some(first) = inner.next() else {
+            return TermEvaluationResult::Invalid;
+        };
+        match first.as_rule() {
+            Rule::neg | Rule::pos => {
+                let operator = first.as_rule();
+                let Some(operand) = inner.next() else {
+                    return TermEvaluationResult::Invalid;
+                };
+                let v = self.evaluate_arith_operand(operand, json, calc_data);
+                arith_unary(operator, v)
+            }
+            _ => self.evaluate_arith_operand(first, json, calc_data),
+        }
+    }
+
+    /// Evaluate an arithmetic primary: a parenthesized sub-expression or a plain term.
+    fn evaluate_arith_operand<'j: 'i, S: SelectValue>(
+        &self,
+        operand: Pair<'i, Rule>,
+        json: ValueRef<'j, S>,
+        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+    ) -> TermEvaluationResult<'i, 'j, S> {
+        match operand.as_rule() {
+            Rule::arith_expr => self.evaluate_arith_expr(operand, json, calc_data),
+            _ => self.evaluate_single_term(operand, json, calc_data),
+        }
+    }
+
     fn evaluate_single_filter<'j: 'i, S: SelectValue>(
         &self,
         curr: Pair<'i, Rule>,
@@ -1249,7 +1425,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             return false;
         };
         trace!("evaluate_single_filter term1 {:?}", &term1);
-        let term1_val = self.evaluate_single_term(term1, json.clone(), calc_data);
+        let term1_val = self.evaluate_arith_expr(term1, json.clone(), calc_data);
         trace!("evaluate_single_filter term1_val {:?}", &term1_val);
         if let Some(op) = curr.next() {
             trace!("evaluate_single_filter op {:?}", &op);
@@ -1258,7 +1434,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 return false;
             };
             trace!("evaluate_single_filter term2 {:?}", &term2);
-            let term2_val = self.evaluate_single_term(term2, json, calc_data);
+            let term2_val = self.evaluate_arith_expr(term2, json, calc_data);
             trace!("evaluate_single_filter term2_val {:?}", &term2_val);
             match op.as_rule() {
                 Rule::gt => term1_val.gt(&term2_val),

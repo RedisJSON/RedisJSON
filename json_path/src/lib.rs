@@ -626,6 +626,70 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_arith_add() {
+        setup();
+        verify_json!(path:"$[?@.a + 1 == 3]", json:[{"a":2},{"a":5}], results:[{"a":2}]);
+    }
+
+    #[test]
+    fn test_arith_sub() {
+        setup();
+        verify_json!(path:"$[?@.a - 1 == 4]", json:[{"a":5},{"a":2}], results:[{"a":5}]);
+    }
+
+    #[test]
+    fn test_arith_mul() {
+        setup();
+        verify_json!(path:"$[?@.a * 2 == 6]", json:[{"a":3},{"a":2}], results:[{"a":3}]);
+    }
+
+    #[test]
+    fn test_arith_div() {
+        setup();
+        // division is float: 8 / 2 == 4
+        verify_json!(path:"$[?@.a / 2 == 4]", json:[{"a":8},{"a":3}], results:[{"a":8}]);
+    }
+
+    #[test]
+    fn test_arith_rem() {
+        setup();
+        verify_json!(path:"$[?@.a % 2 == 0]", json:[{"a":4},{"a":3}], results:[{"a":4}]);
+    }
+
+    #[test]
+    fn test_arith_precedence() {
+        setup();
+        // * binds tighter than +
+        verify_json!(path:"$[?@.a + @.b * 2 == 7]", json:[{"a":1,"b":3},{"a":2,"b":2}], results:[{"a":1,"b":3}]);
+    }
+
+    #[test]
+    fn test_arith_parens() {
+        setup();
+        verify_json!(path:"$[?(@.a + @.b) * 2 == 8]", json:[{"a":1,"b":3},{"a":2,"b":3}], results:[{"a":1,"b":3}]);
+    }
+
+    #[test]
+    fn test_arith_unary_neg() {
+        setup();
+        verify_json!(path:"$[?-@.a == -3]", json:[{"a":3},{"a":1}], results:[{"a":3}]);
+    }
+
+    #[test]
+    fn test_arith_parens_current() {
+        setup();
+        // bare `@ * 2` collides with the wildcard `*`; parens disambiguate
+        verify_json!(path:"$.a[?(@) * 2 == 6]", json:{"a":[1,3]}, results:[3]);
+    }
+
+    #[test]
+    fn test_arith_div_by_zero_no_match() {
+        setup();
+        // division by zero -> Nothing -> comparison is false
+        verify_json!(path:"$[?@.a / 0 == 0]", json:[{"a":5}], results:[]);
+    }
+
+    #[test]
     fn test_filter_with_full_scan() {
         setup();
         verify_json!(path:"$..[?(@.code==\"2\")].code", json:[{"code":"1"},{"code":"2"}], results:["2"]);
