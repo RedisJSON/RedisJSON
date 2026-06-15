@@ -265,6 +265,130 @@ fn build_literal(pair: Pair<Rule>) -> Literal {
     }
 }
 
+/// RFC 9535 `length()` on a value: chars for strings, element/member count for
+/// arrays/objects, `None` (Nothing) otherwise. Generic over any `SelectValue`.
+fn value_length<V: SelectValue>(v: &V) -> Option<usize> {
+    match v.get_type() {
+        SelectValueType::String => v.as_str().map(|s| s.chars().count()),
+        SelectValueType::Array | SelectValueType::Object => v.len(),
+        _ => None,
+    }
+}
+
+fn function_length<'i, 'j, S: SelectValue>(
+    arg: &TermEvaluationResult<'i, 'j, S>,
+) -> TermEvaluationResult<'i, 'j, S> {
+    match arg {
+        TermEvaluationResult::Str(s) => Some(s.chars().count()),
+        TermEvaluationResult::String(s) => Some(s.chars().count()),
+        TermEvaluationResult::Value(v) => value_length(v.as_ref()),
+        TermEvaluationResult::Literal(l) => value_length(l),
+        TermEvaluationResult::NodeList(list) if list.len() == 1 => value_length(list[0].as_ref()),
+        TermEvaluationResult::NodeList(_)
+        | TermEvaluationResult::Integer(_)
+        | TermEvaluationResult::Float(_)
+        | TermEvaluationResult::Bool(_)
+        | TermEvaluationResult::Null
+        | TermEvaluationResult::Invalid => None,
+    }
+    .map_or(TermEvaluationResult::Invalid, |n| {
+        TermEvaluationResult::Integer(n as i64)
+    })
+}
+
+/// RFC 9535 `count()`: number of nodes in a nodelist. A single value counts as 1,
+/// an empty/absent query (`Invalid`) as 0.
+fn function_count<'i, 'j, S: SelectValue>(arg: &TermEvaluationResult<'i, 'j, S>) -> i64 {
+    match arg {
+        TermEvaluationResult::Invalid => 0,
+        TermEvaluationResult::NodeList(list) => list.len() as i64,
+        TermEvaluationResult::Integer(_)
+        | TermEvaluationResult::Float(_)
+        | TermEvaluationResult::Str(_)
+        | TermEvaluationResult::String(_)
+        | TermEvaluationResult::Value(_)
+        | TermEvaluationResult::Literal(_)
+        | TermEvaluationResult::Bool(_)
+        | TermEvaluationResult::Null => 1,
+    }
+}
+
+/// RFC 9535 `value()`: the value of a single-node nodelist, otherwise Nothing.
+fn function_value<'i, 'j, S: SelectValue>(
+    arg: TermEvaluationResult<'i, 'j, S>,
+) -> TermEvaluationResult<'i, 'j, S> {
+    match arg {
+        TermEvaluationResult::NodeList(mut list) if list.len() == 1 => list
+            .pop()
+            .map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Value),
+        v @ TermEvaluationResult::Value(_) => v,
+        TermEvaluationResult::NodeList(_)
+        | TermEvaluationResult::Integer(_)
+        | TermEvaluationResult::Float(_)
+        | TermEvaluationResult::Str(_)
+        | TermEvaluationResult::String(_)
+        | TermEvaluationResult::Literal(_)
+        | TermEvaluationResult::Bool(_)
+        | TermEvaluationResult::Null
+        | TermEvaluationResult::Invalid => TermEvaluationResult::Invalid,
+    }
+}
+
+/// Extract a string from a term result (for `match`/`search` operands).
+fn term_as_string<'i, 'j, S: SelectValue>(arg: &TermEvaluationResult<'i, 'j, S>) -> Option<String> {
+    match arg {
+        TermEvaluationResult::Str(s) => Some((*s).to_string()),
+        TermEvaluationResult::String(s) => Some(s.clone()),
+        TermEvaluationResult::Value(v) => v.as_ref().get_str(),
+        TermEvaluationResult::Literal(l) => l.get_str(),
+        TermEvaluationResult::Integer(_)
+        | TermEvaluationResult::Float(_)
+        | TermEvaluationResult::Bool(_)
+        | TermEvaluationResult::Null
+        | TermEvaluationResult::NodeList(_)
+        | TermEvaluationResult::Invalid => None,
+    }
+}
+
+fn regex_is_match(regex: &str, s: &str) -> bool {
+    Regex::new(regex).map_or(false, |re| re.is_match(s))
+}
+
+/// Anchored (full-string) regex match used by RFC 9535 `match()`.
+fn regex_is_full_match(regex: &str, s: &str) -> bool {
+    Regex::new(&format!("^(?:{regex})$")).map_or(false, |re| re.is_match(s))
+}
+
+/// Dispatch a filter-expression function call to its RFC 9535 implementation.
+fn eval_function<'i, 'j, S: SelectValue>(
+    name: &str,
+    mut args: Vec<TermEvaluationResult<'i, 'j, S>>,
+) -> TermEvaluationResult<'i, 'j, S> {
+    match name {
+        "length" => args
+            .first()
+            .map_or(TermEvaluationResult::Invalid, function_length),
+        "count" => args.first().map_or(TermEvaluationResult::Invalid, |a| {
+            TermEvaluationResult::Integer(function_count(a))
+        }),
+        "value" if args.len() == 1 => function_value(args.pop().unwrap()),
+        "match" | "search" => {
+            let full = name == "match";
+            let s = args.first().and_then(term_as_string);
+            let re = args.get(1).and_then(term_as_string);
+            match (s, re) {
+                (Some(s), Some(re)) => TermEvaluationResult::Bool(if full {
+                    regex_is_full_match(&re, &s)
+                } else {
+                    regex_is_match(&re, &s)
+                }),
+                _ => TermEvaluationResult::Bool(false),
+            }
+        }
+        _ => TermEvaluationResult::Invalid,
+    }
+}
+
 /// Compile the given string query into a query object.
 /// Returns error on compilation error.
 pub(crate) fn compile(path: &str) -> Result<Query<'_>, QueryCompilationError> {
@@ -973,6 +1097,15 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             Rule::array_literal | Rule::object_literal => {
                 TermEvaluationResult::Literal(build_literal(term))
             }
+            Rule::function_call => {
+                let mut inner = term.into_inner();
+                let name = inner.next().map_or("", |p| p.as_str());
+                let mut args = Vec::new();
+                for arg in inner {
+                    args.push(self.evaluate_single_term(arg, json.clone(), calc_data));
+                }
+                eval_function(name, args)
+            }
             Rule::string_value | Rule::string_value_escape_1 | Rule::string_value_escape_2 => {
                 match unescape_string_value(term) {
                     Cow::Borrowed(s) => TermEvaluationResult::Str(s),
@@ -1053,7 +1186,12 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 }
             }
         } else {
-            !matches!(term1_val, TermEvaluationResult::Invalid)
+            // A bare term is a test: a boolean result (e.g. `match(...)`) uses its
+            // value; any other present value is truthy (existence), `Invalid` is false.
+            match term1_val {
+                TermEvaluationResult::Bool(b) => b,
+                other => !matches!(other, TermEvaluationResult::Invalid),
+            }
         }
     }
 

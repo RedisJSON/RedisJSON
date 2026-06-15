@@ -535,6 +535,46 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_function_length() {
+        setup();
+        // length: array elements / string chars
+        verify_json!(path:"$.a[?length(@) > 2]", json:{"a":[[1,2,3],[1],"abcd","x"]}, results:[[1,2,3],"abcd"]);
+    }
+
+    #[test]
+    fn test_function_length_object() {
+        setup();
+        // length of an object = number of members
+        verify_json!(path:"$[?length(@) == 2]", json:[{"a":1,"b":2},{"a":1}], results:[{"a":1,"b":2}]);
+    }
+
+    #[test]
+    fn test_function_count() {
+        setup();
+        verify_json!(path:"$[?count(@.*) == 3]", json:[{"a":1,"b":2,"c":3},{"a":1}], results:[{"a":1,"b":2,"c":3}]);
+    }
+
+    #[test]
+    fn test_function_value() {
+        setup();
+        verify_json!(path:"$[?value(@.a) == 1]", json:[{"a":1},{"a":2}], results:[{"a":1}]);
+    }
+
+    #[test]
+    fn test_function_match() {
+        setup();
+        // match is a full (anchored) match
+        verify_json!(path:"$.a[?match(@, \"a.*\")]", json:{"a":["abc","xabc","a","b"]}, results:["abc","a"]);
+    }
+
+    #[test]
+    fn test_function_search() {
+        setup();
+        // search is a substring match
+        verify_json!(path:"$.a[?search(@, \"b\")]", json:{"a":["abc","xyz","b"]}, results:["abc","b"]);
+    }
+
+    #[test]
     fn test_filter_with_full_scan() {
         setup();
         verify_json!(path:"$..[?(@.code==\"2\")].code", json:[{"code":"1"},{"code":"2"}], results:["2"]);

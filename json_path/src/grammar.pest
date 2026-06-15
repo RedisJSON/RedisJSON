@@ -47,7 +47,11 @@ object_literal = {"{" ~ (object_member ~ ("," ~ object_member)*)? ~ "}"}
 object_member = {string ~ ":" ~ json_value}
 json_value = _{decimal | string | boolean | null | array_literal | object_literal}
 
-term = _{select_term | decimal | string | boolean | null | array_literal | object_literal}
+// Filter-expression functions, e.g. `length(@)`, `match(@.s, "a.*")`. Args are terms.
+function_name = @{ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")*}
+function_call = {function_name ~ "(" ~ (term ~ ("," ~ term)*)? ~ ")"}
+
+term = _{select_term | decimal | string | boolean | null | array_literal | object_literal | function_call}
 
 single_filter = {term ~ op ~ term | term}
 

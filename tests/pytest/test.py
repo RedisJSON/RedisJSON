@@ -1640,6 +1640,26 @@ def testFilterNegation(env):
     # !(@.a || @.b)
     r.expect('JSON.GET', 'doc', '$[?!(@.a || @.b)]').equal('[{"c":3}]')
 
+def testFilterFunctions(env):
+    # Test RFC 9535 filter functions: length, count, value, match, search
+    r = env
+    # length: array elements / string chars / object members
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [[1, 2, 3], [1], "abcd", "x"]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?length(@) > 2]').equal('[[1,2,3],"abcd"]')
+    r.expect('JSON.SET', 'doc', '$', json.dumps([{"a": 1, "b": 2}, {"a": 1}])).ok()
+    r.expect('JSON.GET', 'doc', '$[?length(@) == 2]').equal('[{"a":1,"b":2}]')
+    # count: number of nodes selected by a query
+    r.expect('JSON.SET', 'doc', '$', json.dumps([{"a": 1, "b": 2, "c": 3}, {"a": 1}])).ok()
+    r.expect('JSON.GET', 'doc', '$[?count(@.*) == 3]').equal('[{"a":1,"b":2,"c":3}]')
+    # value: value of a single-node query
+    r.expect('JSON.SET', 'doc', '$', json.dumps([{"a": 1}, {"a": 2}])).ok()
+    r.expect('JSON.GET', 'doc', '$[?value(@.a) == 1]').equal('[{"a":1}]')
+    # match (anchored / full) vs search (substring)
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": ["abc", "xabc", "a", "b"]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?match(@, "a.*")]').equal('["abc","a"]')
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": ["abc", "xyz", "b"]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?search(@, "b")]').equal('["abc","b"]')
+
 def testMerge(env):
     # Test JSON.MERGE
     r = env
