@@ -322,11 +322,7 @@ fn op_order_on_literal_matches_nothing() {
     setup();
 
     // Ordering comparisons against a structured literal are not comparable.
-    select_and_then_compare(
-        r#"$.a[?(@ > [1])]"#,
-        json!({"a": [[1], [2]]}),
-        json!([]),
-    );
+    select_and_then_compare(r#"$.a[?(@ > [1])]"#, json!({"a": [[1], [2]]}), json!([]));
 }
 
 #[test]

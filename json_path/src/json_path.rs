@@ -371,9 +371,10 @@ fn arith_unary<'i, 'j, S: SelectValue>(
 ) -> TermEvaluationResult<'i, 'j, S> {
     match v.as_number() {
         Some(Num::Int(n)) => match operator {
-            Rule::neg => n
-                .checked_neg()
-                .map_or_else(|| TermEvaluationResult::Float(-(n as f64)), TermEvaluationResult::Integer),
+            Rule::neg => n.checked_neg().map_or_else(
+                || TermEvaluationResult::Float(-(n as f64)),
+                TermEvaluationResult::Integer,
+            ),
             _ => TermEvaluationResult::Integer(n),
         },
         Some(Num::Float(f)) => match operator {
