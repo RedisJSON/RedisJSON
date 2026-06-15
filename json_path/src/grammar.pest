@@ -41,7 +41,13 @@ boolean = _{boolean_true | boolean_false}
 
 null = @{"null"}
 
-term = _{select_term | decimal | string | boolean | null}
+// JSON array/object literals usable as filter operands, e.g. `?@==[1]`, `?@=={"a":1}`
+array_literal = {"[" ~ (json_value ~ ("," ~ json_value)*)? ~ "]"}
+object_literal = {"{" ~ (object_member ~ ("," ~ object_member)*)? ~ "}"}
+object_member = {string ~ ":" ~ json_value}
+json_value = _{decimal | string | boolean | null | array_literal | object_literal}
+
+term = _{select_term | decimal | string | boolean | null | array_literal | object_literal}
 
 single_filter = {term ~ op ~ term | term}
 

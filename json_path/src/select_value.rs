@@ -8,7 +8,7 @@
  */
 
 use serde::{Serialize, Serializer};
-use std::{ffi::c_void, fmt::Debug};
+use std::{ffi::c_void, fmt::Debug, ptr::null};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum SelectValueType {
@@ -170,3 +170,180 @@ pub fn is_equal<T1: SelectValue, T2: SelectValue>(a: &T1, b: &T2) -> bool {
 
 #[allow(unused)]
 pub const MAX_DEPTH: usize = 128;
+
+/// A small owned JSON value used to represent array/object literals that appear
+/// as filter operands (e.g. `?@==[1]`, `?@=={"a":1}`). It implements `SelectValue`
+/// so it can be deep-compared against the document's value
+#[derive(Debug, Clone, Default)]
+pub(crate) enum Literal {
+    #[default]
+    Null,
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    Str(String),
+    Array(Vec<Literal>),
+    Object(Vec<(String, Literal)>),
+}
+
+impl PartialEq for Literal {
+    fn eq(&self, other: &Self) -> bool {
+        is_equal(self, other)
+    }
+}
+
+impl Eq for Literal {}
+
+impl Serialize for Literal {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        match self {
+            Self::Null => serializer.serialize_unit(),
+            Self::Bool(b) => serializer.serialize_bool(*b),
+            Self::Int(i) => serializer.serialize_i64(*i),
+            Self::Float(f) => serializer.serialize_f64(*f),
+            Self::Str(s) => serializer.serialize_str(s),
+            Self::Array(a) => a.serialize(serializer),
+            Self::Object(o) => {
+                let mut map = serializer.serialize_map(Some(o.len()))?;
+                for (k, v) in o {
+                    map.serialize_entry(k, v)?;
+                }
+                map.end()
+            }
+        }
+    }
+}
+
+impl SelectValue for Literal {
+    fn get_type(&self) -> SelectValueType {
+        match self {
+            Self::Null => SelectValueType::Null,
+            Self::Bool(_) => SelectValueType::Bool,
+            Self::Int(_) => SelectValueType::Long,
+            Self::Float(_) => SelectValueType::Double,
+            Self::Str(_) => SelectValueType::String,
+            Self::Array(_) => SelectValueType::Array,
+            Self::Object(_) => SelectValueType::Object,
+        }
+    }
+
+    fn contains_key(&self, key: &str) -> bool {
+        match self {
+            Self::Object(o) => o.iter().any(|(k, _)| k == key),
+            _ => false,
+        }
+    }
+
+    fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = ValueRef<'a, Self>> + 'a>> {
+        match self {
+            Self::Array(a) => Some(Box::new(a.iter().map(ValueRef::Borrowed))),
+            Self::Object(o) => Some(Box::new(o.iter().map(|(_, v)| ValueRef::Borrowed(v)))),
+            _ => None,
+        }
+    }
+
+    fn keys<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a str> + 'a>> {
+        match self {
+            Self::Object(o) => Some(Box::new(o.iter().map(|(k, _)| k.as_str()))),
+            _ => None,
+        }
+    }
+
+    fn items<'a>(&'a self) -> Option<Box<dyn Iterator<Item = (&'a str, ValueRef<'a, Self>)> + 'a>> {
+        match self {
+            Self::Object(o) => Some(Box::new(
+                o.iter().map(|(k, v)| (k.as_str(), ValueRef::Borrowed(v))),
+            )),
+            _ => None,
+        }
+    }
+
+    fn len(&self) -> Option<usize> {
+        match self {
+            Self::Array(a) => Some(a.len()),
+            Self::Object(o) => Some(o.len()),
+            _ => None,
+        }
+    }
+
+    fn is_empty(&self) -> Option<bool> {
+        match self {
+            Self::Array(a) => Some(a.is_empty()),
+            Self::Object(o) => Some(o.is_empty()),
+            _ => None,
+        }
+    }
+
+    fn get_key<'a>(&'a self, key: &str) -> Option<ValueRef<'a, Self>> {
+        match self {
+            Self::Object(o) => o
+                .iter()
+                .find(|(k, _)| k == key)
+                .map(|(_, v)| ValueRef::Borrowed(v)),
+            _ => None,
+        }
+    }
+
+    fn get_index<'a>(&'a self, index: usize) -> Option<ValueRef<'a, Self>> {
+        match self {
+            Self::Array(a) => a.get(index).map(ValueRef::Borrowed),
+            _ => None,
+        }
+    }
+
+    fn is_array(&self) -> bool {
+        matches!(self, Self::Array(_))
+    }
+
+    fn is_double(&self) -> Option<bool> {
+        match self {
+            Self::Float(_) => Some(true),
+            Self::Int(_) => Some(false),
+            _ => None,
+        }
+    }
+
+    fn get_str(&self) -> Option<String> {
+        match self {
+            Self::Str(s) => Some(s.clone()),
+            _ => None,
+        }
+    }
+
+    fn as_str(&self) -> Option<&str> {
+        match self {
+            Self::Str(s) => Some(s.as_str()),
+            _ => None,
+        }
+    }
+
+    fn get_bool(&self) -> Option<bool> {
+        match self {
+            Self::Bool(b) => Some(*b),
+            _ => None,
+        }
+    }
+
+    fn get_long(&self) -> Option<i64> {
+        match self {
+            Self::Int(i) => Some(*i),
+            _ => None,
+        }
+    }
+
+    fn get_double(&self) -> Option<f64> {
+        match self {
+            Self::Float(f) => Some(*f),
+            _ => None,
+        }
+    }
+
+    fn get_array(&self) -> *const c_void {
+        null()
+    }
+
+    fn get_array_type(&self) -> Option<JSONArrayType> {
+        None
+    }
+}

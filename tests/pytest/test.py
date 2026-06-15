@@ -1600,6 +1600,27 @@ def testFilterPrecedence(env):
     r.assertEqual(json.loads(res), [doc[0]])
     r.expect('JSON.GET', 'doc', '$[?(@.f==true || @.one==1 && @.t==false)]').equal('[]')
 
+def testFilterStructuredLiterals(env):
+    # Test array/object literals as filter operands (#949)
+    r = env
+    doc = {
+        "arrs": [[1], [2], [1, 2], [1, [2]]],
+        "objs": [{"x": 1}, {"x": 2}, {"y": 1}]
+    }
+    r.expect('JSON.SET', 'doc', '$', json.dumps(doc)).ok()
+    # Array literal equality (right- and left-hand side)
+    r.expect('JSON.GET', 'doc', '$.arrs[?(@ == [1])]').equal('[[1]]')
+    r.expect('JSON.GET', 'doc', '$.arrs[?([1] == @)]').equal('[[1]]')
+    # Nested array literal
+    r.expect('JSON.GET', 'doc', '$.arrs[?(@ == [1,[2]])]').equal('[[1,[2]]]')
+    # Inequality
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'doc', '$.arrs[?(@ != [1])]')),
+                  [[2], [1, 2], [1, [2]]])
+    # Object literal equality
+    r.expect('JSON.GET', 'doc', '$.objs[?(@ == {"x":1})]').equal('[{"x":1}]')
+    # Ordering against a structured literal is not comparable -> no match
+    r.expect('JSON.GET', 'doc', '$.arrs[?(@ > [1])]').equal('[]')
+
 def testMerge(env):
     # Test JSON.MERGE
     r = env

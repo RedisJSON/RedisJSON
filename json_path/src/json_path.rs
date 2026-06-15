@@ -7,7 +7,7 @@
  * GNU Affero General Public License v3 (AGPLv3).
  */
 
-use crate::select_value::{SelectValue, SelectValueType, ValueRef};
+use crate::select_value::{is_equal, Literal, SelectValue, SelectValueType, ValueRef};
 use itertools::Itertools;
 use log::trace;
 use pest::iterators::{Pair, Pairs};
@@ -224,6 +224,47 @@ fn unescape_string_value<'a>(pair: Pair<'a, Rule>) -> Cow<'a, str> {
     }
 }
 
+/// Recursively build an owned `Literal` value from an array/object literal
+/// parse subtree (e.g. `[1,{"a":2}]`). Used for structured filter operands.
+fn build_literal(pair: Pair<Rule>) -> Literal {
+    match pair.as_rule() {
+        Rule::array_literal => Literal::Array(pair.into_inner().map(build_literal).collect()),
+        Rule::object_literal => Literal::Object(
+            pair.into_inner()
+                .map(|member| {
+                    let mut it = member.into_inner();
+                    let key = it
+                        .next()
+                        .map(|k| unescape_string_value(k).into_owned())
+                        .unwrap_or_default();
+                    let value = it.next().map_or(Literal::Null, build_literal);
+                    (key, value)
+                })
+                .collect(),
+        ),
+        Rule::decimal => {
+            let s = pair.as_str();
+            if let Ok(i) = s.parse::<i64>() {
+                Literal::Int(i)
+            } else if let Ok(f) = s.parse::<f64>() {
+                Literal::Float(f)
+            } else {
+                Literal::Null
+            }
+        }
+        Rule::string_value | Rule::string_value_escape_1 | Rule::string_value_escape_2 => {
+            Literal::Str(unescape_string_value(pair).into_owned())
+        }
+        Rule::boolean_true => Literal::Bool(true),
+        Rule::boolean_false => Literal::Bool(false),
+        Rule::null => Literal::Null,
+        other => {
+            trace!("build_literal: unexpected rule {other:?}");
+            Literal::Null
+        }
+    }
+}
+
 /// Compile the given string query into a query object.
 /// Returns error on compilation error.
 pub(crate) fn compile(path: &str) -> Result<Query<'_>, QueryCompilationError> {
@@ -404,6 +445,8 @@ enum TermEvaluationResult<'i, 'j, S: SelectValue> {
     Str(&'i str),
     String(String),
     Value(ValueRef<'j, S>),
+    /// An array/object literal operand, e.g. `[1,2]` or `{"a":1}` in `?@==[1,2]`.
+    Literal(Literal),
     Bool(bool),
     Null,
     /// Multiple results from a non-singular query (e.g. `@.*`, `@..key`).
@@ -539,6 +582,17 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
                 .iter()
                 .any(|v| self.eq(&TermEvaluationResult::Value(v.clone()))),
             (TermEvaluationResult::Value(v1), TermEvaluationResult::Value(v2)) => v1 == v2,
+            // Structured literal operands deep-compare against the document value
+            // (any `SelectValue`) via the cross-type `is_equal`.
+            (TermEvaluationResult::Value(v), TermEvaluationResult::Literal(l)) => {
+                is_equal(v.as_ref(), l)
+            }
+            (TermEvaluationResult::Literal(l), TermEvaluationResult::Value(v)) => {
+                is_equal(l, v.as_ref())
+            }
+            (TermEvaluationResult::Literal(l1), TermEvaluationResult::Literal(l2)) => {
+                is_equal(l1, l2)
+            }
             (_, _) => match self.cmp(s) {
                 CmpResult::Ord(o) => o.is_eq(),
                 CmpResult::NotComparable => false,
@@ -916,6 +970,9 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             Rule::boolean_true => TermEvaluationResult::Bool(true),
             Rule::boolean_false => TermEvaluationResult::Bool(false),
             Rule::null => TermEvaluationResult::Null,
+            Rule::array_literal | Rule::object_literal => {
+                TermEvaluationResult::Literal(build_literal(term))
+            }
             Rule::string_value | Rule::string_value_escape_1 | Rule::string_value_escape_2 => {
                 match unescape_string_value(term) {
                     Cow::Borrowed(s) => TermEvaluationResult::Str(s),

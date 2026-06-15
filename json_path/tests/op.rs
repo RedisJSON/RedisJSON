@@ -262,6 +262,74 @@ fn op_ne_for_object_value() {
 }
 
 #[test]
+fn op_eq_array_literal() {
+    setup();
+
+    select_and_then_compare(
+        r#"$.a[?(@ == [1])]"#,
+        json!({"a": [[1], [2], [1, 2]]}),
+        json!([[1]]),
+    );
+}
+
+#[test]
+fn op_eq_array_literal_lhs() {
+    setup();
+
+    // Literal on the left-hand side must behave the same as on the right.
+    select_and_then_compare(
+        r#"$.a[?([1] == @)]"#,
+        json!({"a": [[1], [2]]}),
+        json!([[1]]),
+    );
+}
+
+#[test]
+fn op_eq_object_literal() {
+    setup();
+
+    select_and_then_compare(
+        r#"$.a[?(@ == {"x": 1})]"#,
+        json!({"a": [{"x": 1}, {"x": 2}, {"y": 1}]}),
+        json!([{"x": 1}]),
+    );
+}
+
+#[test]
+fn op_eq_nested_literal() {
+    setup();
+
+    select_and_then_compare(
+        r#"$.a[?(@ == [1, [2]])]"#,
+        json!({"a": [[1, [2]], [1, 2]]}),
+        json!([[1, [2]]]),
+    );
+}
+
+#[test]
+fn op_ne_array_literal() {
+    setup();
+
+    select_and_then_compare(
+        r#"$.a[?(@ != [1])]"#,
+        json!({"a": [[1], [2]]}),
+        json!([[2]]),
+    );
+}
+
+#[test]
+fn op_order_on_literal_matches_nothing() {
+    setup();
+
+    // Ordering comparisons against a structured literal are not comparable.
+    select_and_then_compare(
+        r#"$.a[?(@ > [1])]"#,
+        json!({"a": [[1], [2]]}),
+        json!([]),
+    );
+}
+
+#[test]
 fn op_lt_for_object_value() {
     setup();
 
