@@ -575,6 +575,57 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_membership_in_literal() {
+        setup();
+        verify_json!(path:"$.a[?@ in [2,4]]", json:{"a":[1,2,3,4]}, results:[2,4]);
+    }
+
+    #[test]
+    fn test_membership_nin_literal() {
+        setup();
+        verify_json!(path:"$.a[?@ nin [2,4]]", json:{"a":[1,2,3,4]}, results:[1,3]);
+    }
+
+    #[test]
+    fn test_membership_in_path_array() {
+        setup();
+        verify_json!(path:"$.a[?@ in $.allow]", json:{"a":[1,2,3],"allow":[2,3]}, results:[2,3]);
+    }
+
+    #[test]
+    fn test_membership_structured_in_literal() {
+        setup();
+        verify_json!(path:"$.a[?@ in [[1],[2]]]", json:{"a":[[1],[2],[3]]}, results:[[1],[2]]);
+    }
+
+    #[test]
+    fn test_membership_literal_in_path() {
+        setup();
+        // [4] in @.vals
+        verify_json!(path:"$.items[?[4] in @.vals]",
+            json:{"items":[{"vals":[1,2,[4]]},{"vals":[1,2]}]},
+            results:[{"vals":[1,2,[4]]}]);
+    }
+
+    #[test]
+    fn test_membership_value_in_path() {
+        setup();
+        // @.val in @.vals
+        verify_json!(path:"$.items[?@.val in @.vals]",
+            json:{"items":[{"val":2,"vals":[1,2,3]},{"val":9,"vals":[1,2,3]}]},
+            results:[{"val":2,"vals":[1,2,3]}]);
+    }
+
+    #[test]
+    fn test_membership_number_coercion() {
+        setup();
+        // numbers coerce int/float, aligned with `==`: 1.0 matches literal 1
+        verify_json!(path:"$.a[?@ in [1,2]]", json:{"a":[1.0, 2.0, 3.0]}, results:[1.0,2.0]);
+        // integer element matches a float in the document
+        verify_json!(path:"$.a[?2 in @.vals]", json:{"a":[{"vals":[1.0,2.0]}]}, results:[{"vals":[1.0,2.0]}]);
+    }
+
+    #[test]
     fn test_filter_with_full_scan() {
         setup();
         verify_json!(path:"$..[?(@.code==\"2\")].code", json:[{"code":"1"},{"code":"2"}], results:["2"]);

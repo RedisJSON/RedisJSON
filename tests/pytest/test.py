@@ -1660,6 +1660,26 @@ def testFilterFunctions(env):
     r.expect('JSON.SET', 'doc', '$', json.dumps({"a": ["abc", "xyz", "b"]})).ok()
     r.expect('JSON.GET', 'doc', '$.a[?search(@, "b")]').equal('["abc","b"]')
 
+def testFilterMembership(env):
+    # Test set-membership operators: in / nin
+    r = env
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [1, 2, 3, 4], "allow": [2, 3]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?@ in [2,4]]').equal('[2,4]')
+    r.expect('JSON.GET', 'doc', '$.a[?@ nin [2,4]]').equal('[1,3]')
+    # RHS is a path to an array
+    r.expect('JSON.GET', 'doc', '$.a[?@ in $.allow]').equal('[2,3]')
+    # Structured (deep) membership
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [[1], [2], [3]]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?@ in [[1],[2]]]').equal('[[1],[2]]')
+    # literal/value LHS against a path array
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"items": [{"vals": [1, 2, [4]]}, {"vals": [1, 2]}]})).ok()
+    r.expect('JSON.GET', 'doc', '$.items[?[4] in @.vals]').equal('[{"vals":[1,2,[4]]}]')
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"items": [{"val": 2, "vals": [1, 2, 3]}, {"val": 9, "vals": [1, 2, 3]}]})).ok()
+    r.expect('JSON.GET', 'doc', '$.items[?@.val in @.vals]').equal('[{"val":2,"vals":[1,2,3]}]')
+    # numbers coerce int/float, aligned with `==`
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [1.0, 2.0, 3.0]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?@ in [1,2]]').equal('[1.0,2.0]')
+
 def testMerge(env):
     # Test JSON.MERGE
     r = env

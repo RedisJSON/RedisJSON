@@ -26,7 +26,7 @@ from_root    = {"$" ~ root?}
 
 select_term = _{from_current | from_root}
 
-op = _{ge | gt | le | lt | eq | ne | re}
+op = _{ge | gt | le | lt | eq | ne | re | in_op | nin_op}
     ge = @{">="}
     gt = @{">"}
     le = @{"<="}
@@ -34,6 +34,9 @@ op = _{ge | gt | le | lt | eq | ne | re}
     eq = @{"=="}
     ne = @{"!="}
     re = @{"=~"}
+    // Set-membership operators (word operators; require a non-alphanumeric boundary)
+    in_op = @{"in" ~ !ASCII_ALPHANUMERIC}
+    nin_op = @{"nin" ~ !ASCII_ALPHANUMERIC}
 
 boolean = _{boolean_true | boolean_false}
     boolean_true = @{"true"}
@@ -74,7 +77,12 @@ bracket = _{numbers_range | numbers_list | string_list | all | "?" ~ filter}
 
 element = _{"." ~ literal | full_scan ~ (literal | all | "[" ~ bracket ~ "]") | "." ~ all | ("."? ~ "[" ~ bracket ~ "]")}
 
-first_element = _{literal | all}
+// The bare word operators `in`/`nin` must not be swallowed as a bare path segment
+// (e.g. `@ in [...]`). A field literally named `in`/`nin` is still reachable via
+// `.in` / `["in"]`.
+op_keyword = @{("nin" | "in") ~ !(ASCII_ALPHANUMERIC | "_")}
+
+first_element = _{(!op_keyword ~ literal) | all}
 
 root = {(element|first_element) ~ (element)*}
 

@@ -265,6 +265,31 @@ fn build_literal(pair: Pair<Rule>) -> Literal {
     }
 }
 
+/// A numeric value extracted from a term/value for membership comparison.
+#[derive(Clone, Copy)]
+enum Num {
+    Int(i64),
+    Float(f64),
+}
+
+/// Numeric equality matching `==`: exact for two integers, by `f64` value otherwise.
+fn numbers_equal(a: Num, b: Num) -> bool {
+    match (a, b) {
+        (Num::Int(x), Num::Int(y)) => x == y,
+        (Num::Float(x), Num::Float(y)) => x == y,
+        (Num::Int(x), Num::Float(y)) | (Num::Float(y), Num::Int(x)) => x as f64 == y,
+    }
+}
+
+/// Numeric view of a `SelectValue` (integer or double), `None` if not a number.
+fn value_as_number<V: SelectValue>(v: &V) -> Option<Num> {
+    match v.get_type() {
+        SelectValueType::Long => v.get_long().map(Num::Int),
+        SelectValueType::Double => v.get_double().map(Num::Float),
+        _ => None,
+    }
+}
+
 /// RFC 9535 `length()` on a value: chars for strings, element/member count for
 /// arrays/objects, `None` (Nothing) otherwise. Generic over any `SelectValue`.
 fn value_length<V: SelectValue>(v: &V) -> Option<usize> {
@@ -728,6 +753,72 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
         !self.eq(s)
     }
 
+    /// Numeric view of this term (integer or double), `None` if not a number.
+    fn as_number(&self) -> Option<Num> {
+        match self {
+            TermEvaluationResult::Integer(n) => Some(Num::Int(*n)),
+            TermEvaluationResult::Float(f) => Some(Num::Float(*f)),
+            TermEvaluationResult::Value(v) => value_as_number(v.as_ref()),
+            TermEvaluationResult::Literal(l) => value_as_number(l),
+            TermEvaluationResult::Str(_)
+            | TermEvaluationResult::String(_)
+            | TermEvaluationResult::Bool(_)
+            | TermEvaluationResult::Null
+            | TermEvaluationResult::NodeList(_)
+            | TermEvaluationResult::Invalid => None,
+        }
+    }
+
+    /// Equality between this term and an arbitrary `SelectValue`, used by membership
+    /// (`in`/`nin`). Numbers coerce across integer/float (matching `==`); strings,
+    /// booleans, null and structured values use deep (`is_equal`) equality.
+    fn equals_value<V: SelectValue>(&self, other: &V) -> bool {
+        // Numbers compare by value (int/float coerce), matching `==`.
+        if let (Some(a), Some(b)) = (self.as_number(), value_as_number(other)) {
+            return numbers_equal(a, b);
+        }
+        match self {
+            TermEvaluationResult::Value(v) => is_equal(v.as_ref(), other),
+            TermEvaluationResult::Literal(l) => is_equal(l, other),
+            TermEvaluationResult::NodeList(list) => {
+                list.iter().any(|v| is_equal(v.as_ref(), other))
+            }
+            TermEvaluationResult::Str(s) => other.as_str() == Some(*s),
+            TermEvaluationResult::String(s) => other.as_str() == Some(s.as_str()),
+            TermEvaluationResult::Bool(b) => other.get_bool() == Some(*b),
+            TermEvaluationResult::Null => other.get_type() == SelectValueType::Null,
+            // self is numeric but `other` is not a number -> not equal
+            TermEvaluationResult::Integer(_) | TermEvaluationResult::Float(_) => false,
+            TermEvaluationResult::Invalid => false,
+        }
+    }
+
+    /// Membership: true if `self` deep-equals any element of `arr`. `arr` must be an
+    /// array value, an array literal, or a nodelist; anything else yields false.
+    fn member_of(&self, arr: &Self) -> bool {
+        match arr {
+            TermEvaluationResult::Value(v) if v.as_ref().get_type() == SelectValueType::Array => v
+                .as_ref()
+                .values()
+                .is_some_and(|mut it| it.any(|e| self.equals_value(e.as_ref()))),
+            TermEvaluationResult::Literal(Literal::Array(items)) => {
+                items.iter().any(|it| self.equals_value(it))
+            }
+            TermEvaluationResult::NodeList(list) => {
+                list.iter().any(|v| self.equals_value(v.as_ref()))
+            }
+            TermEvaluationResult::Value(_)
+            | TermEvaluationResult::Literal(_)
+            | TermEvaluationResult::Integer(_)
+            | TermEvaluationResult::Float(_)
+            | TermEvaluationResult::Str(_)
+            | TermEvaluationResult::String(_)
+            | TermEvaluationResult::Bool(_)
+            | TermEvaluationResult::Null
+            | TermEvaluationResult::Invalid => false,
+        }
+    }
+
     fn re_is_match(regex: &str, s: &str) -> bool {
         Regex::new(regex).map_or_else(|_| false, |re| Regex::is_match(&re, s))
     }
@@ -1177,6 +1268,8 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 Rule::eq => term1_val.eq(&term2_val),
                 Rule::ne => term1_val.ne(&term2_val),
                 Rule::re => term1_val.re(&term2_val),
+                Rule::in_op => term1_val.member_of(&term2_val),
+                Rule::nin_op => !term1_val.member_of(&term2_val),
                 _ => {
                     trace!(
                         "evaluate_single_filter: unknown comparison op {:?}",
