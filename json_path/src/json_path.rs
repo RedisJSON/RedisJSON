@@ -471,12 +471,12 @@ fn term_as_string<'i, 'j, S: SelectValue>(arg: &TermEvaluationResult<'i, 'j, S>)
 }
 
 fn regex_is_match(regex: &str, s: &str) -> bool {
-    Regex::new(regex).map_or(false, |re| re.is_match(s))
+    Regex::new(regex).is_ok_and(|re| re.is_match(s))
 }
 
 /// Anchored (full-string) regex match used by RFC 9535 `match()`.
 fn regex_is_full_match(regex: &str, s: &str) -> bool {
-    Regex::new(&format!("^(?:{regex})$")).map_or(false, |re| re.is_match(s))
+    Regex::new(&format!("^(?:{regex})$")).is_ok_and(|re| re.is_match(s))
 }
 
 /// Dispatch a filter-expression function call to its RFC 9535 implementation.

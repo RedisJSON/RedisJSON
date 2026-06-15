@@ -347,3 +347,125 @@ impl SelectValue for Literal {
         None
     }
 }
+
+#[cfg(test)]
+mod literal_tests {
+    use super::*;
+
+    fn sample_object() -> Literal {
+        Literal::Object(vec![
+            ("n".to_string(), Literal::Int(1)),
+            ("f".to_string(), Literal::Float(1.5)),
+            ("s".to_string(), Literal::Str("x".to_string())),
+            ("b".to_string(), Literal::Bool(true)),
+            ("z".to_string(), Literal::Null),
+            (
+                "arr".to_string(),
+                Literal::Array(vec![Literal::Int(1), Literal::Int(2)]),
+            ),
+        ])
+    }
+
+    #[test]
+    fn scalar_accessors() {
+        assert_eq!(Literal::default(), Literal::Null);
+        assert_eq!(Literal::Null.get_type(), SelectValueType::Null);
+        assert_eq!(Literal::Bool(true).get_type(), SelectValueType::Bool);
+        assert_eq!(Literal::Int(3).get_type(), SelectValueType::Long);
+        assert_eq!(Literal::Float(1.5).get_type(), SelectValueType::Double);
+        assert_eq!(
+            Literal::Str("a".to_string()).get_type(),
+            SelectValueType::String
+        );
+
+        assert_eq!(Literal::Bool(true).get_bool(), Some(true));
+        assert_eq!(Literal::Int(7).get_long(), Some(7));
+        assert_eq!(Literal::Float(2.5).get_double(), Some(2.5));
+        assert_eq!(
+            Literal::Str("a".to_string()).get_str(),
+            Some("a".to_string())
+        );
+        assert_eq!(Literal::Str("a".to_string()).as_str(), Some("a"));
+        assert_eq!(Literal::Float(1.0).is_double(), Some(true));
+        assert_eq!(Literal::Int(1).is_double(), Some(false));
+        assert_eq!(Literal::Null.is_double(), None);
+
+        // wrong-variant accessors return None
+        assert_eq!(Literal::Null.get_bool(), None);
+        assert_eq!(Literal::Null.get_long(), None);
+        assert_eq!(Literal::Null.get_double(), None);
+        assert_eq!(Literal::Null.get_str(), None);
+        assert_eq!(Literal::Null.as_str(), None);
+    }
+
+    #[test]
+    fn array_accessors() {
+        let a = Literal::Array(vec![Literal::Int(10), Literal::Int(20)]);
+        assert!(a.is_array());
+        assert!(!Literal::Int(1).is_array());
+        assert_eq!(a.len(), Some(2));
+        assert_eq!(a.is_empty(), Some(false));
+        assert_eq!(Literal::Array(vec![]).is_empty(), Some(true));
+        assert_eq!(a.get_index(1).unwrap().as_ref().get_long(), Some(20));
+        assert!(a.get_index(5).is_none());
+        let vals: Vec<i64> = a
+            .values()
+            .unwrap()
+            .map(|v| v.as_ref().get_long().unwrap())
+            .collect();
+        assert_eq!(vals, vec![10, 20]);
+        assert!(a.get_array().is_null());
+        assert!(a.get_array_type().is_none());
+
+        // scalars are not containers
+        assert_eq!(Literal::Int(1).len(), None);
+        assert_eq!(Literal::Int(1).is_empty(), None);
+        assert!(Literal::Int(1).get_index(0).is_none());
+        assert!(Literal::Int(1).values().is_none());
+        assert!(!Literal::Int(1).contains_key("x"));
+        assert!(Literal::Int(1).keys().is_none());
+        assert!(Literal::Int(1).items().is_none());
+    }
+
+    #[test]
+    fn object_accessors() {
+        let o = sample_object();
+        assert_eq!(o.len(), Some(6));
+        assert_eq!(o.is_empty(), Some(false));
+        assert!(o.contains_key("n"));
+        assert!(!o.contains_key("missing"));
+        assert_eq!(o.get_key("n").unwrap().as_ref().get_long(), Some(1));
+        assert!(o.get_key("missing").is_none());
+        assert!(!o.is_array());
+        assert!(o.get_index(0).is_none());
+        let keys: Vec<&str> = o.keys().unwrap().collect();
+        assert!(keys.contains(&"n") && keys.contains(&"arr"));
+        let items: Vec<&str> = o.items().unwrap().map(|(k, _)| k).collect();
+        assert_eq!(items.len(), 6);
+        let vals = o.values().unwrap().count();
+        assert_eq!(vals, 6);
+    }
+
+    #[test]
+    fn serialize_and_eq() {
+        let a = Literal::Array(vec![
+            Literal::Int(1),
+            Literal::Str("x".to_string()),
+            Literal::Bool(true),
+            Literal::Null,
+            Literal::Float(2.5),
+        ]);
+        assert_eq!(
+            serde_json::to_string(&a).unwrap(),
+            r#"[1,"x",true,null,2.5]"#
+        );
+        let o = Literal::Object(vec![("k".to_string(), Literal::Int(1))]);
+        assert_eq!(serde_json::to_string(&o).unwrap(), r#"{"k":1}"#);
+
+        // PartialEq (via is_equal) and is_equal cross-type
+        assert_eq!(Literal::Int(1), Literal::Int(1));
+        assert_ne!(Literal::Int(1), Literal::Int(2));
+        assert!(is_equal(&Literal::Bool(true), &Literal::Bool(true)));
+        assert!(!is_equal(&Literal::Int(1), &Literal::Null));
+    }
+}

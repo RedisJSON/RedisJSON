@@ -690,6 +690,113 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_literal_string_element() {
+        setup();
+        verify_json!(path:"$.a[?@ == [\"x\"]]", json:{"a":[["x"],["y"]]}, results:[["x"]]);
+    }
+
+    #[test]
+    fn test_literal_bool_and_null() {
+        setup();
+        verify_json!(path:"$.a[?@ == [true, null]]", json:{"a":[[true,null],[false,null]]}, results:[[true,null]]);
+    }
+
+    #[test]
+    fn test_literal_float() {
+        setup();
+        verify_json!(path:"$.a[?@ == [1.5]]", json:{"a":[[1.5],[2.5]]}, results:[[1.5]]);
+    }
+
+    #[test]
+    fn test_arith_unary_plus() {
+        setup();
+        verify_json!(path:"$[?+@.a == 3]", json:[{"a":3},{"a":1}], results:[{"a":3}]);
+    }
+
+    #[test]
+    fn test_arith_mod_by_zero_no_match() {
+        setup();
+        verify_json!(path:"$[?@.a % 0 == 0]", json:[{"a":5}], results:[]);
+    }
+
+    #[test]
+    fn test_arith_non_numeric_operand_no_match() {
+        setup();
+        // arithmetic on a non-number yields Nothing -> no match
+        verify_json!(path:"$[?@.a * 2 == 4]", json:[{"a":"x"}], results:[]);
+    }
+
+    #[test]
+    fn test_arith_mixed_int_float() {
+        setup();
+        verify_json!(path:"$[?@.a + 0.5 == 2.5]", json:[{"a":2},{"a":5}], results:[{"a":2}]);
+    }
+
+    #[test]
+    fn test_arith_float_mul_and_rem() {
+        setup();
+        verify_json!(path:"$[?@.a * 2 == 5]", json:[{"a":2.5},{"a":1}], results:[{"a":2.5}]);
+        verify_json!(path:"$[?@.a % 2 == 1.5]", json:[{"a":3.5},{"a":4}], results:[{"a":3.5}]);
+    }
+
+    #[test]
+    fn test_arith_unary_neg_float() {
+        setup();
+        verify_json!(path:"$[?-@.a == -1.5]", json:[{"a":1.5},{"a":2.0}], results:[{"a":1.5}]);
+    }
+
+    #[test]
+    fn test_function_length_non_container_nothing() {
+        setup();
+        // length of a number is Nothing -> never > 0
+        verify_json!(path:"$.a[?length(@) > 0]", json:{"a":[1,2]}, results:[]);
+    }
+
+    #[test]
+    fn test_function_count_zero_and_one() {
+        setup();
+        // absent query -> 0
+        verify_json!(path:"$[?count(@.x) == 0]", json:[{"y":1}], results:[{"y":1}]);
+        // single node -> 1
+        verify_json!(path:"$[?count(@.y) == 1]", json:[{"y":7}], results:[{"y":7}]);
+    }
+
+    #[test]
+    fn test_function_value_multi_nothing() {
+        setup();
+        // value() of a multi-node query is Nothing -> no match
+        verify_json!(path:"$[?value(@.*) == 1]", json:[{"a":1,"b":2}], results:[]);
+    }
+
+    #[test]
+    fn test_membership_string_bool_null_lhs() {
+        setup();
+        // string / bool / null literal on the left-hand side of `in`
+        verify_json!(path:"$.items[?\"x\" in @.tags]",
+            json:{"items":[{"tags":["x","y"]},{"tags":["z"]}]},
+            results:[{"tags":["x","y"]}]);
+        verify_json!(path:"$.items[?true in @.flags]",
+            json:{"items":[{"flags":[true]},{"flags":[false]}]},
+            results:[{"flags":[true]}]);
+        verify_json!(path:"$.items[?null in @.vals]",
+            json:{"items":[{"vals":[null]},{"vals":[1]}]},
+            results:[{"vals":[null]}]);
+    }
+
+    #[test]
+    fn test_membership_string_value_in_literal() {
+        setup();
+        verify_json!(path:"$.a[?@ in [\"x\",\"y\"]]", json:{"a":["x","z"]}, results:["x"]);
+    }
+
+    #[test]
+    fn test_membership_rhs_not_array_no_match() {
+        setup();
+        // RHS resolves to a scalar (not an array) -> no membership
+        verify_json!(path:"$.items[?@.v in @.set]", json:{"items":[{"v":2,"set":5}]}, results:[]);
+    }
+
+    #[test]
     fn test_filter_with_full_scan() {
         setup();
         verify_json!(path:"$..[?(@.code==\"2\")].code", json:[{"code":"1"},{"code":"2"}], results:["2"]);
