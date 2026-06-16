@@ -632,7 +632,7 @@ fn function_aggregate<'i, 'j, S: SelectValue>(
     arg: Option<&TermEvaluationResult<'i, 'j, S>>,
     agg: fn(&[f64]) -> f64,
 ) -> TermEvaluationResult<'i, 'j, S> {
-    match arg.and_then(|a| term_number_seq(a)) {
+    match arg.and_then(term_number_seq) {
         Some(seq) => TermEvaluationResult::Float(agg(&seq)),
         None => TermEvaluationResult::Invalid,
     }
@@ -1149,8 +1149,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
     /// otherwise ⇒ any element is in `rhs` (empty `self` ⇒ false). A non-array `self`
     /// yields false (so `subsetof`/`anyof` are false and `noneof` is true).
     fn set_relate(&self, rhs: &Self, require_all: bool) -> bool {
-        fn combine(require_all: bool, it: impl Iterator<Item = bool>) -> bool {
-            let mut it = it;
+        fn combine(require_all: bool, mut it: impl Iterator<Item = bool>) -> bool {
             if require_all {
                 it.all(|m| m)
             } else {
