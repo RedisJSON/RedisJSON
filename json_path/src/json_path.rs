@@ -354,7 +354,9 @@ fn num_binop<'i, 'j, S: SelectValue>(
             (y != 0.0).then(|| TermEvaluationResult::Float(a.as_f64() / y))
         }
         Rule::rem => match (a, b) {
-            (Int(x), Int(y)) => (y != 0).then(|| TermEvaluationResult::Integer(x % y)),
+            // `checked_rem` yields None for a zero divisor and for the i64::MIN % -1
+            // overflow, both of which become Nothing (rather than panicking).
+            (Int(x), Int(y)) => x.checked_rem(y).map(TermEvaluationResult::Integer),
             _ => {
                 let y = b.as_f64();
                 (y != 0.0).then(|| TermEvaluationResult::Float(a.as_f64() % y))

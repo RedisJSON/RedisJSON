@@ -720,6 +720,13 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_arith_mod_min_by_neg_one_no_panic() {
+        setup();
+        // i64::MIN % -1 overflows; must yield Nothing (no match), not panic
+        verify_json!(path:"$[?@.a % -1 == 0]", json:[{"a": i64::MIN}], results:[]);
+    }
+
+    #[test]
     fn test_arith_non_numeric_operand_no_match() {
         setup();
         // arithmetic on a non-number yields Nothing -> no match
