@@ -7,7 +7,7 @@
  * GNU Affero General Public License v3 (AGPLv3).
  */
 
-use crate::select_value::{is_equal, Literal, SelectValue, SelectValueType, ValueRef};
+use crate::select_value::{is_equal, SelectValue, SelectValueType, ValueRef};
 use itertools::Itertools;
 use log::trace;
 use pest::iterators::{Pair, Pairs};
@@ -15,6 +15,7 @@ use pest::Parser;
 use pest_derive::Parser;
 use redis_module::rediserror::RedisError;
 use regex::Regex;
+use serde_json::Value;
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -225,16 +226,17 @@ fn unescape_string_value<'a>(pair: Pair<'a, Rule>) -> Cow<'a, str> {
     }
 }
 
-/// Recursively build an owned `Literal` value from an array/object literal
-/// parse subtree (e.g. `[1,{"a":2}]`). Used for structured filter operands.
+/// Recursively build an owned JSON `Value` from an array/object literal parse subtree
+/// (e.g. `[1,{"a":2}]`). Used for structured filter operands; compared against the
+/// document value via the cross-type `is_equal`.
 ///
 /// PERF/TODO: this runs per element during filter evaluation, so a constant literal
 /// (e.g. the array in `$.a[?@ in [1,2,...]]`) is rebuilt for every node. A follow-up
 /// could materialize literals once at `compile()` time and reuse them.
-fn build_literal(pair: Pair<Rule>) -> Literal {
+fn build_literal(pair: Pair<Rule>) -> Value {
     match pair.as_rule() {
-        Rule::array_literal => Literal::Array(pair.into_inner().map(build_literal).collect()),
-        Rule::object_literal => Literal::Object(
+        Rule::array_literal => Value::Array(pair.into_inner().map(build_literal).collect()),
+        Rule::object_literal => Value::Object(
             pair.into_inner()
                 .map(|member| {
                     let mut it = member.into_inner();
@@ -242,7 +244,7 @@ fn build_literal(pair: Pair<Rule>) -> Literal {
                         .next()
                         .map(|k| unescape_string_value(k).into_owned())
                         .unwrap_or_default();
-                    let value = it.next().map_or(Literal::Null, build_literal);
+                    let value = it.next().map_or(Value::Null, build_literal);
                     (key, value)
                 })
                 .collect(),
@@ -250,22 +252,22 @@ fn build_literal(pair: Pair<Rule>) -> Literal {
         Rule::decimal => {
             let s = pair.as_str();
             if let Ok(i) = s.parse::<i64>() {
-                Literal::Int(i)
-            } else if let Ok(f) = s.parse::<f64>() {
-                Literal::Float(f)
+                Value::from(i)
+            } else if let Some(n) = s.parse::<f64>().ok().and_then(serde_json::Number::from_f64) {
+                Value::Number(n)
             } else {
-                Literal::Null
+                Value::Null
             }
         }
         Rule::string_value | Rule::string_value_escape_1 | Rule::string_value_escape_2 => {
-            Literal::Str(unescape_string_value(pair).into_owned())
+            Value::String(unescape_string_value(pair).into_owned())
         }
-        Rule::boolean_true => Literal::Bool(true),
-        Rule::boolean_false => Literal::Bool(false),
-        Rule::null => Literal::Null,
+        Rule::boolean_true => Value::Bool(true),
+        Rule::boolean_false => Value::Bool(false),
+        Rule::null => Value::Null,
         other => {
             trace!("build_literal: unexpected rule {other:?}");
-            Literal::Null
+            Value::Null
         }
     }
 }
@@ -714,7 +716,7 @@ enum TermEvaluationResult<'i, 'j, S: SelectValue> {
     String(String),
     Value(ValueRef<'j, S>),
     /// An array/object literal operand, e.g. `[1,2]` or `{"a":1}` in `?@==[1,2]`.
-    Literal(Literal),
+    Literal(Value),
     Bool(bool),
     Null,
     /// Multiple results from a non-singular query (e.g. `@.*`, `@..key`).
@@ -923,7 +925,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
                 .as_ref()
                 .values()
                 .is_some_and(|mut it| it.any(|e| self.equals_value(e.as_ref()))),
-            TermEvaluationResult::Literal(Literal::Array(items)) => {
+            TermEvaluationResult::Literal(Value::Array(items)) => {
                 items.iter().any(|it| self.equals_value(it))
             }
             TermEvaluationResult::NodeList(list) => {
