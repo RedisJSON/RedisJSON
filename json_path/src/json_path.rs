@@ -510,19 +510,25 @@ type RegexCache = HashMap<String, Option<Regex>>;
 
 /// Compile `pattern` (caching the result in `cache`) and test it against `s`. `full`
 /// anchors the pattern for RFC 9535 `match()`; otherwise it is a substring search
-/// (`search()` / the `=~` operator). The pattern is invariant across the elements of a
-/// filter, so the cache compiles it once per query instead of once per element.
+/// (`search()` / the `=~` operator). A constant pattern is invariant across the elements
+/// of a filter, so the cache compiles it once per query instead of once per element.
 fn regex_matches(cache: &mut RegexCache, pattern: &str, full: bool, s: &str) -> bool {
+    // Past the cap we compile uncached; already-cached patterns (the common constant case) still hit.
+    const MAX_REGEX_CACHE: usize = 64;
     let key = if full {
         format!("^(?:{pattern})$")
     } else {
         pattern.to_string()
     };
-    cache
-        .entry(key)
-        .or_insert_with_key(|k| Regex::new(k).ok())
-        .as_ref()
-        .is_some_and(|re| re.is_match(s))
+    if cache.len() < MAX_REGEX_CACHE || cache.contains_key(&key) {
+        cache
+            .entry(key)
+            .or_insert_with_key(|k| Regex::new(k).ok())
+            .as_ref()
+            .is_some_and(|re| re.is_match(s))
+    } else {
+        Regex::new(&key).is_ok_and(|re| re.is_match(s))
+    }
 }
 
 /// Dispatch a filter-expression function call to its RFC 9535 implementation.

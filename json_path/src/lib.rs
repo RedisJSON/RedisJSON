@@ -575,6 +575,19 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_regex_cache_cap_correctness() {
+        setup();
+        // More distinct (document-value) patterns than the regex-cache cap (64): entries
+        // past the cap take the uncached path; results must still be correct.
+        let items: Vec<Value> = (0..70)
+            .map(|i| json!({"s": format!("v{i}"), "pat": format!("^v{i}$")}))
+            .collect();
+        let j = json!({ "a": items });
+        // each element's string matches its own pattern -> all 70 returned
+        assert_eq!(perform_search("$.a[?@.s =~ @.pat]", &j).len(), 70);
+    }
+
+    #[test]
     fn test_function_ceiling_floor() {
         setup();
         verify_json!(path:"$.a[?ceiling(@) == 3]", json:{"a":[2.1, 3.9, 1.0]}, results:[2.1]);
