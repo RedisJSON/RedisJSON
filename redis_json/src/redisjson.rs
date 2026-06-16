@@ -112,8 +112,9 @@ impl<'a> Path<'a> {
     #[must_use]
     pub fn new(path: &str) -> Path<'_> {
         let fixed_path = if path.starts_with('$')
-            && (path.len() < 2 || (path.as_bytes()[1] == b'.' || path.as_bytes()[1] == b'['))
+            && (path.len() < 2 || matches!(path.as_bytes()[1], b'.' | b'[' | b'~'))
         {
+            // `$~` is the root get-keys operator, so `$` followed by `~` is JSONPath too.
             None
         } else {
             let mut cloned = path.to_string();

@@ -671,6 +671,67 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_get_keys_operator() {
+        setup();
+        // `~` emits each member name as a separate string result
+        verify_json!(path:"$.a~", json:{"a":{"x":1,"y":2}}, results:["x","y"]);
+        // keys of the root
+        verify_json!(path:"$~", json:{"x":1,"y":2}, results:["x","y"]);
+        // non-object (array / scalar) selects nothing
+        verify_json!(path:"$.a~", json:{"a":[1,2]}, results:[]);
+        verify_json!(path:"$.a~", json:{"a":5}, results:[]);
+    }
+
+    #[test]
+    fn test_get_keys_function() {
+        setup();
+        // keys() is the function-form alias for `~`
+        verify_json!(path:"$.a.keys()", json:{"a":{"x":1,"y":2}}, results:["x","y"]);
+        verify_json!(path:"$.keys()", json:{"x":1,"y":2}, results:["x","y"]);
+    }
+
+    #[test]
+    fn test_get_keys_negatives() {
+        setup();
+        // non-object scalars select nothing (string / bool / null / number)
+        verify_json!(path:"$.a~", json:{"a":"str"}, results:[]);
+        verify_json!(path:"$.a~", json:{"a":true}, results:[]);
+        verify_json!(path:"$.a~", json:{"a":null}, results:[]);
+        // empty object has no keys
+        verify_json!(path:"$.a~", json:{"a":{}}, results:[]);
+        verify_json!(path:"$.a.keys()", json:{"a":{}}, results:[]);
+        // root that is an array / scalar selects nothing
+        verify_json!(path:"$~", json:[1,2,3], results:[]);
+        // a missing path selects nothing (never reaches the get-keys step)
+        verify_json!(path:"$.missing~", json:{"a":{"x":1}}, results:[]);
+        verify_json!(path:"$.missing.keys()", json:{"a":{"x":1}}, results:[]);
+        // keys() on a non-object
+        verify_json!(path:"$.a.keys()", json:{"a":[1,2]}, results:[]);
+    }
+
+    #[test]
+    fn test_get_keys_trailing_path() {
+        setup();
+        // a path after `~`/`keys()` navigates into the emitted key strings, which have no
+        // children -> selects nothing (the keys themselves are only returned when the
+        // get-keys step is terminal)
+        verify_json!(path:"$.a~.x", json:{"a":{"x":1,"y":2}}, results:[]);
+        verify_json!(path:"$.a.keys().x", json:{"a":{"x":1,"y":2}}, results:[]);
+        verify_json!(path:"$.keys().foo", json:{"a":{"x":1}}, results:[]);
+        verify_json!(path:"$~.a", json:{"a":{"x":1}}, results:[]);
+        verify_json!(path:"$.a~[0]", json:{"a":{"x":1}}, results:[]);
+    }
+
+    #[test]
+    fn test_get_keys_invalid_syntax() {
+        setup();
+        // `.~` is not valid: `.` must be followed by a field, `*`, or keys(); use bare `~`
+        // (e.g. `$.obj~`) or the `keys()` form instead.
+        assert!(json_path::compile("$.~.a").is_err());
+        assert!(json_path::compile("$.a.~").is_err());
+    }
+
+    #[test]
     fn test_membership_in_literal() {
         setup();
         verify_json!(path:"$.a[?@ in [2,4]]", json:{"a":[1,2,3,4]}, results:[2,4]);
