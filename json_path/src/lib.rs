@@ -797,6 +797,34 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_membership_nin_non_array_rhs() {
+        setup();
+        // `nin` is the strict negation of `in` (matches Jayway): a non-array / absent RHS
+        // makes `in` false, so `nin` matches.
+        verify_json!(path:"$.items[?@.v nin @.set]", json:{"items":[{"v":2,"set":5}]}, results:[{"v":2,"set":5}]);
+        verify_json!(path:"$.items[?@.v nin @.missing]", json:{"items":[{"v":2}]}, results:[{"v":2}]);
+    }
+
+    #[test]
+    fn test_arith_requires_spaces() {
+        setup();
+        // `@.a + 1` (spaces) is addition
+        verify_json!(path:"$[?@.a + 1 == 3]", json:[{"a":2}], results:[{"a":2}]);
+        // `@.a+1` (no spaces) is a field named "a+1" (existence test), NOT arithmetic:
+        // only the doc with that key matches; `{"a":2}` does not (which it would if this
+        // were `@.a + 1`).
+        verify_json!(path:"$[?@.a+1]", json:[{"a+1":5},{"a":2}], results:[{"a+1":5}]);
+    }
+
+    #[test]
+    fn test_bare_term_bool_literal() {
+        setup();
+        // Bare boolean term: `false` matches nothing, `true` matches every node.
+        verify_json!(path:"$[?false]", json:[1,2,3], results:[]);
+        verify_json!(path:"$[?true]", json:[1,2,3], results:[1,2,3]);
+    }
+
+    #[test]
     fn test_filter_with_full_scan() {
         setup();
         verify_json!(path:"$..[?(@.code==\"2\")].code", json:[{"code":"1"},{"code":"2"}], results:["2"]);

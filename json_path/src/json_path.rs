@@ -17,6 +17,7 @@ use redis_module::rediserror::RedisError;
 use regex::Regex;
 use std::borrow::Cow;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::fmt::Debug;
 
 // Macro to handle items() iterator for both Borrowed and Owned ValueRef cases
@@ -226,6 +227,10 @@ fn unescape_string_value<'a>(pair: Pair<'a, Rule>) -> Cow<'a, str> {
 
 /// Recursively build an owned `Literal` value from an array/object literal
 /// parse subtree (e.g. `[1,{"a":2}]`). Used for structured filter operands.
+///
+/// PERF/TODO: this runs per element during filter evaluation, so a constant literal
+/// (e.g. the array in `$.a[?@ in [1,2,...]]`) is rebuilt for every node. A follow-up
+/// could materialize literals once at `compile()` time and reuse them.
 fn build_literal(pair: Pair<Rule>) -> Literal {
     match pair.as_rule() {
         Rule::array_literal => Literal::Array(pair.into_inner().map(build_literal).collect()),
@@ -273,6 +278,11 @@ enum Num {
 }
 
 /// Numeric equality matching `==`: exact for two integers, by `f64` value otherwise.
+///
+/// NOTE: mixed int/float comparison goes through `f64`, which loses precision above
+/// 2^53 — e.g. `9007199254740993` and `9007199254740992` compare equal. This matches
+/// the existing `==`/`is_equal` numeric coercion, but `in`/`nin` now route through here
+/// too, so large-integer membership can match a near-but-unequal value.
 fn numbers_equal(a: Num, b: Num) -> bool {
     match (a, b) {
         (Num::Int(x), Num::Int(y)) => x == y,
@@ -470,19 +480,30 @@ fn term_as_string<'i, 'j, S: SelectValue>(arg: &TermEvaluationResult<'i, 'j, S>)
     }
 }
 
-fn regex_is_match(regex: &str, s: &str) -> bool {
-    Regex::new(regex).is_ok_and(|re| re.is_match(s))
-}
+type RegexCache = HashMap<String, Option<Regex>>;
 
-/// Anchored (full-string) regex match used by RFC 9535 `match()`.
-fn regex_is_full_match(regex: &str, s: &str) -> bool {
-    Regex::new(&format!("^(?:{regex})$")).is_ok_and(|re| re.is_match(s))
+/// Compile `pattern` (caching the result in `cache`) and test it against `s`. `full`
+/// anchors the pattern for RFC 9535 `match()`; otherwise it is a substring search
+/// (`search()` / the `=~` operator). The pattern is invariant across the elements of a
+/// filter, so the cache compiles it once per query instead of once per element.
+fn regex_matches(cache: &mut RegexCache, pattern: &str, full: bool, s: &str) -> bool {
+    let key = if full {
+        format!("^(?:{pattern})$")
+    } else {
+        pattern.to_string()
+    };
+    cache
+        .entry(key)
+        .or_insert_with_key(|k| Regex::new(k).ok())
+        .as_ref()
+        .is_some_and(|re| re.is_match(s))
 }
 
 /// Dispatch a filter-expression function call to its RFC 9535 implementation.
 fn eval_function<'i, 'j, S: SelectValue>(
     name: &str,
     mut args: Vec<TermEvaluationResult<'i, 'j, S>>,
+    cache: &mut RegexCache,
 ) -> TermEvaluationResult<'i, 'j, S> {
     match name {
         "length" => args
@@ -497,15 +518,16 @@ fn eval_function<'i, 'j, S: SelectValue>(
             let s = args.first().and_then(term_as_string);
             let re = args.get(1).and_then(term_as_string);
             match (s, re) {
-                (Some(s), Some(re)) => TermEvaluationResult::Bool(if full {
-                    regex_is_full_match(&re, &s)
-                } else {
-                    regex_is_match(&re, &s)
-                }),
+                (Some(s), Some(re)) => {
+                    TermEvaluationResult::Bool(regex_matches(cache, &re, full, &s))
+                }
                 _ => TermEvaluationResult::Bool(false),
             }
         }
-        _ => TermEvaluationResult::Invalid,
+        other => {
+            trace!("eval_function: unknown function {other:?}");
+            TermEvaluationResult::Invalid
+        }
     }
 }
 
@@ -827,7 +849,10 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
                 .any(|v| self.eq(&TermEvaluationResult::Value(v.clone()))),
             (TermEvaluationResult::Value(v1), TermEvaluationResult::Value(v2)) => v1 == v2,
             // Structured literal operands deep-compare against the document value
-            // (any `SelectValue`) via the cross-type `is_equal`.
+            // (any `SelectValue`) via the cross-type `is_equal`. Like the existing
+            // `Value == Value` path above, this is type-strict for numbers: nested
+            // integers do not match doubles (e.g. `@ == [1]` does not match `[1.0]`),
+            // unlike scalar `==` / `in` which coerce. Kept consistent with `is_equal`.
             (TermEvaluationResult::Value(v), TermEvaluationResult::Literal(l)) => {
                 is_equal(v.as_ref(), l)
             }
@@ -914,17 +939,18 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
         }
     }
 
-    fn re_is_match(regex: &str, s: &str) -> bool {
-        Regex::new(regex).map_or_else(|_| false, |re| Regex::is_match(&re, s))
+    fn re_is_match(cache: &mut RegexCache, regex: &str, s: &str) -> bool {
+        // Substring match, shared (and cached) with `search()`.
+        regex_matches(cache, regex, false, s)
     }
 
-    fn re_match(&self, s: &Self) -> bool {
+    fn re_match(&self, s: &Self, cache: &mut RegexCache) -> bool {
         match (self, s) {
             (TermEvaluationResult::Value(v), TermEvaluationResult::Str(regex)) => {
                 match v.get_type() {
-                    SelectValueType::String => {
-                        v.as_str().is_some_and(|s| Self::re_is_match(regex, s))
-                    }
+                    SelectValueType::String => v
+                        .as_str()
+                        .is_some_and(|s| Self::re_is_match(cache, regex, s)),
                     _ => false,
                 }
             }
@@ -933,8 +959,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
                     (SelectValueType::String, SelectValueType::String) => v1
                         .as_str()
                         .zip(v2.as_str())
-                        .map(|(s1, s2)| Self::re_is_match(s2, s1))
-                        .unwrap_or(false),
+                        .is_some_and(|(s1, s2)| Self::re_is_match(cache, s2, s1)),
                     (_, _) => false,
                 }
             }
@@ -942,15 +967,15 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
         }
     }
 
-    fn re(&self, s: &Self) -> bool {
+    fn re(&self, s: &Self, cache: &mut RegexCache) -> bool {
         match (self, s) {
             (TermEvaluationResult::NodeList(list), _) => list
                 .iter()
-                .any(|v| TermEvaluationResult::Value(v.clone()).re(s)),
+                .any(|v| TermEvaluationResult::Value(v.clone()).re(s, cache)),
             (_, TermEvaluationResult::NodeList(list)) => list
                 .iter()
-                .any(|v| self.re(&TermEvaluationResult::Value(v.clone()))),
-            _ => self.re_match(s),
+                .any(|v| self.re(&TermEvaluationResult::Value(v.clone()), cache)),
+            _ => self.re_match(s, cache),
         }
     }
 }
@@ -970,10 +995,13 @@ pub struct CalculationResult<'i, S: SelectValue, UPT: UserPathTracker> {
     pub path_tracker: Option<UPT>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 struct PathCalculatorData<'i, S: SelectValue, UPT: UserPathTracker> {
     results: Vec<CalculationResult<'i, S, UPT>>,
     root: ValueRef<'i, S>,
+    /// Per-query compiled-regex cache (see `RegexCache`), threaded as `&mut` through
+    /// filter evaluation. Dropped with this struct when the query ends.
+    regex_cache: RegexCache,
 }
 
 // The following block of code is used to create a unified iterator for arrays and objects.
@@ -1290,7 +1318,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 for arg in inner {
                     args.push(self.evaluate_single_term(arg, json.clone(), calc_data));
                 }
-                eval_function(name, args)
+                eval_function(name, args, &mut calc_data.regex_cache)
             }
             Rule::string_value | Rule::string_value_escape_1 | Rule::string_value_escape_2 => {
                 match unescape_string_value(term) {
@@ -1303,6 +1331,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                     let mut calc_data = PathCalculatorData {
                         results: Vec::new(),
                         root: json.clone(),
+                        regex_cache: HashMap::new(),
                     };
                     self.calc_internal(term.into_inner(), json, None, &mut calc_data);
                     Self::results_to_term(calc_data.results)
@@ -1314,6 +1343,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                     let mut new_calc_data = PathCalculatorData {
                         results: Vec::new(),
                         root: calc_data.root.clone(),
+                        regex_cache: HashMap::new(),
                     };
                     self.calc_internal(
                         term.into_inner(),
@@ -1444,8 +1474,11 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 Rule::le => term1_val.le(&term2_val),
                 Rule::eq => term1_val.eq(&term2_val),
                 Rule::ne => term1_val.ne(&term2_val),
-                Rule::re => term1_val.re(&term2_val),
+                Rule::re => term1_val.re(&term2_val, &mut calc_data.regex_cache),
                 Rule::in_op => term1_val.member_of(&term2_val),
+                // `nin` is the strict negation of `in`, matching Jayway (its
+                // NotInEvaluator returns `!In`): a non-array / absent RHS makes `in`
+                // false, so `nin` is true.
                 Rule::nin_op => !term1_val.member_of(&term2_val),
                 _ => {
                     trace!(
@@ -1682,6 +1715,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         let mut calc_data = PathCalculatorData {
             results: Vec::new(),
             root: json.clone(),
+            regex_cache: HashMap::new(),
         };
         if self.tracker_generator.is_some() {
             self.calc_internal(root, json, Some(create_empty_tracker()), &mut calc_data);

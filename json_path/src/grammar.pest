@@ -34,9 +34,10 @@ op = _{ge | gt | le | lt | eq | ne | re | in_op | nin_op}
     eq = @{"=="}
     ne = @{"!="}
     re = @{"=~"}
-    // Set-membership operators (word operators; require a non-alphanumeric boundary)
-    in_op = @{"in" ~ !ASCII_ALPHANUMERIC}
-    nin_op = @{"nin" ~ !ASCII_ALPHANUMERIC}
+    // Set-membership operators (word operators). The trailing boundary must match
+    // `op_keyword` below so the operator and the path-segment guard agree.
+    in_op = @{"in" ~ !(ASCII_ALPHANUMERIC | "_")}
+    nin_op = @{"nin" ~ !(ASCII_ALPHANUMERIC | "_")}
 
 boolean = _{boolean_true | boolean_false}
     boolean_true = @{"true"}
@@ -100,6 +101,9 @@ element = _{"." ~ literal | full_scan ~ (literal | all | "[" ~ bracket ~ "]") | 
 // The bare word operators `in`/`nin` must not be swallowed as a bare path segment
 // (e.g. `@ in [...]`). A field literally named `in`/`nin` is still reachable via
 // `.in` / `["in"]`.
+// NOTE: this is a deliberate, documented behavior change: a bare first segment named
+// `in`/`nin` (e.g. `$in`, `@in`) no longer parses as a path to that field — use
+// `$.in` / `$["in"]` instead.
 op_keyword = @{("nin" | "in") ~ !(ASCII_ALPHANUMERIC | "_")}
 
 first_element = _{(!op_keyword ~ literal) | all}
