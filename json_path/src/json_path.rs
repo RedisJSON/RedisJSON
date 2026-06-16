@@ -302,6 +302,28 @@ fn value_as_number<V: SelectValue>(v: &V) -> Option<Num> {
     }
 }
 
+/// True if `needle` deep-equals any element of the array-shaped term `haystack` (array
+/// value, array literal, or nodelist). Comparison is type-strict like structured `==`
+/// (`is_equal`): nested numbers do not coerce, so `1` ≠ `1.0`. Non-array `haystack` ⇒ false.
+fn value_in_array<'i, 'j, S: SelectValue, V: SelectValue>(
+    needle: &V,
+    haystack: &TermEvaluationResult<'i, 'j, S>,
+) -> bool {
+    match haystack {
+        TermEvaluationResult::Value(v) if v.as_ref().get_type() == SelectValueType::Array => v
+            .as_ref()
+            .values()
+            .is_some_and(|mut it| it.any(|e| is_equal(needle, e.as_ref()))),
+        TermEvaluationResult::Literal(Value::Array(items)) => {
+            items.iter().any(|it| is_equal(needle, it))
+        }
+        TermEvaluationResult::NodeList(list) => {
+            list.iter().any(|v| is_equal(needle, v.as_ref()))
+        }
+        _ => false,
+    }
+}
+
 impl Num {
     fn as_f64(self) -> f64 {
         match self {
@@ -945,6 +967,45 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
         }
     }
 
+    /// Set relation between two arrays (`subsetof`/`anyof`/`noneof`). Folds
+    /// `value_in_array(element, rhs)` over the elements of the array-shaped `self`:
+    /// `require_all` ⇒ every element must be in `rhs` (empty `self` ⇒ true);
+    /// otherwise ⇒ any element is in `rhs` (empty `self` ⇒ false). A non-array `self`
+    /// yields false (so `subsetof`/`anyof` are false and `noneof` is true).
+    fn set_relate(&self, rhs: &Self, require_all: bool) -> bool {
+        fn combine(require_all: bool, it: impl Iterator<Item = bool>) -> bool {
+            let mut it = it;
+            if require_all {
+                it.all(|m| m)
+            } else {
+                it.any(|m| m)
+            }
+        }
+        match self {
+            TermEvaluationResult::Value(v) if v.as_ref().get_type() == SelectValueType::Array => v
+                .as_ref()
+                .values()
+                .is_some_and(|it| combine(require_all, it.map(|e| value_in_array(e.as_ref(), rhs)))),
+            TermEvaluationResult::Literal(Value::Array(items)) => {
+                combine(require_all, items.iter().map(|e| value_in_array(e, rhs)))
+            }
+            TermEvaluationResult::NodeList(list) => {
+                combine(require_all, list.iter().map(|v| value_in_array(v.as_ref(), rhs)))
+            }
+            _ => false,
+        }
+    }
+
+    /// `arr1 subsetof arr2`: every element of `self` is a member of `rhs`.
+    fn subset_of(&self, rhs: &Self) -> bool {
+        self.set_relate(rhs, true)
+    }
+
+    /// `arr1 anyof arr2`: `self` and `rhs` have a non-empty intersection.
+    fn any_of(&self, rhs: &Self) -> bool {
+        self.set_relate(rhs, false)
+    }
+
     fn re_is_match(cache: &mut RegexCache, regex: &str, s: &str) -> bool {
         // Substring match, shared (and cached) with `search()`.
         regex_matches(cache, regex, false, s)
@@ -1485,6 +1546,10 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 // `nin` is the strict negation of `in`: a non-array / absent RHS makes
                 // `in` false, so `nin` is true.
                 Rule::nin_op => !term1_val.member_of(&term2_val),
+                Rule::subsetof_op => term1_val.subset_of(&term2_val),
+                Rule::anyof_op => term1_val.any_of(&term2_val),
+                // `noneof` = empty intersection = strict negation of `anyof`.
+                Rule::noneof_op => !term1_val.any_of(&term2_val),
                 _ => {
                     trace!(
                         "evaluate_single_filter: unknown comparison op {:?}",

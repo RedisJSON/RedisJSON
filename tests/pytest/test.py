@@ -1680,6 +1680,22 @@ def testFilterMembership(env):
     r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [1.0, 2.0, 3.0]})).ok()
     r.expect('JSON.GET', 'doc', '$.a[?@ in [1,2]]').equal('[1.0,2.0]')
 
+def testFilterSetRelations(env):
+    # Test set-relation operators: subsetof / anyof / noneof
+    r = env
+    # subsetof: every element present; empty array is always a subset
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [[1, 2], [1, 5], []]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?@ subsetof [1,2,3]]').equal('[[1,2],[]]')
+    # subsetof with a path-array RHS
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"items": [{"val": [1, 2], "vals": [1, 2, 3]}, {"val": [1, 9], "vals": [1, 2, 3]}]})).ok()
+    r.expect('JSON.GET', 'doc', '$.items[?@.val subsetof @.vals]').equal('[{"val":[1,2],"vals":[1,2,3]}]')
+    # anyof: non-empty intersection; empty array has none
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [[1, 9], [8, 9], []]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?@ anyof [1,2,3]]').equal('[[1,9]]')
+    # noneof: empty intersection; empty array trivially matches
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [[4, 5], [1, 9], []]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?@ noneof [1,2,3]]').equal('[[4,5],[]]')
+
 def testFilterArithmetic(env):
     # Test arithmetic operators in filters: + - * / % and unary, with precedence
     r = env

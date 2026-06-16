@@ -626,6 +626,42 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_set_subsetof_literal() {
+        setup();
+        // every element must be present; empty array is always a subset
+        verify_json!(path:"$.a[?@ subsetof [1,2,3]]", json:{"a":[[1,2],[1,5],[]]}, results:[[1,2],[]]);
+    }
+
+    #[test]
+    fn test_set_subsetof_path() {
+        setup();
+        verify_json!(path:"$.items[?@.val subsetof @.vals]",
+            json:{"items":[{"val":[1,2],"vals":[1,2,3]},{"val":[1,9],"vals":[1,2,3]}]},
+            results:[{"val":[1,2],"vals":[1,2,3]}]);
+    }
+
+    #[test]
+    fn test_set_subsetof_type_strict() {
+        setup();
+        // array comparison is type-strict like structured `==`: floats do not match ints
+        verify_json!(path:"$.a[?@ subsetof [1.0,2.0,3.0]]", json:{"a":[[1.0,2.0],[1,2]]}, results:[[1.0,2.0]]);
+    }
+
+    #[test]
+    fn test_set_anyof() {
+        setup();
+        // non-empty intersection; empty array has none
+        verify_json!(path:"$.a[?@ anyof [1,2,3]]", json:{"a":[[1,9],[8,9],[]]}, results:[[1,9]]);
+    }
+
+    #[test]
+    fn test_set_noneof() {
+        setup();
+        // empty intersection; empty array trivially matches (no shared element)
+        verify_json!(path:"$.a[?@ noneof [1,2,3]]", json:{"a":[[4,5],[1,9],[]]}, results:[[4,5],[]]);
+    }
+
+    #[test]
     fn test_arith_add() {
         setup();
         verify_json!(path:"$[?@.a + 1 == 3]", json:[{"a":2},{"a":5}], results:[{"a":2}]);
