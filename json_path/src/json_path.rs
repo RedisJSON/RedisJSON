@@ -526,6 +526,56 @@ fn regex_matches(cache: &mut RegexCache, pattern: &str, full: bool, s: &str) -> 
 }
 
 /// Dispatch a filter-expression function call to its RFC 9535 implementation.
+/// `ceiling(n)`/`floor(n)`: round a number to an integer using `round`
+/// (`f64::ceil`/`f64::floor`). Integers pass through unchanged; a non-numeric argument
+/// or a result outside the `i64` range is Nothing.
+fn function_round<'i, 'j, S: SelectValue>(
+    arg: Option<&TermEvaluationResult<'i, 'j, S>>,
+    round: fn(f64) -> f64,
+) -> TermEvaluationResult<'i, 'j, S> {
+    match arg.and_then(TermEvaluationResult::as_number) {
+        Some(Num::Int(n)) => TermEvaluationResult::Integer(n),
+        Some(Num::Float(f)) => {
+            let r = round(f);
+            if r.is_finite() && r >= i64::MIN as f64 && r <= i64::MAX as f64 {
+                TermEvaluationResult::Integer(r as i64)
+            } else {
+                TermEvaluationResult::Invalid
+            }
+        }
+        None => TermEvaluationResult::Invalid,
+    }
+}
+
+/// `abs(n)`: absolute value. Integers stay integers (i64::MIN overflows -> Nothing);
+/// doubles stay doubles. A non-numeric argument is Nothing.
+fn function_abs<'i, 'j, S: SelectValue>(
+    arg: Option<&TermEvaluationResult<'i, 'j, S>>,
+) -> TermEvaluationResult<'i, 'j, S> {
+    match arg.and_then(TermEvaluationResult::as_number) {
+        Some(Num::Int(n)) => n
+            .checked_abs()
+            .map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Integer),
+        Some(Num::Float(f)) => TermEvaluationResult::Float(f.abs()),
+        None => TermEvaluationResult::Invalid,
+    }
+}
+
+/// `concat(s1, s2, ...)`: concatenate string arguments into one string. Any non-string
+/// argument yields Nothing.
+fn function_concat<'i, 'j, S: SelectValue>(
+    args: &[TermEvaluationResult<'i, 'j, S>],
+) -> TermEvaluationResult<'i, 'j, S> {
+    let mut out = String::new();
+    for a in args {
+        match term_as_str(a) {
+            Some(s) => out.push_str(s),
+            None => return TermEvaluationResult::Invalid,
+        }
+    }
+    TermEvaluationResult::String(out)
+}
+
 fn eval_function<'i, 'j, S: SelectValue>(
     name: &str,
     mut args: Vec<TermEvaluationResult<'i, 'j, S>>,
@@ -539,6 +589,10 @@ fn eval_function<'i, 'j, S: SelectValue>(
             TermEvaluationResult::Integer(function_count(a))
         }),
         "value" if args.len() == 1 => function_value(args.pop().unwrap()),
+        "ceiling" => function_round(args.first(), f64::ceil),
+        "floor" => function_round(args.first(), f64::floor),
+        "abs" => function_abs(args.first()),
+        "concat" => function_concat(&args),
         "match" | "search" => {
             let full = name == "match";
             let s = args.first().and_then(term_as_str);

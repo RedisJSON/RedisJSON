@@ -575,6 +575,34 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_function_ceiling_floor() {
+        setup();
+        verify_json!(path:"$.a[?ceiling(@) == 3]", json:{"a":[2.1, 3.9, 1.0]}, results:[2.1]);
+        verify_json!(path:"$.a[?floor(@) == 2]", json:{"a":[2.1, 2.9, 3.5]}, results:[2.1, 2.9]);
+        // integers pass through unchanged
+        verify_json!(path:"$.a[?ceiling(@) == 5]", json:{"a":[5, 6]}, results:[5]);
+    }
+
+    #[test]
+    fn test_function_abs() {
+        setup();
+        // integer abs stays integer; float abs stays float (objects, since the macro's
+        // result list can't hold a bare negative literal)
+        verify_json!(path:"$.a[?abs(@.n) == 5]", json:{"a":[{"n":-5},{"n":5},{"n":-3}]}, results:[{"n":-5},{"n":5}]);
+        verify_json!(path:"$.a[?abs(@.n) == 2.5]", json:{"a":[{"n":-2.5},{"n":2.5},{"n":1.0}]}, results:[{"n":-2.5},{"n":2.5}]);
+    }
+
+    #[test]
+    fn test_function_concat() {
+        setup();
+        verify_json!(path:"$.a[?concat(@.x, @.y) == \"ab\"]",
+            json:{"a":[{"x":"a","y":"b"},{"x":"a","y":"c"}]},
+            results:[{"x":"a","y":"b"}]);
+        // a non-string argument yields Nothing -> no match
+        verify_json!(path:"$.a[?concat(@.x, @.y) == \"a1\"]", json:{"a":[{"x":"a","y":1}]}, results:[]);
+    }
+
+    #[test]
     fn test_membership_in_literal() {
         setup();
         verify_json!(path:"$.a[?@ in [2,4]]", json:{"a":[1,2,3,4]}, results:[2,4]);

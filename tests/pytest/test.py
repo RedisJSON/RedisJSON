@@ -1660,6 +1660,20 @@ def testFilterFunctions(env):
     r.expect('JSON.SET', 'doc', '$', json.dumps({"a": ["abc", "xyz", "b"]})).ok()
     r.expect('JSON.GET', 'doc', '$.a[?search(@, "b")]').equal('["abc","b"]')
 
+def testFilterNumericStringFunctions(env):
+    # Test ceiling / floor / abs / concat
+    r = env
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [2.1, 3.9, 1.0]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?ceiling(@) == 3]').equal('[2.1]')
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [2.1, 2.9, 3.5]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?floor(@) == 2]').equal('[2.1,2.9]')
+    # abs: integer stays integer, float stays float
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [{"n": -5}, {"n": 5}, {"n": -3}]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?abs(@.n) == 5]').equal('[{"n":-5},{"n":5}]')
+    # concat: string concatenation; non-string arg -> no match
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [{"x": "a", "y": "b"}, {"x": "a", "y": "c"}]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?concat(@.x, @.y) == "ab"]').equal('[{"x":"a","y":"b"}]')
+
 def testFilterMembership(env):
     # Test set-membership operators: in / nin
     r = env
