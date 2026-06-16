@@ -316,10 +316,10 @@ impl Num {
 ///
 /// Division/modulo by zero returns `None`, which the caller turns into `Invalid`
 /// (RFC 9535 "Nothing"): the surrounding comparison then evaluates to false and the
-/// node is skipped. NOTE: this differs from PostgreSQL SQL/JSON path, which raises a
-/// hard "division by zero" error. We return Nothing instead because the path
-/// evaluator has no error channel — every operand resolves to a value or to Nothing,
-/// never to an error — so a single bad element cannot abort the whole command. (Same
+/// node is skipped. NOTE: rather than raising a hard "division by zero" error, we
+/// return Nothing because the path evaluator has no error channel — every operand
+/// resolves to a value or to Nothing, never to an error — so a single bad element
+/// cannot abort the whole command. (Same
 /// rule applies to any non-numeric arithmetic operand, e.g. `@.str * 2` → Nothing.)
 fn num_binop<'i, 'j, S: SelectValue>(
     operator: Rule,
@@ -1480,9 +1480,8 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 Rule::ne => term1_val.ne(&term2_val),
                 Rule::re => term1_val.re(&term2_val, &mut calc_data.regex_cache),
                 Rule::in_op => term1_val.member_of(&term2_val),
-                // `nin` is the strict negation of `in`, matching Jayway (its
-                // NotInEvaluator returns `!In`): a non-array / absent RHS makes `in`
-                // false, so `nin` is true.
+                // `nin` is the strict negation of `in`: a non-array / absent RHS makes
+                // `in` false, so `nin` is true.
                 Rule::nin_op => !term1_val.member_of(&term2_val),
                 _ => {
                     trace!(

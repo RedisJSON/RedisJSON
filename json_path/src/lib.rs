@@ -799,7 +799,7 @@ mod json_path_tests {
     #[test]
     fn test_membership_nin_non_array_rhs() {
         setup();
-        // `nin` is the strict negation of `in` (matches Jayway): a non-array / absent RHS
+        // `nin` is the strict negation of `in`: a non-array / absent RHS
         // makes `in` false, so `nin` matches.
         verify_json!(path:"$.items[?@.v nin @.set]", json:{"items":[{"v":2,"set":5}]}, results:[{"v":2,"set":5}]);
         verify_json!(path:"$.items[?@.v nin @.missing]", json:{"items":[{"v":2}]}, results:[{"v":2}]);

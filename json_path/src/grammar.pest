@@ -61,7 +61,7 @@ term = _{select_term | decimal | string | boolean | null | array_literal | objec
 // `literal` charset already includes + - / % (so `@.a+1` is a field name, while
 // `@.a + 1` is addition). Precedence: unary, then * / %, then + -.
 // Division/modulo by zero (and any non-numeric operand) yields Nothing, so the
-// comparison is false and the node is skipped (unlike PostgreSQL, which errors).
+// comparison is false and the node is skipped (we yield Nothing rather than erroring).
 add = @{"+"}
 sub = @{"-"}
 mul = @{"*"}
