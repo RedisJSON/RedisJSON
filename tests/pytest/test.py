@@ -1600,6 +1600,104 @@ def testFilterPrecedence(env):
     r.assertEqual(json.loads(res), [doc[0]])
     r.expect('JSON.GET', 'doc', '$[?(@.f==true || @.one==1 && @.t==false)]').equal('[]')
 
+def testFilterStructuredLiterals(env):
+    # Test array/object literals as filter operands (#949)
+    r = env
+    doc = {
+        "arrs": [[1], [2], [1, 2], [1, [2]]],
+        "objs": [{"x": 1}, {"x": 2}, {"y": 1}]
+    }
+    r.expect('JSON.SET', 'doc', '$', json.dumps(doc)).ok()
+    # Array literal equality (right- and left-hand side)
+    r.expect('JSON.GET', 'doc', '$.arrs[?(@ == [1])]').equal('[[1]]')
+    r.expect('JSON.GET', 'doc', '$.arrs[?([1] == @)]').equal('[[1]]')
+    # Nested array literal
+    r.expect('JSON.GET', 'doc', '$.arrs[?(@ == [1,[2]])]').equal('[[1,[2]]]')
+    # Inequality
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'doc', '$.arrs[?(@ != [1])]')),
+                  [[2], [1, 2], [1, [2]]])
+    # Object literal equality
+    r.expect('JSON.GET', 'doc', '$.objs[?(@ == {"x":1})]').equal('[{"x":1}]')
+    # Ordering against a structured literal is not comparable -> no match
+    r.expect('JSON.GET', 'doc', '$.arrs[?(@ > [1])]').equal('[]')
+
+def testFilterNegation(env):
+    # Test logical negation `!` in filter expressions
+    r = env
+    doc = [{"a": 1, "b": 1}, {"b": 2}, {"a": 1}, {"c": 3}]
+    r.expect('JSON.SET', 'doc', '$', json.dumps(doc)).ok()
+    # Existence negation
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'doc', '$[?!@.a]')),
+                  [{"b": 2}, {"c": 3}])
+    # Double negation -> existence
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'doc', '$[?!!@.a]')),
+                  [{"a": 1, "b": 1}, {"a": 1}])
+    # Negated comparison (parenthesized and bare)
+    r.expect('JSON.GET', 'doc', '$[?!(@.a==1)]').equal('[{"b":2},{"c":3}]')
+    r.expect('JSON.GET', 'doc', '$[?!@.a==1]').equal('[{"b":2},{"c":3}]')
+    # Precedence: !@.a && @.b  ==>  (!@.a) && @.b
+    r.expect('JSON.GET', 'doc', '$[?!@.a && @.b]').equal('[{"b":2}]')
+    # !(@.a || @.b)
+    r.expect('JSON.GET', 'doc', '$[?!(@.a || @.b)]').equal('[{"c":3}]')
+
+def testFilterFunctions(env):
+    # Test RFC 9535 filter functions: length, count, value, match, search
+    r = env
+    # length: array elements / string chars / object members
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [[1, 2, 3], [1], "abcd", "x"]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?length(@) > 2]').equal('[[1,2,3],"abcd"]')
+    r.expect('JSON.SET', 'doc', '$', json.dumps([{"a": 1, "b": 2}, {"a": 1}])).ok()
+    r.expect('JSON.GET', 'doc', '$[?length(@) == 2]').equal('[{"a":1,"b":2}]')
+    # count: number of nodes selected by a query
+    r.expect('JSON.SET', 'doc', '$', json.dumps([{"a": 1, "b": 2, "c": 3}, {"a": 1}])).ok()
+    r.expect('JSON.GET', 'doc', '$[?count(@.*) == 3]').equal('[{"a":1,"b":2,"c":3}]')
+    # value: value of a single-node query
+    r.expect('JSON.SET', 'doc', '$', json.dumps([{"a": 1}, {"a": 2}])).ok()
+    r.expect('JSON.GET', 'doc', '$[?value(@.a) == 1]').equal('[{"a":1}]')
+    # match (anchored / full) vs search (substring)
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": ["abc", "xabc", "a", "b"]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?match(@, "a.*")]').equal('["abc","a"]')
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": ["abc", "xyz", "b"]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?search(@, "b")]').equal('["abc","b"]')
+
+def testFilterMembership(env):
+    # Test set-membership operators: in / nin
+    r = env
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [1, 2, 3, 4], "allow": [2, 3]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?@ in [2,4]]').equal('[2,4]')
+    r.expect('JSON.GET', 'doc', '$.a[?@ nin [2,4]]').equal('[1,3]')
+    # RHS is a path to an array
+    r.expect('JSON.GET', 'doc', '$.a[?@ in $.allow]').equal('[2,3]')
+    # Structured (deep) membership
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [[1], [2], [3]]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?@ in [[1],[2]]]').equal('[[1],[2]]')
+    # literal/value LHS against a path array
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"items": [{"vals": [1, 2, [4]]}, {"vals": [1, 2]}]})).ok()
+    r.expect('JSON.GET', 'doc', '$.items[?[4] in @.vals]').equal('[{"vals":[1,2,[4]]}]')
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"items": [{"val": 2, "vals": [1, 2, 3]}, {"val": 9, "vals": [1, 2, 3]}]})).ok()
+    r.expect('JSON.GET', 'doc', '$.items[?@.val in @.vals]').equal('[{"val":2,"vals":[1,2,3]}]')
+    # numbers coerce int/float, aligned with `==`
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [1.0, 2.0, 3.0]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?@ in [1,2]]').equal('[1.0,2.0]')
+
+def testFilterArithmetic(env):
+    # Test arithmetic operators in filters: + - * / % and unary, with precedence
+    r = env
+    r.expect('JSON.SET', 'doc', '$', json.dumps([{"a": 2, "b": 3}, {"a": 5, "b": 2}])).ok()
+    r.expect('JSON.GET', 'doc', '$[?@.a + 1 == 3]').equal('[{"a":2,"b":3}]')
+    r.expect('JSON.GET', 'doc', '$[?@.a - 1 == 4]').equal('[{"a":5,"b":2}]')
+    # * binds tighter than +
+    r.expect('JSON.GET', 'doc', '$[?@.a + @.b * 2 == 8]').equal('[{"a":2,"b":3}]')
+    # parentheses override precedence
+    r.expect('JSON.GET', 'doc', '$[?(@.a + @.b) * 2 == 10]').equal('[{"a":2,"b":3}]')
+    # division is float; modulo; unary minus
+    r.expect('JSON.SET', 'doc', '$', json.dumps([{"a": 8}, {"a": 3}])).ok()
+    r.expect('JSON.GET', 'doc', '$[?@.a / 2 == 4]').equal('[{"a":8}]')
+    r.expect('JSON.GET', 'doc', '$[?@.a % 2 == 0]').equal('[{"a":8}]')
+    r.expect('JSON.GET', 'doc', '$[?-@.a == -3]').equal('[{"a":3}]')
+    # division by zero -> no match
+    r.expect('JSON.GET', 'doc', '$[?@.a / 0 == 0]').equal('[]')
+
 def testMerge(env):
     # Test JSON.MERGE
     r = env
