@@ -662,6 +662,32 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_size_of_array_and_string() {
+        setup();
+        // array element count and string char count
+        verify_json!(path:"$.a[?@ sizeof 2]", json:{"a":[[4,5],[1],[7,8,9]]}, results:[[4,5]]);
+        verify_json!(path:"$.a[?@ sizeof 2]", json:{"a":["ab","abc","xy"]}, results:["ab","xy"]);
+        // `size` is accepted as an alias for `sizeof`
+        verify_json!(path:"$.a[?@ size 2]", json:{"a":[[4,5],[1]]}, results:[[4,5]]);
+    }
+
+    #[test]
+    fn test_size_of_truncates_and_rejects_non_numeric() {
+        setup();
+        // fractional size truncates toward zero; non-numeric size never matches
+        verify_json!(path:"$.a[?@ sizeof 2.9]", json:{"a":[[4,5],[1]]}, results:[[4,5]]);
+        verify_json!(path:r#"$.a[?@ sizeof "2"]"#, json:{"a":[[4,5]]}, results:[]);
+    }
+
+    #[test]
+    fn test_empty_true_false() {
+        setup();
+        // empty true -> empty array/string; empty false -> non-empty
+        verify_json!(path:"$.a[?@ empty true]", json:{"a":[[],[1],"",[2,3]]}, results:[[],""]);
+        verify_json!(path:"$.a[?@ empty false]", json:{"a":[[],[1],"",[2,3]]}, results:[[1],[2,3]]);
+    }
+
+    #[test]
     fn test_arith_add() {
         setup();
         verify_json!(path:"$[?@.a + 1 == 3]", json:[{"a":2},{"a":5}], results:[{"a":2}]);

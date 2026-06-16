@@ -317,9 +317,7 @@ fn value_in_array<'i, 'j, S: SelectValue, V: SelectValue>(
         TermEvaluationResult::Literal(Value::Array(items)) => {
             items.iter().any(|it| is_equal(needle, it))
         }
-        TermEvaluationResult::NodeList(list) => {
-            list.iter().any(|v| is_equal(needle, v.as_ref()))
-        }
+        TermEvaluationResult::NodeList(list) => list.iter().any(|v| is_equal(needle, v.as_ref())),
         _ => false,
     }
 }
@@ -982,16 +980,18 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             }
         }
         match self {
-            TermEvaluationResult::Value(v) if v.as_ref().get_type() == SelectValueType::Array => v
-                .as_ref()
-                .values()
-                .is_some_and(|it| combine(require_all, it.map(|e| value_in_array(e.as_ref(), rhs)))),
+            TermEvaluationResult::Value(v) if v.as_ref().get_type() == SelectValueType::Array => {
+                v.as_ref().values().is_some_and(|it| {
+                    combine(require_all, it.map(|e| value_in_array(e.as_ref(), rhs)))
+                })
+            }
             TermEvaluationResult::Literal(Value::Array(items)) => {
                 combine(require_all, items.iter().map(|e| value_in_array(e, rhs)))
             }
-            TermEvaluationResult::NodeList(list) => {
-                combine(require_all, list.iter().map(|v| value_in_array(v.as_ref(), rhs)))
-            }
+            TermEvaluationResult::NodeList(list) => combine(
+                require_all,
+                list.iter().map(|v| value_in_array(v.as_ref(), rhs)),
+            ),
             _ => false,
         }
     }
@@ -1004,6 +1004,57 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
     /// `arr1 anyof arr2`: `self` and `rhs` have a non-empty intersection.
     fn any_of(&self, rhs: &Self) -> bool {
         self.set_relate(rhs, false)
+    }
+
+    /// Length of `self` as a sized sequence — array element count or string char count.
+    /// `None` for anything else (numbers, bools, null, objects, multi-node lists). Used
+    /// by the `sizeof`/`empty` operators, which apply only to arrays and strings.
+    fn seq_length(&self) -> Option<usize> {
+        match self {
+            // RFC 9535 `length()` on a value: chars for strings
+            TermEvaluationResult::Str(s) => Some(s.chars().count()),
+            TermEvaluationResult::String(s) => Some(s.chars().count()),
+            TermEvaluationResult::Value(v) => value_length(v.as_ref()),
+            TermEvaluationResult::Literal(l) => value_length(l),
+            TermEvaluationResult::NodeList(list) if list.len() == 1 => {
+                value_length(list[0].as_ref())
+            }
+            _ => None,
+        }
+    }
+
+    /// Boolean view of this term, `None` if not a boolean.
+    fn as_bool(&self) -> Option<bool> {
+        match self {
+            TermEvaluationResult::Bool(b) => Some(*b),
+            TermEvaluationResult::Literal(Value::Bool(b)) => Some(*b),
+            TermEvaluationResult::Value(v) if v.as_ref().get_type() == SelectValueType::Bool => {
+                v.as_ref().get_bool()
+            }
+            _ => None,
+        }
+    }
+
+    /// `left sizeof right`: true if `self` is an array/string whose length equals the
+    /// integer value of `right` (a fractional `right` is truncated toward zero). A
+    /// non-numeric `right` or non-array/string `self` yields false.
+    fn size_of(&self, rhs: &Self) -> bool {
+        let target: i64 = match rhs.as_number() {
+            Some(Num::Int(n)) => n,
+            Some(Num::Float(f)) if f.is_finite() => f.trunc() as i64,
+            _ => return false,
+        };
+        target >= 0 && self.seq_length().is_some_and(|len| len as i64 == target)
+    }
+
+    /// `left empty right`: `right` is a boolean — `true` matches an empty array/string,
+    /// `false` a non-empty one. A non-boolean `right` or non-array/string `self` yields
+    /// false.
+    fn empty_check(&self, rhs: &Self) -> bool {
+        let (Some(len), Some(want_empty)) = (self.seq_length(), rhs.as_bool()) else {
+            return false;
+        };
+        (len == 0) == want_empty
     }
 
     fn re_is_match(cache: &mut RegexCache, regex: &str, s: &str) -> bool {
@@ -1550,6 +1601,8 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 Rule::anyof_op => term1_val.any_of(&term2_val),
                 // `noneof` = empty intersection = strict negation of `anyof`.
                 Rule::noneof_op => !term1_val.any_of(&term2_val),
+                Rule::size_op => term1_val.size_of(&term2_val),
+                Rule::empty_op => term1_val.empty_check(&term2_val),
                 _ => {
                     trace!(
                         "evaluate_single_filter: unknown comparison op {:?}",
