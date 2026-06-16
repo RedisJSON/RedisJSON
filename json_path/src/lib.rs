@@ -603,6 +603,74 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_function_aggregations() {
+        setup();
+        verify_json!(path:"$.a[?sum(@.n) == 6]", json:{"a":[{"n":[1,2,3]},{"n":[1,1]}]}, results:[{"n":[1,2,3]}]);
+        verify_json!(path:"$.a[?min(@.n) == 1]", json:{"a":[{"n":[3,1,2]},{"n":[5,6]}]}, results:[{"n":[3,1,2]}]);
+        verify_json!(path:"$.a[?max(@.n) == 3]", json:{"a":[{"n":[3,1,2]},{"n":[5,6]}]}, results:[{"n":[3,1,2]}]);
+        verify_json!(path:"$.a[?avg(@.n) == 2]", json:{"a":[{"n":[1,2,3]},{"n":[5,6]}]}, results:[{"n":[1,2,3]}]);
+    }
+
+    #[test]
+    fn test_function_stddev() {
+        setup();
+        // population stddev of [2,4,4,4,5,5,7,9] is 2.0
+        verify_json!(path:"$.a[?stddev(@.n) == 2.0]", json:{"a":[{"n":[2,4,4,4,5,5,7,9]},{"n":[1,2]}]}, results:[{"n":[2,4,4,4,5,5,7,9]}]);
+    }
+
+    #[test]
+    fn test_function_aggregation_non_numeric_nothing() {
+        setup();
+        // a non-numeric element yields Nothing -> no match
+        verify_json!(path:"$.a[?sum(@.n) == 3]", json:{"a":[{"n":[1,"x"]}]}, results:[]);
+    }
+
+    #[test]
+    fn test_function_first_last_index() {
+        setup();
+        verify_json!(path:"$.a[?first(@.n) == 1]", json:{"a":[{"n":[1,2]},{"n":[9,8]}]}, results:[{"n":[1,2]}]);
+        verify_json!(path:"$.a[?last(@.n) == 8]", json:{"a":[{"n":[1,2]},{"n":[9,8]}]}, results:[{"n":[9,8]}]);
+        // index with a negative offset counts from the end
+        verify_json!(path:"$.a[?index(@.n, -1) == 2]", json:{"a":[{"n":[1,2]},{"n":[9,8]}]}, results:[{"n":[1,2]}]);
+        // out-of-range index -> Nothing -> no match
+        verify_json!(path:"$.a[?index(@.n, 5) == 1]", json:{"a":[{"n":[1,2]}]}, results:[]);
+    }
+
+    #[test]
+    fn test_function_aggregation_negatives() {
+        setup();
+        // non-array argument -> Nothing (number / string / object)
+        verify_json!(path:"$.a[?sum(@.n) == 5]", json:{"a":[{"n":5}]}, results:[]);
+        verify_json!(path:"$.a[?avg(@.n) == 0]", json:{"a":[{"n":"x"}]}, results:[]);
+        verify_json!(path:"$.a[?max(@.n) == 0]", json:{"a":[{"n":{"k":1}}]}, results:[]);
+        // heterogeneous array (a non-numeric element) -> Nothing, even though the numeric
+        // elements alone would sum to the target (strict, no silent skipping)
+        verify_json!(path:"$.a[?sum(@.n) == 3]", json:{"a":[{"n":[1,true,2]}]}, results:[]);
+        verify_json!(path:"$.a[?sum(@.n) == 3]", json:{"a":[{"n":[1,null,2]}]}, results:[]);
+        verify_json!(path:"$.a[?sum(@.n) == 3]", json:{"a":[{"n":[1,[2],3]}]}, results:[]);
+        verify_json!(path:"$.a[?sum(@.n) == 3]", json:{"a":[{"n":[1,"2"]}]}, results:[]);
+        // empty array -> Nothing
+        verify_json!(path:"$.a[?sum(@.n) == 0]", json:{"a":[{"n":[]}]}, results:[]);
+        verify_json!(path:"$.a[?min(@.n) == 0]", json:{"a":[{"n":[]}]}, results:[]);
+    }
+
+    #[test]
+    fn test_function_index_negatives() {
+        setup();
+        // non-array argument -> Nothing
+        verify_json!(path:"$.a[?first(@.n) == 1]", json:{"a":[{"n":5}]}, results:[]);
+        verify_json!(path:"$.a[?last(@.n) == 1]", json:{"a":[{"n":"x"}]}, results:[]);
+        // first/last of an empty array -> Nothing
+        verify_json!(path:"$.a[?first(@.n) == 1]", json:{"a":[{"n":[]}]}, results:[]);
+        // out-of-range index, positive and negative -> Nothing
+        verify_json!(path:"$.a[?index(@.n, 9) == 1]", json:{"a":[{"n":[1,2]}]}, results:[]);
+        verify_json!(path:"$.a[?index(@.n, -9) == 1]", json:{"a":[{"n":[1,2]}]}, results:[]);
+        // non-integer index argument -> Nothing (string or float; index is integer-only)
+        verify_json!(path:r#"$.a[?index(@.n, "x") == 1]"#, json:{"a":[{"n":[1,2]}]}, results:[]);
+        verify_json!(path:"$.a[?index(@.n, 1.0) == 2]", json:{"a":[{"n":[1,2]}]}, results:[]);
+    }
+
+    #[test]
     fn test_membership_in_literal() {
         setup();
         verify_json!(path:"$.a[?@ in [2,4]]", json:{"a":[1,2,3,4]}, results:[2,4]);

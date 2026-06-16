@@ -1674,6 +1674,26 @@ def testFilterNumericStringFunctions(env):
     r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [{"x": "a", "y": "b"}, {"x": "a", "y": "c"}]})).ok()
     r.expect('JSON.GET', 'doc', '$.a[?concat(@.x, @.y) == "ab"]').equal('[{"x":"a","y":"b"}]')
 
+def testFilterArrayFunctions(env):
+    # Test min / max / avg / sum / stddev / first / last / index
+    r = env
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [{"n": [3, 1, 2]}, {"n": [5, 6]}]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?sum(@.n) == 6]').equal('[{"n":[3,1,2]}]')
+    r.expect('JSON.GET', 'doc', '$.a[?min(@.n) == 1]').equal('[{"n":[3,1,2]}]')
+    r.expect('JSON.GET', 'doc', '$.a[?max(@.n) == 3]').equal('[{"n":[3,1,2]}]')
+    r.expect('JSON.GET', 'doc', '$.a[?avg(@.n) == 2]').equal('[{"n":[3,1,2]}]')
+    # population stddev of [2,4,4,4,5,5,7,9] is 2.0
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [{"n": [2, 4, 4, 4, 5, 5, 7, 9]}, {"n": [1, 2]}]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?stddev(@.n) == 2.0]').equal('[{"n":[2,4,4,4,5,5,7,9]}]')
+    # a non-numeric element yields Nothing -> no match
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [{"n": [1, "x"]}]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?sum(@.n) == 3]').equal('[]')
+    # first / last / index (negative offset counts from the end)
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [{"n": [1, 2]}, {"n": [9, 8]}]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?first(@.n) == 1]').equal('[{"n":[1,2]}]')
+    r.expect('JSON.GET', 'doc', '$.a[?last(@.n) == 8]').equal('[{"n":[9,8]}]')
+    r.expect('JSON.GET', 'doc', '$.a[?index(@.n, -1) == 2]').equal('[{"n":[1,2]}]')
+
 def testFilterMembership(env):
     # Test set-membership operators: in / nin
     r = env

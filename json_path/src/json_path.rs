@@ -576,6 +576,113 @@ fn function_concat<'i, 'j, S: SelectValue>(
     TermEvaluationResult::String(out)
 }
 
+/// Collect the elements of an array-shaped term (array value, array literal, or
+/// nodelist) as `f64`s for the numeric aggregations. Nothing (`None`) if the term is not
+/// an array, is empty, or contains a non-numeric element.
+fn term_number_seq<'i, 'j, S: SelectValue>(
+    arg: &TermEvaluationResult<'i, 'j, S>,
+) -> Option<Vec<f64>> {
+    let mut out = Vec::new();
+    match arg {
+        TermEvaluationResult::Value(v) if v.as_ref().get_type() == SelectValueType::Array => {
+            for e in v.as_ref().values()? {
+                out.push(value_as_number(e.as_ref())?.as_f64());
+            }
+        }
+        TermEvaluationResult::Literal(Value::Array(items)) => {
+            for it in items {
+                out.push(value_as_number(it)?.as_f64());
+            }
+        }
+        TermEvaluationResult::NodeList(list) => {
+            for v in list {
+                out.push(value_as_number(v.as_ref())?.as_f64());
+            }
+        }
+        _ => return None,
+    }
+    (!out.is_empty()).then_some(out)
+}
+
+fn agg_sum(s: &[f64]) -> f64 {
+    s.iter().sum()
+}
+fn agg_min(s: &[f64]) -> f64 {
+    s.iter().copied().fold(f64::INFINITY, f64::min)
+}
+fn agg_max(s: &[f64]) -> f64 {
+    s.iter().copied().fold(f64::NEG_INFINITY, f64::max)
+}
+fn agg_avg(s: &[f64]) -> f64 {
+    // Guaranteed non-empty by `term_number_seq` (returns Nothing for an empty array).
+    debug_assert!(!s.is_empty(), "agg over an empty sequence");
+    s.iter().sum::<f64>() / s.len() as f64
+}
+/// Population standard deviation (divides by N).
+fn agg_stddev(s: &[f64]) -> f64 {
+    debug_assert!(!s.is_empty(), "agg over an empty sequence");
+    let mean = agg_avg(s);
+    let variance = s.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / s.len() as f64;
+    variance.sqrt()
+}
+
+/// `min`/`max`/`avg`/`sum`/`stddev`: reduce an array of numbers to a double. A non-array
+/// argument, a non-numeric element, or an empty array is Nothing.
+fn function_aggregate<'i, 'j, S: SelectValue>(
+    arg: Option<&TermEvaluationResult<'i, 'j, S>>,
+    agg: fn(&[f64]) -> f64,
+) -> TermEvaluationResult<'i, 'j, S> {
+    match arg.and_then(|a| term_number_seq(a)) {
+        Some(seq) => TermEvaluationResult::Float(agg(&seq)),
+        None => TermEvaluationResult::Invalid,
+    }
+}
+
+/// `first(a)`/`last(a)`/`index(a, n)`: the element at a (possibly negative) index of an
+/// array. Out-of-range, non-array, or non-integer index is Nothing. Takes the argument by
+/// value so the element can be moved/borrowed out with the document lifetime `'j`.
+fn function_index<'i, 'j, S: SelectValue>(
+    arg: Option<TermEvaluationResult<'i, 'j, S>>,
+    idx: i64,
+) -> TermEvaluationResult<'i, 'j, S> {
+    // Map a signed index (negative counts from the end) into `0..len`. A negative result
+    // fails `try_from` (-> None); the filter then bounds-checks against `len`.
+    fn resolve(idx: i64, len: usize) -> Option<usize> {
+        let i = if idx < 0 { idx + len as i64 } else { idx };
+        usize::try_from(i).ok().filter(|&u| u < len)
+    }
+    match arg {
+        Some(TermEvaluationResult::Value(v))
+            if v.as_ref().get_type() == SelectValueType::Array =>
+        {
+            let Some(i) = resolve(idx, v.as_ref().len().unwrap_or(0)) else {
+                return TermEvaluationResult::Invalid;
+            };
+            match v {
+                // A borrowed array yields an element borrowed for the same `'j`.
+                ValueRef::Borrowed(r) => r
+                    .get_index(i)
+                    .map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Value),
+                // An owned array must clone the element out before it is dropped.
+                ValueRef::Owned(s) => s.get_index(i).map_or(TermEvaluationResult::Invalid, |e| {
+                    TermEvaluationResult::Value(ValueRef::Owned(e.inner_cloned()))
+                }),
+            }
+        }
+        Some(TermEvaluationResult::Literal(Value::Array(mut items))) => {
+            match resolve(idx, items.len()) {
+                Some(i) => TermEvaluationResult::Literal(items.swap_remove(i)),
+                None => TermEvaluationResult::Invalid,
+            }
+        }
+        Some(TermEvaluationResult::NodeList(mut list)) => match resolve(idx, list.len()) {
+            Some(i) => TermEvaluationResult::Value(list.swap_remove(i)),
+            None => TermEvaluationResult::Invalid,
+        },
+        _ => TermEvaluationResult::Invalid,
+    }
+}
+
 fn eval_function<'i, 'j, S: SelectValue>(
     name: &str,
     mut args: Vec<TermEvaluationResult<'i, 'j, S>>,
@@ -593,6 +700,23 @@ fn eval_function<'i, 'j, S: SelectValue>(
         "floor" => function_round(args.first(), f64::floor),
         "abs" => function_abs(args.first()),
         "concat" => function_concat(&args),
+        "sum" => function_aggregate(args.first(), agg_sum),
+        "min" => function_aggregate(args.first(), agg_min),
+        "max" => function_aggregate(args.first(), agg_max),
+        "avg" => function_aggregate(args.first(), agg_avg),
+        "stddev" => function_aggregate(args.first(), agg_stddev),
+        "first" => function_index(args.into_iter().next(), 0),
+        "last" => function_index(args.into_iter().next(), -1),
+        "index" => {
+            // index(array, n) — n must be an integer; a float or non-numeric n is Nothing.
+            let mut it = args.into_iter();
+            let array = it.next();
+            let idx = it.next().and_then(|a| match a.as_number() {
+                Some(Num::Int(n)) => Some(n),
+                _ => None,
+            });
+            idx.map_or(TermEvaluationResult::Invalid, |n| function_index(array, n))
+        }
         "match" | "search" => {
             let full = name == "match";
             let s = args.first().and_then(term_as_str);
