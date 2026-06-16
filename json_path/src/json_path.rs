@@ -464,13 +464,15 @@ fn function_value<'i, 'j, S: SelectValue>(
     }
 }
 
-/// Extract a string from a term result (for `match`/`search` operands).
-fn term_as_string<'i, 'j, S: SelectValue>(arg: &TermEvaluationResult<'i, 'j, S>) -> Option<String> {
+/// Borrow the string content of a term result (for `match`/`search` operands).
+fn term_as_str<'a, 'i, 'j, S: SelectValue>(
+    arg: &'a TermEvaluationResult<'i, 'j, S>,
+) -> Option<&'a str> {
     match arg {
-        TermEvaluationResult::Str(s) => Some((*s).to_string()),
-        TermEvaluationResult::String(s) => Some(s.clone()),
-        TermEvaluationResult::Value(v) => v.as_ref().get_str(),
-        TermEvaluationResult::Literal(l) => l.get_str(),
+        TermEvaluationResult::Str(s) => Some(*s),
+        TermEvaluationResult::String(s) => Some(s.as_str()),
+        TermEvaluationResult::Value(v) => v.as_ref().as_str(),
+        TermEvaluationResult::Literal(l) => l.as_str(),
         TermEvaluationResult::Integer(_)
         | TermEvaluationResult::Float(_)
         | TermEvaluationResult::Bool(_)
@@ -515,11 +517,11 @@ fn eval_function<'i, 'j, S: SelectValue>(
         "value" if args.len() == 1 => function_value(args.pop().unwrap()),
         "match" | "search" => {
             let full = name == "match";
-            let s = args.first().and_then(term_as_string);
-            let re = args.get(1).and_then(term_as_string);
+            let s = args.first().and_then(term_as_str);
+            let re = args.get(1).and_then(term_as_str);
             match (s, re) {
                 (Some(s), Some(re)) => {
-                    TermEvaluationResult::Bool(regex_matches(cache, &re, full, &s))
+                    TermEvaluationResult::Bool(regex_matches(cache, re, full, s))
                 }
                 _ => TermEvaluationResult::Bool(false),
             }
