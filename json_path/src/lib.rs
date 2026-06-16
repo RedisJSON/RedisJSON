@@ -584,6 +584,15 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_function_round_overflow_nothing() {
+        setup();
+        // 2^63 is one past i64::MAX; ceiling/floor must yield Nothing (no match), not a
+        // value saturated to i64::MAX
+        verify_json!(path:"$.a[?ceiling(@) == 9223372036854775807]", json:{"a":[9223372036854775808.0]}, results:[]);
+        verify_json!(path:"$.a[?floor(@) == 9223372036854775807]", json:{"a":[9223372036854775808.0]}, results:[]);
+    }
+
+    #[test]
     fn test_function_abs() {
         setup();
         // integer abs stays integer; float abs stays float (objects, since the macro's

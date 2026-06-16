@@ -100,7 +100,7 @@ pub trait SelectValue: Debug + Eq + PartialEq + Default + Clone + Serialize {
 
     fn get_str(&self) -> Option<String>;
     fn as_str(&self) -> Option<&str>;
-    
+
     /// Owned string value for the `~`/`keys()` get-keys operator. A method (not a
     /// `From<&str>` supertrait): explicit, and avoids an orphan-rule block on foreign types.
     fn make_string(s: &str) -> Self;

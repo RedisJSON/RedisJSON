@@ -537,7 +537,10 @@ fn function_round<'i, 'j, S: SelectValue>(
         Some(Num::Int(n)) => TermEvaluationResult::Integer(n),
         Some(Num::Float(f)) => {
             let r = round(f);
-            if r.is_finite() && r >= i64::MIN as f64 && r <= i64::MAX as f64 {
+            // `i64::MAX` is not exactly representable in f64: `i64::MAX as f64` rounds up
+            // to 2^63 (one past MAX), so the upper bound must be strict `<` to reject it.
+            // `i64::MIN` (-2^63) is exact, so `>=` is correct there.
+            if r.is_finite() && r >= i64::MIN as f64 && r < i64::MAX as f64 {
                 TermEvaluationResult::Integer(r as i64)
             } else {
                 TermEvaluationResult::Invalid
@@ -652,9 +655,7 @@ fn function_index<'i, 'j, S: SelectValue>(
         usize::try_from(i).ok().filter(|&u| u < len)
     }
     match arg {
-        Some(TermEvaluationResult::Value(v))
-            if v.as_ref().get_type() == SelectValueType::Array =>
-        {
+        Some(TermEvaluationResult::Value(v)) if v.as_ref().get_type() == SelectValueType::Array => {
             let Some(i) = resolve(idx, v.as_ref().len().unwrap_or(0)) else {
                 return TermEvaluationResult::Invalid;
             };
