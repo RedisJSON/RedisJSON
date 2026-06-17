@@ -84,9 +84,7 @@ pub enum JSONArrayType {
 }
 
 #[allow(unused)]
-pub trait SelectValue:
-    Debug + Eq + PartialEq + Default + Clone + Serialize + for<'a> From<&'a str>
-{
+pub trait SelectValue: Debug + Eq + PartialEq + Default + Clone + Serialize {
     fn get_type(&self) -> SelectValueType;
     fn contains_key(&self, key: &str) -> bool;
     fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = ValueRef<'a, Self>> + 'a>>;

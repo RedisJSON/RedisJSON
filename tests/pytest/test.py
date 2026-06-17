@@ -1694,31 +1694,6 @@ def testFilterArrayFunctions(env):
     r.expect('JSON.GET', 'doc', '$.a[?last(@.n) == 8]').equal('[{"n":[9,8]}]')
     r.expect('JSON.GET', 'doc', '$.a[?index(@.n, -1) == 2]').equal('[{"n":[1,2]}]')
 
-def testGetKeys(env):
-    # ~ and its keys() alias emit object member names as string results
-    r = env
-    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": {"x": 1, "y": 2}})).ok()
-    r.expect('JSON.GET', 'doc', '$.a~').equal('["x","y"]')
-    r.expect('JSON.GET', 'doc', '$.a.keys()').equal('["x","y"]')
-    # keys of the root
-    r.expect('JSON.GET', 'doc', '$~').equal('["a"]')
-    r.expect('JSON.GET', 'doc', '$.keys()').equal('["a"]')
-    # non-object selects nothing
-    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [1, 2]})).ok()
-    r.expect('JSON.GET', 'doc', '$.a~').equal('[]')
-    # negatives: scalar, empty object, missing path
-    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": "str", "b": {}})).ok()
-    r.expect('JSON.GET', 'doc', '$.a~').equal('[]')
-    r.expect('JSON.GET', 'doc', '$.b~').equal('[]')
-    r.expect('JSON.GET', 'doc', '$.b.keys()').equal('[]')
-    r.expect('JSON.GET', 'doc', '$.missing~').equal('[]')
-    # a path after ~/keys() navigates into the key strings (no children) -> nothing
-    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": {"x": 1, "y": 2}})).ok()
-    r.expect('JSON.GET', 'doc', '$.a~.x').equal('[]')
-    r.expect('JSON.GET', 'doc', '$.a.keys().x').equal('[]')
-    # `.~` is invalid syntax -> error
-    r.expect('JSON.GET', 'doc', '$.~.a').raiseError()
-
 def testFilterMembership(env):
     # Test set-membership operators: in / nin
     r = env

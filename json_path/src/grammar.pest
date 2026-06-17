@@ -1,4 +1,4 @@
-literal = @{('a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | "-" | "_" | "`" | "+" | "#" | "%" | "$" | "^" | "/" | ":")+}
+literal = @{('a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | "-" | "_" | "`" | "~" | "+" | "#" | "%" | "$" | "^" | "/" | ":")+}
 
 string = _{("'" ~ (string_value) ~ "'") | ("\"" ~ (string_value) ~ "\"") | ("\"" ~ (string_value_escape_1) ~ "\"") | ("'" ~ (string_value_escape_2) ~ "'")}
     string_escape = @{"\\"}
@@ -102,15 +102,9 @@ all = {"*"}
 
 full_scan = {".."}
 
-// Get-keys: `$.obj~` (terminal `~`) or its function alias `$.obj.keys()`. Both emit the
-// object's member names as string results. `~` was removed from the `literal` charset, so
-// a field literally named with `~` is now reachable only via `["a~b"]`.
-get_keys = {"~"}
-get_keys_fn = {"keys" ~ "(" ~ ")"}
-
 bracket = _{numbers_range | numbers_list | string_list | all | "?" ~ filter}
 
-element = _{"." ~ get_keys_fn | "." ~ literal | full_scan ~ (literal | all | "[" ~ bracket ~ "]") | "." ~ all | ("."? ~ "[" ~ bracket ~ "]") | get_keys}
+element = _{"." ~ literal | full_scan ~ (literal | all | "[" ~ bracket ~ "]") | "." ~ all | ("."? ~ "[" ~ bracket ~ "]")}
 
 // The bare word operators must not be swallowed as a bare first path segment
 // (e.g. `@ in [...]`). A field with one of these names is still reachable via

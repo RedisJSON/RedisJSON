@@ -1436,30 +1436,6 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         }
     }
 
-    fn calc_get_keys<'j: 'i, 'k, 'l, S: SelectValue>(
-        &self,
-        pairs: Pairs<'i, Rule>,
-        json: ValueRef<'j, S>,
-        path_tracker: Option<PathTracker<'l, 'k>>,
-        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
-    ) {
-        if json.get_type() == SelectValueType::Object {
-            if let Some(keys) = json.as_ref().keys() {
-                for key in keys {
-                    let new_tracker = path_tracker
-                        .as_ref()
-                        .map(|pt| create_str_tracker(Cow::Owned(key.to_owned()), pt));
-                    self.calc_internal(
-                        pairs.clone(),
-                        ValueRef::Owned(S::from(key)),
-                        new_tracker,
-                        calc_data,
-                    );
-                }
-            }
-        }
-    }
-
     fn calc_literal<'j: 'i, 'k, 'l, S: SelectValue>(
         &self,
         pairs: Pairs<'i, Rule>,
@@ -1965,9 +1941,6 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                         self.calc_full_scan(pairs, json, path_tracker, calc_data);
                     }
                     Rule::all => self.calc_all(pairs, json, path_tracker, calc_data),
-                    Rule::get_keys | Rule::get_keys_fn => {
-                        self.calc_get_keys(pairs, json, path_tracker, calc_data);
-                    }
                     Rule::literal => self.calc_literal(pairs, curr, json, path_tracker, calc_data),
                     Rule::string_list => {
                         self.calc_strings(pairs, curr, json, path_tracker, calc_data);
