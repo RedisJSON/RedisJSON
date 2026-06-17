@@ -26,7 +26,7 @@ from_root    = {"$" ~ root?}
 
 select_term = _{from_current | from_root}
 
-op = _{ge | gt | le | lt | eq | ne | re | in_op | nin_op}
+op = _{ge | gt | le | lt | eq | ne | re | in_op | nin_op | subsetof_op | anyof_op | noneof_op | size_op | empty_op}
     ge = @{">="}
     gt = @{">"}
     le = @{"<="}
@@ -38,6 +38,14 @@ op = _{ge | gt | le | lt | eq | ne | re | in_op | nin_op}
     // `op_keyword` below so the operator and the path-segment guard agree.
     in_op = @{"in" ~ !(ASCII_ALPHANUMERIC | "_")}
     nin_op = @{"nin" ~ !(ASCII_ALPHANUMERIC | "_")}
+    // Set-relation operators: both operands are arrays.
+    subsetof_op = @{"subsetof" ~ !(ASCII_ALPHANUMERIC | "_")}
+    anyof_op = @{"anyof" ~ !(ASCII_ALPHANUMERIC | "_")}
+    noneof_op = @{"noneof" ~ !(ASCII_ALPHANUMERIC | "_")}
+    // Size/emptiness operators: `left sizeof right` (|left| == right) and
+    // `left empty <bool>`. `left` is an array or string.
+    size_op = @{("sizeof" | "size") ~ !(ASCII_ALPHANUMERIC | "_")}
+    empty_op = @{"empty" ~ !(ASCII_ALPHANUMERIC | "_")}
 
 boolean = _{boolean_true | boolean_false}
     boolean_true = @{"true"}
@@ -98,13 +106,15 @@ bracket = _{numbers_range | numbers_list | string_list | all | "?" ~ filter}
 
 element = _{"." ~ literal | full_scan ~ (literal | all | "[" ~ bracket ~ "]") | "." ~ all | ("."? ~ "[" ~ bracket ~ "]")}
 
-// The bare word operators `in`/`nin` must not be swallowed as a bare path segment
-// (e.g. `@ in [...]`). A field literally named `in`/`nin` is still reachable via
-// `.in` / `["in"]`.
-// NOTE: this is a deliberate, documented behavior change: a bare first segment named
-// `in`/`nin` (e.g. `$in`, `@in`) no longer parses as a path to that field — use
-// `$.in` / `$["in"]` instead.
-op_keyword = @{("nin" | "in") ~ !(ASCII_ALPHANUMERIC | "_")}
+// The bare word operators must not be swallowed as a bare first path segment
+// (e.g. `@ in [...]`). A field with one of these names is still reachable via
+// `.name` / `["name"]`.
+// NOTE: this is a deliberate, documented behavior change: a bare first segment with one
+// of these names (e.g. `$in`, `@size`) no longer parses as a path to that field — use
+// `$.size` / `$["size"]` instead.
+// Order mirrors the `op` rule's word-operator alternation (with `sizeof` before its
+// prefix `size`), so the operator list and this path-segment guard stay in agreement.
+op_keyword = @{("in" | "nin" | "subsetof" | "anyof" | "noneof" | "sizeof" | "size" | "empty") ~ !(ASCII_ALPHANUMERIC | "_")}
 
 first_element = _{(!op_keyword ~ literal) | all}
 

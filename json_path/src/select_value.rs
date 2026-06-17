@@ -100,6 +100,7 @@ pub trait SelectValue: Debug + Eq + PartialEq + Default + Clone + Serialize {
 
     fn get_str(&self) -> Option<String>;
     fn as_str(&self) -> Option<&str>;
+
     fn get_bool(&self) -> Option<bool>;
     fn get_long(&self) -> Option<i64>;
     fn get_double(&self) -> Option<f64>;

@@ -302,6 +302,39 @@ fn value_as_number<V: SelectValue>(v: &V) -> Option<Num> {
     }
 }
 
+/// Equality between two document values with `in`/`nin` number coercion: integers and
+/// doubles compare by numeric value (`1` == `1.0`); everything else uses deep `is_equal`
+/// equality. Mirrors `equals_value`, so the set operators agree with `in`/`nin`.
+fn values_equal<A: SelectValue, B: SelectValue>(a: &A, b: &B) -> bool {
+    match (value_as_number(a), value_as_number(b)) {
+        (Some(x), Some(y)) => numbers_equal(x, y),
+        _ => is_equal(a, b),
+    }
+}
+
+/// True if `needle` equals any element of the array-shaped term `haystack` (array value,
+/// array literal, or nodelist). Comparison coerces numbers like `in`/`nin` (`1` == `1.0`)
+/// and uses deep `is_equal` for everything else, so the set operators agree with
+/// membership. Non-array `haystack` ⇒ false.
+fn value_in_array<'i, 'j, S: SelectValue, V: SelectValue>(
+    needle: &V,
+    haystack: &TermEvaluationResult<'i, 'j, S>,
+) -> bool {
+    match haystack {
+        TermEvaluationResult::Value(v) if v.as_ref().get_type() == SelectValueType::Array => v
+            .as_ref()
+            .values()
+            .is_some_and(|mut it| it.any(|e| values_equal(needle, e.as_ref()))),
+        TermEvaluationResult::Literal(Value::Array(items)) => {
+            items.iter().any(|it| values_equal(needle, it))
+        }
+        TermEvaluationResult::NodeList(list) => {
+            list.iter().any(|v| values_equal(needle, v.as_ref()))
+        }
+        _ => false,
+    }
+}
+
 impl Num {
     fn as_f64(self) -> f64 {
         match self {
@@ -490,27 +523,205 @@ type RegexCache = HashMap<String, Option<Regex>>;
 
 /// Compile `pattern` (caching the result in `cache`) and test it against `s`. `full`
 /// anchors the pattern for RFC 9535 `match()`; otherwise it is a substring search
-/// (`search()` / the `=~` operator). The pattern is invariant across the elements of a
-/// filter, so the cache compiles it once per query instead of once per element.
+/// (`search()` / the `=~` operator). A constant pattern is invariant across the elements
+/// of a filter, so the cache compiles it once per query instead of once per element.
 fn regex_matches(cache: &mut RegexCache, pattern: &str, full: bool, s: &str) -> bool {
+    // Past the cap we compile uncached; already-cached patterns (the common constant case) still hit.
+    const MAX_REGEX_CACHE: usize = 64;
     let key = if full {
         format!("^(?:{pattern})$")
     } else {
         pattern.to_string()
     };
-    cache
-        .entry(key)
-        .or_insert_with_key(|k| Regex::new(k).ok())
-        .as_ref()
-        .is_some_and(|re| re.is_match(s))
+    if cache.len() < MAX_REGEX_CACHE || cache.contains_key(&key) {
+        cache
+            .entry(key)
+            .or_insert_with_key(|k| Regex::new(k).ok())
+            .as_ref()
+            .is_some_and(|re| re.is_match(s))
+    } else {
+        Regex::new(&key).is_ok_and(|re| re.is_match(s))
+    }
+}
+
+/// Convert a finite `f64` to `i64`, returning `None` when it falls outside the `i64`
+/// range (rather than saturating, as a bare `as i64` would). Callers round or truncate
+/// first; this enforces the overflow/range policy in one place.
+fn f64_to_i64(v: f64) -> Option<i64> {
+    // `i64::MAX` is not exactly representable in f64: `i64::MAX as f64` rounds up to 2^63
+    // (one past MAX), so the upper bound must be strict `<` to reject it. `i64::MIN`
+    // (-2^63) is exact, so `>=` is correct there.
+    (v.is_finite() && v >= i64::MIN as f64 && v < i64::MAX as f64).then_some(v as i64)
 }
 
 /// Dispatch a filter-expression function call to its RFC 9535 implementation.
+/// `ceiling(n)`/`floor(n)`: round a number to an integer using `round`
+/// (`f64::ceil`/`f64::floor`). Integers pass through unchanged; a non-numeric argument
+/// or a result outside the `i64` range is Nothing.
+fn function_round<'i, 'j, S: SelectValue>(
+    arg: Option<&TermEvaluationResult<'i, 'j, S>>,
+    round: fn(f64) -> f64,
+) -> TermEvaluationResult<'i, 'j, S> {
+    match arg.and_then(TermEvaluationResult::as_number) {
+        Some(Num::Int(n)) => TermEvaluationResult::Integer(n),
+        Some(Num::Float(f)) => f64_to_i64(round(f))
+            .map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Integer),
+        None => TermEvaluationResult::Invalid,
+    }
+}
+
+/// `abs(n)`: absolute value. Integers stay integers (i64::MIN overflows -> Nothing);
+/// doubles stay doubles. A non-numeric argument is Nothing.
+fn function_abs<'i, 'j, S: SelectValue>(
+    arg: Option<&TermEvaluationResult<'i, 'j, S>>,
+) -> TermEvaluationResult<'i, 'j, S> {
+    match arg.and_then(TermEvaluationResult::as_number) {
+        Some(Num::Int(n)) => n
+            .checked_abs()
+            .map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Integer),
+        Some(Num::Float(f)) => TermEvaluationResult::Float(f.abs()),
+        None => TermEvaluationResult::Invalid,
+    }
+}
+
+/// `concat(s1, s2, ...)`: concatenate string arguments into one string. Any non-string
+/// argument yields Nothing.
+fn function_concat<'i, 'j, S: SelectValue>(
+    args: &[TermEvaluationResult<'i, 'j, S>],
+) -> TermEvaluationResult<'i, 'j, S> {
+    let mut out = String::new();
+    for a in args {
+        match term_as_str(a) {
+            Some(s) => out.push_str(s),
+            None => return TermEvaluationResult::Invalid,
+        }
+    }
+    TermEvaluationResult::String(out)
+}
+
+/// Collect the elements of an array-shaped term (array value, array literal, or
+/// nodelist) as `f64`s for the numeric aggregations. Nothing (`None`) if the term is not
+/// an array, is empty, or contains a non-numeric element.
+fn term_number_seq<'i, 'j, S: SelectValue>(
+    arg: &TermEvaluationResult<'i, 'j, S>,
+) -> Option<Vec<f64>> {
+    let mut out = Vec::new();
+    match arg {
+        TermEvaluationResult::Value(v) if v.as_ref().get_type() == SelectValueType::Array => {
+            for e in v.as_ref().values()? {
+                out.push(value_as_number(e.as_ref())?.as_f64());
+            }
+        }
+        TermEvaluationResult::Literal(Value::Array(items)) => {
+            for it in items {
+                out.push(value_as_number(it)?.as_f64());
+            }
+        }
+        TermEvaluationResult::NodeList(list) => {
+            for v in list {
+                out.push(value_as_number(v.as_ref())?.as_f64());
+            }
+        }
+        _ => return None,
+    }
+    (!out.is_empty()).then_some(out)
+}
+
+fn agg_sum(s: &[f64]) -> f64 {
+    s.iter().sum()
+}
+fn agg_min(s: &[f64]) -> f64 {
+    s.iter().copied().fold(f64::INFINITY, f64::min)
+}
+fn agg_max(s: &[f64]) -> f64 {
+    s.iter().copied().fold(f64::NEG_INFINITY, f64::max)
+}
+fn agg_avg(s: &[f64]) -> f64 {
+    // Guaranteed non-empty by `term_number_seq` (returns Nothing for an empty array).
+    debug_assert!(!s.is_empty(), "agg over an empty sequence");
+    s.iter().sum::<f64>() / s.len() as f64
+}
+/// Population standard deviation (divides by N).
+fn agg_stddev(s: &[f64]) -> f64 {
+    debug_assert!(!s.is_empty(), "agg over an empty sequence");
+    let mean = agg_avg(s);
+    let variance = s.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / s.len() as f64;
+    variance.sqrt()
+}
+
+/// `min`/`max`/`avg`/`sum`/`stddev`: reduce an array of numbers to a double. A non-array
+/// argument, a non-numeric element, or an empty array is Nothing.
+fn function_aggregate<'i, 'j, S: SelectValue>(
+    arg: Option<&TermEvaluationResult<'i, 'j, S>>,
+    agg: fn(&[f64]) -> f64,
+) -> TermEvaluationResult<'i, 'j, S> {
+    match arg.and_then(term_number_seq) {
+        Some(seq) => TermEvaluationResult::Float(agg(&seq)),
+        None => TermEvaluationResult::Invalid,
+    }
+}
+
+/// `first(a)`/`last(a)`/`index(a, n)`: the element at a (possibly negative) index of an
+/// array. Out-of-range, non-array, or non-integer index is Nothing. Takes the argument by
+/// value so the element can be moved/borrowed out with the document lifetime `'j`.
+fn function_index<'i, 'j, S: SelectValue>(
+    arg: Option<TermEvaluationResult<'i, 'j, S>>,
+    idx: i64,
+) -> TermEvaluationResult<'i, 'j, S> {
+    // Map a signed index (negative counts from the end) into `0..len`. A negative result
+    // fails `try_from` (-> None); the filter then bounds-checks against `len`.
+    fn resolve(idx: i64, len: usize) -> Option<usize> {
+        let i = if idx < 0 { idx + len as i64 } else { idx };
+        usize::try_from(i).ok().filter(|&u| u < len)
+    }
+    match arg {
+        Some(TermEvaluationResult::Value(v)) if v.as_ref().get_type() == SelectValueType::Array => {
+            let Some(i) = resolve(idx, v.as_ref().len().unwrap_or(0)) else {
+                return TermEvaluationResult::Invalid;
+            };
+            match v {
+                // A borrowed array yields an element borrowed for the same `'j`.
+                ValueRef::Borrowed(r) => r
+                    .get_index(i)
+                    .map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Value),
+                // An owned array must clone the element out before it is dropped.
+                ValueRef::Owned(s) => s.get_index(i).map_or(TermEvaluationResult::Invalid, |e| {
+                    TermEvaluationResult::Value(ValueRef::Owned(e.inner_cloned()))
+                }),
+            }
+        }
+        Some(TermEvaluationResult::Literal(Value::Array(mut items))) => {
+            match resolve(idx, items.len()) {
+                Some(i) => TermEvaluationResult::Literal(items.swap_remove(i)),
+                None => TermEvaluationResult::Invalid,
+            }
+        }
+        Some(TermEvaluationResult::NodeList(mut list)) => match resolve(idx, list.len()) {
+            Some(i) => TermEvaluationResult::Value(list.swap_remove(i)),
+            None => TermEvaluationResult::Invalid,
+        },
+        _ => TermEvaluationResult::Invalid,
+    }
+}
+
 fn eval_function<'i, 'j, S: SelectValue>(
     name: &str,
     mut args: Vec<TermEvaluationResult<'i, 'j, S>>,
     cache: &mut RegexCache,
 ) -> TermEvaluationResult<'i, 'j, S> {
+    // Reject the wrong number of arguments (-> Nothing) for this PR's functions, so a
+    // malformed query like `ceiling(@, 9)` or `concat()` doesn't silently operate on a
+    // subset of its arguments instead of failing.
+    let arity_ok = match name {
+        "concat" => !args.is_empty(),
+        "index" => args.len() == 2,
+        "ceiling" | "floor" | "abs" | "sum" | "min" | "max" | "avg" | "stddev" | "first"
+        | "last" => args.len() == 1,
+        _ => true,
+    };
+    if !arity_ok {
+        return TermEvaluationResult::Invalid;
+    }
     match name {
         "length" => args
             .first()
@@ -519,6 +730,29 @@ fn eval_function<'i, 'j, S: SelectValue>(
             TermEvaluationResult::Integer(function_count(a))
         }),
         "value" if args.len() == 1 => function_value(args.pop().unwrap()),
+        "ceiling" => function_round(args.first(), f64::ceil),
+        "floor" => function_round(args.first(), f64::floor),
+        "abs" => function_abs(args.first()),
+        "concat" => function_concat(&args),
+        "sum" => function_aggregate(args.first(), agg_sum),
+        "min" => function_aggregate(args.first(), agg_min),
+        "max" => function_aggregate(args.first(), agg_max),
+        "avg" => function_aggregate(args.first(), agg_avg),
+        "stddev" => function_aggregate(args.first(), agg_stddev),
+        "first" => function_index(args.into_iter().next(), 0),
+        "last" => function_index(args.into_iter().next(), -1),
+        "index" => {
+            // index(array, n) — a fractional n is truncated toward zero; a non-numeric n
+            // is Nothing.
+            let mut it = args.into_iter();
+            let array = it.next();
+            let idx = it.next().and_then(|a| match a.as_number() {
+                Some(Num::Int(n)) => Some(n),
+                Some(Num::Float(f)) => f64_to_i64(f.trunc()),
+                _ => None,
+            });
+            idx.map_or(TermEvaluationResult::Invalid, |n| function_index(array, n))
+        }
         "match" | "search" => {
             let full = name == "match";
             let s = args.first().and_then(term_as_str);
@@ -943,6 +1177,137 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             | TermEvaluationResult::Null
             | TermEvaluationResult::Invalid => false,
         }
+    }
+
+    /// Set relation between two arrays (`subsetof`/`anyof`/`noneof`). Folds
+    /// `value_in_array(element, rhs)` over the elements of the array-shaped `self`:
+    /// `require_all` ⇒ every element must be in `rhs` (empty `self` ⇒ true);
+    /// otherwise ⇒ any element is in `rhs` (empty `self` ⇒ false). A non-array `self`
+    /// yields false (so `subsetof`/`anyof` are false and `noneof` is true).
+    ///
+    /// A multi-result (nodelist) left operand is handled any-of per node, matching
+    /// `==`/`<`/`in`: the relation holds if any single matched node — itself array-shaped
+    /// — satisfies it. (Without this, the nodelist itself would be taken as the left array
+    /// and its nodes as elements, so array-valued nodes would never match.)
+    fn set_relate(&self, rhs: &Self, require_all: bool) -> bool {
+        if let TermEvaluationResult::NodeList(list) = self {
+            return list
+                .iter()
+                .any(|v| TermEvaluationResult::Value(v.clone()).set_relate(rhs, require_all));
+        }
+        fn combine(require_all: bool, mut it: impl Iterator<Item = bool>) -> bool {
+            if require_all {
+                it.all(|m| m)
+            } else {
+                it.any(|m| m)
+            }
+        }
+        match self {
+            TermEvaluationResult::Value(v) if v.as_ref().get_type() == SelectValueType::Array => {
+                v.as_ref().values().is_some_and(|it| {
+                    combine(require_all, it.map(|e| value_in_array(e.as_ref(), rhs)))
+                })
+            }
+            TermEvaluationResult::Literal(Value::Array(items)) => {
+                combine(require_all, items.iter().map(|e| value_in_array(e, rhs)))
+            }
+            TermEvaluationResult::NodeList(list) => list
+                .iter()
+                .any(|v| TermEvaluationResult::Value(v.clone()).set_relate(rhs, require_all)),
+            _ => false,
+        }
+    }
+
+    /// `arr1 subsetof arr2`: every element of `self` is a member of `rhs`.
+    fn subset_of(&self, rhs: &Self) -> bool {
+        self.set_relate(rhs, true)
+    }
+
+    /// `arr1 anyof arr2`: `self` and `rhs` have a non-empty intersection.
+    fn any_of(&self, rhs: &Self) -> bool {
+        self.set_relate(rhs, false)
+    }
+
+    /// Length of `self` as a sized sequence — array element count or string char count.
+    /// `None` for anything else (numbers, bools, null, objects). Used by the `sizeof`/
+    /// `empty` operators; a multi-result (nodelist) left operand is handled any-of by the
+    /// callers, so it never reaches here.
+    fn seq_length(&self) -> Option<usize> {
+        fn arr_or_str_len<V: SelectValue>(v: &V) -> Option<usize> {
+            match v.get_type() {
+                SelectValueType::String => v.as_str().map(|s| s.chars().count()),
+                SelectValueType::Array => v.len(),
+                _ => None,
+            }
+        }
+        match self {
+            TermEvaluationResult::Str(s) => Some(s.chars().count()),
+            TermEvaluationResult::String(s) => Some(s.chars().count()),
+            TermEvaluationResult::Value(v) => arr_or_str_len(v.as_ref()),
+            TermEvaluationResult::Literal(l) => arr_or_str_len(l),
+            _ => None,
+        }
+    }
+
+    /// Boolean view of this term, `None` if not a boolean.
+    fn as_bool(&self) -> Option<bool> {
+        match self {
+            TermEvaluationResult::Bool(b) => Some(*b),
+            TermEvaluationResult::Literal(Value::Bool(b)) => Some(*b),
+            TermEvaluationResult::Value(v) if v.as_ref().get_type() == SelectValueType::Bool => {
+                v.as_ref().get_bool()
+            }
+            _ => None,
+        }
+    }
+
+    /// `left sizeof right`: true if `self` is an array/string whose length equals the
+    /// integer value of `right` (a fractional `right` is truncated toward zero). A
+    /// non-numeric `right` or non-array/string `self` yields false.
+    fn size_of(&self, rhs: &Self) -> bool {
+        // Any-of over a multi-result left operand, matching `==`/`<`/`in`.
+        if let TermEvaluationResult::NodeList(list) = self {
+            return list
+                .iter()
+                .any(|v| TermEvaluationResult::Value(v.clone()).size_of(rhs));
+        }
+        // Any-of over a multi-result right operand (the size target), likewise.
+        if let TermEvaluationResult::NodeList(list) = rhs {
+            return list
+                .iter()
+                .any(|v| self.size_of(&TermEvaluationResult::Value(v.clone())));
+        }
+        let target: i64 = match rhs.as_number() {
+            Some(Num::Int(n)) => n,
+            Some(Num::Float(f)) => match f64_to_i64(f.trunc()) {
+                Some(n) => n,
+                None => return false,
+            },
+            None => return false,
+        };
+        target >= 0 && self.seq_length().is_some_and(|len| len as i64 == target)
+    }
+
+    /// `left empty right`: `right` is a boolean — `true` matches an empty array/string,
+    /// `false` a non-empty one. A non-boolean `right` or non-array/string `self` yields
+    /// false.
+    fn empty_check(&self, rhs: &Self) -> bool {
+        // Any-of over a multi-result left operand, matching `==`/`<`/`in`.
+        if let TermEvaluationResult::NodeList(list) = self {
+            return list
+                .iter()
+                .any(|v| TermEvaluationResult::Value(v.clone()).empty_check(rhs));
+        }
+        // Any-of over a multi-result right operand (the boolean), likewise.
+        if let TermEvaluationResult::NodeList(list) = rhs {
+            return list
+                .iter()
+                .any(|v| self.empty_check(&TermEvaluationResult::Value(v.clone())));
+        }
+        let (Some(len), Some(want_empty)) = (self.seq_length(), rhs.as_bool()) else {
+            return false;
+        };
+        (len == 0) == want_empty
     }
 
     fn re_is_match(cache: &mut RegexCache, regex: &str, s: &str) -> bool {
@@ -1485,6 +1850,12 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 // `nin` is the strict negation of `in`: a non-array / absent RHS makes
                 // `in` false, so `nin` is true.
                 Rule::nin_op => !term1_val.member_of(&term2_val),
+                Rule::subsetof_op => term1_val.subset_of(&term2_val),
+                Rule::anyof_op => term1_val.any_of(&term2_val),
+                // `noneof` = empty intersection = strict negation of `anyof`.
+                Rule::noneof_op => !term1_val.any_of(&term2_val),
+                Rule::size_op => term1_val.size_of(&term2_val),
+                Rule::empty_op => term1_val.empty_check(&term2_val),
                 _ => {
                     trace!(
                         "evaluate_single_filter: unknown comparison op {:?}",

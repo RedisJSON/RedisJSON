@@ -1660,6 +1660,40 @@ def testFilterFunctions(env):
     r.expect('JSON.SET', 'doc', '$', json.dumps({"a": ["abc", "xyz", "b"]})).ok()
     r.expect('JSON.GET', 'doc', '$.a[?search(@, "b")]').equal('["abc","b"]')
 
+def testFilterNumericStringFunctions(env):
+    # Test ceiling / floor / abs / concat
+    r = env
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [2.1, 3.9, 1.0]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?ceiling(@) == 3]').equal('[2.1]')
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [2.1, 2.9, 3.5]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?floor(@) == 2]').equal('[2.1,2.9]')
+    # abs: integer stays integer, float stays float
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [{"n": -5}, {"n": 5}, {"n": -3}]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?abs(@.n) == 5]').equal('[{"n":-5},{"n":5}]')
+    # concat: string concatenation; non-string arg -> no match
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [{"x": "a", "y": "b"}, {"x": "a", "y": "c"}]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?concat(@.x, @.y) == "ab"]').equal('[{"x":"a","y":"b"}]')
+
+def testFilterArrayFunctions(env):
+    # Test min / max / avg / sum / stddev / first / last / index
+    r = env
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [{"n": [3, 1, 2]}, {"n": [5, 6]}]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?sum(@.n) == 6]').equal('[{"n":[3,1,2]}]')
+    r.expect('JSON.GET', 'doc', '$.a[?min(@.n) == 1]').equal('[{"n":[3,1,2]}]')
+    r.expect('JSON.GET', 'doc', '$.a[?max(@.n) == 3]').equal('[{"n":[3,1,2]}]')
+    r.expect('JSON.GET', 'doc', '$.a[?avg(@.n) == 2]').equal('[{"n":[3,1,2]}]')
+    # population stddev of [2,4,4,4,5,5,7,9] is 2.0
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [{"n": [2, 4, 4, 4, 5, 5, 7, 9]}, {"n": [1, 2]}]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?stddev(@.n) == 2.0]').equal('[{"n":[2,4,4,4,5,5,7,9]}]')
+    # a non-numeric element yields Nothing -> no match
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [{"n": [1, "x"]}]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?sum(@.n) == 3]').equal('[]')
+    # first / last / index (negative offset counts from the end)
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [{"n": [1, 2]}, {"n": [9, 8]}]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?first(@.n) == 1]').equal('[{"n":[1,2]}]')
+    r.expect('JSON.GET', 'doc', '$.a[?last(@.n) == 8]').equal('[{"n":[9,8]}]')
+    r.expect('JSON.GET', 'doc', '$.a[?index(@.n, -1) == 2]').equal('[{"n":[1,2]}]')
+
 def testFilterMembership(env):
     # Test set-membership operators: in / nin
     r = env
@@ -1679,6 +1713,38 @@ def testFilterMembership(env):
     # numbers coerce int/float, aligned with `==`
     r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [1.0, 2.0, 3.0]})).ok()
     r.expect('JSON.GET', 'doc', '$.a[?@ in [1,2]]').equal('[1.0,2.0]')
+
+def testFilterSetRelations(env):
+    # Test set-relation operators: subsetof / anyof / noneof
+    r = env
+    # subsetof: every element present; empty array is always a subset
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [[1, 2], [1, 5], []]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?@ subsetof [1,2,3]]').equal('[[1,2],[]]')
+    # subsetof with a path-array RHS
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"items": [{"val": [1, 2], "vals": [1, 2, 3]}, {"val": [1, 9], "vals": [1, 2, 3]}]})).ok()
+    r.expect('JSON.GET', 'doc', '$.items[?@.val subsetof @.vals]').equal('[{"val":[1,2],"vals":[1,2,3]}]')
+    # anyof: non-empty intersection; empty array has none
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [[1, 9], [8, 9], []]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?@ anyof [1,2,3]]').equal('[[1,9]]')
+    # noneof: empty intersection; empty array trivially matches
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [[4, 5], [1, 9], []]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?@ noneof [1,2,3]]').equal('[[4,5],[]]')
+
+def testFilterSizeEmpty(env):
+    # Test size/sizeof and empty operators (arrays and strings)
+    r = env
+    # sizeof: array element count
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [[4, 5], [1], [7, 8, 9]]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?@ sizeof 2]').equal('[[4,5]]')
+    # `size` is an alias for `sizeof`
+    r.expect('JSON.GET', 'doc', '$.a[?@ size 2]').equal('[[4,5]]')
+    # sizeof: string char count
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": ["ab", "abc", "xy"]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?@ sizeof 2]').equal('["ab","xy"]')
+    # empty true -> empty array/string; empty false -> non-empty
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [[], [1], "", [2, 3]]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?@ empty true]').equal('[[],""]')
+    r.expect('JSON.GET', 'doc', '$.a[?@ empty false]').equal('[[1],[2,3]]')
 
 def testFilterArithmetic(env):
     # Test arithmetic operators in filters: + - * / % and unary, with precedence
