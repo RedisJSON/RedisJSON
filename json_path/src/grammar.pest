@@ -112,7 +112,9 @@ element = _{"." ~ literal | full_scan ~ (literal | all | "[" ~ bracket ~ "]") | 
 // NOTE: this is a deliberate, documented behavior change: a bare first segment with one
 // of these names (e.g. `$in`, `@size`) no longer parses as a path to that field — use
 // `$.size` / `$["size"]` instead.
-op_keyword = @{("subsetof" | "noneof" | "anyof" | "sizeof" | "size" | "empty" | "nin" | "in") ~ !(ASCII_ALPHANUMERIC | "_")}
+// Order mirrors the `op` rule's word-operator alternation (with `sizeof` before its
+// prefix `size`), so the operator list and this path-segment guard stay in agreement.
+op_keyword = @{("in" | "nin" | "subsetof" | "anyof" | "noneof" | "sizeof" | "size" | "empty") ~ !(ASCII_ALPHANUMERIC | "_")}
 
 first_element = _{(!op_keyword ~ literal) | all}
 

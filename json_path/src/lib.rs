@@ -694,6 +694,22 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_function_wrong_arity_nothing() {
+        setup();
+        // wrong argument count -> Nothing (no match), instead of silently using a subset.
+        // single-arg functions reject a second arg
+        verify_json!(path:"$.a[?ceiling(@.n, 99) == 3]", json:{"a":[{"n":2.1}]}, results:[]);
+        verify_json!(path:"$.a[?abs(@.n, 99) == 5]", json:{"a":[{"n":-5}]}, results:[]);
+        verify_json!(path:"$.a[?sum(@.n, 99) == 6]", json:{"a":[{"n":[1,2,3]}]}, results:[]);
+        verify_json!(path:"$.a[?first(@.n, 99) == 1]", json:{"a":[{"n":[1,2]}]}, results:[]);
+        // index requires exactly two args
+        verify_json!(path:"$.a[?index(@.n) == 1]", json:{"a":[{"n":[1,2]}]}, results:[]);
+        verify_json!(path:"$.a[?index(@.n, 0, 9) == 1]", json:{"a":[{"n":[1,2]}]}, results:[]);
+        // concat needs at least one arg: `concat()` is Nothing, not the empty string
+        verify_json!(path:r#"$.a[?concat() == ""]"#, json:{"a":[{"n":1}]}, results:[]);
+    }
+
+    #[test]
     fn test_membership_in_literal() {
         setup();
         verify_json!(path:"$.a[?@ in [2,4]]", json:{"a":[1,2,3,4]}, results:[2,4]);
@@ -760,10 +776,14 @@ mod json_path_tests {
     }
 
     #[test]
-    fn test_set_subsetof_type_strict() {
+    fn test_set_subsetof_numeric_coercion() {
         setup();
-        // array comparison is type-strict like structured `==`: floats do not match ints
-        verify_json!(path:"$.a[?@ subsetof [1.0,2.0,3.0]]", json:{"a":[[1.0,2.0],[1,2]]}, results:[[1.0,2.0]]);
+        // set ops coerce numbers like `in`/`nin`: an int element matches a float member
+        // (`1` == `1.0`), so both arrays are subsets of the float literal
+        verify_json!(path:"$.a[?@ subsetof [1.0,2.0,3.0]]", json:{"a":[[1.0,2.0],[1,2]]}, results:[[1.0,2.0],[1,2]]);
+        // anyof/noneof coerce too: `2` intersects `[1.0,2.0]`
+        verify_json!(path:"$.a[?@ anyof [1.0,2.0]]", json:{"a":[[2],[9]]}, results:[[2]]);
+        verify_json!(path:"$.a[?@ noneof [1.0,2.0]]", json:{"a":[[2],[9]]}, results:[[9]]);
     }
 
     #[test]
@@ -810,6 +830,25 @@ mod json_path_tests {
         // matches empty true or empty false
         verify_json!(path:"$.a[?@ empty true]", json:{"a":[{}, [], {"k":1}]}, results:[[]]);
         verify_json!(path:"$.a[?@ empty false]", json:{"a":[{}, [1], {"k":1}]}, results:[[1]]);
+    }
+
+    #[test]
+    fn test_size_of_multi_node_any_of() {
+        setup();
+        // a multi-result left operand (`@.*`) matches any-of, like `==`/`<`/`in`:
+        // the object matches because one of its values is a size-2 array
+        verify_json!(path:"$.a[?@.* sizeof 2]",
+            json:{"a":[{"x":[1],"y":[1,2]},{"x":[1],"y":[3]}]},
+            results:[{"x":[1],"y":[1,2]}]);
+    }
+
+    #[test]
+    fn test_empty_multi_node_any_of() {
+        setup();
+        // `@.* empty true` matches if any matched node is an empty array/string
+        verify_json!(path:"$.a[?@.* empty true]",
+            json:{"a":[{"x":[1],"y":[]},{"x":[1],"y":[3]}]},
+            results:[{"x":[1],"y":[]}]);
     }
 
     #[test]

@@ -302,9 +302,20 @@ fn value_as_number<V: SelectValue>(v: &V) -> Option<Num> {
     }
 }
 
-/// True if `needle` deep-equals any element of the array-shaped term `haystack` (array
-/// value, array literal, or nodelist). Comparison is type-strict like structured `==`
-/// (`is_equal`): nested numbers do not coerce, so `1` ≠ `1.0`. Non-array `haystack` ⇒ false.
+/// Equality between two document values with `in`/`nin` number coercion: integers and
+/// doubles compare by numeric value (`1` == `1.0`); everything else uses deep `is_equal`
+/// equality. Mirrors `equals_value`, so the set operators agree with `in`/`nin`.
+fn values_equal<A: SelectValue, B: SelectValue>(a: &A, b: &B) -> bool {
+    match (value_as_number(a), value_as_number(b)) {
+        (Some(x), Some(y)) => numbers_equal(x, y),
+        _ => is_equal(a, b),
+    }
+}
+
+/// True if `needle` equals any element of the array-shaped term `haystack` (array value,
+/// array literal, or nodelist). Comparison coerces numbers like `in`/`nin` (`1` == `1.0`)
+/// and uses deep `is_equal` for everything else, so the set operators agree with
+/// membership. Non-array `haystack` ⇒ false.
 fn value_in_array<'i, 'j, S: SelectValue, V: SelectValue>(
     needle: &V,
     haystack: &TermEvaluationResult<'i, 'j, S>,
@@ -313,11 +324,13 @@ fn value_in_array<'i, 'j, S: SelectValue, V: SelectValue>(
         TermEvaluationResult::Value(v) if v.as_ref().get_type() == SelectValueType::Array => v
             .as_ref()
             .values()
-            .is_some_and(|mut it| it.any(|e| is_equal(needle, e.as_ref()))),
+            .is_some_and(|mut it| it.any(|e| values_equal(needle, e.as_ref()))),
         TermEvaluationResult::Literal(Value::Array(items)) => {
-            items.iter().any(|it| is_equal(needle, it))
+            items.iter().any(|it| values_equal(needle, it))
         }
-        TermEvaluationResult::NodeList(list) => list.iter().any(|v| is_equal(needle, v.as_ref())),
+        TermEvaluationResult::NodeList(list) => {
+            list.iter().any(|v| values_equal(needle, v.as_ref()))
+        }
         _ => false,
     }
 }
@@ -531,6 +544,16 @@ fn regex_matches(cache: &mut RegexCache, pattern: &str, full: bool, s: &str) -> 
     }
 }
 
+/// Convert a finite `f64` to `i64`, returning `None` when it falls outside the `i64`
+/// range (rather than saturating, as a bare `as i64` would). Callers round or truncate
+/// first; this enforces the overflow/range policy in one place.
+fn f64_to_i64(v: f64) -> Option<i64> {
+    // `i64::MAX` is not exactly representable in f64: `i64::MAX as f64` rounds up to 2^63
+    // (one past MAX), so the upper bound must be strict `<` to reject it. `i64::MIN`
+    // (-2^63) is exact, so `>=` is correct there.
+    (v.is_finite() && v >= i64::MIN as f64 && v < i64::MAX as f64).then_some(v as i64)
+}
+
 /// Dispatch a filter-expression function call to its RFC 9535 implementation.
 /// `ceiling(n)`/`floor(n)`: round a number to an integer using `round`
 /// (`f64::ceil`/`f64::floor`). Integers pass through unchanged; a non-numeric argument
@@ -542,15 +565,8 @@ fn function_round<'i, 'j, S: SelectValue>(
     match arg.and_then(TermEvaluationResult::as_number) {
         Some(Num::Int(n)) => TermEvaluationResult::Integer(n),
         Some(Num::Float(f)) => {
-            let r = round(f);
-            // `i64::MAX` is not exactly representable in f64: `i64::MAX as f64` rounds up
-            // to 2^63 (one past MAX), so the upper bound must be strict `<` to reject it.
-            // `i64::MIN` (-2^63) is exact, so `>=` is correct there.
-            if r.is_finite() && r >= i64::MIN as f64 && r < i64::MAX as f64 {
-                TermEvaluationResult::Integer(r as i64)
-            } else {
-                TermEvaluationResult::Invalid
-            }
+            f64_to_i64(round(f))
+                .map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Integer)
         }
         None => TermEvaluationResult::Invalid,
     }
@@ -695,6 +711,19 @@ fn eval_function<'i, 'j, S: SelectValue>(
     mut args: Vec<TermEvaluationResult<'i, 'j, S>>,
     cache: &mut RegexCache,
 ) -> TermEvaluationResult<'i, 'j, S> {
+    // Reject the wrong number of arguments (-> Nothing) for this PR's functions, so a
+    // malformed query like `ceiling(@, 9)` or `concat()` doesn't silently operate on a
+    // subset of its arguments instead of failing.
+    let arity_ok = match name {
+        "concat" => !args.is_empty(),
+        "index" => args.len() == 2,
+        "ceiling" | "floor" | "abs" | "sum" | "min" | "max" | "avg" | "stddev" | "first"
+        | "last" => args.len() == 1,
+        _ => true,
+    };
+    if !arity_ok {
+        return TermEvaluationResult::Invalid;
+    }
     match name {
         "length" => args
             .first()
@@ -721,7 +750,7 @@ fn eval_function<'i, 'j, S: SelectValue>(
             let array = it.next();
             let idx = it.next().and_then(|a| match a.as_number() {
                 Some(Num::Int(n)) => Some(n),
-                Some(Num::Float(f)) if f.is_finite() => Some(f.trunc() as i64),
+                Some(Num::Float(f)) => f64_to_i64(f.trunc()),
                 _ => None,
             });
             idx.map_or(TermEvaluationResult::Invalid, |n| function_index(array, n))
@@ -1193,8 +1222,9 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
     }
 
     /// Length of `self` as a sized sequence — array element count or string char count.
-    /// `None` for anything else (numbers, bools, null, objects, multi-node lists). Used
-    /// by the `sizeof`/`empty` operators, which apply only to arrays and strings.
+    /// `None` for anything else (numbers, bools, null, objects). Used by the `sizeof`/
+    /// `empty` operators; a multi-result (nodelist) left operand is handled any-of by the
+    /// callers, so it never reaches here.
     fn seq_length(&self) -> Option<usize> {
         fn arr_or_str_len<V: SelectValue>(v: &V) -> Option<usize> {
             match v.get_type() {
@@ -1208,9 +1238,6 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             TermEvaluationResult::String(s) => Some(s.chars().count()),
             TermEvaluationResult::Value(v) => arr_or_str_len(v.as_ref()),
             TermEvaluationResult::Literal(l) => arr_or_str_len(l),
-            TermEvaluationResult::NodeList(list) if list.len() == 1 => {
-                arr_or_str_len(list[0].as_ref())
-            }
             _ => None,
         }
     }
@@ -1231,10 +1258,19 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
     /// integer value of `right` (a fractional `right` is truncated toward zero). A
     /// non-numeric `right` or non-array/string `self` yields false.
     fn size_of(&self, rhs: &Self) -> bool {
+        // Any-of over a multi-result left operand, matching `==`/`<`/`in`.
+        if let TermEvaluationResult::NodeList(list) = self {
+            return list
+                .iter()
+                .any(|v| TermEvaluationResult::Value(v.clone()).size_of(rhs));
+        }
         let target: i64 = match rhs.as_number() {
             Some(Num::Int(n)) => n,
-            Some(Num::Float(f)) if f.is_finite() => f.trunc() as i64,
-            _ => return false,
+            Some(Num::Float(f)) => match f64_to_i64(f.trunc()) {
+                Some(n) => n,
+                None => return false,
+            },
+            None => return false,
         };
         target >= 0 && self.seq_length().is_some_and(|len| len as i64 == target)
     }
@@ -1243,6 +1279,12 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
     /// `false` a non-empty one. A non-boolean `right` or non-array/string `self` yields
     /// false.
     fn empty_check(&self, rhs: &Self) -> bool {
+        // Any-of over a multi-result left operand, matching `==`/`<`/`in`.
+        if let TermEvaluationResult::NodeList(list) = self {
+            return list
+                .iter()
+                .any(|v| TermEvaluationResult::Value(v.clone()).empty_check(rhs));
+        }
         let (Some(len), Some(want_empty)) = (self.seq_length(), rhs.as_bool()) else {
             return false;
         };
