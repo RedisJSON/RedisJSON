@@ -85,6 +85,19 @@ pub fn calc_once<'j, 'p, S: SelectValue>(q: Query<'j>, json: &'p S) -> Vec<Value
     .collect()
 }
 
+/// Calc once for a projection query (e.g. `$.a + 1`, `$arr.length()`): returns the single
+/// computed value as an impl-independent `serde_json::Value`, or `None` for Nothing (an empty
+/// result). Only valid when `q.is_projection()`; returns `None` otherwise. The result is a
+/// synthesized value, never a document node, so it is GET-output-only.
+pub fn calc_once_projection<S: SelectValue>(q: Query, json: &S) -> Option<serde_json::Value> {
+    let expr = q.projection_expr()?.clone();
+    PathCalculator::<DummyTrackerGenerator> {
+        query: None,
+        tracker_generator: None,
+    }
+    .eval_projection(ValueRef::Borrowed(json), expr)
+}
+
 /// A version of `calc_once` that returns also paths.
 pub fn calc_once_with_paths<'p, S: SelectValue>(
     q: Query<'_>,
@@ -139,6 +152,18 @@ mod json_path_tests {
         let query = json_path::compile(path).unwrap();
         let path_calculator = create_with_generator(&query);
         path_calculator.calc_paths(json)
+    }
+
+    /// Evaluate a projection query, returning the single computed value (or `None` for
+    /// Nothing). Asserts the query is classified as a projection.
+    fn perform_projection(path: &str, json: &Value) -> Option<Value> {
+        use crate::calc_once_projection;
+        let query = json_path::compile(path).unwrap();
+        assert!(
+            query.is_projection(),
+            "expected `{path}` to be a projection"
+        );
+        calc_once_projection(query, json)
     }
 
     macro_rules! verify_json {(
@@ -572,6 +597,16 @@ mod json_path_tests {
         setup();
         // search is a substring match
         verify_json!(path:"$.a[?search(@, \"b\")]", json:{"a":["abc","xyz","b"]}, results:["abc","b"]);
+    }
+
+    #[test]
+    fn test_re_with_computed_string_pattern() {
+        setup();
+        // `=~` RHS is a computed String (from concat), not a literal/document string.
+        // concat(@.a, @.b) -> "ab"; substring-matches "abc" but not "xyz".
+        verify_json!(path:r#"$.items[?@.s =~ concat(@.a, @.b)]"#,
+            json:{"items":[{"s":"abc","a":"a","b":"b"},{"s":"xyz","a":"a","b":"b"}]},
+            results:[{"s":"abc","a":"a","b":"b"}]);
     }
 
     #[test]
@@ -1327,5 +1362,124 @@ mod json_path_tests {
         let string_paths = calculator.calc_paths(&doc);
         let n_vals = calc_once(q, &doc).len();
         assert_eq!(string_paths.len(), n_vals, "calc_paths vs calc_once count");
+    }
+
+    // ---- Projection (top-level computed expressions) ----
+
+    #[test]
+    fn projection_arithmetic() {
+        setup();
+        let doc = json!({"a": 2, "b": 4});
+        assert_eq!(perform_projection("$.a + 1", &doc), Some(json!(3)));
+        assert_eq!(perform_projection("$.a * $.b", &doc), Some(json!(8)));
+        assert_eq!(perform_projection("$.a - $.b", &doc), Some(json!(-2)));
+        // division is always float
+        assert_eq!(
+            perform_projection("($.a + $.b) / 2", &doc),
+            Some(json!(3.0))
+        );
+        // unary minus
+        assert_eq!(perform_projection("-$.a", &doc), Some(json!(-2)));
+        // precedence: * binds tighter than +
+        assert_eq!(perform_projection("$.a + $.b * 2", &doc), Some(json!(10)));
+        // modulo, integer stays integer
+        assert_eq!(perform_projection("$.b % $.a", &doc), Some(json!(0)));
+    }
+
+    #[test]
+    fn projection_postfix_methods() {
+        setup();
+        let doc = json!({"arr": [1, 2, 3], "s": "héllo", "nums": [3, 1, 2], "matrix": [[1, 2, 3], [4, 5]]});
+        assert_eq!(perform_projection("$.arr.length()", &doc), Some(json!(3)));
+        // string length is char count
+        assert_eq!(perform_projection("$.s.length()", &doc), Some(json!(5)));
+        assert_eq!(perform_projection("$.nums.min()", &doc), Some(json!(1.0)));
+        assert_eq!(perform_projection("$.nums.max()", &doc), Some(json!(3.0)));
+        assert_eq!(perform_projection("$.nums.sum()", &doc), Some(json!(6.0)));
+        // index(n) with the receiver as the array
+        assert_eq!(perform_projection("$.arr.index(1)", &doc), Some(json!(2)));
+        // first() returns the document element (node pass-through)
+        assert_eq!(perform_projection("$.arr.first()", &doc), Some(json!(1)));
+        // method chaining: first() -> [1,2,3] -> length() -> 3
+        assert_eq!(
+            perform_projection("$.matrix.first().length()", &doc),
+            Some(json!(3))
+        );
+    }
+
+    #[test]
+    fn projection_function_edge_cases() {
+        setup();
+        let doc = json!({"a": 2, "s": "x", "big": 1e308});
+        // unknown function -> Nothing
+        assert_eq!(perform_projection("$.a.bogus()", &doc), None);
+        // type-mismatched function -> Nothing
+        assert_eq!(perform_projection("$.s.min()", &doc), None); // min on a string
+        assert_eq!(perform_projection("$.a.length()", &doc), None); // length of a number
+                                                                    // overflow to a non-finite float -> Nothing (not null), like division by zero
+        assert_eq!(perform_projection("$.big * $.big", &doc), None);
+    }
+
+    #[test]
+    fn projection_prefix_functions() {
+        setup();
+        let doc = json!({"arr": [1, 2, 3], "n": -5});
+        assert_eq!(perform_projection("length($.arr)", &doc), Some(json!(3)));
+        assert_eq!(perform_projection("abs($.n)", &doc), Some(json!(5)));
+    }
+
+    #[test]
+    fn projection_nothing_is_empty() {
+        setup();
+        let doc = json!({"a": 5, "s": "x"});
+        // division / modulo by zero -> Nothing
+        assert_eq!(perform_projection("$.a / 0", &doc), None);
+        assert_eq!(perform_projection("$.a % 0", &doc), None);
+        // arithmetic on a non-number -> Nothing
+        assert_eq!(perform_projection("$.s * 2", &doc), None);
+        // missing field -> Nothing
+        assert_eq!(perform_projection("$.missing + 1", &doc), None);
+        // multi-node operand is not a single number -> Nothing
+        let multi = json!({"o": {"x": 1}, "p": {"x": 2}});
+        assert_eq!(perform_projection("$..x + 1", &multi), None);
+    }
+
+    #[test]
+    fn projection_classification_backward_compat() {
+        setup();
+        // These must stay PLAIN PATHS (not projections) and keep today's behavior.
+        for path in [
+            "$",
+            "$.a.b",
+            "$..x",
+            "$[*]",
+            "$.a[?@>1]",
+            "$[\"k\"]",
+            "$[0:2]",
+            "$.a+1",        // no spaces -> a field literally named "a+1"
+            "$.arr.length", // no parens -> a field named "length"
+        ] {
+            let q = json_path::compile(path).unwrap();
+            assert!(!q.is_projection(), "`{path}` should be a plain path");
+        }
+        // These are projections.
+        for path in [
+            "$.a + 1",
+            "-$.a",
+            "$.a * $.b",
+            "$.arr.length()",
+            "length($.arr)",
+            "($.a)",
+        ] {
+            let q = json_path::compile(path).unwrap();
+            assert!(q.is_projection(), "`{path}` should be a projection");
+        }
+    }
+
+    #[test]
+    fn projection_no_space_is_field_not_arithmetic() {
+        setup();
+        // `$.a+1` is the field "a+1" (path mode), NOT arithmetic.
+        verify_json!(path:"$.a+1", json:{"a+1": 7, "a": 2}, results:[7]);
     }
 }

@@ -111,9 +111,7 @@ pub struct Path<'a> {
 impl<'a> Path<'a> {
     #[must_use]
     pub fn new(path: &str) -> Path<'_> {
-        let fixed_path = if path.starts_with('$')
-            && (path.len() < 2 || (path.as_bytes()[1] == b'.' || path.as_bytes()[1] == b'['))
-        {
+        let fixed_path = if Self::is_jsonpath(path) {
             None
         } else {
             let mut cloned = path.to_string();
@@ -129,6 +127,36 @@ impl<'a> Path<'a> {
         Path {
             original_path: path,
             fixed_path,
+        }
+    }
+
+    /// Whether `path` is a JSONPath (v2) expression rather than a legacy (1.x) path.
+    /// Rooted JSONPath is `$` alone or `$.`/`$[` — `$<name>` stays a legacy field (e.g. a
+    /// key literally named `$a`), preserving 1.x behavior. A top-level *projection*
+    /// expression is also JSONPath: a parenthesized group, a unary sign on a
+    /// `$`-rooted/parenthesized operand, or a prefix function call (`name(...)`). These
+    /// forms can only be computed expressions, never a legacy path (`(` is not a legacy
+    /// path char and a bare field is not followed by `(`), so legacy paths starting with
+    /// `.` or a bare field name are never misclassified.
+    fn is_jsonpath(path: &str) -> bool {
+        let b = path.as_bytes();
+        match b.first() {
+            // Rooted JSONPath (legacy keeps `$<name>` as a field).
+            Some(b'$') => path.len() < 2 || matches!(b.get(1), Some(b'.' | b'[')),
+            // Parenthesized projection, e.g. `($.a + $.b) / 2`.
+            Some(b'(') => true,
+            // Unary `-`/`+` on a rooted or parenthesized operand (e.g. `-$.a`, `+($.a)`),
+            // distinct from a legacy field name that happens to contain a sign.
+            Some(b'-' | b'+') => matches!(b.get(1), Some(b'$' | b'(')),
+            // Prefix function call: an identifier immediately followed by `(`.
+            Some(c) if c.is_ascii_alphabetic() || *c == b'_' => {
+                let name_len = b
+                    .iter()
+                    .take_while(|x| x.is_ascii_alphanumeric() || **x == b'_')
+                    .count();
+                b.get(name_len) == Some(&b'(')
+            }
+            _ => false,
         }
     }
 

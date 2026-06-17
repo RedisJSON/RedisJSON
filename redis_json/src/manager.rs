@@ -102,6 +102,10 @@ pub fn err_invalid_path() -> RedisError {
     RedisError::Str("ERR Path does not exist")
 }
 
+pub fn err_projection_readonly() -> RedisError {
+    RedisError::Str("ERR computed/projection expressions are only supported by JSON.GET/JSON.MGET")
+}
+
 pub fn err_invalid_path_or(or: &str) -> RedisError {
     RedisError::String(format!("ERR Path does not exist or {or}"))
 }

@@ -1764,6 +1764,98 @@ def testFilterArithmetic(env):
     # division by zero -> no match
     r.expect('JSON.GET', 'doc', '$[?@.a / 0 == 0]').equal('[]')
 
+def testProjection(env):
+    # Top-level projection: JSON.GET computes a value rather than only selecting nodes.
+    r = env
+    r.expect('JSON.SET', 'doc', '$', json.dumps(
+        {"a": 2, "b": 4, "arr": [1, 2, 3], "s": "hi", "nums": [3, 1, 2]})).ok()
+    # arithmetic (spaces required between operands and operators)
+    r.expect('JSON.GET', 'doc', '$.a + 1').equal('[3]')
+    r.expect('JSON.GET', 'doc', '$.a * $.b').equal('[8]')
+    r.expect('JSON.GET', 'doc', '($.a + $.b) / 2').equal('[3.0]')
+    r.expect('JSON.GET', 'doc', '-$.a').equal('[-2]')
+    # postfix / method functions ($.arr, with the dot — `$arr` is a legacy field access)
+    r.expect('JSON.GET', 'doc', '$.arr.length()').equal('[3]')
+    r.expect('JSON.GET', 'doc', '$.s.length()').equal('[2]')
+    r.expect('JSON.GET', 'doc', '$.nums.min()').equal('[1.0]')
+    r.expect('JSON.GET', 'doc', '$.arr.index(1)').equal('[2]')
+    # prefix function form
+    r.expect('JSON.GET', 'doc', 'length($.arr)').equal('[3]')
+    # Nothing -> empty result (like a non-matching path)
+    r.expect('JSON.GET', 'doc', '$.a / 0').equal('[]')
+    r.expect('JSON.GET', 'doc', '$.s * 2').equal('[]')
+    r.expect('JSON.GET', 'doc', '$.missing + 1').equal('[]')
+    # `$.a+1` (no spaces) is still the field literally named "a+1", not arithmetic
+    r.expect('JSON.SET', 'doc2', '$', json.dumps({"a+1": 7, "a": 2})).ok()
+    r.expect('JSON.GET', 'doc2', '$.a+1').equal('[7]')
+    # JSON.MGET evaluates the projection per key (Nothing -> [], missing key -> None)
+    r.expect('JSON.SET', 'doc3', '$', json.dumps({"x": 1})).ok()
+    r.assertEqual(r.execute_command('JSON.MGET', 'doc', 'doc3', '$.a + 1'), ['[3]', '[]'])
+
+def testProjectionMget(env):
+    # JSON.MGET evaluates a top-level projection independently per key.
+    r = env
+    r.expect('JSON.SET', 'doc1{t}', '$', json.dumps({"a": 2, "arr": [1, 2, 3]})).ok()
+    r.expect('JSON.SET', 'doc2{t}', '$', json.dumps({"a": 10})).ok()
+    r.expect('JSON.SET', 'doc3{t}', '$', json.dumps({"x": 1})).ok()
+    # arithmetic projection: computed where `a` exists, Nothing ("[]") where it doesn't,
+    # and nil for a missing key
+    r.assertEqual(r.execute_command('JSON.MGET', 'doc1{t}', 'doc2{t}', 'doc3{t}', 'nokey{t}', '$.a + 1'),
+                  ['[3]', '[11]', '[]', None])
+    # method-form projection, per key (doc2 has no `arr` -> Nothing -> "[]")
+    r.assertEqual(r.execute_command('JSON.MGET', 'doc1{t}', 'doc2{t}', '$.arr.length()'),
+                  ['[3]', '[]'])
+    # a malformed projection surfaces as nil per key (JSON.MGET maps a per-key path error
+    # to nil rather than failing the whole request, unlike JSON.GET which errors)
+    r.assertEqual(r.execute_command('JSON.MGET', 'doc1{t}', 'doc2{t}', '$.a +'), [None, None])
+    r.expect('PING').equal(True)
+
+def testProjectionReadOnly(env):
+    # Projections are read-only: write/path commands must reject them.
+    r = env
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": 2, "arr": [1, 2, 3]})).ok()
+    r.expect('JSON.SET', 'doc', '$.a + 1', '5').raiseError()
+    r.expect('JSON.NUMINCRBY', 'doc', '$.a + 1', '1').raiseError()
+    r.expect('JSON.NUMMULTBY', 'doc', '$.arr.length()', '2').raiseError()
+    r.expect('JSON.ARRAPPEND', 'doc', '$.a * 2', '1').raiseError()
+    r.expect('JSON.STRAPPEND', 'doc', '-$.a', '"x"').raiseError()
+    # the document is unchanged after the rejected writes
+    r.expect('JSON.GET', 'doc', '$').equal('[{"a":2,"arr":[1,2,3]}]')
+
+def testProjectionRejectedByNodeCommands(env):
+    # Node-based read commands operate on document nodes; a projection has none, so they must
+    # return a clean error.
+    r = env
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": 2, "arr": [1, 2, 3], "s": "hi"})).ok()
+    r.expect('JSON.TYPE', 'doc', '$.a + 1').raiseError()
+    r.expect('JSON.STRLEN', 'doc', '$.s.length()').raiseError()
+    r.expect('JSON.OBJLEN', 'doc', '-$.a').raiseError()
+    r.expect('JSON.ARRLEN', 'doc', '$.a + 1').raiseError()
+    r.expect('JSON.ARRINDEX', 'doc', '$.a + 1', '1').raiseError()
+    r.expect('JSON.DEBUG', 'MEMORY', 'doc', 'length($.arr)').raiseError()
+    # server is alive and JSON.GET projection still works
+    r.expect('PING').equal(True)
+    r.expect('JSON.GET', 'doc', '$.a + 1').equal('[3]')
+
+def testProjectionEdgeCases(env):
+    r = env
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": 2, "b": 4, "arr": [1, 2, 3], "big": 1e308})).ok()
+    # malformed projection expressions -> clean error, must not crash the server
+    for bad in ['$.a +', '$.arr.length(', '($.a', '$.a * * 2']:
+        r.expect('JSON.GET', 'doc', bad).raiseError()
+    r.expect('PING').equal(True)
+    # overflow to a non-finite value -> Nothing (not null), like division by zero
+    r.expect('JSON.GET', 'doc', '$.big * $.big').equal('[]')
+    # unknown / type-mismatched method -> Nothing
+    r.expect('JSON.GET', 'doc', '$.a.bogus()').equal('[]')
+    r.expect('JSON.GET', 'doc', '$.a.length()').equal('[]')
+    # multi-path: a projection and a plain path in one reply (compare order-independently)
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'doc', '$.a + 1', '$.b')),
+                  {"$.a + 1": [3], "$.b": [4]})
+    # multi-path with a projection that is Nothing -> [] for that path, not a whole-request error
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'doc', '$.a + 1', '$.nope.length()')),
+                  {"$.a + 1": [3], "$.nope.length()": []})
+
 def testMerge(env):
     # Test JSON.MERGE
     r = env

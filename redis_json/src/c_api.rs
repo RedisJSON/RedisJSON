@@ -337,6 +337,11 @@ pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -
     let Ok(query) = compile(path) else {
         return null();
     };
+    // The LLAPI returns pointers to document nodes; a projection yields a synthesized value
+    // with no node, so it is not exposed here.
+    if query.is_projection() {
+        return null();
+    }
     let path_calculator = create(&query);
     let res = path_calculator.calc(v);
     Box::into_raw(Box::new(ResultsIterator {
