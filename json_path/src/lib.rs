@@ -801,6 +801,25 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_set_relate_multi_node_any_of() {
+        setup();
+        // a multi-result left operand (`@.*`) is evaluated any-of per node, each node
+        // treated as the array-shaped left operand (not the nodelist itself as one array)
+        // subsetof: any node is a subset of the RHS
+        verify_json!(path:"$.a[?@.* subsetof [1,2,3]]",
+            json:{"a":[{"x":[1,2],"y":[9]},{"x":[7],"y":[8]}]},
+            results:[{"x":[1,2],"y":[9]}]);
+        // anyof: any node intersects the RHS
+        verify_json!(path:"$.a[?@.* anyof [1,2,3]]",
+            json:{"a":[{"x":[9,2],"y":[8]},{"x":[7],"y":[6]}]},
+            results:[{"x":[9,2],"y":[8]}]);
+        // noneof = no node intersects the RHS
+        verify_json!(path:"$.a[?@.* noneof [1,2,3]]",
+            json:{"a":[{"x":[9],"y":[8]},{"x":[7],"y":[2]}]},
+            results:[{"x":[9],"y":[8]}]);
+    }
+
+    #[test]
     fn test_size_of_array_and_string() {
         setup();
         // array element count and string char count

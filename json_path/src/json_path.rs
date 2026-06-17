@@ -564,10 +564,8 @@ fn function_round<'i, 'j, S: SelectValue>(
 ) -> TermEvaluationResult<'i, 'j, S> {
     match arg.and_then(TermEvaluationResult::as_number) {
         Some(Num::Int(n)) => TermEvaluationResult::Integer(n),
-        Some(Num::Float(f)) => {
-            f64_to_i64(round(f))
-                .map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Integer)
-        }
+        Some(Num::Float(f)) => f64_to_i64(round(f))
+            .map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Integer),
         None => TermEvaluationResult::Invalid,
     }
 }
@@ -1186,7 +1184,17 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
     /// `require_all` ⇒ every element must be in `rhs` (empty `self` ⇒ true);
     /// otherwise ⇒ any element is in `rhs` (empty `self` ⇒ false). A non-array `self`
     /// yields false (so `subsetof`/`anyof` are false and `noneof` is true).
+    ///
+    /// A multi-result (nodelist) left operand is handled any-of per node, matching
+    /// `==`/`<`/`in`: the relation holds if any single matched node — itself array-shaped
+    /// — satisfies it. (Without this, the nodelist itself would be taken as the left array
+    /// and its nodes as elements, so array-valued nodes would never match.)
     fn set_relate(&self, rhs: &Self, require_all: bool) -> bool {
+        if let TermEvaluationResult::NodeList(list) = self {
+            return list
+                .iter()
+                .any(|v| TermEvaluationResult::Value(v.clone()).set_relate(rhs, require_all));
+        }
         fn combine(require_all: bool, mut it: impl Iterator<Item = bool>) -> bool {
             if require_all {
                 it.all(|m| m)
@@ -1203,10 +1211,9 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             TermEvaluationResult::Literal(Value::Array(items)) => {
                 combine(require_all, items.iter().map(|e| value_in_array(e, rhs)))
             }
-            TermEvaluationResult::NodeList(list) => combine(
-                require_all,
-                list.iter().map(|v| value_in_array(v.as_ref(), rhs)),
-            ),
+            TermEvaluationResult::NodeList(list) => list
+                .iter()
+                .any(|v| TermEvaluationResult::Value(v.clone()).set_relate(rhs, require_all)),
             _ => false,
         }
     }
