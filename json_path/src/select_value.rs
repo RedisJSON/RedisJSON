@@ -84,7 +84,9 @@ pub enum JSONArrayType {
 }
 
 #[allow(unused)]
-pub trait SelectValue: Debug + Eq + PartialEq + Default + Clone + Serialize {
+pub trait SelectValue:
+    Debug + Eq + PartialEq + Default + Clone + Serialize + for<'a> From<&'a str>
+{
     fn get_type(&self) -> SelectValueType;
     fn contains_key(&self, key: &str) -> bool;
     fn values<'a>(&'a self) -> Option<Box<dyn Iterator<Item = ValueRef<'a, Self>> + 'a>>;
@@ -100,10 +102,6 @@ pub trait SelectValue: Debug + Eq + PartialEq + Default + Clone + Serialize {
 
     fn get_str(&self) -> Option<String>;
     fn as_str(&self) -> Option<&str>;
-
-    /// Owned string value for the `~`/`keys()` get-keys operator. A method (not a
-    /// `From<&str>` supertrait): explicit, and avoids an orphan-rule block on foreign types.
-    fn make_string(s: &str) -> Self;
 
     fn get_bool(&self) -> Option<bool>;
     fn get_long(&self) -> Option<i64>;

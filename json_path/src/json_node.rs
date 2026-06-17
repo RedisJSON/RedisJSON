@@ -115,10 +115,6 @@ impl SelectValue for Value {
         }
     }
 
-    fn make_string(s: &str) -> Self {
-        Self::String(s.to_owned())
-    }
-
     fn get_bool(&self) -> Option<bool> {
         match self {
             Self::Bool(b) => Some(*b),
@@ -254,10 +250,6 @@ impl SelectValue for IValue {
 
     fn as_str(&self) -> Option<&str> {
         self.as_string().map(IString::as_str)
-    }
-
-    fn make_string(s: &str) -> Self {
-        IString::from(s).into()
     }
 
     fn get_bool(&self) -> Option<bool> {

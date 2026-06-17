@@ -715,11 +715,13 @@ fn eval_function<'i, 'j, S: SelectValue>(
         "first" => function_index(args.into_iter().next(), 0),
         "last" => function_index(args.into_iter().next(), -1),
         "index" => {
-            // index(array, n) — n must be an integer; a float or non-numeric n is Nothing.
+            // index(array, n) — a fractional n is truncated toward zero; a non-numeric n
+            // is Nothing.
             let mut it = args.into_iter();
             let array = it.next();
             let idx = it.next().and_then(|a| match a.as_number() {
                 Some(Num::Int(n)) => Some(n),
+                Some(Num::Float(f)) if f.is_finite() => Some(f.trunc() as i64),
                 _ => None,
             });
             idx.map_or(TermEvaluationResult::Invalid, |n| function_index(array, n))
@@ -1194,14 +1196,20 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
     /// `None` for anything else (numbers, bools, null, objects, multi-node lists). Used
     /// by the `sizeof`/`empty` operators, which apply only to arrays and strings.
     fn seq_length(&self) -> Option<usize> {
+        fn arr_or_str_len<V: SelectValue>(v: &V) -> Option<usize> {
+            match v.get_type() {
+                SelectValueType::String => v.as_str().map(|s| s.chars().count()),
+                SelectValueType::Array => v.len(),
+                _ => None,
+            }
+        }
         match self {
-            // RFC 9535 `length()` on a value: chars for strings
             TermEvaluationResult::Str(s) => Some(s.chars().count()),
             TermEvaluationResult::String(s) => Some(s.chars().count()),
-            TermEvaluationResult::Value(v) => value_length(v.as_ref()),
-            TermEvaluationResult::Literal(l) => value_length(l),
+            TermEvaluationResult::Value(v) => arr_or_str_len(v.as_ref()),
+            TermEvaluationResult::Literal(l) => arr_or_str_len(l),
             TermEvaluationResult::NodeList(list) if list.len() == 1 => {
-                value_length(list[0].as_ref())
+                arr_or_str_len(list[0].as_ref())
             }
             _ => None,
         }
@@ -1443,7 +1451,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                         .map(|pt| create_str_tracker(Cow::Owned(key.to_owned()), pt));
                     self.calc_internal(
                         pairs.clone(),
-                        ValueRef::Owned(S::make_string(key)),
+                        ValueRef::Owned(S::from(key)),
                         new_tracker,
                         calc_data,
                     );
