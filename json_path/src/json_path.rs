@@ -1271,6 +1271,12 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
                 .iter()
                 .any(|v| TermEvaluationResult::Value(v.clone()).size_of(rhs));
         }
+        // Any-of over a multi-result right operand (the size target), likewise.
+        if let TermEvaluationResult::NodeList(list) = rhs {
+            return list
+                .iter()
+                .any(|v| self.size_of(&TermEvaluationResult::Value(v.clone())));
+        }
         let target: i64 = match rhs.as_number() {
             Some(Num::Int(n)) => n,
             Some(Num::Float(f)) => match f64_to_i64(f.trunc()) {
@@ -1291,6 +1297,12 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             return list
                 .iter()
                 .any(|v| TermEvaluationResult::Value(v.clone()).empty_check(rhs));
+        }
+        // Any-of over a multi-result right operand (the boolean), likewise.
+        if let TermEvaluationResult::NodeList(list) = rhs {
+            return list
+                .iter()
+                .any(|v| self.empty_check(&TermEvaluationResult::Value(v.clone())));
         }
         let (Some(len), Some(want_empty)) = (self.seq_length(), rhs.as_bool()) else {
             return false;

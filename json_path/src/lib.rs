@@ -871,6 +871,25 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_size_of_multi_node_rhs_any_of() {
+        setup();
+        // a multi-result right operand (the size target) is any-of too, like `==`/`<`/`in`:
+        // `@.v` matches if its length equals any of the `@.want` values
+        verify_json!(path:"$.a[?@.v sizeof @.want[*]]",
+            json:{"a":[{"v":[1,2],"want":[2,3]},{"v":[1],"want":[2,3]}]},
+            results:[{"v":[1,2],"want":[2,3]}]);
+    }
+
+    #[test]
+    fn test_empty_multi_node_rhs_any_of() {
+        setup();
+        // a multi-result right operand (the boolean) is any-of too
+        verify_json!(path:"$.a[?@.v empty @.flags[*]]",
+            json:{"a":[{"v":[],"flags":[true,true]},{"v":[1],"flags":[true,true]}]},
+            results:[{"v":[],"flags":[true,true]}]);
+    }
+
+    #[test]
     fn test_arith_add() {
         setup();
         verify_json!(path:"$[?@.a + 1 == 3]", json:[{"a":2},{"a":5}], results:[{"a":2}]);
