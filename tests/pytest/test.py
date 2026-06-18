@@ -1788,9 +1788,7 @@ def testProjection(env):
     # `$.a+1` (no spaces) is still the field literally named "a+1", not arithmetic
     r.expect('JSON.SET', 'doc2', '$', json.dumps({"a+1": 7, "a": 2})).ok()
     r.expect('JSON.GET', 'doc2', '$.a+1').equal('[7]')
-    # JSON.MGET evaluates the projection per key (Nothing -> [], missing key -> None)
-    r.expect('JSON.SET', 'doc3', '$', json.dumps({"x": 1})).ok()
-    r.assertEqual(r.execute_command('JSON.MGET', 'doc', 'doc3', '$.a + 1'), ['[3]', '[]'])
+    # JSON.MGET projection behavior is covered in testProjectionMget (with cluster hash tags)
 
 def testProjectionMget(env):
     # JSON.MGET evaluates a top-level projection independently per key.

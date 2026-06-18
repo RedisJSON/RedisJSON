@@ -874,11 +874,16 @@ pub(crate) fn compile(path: &str) -> Result<Query<'_>, QueryCompilationError> {
                 message: "internal: empty JSONPath parse result".to_string(),
             })?;
             // EOI follows `arith_expr`; its (empty) inner is reused as the empty `root` for
-            // a bare `$` and for projection queries.
+            // a bare `$` and for projection queries. A successful parse always emits EOI, so
+            // a missing one is an internal invariant violation (error), never a fallback to
+            // `expr`'s inner — that would wrongly store an `arith_term` as the root.
             let empty = q
                 .next()
-                .map(Pair::into_inner)
-                .unwrap_or_else(|| expr.clone().into_inner());
+                .ok_or_else(|| QueryCompilationError {
+                    location: 0,
+                    message: "internal: JSONPath parse missing EOI".to_string(),
+                })?
+                .into_inner();
             match classify_query(&expr, &empty) {
                 QueryClass::Path(root) => Ok(Query {
                     root,
