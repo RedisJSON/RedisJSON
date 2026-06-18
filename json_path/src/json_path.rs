@@ -868,26 +868,43 @@ fn classify_query<'i>(expr: &Pair<'i, Rule>, empty: &Pairs<'i, Rule>) -> QueryCl
     }
 }
 
-/// Compile the given string query into a query object.
-/// Returns error on compilation error.
+/// Maximum bracket/paren nesting depth of `path`, ignoring brackets inside a quoted string
+/// literal (a key or regex) since those are not structural.
+fn max_bracket_depth(path: &str) -> usize {
+    let (mut depth, mut max_depth) = (0usize, 0usize);
+    let mut string_quote: Option<u8> = None; // the opening quote while inside a string literal
+    let mut escaped = false; // previous byte was a `\` inside a string
+    for &b in path.as_bytes() {
+        match string_quote {
+            // Inside a string: walk to the matching quote, honoring `\` escapes (`\"`, `\\`).
+            Some(quote) => match b {
+                _ if escaped => escaped = false,
+                b'\\' => escaped = true,
+                _ if b == quote => string_quote = None,
+                _ => {}
+            },
+            // Outside a string: open a literal, or count structural brackets.
+            None => match b {
+                b'\'' | b'"' => string_quote = Some(b),
+                b'(' | b'[' => {
+                    depth += 1;
+                    max_depth = max_depth.max(depth);
+                }
+                b')' | b']' => depth = depth.saturating_sub(1),
+                _ => {}
+            },
+        }
+    }
+    max_depth
+}
+
 pub(crate) fn compile(path: &str) -> Result<Query<'_>, QueryCompilationError> {
     const MAX_NESTING_DEPTH: usize = 128;
-    let (mut depth, mut max_depth) = (0usize, 0usize);
-    for b in path.bytes() {
-        match b {
-            b'(' | b'[' => {
-                depth += 1;
-                max_depth = max_depth.max(depth);
-            }
-            b')' | b']' => depth = depth.saturating_sub(1),
-            _ => {}
-        }
-        if max_depth > MAX_NESTING_DEPTH {
-            return Err(QueryCompilationError {
-                location: 0,
-                message: format!("JSONPath nesting too deep (max depth {MAX_NESTING_DEPTH})"),
-            });
-        }
+    if max_bracket_depth(path) > MAX_NESTING_DEPTH {
+        return Err(QueryCompilationError {
+            location: 0,
+            message: format!("JSONPath nesting too deep (max depth {MAX_NESTING_DEPTH})"),
+        });
     }
     let query = JsonPathParser::parse(Rule::query, path);
     match query {

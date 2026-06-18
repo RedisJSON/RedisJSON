@@ -760,6 +760,25 @@ mod json_path_tests {
         );
         // A modestly nested, valid projection still compiles.
         assert!(json_path::compile("((($.a + 1)))").is_ok());
+        // Brackets inside a quoted string literal are not structural nesting, so a shallow
+        // query with a bracket-heavy string key/regex must NOT be rejected.
+        let in_string = format!(r#"$[?@.s == "{}"]"#, "(".repeat(300));
+        assert!(
+            json_path::compile(&in_string).is_ok(),
+            "brackets inside a string literal must not count toward nesting depth"
+        );
+        // ...including a deep regex group on the right of `=~` (the realistic trigger).
+        let re = format!(r#"$.a[?@.s =~ "{}"]"#, "(".repeat(300));
+        assert!(
+            json_path::compile(&re).is_ok(),
+            "brackets inside a regex must not count"
+        );
+        // ...and a bracket-quoted field name literally containing many parens.
+        let key = format!(r#"$["{}"]"#, "(".repeat(300));
+        assert!(
+            json_path::compile(&key).is_ok(),
+            "brackets inside a key name must not count"
+        );
     }
 
     #[test]
