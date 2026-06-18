@@ -252,7 +252,10 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 format,
             ))
         } else {
-            Ok(Self::values_to_resp3(&calc_once(q, self.val.as_ref()), format))
+            Ok(Self::values_to_resp3(
+                &calc_once(q, self.val.as_ref()),
+                format,
+            ))
         }
     }
 

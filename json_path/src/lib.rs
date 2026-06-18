@@ -754,7 +754,10 @@ mod json_path_tests {
         setup();
         // Deeply nested parens must be rejected up front, not overflow the parser stack.
         let deep = format!("{}$.a{}", "(".repeat(5000), ")".repeat(5000));
-        assert!(json_path::compile(&deep).is_err(), "deep nesting must be rejected");
+        assert!(
+            json_path::compile(&deep).is_err(),
+            "deep nesting must be rejected"
+        );
         // A modestly nested, valid projection still compiles.
         assert!(json_path::compile("((($.a + 1)))").is_ok());
     }
