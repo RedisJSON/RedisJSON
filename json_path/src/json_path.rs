@@ -110,6 +110,12 @@ pub struct Query<'i> {
     pub root: Pairs<'i, Rule>,
     is_static: Option<bool>,
     size: Option<usize>,
+    /// For a projection query (e.g. `$.a + 1`, `$arr.length()`) this holds the top-level
+    /// `arith_expr` to evaluate; `None` for a plain path. A projection is read-only (it has
+    /// no document path) and is evaluated via `PathCalculator::eval_projection` — `root` is
+    /// left empty and unused.
+    #[allow(dead_code)]
+    projection: Option<Pair<'i, Rule>>,
 }
 
 #[derive(Debug)]
@@ -184,6 +190,19 @@ impl<'i> Query<'i> {
         self.size = Some(size);
         self.is_static = Some(is_static);
         is_static
+    }
+
+    /// Whether this query is a projection (a computed expression such as `$.a + 1` or
+    /// `$arr.length()`) rather than a plain path. Projections are read-only.
+    #[allow(dead_code)]
+    pub fn is_projection(&self) -> bool {
+        self.projection.is_some()
+    }
+
+    /// The top-level `arith_expr` of a projection query, if any (for `eval_projection`).
+    #[allow(dead_code)]
+    pub(crate) fn projection_expr(&self) -> Option<&Pair<'i, Rule>> {
+        self.projection.as_ref()
     }
 }
 
@@ -715,8 +734,8 @@ fn eval_function<'i, 'j, S: SelectValue>(
     let arity_ok = match name {
         "concat" => !args.is_empty(),
         "index" => args.len() == 2,
-        "ceiling" | "floor" | "abs" | "sum" | "min" | "max" | "avg" | "stddev" | "first"
-        | "last" => args.len() == 1,
+        "length" | "count" | "ceiling" | "floor" | "abs" | "sum" | "min" | "max" | "avg"
+        | "stddev" | "first" | "last" => args.len() == 1,
         _ => true,
     };
     if !arity_ok {
@@ -771,21 +790,154 @@ fn eval_function<'i, 'j, S: SelectValue>(
     }
 }
 
-/// Compile the given string query into a query object.
-/// Returns error on compilation error.
+/// Convert a projection's evaluated `TermEvaluationResult` into the single output value as an
+/// impl-independent `serde_json::Value` (or `None` for Nothing, which becomes an empty result —
+/// like a non-matching path).
+#[allow(dead_code)]
+fn term_to_output<'i, 'j, S: SelectValue>(term: TermEvaluationResult<'i, 'j, S>) -> Option<Value> {
+    match term {
+        TermEvaluationResult::Integer(n) => Some(Value::from(n)),
+        TermEvaluationResult::Float(f) => serde_json::Number::from_f64(f).map(Value::Number),
+        TermEvaluationResult::Str(s) => Some(Value::from(s)),
+        TermEvaluationResult::String(s) => Some(Value::from(s)),
+        TermEvaluationResult::Bool(b) => Some(Value::from(b)),
+        TermEvaluationResult::Null => Some(Value::Null),
+        TermEvaluationResult::Literal(v) => Some(v),
+        // A real document node (e.g. `$.a.first()`, `value($.a)`): serialize it to a Value.
+        TermEvaluationResult::Value(vref) => {
+            Some(serde_json::to_value(&vref).unwrap_or(Value::Null))
+        }
+        // Multiple nodes (e.g. `($..x)`): render as a JSON array.
+        TermEvaluationResult::NodeList(list) => Some(Value::Array(
+            list.iter()
+                .map(|v| serde_json::to_value(v).unwrap_or(Value::Null))
+                .collect(),
+        )),
+        // Nothing -> empty result.
+        TermEvaluationResult::Invalid => None,
+    }
+}
+
+/// Result of classifying a top-level `arith_expr`.
+enum QueryClass<'i> {
+    /// A plain path; the inner value is the `root` segments to walk.
+    Path(Pairs<'i, Rule>),
+    /// A computed projection; evaluated via `eval_projection`.
+    Projection,
+}
+
+/// Classify a top-level `arith_expr`. It is a plain *path* iff it is a single bare
+/// `from_root` term: no arithmetic operator, no unary sign, no method call, not a function
+/// call, not parenthesized, and not `@`-rooted. Anything else is a projection. `empty` is a
+/// guaranteed-empty `Pairs` (the EOI subtree) reused as the `root` for a bare `$`.
+fn classify_query<'i>(expr: &Pair<'i, Rule>, empty: &Pairs<'i, Rule>) -> QueryClass<'i> {
+    let mut terms = expr.clone().into_inner(); // arith_term (add/sub arith_term)*
+    let Some(term) = terms.next() else {
+        return QueryClass::Projection;
+    };
+    if terms.next().is_some() {
+        return QueryClass::Projection; // a top-level + / - operator
+    }
+    let mut factors = term.into_inner(); // arith_factor (mul/div/rem arith_factor)*
+    let Some(factor) = factors.next() else {
+        return QueryClass::Projection;
+    };
+    if factors.next().is_some() {
+        return QueryClass::Projection; // a * / % operator
+    }
+    let mut inner = factor.into_inner(); // unary_op? arith_primary
+    let Some(prim) = inner.next() else {
+        return QueryClass::Projection;
+    };
+    if matches!(prim.as_rule(), Rule::neg | Rule::pos) {
+        return QueryClass::Projection; // unary +/-
+    }
+    match prim.as_rule() {
+        // A lone `$` / `$.path`: walk its `root` segments (empty for a bare `$`).
+        Rule::from_root => match prim.into_inner().next() {
+            Some(root) => QueryClass::Path(root.into_inner()),
+            None => QueryClass::Path(empty.clone()),
+        },
+        // A fully-parenthesized expression with no surrounding operator/sign/method reduces to
+        // its inner expression: `($..x)` is the same query as `$..x`. Recurse so a wrapped lone
+        // path classifies as a path — otherwise the projection serializer collapses a multi-node
+        // result into one array and then wraps it again (`($..x)` -> `[[..]]` instead of `[..]`).
+        Rule::arith_expr => classify_query(&prim, empty),
+        // from_current (`@`), method_chain, function_call, literals.
+        _ => QueryClass::Projection,
+    }
+}
+
+/// Maximum bracket/paren nesting depth of `path`, ignoring brackets inside a quoted string
+/// literal (a key or regex) since those are not structural.
+fn max_bracket_depth(path: &str) -> usize {
+    let (mut depth, mut max_depth) = (0usize, 0usize);
+    let mut string_quote: Option<u8> = None; // the opening quote while inside a string literal
+    let mut escaped = false; // previous byte was a `\` inside a string
+    for &b in path.as_bytes() {
+        match string_quote {
+            // Inside a string: walk to the matching quote, honoring `\` escapes (`\"`, `\\`).
+            Some(quote) => match b {
+                _ if escaped => escaped = false,
+                b'\\' => escaped = true,
+                _ if b == quote => string_quote = None,
+                _ => {}
+            },
+            // Outside a string: open a literal, or count structural brackets.
+            None => match b {
+                b'\'' | b'"' => string_quote = Some(b),
+                b'(' | b'[' => {
+                    depth += 1;
+                    max_depth = max_depth.max(depth);
+                }
+                b')' | b']' => depth = depth.saturating_sub(1),
+                _ => {}
+            },
+        }
+    }
+    max_depth
+}
+
 pub(crate) fn compile(path: &str) -> Result<Query<'_>, QueryCompilationError> {
+    const MAX_NESTING_DEPTH: usize = 128;
+    if max_bracket_depth(path) > MAX_NESTING_DEPTH {
+        return Err(QueryCompilationError {
+            location: 0,
+            message: format!("JSONPath nesting too deep (max depth {MAX_NESTING_DEPTH})"),
+        });
+    }
     let query = JsonPathParser::parse(Rule::query, path);
     match query {
         Ok(mut q) => {
-            let root = q.next().ok_or_else(|| QueryCompilationError {
+            let expr = q.next().ok_or_else(|| QueryCompilationError {
                 location: 0,
                 message: "internal: empty JSONPath parse result".to_string(),
             })?;
-            Ok(Query {
-                root: root.into_inner(),
-                is_static: None,
-                size: None,
-            })
+            // EOI follows `arith_expr`; its (empty) inner is reused as the empty `root` for
+            // a bare `$` and for projection queries. A successful parse always emits EOI, so
+            // a missing one is an internal invariant violation (error), never a fallback to
+            // `expr`'s inner — that would wrongly store an `arith_term` as the root.
+            let empty = q
+                .next()
+                .ok_or_else(|| QueryCompilationError {
+                    location: 0,
+                    message: "internal: JSONPath parse missing EOI".to_string(),
+                })?
+                .into_inner();
+            match classify_query(&expr, &empty) {
+                QueryClass::Path(root) => Ok(Query {
+                    root,
+                    is_static: None,
+                    size: None,
+                    projection: None,
+                }),
+                QueryClass::Projection => Ok(Query {
+                    root: empty,
+                    is_static: None,
+                    size: None,
+                    projection: Some(expr),
+                }),
+            }
         }
         // pest::error::Error
         Err(e) => {
@@ -1316,25 +1468,12 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
     }
 
     fn re_match(&self, s: &Self, cache: &mut RegexCache) -> bool {
-        match (self, s) {
-            (TermEvaluationResult::Value(v), TermEvaluationResult::Str(regex)) => {
-                match v.get_type() {
-                    SelectValueType::String => v
-                        .as_str()
-                        .is_some_and(|s| Self::re_is_match(cache, regex, s)),
-                    _ => false,
-                }
-            }
-            (TermEvaluationResult::Value(v1), TermEvaluationResult::Value(v2)) => {
-                match (v1.get_type(), v2.get_type()) {
-                    (SelectValueType::String, SelectValueType::String) => v1
-                        .as_str()
-                        .zip(v2.as_str())
-                        .is_some_and(|(s1, s2)| Self::re_is_match(cache, s2, s1)),
-                    (_, _) => false,
-                }
-            }
-            (_, _) => false,
+        // Both operands must be strings. `term_as_str` normalizes every string-shaped term
+        // (document string, `Str`/`String` literal, single-string nodelist), so a computed
+        // pattern such as `@.s =~ concat(@.a, @.b)` matches like a literal one.
+        match (term_as_str(self), term_as_str(s)) {
+            (Some(subject), Some(regex)) => Self::re_is_match(cache, regex, subject),
+            _ => false,
         }
     }
 
@@ -1811,8 +1950,37 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
     ) -> TermEvaluationResult<'i, 'j, S> {
         match operand.as_rule() {
             Rule::arith_expr => self.evaluate_arith_expr(operand, json, calc_data),
+            Rule::method_chain => self.evaluate_method_chain(operand, json, calc_data),
             _ => self.evaluate_single_term(operand, json, calc_data),
         }
+    }
+
+    /// Evaluate a postfix/method chain `recv.f().g(args)`. Each method applies to the running
+    /// result as its implicit first argument, so `$arr.length()` maps to
+    /// `length(arr)` and `$arr.index(2)` to `index(arr, 2)` — the same dispatch as the prefix
+    /// function form via `eval_function`.
+    fn evaluate_method_chain<'j: 'i, S: SelectValue>(
+        &self,
+        chain: Pair<'i, Rule>,
+        json: ValueRef<'j, S>,
+        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+    ) -> TermEvaluationResult<'i, 'j, S> {
+        let mut it = chain.into_inner();
+        let Some(recv) = it.next() else {
+            return TermEvaluationResult::Invalid;
+        };
+        let mut acc = self.evaluate_single_term(recv, json.clone(), calc_data);
+        for method in it {
+            let mut mi = method.into_inner();
+            let name = mi.next().map_or("", |p| p.as_str());
+            // The receiver is the implicit first argument; explicit args follow.
+            let mut args = vec![acc];
+            for arg in mi {
+                args.push(self.evaluate_arith_operand(arg, json.clone(), calc_data));
+            }
+            acc = eval_function(name, args, &mut calc_data.regex_cache);
+        }
+        acc
     }
 
     fn evaluate_single_filter<'j: 'i, S: SelectValue>(
@@ -2081,6 +2249,24 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 });
             }
         }
+    }
+
+    /// Evaluate a projection expression (e.g. `$.a + 1`, `$arr.length()`) against the
+    /// document root, reusing the same arithmetic/function machinery as filters. Returns the
+    /// single computed value, or `None` for Nothing (an empty result).
+    #[allow(dead_code)]
+    pub fn eval_projection<'j: 'i, S: SelectValue>(
+        &self,
+        json: ValueRef<'j, S>,
+        expr: Pair<'i, Rule>,
+    ) -> Option<Value> {
+        let mut calc_data = PathCalculatorData {
+            results: Vec::new(),
+            root: json.clone(),
+            regex_cache: HashMap::new(),
+        };
+        let term = self.evaluate_arith_expr(expr, json, &mut calc_data);
+        term_to_output(term)
     }
 
     pub fn calc_with_paths_on_root<'j: 'i, S: SelectValue>(

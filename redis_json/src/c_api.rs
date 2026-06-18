@@ -337,6 +337,11 @@ pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -
     let Ok(query) = compile(path) else {
         return null();
     };
+    // The LLAPI returns pointers to document nodes; a projection yields a synthesized value
+    // with no node, so it is not exposed here.
+    if query.is_projection() {
+        return null();
+    }
     let path_calculator = create(&query);
     let res = path_calculator.calc(v);
     Box::into_raw(Box::new(ResultsIterator {
@@ -722,6 +727,14 @@ macro_rules! redis_json_module_export_shared_api {
                 }
             };
             match json_path::compile(path) {
+                Ok(q) if q.is_projection() => {
+                    create_rmstring(
+                        ctx,
+                        "computed/projection expressions are not supported by the JSON LLAPI",
+                        err_msg,
+                    );
+                    std::ptr::null()
+                }
                 Ok(q) => Box::into_raw(Box::new(q)).cast::<c_void>(),
                 Err(e) => {
                     create_rmstring(ctx, &format!("{}", e), err_msg);
@@ -1014,6 +1027,28 @@ mod tests {
                 phantom: PhantomData,
             },
             wrapper_ptr,
+        );
+    }
+
+    #[test]
+    fn test_json_api_get_rejects_projection() {
+        use std::ffi::CString;
+        // A projection synthesizes a value with no document node, so the LLAPI does not
+        // expose it: json_api_get returns null (JSONAPI_pathParse rejects it up front too,
+        // so pathIsSingle / pathHasDefinedOrder never see a projection's empty root).
+        let doc: IValue = serde_json::from_str(r#"{"a":2}"#).unwrap();
+        let path = CString::new("$.a + 1").unwrap();
+        let res = json_api_get(
+            RedisIValueJsonKeyManager {
+                phantom: PhantomData,
+            },
+            &doc as *const IValue as *const c_void,
+            path.as_ptr(),
+        );
+        assert_eq!(
+            res,
+            null(),
+            "a projection path must not be exposed via the LLAPI"
         );
     }
 

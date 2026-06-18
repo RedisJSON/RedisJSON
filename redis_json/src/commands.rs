@@ -11,7 +11,8 @@ use crate::defrag::defrag_info;
 use crate::formatter::ReplyFormatOptions;
 use crate::key_value::KeyValue;
 use crate::manager::{
-    err_invalid_path, err_invalid_path_or, Manager, ReadHolder, UpdateInfo, WriteHolder,
+    err_invalid_path, err_invalid_path_or, err_projection_readonly, Manager, ReadHolder,
+    UpdateInfo, WriteHolder,
 };
 use crate::redisjson::{Format, Path, ReplyFormat, SetOptions, JSON_ROOT_PATH};
 use ijson::FloatType;
@@ -66,6 +67,9 @@ const JSONGET_SUBCOMMANDS_MAXSTRLEN: usize = max_strlen(&[
 pub enum Values<'a, V: SelectValue> {
     Single(ValueRef<'a, V>),
     Multi(Vec<ValueRef<'a, V>>),
+    /// A computed projection result (e.g. `$.a + 1`). Output-only: an impl-independent
+    /// `serde_json::Value`, never a document node, so it never re-enters traversal.
+    Computed(serde_json::Value),
 }
 
 impl<'a, V: SelectValue> Serialize for Values<'a, V> {
@@ -73,6 +77,8 @@ impl<'a, V: SelectValue> Serialize for Values<'a, V> {
         match self {
             Values::Single(v) => v.serialize(serializer),
             Values::Multi(v) => v.serialize(serializer),
+            // Wrap in a one-element array to match JSONPath nodelist output (`[v]`).
+            Values::Computed(v) => std::slice::from_ref(v).serialize(serializer),
         }
     }
 }
@@ -754,6 +760,9 @@ fn find_paths<T: SelectValue, F: Fn(&ValueRef<'_, T>) -> bool>(
         Ok(q) => q,
         Err(e) => return Err(RedisError::String(e.to_string())),
     };
+    if query.is_projection() {
+        return Err(err_projection_readonly());
+    }
     let res = calc_once_with_paths(query, doc);
     Ok(res
         .into_iter()
@@ -771,6 +780,9 @@ fn get_all_values_and_paths<'a, T: SelectValue>(
         Ok(q) => q,
         Err(e) => return Err(RedisError::String(e.to_string())),
     };
+    if query.is_projection() {
+        return Err(err_projection_readonly());
+    }
     let res = calc_once_with_paths(query, doc);
     Ok(res
         .into_iter()
@@ -1198,6 +1210,12 @@ pub fn json_type_impl<M: Manager>(redis_key: &M::ReadHolder, path: &str) -> Redi
 }
 
 fn json_type_legacy<M: Manager>(redis_key: &M::ReadHolder, path: &str) -> RedisResult {
+    // A legacy path that normalizes to a projection (e.g. `a + 1` -> `$.a + 1`) addresses no
+    // node; reject it explicitly instead of letting the lenient `map_or(Null)` swallow the
+    // projection error into a silent nil.
+    if compile(path).is_ok_and(|q| q.is_projection()) {
+        return Err(err_projection_readonly());
+    }
     let value = redis_key.get_value()?.map_or(RedisValue::Null, |doc| {
         KeyValue::new(doc)
             .get_type(path)
@@ -2736,6 +2754,11 @@ fn json_obj_keys_impl<M: Manager>(redis_key: &mut M::ReadHolder, path: &str) -> 
 }
 
 fn json_obj_keys_legacy<M: Manager>(redis_key: &mut M::ReadHolder, path: &str) -> RedisResult {
+    // Reject a legacy-normalized projection rather than swallowing the error to nil (see
+    // `json_type_legacy`).
+    if compile(path).is_ok_and(|q| q.is_projection()) {
+        return Err(err_projection_readonly());
+    }
     let root = match redis_key.get_value()? {
         Some(v) => v,
         _ => return Ok(RedisValue::Null),

@@ -2,7 +2,7 @@ use itertools::Itertools;
 use std::collections::HashMap;
 
 use json_path::{
-    calc_once, calc_once_paths, compile,
+    calc_once, calc_once_paths, calc_once_projection, compile,
     json_path::JsonPathToken,
     select_value::{is_equal, SelectValue, SelectValueType, ValueRef},
 };
@@ -13,7 +13,10 @@ use serde_json::Value;
 use crate::{
     commands::{prepare_paths_for_updating, FoundIndex, ObjectLen, Values},
     formatter::{RedisJsonFormatter, ReplyFormatOptions},
-    manager::{err_invalid_path, err_json, AddUpdateInfo, SetUpdateInfo, UpdateInfo},
+    manager::{
+        err_invalid_path, err_json, err_projection_readonly, AddUpdateInfo, SetUpdateInfo,
+        UpdateInfo,
+    },
     redisjson::{normalize_arr_indices, Path, ReplyFormat, SetOptions},
 };
 
@@ -36,12 +39,24 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     pub fn resp_serialize(&self, path: Path) -> RedisResult {
+        let query = compile(path.get_path())?;
+        // A projection (incl. a legacy path that normalizes to one, e.g. `a + 1` -> `$.a + 1`)
+        // is computed: JSON.RESP is a value-returning read like JSON.GET/JSON.MGET.
+        if query.is_projection() {
+            return Ok(Self::projection_to_resp(calc_once_projection(
+                query,
+                self.val.as_ref(),
+            )));
+        }
         if path.is_legacy() {
-            let v = self.get_first(path.get_path())?;
+            // Legacy paths address a single node (first match), not a nodelist.
+            let v = calc_once(query, self.val.as_ref())
+                .into_iter()
+                .next()
+                .ok_or_else(err_invalid_path)?;
             Ok(Self::resp_serialize_inner(v.as_ref()))
         } else {
-            Ok(self
-                .get_values(path.get_path())?
+            Ok(calc_once(query, self.val.as_ref())
                 .into_iter()
                 .map(|v| Self::resp_serialize_inner(v.as_ref()))
                 .collect_vec()
@@ -101,8 +116,39 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
 
     pub fn get_values<'b>(&'a self, path: &'b str) -> RedisResult<Vec<ValueRef<'a, V>>> {
         let query = compile(path)?;
-        let results = calc_once(query, self.val.as_ref());
-        Ok(results)
+
+        if query.is_projection() {
+            return Err(err_projection_readonly());
+        }
+        Ok(calc_once(query, self.val.as_ref()))
+    }
+
+    /// Serialize a projection result (0 or 1 value) as a RESP3 array, matching JSONPath
+    /// nodelist output. The value is a `serde_json::Value` (itself a `SelectValue`), reusing
+    /// the node serializer via `KeyValue::<Value>`.
+    fn projection_to_resp3(value: Option<Value>, format: &ReplyFormatOptions) -> RedisValue {
+        value
+            .iter()
+            .map(|v| KeyValue::<Value>::value_to_resp3(v, format))
+            .collect_vec()
+            .into()
+    }
+
+    /// Serialize a projection result (0 or 1 value) as a JSON.RESP array.
+    fn projection_to_resp(value: Option<Value>) -> RedisValue {
+        value
+            .iter()
+            .map(KeyValue::<Value>::resp_serialize_inner)
+            .collect_vec()
+            .into()
+    }
+
+    /// Serialize a projection result (0 or 1 value) as a JSON-string array (`[v]` or `[]`).
+    fn projection_to_string(
+        value: Option<Value>,
+        format: &ReplyFormatOptions,
+    ) -> RedisResult<String> {
+        Self::serialize_object(&value.as_slice(), format)
     }
 
     pub fn serialize_object<O: Serialize>(
@@ -138,12 +184,21 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 .fold(HashMap::with_capacity(path_len), |mut acc, path: Path| {
                     // If we can't compile the path, we can't continue
                     if let Ok(query) = compile(path.get_path()) {
-                        let results = calc_once(query, self.val.as_ref());
-
-                        let value = if is_legacy {
-                            (!results.is_empty()).then(|| Values::Single(results[0].clone()))
+                        let value = if query.is_projection() {
+                            // A projection always contributes a result: its computed value, or
+                            // an empty array for Nothing (like a non-matching JSONPath) — never a
+                            // missing-path error.
+                            Some(
+                                calc_once_projection(query, self.val.as_ref())
+                                    .map_or(Values::Multi(Vec::new()), Values::Computed),
+                            )
                         } else {
-                            Some(Values::Multi(results))
+                            let results = calc_once(query, self.val.as_ref());
+                            if is_legacy {
+                                (!results.is_empty()).then(|| Values::Single(results[0].clone()))
+                            } else {
+                                Some(Values::Multi(results))
+                            }
                         };
 
                         if value.is_none() && missing_path.is_none() {
@@ -166,6 +221,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                     let value = match v {
                         Some(Values::Single(value)) => Self::value_to_resp3(value.as_ref(), format),
                         Some(Values::Multi(values)) => Self::values_to_resp3(&values, format),
+                        Some(Values::Computed(val)) => Self::projection_to_resp3(Some(val), format),
                         None => RedisValue::Null,
                     };
                     (key, value)
@@ -182,14 +238,25 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         let results = paths
             .into_iter()
             .map(|path: Path| self.to_resp3_path(&path, format))
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(RedisValue::Array(results))
     }
 
-    pub fn to_resp3_path(&self, path: &Path, format: &ReplyFormatOptions) -> RedisValue {
-        compile(path.get_path()).map_or(RedisValue::Array(vec![]), |q| {
-            Self::values_to_resp3(&calc_once(q, self.val.as_ref()), format)
-        })
+    pub fn to_resp3_path(&self, path: &Path, format: &ReplyFormatOptions) -> RedisResult {
+        // Propagate a compile error (e.g. a malformed projection `$.a +`) rather than masking
+        // it as an empty array, so RESP3 errors consistently with the RESP2 path.
+        let q = compile(path.get_path())?;
+        if q.is_projection() {
+            Ok(Self::projection_to_resp3(
+                calc_once_projection(q, self.val.as_ref()),
+                format,
+            ))
+        } else {
+            Ok(Self::values_to_resp3(
+                &calc_once(q, self.val.as_ref()),
+                format,
+            ))
+        }
     }
 
     fn to_json_single(
@@ -201,8 +268,12 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         let res = if is_legacy {
             self.to_string_single(path, format)?.into()
         } else if format.is_resp3_reply() {
-            let values = self.get_values(path)?;
-            Self::values_to_resp3(&values, format)
+            let query = compile(path)?;
+            if query.is_projection() {
+                Self::projection_to_resp3(calc_once_projection(query, self.val.as_ref()), format)
+            } else {
+                Self::values_to_resp3(&calc_once(query, self.val.as_ref()), format)
+            }
         } else {
             self.to_string_multi(path, format)?.into()
         };
@@ -299,6 +370,9 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
 
     fn find_add_paths(&mut self, path: &str) -> RedisResult<Vec<UpdateInfo>> {
         let mut query = compile(path)?;
+        if query.is_projection() {
+            return Err(err_projection_readonly());
+        }
         if !query.is_static() {
             return Err(RedisError::Str("Err wrong static path"));
         }
@@ -351,6 +425,9 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     pub fn find_paths(&mut self, path: &str, option: SetOptions) -> RedisResult<Vec<UpdateInfo>> {
         if option != SetOptions::NotExists {
             let query = compile(path)?;
+            if query.is_projection() {
+                return Err(err_projection_readonly());
+            }
             let mut res = calc_once_paths(query, self.val.as_ref());
             if option != SetOptions::MergeExisting {
                 prepare_paths_for_updating(&mut res);
@@ -370,13 +447,30 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     pub fn to_string_single(&self, path: &str, format: &ReplyFormatOptions) -> RedisResult<String> {
-        let result = self.get_first(path)?;
+        let query = compile(path)?;
+        // A projection (incl. a legacy path that normalizes to one, e.g. `a + 1` -> `$.a + 1`)
+        // is computed: JSON.GET / JSON.MGET are value-returning reads. This mirrors the
+        // multi-path branch, so single- and multi-path GET agree on the same expression.
+        if query.is_projection() {
+            return Self::projection_to_string(
+                calc_once_projection(query, self.val.as_ref()),
+                format,
+            );
+        }
+        let result = calc_once(query, self.val.as_ref())
+            .into_iter()
+            .next()
+            .ok_or_else(err_invalid_path)?;
         Self::serialize_object(&result, format)
     }
 
     pub fn to_string_multi(&self, path: &str, format: &ReplyFormatOptions) -> RedisResult<String> {
-        let results = self.get_values(path)?;
-        Self::serialize_object(&results, format)
+        let query = compile(path)?;
+        if query.is_projection() {
+            Self::projection_to_string(calc_once_projection(query, self.val.as_ref()), format)
+        } else {
+            Self::serialize_object(&calc_once(query, self.val.as_ref()), format)
+        }
     }
 
     pub fn get_type(&self, path: &str) -> RedisResult<String> {
@@ -414,6 +508,11 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     pub fn obj_len(&self, path: &str) -> RedisResult<ObjectLen> {
+        // Reject a legacy-normalized projection rather than swallowing it into `NoneExisting`
+        // (nil); a projection has no node to size.
+        if compile(path).is_ok_and(|q| q.is_projection()) {
+            return Err(err_projection_readonly());
+        }
         match self.get_first(path) {
             Ok(first) => match first.get_type() {
                 SelectValueType::Object => first

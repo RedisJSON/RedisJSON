@@ -80,7 +80,14 @@ mul_op = _{mul | div | rem}
 neg = @{"-"}
 pos = @{"+"}
 unary_op = _{neg | pos}
-arith_primary = _{"(" ~ arith_expr ~ ")" | term}
+// Postfix (method) function call applied to a primary, e.g. `$arr.length()`,
+// `$.a.index(2)`. Disambiguated from a `.field` path segment by the immediately
+// following `(` (which is not a `literal` char). Args are full expressions.
+postfix_method = {"." ~ function_name ~ "(" ~ (arith_expr ~ ("," ~ arith_expr)*)? ~ ")"}
+// A term followed by >=1 method call. The `+` keeps a bare term out of this rule so
+// existing (non-method) parse trees are unchanged.
+method_chain = {term ~ postfix_method+}
+arith_primary = _{"(" ~ arith_expr ~ ")" | method_chain | term}
 arith_factor = {unary_op? ~ arith_primary}
 arith_term = {arith_factor ~ (mul_op ~ arith_factor)*}
 arith_expr = {arith_term ~ (add_op ~ arith_term)*}
@@ -104,7 +111,11 @@ full_scan = {".."}
 
 bracket = _{numbers_range | numbers_list | string_list | all | "?" ~ filter}
 
-element = _{"." ~ literal | full_scan ~ (literal | all | "[" ~ bracket ~ "]") | "." ~ all | ("."? ~ "[" ~ bracket ~ "]")}
+// A `.`-field segment must NOT be a method call (a name immediately followed by `(`),
+// so a trailing `.func()` is left for `postfix_method` instead of being swallowed as a
+// field. `.field` with no `(` is unaffected, so a field literally named `length` still
+// parses as a path segment.
+element = _{"." ~ !(function_name ~ "(") ~ literal | full_scan ~ (literal | all | "[" ~ bracket ~ "]") | "." ~ all | ("."? ~ "[" ~ bracket ~ "]")}
 
 // The bare word operators must not be swallowed as a bare first path segment
 // (e.g. `@ in [...]`). A field with one of these names is still reachable via
@@ -122,7 +133,10 @@ root = {(element|first_element) ~ (element)*}
 
 simple_root = {"." ~ literal}
 
-query = _{SOI ~ "$" ~ root? ~ EOI}
+// Top level is an arithmetic expression. A lone `$.path` is a valid `arith_expr` (a single
+// `from_root` term, no operator/method) and reproduces the former `"$" ~ root?` exactly;
+// `compile()` classifies such a lone path as path-mode and anything else as a projection.
+query = _{SOI ~ arith_expr ~ EOI}
 
 simple_query = _{SOI ~ "$" ~ simple_root ~ EOI}
 

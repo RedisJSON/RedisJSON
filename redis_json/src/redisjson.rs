@@ -111,9 +111,7 @@ pub struct Path<'a> {
 impl<'a> Path<'a> {
     #[must_use]
     pub fn new(path: &str) -> Path<'_> {
-        let fixed_path = if path.starts_with('$')
-            && (path.len() < 2 || (path.as_bytes()[1] == b'.' || path.as_bytes()[1] == b'['))
-        {
+        let fixed_path = if Self::is_jsonpath(path) {
             None
         } else {
             let mut cloned = path.to_string();
@@ -129,6 +127,55 @@ impl<'a> Path<'a> {
         Path {
             original_path: path,
             fixed_path,
+        }
+    }
+
+    /// Whether `path` is a JSONPath (v2) expression rather than a legacy (1.x) path.
+    /// Rooted JSONPath is `$` alone or `$.`/`$[` — `$<name>` stays a legacy field (e.g. a
+    /// key literally named `$a`), preserving 1.x behavior. A top-level *projection*
+    /// expression is also JSONPath: a parenthesized group, a unary sign on a
+    /// `$`-rooted/parenthesized operand, or a prefix function call (`name(...)`). These
+    /// forms can only be computed expressions, never a legacy path (`(` is not a legacy
+    /// path char and a bare field is not followed by `(`), so legacy paths starting with
+    /// `.` or a bare field name are never misclassified.
+    fn is_jsonpath(path: &str) -> bool {
+        let b = path.as_bytes();
+        // The grammar's `WHITESPACE` rule allows spaces (e.g. `length ( $.arr )`, `- $.a`), so
+        // the byte scan must skip them too — otherwise a spaced projection is misclassified as
+        // a legacy field and silently mis-evaluated.
+        fn skip_spaces(b: &[u8], mut i: usize) -> usize {
+            while b.get(i) == Some(&b' ') {
+                i += 1;
+            }
+            i
+        }
+        // The operand at byte `i` is a rooted JSONPath (`$`, `$.`, `$[`) or a parenthesized
+        // group. A bare `$<name>` stays a legacy field, so `-$x` is a legacy field while
+        // `-$.a` is the projection `-($.a)`.
+        fn rooted_or_paren(b: &[u8], i: usize) -> bool {
+            match b.get(i) {
+                Some(b'$') => i + 1 >= b.len() || matches!(b.get(i + 1), Some(b'.' | b'[')),
+                Some(b'(') => true,
+                _ => false,
+            }
+        }
+        match b.first() {
+            // Rooted JSONPath (legacy keeps `$<name>` as a field).
+            Some(b'$') => rooted_or_paren(b, 0),
+            // Parenthesized projection, e.g. `($.a + $.b) / 2`.
+            Some(b'(') => true,
+            // Unary `-`/`+` (optionally spaced) on a rooted or parenthesized operand
+            // (`-$.a`, `+ ($.a)`), distinct from a legacy field name with a leading sign.
+            Some(b'-' | b'+') => rooted_or_paren(b, skip_spaces(b, 1)),
+            // Prefix function call: an identifier, optional spaces, then `(`.
+            Some(c) if c.is_ascii_alphabetic() || *c == b'_' => {
+                let name_len = b
+                    .iter()
+                    .take_while(|x| x.is_ascii_alphanumeric() || **x == b'_')
+                    .count();
+                b.get(skip_spaces(b, name_len)) == Some(&b'(')
+            }
+            _ => false,
         }
     }
 
