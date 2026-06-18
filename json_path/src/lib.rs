@@ -742,6 +742,21 @@ mod json_path_tests {
         verify_json!(path:"$.a[?index(@.n, 0, 9) == 1]", json:{"a":[{"n":[1,2]}]}, results:[]);
         // concat needs at least one arg: `concat()` is Nothing, not the empty string
         verify_json!(path:r#"$.a[?concat() == ""]"#, json:{"a":[{"n":1}]}, results:[]);
+        // length/count are arity-checked too (extra args -> Nothing, not silently dropped)
+        verify_json!(path:"$.a[?length(@.arr, 9) == 3]", json:{"a":[{"arr":[1,2,3]}]}, results:[]);
+        verify_json!(path:"$.a[?count(@.arr, 9) == 1]", json:{"a":[{"arr":[1,2,3]}]}, results:[]);
+        // the correct arity still matches
+        verify_json!(path:"$.a[?length(@.arr) == 3]", json:{"a":[{"arr":[1,2,3]}]}, results:[{"arr":[1,2,3]}]);
+    }
+
+    #[test]
+    fn compile_rejects_excessive_nesting() {
+        setup();
+        // Deeply nested parens must be rejected up front, not overflow the parser stack.
+        let deep = format!("{}$.a{}", "(".repeat(5000), ")".repeat(5000));
+        assert!(json_path::compile(&deep).is_err(), "deep nesting must be rejected");
+        // A modestly nested, valid projection still compiles.
+        assert!(json_path::compile("((($.a + 1)))").is_ok());
     }
 
     #[test]
@@ -1458,6 +1473,12 @@ mod json_path_tests {
             "$[0:2]",
             "$.a+1",        // no spaces -> a field literally named "a+1"
             "$.arr.length", // no parens -> a field named "length"
+            // A fully-parenthesized lone path is the same query as the unwrapped path, so it
+            // classifies as a path (otherwise a multi-node result double-wraps: `($..x)` would
+            // serialize as `[[..]]` instead of `[..]`).
+            "($.a)",
+            "($..x)",
+            "(($.a))",
         ] {
             let q = json_path::compile(path).unwrap();
             assert!(!q.is_projection(), "`{path}` should be a plain path");
@@ -1469,7 +1490,7 @@ mod json_path_tests {
             "$.a * $.b",
             "$.arr.length()",
             "length($.arr)",
-            "($.a)",
+            "($.a + 1)",
         ] {
             let q = json_path::compile(path).unwrap();
             assert!(q.is_projection(), "`{path}` should be a projection");

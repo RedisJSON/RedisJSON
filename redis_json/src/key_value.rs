@@ -238,18 +238,22 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         let results = paths
             .into_iter()
             .map(|path: Path| self.to_resp3_path(&path, format))
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(RedisValue::Array(results))
     }
 
-    pub fn to_resp3_path(&self, path: &Path, format: &ReplyFormatOptions) -> RedisValue {
-        compile(path.get_path()).map_or(RedisValue::Array(vec![]), |q| {
-            if q.is_projection() {
-                Self::projection_to_resp3(calc_once_projection(q, self.val.as_ref()), format)
-            } else {
-                Self::values_to_resp3(&calc_once(q, self.val.as_ref()), format)
-            }
-        })
+    pub fn to_resp3_path(&self, path: &Path, format: &ReplyFormatOptions) -> RedisResult {
+        // Propagate a compile error (e.g. a malformed projection `$.a +`) rather than masking
+        // it as an empty array, so RESP3 errors consistently with the RESP2 path.
+        let q = compile(path.get_path())?;
+        if q.is_projection() {
+            Ok(Self::projection_to_resp3(
+                calc_once_projection(q, self.val.as_ref()),
+                format,
+            ))
+        } else {
+            Ok(Self::values_to_resp3(&calc_once(q, self.val.as_ref()), format))
+        }
     }
 
     fn to_json_single(
@@ -501,6 +505,11 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     pub fn obj_len(&self, path: &str) -> RedisResult<ObjectLen> {
+        // Reject a legacy-normalized projection rather than swallowing it into `NoneExisting`
+        // (nil); a projection has no node to size.
+        if compile(path).is_ok_and(|q| q.is_projection()) {
+            return Err(err_projection_readonly());
+        }
         match self.get_first(path) {
             Ok(first) => match first.get_type() {
                 SelectValueType::Object => first

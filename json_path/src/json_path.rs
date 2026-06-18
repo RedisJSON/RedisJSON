@@ -734,8 +734,8 @@ fn eval_function<'i, 'j, S: SelectValue>(
     let arity_ok = match name {
         "concat" => !args.is_empty(),
         "index" => args.len() == 2,
-        "ceiling" | "floor" | "abs" | "sum" | "min" | "max" | "avg" | "stddev" | "first"
-        | "last" => args.len() == 1,
+        "length" | "count" | "ceiling" | "floor" | "abs" | "sum" | "min" | "max" | "avg"
+        | "stddev" | "first" | "last" => args.len() == 1,
         _ => true,
     };
     if !arity_ok {
@@ -858,7 +858,12 @@ fn classify_query<'i>(expr: &Pair<'i, Rule>, empty: &Pairs<'i, Rule>) -> QueryCl
             Some(root) => QueryClass::Path(root.into_inner()),
             None => QueryClass::Path(empty.clone()),
         },
-        // from_current (`@`), method_chain, function_call, literals, parenthesized expr.
+        // A fully-parenthesized expression with no surrounding operator/sign/method reduces to
+        // its inner expression: `($..x)` is the same query as `$..x`. Recurse so a wrapped lone
+        // path classifies as a path — otherwise the projection serializer collapses a multi-node
+        // result into one array and then wraps it again (`($..x)` -> `[[..]]` instead of `[..]`).
+        Rule::arith_expr => classify_query(&prim, empty),
+        // from_current (`@`), method_chain, function_call, literals.
         _ => QueryClass::Projection,
     }
 }
@@ -866,6 +871,24 @@ fn classify_query<'i>(expr: &Pair<'i, Rule>, empty: &Pairs<'i, Rule>) -> QueryCl
 /// Compile the given string query into a query object.
 /// Returns error on compilation error.
 pub(crate) fn compile(path: &str) -> Result<Query<'_>, QueryCompilationError> {
+    const MAX_NESTING_DEPTH: usize = 128;
+    let (mut depth, mut max_depth) = (0usize, 0usize);
+    for b in path.bytes() {
+        match b {
+            b'(' | b'[' => {
+                depth += 1;
+                max_depth = max_depth.max(depth);
+            }
+            b')' | b']' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+        if max_depth > MAX_NESTING_DEPTH {
+            return Err(QueryCompilationError {
+                location: 0,
+                message: format!("JSONPath nesting too deep (max depth {MAX_NESTING_DEPTH})"),
+            });
+        }
+    }
     let query = JsonPathParser::parse(Rule::query, path);
     match query {
         Ok(mut q) => {

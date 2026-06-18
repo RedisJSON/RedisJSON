@@ -1210,6 +1210,12 @@ pub fn json_type_impl<M: Manager>(redis_key: &M::ReadHolder, path: &str) -> Redi
 }
 
 fn json_type_legacy<M: Manager>(redis_key: &M::ReadHolder, path: &str) -> RedisResult {
+    // A legacy path that normalizes to a projection (e.g. `a + 1` -> `$.a + 1`) addresses no
+    // node; reject it explicitly instead of letting the lenient `map_or(Null)` swallow the
+    // projection error into a silent nil.
+    if compile(path).is_ok_and(|q| q.is_projection()) {
+        return Err(err_projection_readonly());
+    }
     let value = redis_key.get_value()?.map_or(RedisValue::Null, |doc| {
         KeyValue::new(doc)
             .get_type(path)
@@ -2748,6 +2754,11 @@ fn json_obj_keys_impl<M: Manager>(redis_key: &mut M::ReadHolder, path: &str) -> 
 }
 
 fn json_obj_keys_legacy<M: Manager>(redis_key: &mut M::ReadHolder, path: &str) -> RedisResult {
+    // Reject a legacy-normalized projection rather than swallowing the error to nil (see
+    // `json_type_legacy`).
+    if compile(path).is_ok_and(|q| q.is_projection()) {
+        return Err(err_projection_readonly());
+    }
     let root = match redis_key.get_value()? {
         Some(v) => v,
         _ => return Ok(RedisValue::Null),

@@ -1860,6 +1860,55 @@ def testProjectionResp(env):
     r.assertEqual(r.execute_command('JSON.RESP', 'doc', '$.arr.length()'), [3])
     # a Nothing projection -> empty reply
     r.assertEqual(r.execute_command('JSON.RESP', 'doc', '$.a / 0'), [])
+    # non-scalar / float projection outputs are resp-encoded (not just integers)
+    r.expect('JSON.SET', 'doc', '$',
+             json.dumps({"arr": [1, 2, 3], "nums": [3, 1, 2], "obj": {"k": 1}})).ok()
+    r.assertEqual(r.execute_command('JSON.RESP', 'doc', '$.nums.min()'), ['1'])       # float
+    r.assertEqual(r.execute_command('JSON.RESP', 'doc', '$.arr.first()'), [1])
+    r.assertEqual(r.execute_command('JSON.RESP', 'doc', 'value($.arr)'), [['[', 1, 2, 3]])  # array
+    r.assertEqual(r.execute_command('JSON.RESP', 'doc', 'value($.obj)'), [['{', 'k', 1]])    # object
+
+def testProjectionResp3(env):
+    # The live RESP3 projection route (`to_resp3_path` -> `projection_to_resp3`, reached via
+    # FORMAT EXPAND) returns structured replies, and a malformed projection errors (not `[]`).
+    r = env
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"nums": [3, 1, 2], "a": {"x": 1}, "b": {"x": 2}})).ok()
+    con = r.getConnection()
+    con.execute_command('HELLO', '3')
+    env.assertEqual(con.execute_command('JSON.GET', 'doc', '$.nums.min()', 'FORMAT', 'EXPAND'), [[1.0]])
+    # a parenthesized multi-node path is not double-wrapped under RESP3 either
+    env.assertEqual(con.execute_command('JSON.GET', 'doc', '($..x)', 'FORMAT', 'EXPAND'), [[1, 2]])
+    # malformed projection -> error (RESP3 no longer swallows it to an empty array)
+    try:
+        con.execute_command('JSON.GET', 'doc', '$.x +', 'FORMAT', 'EXPAND')
+        env.assertTrue(False, message="malformed projection should error under RESP3")
+    except Exception:
+        pass
+
+def testProjectionClassificationFixes(env):
+    # Fixes to is_jsonpath classification, projection wrapping, arity, and the nesting guard.
+    r = env
+    r.expect('JSON.SET', 'd', '$',
+             json.dumps({"arr": [1, 2, 3], "a": {"x": 1}, "b": {"x": 2}, "-$x": 111, "x": 5})).ok()
+    # whitespace inside a projection is still classified as JSONPath (not a legacy field)
+    r.expect('JSON.GET', 'd', 'length ( $.arr )').equal('[3]')
+    r.expect('JSON.GET', 'd', '- $.a.x').equal('[-1]')
+    # a legacy field literally named `-$x` is preserved (not reinterpreted as `-($.x)`)
+    r.expect('JSON.GET', 'd', '-$x').equal('111')
+    # a parenthesized multi-node path does not double-wrap (`($..x)` == `$..x`)
+    r.assertEqual(sorted(json.loads(r.execute_command('JSON.GET', 'd', '($..x)'))), [1, 2, 5])
+    r.assertEqual(sorted(json.loads(r.execute_command('JSON.GET', 'd', '$..x'))), [1, 2, 5])
+    # method/function arity: extra args -> Nothing (not silently dropped)
+    r.expect('JSON.GET', 'd', '$.arr.length()').equal('[3]')
+    r.expect('JSON.GET', 'd', '$.arr.length(99)').equal('[]')
+    r.expect('JSON.GET', 'd', '$.length($.arr)').equal('[]')
+    # legacy-form projection is rejected by node commands (not a silent nil)
+    r.expect('JSON.TYPE', 'd', 'x + 1').raiseError()
+    r.expect('JSON.OBJLEN', 'd', 'x + 1').raiseError()
+    r.expect('JSON.OBJKEYS', 'd', 'x + 1').raiseError()
+    # pathological nesting -> clean error, server stays up (no stack-overflow abort)
+    r.expect('JSON.GET', 'd', '(' * 5000 + '$.a' + ')' * 5000).raiseError()
+    r.expect('PING').equal(True)
 
 def testProjectionLegacyForm(env):
     # A legacy-form path can normalize to a projection (e.g. `a + 1` -> `$.a + 1`). The
