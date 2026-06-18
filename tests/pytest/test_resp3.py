@@ -343,7 +343,22 @@ class testResp3():
         r.assertEqual(r.execute_command('JSON.ARRLEN', 'test_resp3_arr'), 3)
         r.assertEqual(r.executeCommand('JSON.ARRPOP', 'test_resp3_arr'), '"dud"')
         r.assertEqual(r.execute_command('JSON.ARRLEN', 'test_resp3_arr'), 2)
-        
+
+    def test_resp3_projection(self):
+        # FORMAT EXPAND under RESP3 is the live structured projection route
+        # (to_resp3_path -> projection_to_resp3).
+        r = self.env
+        r.skipOnVersionSmaller('7.0')
+        r.assertOk(r.execute_command('JSON.SET', 'doc', '$', '{"nums":[3,1,2],"a":{"x":1},"b":{"x":2}}'))
+        # scalar / float projection -> structured RESP3 reply
+        r.assertEqual(r.execute_command('JSON.GET', 'doc', 'FORMAT', 'EXPAND', '$.nums.min()'), [[1.0]])
+        # a parenthesized multi-node path is not double-wrapped (`($..x)` == `$..x`)
+        r.assertEqual(r.execute_command('JSON.GET', 'doc', 'FORMAT', 'EXPAND', '($..x)'), [[1, 2]])
+        r.assertEqual(r.execute_command('JSON.GET', 'doc', 'FORMAT', 'EXPAND', '$..x'), [[1, 2]])
+        # a malformed projection errors (RESP3 no longer swallows it to an empty array)
+        r.expect('JSON.GET', 'doc', 'FORMAT', 'EXPAND', '$.x +').raiseError()
+
+
 def test_fail_with_resp2():
     r = Env(protocol=2)
     r.assertOk(r.execute_command('JSON.SET', 'doc', '$', '{"a":[1, 2, 3], "FORMAT": [1]}'))

@@ -1868,22 +1868,6 @@ def testProjectionResp(env):
     r.assertEqual(r.execute_command('JSON.RESP', 'doc', 'value($.arr)'), [['[', 1, 2, 3]])  # array
     r.assertEqual(r.execute_command('JSON.RESP', 'doc', 'value($.obj)'), [['{', 'k', 1]])    # object
 
-def testProjectionResp3(env):
-    # The live RESP3 projection route (`to_resp3_path` -> `projection_to_resp3`, reached via
-    # FORMAT EXPAND) returns structured replies, and a malformed projection errors (not `[]`).
-    r = env
-    r.expect('JSON.SET', 'doc', '$', json.dumps({"nums": [3, 1, 2], "a": {"x": 1}, "b": {"x": 2}})).ok()
-    con = r.getConnection()
-    con.execute_command('HELLO', '3')
-    env.assertEqual(con.execute_command('JSON.GET', 'doc', '$.nums.min()', 'FORMAT', 'EXPAND'), [[1.0]])
-    # a parenthesized multi-node path is not double-wrapped under RESP3 either
-    env.assertEqual(con.execute_command('JSON.GET', 'doc', '($..x)', 'FORMAT', 'EXPAND'), [[1, 2]])
-    # malformed projection -> error (RESP3 no longer swallows it to an empty array)
-    try:
-        con.execute_command('JSON.GET', 'doc', '$.x +', 'FORMAT', 'EXPAND')
-        env.assertTrue(False, message="malformed projection should error under RESP3")
-    except Exception:
-        pass
 
 def testProjectionClassificationFixes(env):
     # Fixes to is_jsonpath classification, projection wrapping, arity, and the nesting guard.
