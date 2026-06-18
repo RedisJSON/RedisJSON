@@ -388,8 +388,10 @@ def migrate_slots_rapid(env):
     # Migrate middle_second back from first to second (restore original ownership).
     task_id = second_conn.execute_command("CLUSTER", "MIGRATION", "IMPORT", middle_second.start, middle_second.end)
     wait_for_migration(second_conn, task_id, timeout=timeout)
-    # Wait for the source (first) to give up the slots so the next round starts clean.
+    # Wait for BOTH nodes' views to return to their original single slot range
+    # before the next round re-reads (and unpacks) original_first / original_second.
     wait_for_slots(first_conn, {original_first}, timeout=timeout)
+    wait_for_slots(second_conn, {original_second}, timeout=timeout)
 
 
 def wait_for_migration(conn, task_id, timeout=5):
