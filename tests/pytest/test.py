@@ -1808,32 +1808,58 @@ def testProjectionMget(env):
     r.assertEqual(r.execute_command('JSON.MGET', 'doc1{t}', 'doc2{t}', '$.a +'), [None, None])
     r.expect('PING').equal(True)
 
-def testProjectionReadOnly(env):
-    # Projections are read-only: write/path commands must reject them.
+def testProjectionRejectedByAllPathCommands(env):
+    # A top-level projection (e.g. `$.a + 1`, `$.arr.length()`) addresses no document node.
+    # Every path-taking command EXCEPT the value-returning reads (JSON.GET / JSON.MGET /
+    # JSON.RESP) must reject it with a clean error (never mutate, never crash). The projection
+    # form is varied (arithmetic, method, unary, prefix-function) so rejection is not tied to
+    # one syntax.
+    r = env
+    doc = {"a": 2, "arr": [1, 2, 3], "s": "hi", "b": True}
+    r.expect('JSON.SET', 'doc', '$', json.dumps(doc)).ok()
+    p = '$.a + 1'  # representative projection path
+    rejected = [
+        # write / path-mutating commands
+        ('JSON.SET', 'doc', p, '5'),
+        ('JSON.DEL', 'doc', p),
+        ('JSON.FORGET', 'doc', p),
+        ('JSON.MSET', 'doc', p, '5'),
+        ('JSON.MERGE', 'doc', p, '5'),
+        ('JSON.CLEAR', 'doc', p),
+        ('JSON.TOGGLE', 'doc', p),
+        ('JSON.NUMINCRBY', 'doc', p, '1'),
+        ('JSON.NUMMULTBY', 'doc', '$.arr.length()', '2'),
+        ('JSON.NUMPOWBY', 'doc', p, '2'),
+        ('JSON.STRAPPEND', 'doc', '-$.a', '"x"'),
+        ('JSON.ARRAPPEND', 'doc', '$.a * 2', '1'),
+        ('JSON.ARRINSERT', 'doc', p, '0', '1'),
+        ('JSON.ARRPOP', 'doc', p),
+        ('JSON.ARRTRIM', 'doc', p, '0', '1'),
+        # node-based read commands (a projection has no node)
+        ('JSON.TYPE', 'doc', p),
+        ('JSON.STRLEN', 'doc', '$.s.length()'),
+        ('JSON.OBJLEN', 'doc', p),
+        ('JSON.OBJKEYS', 'doc', p),
+        ('JSON.ARRLEN', 'doc', p),
+        ('JSON.ARRINDEX', 'doc', p, '1'),
+        ('JSON.DEBUG', 'MEMORY', 'doc', 'length($.arr)'),
+    ]
+    for cmd in rejected:
+        r.expect(*cmd).raiseError()
+    # document unchanged after all rejected commands; server healthy; GET projection still works
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'doc', '$')), [doc])
+    r.expect('PING').equal(True)
+    r.expect('JSON.GET', 'doc', p).equal('[3]')
+
+def testProjectionResp(env):
+    # JSON.RESP is a value-returning read command, so it evaluates a projection (like GET/MGET),
+    # returning the computed value resp-encoded (or an empty reply for a Nothing projection).
     r = env
     r.expect('JSON.SET', 'doc', '$', json.dumps({"a": 2, "arr": [1, 2, 3]})).ok()
-    r.expect('JSON.SET', 'doc', '$.a + 1', '5').raiseError()
-    r.expect('JSON.NUMINCRBY', 'doc', '$.a + 1', '1').raiseError()
-    r.expect('JSON.NUMMULTBY', 'doc', '$.arr.length()', '2').raiseError()
-    r.expect('JSON.ARRAPPEND', 'doc', '$.a * 2', '1').raiseError()
-    r.expect('JSON.STRAPPEND', 'doc', '-$.a', '"x"').raiseError()
-    # the document is unchanged after the rejected writes
-    r.expect('JSON.GET', 'doc', '$').equal('[{"a":2,"arr":[1,2,3]}]')
-
-def testProjectionRejectedByNodeCommands(env):
-    # Node-based read commands operate on document nodes; a projection has none, so they must
-    # return a clean error.
-    r = env
-    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": 2, "arr": [1, 2, 3], "s": "hi"})).ok()
-    r.expect('JSON.TYPE', 'doc', '$.a + 1').raiseError()
-    r.expect('JSON.STRLEN', 'doc', '$.s.length()').raiseError()
-    r.expect('JSON.OBJLEN', 'doc', '-$.a').raiseError()
-    r.expect('JSON.ARRLEN', 'doc', '$.a + 1').raiseError()
-    r.expect('JSON.ARRINDEX', 'doc', '$.a + 1', '1').raiseError()
-    r.expect('JSON.DEBUG', 'MEMORY', 'doc', 'length($.arr)').raiseError()
-    # server is alive and JSON.GET projection still works
-    r.expect('PING').equal(True)
-    r.expect('JSON.GET', 'doc', '$.a + 1').equal('[3]')
+    r.assertEqual(r.execute_command('JSON.RESP', 'doc', '$.a + 1'), [3])
+    r.assertEqual(r.execute_command('JSON.RESP', 'doc', '$.arr.length()'), [3])
+    # a Nothing projection -> empty reply
+    r.assertEqual(r.execute_command('JSON.RESP', 'doc', '$.a / 0'), [])
 
 def testProjectionEdgeCases(env):
     r = env

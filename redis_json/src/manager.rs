@@ -103,7 +103,9 @@ pub fn err_invalid_path() -> RedisError {
 }
 
 pub fn err_projection_readonly() -> RedisError {
-    RedisError::Str("ERR computed/projection expressions are only supported by JSON.GET/JSON.MGET")
+    RedisError::Str(
+        "ERR computed/projection expressions are only supported by JSON.GET/JSON.MGET/JSON.RESP",
+    )
 }
 
 pub fn err_invalid_path_or(or: &str) -> RedisError {
