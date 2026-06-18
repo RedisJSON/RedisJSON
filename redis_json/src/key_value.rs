@@ -39,24 +39,28 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     pub fn resp_serialize(&self, path: Path) -> RedisResult {
+        let query = compile(path.get_path())?;
+        // A projection (incl. a legacy path that normalizes to one, e.g. `a + 1` -> `$.a + 1`)
+        // is computed: JSON.RESP is a value-returning read like JSON.GET/JSON.MGET.
+        if query.is_projection() {
+            return Ok(Self::projection_to_resp(calc_once_projection(
+                query,
+                self.val.as_ref(),
+            )));
+        }
         if path.is_legacy() {
-            // A legacy path is never a projection (projections route to JSONPath mode).
-            let v = self.get_first(path.get_path())?;
+            // Legacy paths address a single node (first match), not a nodelist.
+            let v = calc_once(query, self.val.as_ref())
+                .into_iter()
+                .next()
+                .ok_or_else(err_invalid_path)?;
             Ok(Self::resp_serialize_inner(v.as_ref()))
         } else {
-            let query = compile(path.get_path())?;
-            if query.is_projection() {
-                Ok(Self::projection_to_resp(calc_once_projection(
-                    query,
-                    self.val.as_ref(),
-                )))
-            } else {
-                Ok(calc_once(query, self.val.as_ref())
-                    .into_iter()
-                    .map(|v| Self::resp_serialize_inner(v.as_ref()))
-                    .collect_vec()
-                    .into())
-            }
+            Ok(calc_once(query, self.val.as_ref())
+                .into_iter()
+                .map(|v| Self::resp_serialize_inner(v.as_ref()))
+                .collect_vec()
+                .into())
         }
     }
 
@@ -436,7 +440,20 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     }
 
     pub fn to_string_single(&self, path: &str, format: &ReplyFormatOptions) -> RedisResult<String> {
-        let result = self.get_first(path)?;
+        let query = compile(path)?;
+        // A projection (incl. a legacy path that normalizes to one, e.g. `a + 1` -> `$.a + 1`)
+        // is computed: JSON.GET / JSON.MGET are value-returning reads. This mirrors the
+        // multi-path branch, so single- and multi-path GET agree on the same expression.
+        if query.is_projection() {
+            return Self::projection_to_string(
+                calc_once_projection(query, self.val.as_ref()),
+                format,
+            );
+        }
+        let result = calc_once(query, self.val.as_ref())
+            .into_iter()
+            .next()
+            .ok_or_else(err_invalid_path)?;
         Self::serialize_object(&result, format)
     }
 

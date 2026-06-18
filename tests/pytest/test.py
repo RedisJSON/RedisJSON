@@ -1861,6 +1861,25 @@ def testProjectionResp(env):
     # a Nothing projection -> empty reply
     r.assertEqual(r.execute_command('JSON.RESP', 'doc', '$.a / 0'), [])
 
+def testProjectionLegacyForm(env):
+    # A legacy-form path can normalize to a projection (e.g. `a + 1` -> `$.a + 1`). The
+    # value-returning reads (GET / MGET / RESP) compute it the same way for single- and
+    # multi-path; mutating / node commands still reject it.
+    r = env
+    r.expect('JSON.SET', 'd', '$', json.dumps({"a": 2, "b": 4})).ok()
+    # single-path GET now agrees with multi-path GET on the same expression
+    r.expect('JSON.GET', 'd', 'a + 1').equal('[3]')
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'd', 'a + 1', 'b')),
+                  {"a + 1": [3], "b": 4})
+    r.assertEqual(r.execute_command('JSON.MGET', 'd', 'a + 1'), ['[3]'])
+    r.assertEqual(r.execute_command('JSON.RESP', 'd', 'a + 1'), [3])
+    # a mutating command still rejects a (legacy-normalized) projection, leaving the doc intact
+    r.expect('JSON.SET', 'd', 'a + 1', '9').raiseError()
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'd', '$')), [{"a": 2, "b": 4}])
+    # a legacy field with `+` but no surrounding spaces is still a plain field (not arithmetic)
+    r.expect('JSON.SET', 'd2', '$', json.dumps({"a+1": 7})).ok()
+    r.expect('JSON.GET', 'd2', 'a+1').equal('7')
+
 def testProjectionEdgeCases(env):
     r = env
     r.expect('JSON.SET', 'doc', '$', json.dumps({"a": 2, "b": 4, "arr": [1, 2, 3], "big": 1e308})).ok()
