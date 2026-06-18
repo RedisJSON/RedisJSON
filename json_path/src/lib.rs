@@ -496,6 +496,606 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_filter_negation_existence() {
+        setup();
+        verify_json!(path:"$[?!@.a]", json:[{"a":1},{"b":2}], results:[{"b":2}]);
+    }
+
+    #[test]
+    fn test_filter_negation_double() {
+        setup();
+        verify_json!(path:"$[?!!@.a]", json:[{"a":1},{"b":2}], results:[{"a":1}]);
+    }
+
+    #[test]
+    fn test_filter_negation_comparison_parenthesized() {
+        setup();
+        verify_json!(path:"$[?!(@.a==1)]", json:[{"a":1},{"a":2}], results:[{"a":2}]);
+    }
+
+    #[test]
+    fn test_filter_negation_comparison_bare() {
+        setup();
+        // `!` applied directly to a comparison negates the whole comparison
+        verify_json!(path:"$[?!@.a==1]", json:[{"a":1},{"a":2}], results:[{"a":2}]);
+    }
+
+    #[test]
+    fn test_filter_negation_precedence_with_and() {
+        setup();
+        // !@.a && @.b  ==>  (!@.a) && @.b
+        verify_json!(path:"$[?!@.a && @.b]", json:[{"a":1,"b":1},{"b":1},{"a":1}], results:[{"b":1}]);
+    }
+
+    #[test]
+    fn test_filter_negation_with_parens_or() {
+        setup();
+        // !(@.a || @.b)
+        verify_json!(path:"$[?!(@.a || @.b)]", json:[{"a":1},{"b":2},{"c":3}], results:[{"c":3}]);
+    }
+
+    #[test]
+    fn test_function_length() {
+        setup();
+        // length: array elements / string chars
+        verify_json!(path:"$.a[?length(@) > 2]", json:{"a":[[1,2,3],[1],"abcd","x"]}, results:[[1,2,3],"abcd"]);
+    }
+
+    #[test]
+    fn test_function_length_object() {
+        setup();
+        // length of an object = number of members
+        verify_json!(path:"$[?length(@) == 2]", json:[{"a":1,"b":2},{"a":1}], results:[{"a":1,"b":2}]);
+    }
+
+    #[test]
+    fn test_function_count() {
+        setup();
+        verify_json!(path:"$[?count(@.*) == 3]", json:[{"a":1,"b":2,"c":3},{"a":1}], results:[{"a":1,"b":2,"c":3}]);
+    }
+
+    #[test]
+    fn test_function_value() {
+        setup();
+        verify_json!(path:"$[?value(@.a) == 1]", json:[{"a":1},{"a":2}], results:[{"a":1}]);
+    }
+
+    #[test]
+    fn test_function_match() {
+        setup();
+        // match is a full (anchored) match
+        verify_json!(path:"$.a[?match(@, \"a.*\")]", json:{"a":["abc","xabc","a","b"]}, results:["abc","a"]);
+    }
+
+    #[test]
+    fn test_function_search() {
+        setup();
+        // search is a substring match
+        verify_json!(path:"$.a[?search(@, \"b\")]", json:{"a":["abc","xyz","b"]}, results:["abc","b"]);
+    }
+
+    #[test]
+    fn test_regex_cache_cap_correctness() {
+        setup();
+        // More distinct (document-value) patterns than the regex-cache cap (64): entries
+        // past the cap take the uncached path; results must still be correct.
+        let items: Vec<Value> = (0..70)
+            .map(|i| json!({"s": format!("v{i}"), "pat": format!("^v{i}$")}))
+            .collect();
+        let j = json!({ "a": items });
+        // each element's string matches its own pattern -> all 70 returned
+        assert_eq!(perform_search("$.a[?@.s =~ @.pat]", &j).len(), 70);
+    }
+
+    #[test]
+    fn test_function_ceiling_floor() {
+        setup();
+        verify_json!(path:"$.a[?ceiling(@) == 3]", json:{"a":[2.1, 3.9, 1.0]}, results:[2.1]);
+        verify_json!(path:"$.a[?floor(@) == 2]", json:{"a":[2.1, 2.9, 3.5]}, results:[2.1, 2.9]);
+        // integers pass through unchanged
+        verify_json!(path:"$.a[?ceiling(@) == 5]", json:{"a":[5, 6]}, results:[5]);
+    }
+
+    #[test]
+    fn test_function_round_overflow_nothing() {
+        setup();
+        // 2^63 is one past i64::MAX; ceiling/floor must yield Nothing (no match), not a
+        // value saturated to i64::MAX
+        verify_json!(path:"$.a[?ceiling(@) == 9223372036854775807]", json:{"a":[9223372036854775808.0]}, results:[]);
+        verify_json!(path:"$.a[?floor(@) == 9223372036854775807]", json:{"a":[9223372036854775808.0]}, results:[]);
+    }
+
+    #[test]
+    fn test_function_abs() {
+        setup();
+        // integer abs stays integer; float abs stays float (objects, since the macro's
+        // result list can't hold a bare negative literal)
+        verify_json!(path:"$.a[?abs(@.n) == 5]", json:{"a":[{"n":-5},{"n":5},{"n":-3}]}, results:[{"n":-5},{"n":5}]);
+        verify_json!(path:"$.a[?abs(@.n) == 2.5]", json:{"a":[{"n":-2.5},{"n":2.5},{"n":1.0}]}, results:[{"n":-2.5},{"n":2.5}]);
+    }
+
+    #[test]
+    fn test_function_concat() {
+        setup();
+        verify_json!(path:"$.a[?concat(@.x, @.y) == \"ab\"]",
+            json:{"a":[{"x":"a","y":"b"},{"x":"a","y":"c"}]},
+            results:[{"x":"a","y":"b"}]);
+        // a non-string argument yields Nothing -> no match
+        verify_json!(path:"$.a[?concat(@.x, @.y) == \"a1\"]", json:{"a":[{"x":"a","y":1}]}, results:[]);
+    }
+
+    #[test]
+    fn test_function_aggregations() {
+        setup();
+        verify_json!(path:"$.a[?sum(@.n) == 6]", json:{"a":[{"n":[1,2,3]},{"n":[1,1]}]}, results:[{"n":[1,2,3]}]);
+        verify_json!(path:"$.a[?min(@.n) == 1]", json:{"a":[{"n":[3,1,2]},{"n":[5,6]}]}, results:[{"n":[3,1,2]}]);
+        verify_json!(path:"$.a[?max(@.n) == 3]", json:{"a":[{"n":[3,1,2]},{"n":[5,6]}]}, results:[{"n":[3,1,2]}]);
+        verify_json!(path:"$.a[?avg(@.n) == 2]", json:{"a":[{"n":[1,2,3]},{"n":[5,6]}]}, results:[{"n":[1,2,3]}]);
+    }
+
+    #[test]
+    fn test_function_stddev() {
+        setup();
+        // population stddev of [2,4,4,4,5,5,7,9] is 2.0
+        verify_json!(path:"$.a[?stddev(@.n) == 2.0]", json:{"a":[{"n":[2,4,4,4,5,5,7,9]},{"n":[1,2]}]}, results:[{"n":[2,4,4,4,5,5,7,9]}]);
+    }
+
+    #[test]
+    fn test_function_aggregation_non_numeric_nothing() {
+        setup();
+        // a non-numeric element yields Nothing -> no match
+        verify_json!(path:"$.a[?sum(@.n) == 3]", json:{"a":[{"n":[1,"x"]}]}, results:[]);
+    }
+
+    #[test]
+    fn test_function_first_last_index() {
+        setup();
+        verify_json!(path:"$.a[?first(@.n) == 1]", json:{"a":[{"n":[1,2]},{"n":[9,8]}]}, results:[{"n":[1,2]}]);
+        verify_json!(path:"$.a[?last(@.n) == 8]", json:{"a":[{"n":[1,2]},{"n":[9,8]}]}, results:[{"n":[9,8]}]);
+        // index with a negative offset counts from the end
+        verify_json!(path:"$.a[?index(@.n, -1) == 2]", json:{"a":[{"n":[1,2]},{"n":[9,8]}]}, results:[{"n":[1,2]}]);
+        // out-of-range index -> Nothing -> no match
+        verify_json!(path:"$.a[?index(@.n, 5) == 1]", json:{"a":[{"n":[1,2]}]}, results:[]);
+    }
+
+    #[test]
+    fn test_function_aggregation_negatives() {
+        setup();
+        // non-array argument -> Nothing (number / string / object)
+        verify_json!(path:"$.a[?sum(@.n) == 5]", json:{"a":[{"n":5}]}, results:[]);
+        verify_json!(path:"$.a[?avg(@.n) == 0]", json:{"a":[{"n":"x"}]}, results:[]);
+        verify_json!(path:"$.a[?max(@.n) == 0]", json:{"a":[{"n":{"k":1}}]}, results:[]);
+        // heterogeneous array (a non-numeric element) -> Nothing, even though the numeric
+        // elements alone would sum to the target (strict, no silent skipping)
+        verify_json!(path:"$.a[?sum(@.n) == 3]", json:{"a":[{"n":[1,true,2]}]}, results:[]);
+        verify_json!(path:"$.a[?sum(@.n) == 3]", json:{"a":[{"n":[1,null,2]}]}, results:[]);
+        verify_json!(path:"$.a[?sum(@.n) == 3]", json:{"a":[{"n":[1,[2],3]}]}, results:[]);
+        verify_json!(path:"$.a[?sum(@.n) == 3]", json:{"a":[{"n":[1,"2"]}]}, results:[]);
+        // empty array -> Nothing
+        verify_json!(path:"$.a[?sum(@.n) == 0]", json:{"a":[{"n":[]}]}, results:[]);
+        verify_json!(path:"$.a[?min(@.n) == 0]", json:{"a":[{"n":[]}]}, results:[]);
+    }
+
+    #[test]
+    fn test_function_index_negatives() {
+        setup();
+        // non-array argument -> Nothing
+        verify_json!(path:"$.a[?first(@.n) == 1]", json:{"a":[{"n":5}]}, results:[]);
+        verify_json!(path:"$.a[?last(@.n) == 1]", json:{"a":[{"n":"x"}]}, results:[]);
+        // first/last of an empty array -> Nothing
+        verify_json!(path:"$.a[?first(@.n) == 1]", json:{"a":[{"n":[]}]}, results:[]);
+        // out-of-range index, positive and negative -> Nothing
+        verify_json!(path:"$.a[?index(@.n, 9) == 1]", json:{"a":[{"n":[1,2]}]}, results:[]);
+        verify_json!(path:"$.a[?index(@.n, -9) == 1]", json:{"a":[{"n":[1,2]}]}, results:[]);
+        // non-numeric index -> Nothing
+        verify_json!(path:r#"$.a[?index(@.n, "x") == 1]"#, json:{"a":[{"n":[1,2]}]}, results:[]);
+        // a fractional index truncates toward zero: 1.9 -> 1 -> element 2
+        verify_json!(path:"$.a[?index(@.n, 1.9) == 2]", json:{"a":[{"n":[1,2]}]}, results:[{"n":[1,2]}]);
+    }
+
+    #[test]
+    fn test_function_wrong_arity_nothing() {
+        setup();
+        // wrong argument count -> Nothing (no match), instead of silently using a subset.
+        // single-arg functions reject a second arg
+        verify_json!(path:"$.a[?ceiling(@.n, 99) == 3]", json:{"a":[{"n":2.1}]}, results:[]);
+        verify_json!(path:"$.a[?abs(@.n, 99) == 5]", json:{"a":[{"n":-5}]}, results:[]);
+        verify_json!(path:"$.a[?sum(@.n, 99) == 6]", json:{"a":[{"n":[1,2,3]}]}, results:[]);
+        verify_json!(path:"$.a[?first(@.n, 99) == 1]", json:{"a":[{"n":[1,2]}]}, results:[]);
+        // index requires exactly two args
+        verify_json!(path:"$.a[?index(@.n) == 1]", json:{"a":[{"n":[1,2]}]}, results:[]);
+        verify_json!(path:"$.a[?index(@.n, 0, 9) == 1]", json:{"a":[{"n":[1,2]}]}, results:[]);
+        // concat needs at least one arg: `concat()` is Nothing, not the empty string
+        verify_json!(path:r#"$.a[?concat() == ""]"#, json:{"a":[{"n":1}]}, results:[]);
+    }
+
+    #[test]
+    fn test_membership_in_literal() {
+        setup();
+        verify_json!(path:"$.a[?@ in [2,4]]", json:{"a":[1,2,3,4]}, results:[2,4]);
+    }
+
+    #[test]
+    fn test_membership_nin_literal() {
+        setup();
+        verify_json!(path:"$.a[?@ nin [2,4]]", json:{"a":[1,2,3,4]}, results:[1,3]);
+    }
+
+    #[test]
+    fn test_membership_in_path_array() {
+        setup();
+        verify_json!(path:"$.a[?@ in $.allow]", json:{"a":[1,2,3],"allow":[2,3]}, results:[2,3]);
+    }
+
+    #[test]
+    fn test_membership_structured_in_literal() {
+        setup();
+        verify_json!(path:"$.a[?@ in [[1],[2]]]", json:{"a":[[1],[2],[3]]}, results:[[1],[2]]);
+    }
+
+    #[test]
+    fn test_membership_literal_in_path() {
+        setup();
+        // [4] in @.vals
+        verify_json!(path:"$.items[?[4] in @.vals]",
+            json:{"items":[{"vals":[1,2,[4]]},{"vals":[1,2]}]},
+            results:[{"vals":[1,2,[4]]}]);
+    }
+
+    #[test]
+    fn test_membership_value_in_path() {
+        setup();
+        // @.val in @.vals
+        verify_json!(path:"$.items[?@.val in @.vals]",
+            json:{"items":[{"val":2,"vals":[1,2,3]},{"val":9,"vals":[1,2,3]}]},
+            results:[{"val":2,"vals":[1,2,3]}]);
+    }
+
+    #[test]
+    fn test_membership_number_coercion() {
+        setup();
+        // numbers coerce int/float, aligned with `==`: 1.0 matches literal 1
+        verify_json!(path:"$.a[?@ in [1,2]]", json:{"a":[1.0, 2.0, 3.0]}, results:[1.0,2.0]);
+        // integer element matches a float in the document
+        verify_json!(path:"$.a[?2 in @.vals]", json:{"a":[{"vals":[1.0,2.0]}]}, results:[{"vals":[1.0,2.0]}]);
+    }
+
+    #[test]
+    fn test_set_subsetof_literal() {
+        setup();
+        // every element must be present; empty array is always a subset
+        verify_json!(path:"$.a[?@ subsetof [1,2,3]]", json:{"a":[[1,2],[1,5],[]]}, results:[[1,2],[]]);
+    }
+
+    #[test]
+    fn test_set_subsetof_path() {
+        setup();
+        verify_json!(path:"$.items[?@.val subsetof @.vals]",
+            json:{"items":[{"val":[1,2],"vals":[1,2,3]},{"val":[1,9],"vals":[1,2,3]}]},
+            results:[{"val":[1,2],"vals":[1,2,3]}]);
+    }
+
+    #[test]
+    fn test_set_subsetof_numeric_coercion() {
+        setup();
+        // set ops coerce numbers like `in`/`nin`: an int element matches a float member
+        // (`1` == `1.0`), so both arrays are subsets of the float literal
+        verify_json!(path:"$.a[?@ subsetof [1.0,2.0,3.0]]", json:{"a":[[1.0,2.0],[1,2]]}, results:[[1.0,2.0],[1,2]]);
+        // anyof/noneof coerce too: `2` intersects `[1.0,2.0]`
+        verify_json!(path:"$.a[?@ anyof [1.0,2.0]]", json:{"a":[[2],[9]]}, results:[[2]]);
+        verify_json!(path:"$.a[?@ noneof [1.0,2.0]]", json:{"a":[[2],[9]]}, results:[[9]]);
+    }
+
+    #[test]
+    fn test_set_anyof() {
+        setup();
+        // non-empty intersection; empty array has none
+        verify_json!(path:"$.a[?@ anyof [1,2,3]]", json:{"a":[[1,9],[8,9],[]]}, results:[[1,9]]);
+    }
+
+    #[test]
+    fn test_set_noneof() {
+        setup();
+        // empty intersection; empty array trivially matches (no shared element)
+        verify_json!(path:"$.a[?@ noneof [1,2,3]]", json:{"a":[[4,5],[1,9],[]]}, results:[[4,5],[]]);
+    }
+
+    #[test]
+    fn test_set_relate_multi_node_any_of() {
+        setup();
+        // a multi-result left operand (`@.*`) is evaluated any-of per node, each node
+        // treated as the array-shaped left operand (not the nodelist itself as one array)
+        // subsetof: any node is a subset of the RHS
+        verify_json!(path:"$.a[?@.* subsetof [1,2,3]]",
+            json:{"a":[{"x":[1,2],"y":[9]},{"x":[7],"y":[8]}]},
+            results:[{"x":[1,2],"y":[9]}]);
+        // anyof: any node intersects the RHS
+        verify_json!(path:"$.a[?@.* anyof [1,2,3]]",
+            json:{"a":[{"x":[9,2],"y":[8]},{"x":[7],"y":[6]}]},
+            results:[{"x":[9,2],"y":[8]}]);
+        // noneof = no node intersects the RHS
+        verify_json!(path:"$.a[?@.* noneof [1,2,3]]",
+            json:{"a":[{"x":[9],"y":[8]},{"x":[7],"y":[2]}]},
+            results:[{"x":[9],"y":[8]}]);
+    }
+
+    #[test]
+    fn test_size_of_array_and_string() {
+        setup();
+        // array element count and string char count
+        verify_json!(path:"$.a[?@ sizeof 2]", json:{"a":[[4,5],[1],[7,8,9]]}, results:[[4,5]]);
+        verify_json!(path:"$.a[?@ sizeof 2]", json:{"a":["ab","abc","xy"]}, results:["ab","xy"]);
+        // `size` is accepted as an alias for `sizeof`
+        verify_json!(path:"$.a[?@ size 2]", json:{"a":[[4,5],[1]]}, results:[[4,5]]);
+        // objects are NOT sized (only arrays/strings): a 2-member object must not match
+        verify_json!(path:"$.a[?@ sizeof 2]", json:{"a":[{"x":1,"y":2}, [3,4]]}, results:[[3,4]]);
+    }
+
+    #[test]
+    fn test_size_of_truncates_and_rejects_non_numeric() {
+        setup();
+        // fractional size truncates toward zero; non-numeric size never matches
+        verify_json!(path:"$.a[?@ sizeof 2.9]", json:{"a":[[4,5],[1]]}, results:[[4,5]]);
+        verify_json!(path:r#"$.a[?@ sizeof "2"]"#, json:{"a":[[4,5]]}, results:[]);
+    }
+
+    #[test]
+    fn test_empty_true_false() {
+        setup();
+        // empty true -> empty array/string; empty false -> non-empty
+        verify_json!(path:"$.a[?@ empty true]", json:{"a":[[],[1],"",[2,3]]}, results:[[],""]);
+        verify_json!(path:"$.a[?@ empty false]", json:{"a":[[],[1],"",[2,3]]}, results:[[1],[2,3]]);
+        // objects are NOT subject to empty (only arrays/strings): neither {} nor {"k":1}
+        // matches empty true or empty false
+        verify_json!(path:"$.a[?@ empty true]", json:{"a":[{}, [], {"k":1}]}, results:[[]]);
+        verify_json!(path:"$.a[?@ empty false]", json:{"a":[{}, [1], {"k":1}]}, results:[[1]]);
+    }
+
+    #[test]
+    fn test_size_of_multi_node_any_of() {
+        setup();
+        // a multi-result left operand (`@.*`) matches any-of, like `==`/`<`/`in`:
+        // the object matches because one of its values is a size-2 array
+        verify_json!(path:"$.a[?@.* sizeof 2]",
+            json:{"a":[{"x":[1],"y":[1,2]},{"x":[1],"y":[3]}]},
+            results:[{"x":[1],"y":[1,2]}]);
+    }
+
+    #[test]
+    fn test_empty_multi_node_any_of() {
+        setup();
+        // `@.* empty true` matches if any matched node is an empty array/string
+        verify_json!(path:"$.a[?@.* empty true]",
+            json:{"a":[{"x":[1],"y":[]},{"x":[1],"y":[3]}]},
+            results:[{"x":[1],"y":[]}]);
+    }
+
+    #[test]
+    fn test_size_of_multi_node_rhs_any_of() {
+        setup();
+        // a multi-result right operand (the size target) is any-of too, like `==`/`<`/`in`:
+        // `@.v` matches if its length equals any of the `@.want` values
+        verify_json!(path:"$.a[?@.v sizeof @.want[*]]",
+            json:{"a":[{"v":[1,2],"want":[2,3]},{"v":[1],"want":[2,3]}]},
+            results:[{"v":[1,2],"want":[2,3]}]);
+    }
+
+    #[test]
+    fn test_empty_multi_node_rhs_any_of() {
+        setup();
+        // a multi-result right operand (the boolean) is any-of too
+        verify_json!(path:"$.a[?@.v empty @.flags[*]]",
+            json:{"a":[{"v":[],"flags":[true,true]},{"v":[1],"flags":[true,true]}]},
+            results:[{"v":[],"flags":[true,true]}]);
+    }
+
+    #[test]
+    fn test_arith_add() {
+        setup();
+        verify_json!(path:"$[?@.a + 1 == 3]", json:[{"a":2},{"a":5}], results:[{"a":2}]);
+    }
+
+    #[test]
+    fn test_arith_sub() {
+        setup();
+        verify_json!(path:"$[?@.a - 1 == 4]", json:[{"a":5},{"a":2}], results:[{"a":5}]);
+    }
+
+    #[test]
+    fn test_arith_mul() {
+        setup();
+        verify_json!(path:"$[?@.a * 2 == 6]", json:[{"a":3},{"a":2}], results:[{"a":3}]);
+    }
+
+    #[test]
+    fn test_arith_div() {
+        setup();
+        // division is float: 8 / 2 == 4
+        verify_json!(path:"$[?@.a / 2 == 4]", json:[{"a":8},{"a":3}], results:[{"a":8}]);
+    }
+
+    #[test]
+    fn test_arith_rem() {
+        setup();
+        verify_json!(path:"$[?@.a % 2 == 0]", json:[{"a":4},{"a":3}], results:[{"a":4}]);
+    }
+
+    #[test]
+    fn test_arith_precedence() {
+        setup();
+        // * binds tighter than +
+        verify_json!(path:"$[?@.a + @.b * 2 == 7]", json:[{"a":1,"b":3},{"a":2,"b":2}], results:[{"a":1,"b":3}]);
+    }
+
+    #[test]
+    fn test_arith_parens() {
+        setup();
+        verify_json!(path:"$[?(@.a + @.b) * 2 == 8]", json:[{"a":1,"b":3},{"a":2,"b":3}], results:[{"a":1,"b":3}]);
+    }
+
+    #[test]
+    fn test_arith_unary_neg() {
+        setup();
+        verify_json!(path:"$[?-@.a == -3]", json:[{"a":3},{"a":1}], results:[{"a":3}]);
+    }
+
+    #[test]
+    fn test_arith_parens_current() {
+        setup();
+        // bare `@ * 2` collides with the wildcard `*`; parens disambiguate
+        verify_json!(path:"$.a[?(@) * 2 == 6]", json:{"a":[1,3]}, results:[3]);
+    }
+
+    #[test]
+    fn test_arith_div_by_zero_no_match() {
+        setup();
+        // division by zero -> Nothing -> comparison is false
+        verify_json!(path:"$[?@.a / 0 == 0]", json:[{"a":5}], results:[]);
+    }
+
+    #[test]
+    fn test_literal_string_element() {
+        setup();
+        verify_json!(path:"$.a[?@ == [\"x\"]]", json:{"a":[["x"],["y"]]}, results:[["x"]]);
+    }
+
+    #[test]
+    fn test_literal_bool_and_null() {
+        setup();
+        verify_json!(path:"$.a[?@ == [true, null]]", json:{"a":[[true,null],[false,null]]}, results:[[true,null]]);
+    }
+
+    #[test]
+    fn test_literal_float() {
+        setup();
+        verify_json!(path:"$.a[?@ == [1.5]]", json:{"a":[[1.5],[2.5]]}, results:[[1.5]]);
+    }
+
+    #[test]
+    fn test_arith_unary_plus() {
+        setup();
+        verify_json!(path:"$[?+@.a == 3]", json:[{"a":3},{"a":1}], results:[{"a":3}]);
+    }
+
+    #[test]
+    fn test_arith_mod_by_zero_no_match() {
+        setup();
+        verify_json!(path:"$[?@.a % 0 == 0]", json:[{"a":5}], results:[]);
+    }
+
+    #[test]
+    fn test_arith_mod_min_by_neg_one_no_panic() {
+        setup();
+        // i64::MIN % -1 overflows; must yield Nothing (no match), not panic
+        verify_json!(path:"$[?@.a % -1 == 0]", json:[{"a": i64::MIN}], results:[]);
+    }
+
+    #[test]
+    fn test_arith_non_numeric_operand_no_match() {
+        setup();
+        // arithmetic on a non-number yields Nothing -> no match
+        verify_json!(path:"$[?@.a * 2 == 4]", json:[{"a":"x"}], results:[]);
+    }
+
+    #[test]
+    fn test_arith_mixed_int_float() {
+        setup();
+        verify_json!(path:"$[?@.a + 0.5 == 2.5]", json:[{"a":2},{"a":5}], results:[{"a":2}]);
+    }
+
+    #[test]
+    fn test_arith_float_mul_and_rem() {
+        setup();
+        verify_json!(path:"$[?@.a * 2 == 5]", json:[{"a":2.5},{"a":1}], results:[{"a":2.5}]);
+        verify_json!(path:"$[?@.a % 2 == 1.5]", json:[{"a":3.5},{"a":4}], results:[{"a":3.5}]);
+    }
+
+    #[test]
+    fn test_arith_unary_neg_float() {
+        setup();
+        verify_json!(path:"$[?-@.a == -1.5]", json:[{"a":1.5},{"a":2.0}], results:[{"a":1.5}]);
+    }
+
+    #[test]
+    fn test_function_length_non_container_nothing() {
+        setup();
+        // length of a number is Nothing -> never > 0
+        verify_json!(path:"$.a[?length(@) > 0]", json:{"a":[1,2]}, results:[]);
+    }
+
+    #[test]
+    fn test_function_count_zero_and_one() {
+        setup();
+        // absent query -> 0
+        verify_json!(path:"$[?count(@.x) == 0]", json:[{"y":1}], results:[{"y":1}]);
+        // single node -> 1
+        verify_json!(path:"$[?count(@.y) == 1]", json:[{"y":7}], results:[{"y":7}]);
+    }
+
+    #[test]
+    fn test_function_value_multi_nothing() {
+        setup();
+        // value() of a multi-node query is Nothing -> no match
+        verify_json!(path:"$[?value(@.*) == 1]", json:[{"a":1,"b":2}], results:[]);
+    }
+
+    #[test]
+    fn test_membership_string_bool_null_lhs() {
+        setup();
+        // string / bool / null literal on the left-hand side of `in`
+        verify_json!(path:"$.items[?\"x\" in @.tags]",
+            json:{"items":[{"tags":["x","y"]},{"tags":["z"]}]},
+            results:[{"tags":["x","y"]}]);
+        verify_json!(path:"$.items[?true in @.flags]",
+            json:{"items":[{"flags":[true]},{"flags":[false]}]},
+            results:[{"flags":[true]}]);
+        verify_json!(path:"$.items[?null in @.vals]",
+            json:{"items":[{"vals":[null]},{"vals":[1]}]},
+            results:[{"vals":[null]}]);
+    }
+
+    #[test]
+    fn test_membership_string_value_in_literal() {
+        setup();
+        verify_json!(path:"$.a[?@ in [\"x\",\"y\"]]", json:{"a":["x","z"]}, results:["x"]);
+    }
+
+    #[test]
+    fn test_membership_rhs_not_array_no_match() {
+        setup();
+        // RHS resolves to a scalar (not an array) -> no membership
+        verify_json!(path:"$.items[?@.v in @.set]", json:{"items":[{"v":2,"set":5}]}, results:[]);
+    }
+
+    #[test]
+    fn test_membership_nin_non_array_rhs() {
+        setup();
+        // `nin` is the strict negation of `in`: a non-array / absent RHS
+        // makes `in` false, so `nin` matches.
+        verify_json!(path:"$.items[?@.v nin @.set]", json:{"items":[{"v":2,"set":5}]}, results:[{"v":2,"set":5}]);
+        verify_json!(path:"$.items[?@.v nin @.missing]", json:{"items":[{"v":2}]}, results:[{"v":2}]);
+    }
+
+    #[test]
+    fn test_arith_requires_spaces() {
+        setup();
+        // `@.a + 1` (spaces) is addition
+        verify_json!(path:"$[?@.a + 1 == 3]", json:[{"a":2}], results:[{"a":2}]);
+        // `@.a+1` (no spaces) is a field named "a+1" (existence test), NOT arithmetic:
+        // only the doc with that key matches; `{"a":2}` does not (which it would if this
+        // were `@.a + 1`).
+        verify_json!(path:"$[?@.a+1]", json:[{"a+1":5},{"a":2}], results:[{"a+1":5}]);
+    }
+
+    #[test]
+    fn test_bare_term_bool_literal() {
+        setup();
+        // Bare boolean term: `false` matches nothing, `true` matches every node.
+        verify_json!(path:"$[?false]", json:[1,2,3], results:[]);
+        verify_json!(path:"$[?true]", json:[1,2,3], results:[1,2,3]);
+    }
+
+    #[test]
     fn test_filter_with_full_scan() {
         setup();
         verify_json!(path:"$..[?(@.code==\"2\")].code", json:[{"code":"1"},{"code":"2"}], results:["2"]);

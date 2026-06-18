@@ -7,7 +7,7 @@
  * GNU Affero General Public License v3 (AGPLv3).
  */
 
-use crate::select_value::{SelectValue, SelectValueType, ValueRef};
+use crate::select_value::{is_equal, SelectValue, SelectValueType, ValueRef};
 use itertools::Itertools;
 use log::trace;
 use pest::iterators::{Pair, Pairs};
@@ -15,8 +15,10 @@ use pest::Parser;
 use pest_derive::Parser;
 use redis_module::rediserror::RedisError;
 use regex::Regex;
+use serde_json::Value;
 use std::borrow::Cow;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::fmt::Debug;
 
 // Macro to handle items() iterator for both Borrowed and Owned ValueRef cases
@@ -224,6 +226,551 @@ fn unescape_string_value<'a>(pair: Pair<'a, Rule>) -> Cow<'a, str> {
     }
 }
 
+/// Recursively build an owned JSON `Value` from an array/object literal parse subtree
+/// (e.g. `[1,{"a":2}]`). Used for structured filter operands; compared against the
+/// document value via the cross-type `is_equal`.
+///
+/// PERF/TODO: this runs per element during filter evaluation, so a constant literal
+/// (e.g. the array in `$.a[?@ in [1,2,...]]`) is rebuilt for every node. A follow-up
+/// could materialize literals once at `compile()` time and reuse them.
+fn build_literal(pair: Pair<Rule>) -> Value {
+    match pair.as_rule() {
+        Rule::array_literal => Value::Array(pair.into_inner().map(build_literal).collect()),
+        Rule::object_literal => Value::Object(
+            pair.into_inner()
+                .map(|member| {
+                    let mut it = member.into_inner();
+                    let key = it
+                        .next()
+                        .map(|k| unescape_string_value(k).into_owned())
+                        .unwrap_or_default();
+                    let value = it.next().map_or(Value::Null, build_literal);
+                    (key, value)
+                })
+                .collect(),
+        ),
+        Rule::decimal => {
+            let s = pair.as_str();
+            if let Ok(i) = s.parse::<i64>() {
+                Value::from(i)
+            } else if let Some(n) = s.parse::<f64>().ok().and_then(serde_json::Number::from_f64) {
+                Value::Number(n)
+            } else {
+                Value::Null
+            }
+        }
+        Rule::string_value | Rule::string_value_escape_1 | Rule::string_value_escape_2 => {
+            Value::String(unescape_string_value(pair).into_owned())
+        }
+        Rule::boolean_true => Value::Bool(true),
+        Rule::boolean_false => Value::Bool(false),
+        Rule::null => Value::Null,
+        other => {
+            trace!("build_literal: unexpected rule {other:?}");
+            Value::Null
+        }
+    }
+}
+
+/// A numeric value extracted from a term/value for membership comparison.
+#[derive(Clone, Copy)]
+enum Num {
+    Int(i64),
+    Float(f64),
+}
+
+/// Numeric equality matching `==`: exact for two integers, by `f64` value otherwise.
+///
+/// NOTE: mixed int/float comparison goes through `f64`, which loses precision above
+/// 2^53 — e.g. `9007199254740993` and `9007199254740992` compare equal. This matches
+/// the existing `==`/`is_equal` numeric coercion, but `in`/`nin` now route through here
+/// too, so large-integer membership can match a near-but-unequal value.
+fn numbers_equal(a: Num, b: Num) -> bool {
+    match (a, b) {
+        (Num::Int(x), Num::Int(y)) => x == y,
+        (Num::Float(x), Num::Float(y)) => x == y,
+        (Num::Int(x), Num::Float(y)) | (Num::Float(y), Num::Int(x)) => x as f64 == y,
+    }
+}
+
+/// Numeric view of a `SelectValue` (integer or double), `None` if not a number.
+fn value_as_number<V: SelectValue>(v: &V) -> Option<Num> {
+    match v.get_type() {
+        SelectValueType::Long => v.get_long().map(Num::Int),
+        SelectValueType::Double => v.get_double().map(Num::Float),
+        _ => None,
+    }
+}
+
+/// Equality between two document values with `in`/`nin` number coercion: integers and
+/// doubles compare by numeric value (`1` == `1.0`); everything else uses deep `is_equal`
+/// equality. Mirrors `equals_value`, so the set operators agree with `in`/`nin`.
+fn values_equal<A: SelectValue, B: SelectValue>(a: &A, b: &B) -> bool {
+    match (value_as_number(a), value_as_number(b)) {
+        (Some(x), Some(y)) => numbers_equal(x, y),
+        _ => is_equal(a, b),
+    }
+}
+
+/// True if `needle` equals any element of the array-shaped term `haystack` (array value,
+/// array literal, or nodelist). Comparison coerces numbers like `in`/`nin` (`1` == `1.0`)
+/// and uses deep `is_equal` for everything else, so the set operators agree with
+/// membership. Non-array `haystack` ⇒ false.
+fn value_in_array<'i, 'j, S: SelectValue, V: SelectValue>(
+    needle: &V,
+    haystack: &TermEvaluationResult<'i, 'j, S>,
+) -> bool {
+    match haystack {
+        TermEvaluationResult::Value(v) if v.as_ref().get_type() == SelectValueType::Array => v
+            .as_ref()
+            .values()
+            .is_some_and(|mut it| it.any(|e| values_equal(needle, e.as_ref()))),
+        TermEvaluationResult::Literal(Value::Array(items)) => {
+            items.iter().any(|it| values_equal(needle, it))
+        }
+        TermEvaluationResult::NodeList(list) => {
+            list.iter().any(|v| values_equal(needle, v.as_ref()))
+        }
+        _ => false,
+    }
+}
+
+impl Num {
+    fn as_f64(self) -> f64 {
+        match self {
+            Num::Int(i) => i as f64,
+            Num::Float(f) => f,
+        }
+    }
+}
+
+/// Apply a binary arithmetic operator to two numbers. Integer operands stay integer
+/// for `+ - *` (falling back to float on overflow) and `%`; division is always float.
+///
+/// Division/modulo by zero returns `None`, which the caller turns into `Invalid`
+/// (RFC 9535 "Nothing"): the surrounding comparison then evaluates to false and the
+/// node is skipped. NOTE: rather than raising a hard "division by zero" error, we
+/// return Nothing because the path evaluator has no error channel — every operand
+/// resolves to a value or to Nothing, never to an error — so a single bad element
+/// cannot abort the whole command. (Same
+/// rule applies to any non-numeric arithmetic operand, e.g. `@.str * 2` → Nothing.)
+fn num_binop<'i, 'j, S: SelectValue>(
+    operator: Rule,
+    a: Num,
+    b: Num,
+) -> Option<TermEvaluationResult<'i, 'j, S>> {
+    use Num::Int;
+    match operator {
+        Rule::add | Rule::sub | Rule::mul => {
+            if let (Int(x), Int(y)) = (a, b) {
+                let checked = match operator {
+                    Rule::add => x.checked_add(y),
+                    Rule::sub => x.checked_sub(y),
+                    Rule::mul => x.checked_mul(y),
+                    _ => unreachable!("num_binop: outer arm guarantees add/sub/mul"),
+                };
+                if let Some(v) = checked {
+                    return Some(TermEvaluationResult::Integer(v));
+                }
+            }
+            let (x, y) = (a.as_f64(), b.as_f64());
+            let v = match operator {
+                Rule::add => x + y,
+                Rule::sub => x - y,
+                Rule::mul => x * y,
+                _ => unreachable!("num_binop: outer arm guarantees add/sub/mul"),
+            };
+            Some(TermEvaluationResult::Float(v))
+        }
+        Rule::div => {
+            let y = b.as_f64();
+            (y != 0.0).then(|| TermEvaluationResult::Float(a.as_f64() / y))
+        }
+        Rule::rem => match (a, b) {
+            // `checked_rem` yields None for a zero divisor and for the i64::MIN % -1
+            // overflow, both of which become Nothing (rather than panicking).
+            (Int(x), Int(y)) => x.checked_rem(y).map(TermEvaluationResult::Integer),
+            _ => {
+                let y = b.as_f64();
+                (y != 0.0).then(|| TermEvaluationResult::Float(a.as_f64() % y))
+            }
+        },
+        _ => None,
+    }
+}
+
+/// Apply a binary arithmetic operator to two term results (both must be numbers).
+fn arith_binop<'i, 'j, S: SelectValue>(
+    operator: Rule,
+    a: &TermEvaluationResult<'i, 'j, S>,
+    b: &TermEvaluationResult<'i, 'j, S>,
+) -> TermEvaluationResult<'i, 'j, S> {
+    match (a.as_number(), b.as_number()) {
+        (Some(x), Some(y)) => num_binop(operator, x, y).unwrap_or(TermEvaluationResult::Invalid),
+        _ => TermEvaluationResult::Invalid,
+    }
+}
+
+/// Apply a unary `+`/`-` to a term result (must be a number).
+fn arith_unary<'i, 'j, S: SelectValue>(
+    operator: Rule,
+    v: TermEvaluationResult<'i, 'j, S>,
+) -> TermEvaluationResult<'i, 'j, S> {
+    match v.as_number() {
+        Some(Num::Int(n)) => match operator {
+            Rule::neg => n.checked_neg().map_or_else(
+                || TermEvaluationResult::Float(-(n as f64)),
+                TermEvaluationResult::Integer,
+            ),
+            _ => TermEvaluationResult::Integer(n),
+        },
+        Some(Num::Float(f)) => match operator {
+            Rule::neg => TermEvaluationResult::Float(-f),
+            _ => TermEvaluationResult::Float(f),
+        },
+        None => TermEvaluationResult::Invalid,
+    }
+}
+
+/// RFC 9535 `length()` on a value: chars for strings, element/member count for
+/// arrays/objects, `None` (Nothing) otherwise. Generic over any `SelectValue`.
+fn value_length<V: SelectValue>(v: &V) -> Option<usize> {
+    match v.get_type() {
+        SelectValueType::String => v.as_str().map(|s| s.chars().count()),
+        SelectValueType::Array | SelectValueType::Object => v.len(),
+        _ => None,
+    }
+}
+
+fn function_length<'i, 'j, S: SelectValue>(
+    arg: &TermEvaluationResult<'i, 'j, S>,
+) -> TermEvaluationResult<'i, 'j, S> {
+    match arg {
+        TermEvaluationResult::Str(s) => Some(s.chars().count()),
+        TermEvaluationResult::String(s) => Some(s.chars().count()),
+        TermEvaluationResult::Value(v) => value_length(v.as_ref()),
+        TermEvaluationResult::Literal(l) => value_length(l),
+        TermEvaluationResult::NodeList(list) if list.len() == 1 => value_length(list[0].as_ref()),
+        TermEvaluationResult::NodeList(_)
+        | TermEvaluationResult::Integer(_)
+        | TermEvaluationResult::Float(_)
+        | TermEvaluationResult::Bool(_)
+        | TermEvaluationResult::Null
+        | TermEvaluationResult::Invalid => None,
+    }
+    .map_or(TermEvaluationResult::Invalid, |n| {
+        TermEvaluationResult::Integer(n as i64)
+    })
+}
+
+/// RFC 9535 `count()`: number of nodes in a nodelist. A single value counts as 1,
+/// an empty/absent query (`Invalid`) as 0.
+fn function_count<'i, 'j, S: SelectValue>(arg: &TermEvaluationResult<'i, 'j, S>) -> i64 {
+    match arg {
+        TermEvaluationResult::Invalid => 0,
+        TermEvaluationResult::NodeList(list) => list.len() as i64,
+        TermEvaluationResult::Integer(_)
+        | TermEvaluationResult::Float(_)
+        | TermEvaluationResult::Str(_)
+        | TermEvaluationResult::String(_)
+        | TermEvaluationResult::Value(_)
+        | TermEvaluationResult::Literal(_)
+        | TermEvaluationResult::Bool(_)
+        | TermEvaluationResult::Null => 1,
+    }
+}
+
+/// RFC 9535 `value()`: the value of a single-node nodelist, otherwise Nothing.
+fn function_value<'i, 'j, S: SelectValue>(
+    arg: TermEvaluationResult<'i, 'j, S>,
+) -> TermEvaluationResult<'i, 'j, S> {
+    match arg {
+        TermEvaluationResult::NodeList(mut list) if list.len() == 1 => list
+            .pop()
+            .map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Value),
+        v @ TermEvaluationResult::Value(_) => v,
+        TermEvaluationResult::NodeList(_)
+        | TermEvaluationResult::Integer(_)
+        | TermEvaluationResult::Float(_)
+        | TermEvaluationResult::Str(_)
+        | TermEvaluationResult::String(_)
+        | TermEvaluationResult::Literal(_)
+        | TermEvaluationResult::Bool(_)
+        | TermEvaluationResult::Null
+        | TermEvaluationResult::Invalid => TermEvaluationResult::Invalid,
+    }
+}
+
+/// Borrow the string content of a term result (for `match`/`search` operands).
+fn term_as_str<'a, 'i, 'j, S: SelectValue>(
+    arg: &'a TermEvaluationResult<'i, 'j, S>,
+) -> Option<&'a str> {
+    match arg {
+        TermEvaluationResult::Str(s) => Some(*s),
+        TermEvaluationResult::String(s) => Some(s.as_str()),
+        TermEvaluationResult::Value(v) => v.as_ref().as_str(),
+        TermEvaluationResult::Literal(l) => l.as_str(),
+        TermEvaluationResult::Integer(_)
+        | TermEvaluationResult::Float(_)
+        | TermEvaluationResult::Bool(_)
+        | TermEvaluationResult::Null
+        | TermEvaluationResult::NodeList(_)
+        | TermEvaluationResult::Invalid => None,
+    }
+}
+
+type RegexCache = HashMap<String, Option<Regex>>;
+
+/// Compile `pattern` (caching the result in `cache`) and test it against `s`. `full`
+/// anchors the pattern for RFC 9535 `match()`; otherwise it is a substring search
+/// (`search()` / the `=~` operator). A constant pattern is invariant across the elements
+/// of a filter, so the cache compiles it once per query instead of once per element.
+fn regex_matches(cache: &mut RegexCache, pattern: &str, full: bool, s: &str) -> bool {
+    // Past the cap we compile uncached; already-cached patterns (the common constant case) still hit.
+    const MAX_REGEX_CACHE: usize = 64;
+    let key = if full {
+        format!("^(?:{pattern})$")
+    } else {
+        pattern.to_string()
+    };
+    if cache.len() < MAX_REGEX_CACHE || cache.contains_key(&key) {
+        cache
+            .entry(key)
+            .or_insert_with_key(|k| Regex::new(k).ok())
+            .as_ref()
+            .is_some_and(|re| re.is_match(s))
+    } else {
+        Regex::new(&key).is_ok_and(|re| re.is_match(s))
+    }
+}
+
+/// Convert a finite `f64` to `i64`, returning `None` when it falls outside the `i64`
+/// range (rather than saturating, as a bare `as i64` would). Callers round or truncate
+/// first; this enforces the overflow/range policy in one place.
+fn f64_to_i64(v: f64) -> Option<i64> {
+    // `i64::MAX` is not exactly representable in f64: `i64::MAX as f64` rounds up to 2^63
+    // (one past MAX), so the upper bound must be strict `<` to reject it. `i64::MIN`
+    // (-2^63) is exact, so `>=` is correct there.
+    (v.is_finite() && v >= i64::MIN as f64 && v < i64::MAX as f64).then_some(v as i64)
+}
+
+/// Dispatch a filter-expression function call to its RFC 9535 implementation.
+/// `ceiling(n)`/`floor(n)`: round a number to an integer using `round`
+/// (`f64::ceil`/`f64::floor`). Integers pass through unchanged; a non-numeric argument
+/// or a result outside the `i64` range is Nothing.
+fn function_round<'i, 'j, S: SelectValue>(
+    arg: Option<&TermEvaluationResult<'i, 'j, S>>,
+    round: fn(f64) -> f64,
+) -> TermEvaluationResult<'i, 'j, S> {
+    match arg.and_then(TermEvaluationResult::as_number) {
+        Some(Num::Int(n)) => TermEvaluationResult::Integer(n),
+        Some(Num::Float(f)) => f64_to_i64(round(f))
+            .map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Integer),
+        None => TermEvaluationResult::Invalid,
+    }
+}
+
+/// `abs(n)`: absolute value. Integers stay integers (i64::MIN overflows -> Nothing);
+/// doubles stay doubles. A non-numeric argument is Nothing.
+fn function_abs<'i, 'j, S: SelectValue>(
+    arg: Option<&TermEvaluationResult<'i, 'j, S>>,
+) -> TermEvaluationResult<'i, 'j, S> {
+    match arg.and_then(TermEvaluationResult::as_number) {
+        Some(Num::Int(n)) => n
+            .checked_abs()
+            .map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Integer),
+        Some(Num::Float(f)) => TermEvaluationResult::Float(f.abs()),
+        None => TermEvaluationResult::Invalid,
+    }
+}
+
+/// `concat(s1, s2, ...)`: concatenate string arguments into one string. Any non-string
+/// argument yields Nothing.
+fn function_concat<'i, 'j, S: SelectValue>(
+    args: &[TermEvaluationResult<'i, 'j, S>],
+) -> TermEvaluationResult<'i, 'j, S> {
+    let mut out = String::new();
+    for a in args {
+        match term_as_str(a) {
+            Some(s) => out.push_str(s),
+            None => return TermEvaluationResult::Invalid,
+        }
+    }
+    TermEvaluationResult::String(out)
+}
+
+/// Collect the elements of an array-shaped term (array value, array literal, or
+/// nodelist) as `f64`s for the numeric aggregations. Nothing (`None`) if the term is not
+/// an array, is empty, or contains a non-numeric element.
+fn term_number_seq<'i, 'j, S: SelectValue>(
+    arg: &TermEvaluationResult<'i, 'j, S>,
+) -> Option<Vec<f64>> {
+    let mut out = Vec::new();
+    match arg {
+        TermEvaluationResult::Value(v) if v.as_ref().get_type() == SelectValueType::Array => {
+            for e in v.as_ref().values()? {
+                out.push(value_as_number(e.as_ref())?.as_f64());
+            }
+        }
+        TermEvaluationResult::Literal(Value::Array(items)) => {
+            for it in items {
+                out.push(value_as_number(it)?.as_f64());
+            }
+        }
+        TermEvaluationResult::NodeList(list) => {
+            for v in list {
+                out.push(value_as_number(v.as_ref())?.as_f64());
+            }
+        }
+        _ => return None,
+    }
+    (!out.is_empty()).then_some(out)
+}
+
+fn agg_sum(s: &[f64]) -> f64 {
+    s.iter().sum()
+}
+fn agg_min(s: &[f64]) -> f64 {
+    s.iter().copied().fold(f64::INFINITY, f64::min)
+}
+fn agg_max(s: &[f64]) -> f64 {
+    s.iter().copied().fold(f64::NEG_INFINITY, f64::max)
+}
+fn agg_avg(s: &[f64]) -> f64 {
+    // Guaranteed non-empty by `term_number_seq` (returns Nothing for an empty array).
+    debug_assert!(!s.is_empty(), "agg over an empty sequence");
+    s.iter().sum::<f64>() / s.len() as f64
+}
+/// Population standard deviation (divides by N).
+fn agg_stddev(s: &[f64]) -> f64 {
+    debug_assert!(!s.is_empty(), "agg over an empty sequence");
+    let mean = agg_avg(s);
+    let variance = s.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / s.len() as f64;
+    variance.sqrt()
+}
+
+/// `min`/`max`/`avg`/`sum`/`stddev`: reduce an array of numbers to a double. A non-array
+/// argument, a non-numeric element, or an empty array is Nothing.
+fn function_aggregate<'i, 'j, S: SelectValue>(
+    arg: Option<&TermEvaluationResult<'i, 'j, S>>,
+    agg: fn(&[f64]) -> f64,
+) -> TermEvaluationResult<'i, 'j, S> {
+    match arg.and_then(term_number_seq) {
+        Some(seq) => TermEvaluationResult::Float(agg(&seq)),
+        None => TermEvaluationResult::Invalid,
+    }
+}
+
+/// `first(a)`/`last(a)`/`index(a, n)`: the element at a (possibly negative) index of an
+/// array. Out-of-range, non-array, or non-integer index is Nothing. Takes the argument by
+/// value so the element can be moved/borrowed out with the document lifetime `'j`.
+fn function_index<'i, 'j, S: SelectValue>(
+    arg: Option<TermEvaluationResult<'i, 'j, S>>,
+    idx: i64,
+) -> TermEvaluationResult<'i, 'j, S> {
+    // Map a signed index (negative counts from the end) into `0..len`. A negative result
+    // fails `try_from` (-> None); the filter then bounds-checks against `len`.
+    fn resolve(idx: i64, len: usize) -> Option<usize> {
+        let i = if idx < 0 { idx + len as i64 } else { idx };
+        usize::try_from(i).ok().filter(|&u| u < len)
+    }
+    match arg {
+        Some(TermEvaluationResult::Value(v)) if v.as_ref().get_type() == SelectValueType::Array => {
+            let Some(i) = resolve(idx, v.as_ref().len().unwrap_or(0)) else {
+                return TermEvaluationResult::Invalid;
+            };
+            match v {
+                // A borrowed array yields an element borrowed for the same `'j`.
+                ValueRef::Borrowed(r) => r
+                    .get_index(i)
+                    .map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Value),
+                // An owned array must clone the element out before it is dropped.
+                ValueRef::Owned(s) => s.get_index(i).map_or(TermEvaluationResult::Invalid, |e| {
+                    TermEvaluationResult::Value(ValueRef::Owned(e.inner_cloned()))
+                }),
+            }
+        }
+        Some(TermEvaluationResult::Literal(Value::Array(mut items))) => {
+            match resolve(idx, items.len()) {
+                Some(i) => TermEvaluationResult::Literal(items.swap_remove(i)),
+                None => TermEvaluationResult::Invalid,
+            }
+        }
+        Some(TermEvaluationResult::NodeList(mut list)) => match resolve(idx, list.len()) {
+            Some(i) => TermEvaluationResult::Value(list.swap_remove(i)),
+            None => TermEvaluationResult::Invalid,
+        },
+        _ => TermEvaluationResult::Invalid,
+    }
+}
+
+fn eval_function<'i, 'j, S: SelectValue>(
+    name: &str,
+    mut args: Vec<TermEvaluationResult<'i, 'j, S>>,
+    cache: &mut RegexCache,
+) -> TermEvaluationResult<'i, 'j, S> {
+    // Reject the wrong number of arguments (-> Nothing) for this PR's functions, so a
+    // malformed query like `ceiling(@, 9)` or `concat()` doesn't silently operate on a
+    // subset of its arguments instead of failing.
+    let arity_ok = match name {
+        "concat" => !args.is_empty(),
+        "index" => args.len() == 2,
+        "ceiling" | "floor" | "abs" | "sum" | "min" | "max" | "avg" | "stddev" | "first"
+        | "last" => args.len() == 1,
+        _ => true,
+    };
+    if !arity_ok {
+        return TermEvaluationResult::Invalid;
+    }
+    match name {
+        "length" => args
+            .first()
+            .map_or(TermEvaluationResult::Invalid, function_length),
+        "count" => args.first().map_or(TermEvaluationResult::Invalid, |a| {
+            TermEvaluationResult::Integer(function_count(a))
+        }),
+        "value" if args.len() == 1 => function_value(args.pop().unwrap()),
+        "ceiling" => function_round(args.first(), f64::ceil),
+        "floor" => function_round(args.first(), f64::floor),
+        "abs" => function_abs(args.first()),
+        "concat" => function_concat(&args),
+        "sum" => function_aggregate(args.first(), agg_sum),
+        "min" => function_aggregate(args.first(), agg_min),
+        "max" => function_aggregate(args.first(), agg_max),
+        "avg" => function_aggregate(args.first(), agg_avg),
+        "stddev" => function_aggregate(args.first(), agg_stddev),
+        "first" => function_index(args.into_iter().next(), 0),
+        "last" => function_index(args.into_iter().next(), -1),
+        "index" => {
+            // index(array, n) — a fractional n is truncated toward zero; a non-numeric n
+            // is Nothing.
+            let mut it = args.into_iter();
+            let array = it.next();
+            let idx = it.next().and_then(|a| match a.as_number() {
+                Some(Num::Int(n)) => Some(n),
+                Some(Num::Float(f)) => f64_to_i64(f.trunc()),
+                _ => None,
+            });
+            idx.map_or(TermEvaluationResult::Invalid, |n| function_index(array, n))
+        }
+        "match" | "search" => {
+            let full = name == "match";
+            let s = args.first().and_then(term_as_str);
+            let re = args.get(1).and_then(term_as_str);
+            match (s, re) {
+                (Some(s), Some(re)) => {
+                    TermEvaluationResult::Bool(regex_matches(cache, re, full, s))
+                }
+                _ => TermEvaluationResult::Bool(false),
+            }
+        }
+        other => {
+            trace!("eval_function: unknown function {other:?}");
+            TermEvaluationResult::Invalid
+        }
+    }
+}
+
 /// Compile the given string query into a query object.
 /// Returns error on compilation error.
 pub(crate) fn compile(path: &str) -> Result<Query<'_>, QueryCompilationError> {
@@ -404,6 +951,8 @@ enum TermEvaluationResult<'i, 'j, S: SelectValue> {
     Str(&'i str),
     String(String),
     Value(ValueRef<'j, S>),
+    /// An array/object literal operand, e.g. `[1,2]` or `{"a":1}` in `?@==[1,2]`.
+    Literal(Value),
     Bool(bool),
     Null,
     /// Multiple results from a non-singular query (e.g. `@.*`, `@..key`).
@@ -539,6 +1088,20 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
                 .iter()
                 .any(|v| self.eq(&TermEvaluationResult::Value(v.clone()))),
             (TermEvaluationResult::Value(v1), TermEvaluationResult::Value(v2)) => v1 == v2,
+            // Structured literal operands deep-compare against the document value
+            // (any `SelectValue`) via the cross-type `is_equal`. Like the existing
+            // `Value == Value` path above, this is type-strict for numbers: nested
+            // integers do not match doubles (e.g. `@ == [1]` does not match `[1.0]`),
+            // unlike scalar `==` / `in` which coerce. Kept consistent with `is_equal`.
+            (TermEvaluationResult::Value(v), TermEvaluationResult::Literal(l)) => {
+                is_equal(v.as_ref(), l)
+            }
+            (TermEvaluationResult::Literal(l), TermEvaluationResult::Value(v)) => {
+                is_equal(l, v.as_ref())
+            }
+            (TermEvaluationResult::Literal(l1), TermEvaluationResult::Literal(l2)) => {
+                is_equal(l1, l2)
+            }
             (_, _) => match self.cmp(s) {
                 CmpResult::Ord(o) => o.is_eq(),
                 CmpResult::NotComparable => false,
@@ -550,17 +1113,215 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
         !self.eq(s)
     }
 
-    fn re_is_match(regex: &str, s: &str) -> bool {
-        Regex::new(regex).map_or_else(|_| false, |re| Regex::is_match(&re, s))
+    /// Numeric view of this term (integer or double), `None` if not a number.
+    fn as_number(&self) -> Option<Num> {
+        match self {
+            TermEvaluationResult::Integer(n) => Some(Num::Int(*n)),
+            TermEvaluationResult::Float(f) => Some(Num::Float(*f)),
+            TermEvaluationResult::Value(v) => value_as_number(v.as_ref()),
+            TermEvaluationResult::Literal(l) => value_as_number(l),
+            TermEvaluationResult::Str(_)
+            | TermEvaluationResult::String(_)
+            | TermEvaluationResult::Bool(_)
+            | TermEvaluationResult::Null
+            | TermEvaluationResult::NodeList(_)
+            | TermEvaluationResult::Invalid => None,
+        }
     }
 
-    fn re_match(&self, s: &Self) -> bool {
+    /// Equality between this term and an arbitrary `SelectValue`, used by membership
+    /// (`in`/`nin`). Numbers coerce across integer/float (matching `==`); strings,
+    /// booleans, null and structured values use deep (`is_equal`) equality.
+    fn equals_value<V: SelectValue>(&self, other: &V) -> bool {
+        // Numbers compare by value (int/float coerce), matching `==`.
+        if let (Some(a), Some(b)) = (self.as_number(), value_as_number(other)) {
+            return numbers_equal(a, b);
+        }
+        match self {
+            TermEvaluationResult::Value(v) => is_equal(v.as_ref(), other),
+            TermEvaluationResult::Literal(l) => is_equal(l, other),
+            TermEvaluationResult::NodeList(list) => {
+                list.iter().any(|v| is_equal(v.as_ref(), other))
+            }
+            TermEvaluationResult::Str(s) => other.as_str() == Some(*s),
+            TermEvaluationResult::String(s) => other.as_str() == Some(s.as_str()),
+            TermEvaluationResult::Bool(b) => other.get_bool() == Some(*b),
+            TermEvaluationResult::Null => other.get_type() == SelectValueType::Null,
+            // self is numeric but `other` is not a number -> not equal
+            TermEvaluationResult::Integer(_) | TermEvaluationResult::Float(_) => false,
+            TermEvaluationResult::Invalid => false,
+        }
+    }
+
+    /// Membership: true if `self` deep-equals any element of `arr`. `arr` must be an
+    /// array value, an array literal, or a nodelist; anything else yields false.
+    fn member_of(&self, arr: &Self) -> bool {
+        match arr {
+            TermEvaluationResult::Value(v) if v.as_ref().get_type() == SelectValueType::Array => v
+                .as_ref()
+                .values()
+                .is_some_and(|mut it| it.any(|e| self.equals_value(e.as_ref()))),
+            TermEvaluationResult::Literal(Value::Array(items)) => {
+                items.iter().any(|it| self.equals_value(it))
+            }
+            TermEvaluationResult::NodeList(list) => {
+                list.iter().any(|v| self.equals_value(v.as_ref()))
+            }
+            TermEvaluationResult::Value(_)
+            | TermEvaluationResult::Literal(_)
+            | TermEvaluationResult::Integer(_)
+            | TermEvaluationResult::Float(_)
+            | TermEvaluationResult::Str(_)
+            | TermEvaluationResult::String(_)
+            | TermEvaluationResult::Bool(_)
+            | TermEvaluationResult::Null
+            | TermEvaluationResult::Invalid => false,
+        }
+    }
+
+    /// Set relation between two arrays (`subsetof`/`anyof`/`noneof`). Folds
+    /// `value_in_array(element, rhs)` over the elements of the array-shaped `self`:
+    /// `require_all` ⇒ every element must be in `rhs` (empty `self` ⇒ true);
+    /// otherwise ⇒ any element is in `rhs` (empty `self` ⇒ false). A non-array `self`
+    /// yields false (so `subsetof`/`anyof` are false and `noneof` is true).
+    ///
+    /// A multi-result (nodelist) left operand is handled any-of per node, matching
+    /// `==`/`<`/`in`: the relation holds if any single matched node — itself array-shaped
+    /// — satisfies it. (Without this, the nodelist itself would be taken as the left array
+    /// and its nodes as elements, so array-valued nodes would never match.)
+    fn set_relate(&self, rhs: &Self, require_all: bool) -> bool {
+        if let TermEvaluationResult::NodeList(list) = self {
+            return list
+                .iter()
+                .any(|v| TermEvaluationResult::Value(v.clone()).set_relate(rhs, require_all));
+        }
+        fn combine(require_all: bool, mut it: impl Iterator<Item = bool>) -> bool {
+            if require_all {
+                it.all(|m| m)
+            } else {
+                it.any(|m| m)
+            }
+        }
+        match self {
+            TermEvaluationResult::Value(v) if v.as_ref().get_type() == SelectValueType::Array => {
+                v.as_ref().values().is_some_and(|it| {
+                    combine(require_all, it.map(|e| value_in_array(e.as_ref(), rhs)))
+                })
+            }
+            TermEvaluationResult::Literal(Value::Array(items)) => {
+                combine(require_all, items.iter().map(|e| value_in_array(e, rhs)))
+            }
+            TermEvaluationResult::NodeList(list) => list
+                .iter()
+                .any(|v| TermEvaluationResult::Value(v.clone()).set_relate(rhs, require_all)),
+            _ => false,
+        }
+    }
+
+    /// `arr1 subsetof arr2`: every element of `self` is a member of `rhs`.
+    fn subset_of(&self, rhs: &Self) -> bool {
+        self.set_relate(rhs, true)
+    }
+
+    /// `arr1 anyof arr2`: `self` and `rhs` have a non-empty intersection.
+    fn any_of(&self, rhs: &Self) -> bool {
+        self.set_relate(rhs, false)
+    }
+
+    /// Length of `self` as a sized sequence — array element count or string char count.
+    /// `None` for anything else (numbers, bools, null, objects). Used by the `sizeof`/
+    /// `empty` operators; a multi-result (nodelist) left operand is handled any-of by the
+    /// callers, so it never reaches here.
+    fn seq_length(&self) -> Option<usize> {
+        fn arr_or_str_len<V: SelectValue>(v: &V) -> Option<usize> {
+            match v.get_type() {
+                SelectValueType::String => v.as_str().map(|s| s.chars().count()),
+                SelectValueType::Array => v.len(),
+                _ => None,
+            }
+        }
+        match self {
+            TermEvaluationResult::Str(s) => Some(s.chars().count()),
+            TermEvaluationResult::String(s) => Some(s.chars().count()),
+            TermEvaluationResult::Value(v) => arr_or_str_len(v.as_ref()),
+            TermEvaluationResult::Literal(l) => arr_or_str_len(l),
+            _ => None,
+        }
+    }
+
+    /// Boolean view of this term, `None` if not a boolean.
+    fn as_bool(&self) -> Option<bool> {
+        match self {
+            TermEvaluationResult::Bool(b) => Some(*b),
+            TermEvaluationResult::Literal(Value::Bool(b)) => Some(*b),
+            TermEvaluationResult::Value(v) if v.as_ref().get_type() == SelectValueType::Bool => {
+                v.as_ref().get_bool()
+            }
+            _ => None,
+        }
+    }
+
+    /// `left sizeof right`: true if `self` is an array/string whose length equals the
+    /// integer value of `right` (a fractional `right` is truncated toward zero). A
+    /// non-numeric `right` or non-array/string `self` yields false.
+    fn size_of(&self, rhs: &Self) -> bool {
+        // Any-of over a multi-result left operand, matching `==`/`<`/`in`.
+        if let TermEvaluationResult::NodeList(list) = self {
+            return list
+                .iter()
+                .any(|v| TermEvaluationResult::Value(v.clone()).size_of(rhs));
+        }
+        // Any-of over a multi-result right operand (the size target), likewise.
+        if let TermEvaluationResult::NodeList(list) = rhs {
+            return list
+                .iter()
+                .any(|v| self.size_of(&TermEvaluationResult::Value(v.clone())));
+        }
+        let target: i64 = match rhs.as_number() {
+            Some(Num::Int(n)) => n,
+            Some(Num::Float(f)) => match f64_to_i64(f.trunc()) {
+                Some(n) => n,
+                None => return false,
+            },
+            None => return false,
+        };
+        target >= 0 && self.seq_length().is_some_and(|len| len as i64 == target)
+    }
+
+    /// `left empty right`: `right` is a boolean — `true` matches an empty array/string,
+    /// `false` a non-empty one. A non-boolean `right` or non-array/string `self` yields
+    /// false.
+    fn empty_check(&self, rhs: &Self) -> bool {
+        // Any-of over a multi-result left operand, matching `==`/`<`/`in`.
+        if let TermEvaluationResult::NodeList(list) = self {
+            return list
+                .iter()
+                .any(|v| TermEvaluationResult::Value(v.clone()).empty_check(rhs));
+        }
+        // Any-of over a multi-result right operand (the boolean), likewise.
+        if let TermEvaluationResult::NodeList(list) = rhs {
+            return list
+                .iter()
+                .any(|v| self.empty_check(&TermEvaluationResult::Value(v.clone())));
+        }
+        let (Some(len), Some(want_empty)) = (self.seq_length(), rhs.as_bool()) else {
+            return false;
+        };
+        (len == 0) == want_empty
+    }
+
+    fn re_is_match(cache: &mut RegexCache, regex: &str, s: &str) -> bool {
+        // Substring match, shared (and cached) with `search()`.
+        regex_matches(cache, regex, false, s)
+    }
+
+    fn re_match(&self, s: &Self, cache: &mut RegexCache) -> bool {
         match (self, s) {
             (TermEvaluationResult::Value(v), TermEvaluationResult::Str(regex)) => {
                 match v.get_type() {
-                    SelectValueType::String => {
-                        v.as_str().is_some_and(|s| Self::re_is_match(regex, s))
-                    }
+                    SelectValueType::String => v
+                        .as_str()
+                        .is_some_and(|s| Self::re_is_match(cache, regex, s)),
                     _ => false,
                 }
             }
@@ -569,8 +1330,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
                     (SelectValueType::String, SelectValueType::String) => v1
                         .as_str()
                         .zip(v2.as_str())
-                        .map(|(s1, s2)| Self::re_is_match(s2, s1))
-                        .unwrap_or(false),
+                        .is_some_and(|(s1, s2)| Self::re_is_match(cache, s2, s1)),
                     (_, _) => false,
                 }
             }
@@ -578,15 +1338,15 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
         }
     }
 
-    fn re(&self, s: &Self) -> bool {
+    fn re(&self, s: &Self, cache: &mut RegexCache) -> bool {
         match (self, s) {
             (TermEvaluationResult::NodeList(list), _) => list
                 .iter()
-                .any(|v| TermEvaluationResult::Value(v.clone()).re(s)),
+                .any(|v| TermEvaluationResult::Value(v.clone()).re(s, cache)),
             (_, TermEvaluationResult::NodeList(list)) => list
                 .iter()
-                .any(|v| self.re(&TermEvaluationResult::Value(v.clone()))),
-            _ => self.re_match(s),
+                .any(|v| self.re(&TermEvaluationResult::Value(v.clone()), cache)),
+            _ => self.re_match(s, cache),
         }
     }
 }
@@ -606,10 +1366,13 @@ pub struct CalculationResult<'i, S: SelectValue, UPT: UserPathTracker> {
     pub path_tracker: Option<UPT>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 struct PathCalculatorData<'i, S: SelectValue, UPT: UserPathTracker> {
     results: Vec<CalculationResult<'i, S, UPT>>,
     root: ValueRef<'i, S>,
+    /// Per-query compiled-regex cache (see `RegexCache`), threaded as `&mut` through
+    /// filter evaluation. Dropped with this struct when the query ends.
+    regex_cache: RegexCache,
 }
 
 // The following block of code is used to create a unified iterator for arrays and objects.
@@ -916,6 +1679,18 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             Rule::boolean_true => TermEvaluationResult::Bool(true),
             Rule::boolean_false => TermEvaluationResult::Bool(false),
             Rule::null => TermEvaluationResult::Null,
+            Rule::array_literal | Rule::object_literal => {
+                TermEvaluationResult::Literal(build_literal(term))
+            }
+            Rule::function_call => {
+                let mut inner = term.into_inner();
+                let name = inner.next().map_or("", |p| p.as_str());
+                let mut args = Vec::new();
+                for arg in inner {
+                    args.push(self.evaluate_single_term(arg, json.clone(), calc_data));
+                }
+                eval_function(name, args, &mut calc_data.regex_cache)
+            }
             Rule::string_value | Rule::string_value_escape_1 | Rule::string_value_escape_2 => {
                 match unescape_string_value(term) {
                     Cow::Borrowed(s) => TermEvaluationResult::Str(s),
@@ -927,6 +1702,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                     let mut calc_data = PathCalculatorData {
                         results: Vec::new(),
                         root: json.clone(),
+                        regex_cache: HashMap::new(),
                     };
                     self.calc_internal(term.into_inner(), json, None, &mut calc_data);
                     Self::results_to_term(calc_data.results)
@@ -938,6 +1714,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                     let mut new_calc_data = PathCalculatorData {
                         results: Vec::new(),
                         root: calc_data.root.clone(),
+                        regex_cache: HashMap::new(),
                     };
                     self.calc_internal(
                         term.into_inner(),
@@ -956,6 +1733,88 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         }
     }
 
+    /// Evaluate an arithmetic expression: `arith_term ((+|-) arith_term)*` (left-assoc).
+    fn evaluate_arith_expr<'j: 'i, S: SelectValue>(
+        &self,
+        expr: Pair<'i, Rule>,
+        json: ValueRef<'j, S>,
+        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+    ) -> TermEvaluationResult<'i, 'j, S> {
+        let mut inner = expr.into_inner();
+        let Some(first) = inner.next() else {
+            return TermEvaluationResult::Invalid;
+        };
+        let mut acc = self.evaluate_arith_term(first, json.clone(), calc_data);
+        while let Some(op) = inner.next() {
+            let Some(rhs) = inner.next() else {
+                return TermEvaluationResult::Invalid;
+            };
+            let rhs = self.evaluate_arith_term(rhs, json.clone(), calc_data);
+            acc = arith_binop(op.as_rule(), &acc, &rhs);
+        }
+        acc
+    }
+
+    /// Evaluate an arithmetic term: `arith_factor ((*|/|%) arith_factor)*` (left-assoc).
+    fn evaluate_arith_term<'j: 'i, S: SelectValue>(
+        &self,
+        term: Pair<'i, Rule>,
+        json: ValueRef<'j, S>,
+        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+    ) -> TermEvaluationResult<'i, 'j, S> {
+        let mut inner = term.into_inner();
+        let Some(first) = inner.next() else {
+            return TermEvaluationResult::Invalid;
+        };
+        let mut acc = self.evaluate_arith_factor(first, json.clone(), calc_data);
+        while let Some(op) = inner.next() {
+            let Some(rhs) = inner.next() else {
+                return TermEvaluationResult::Invalid;
+            };
+            let rhs = self.evaluate_arith_factor(rhs, json.clone(), calc_data);
+            acc = arith_binop(op.as_rule(), &acc, &rhs);
+        }
+        acc
+    }
+
+    /// Evaluate an arithmetic factor: an optional unary `+`/`-` applied to a primary
+    /// (a parenthesized expression or a term).
+    fn evaluate_arith_factor<'j: 'i, S: SelectValue>(
+        &self,
+        factor: Pair<'i, Rule>,
+        json: ValueRef<'j, S>,
+        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+    ) -> TermEvaluationResult<'i, 'j, S> {
+        let mut inner = factor.into_inner();
+        let Some(first) = inner.next() else {
+            return TermEvaluationResult::Invalid;
+        };
+        match first.as_rule() {
+            Rule::neg | Rule::pos => {
+                let operator = first.as_rule();
+                let Some(operand) = inner.next() else {
+                    return TermEvaluationResult::Invalid;
+                };
+                let v = self.evaluate_arith_operand(operand, json, calc_data);
+                arith_unary(operator, v)
+            }
+            _ => self.evaluate_arith_operand(first, json, calc_data),
+        }
+    }
+
+    /// Evaluate an arithmetic primary: a parenthesized sub-expression or a plain term.
+    fn evaluate_arith_operand<'j: 'i, S: SelectValue>(
+        &self,
+        operand: Pair<'i, Rule>,
+        json: ValueRef<'j, S>,
+        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+    ) -> TermEvaluationResult<'i, 'j, S> {
+        match operand.as_rule() {
+            Rule::arith_expr => self.evaluate_arith_expr(operand, json, calc_data),
+            _ => self.evaluate_single_term(operand, json, calc_data),
+        }
+    }
+
     fn evaluate_single_filter<'j: 'i, S: SelectValue>(
         &self,
         curr: Pair<'i, Rule>,
@@ -968,7 +1827,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             return false;
         };
         trace!("evaluate_single_filter term1 {:?}", &term1);
-        let term1_val = self.evaluate_single_term(term1, json.clone(), calc_data);
+        let term1_val = self.evaluate_arith_expr(term1, json.clone(), calc_data);
         trace!("evaluate_single_filter term1_val {:?}", &term1_val);
         if let Some(op) = curr.next() {
             trace!("evaluate_single_filter op {:?}", &op);
@@ -977,7 +1836,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 return false;
             };
             trace!("evaluate_single_filter term2 {:?}", &term2);
-            let term2_val = self.evaluate_single_term(term2, json, calc_data);
+            let term2_val = self.evaluate_arith_expr(term2, json, calc_data);
             trace!("evaluate_single_filter term2_val {:?}", &term2_val);
             match op.as_rule() {
                 Rule::gt => term1_val.gt(&term2_val),
@@ -986,7 +1845,17 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 Rule::le => term1_val.le(&term2_val),
                 Rule::eq => term1_val.eq(&term2_val),
                 Rule::ne => term1_val.ne(&term2_val),
-                Rule::re => term1_val.re(&term2_val),
+                Rule::re => term1_val.re(&term2_val, &mut calc_data.regex_cache),
+                Rule::in_op => term1_val.member_of(&term2_val),
+                // `nin` is the strict negation of `in`: a non-array / absent RHS makes
+                // `in` false, so `nin` is true.
+                Rule::nin_op => !term1_val.member_of(&term2_val),
+                Rule::subsetof_op => term1_val.subset_of(&term2_val),
+                Rule::anyof_op => term1_val.any_of(&term2_val),
+                // `noneof` = empty intersection = strict negation of `anyof`.
+                Rule::noneof_op => !term1_val.any_of(&term2_val),
+                Rule::size_op => term1_val.size_of(&term2_val),
+                Rule::empty_op => term1_val.empty_check(&term2_val),
                 _ => {
                     trace!(
                         "evaluate_single_filter: unknown comparison op {:?}",
@@ -996,7 +1865,37 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 }
             }
         } else {
-            !matches!(term1_val, TermEvaluationResult::Invalid)
+            // A bare term is a test: a boolean result (e.g. `match(...)`) uses its
+            // value; any other present value is truthy (existence), `Invalid` is false.
+            match term1_val {
+                TermEvaluationResult::Bool(b) => b,
+                other => !matches!(other, TermEvaluationResult::Invalid),
+            }
+        }
+    }
+
+    /// Evaluate a single filter operand: a comparison/existence test (`single_filter`),
+    /// a parenthesized sub-filter (`filter`), or a negated operand (`negation`).
+    fn evaluate_filter_operand<'j: 'i, S: SelectValue>(
+        &self,
+        operand: Pair<'i, Rule>,
+        json: ValueRef<'j, S>,
+        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+    ) -> bool {
+        match operand.as_rule() {
+            Rule::single_filter => self.evaluate_single_filter(operand, json, calc_data),
+            Rule::filter => self.evaluate_filter(operand.into_inner(), json, calc_data),
+            Rule::negation => match operand.into_inner().next() {
+                Some(inner) => !self.evaluate_filter_operand(inner, json, calc_data),
+                None => {
+                    trace!("evaluate_filter_operand: negation without operand");
+                    false
+                }
+            },
+            other => {
+                trace!("evaluate_filter_operand: unexpected rule {other:?}");
+                false
+            }
         }
     }
 
@@ -1011,21 +1910,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             return false;
         };
         trace!("evaluate_filter first_filter {:?}", &first_filter);
-        let mut first_result = match first_filter.as_rule() {
-            Rule::single_filter => {
-                self.evaluate_single_filter(first_filter, json.clone(), calc_data)
-            }
-            Rule::filter => {
-                self.evaluate_filter(first_filter.into_inner(), json.clone(), calc_data)
-            }
-            _ => {
-                trace!(
-                    "evaluate_filter: unexpected first rule {:?}",
-                    first_filter.as_rule()
-                );
-                false
-            }
-        };
+        let mut first_result = self.evaluate_filter_operand(first_filter, json.clone(), calc_data);
         trace!("evaluate_filter first_result {:?}", &first_result);
 
         // Evaluate filter operands with operator (relation) precedence of AND before OR, e.g.,
@@ -1049,23 +1934,8 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                     if !first_result {
                         continue; // Skip eval till next OR
                     }
-                    first_result = match second_filter.as_rule() {
-                        Rule::single_filter => {
-                            self.evaluate_single_filter(second_filter, json.clone(), calc_data)
-                        }
-                        Rule::filter => self.evaluate_filter(
-                            second_filter.into_inner(),
-                            json.clone(),
-                            calc_data,
-                        ),
-                        _ => {
-                            trace!(
-                                "evaluate_filter &&: unexpected rule {:?}",
-                                second_filter.as_rule()
-                            );
-                            false
-                        }
-                    };
+                    first_result =
+                        self.evaluate_filter_operand(second_filter, json.clone(), calc_data);
                 }
                 Rule::or => {
                     trace!("evaluate_filter ||");
@@ -1221,6 +2091,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         let mut calc_data = PathCalculatorData {
             results: Vec::new(),
             root: json.clone(),
+            regex_cache: HashMap::new(),
         };
         if self.tracker_generator.is_some() {
             self.calc_internal(root, json, Some(create_empty_tracker()), &mut calc_data);
