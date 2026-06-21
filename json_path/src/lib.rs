@@ -17,6 +17,11 @@ use crate::json_path::{
 };
 use crate::select_value::{SelectValue, ValueRef};
 
+// Mirror of Redis' `hide-user-data-from-log` server config. Defined in the
+// `json_path` module so the standalone `jsonpath` binary (which includes that
+// module directly) shares the same gate, and re-exported here for the module.
+pub use crate::json_path::{hide_user_data_from_log, set_hide_user_data_from_log};
+
 /// Create a `PathCalculator` object. The path calculator can be re-used
 /// to calculate json paths on different JSONs.
 ///
@@ -1776,5 +1781,28 @@ mod json_path_tests {
         verify_json!(path:"$.a[?@.o.keys()]",
             json:{"a":[{"o":{}}, {"o":{"x":1}}, {"o":{"y":2,"z":3}}]},
             results:[{"o":{"x":1}}, {"o":{"y":2,"z":3}}]);
+    }
+
+    /// `hide-user-data-from-log` only gates whether user data is *logged*; it
+    /// must never change the result of a query. Run the same filter with the
+    /// gate off and on and assert the results are identical.
+    #[test]
+    fn hide_user_data_from_log_does_not_change_results() {
+        use crate::{hide_user_data_from_log, set_hide_user_data_from_log};
+        setup();
+        let j = json!({"foo": [1, 2, 3, 4]});
+
+        set_hide_user_data_from_log(false);
+        let shown = perform_search("$.foo[?@ > 2]", &j);
+
+        set_hide_user_data_from_log(true);
+        assert!(hide_user_data_from_log());
+        let hidden = perform_search("$.foo[?@ > 2]", &j);
+
+        // Restore the default so other tests observe the verbose behaviour.
+        set_hide_user_data_from_log(false);
+
+        assert_eq!(shown, hidden);
+        assert_eq!(shown, vec![json!(3), json!(4)]);
     }
 }
