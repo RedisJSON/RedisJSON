@@ -484,11 +484,13 @@ fn function_length<'i, 'j, S: SelectValue>(
 }
 
 /// RFC 9535 `count()`: number of nodes in a nodelist. A single value counts as 1,
-/// an empty/absent query (`Invalid`) as 0.
+/// an empty/absent query (`Invalid`) as 0. A synthesized `Results` list (`keys()`/`~`/
+/// `append()`) counts its elements, so `$.obj.keys().count()` is the key count.
 fn function_count<'i, 'j, S: SelectValue>(arg: &TermEvaluationResult<'i, 'j, S>) -> i64 {
     match arg {
-        TermEvaluationResult::Invalid | TermEvaluationResult::Results(_) => 0,
+        TermEvaluationResult::Invalid => 0,
         TermEvaluationResult::NodeList(list) => list.len() as i64,
+        TermEvaluationResult::Results(vs) => vs.len() as i64,
         TermEvaluationResult::Integer(_)
         | TermEvaluationResult::Float(_)
         | TermEvaluationResult::Str(_)
@@ -509,6 +511,11 @@ fn function_value<'i, 'j, S: SelectValue>(
             .pop()
             .map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Value),
         v @ TermEvaluationResult::Value(_) => v,
+        // A synthesized single-element list (e.g. `keys()` of a one-key object): its lone
+        // value, mirroring the single-node nodelist case.
+        TermEvaluationResult::Results(mut vs) if vs.len() == 1 => vs
+            .pop()
+            .map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Literal),
         TermEvaluationResult::NodeList(_)
         | TermEvaluationResult::Integer(_)
         | TermEvaluationResult::Float(_)
@@ -2136,8 +2143,11 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         } else {
             // A bare term is a test: a boolean result (e.g. `match(...)`) uses its
             // value; any other present value is truthy (existence), `Invalid` is false.
+            // A synthesized list (`keys()`/`~`/`append()`) exists iff it is non-empty, so
+            // `?(@.obj.keys())` means "obj has at least one key".
             match term1_val {
                 TermEvaluationResult::Bool(b) => b,
+                TermEvaluationResult::Results(vs) => !vs.is_empty(),
                 other => !matches!(other, TermEvaluationResult::Invalid),
             }
         }

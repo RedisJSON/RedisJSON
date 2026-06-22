@@ -1624,4 +1624,44 @@ mod json_path_tests {
             vec![json!({"t": "X"})]
         );
     }
+
+    #[test]
+    fn test_count_of_synthesized_results() {
+        setup();
+        // count() of a keys()/append() Results list is its element count (not 0).
+        let doc = json!({"obj": {"x": 1, "y": 2, "z": 3}, "arr": [1, 2, 3]});
+        assert_eq!(
+            perform_projection_multi("$.obj.keys().count()", &doc),
+            vec![json!(3)]
+        );
+        assert_eq!(
+            perform_projection_multi("$.arr.append(9).count()", &doc),
+            vec![json!(4)]
+        );
+    }
+
+    #[test]
+    fn test_value_of_single_key_result() {
+        setup();
+        // value() of a one-element synthesized list (a single-key object's keys) is that value
+        assert_eq!(
+            perform_projection_multi("$.obj.keys().value()", &json!({"obj": {"only": 1}})),
+            vec![json!("only")]
+        );
+        // more than one key -> Nothing (RFC value() on a multi-node nodelist)
+        assert_eq!(
+            perform_projection_multi("$.obj.keys().value()", &json!({"obj": {"a": 1, "b": 2}})),
+            Vec::<Value>::new()
+        );
+    }
+
+    #[test]
+    fn test_get_keys_existence_in_filter() {
+        setup();
+        // `?(@.o.keys())` is a non-empty-object test: an empty object's keys() is an empty
+        // synthesized list and must NOT match.
+        verify_json!(path:"$.a[?@.o.keys()]",
+            json:{"a":[{"o":{}}, {"o":{"x":1}}, {"o":{"y":2,"z":3}}]},
+            results:[{"o":{"x":1}}, {"o":{"y":2,"z":3}}]);
+    }
 }
