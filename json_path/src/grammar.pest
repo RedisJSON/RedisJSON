@@ -1,4 +1,4 @@
-literal = @{('a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | "-" | "_" | "`" | "~" | "+" | "#" | "%" | "$" | "^" | "/" | ":")+}
+literal = @{('a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | "-" | "_" | "`" | "+" | "#" | "%" | "$" | "^" | "/" | ":")+}
 
 string = _{("'" ~ (string_value) ~ "'") | ("\"" ~ (string_value) ~ "\"") | ("\"" ~ (string_value_escape_1) ~ "\"") | ("'" ~ (string_value_escape_2) ~ "'")}
     string_escape = @{"\\"}
@@ -84,9 +84,13 @@ unary_op = _{neg | pos}
 // `$.a.index(2)`. Disambiguated from a `.field` path segment by the immediately
 // following `(` (which is not a `literal` char). Args are full expressions.
 postfix_method = {"." ~ function_name ~ "(" ~ (arith_expr ~ ("," ~ arith_expr)*)? ~ ")"}
-// A term followed by >=1 method call. The `+` keeps a bare term out of this rule so
-// existing (non-method) parse trees are unchanged.
-method_chain = {term ~ postfix_method+}
+// Terminal get-keys operator: `$.obj~` / `$~` emit the object's member names. The function
+// alias `$.obj.keys()` is just a `postfix_method`. `~` was removed from the `literal`
+// charset, so a field literally named with `~` is reachable only via `["a~b"]`.
+get_keys_op = {"~"}
+// A term followed by >=1 postfix method or a trailing `~`. The `+` keeps a bare term out of
+// this rule so existing (non-method) parse trees are unchanged.
+method_chain = {term ~ (postfix_method | get_keys_op)+}
 arith_primary = _{"(" ~ arith_expr ~ ")" | method_chain | term}
 arith_factor = {unary_op? ~ arith_primary}
 arith_term = {arith_factor ~ (mul_op ~ arith_factor)*}

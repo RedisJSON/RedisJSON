@@ -123,32 +123,33 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         Ok(calc_once(query, self.val.as_ref()))
     }
 
-    /// Serialize a projection result (0 or 1 value) as a RESP3 array, matching JSONPath
-    /// nodelist output. The value is a `serde_json::Value` (itself a `SelectValue`), reusing
-    /// the node serializer via `KeyValue::<Value>`.
-    fn projection_to_resp3(value: Option<Value>, format: &ReplyFormatOptions) -> RedisValue {
-        value
+    /// Serialize a projection's computed values as a RESP3 array, matching JSONPath nodelist
+    /// output. Each value is a `serde_json::Value` (itself a `SelectValue`), reusing the node
+    /// serializer via `KeyValue::<Value>`. Usually one element; `keys()`/`~`/`append()` yield
+    /// several.
+    fn projection_to_resp3(values: Vec<Value>, format: &ReplyFormatOptions) -> RedisValue {
+        values
             .iter()
             .map(|v| KeyValue::<Value>::value_to_resp3(v, format))
             .collect_vec()
             .into()
     }
 
-    /// Serialize a projection result (0 or 1 value) as a JSON.RESP array.
-    fn projection_to_resp(value: Option<Value>) -> RedisValue {
-        value
+    /// Serialize a projection's computed values as a JSON.RESP array.
+    fn projection_to_resp(values: Vec<Value>) -> RedisValue {
+        values
             .iter()
             .map(KeyValue::<Value>::resp_serialize_inner)
             .collect_vec()
             .into()
     }
 
-    /// Serialize a projection result (0 or 1 value) as a JSON-string array (`[v]` or `[]`).
+    /// Serialize a projection's computed values as a JSON-string array (`[v…]` or `[]`).
     fn projection_to_string(
-        value: Option<Value>,
+        values: Vec<Value>,
         format: &ReplyFormatOptions,
     ) -> RedisResult<String> {
-        Self::serialize_object(&value.as_slice(), format)
+        Self::serialize_object(&values, format)
     }
 
     pub fn serialize_object<O: Serialize>(
@@ -185,13 +186,13 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                     // If we can't compile the path, we can't continue
                     if let Ok(query) = compile(path.get_path()) {
                         let value = if query.is_projection() {
-                            // A projection always contributes a result: its computed value, or
+                            // A projection always contributes a result: its computed values, or
                             // an empty array for Nothing (like a non-matching JSONPath) — never a
                             // missing-path error.
-                            Some(
-                                calc_once_projection(query, self.val.as_ref())
-                                    .map_or(Values::Multi(Vec::new()), Values::Computed),
-                            )
+                            Some(Values::Computed(calc_once_projection(
+                                query,
+                                self.val.as_ref(),
+                            )))
                         } else {
                             let results = calc_once(query, self.val.as_ref());
                             if is_legacy {
@@ -221,7 +222,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                     let value = match v {
                         Some(Values::Single(value)) => Self::value_to_resp3(value.as_ref(), format),
                         Some(Values::Multi(values)) => Self::values_to_resp3(&values, format),
-                        Some(Values::Computed(val)) => Self::projection_to_resp3(Some(val), format),
+                        Some(Values::Computed(vals)) => Self::projection_to_resp3(vals, format),
                         None => RedisValue::Null,
                     };
                     (key, value)

@@ -67,9 +67,10 @@ const JSONGET_SUBCOMMANDS_MAXSTRLEN: usize = max_strlen(&[
 pub enum Values<'a, V: SelectValue> {
     Single(ValueRef<'a, V>),
     Multi(Vec<ValueRef<'a, V>>),
-    /// A computed projection result (e.g. `$.a + 1`). Output-only: an impl-independent
-    /// `serde_json::Value`, never a document node, so it never re-enters traversal.
-    Computed(serde_json::Value),
+    /// A computed projection's result values (e.g. `$.a + 1` -> one; `$.obj.keys()` /
+    /// `$.a.append(x)` -> several). Output-only: impl-independent `serde_json::Value`s, never
+    /// document nodes, so they never re-enter traversal.
+    Computed(Vec<serde_json::Value>),
 }
 
 impl<'a, V: SelectValue> Serialize for Values<'a, V> {
@@ -77,8 +78,8 @@ impl<'a, V: SelectValue> Serialize for Values<'a, V> {
         match self {
             Values::Single(v) => v.serialize(serializer),
             Values::Multi(v) => v.serialize(serializer),
-            // Wrap in a one-element array to match JSONPath nodelist output (`[v]`).
-            Values::Computed(v) => std::slice::from_ref(v).serialize(serializer),
+            // The computed values are already the nodelist-style output array (`[v…]`).
+            Values::Computed(v) => v.serialize(serializer),
         }
     }
 }

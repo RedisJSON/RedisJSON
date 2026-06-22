@@ -475,6 +475,7 @@ fn function_length<'i, 'j, S: SelectValue>(
         | TermEvaluationResult::Float(_)
         | TermEvaluationResult::Bool(_)
         | TermEvaluationResult::Null
+        | TermEvaluationResult::Results(_)
         | TermEvaluationResult::Invalid => None,
     }
     .map_or(TermEvaluationResult::Invalid, |n| {
@@ -486,7 +487,7 @@ fn function_length<'i, 'j, S: SelectValue>(
 /// an empty/absent query (`Invalid`) as 0.
 fn function_count<'i, 'j, S: SelectValue>(arg: &TermEvaluationResult<'i, 'j, S>) -> i64 {
     match arg {
-        TermEvaluationResult::Invalid => 0,
+        TermEvaluationResult::Invalid | TermEvaluationResult::Results(_) => 0,
         TermEvaluationResult::NodeList(list) => list.len() as i64,
         TermEvaluationResult::Integer(_)
         | TermEvaluationResult::Float(_)
@@ -516,6 +517,7 @@ fn function_value<'i, 'j, S: SelectValue>(
         | TermEvaluationResult::Literal(_)
         | TermEvaluationResult::Bool(_)
         | TermEvaluationResult::Null
+        | TermEvaluationResult::Results(_)
         | TermEvaluationResult::Invalid => TermEvaluationResult::Invalid,
     }
 }
@@ -534,6 +536,7 @@ fn term_as_str<'a, 'i, 'j, S: SelectValue>(
         | TermEvaluationResult::Bool(_)
         | TermEvaluationResult::Null
         | TermEvaluationResult::NodeList(_)
+        | TermEvaluationResult::Results(_)
         | TermEvaluationResult::Invalid => None,
     }
 }
@@ -723,6 +726,49 @@ fn function_index<'i, 'j, S: SelectValue>(
     }
 }
 
+/// `obj.keys()` / `obj~`: the object's member names as a flat list of synthesized string
+/// results (`Results`). A non-object argument is Nothing.
+fn function_keys<'i, 'j, S: SelectValue>(
+    arg: Option<&TermEvaluationResult<'i, 'j, S>>,
+) -> TermEvaluationResult<'i, 'j, S> {
+    let keys: Option<Vec<Value>> = match arg {
+        Some(TermEvaluationResult::Value(v))
+            if v.as_ref().get_type() == SelectValueType::Object =>
+        {
+            v.as_ref()
+                .keys()
+                .map(|it| it.map(|k| Value::String(k.to_owned())).collect())
+        }
+        Some(TermEvaluationResult::Literal(Value::Object(map))) => {
+            Some(map.keys().map(|k| Value::String(k.clone())).collect())
+        }
+        _ => None,
+    };
+    keys.map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Results)
+}
+
+/// `path.append(x)`: enrich the reply by appending `x` as one extra element after the
+/// receiver's result list, WITHOUT modifying the document. An absent/Nothing receiver yields just `[x]`.
+fn function_append<'i, 'j, S: SelectValue>(
+    receiver: Option<TermEvaluationResult<'i, 'j, S>>,
+    x: Option<TermEvaluationResult<'i, 'j, S>>,
+) -> TermEvaluationResult<'i, 'j, S> {
+    let Some(x) = x else {
+        return TermEvaluationResult::Invalid;
+    };
+    let mut out = match receiver {
+        Some(TermEvaluationResult::NodeList(list)) => list
+            .iter()
+            .map(|v| serde_json::to_value(v).unwrap_or(Value::Null))
+            .collect(),
+        Some(TermEvaluationResult::Results(vs)) => vs,
+        Some(TermEvaluationResult::Invalid) | None => Vec::new(),
+        Some(other) => term_to_outputs(other),
+    };
+    out.extend(term_to_outputs(x));
+    TermEvaluationResult::Results(out)
+}
+
 fn eval_function<'i, 'j, S: SelectValue>(
     name: &str,
     mut args: Vec<TermEvaluationResult<'i, 'j, S>>,
@@ -733,9 +779,10 @@ fn eval_function<'i, 'j, S: SelectValue>(
     // subset of its arguments instead of failing.
     let arity_ok = match name {
         "concat" => !args.is_empty(),
-        "index" => args.len() == 2,
+        // `index`/`append` take the receiver plus one explicit argument.
+        "index" | "append" => args.len() == 2,
         "length" | "count" | "ceiling" | "floor" | "abs" | "sum" | "min" | "max" | "avg"
-        | "stddev" | "first" | "last" => args.len() == 1,
+        | "stddev" | "first" | "last" | "keys" => args.len() == 1,
         _ => true,
     };
     if !arity_ok {
@@ -758,6 +805,11 @@ fn eval_function<'i, 'j, S: SelectValue>(
         "max" => function_aggregate(args.first(), agg_max),
         "avg" => function_aggregate(args.first(), agg_avg),
         "stddev" => function_aggregate(args.first(), agg_stddev),
+        "keys" => function_keys(args.first()),
+        "append" => {
+            let mut it = args.into_iter();
+            function_append(it.next(), it.next())
+        }
         "first" => function_index(args.into_iter().next(), 0),
         "last" => function_index(args.into_iter().next(), -1),
         "index" => {
@@ -790,31 +842,38 @@ fn eval_function<'i, 'j, S: SelectValue>(
     }
 }
 
-/// Convert a projection's evaluated `TermEvaluationResult` into the single output value as an
-/// impl-independent `serde_json::Value` (or `None` for Nothing, which becomes an empty result —
-/// like a non-matching path).
-#[allow(dead_code)]
-fn term_to_output<'i, 'j, S: SelectValue>(term: TermEvaluationResult<'i, 'j, S>) -> Option<Value> {
+/// Convert a projection's evaluated `TermEvaluationResult` into the flat list of output
+/// values (impl-independent `serde_json::Value`s) for the reply. A single computed value
+/// yields a 1-element list (serialized as `[v]`); `Results` (from `keys()`/`~`/`append()`)
+/// yields its values flat; Nothing yields the empty list.
+fn term_to_outputs<'i, 'j, S: SelectValue>(term: TermEvaluationResult<'i, 'j, S>) -> Vec<Value> {
     match term {
-        TermEvaluationResult::Integer(n) => Some(Value::from(n)),
-        TermEvaluationResult::Float(f) => serde_json::Number::from_f64(f).map(Value::Number),
-        TermEvaluationResult::Str(s) => Some(Value::from(s)),
-        TermEvaluationResult::String(s) => Some(Value::from(s)),
-        TermEvaluationResult::Bool(b) => Some(Value::from(b)),
-        TermEvaluationResult::Null => Some(Value::Null),
-        TermEvaluationResult::Literal(v) => Some(v),
+        TermEvaluationResult::Integer(n) => vec![Value::from(n)],
+        // A non-finite float (overflow / div-by-zero result) is Nothing -> empty.
+        TermEvaluationResult::Float(f) => serde_json::Number::from_f64(f)
+            .map(Value::Number)
+            .into_iter()
+            .collect(),
+        TermEvaluationResult::Str(s) => vec![Value::from(s)],
+        TermEvaluationResult::String(s) => vec![Value::from(s)],
+        TermEvaluationResult::Bool(b) => vec![Value::from(b)],
+        TermEvaluationResult::Null => vec![Value::Null],
+        TermEvaluationResult::Literal(v) => vec![v],
         // A real document node (e.g. `$.a.first()`, `value($.a)`): serialize it to a Value.
         TermEvaluationResult::Value(vref) => {
-            Some(serde_json::to_value(&vref).unwrap_or(Value::Null))
+            vec![serde_json::to_value(&vref).unwrap_or(Value::Null)]
         }
-        // Multiple nodes (e.g. `($..x)`): render as a JSON array.
-        TermEvaluationResult::NodeList(list) => Some(Value::Array(
+        // A multi-node value: render as one JSON array (a parenthesized path is classified as a
+        // path, so this is rarely reached for a projection).
+        TermEvaluationResult::NodeList(list) => vec![Value::Array(
             list.iter()
                 .map(|v| serde_json::to_value(v).unwrap_or(Value::Null))
                 .collect(),
-        )),
+        )],
+        // Synthesized multi-value output (`keys()`/`~`/`append()`): emitted flat.
+        TermEvaluationResult::Results(vs) => vs,
         // Nothing -> empty result.
-        TermEvaluationResult::Invalid => None,
+        TermEvaluationResult::Invalid => vec![],
     }
 }
 
@@ -1110,6 +1169,9 @@ enum TermEvaluationResult<'i, 'j, S: SelectValue> {
     /// Multiple results from a non-singular query (e.g. `@.*`, `@..key`).
     /// Per RFC 9535, comparisons succeed if ANY element satisfies the condition.
     NodeList(Vec<ValueRef<'j, S>>),
+    /// A flat list of synthesized, impl-independent output values produced by the
+    /// projection-only `keys()`/`~` and `append()` operators.
+    Results(Vec<Value>),
     Invalid,
 }
 
@@ -1277,6 +1339,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             | TermEvaluationResult::Bool(_)
             | TermEvaluationResult::Null
             | TermEvaluationResult::NodeList(_)
+            | TermEvaluationResult::Results(_)
             | TermEvaluationResult::Invalid => None,
         }
     }
@@ -1301,7 +1364,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             TermEvaluationResult::Null => other.get_type() == SelectValueType::Null,
             // self is numeric but `other` is not a number -> not equal
             TermEvaluationResult::Integer(_) | TermEvaluationResult::Float(_) => false,
-            TermEvaluationResult::Invalid => false,
+            TermEvaluationResult::Results(_) | TermEvaluationResult::Invalid => false,
         }
     }
 
@@ -1327,6 +1390,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             | TermEvaluationResult::String(_)
             | TermEvaluationResult::Bool(_)
             | TermEvaluationResult::Null
+            | TermEvaluationResult::Results(_)
             | TermEvaluationResult::Invalid => false,
         }
     }
@@ -1971,6 +2035,11 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         };
         let mut acc = self.evaluate_single_term(recv, json.clone(), calc_data);
         for method in it {
+            // The terminal `~` operator is the alias for `keys()`.
+            if method.as_rule() == Rule::get_keys_op {
+                acc = eval_function("keys", vec![acc], &mut calc_data.regex_cache);
+                continue;
+            }
             let mut mi = method.into_inner();
             let name = mi.next().map_or("", |p| p.as_str());
             // The receiver is the implicit first argument; explicit args follow.
@@ -2259,14 +2328,14 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         &self,
         json: ValueRef<'j, S>,
         expr: Pair<'i, Rule>,
-    ) -> Option<Value> {
+    ) -> Vec<Value> {
         let mut calc_data = PathCalculatorData {
             results: Vec::new(),
             root: json.clone(),
             regex_cache: HashMap::new(),
         };
         let term = self.evaluate_arith_expr(expr, json, &mut calc_data);
-        term_to_output(term)
+        term_to_outputs(term)
     }
 
     pub fn calc_with_paths_on_root<'j: 'i, S: SelectValue>(
