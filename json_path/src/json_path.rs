@@ -768,6 +768,25 @@ fn function_append<'i, 'j, S: SelectValue>(
     out.extend(term_to_outputs(x));
     TermEvaluationResult::Results(out)
 }
+const FN_LENGTH: &str = "length";
+const FN_COUNT: &str = "count";
+const FN_VALUE: &str = "value";
+const FN_CEILING: &str = "ceiling";
+const FN_FLOOR: &str = "floor";
+const FN_ABS: &str = "abs";
+const FN_CONCAT: &str = "concat";
+const FN_SUM: &str = "sum";
+const FN_MIN: &str = "min";
+const FN_MAX: &str = "max";
+const FN_AVG: &str = "avg";
+const FN_STDDEV: &str = "stddev";
+const FN_KEYS: &str = "keys";
+const FN_APPEND: &str = "append";
+const FN_FIRST: &str = "first";
+const FN_LAST: &str = "last";
+const FN_INDEX: &str = "index";
+const FN_MATCH: &str = "match";
+const FN_SEARCH: &str = "search";
 
 fn eval_function<'i, 'j, S: SelectValue>(
     name: &str,
@@ -778,41 +797,41 @@ fn eval_function<'i, 'j, S: SelectValue>(
     // malformed query like `ceiling(@, 9)` or `concat()` doesn't silently operate on a
     // subset of its arguments instead of failing.
     let arity_ok = match name {
-        "concat" => !args.is_empty(),
+        FN_CONCAT => !args.is_empty(),
         // `index`/`append` take the receiver plus one explicit argument.
-        "index" | "append" => args.len() == 2,
-        "length" | "count" | "ceiling" | "floor" | "abs" | "sum" | "min" | "max" | "avg"
-        | "stddev" | "first" | "last" | "keys" => args.len() == 1,
+        FN_INDEX | FN_APPEND => args.len() == 2,
+        FN_LENGTH | FN_COUNT | FN_CEILING | FN_FLOOR | FN_ABS | FN_SUM | FN_MIN | FN_MAX
+        | FN_AVG | FN_STDDEV | FN_FIRST | FN_LAST | FN_KEYS => args.len() == 1,
         _ => true,
     };
     if !arity_ok {
         return TermEvaluationResult::Invalid;
     }
     match name {
-        "length" => args
+        FN_LENGTH => args
             .first()
             .map_or(TermEvaluationResult::Invalid, function_length),
-        "count" => args.first().map_or(TermEvaluationResult::Invalid, |a| {
+        FN_COUNT => args.first().map_or(TermEvaluationResult::Invalid, |a| {
             TermEvaluationResult::Integer(function_count(a))
         }),
-        "value" if args.len() == 1 => function_value(args.pop().unwrap()),
-        "ceiling" => function_round(args.first(), f64::ceil),
-        "floor" => function_round(args.first(), f64::floor),
-        "abs" => function_abs(args.first()),
-        "concat" => function_concat(&args),
-        "sum" => function_aggregate(args.first(), agg_sum),
-        "min" => function_aggregate(args.first(), agg_min),
-        "max" => function_aggregate(args.first(), agg_max),
-        "avg" => function_aggregate(args.first(), agg_avg),
-        "stddev" => function_aggregate(args.first(), agg_stddev),
-        "keys" => function_keys(args.first()),
-        "append" => {
+        FN_VALUE if args.len() == 1 => function_value(args.pop().unwrap()),
+        FN_CEILING => function_round(args.first(), f64::ceil),
+        FN_FLOOR => function_round(args.first(), f64::floor),
+        FN_ABS => function_abs(args.first()),
+        FN_CONCAT => function_concat(&args),
+        FN_SUM => function_aggregate(args.first(), agg_sum),
+        FN_MIN => function_aggregate(args.first(), agg_min),
+        FN_MAX => function_aggregate(args.first(), agg_max),
+        FN_AVG => function_aggregate(args.first(), agg_avg),
+        FN_STDDEV => function_aggregate(args.first(), agg_stddev),
+        FN_KEYS => function_keys(args.first()),
+        FN_APPEND => {
             let mut it = args.into_iter();
             function_append(it.next(), it.next())
         }
-        "first" => function_index(args.into_iter().next(), 0),
-        "last" => function_index(args.into_iter().next(), -1),
-        "index" => {
+        FN_FIRST => function_index(args.into_iter().next(), 0),
+        FN_LAST => function_index(args.into_iter().next(), -1),
+        FN_INDEX => {
             // index(array, n) — a fractional n is truncated toward zero; a non-numeric n
             // is Nothing.
             let mut it = args.into_iter();
@@ -824,8 +843,8 @@ fn eval_function<'i, 'j, S: SelectValue>(
             });
             idx.map_or(TermEvaluationResult::Invalid, |n| function_index(array, n))
         }
-        "match" | "search" => {
-            let full = name == "match";
+        FN_MATCH | FN_SEARCH => {
+            let full = name == FN_MATCH;
             let s = args.first().and_then(term_as_str);
             let re = args.get(1).and_then(term_as_str);
             match (s, re) {
@@ -2037,7 +2056,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         for method in it {
             // The terminal `~` operator is the alias for `keys()`.
             if method.as_rule() == Rule::get_keys_op {
-                acc = eval_function("keys", vec![acc], &mut calc_data.regex_cache);
+                acc = eval_function(FN_KEYS, vec![acc], &mut calc_data.regex_cache);
                 continue;
             }
             let mut mi = method.into_inner();
