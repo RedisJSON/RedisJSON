@@ -747,8 +747,11 @@ fn function_keys<'i, 'j, S: SelectValue>(
     keys.map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Results)
 }
 
-/// `path.append(x)`: enrich the reply by appending `x` as one extra element after the
-/// receiver's result list, WITHOUT modifying the document. An absent/Nothing receiver yields just `[x]`.
+/// `path.append(x)`: enrich the reply by appending `x` after the receiver's sequence,
+/// WITHOUT modifying the document. The receiver is taken as a sequence — a matched array's
+/// elements (so `$.arr.append(x)` -> `[...arr, x]`), or the matched node list for a
+/// multi-result receiver (so `$.a[?...].append(x)` -> `[...matched, x]`). A single non-array
+/// node is appended alongside (`[node, x]`); an absent/Nothing receiver yields just `[x]`.
 fn function_append<'i, 'j, S: SelectValue>(
     receiver: Option<TermEvaluationResult<'i, 'j, S>>,
     x: Option<TermEvaluationResult<'i, 'j, S>>,
@@ -757,12 +760,22 @@ fn function_append<'i, 'j, S: SelectValue>(
         return TermEvaluationResult::Invalid;
     };
     let mut out = match receiver {
+        // Multiple matched nodes (e.g. a filter result): each node is one element.
         Some(TermEvaluationResult::NodeList(list)) => list
             .iter()
             .map(|v| serde_json::to_value(v).unwrap_or(Value::Null))
             .collect(),
+        // A single matched array is appended INTO — its elements are the sequence.
+        Some(TermEvaluationResult::Value(v)) if v.as_ref().get_type() == SelectValueType::Array => {
+            v.as_ref().values().map_or_else(Vec::new, |it| {
+                it.map(|e| serde_json::to_value(&e).unwrap_or(Value::Null))
+                    .collect()
+            })
+        }
+        Some(TermEvaluationResult::Literal(Value::Array(items))) => items,
         Some(TermEvaluationResult::Results(vs)) => vs,
         Some(TermEvaluationResult::Invalid) | None => Vec::new(),
+        // A single non-array node / scalar: appended alongside as one element.
         Some(other) => term_to_outputs(other),
     };
     out.extend(term_to_outputs(x));

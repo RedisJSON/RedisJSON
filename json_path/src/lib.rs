@@ -1580,14 +1580,33 @@ mod json_path_tests {
             perform_projection_multi("$.obj~", &json!({"obj": {}})),
             Vec::<Value>::new()
         );
-        // `~` must be terminal (no trailing path)
+        // `~` is terminal: it closes the chain, so no trailing path, method, or repeated `~`.
         assert!(json_path::compile("$.obj~.x").is_err());
         assert!(json_path::compile("$.obj.keys().x").is_err());
+        assert!(json_path::compile("$.obj~.length()").is_err());
+        assert!(json_path::compile("$.obj~.append(1)").is_err());
+        assert!(json_path::compile("$.obj~~").is_err());
+        // the `keys()` function form stays composable (only the `~` operator is terminal).
+        assert_eq!(
+            perform_projection_multi(r#"$.obj.keys().append("z")"#, &doc),
+            vec![json!("x"), json!("y"), json!("z")]
+        );
     }
 
     #[test]
     fn test_append_projection() {
         setup();
+        // A single matched array is appended INTO: `$.arr.append(x)` -> [...arr, x] (and the
+        // explicit `$.arr[*]` element form gives the same result).
+        let arr_doc = json!({"arr": [1, 2, 3]});
+        assert_eq!(
+            perform_projection_multi("$.arr.append(9)", &arr_doc),
+            vec![json!(1), json!(2), json!(3), json!(9)]
+        );
+        assert_eq!(
+            perform_projection_multi("$.arr[*].append(9)", &arr_doc),
+            vec![json!(1), json!(2), json!(3), json!(9)]
+        );
         let doc = json!({"books": [{"t": "a", "price": 30}, {"t": "b", "price": 5}]});
         // append(X) adds X as one extra element after the matched nodes (reply enrichment)
         assert_eq!(

@@ -1944,6 +1944,10 @@ def testGetKeysAndAppend(env):
     r.expect('JSON.GET', 'd', '$~').equal('["obj","books"]')
     # a non-object selects no keys
     r.expect('JSON.GET', 'd', '$.books~').equal('[]')
+    # a single matched array is appended INTO: `$.arr.append(x)` -> [...arr, x]
+    r.expect('JSON.SET', 'arrdoc', '$', json.dumps({"arr": [1, 2, 3]})).ok()
+    r.expect('JSON.GET', 'arrdoc', '$.arr.append(9)').equal('[1,2,3,9]')
+    r.expect('JSON.GET', 'arrdoc', '$.arr[*].append(9)').equal('[1,2,3,9]')
     # append(X) adds X as one extra element after the matched nodes
     r.assertEqual(json.loads(r.execute_command('JSON.GET', 'd', '$.books[?(@.price >= 10)].append({"t":"X"})')),
                   [{"t": "a", "price": 30}, {"t": "X"}])
