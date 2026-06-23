@@ -1739,4 +1739,17 @@ mod json_path_tests {
             json:{"a":[{"o":{}}, {"o":{"x":1}}, {"o":{"y":2,"z":3}}]},
             results:[{"o":{"x":1}}, {"o":{"y":2,"z":3}}]);
     }
+
+    #[test]
+    fn test_in_nin_with_results_rhs() {
+        setup();
+        // `in` with a synthesized Results list on the RHS (`$.obj.keys()`).
+        verify_json!(path:"$.a[?\"x\" in @.o.keys()]",
+            json:{"a":[{"o":{"x":1,"y":2}}, {"o":{"y":3}}, {"o":{}}]},
+            results:[{"o":{"x":1,"y":2}}]);
+        // `nin` is the strict negation.
+        verify_json!(path:"$.a[?\"x\" nin @.o.keys()]",
+            json:{"a":[{"o":{"x":1,"y":2}}, {"o":{"y":3}}, {"o":{}}]},
+            results:[{"o":{"y":3}}, {"o":{}}]);
+    }
 }

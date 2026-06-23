@@ -944,14 +944,16 @@ fn term_to_outputs<'i, 'j, S: SelectValue>(term: TermEvaluationResult<'i, 'j, S>
         TermEvaluationResult::Value(vref) => {
             vec![serde_json::to_value(&vref).unwrap_or(Value::Null)]
         }
-        // A multi-node value: render as one JSON array (a parenthesized path is classified as a
-        // path, so this is rarely reached for a projection).
+        // A multi-node value: wrapped as a single JSON array. This preserves the invariant that
+        // one path argument → one output element (e.g. `$.arr.append($.obj.keys())` appends the
+        // keys as a single array element, not as individual strings). Contrast with Results below.
         TermEvaluationResult::NodeList(list) => vec![Value::Array(
             list.iter()
                 .map(|v| serde_json::to_value(v).unwrap_or(Value::Null))
                 .collect(),
         )],
-        // Synthesized multi-value output (`keys()`/`~`/`append()`): emitted flat.
+        // Synthesized multi-value output (`keys()`/`~`/`append()`): each synthesized value is an
+        // independent reply element, so they are emitted flat (not wrapped in an outer array).
         TermEvaluationResult::Results(vs) => vs,
         // Nothing -> empty result.
         TermEvaluationResult::Invalid => vec![],
@@ -1463,6 +1465,8 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             TermEvaluationResult::NodeList(list) => {
                 list.iter().any(|v| self.equals_value(v.as_ref()))
             }
+            // A synthesized list (e.g. `$.obj.keys()`) acts as an array for membership tests.
+            TermEvaluationResult::Results(vs) => vs.iter().any(|v| self.equals_value(v)),
             TermEvaluationResult::Value(_)
             | TermEvaluationResult::Literal(_)
             | TermEvaluationResult::Integer(_)
@@ -1471,7 +1475,6 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             | TermEvaluationResult::String(_)
             | TermEvaluationResult::Bool(_)
             | TermEvaluationResult::Null
-            | TermEvaluationResult::Results(_)
             | TermEvaluationResult::Invalid => false,
         }
     }
