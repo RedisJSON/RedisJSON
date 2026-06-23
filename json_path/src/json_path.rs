@@ -24,13 +24,15 @@ use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 
 /// Cached mirror of Redis' `hide-user-data-from-log` server config.
 ///
-/// Defaults to `false`, which is Redis core's own default for the config. The
-/// RedisJSON module keeps it in sync — once at load time and again on every
-/// `CONFIG SET` (see `sync_hide_user_data_from_log` in the `redis_json`
-/// crate). When this crate is used outside the module (the standalone
-/// `jsonpath` binary or the unit tests) there is no server to read from, so
-/// the default preserves the previous, fully verbose tracing behaviour.
-static HIDE_USER_DATA_FROM_LOG: AtomicBool = AtomicBool::new(false);
+/// Defaults to `true` (hidden): user data is kept out of the logs unless the
+/// server is known to permit it. The RedisJSON module keeps this in sync —
+/// once at load time and again on every `CONFIG SET` (see
+/// `sync_hide_user_data_from_log` in the `redis_json` crate), where it shows
+/// user data only when the server explicitly sets `hide-user-data-from-log no`.
+/// Failing closed means contexts without a readable config — a config read
+/// error, an older Redis lacking the config, the standalone `jsonpath` binary
+/// or the unit tests — never leak user data.
+static HIDE_USER_DATA_FROM_LOG: AtomicBool = AtomicBool::new(true);
 
 /// Update the cached value of Redis' `hide-user-data-from-log` server config.
 // Unused by the standalone `jsonpath` binary, which has no server to read from.
