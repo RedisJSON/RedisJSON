@@ -1586,6 +1586,8 @@ mod json_path_tests {
         assert!(json_path::compile("$.obj~.length()").is_err());
         assert!(json_path::compile("$.obj~.append(1)").is_err());
         assert!(json_path::compile("$.obj~~").is_err());
+        // `~` attaches only to a bare term, never after a method.
+        assert!(json_path::compile("$.obj.keys()~").is_err());
         // the `keys()` function form stays composable (only the `~` operator is terminal).
         assert_eq!(
             perform_projection_multi(r#"$.obj.keys().append("z")"#, &doc),
@@ -1623,19 +1625,44 @@ mod json_path_tests {
             perform_projection_multi(r#"$.books[?(@.price > 999)].append({"t":"X"})"#, &doc),
             vec![json!({"t": "X"})]
         );
+        // a Nothing append argument (e.g. a non-matching path) -> the whole result is Nothing
+        let xdoc = json!({"arr": [1, 2, 3], "other": [4, 5], "obj": {"k1": 1, "k2": 2}});
+        assert_eq!(
+            perform_projection_multi("$.arr.append($.missing)", &xdoc),
+            Vec::<Value>::new()
+        );
+        // a multi-value argument is appended as ONE wrapped element (a path array, or a
+        // synthesized keys() list) — not spread:
+        assert_eq!(
+            perform_projection_multi("$.arr.append($.other)", &xdoc),
+            vec![json!(1), json!(2), json!(3), json!([4, 5])]
+        );
+        assert_eq!(
+            perform_projection_multi("$.arr.append($.obj.keys())", &xdoc),
+            vec![json!(1), json!(2), json!(3), json!(["k1", "k2"])]
+        );
     }
 
     #[test]
-    fn test_count_of_synthesized_results() {
+    fn test_count_and_length_of_synthesized_results() {
         setup();
-        // count() of a keys()/append() Results list is its element count (not 0).
+        // count() and length() of a keys()/append() Results list both report its element
+        // count (not 0 / Nothing).
         let doc = json!({"obj": {"x": 1, "y": 2, "z": 3}, "arr": [1, 2, 3]});
         assert_eq!(
             perform_projection_multi("$.obj.keys().count()", &doc),
             vec![json!(3)]
         );
         assert_eq!(
+            perform_projection_multi("$.obj.keys().length()", &doc),
+            vec![json!(3)]
+        );
+        assert_eq!(
             perform_projection_multi("$.arr.append(9).count()", &doc),
+            vec![json!(4)]
+        );
+        assert_eq!(
+            perform_projection_multi("$.arr.append(9).length()", &doc),
             vec![json!(4)]
         );
     }

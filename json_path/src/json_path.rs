@@ -470,12 +470,12 @@ fn function_length<'i, 'j, S: SelectValue>(
         TermEvaluationResult::Value(v) => value_length(v.as_ref()),
         TermEvaluationResult::Literal(l) => value_length(l),
         TermEvaluationResult::NodeList(list) if list.len() == 1 => value_length(list[0].as_ref()),
+        TermEvaluationResult::Results(vs) => Some(vs.len()),
         TermEvaluationResult::NodeList(_)
         | TermEvaluationResult::Integer(_)
         | TermEvaluationResult::Float(_)
         | TermEvaluationResult::Bool(_)
         | TermEvaluationResult::Null
-        | TermEvaluationResult::Results(_)
         | TermEvaluationResult::Invalid => None,
     }
     .map_or(TermEvaluationResult::Invalid, |n| {
@@ -754,17 +754,34 @@ fn function_keys<'i, 'j, S: SelectValue>(
     keys.map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Results)
 }
 
-/// `path.append(x)`: enrich the reply by appending `x` after the receiver's sequence,
-/// WITHOUT modifying the document. The receiver is taken as a sequence — a matched array's
-/// elements (so `$.arr.append(x)` -> `[...arr, x]`), or the matched node list for a
-/// multi-result receiver (so `$.a[?...].append(x)` -> `[...matched, x]`). A single non-array
-/// node is appended alongside (`[node, x]`); an absent/Nothing receiver yields just `[x]`.
+/// `path.append(x)`: enrich the reply by appending `x` as a single element after the
+/// receiver's sequence, WITHOUT modifying the document. The receiver is taken as a sequence —
+/// a matched array's elements (so `$.arr.append(x)` -> `[...arr, x]`), or the matched node
+/// list for a multi-result receiver (so `$.a[?...].append(x)` -> `[...matched, x]`). A single
+/// non-array node is appended alongside (`[node, x]`); an absent/Nothing receiver yields just
+/// `[x]`. `x` itself is appended as ONE element: a multi-value `x` (a multi-node path or a
+/// synthesized list) is wrapped in an array, and a Nothing `x` makes the whole result Nothing.
 fn function_append<'i, 'j, S: SelectValue>(
     receiver: Option<TermEvaluationResult<'i, 'j, S>>,
     x: Option<TermEvaluationResult<'i, 'j, S>>,
 ) -> TermEvaluationResult<'i, 'j, S> {
-    let Some(x) = x else {
-        return TermEvaluationResult::Invalid;
+    // The value to append, as one `serde_json::Value`. A Nothing argument (e.g. a
+    // non-matching `append($.missing)`) propagates -> the whole append is Nothing.
+    let to_append = match x {
+        None | Some(TermEvaluationResult::Invalid) => return TermEvaluationResult::Invalid,
+        // Wrap a multi-value argument so it is appended as a single collection (consistent
+        // for both a multi-node path and a synthesized `keys()`/`append()` list).
+        Some(TermEvaluationResult::NodeList(list)) => Value::Array(
+            list.iter()
+                .map(|v| serde_json::to_value(v).unwrap_or(Value::Null))
+                .collect(),
+        ),
+        Some(TermEvaluationResult::Results(vs)) => Value::Array(vs),
+        Some(other) => match term_to_outputs(other).into_iter().next() {
+            Some(v) => v,
+            // e.g. a non-finite float argument -> Nothing.
+            None => return TermEvaluationResult::Invalid,
+        },
     };
     let mut out = match receiver {
         // Multiple matched nodes (e.g. a filter result): each node is one element.
@@ -785,7 +802,7 @@ fn function_append<'i, 'j, S: SelectValue>(
         // A single non-array node / scalar: appended alongside as one element.
         Some(other) => term_to_outputs(other),
     };
-    out.extend(term_to_outputs(x));
+    out.push(to_append);
     TermEvaluationResult::Results(out)
 }
 const FN_LENGTH: &str = "length";

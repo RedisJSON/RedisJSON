@@ -1963,9 +1963,21 @@ def testGetKeysAndAppend(env):
     r.expect('JSON.SET', 'd', '$.obj~', '5').raiseError()
     r.expect('JSON.DEL', 'd', '$.books[?(@.price>10)].append({})').raiseError()
     r.expect('JSON.TYPE', 'd', '$.obj.keys()').raiseError()
-    # `~` reserved: a field literally named with `~` is reachable via bracket notation
+    # `~` reserved: a field literally named with `~` is reachable via bracket notation,
+    # and the old dot form is now a parse error (documented breaking change).
     r.expect('JSON.SET', 'd2', '$', json.dumps({"a~b": 5})).ok()
     r.expect('JSON.GET', 'd2', '$["a~b"]').equal('[5]')
+    r.expect('JSON.GET', 'd2', '$.a~b').raiseError()
+    # `~` is terminal and attaches only to a bare term: `$.obj.keys()~` is a parse error
+    r.expect('JSON.GET', 'd', '$.obj.keys()~').raiseError()
+    # count() and length() of a synthesized list agree on the element count
+    r.expect('JSON.GET', 'd', '$.obj.keys().count()').equal('[2]')
+    r.expect('JSON.GET', 'd', '$.obj.keys().length()').equal('[2]')
+    # a Nothing append argument propagates -> the whole result is Nothing
+    r.expect('JSON.SET', 'd3', '$', json.dumps({"arr": [1, 2, 3], "other": [4, 5]})).ok()
+    r.expect('JSON.GET', 'd3', '$.arr.append($.missing)').equal('[]')
+    # a multi-value append argument is wrapped as one element (not spread)
+    r.expect('JSON.GET', 'd3', '$.arr.append($.other)').equal('[1,2,3,[4,5]]')
 
 def testMerge(env):
     # Test JSON.MERGE

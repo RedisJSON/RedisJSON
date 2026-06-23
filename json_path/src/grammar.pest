@@ -88,12 +88,12 @@ postfix_method = {"." ~ function_name ~ "(" ~ (arith_expr ~ ("," ~ arith_expr)*)
 // alias `$.obj.keys()` is just a `postfix_method`. `~` was removed from the `literal`
 // charset, so a field literally named with `~` is reachable only via `["a~b"]`.
 get_keys_op = {"~"}
-// Either a term + >=0 postfix methods ending in a single terminal `~`, or a term + >=1
-// postfix method. `~` is genuinely terminal: it closes the chain, so `$.obj~.length()`,
-// `$.obj~~` and `$.obj~.x` are all rejected (the `keys()` function form stays composable).
-// Both alternatives require a postfix or the `~`, keeping a bare term out so existing
+// Either a bare term + a single terminal `~`, or a term + >=1 postfix method. `~` attaches
+// only directly to a term (not after a method), so `$.obj~`/`$~` work while `$.obj.keys()~`,
+// `$.obj~.length()`, `$.obj~~` and `$.obj~.x` are all parse errors (use `keys()` to compose).
+// Both alternatives require the `~` or a postfix, keeping a bare term out so existing
 // (non-method) parse trees are unchanged.
-method_chain = {term ~ postfix_method* ~ get_keys_op | term ~ postfix_method+}
+method_chain = {term ~ get_keys_op | term ~ postfix_method+}
 arith_primary = _{"(" ~ arith_expr ~ ")" | method_chain | term}
 arith_factor = {unary_op? ~ arith_primary}
 arith_term = {arith_factor ~ (mul_op ~ arith_factor)*}
