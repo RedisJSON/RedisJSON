@@ -85,12 +85,15 @@ pub fn calc_once<'j, 'p, S: SelectValue>(q: Query<'j>, json: &'p S) -> Vec<Value
     .collect()
 }
 
-/// Calc once for a projection query (e.g. `$.a + 1`, `$arr.length()`): returns the single
-/// computed value as an impl-independent `serde_json::Value`, or `None` for Nothing (an empty
-/// result). Only valid when `q.is_projection()`; returns `None` otherwise. The result is a
-/// synthesized value, never a document node, so it is GET-output-only.
-pub fn calc_once_projection<S: SelectValue>(q: Query, json: &S) -> Option<serde_json::Value> {
-    let expr = q.projection_expr()?.clone();
+/// Calc once for a projection query (e.g. `$.a + 1`, `$arr.length()`, `$.obj.keys()`,
+/// `$.a.append(x)`): returns the flat list of computed values as impl-independent
+/// `serde_json::Value`s (empty for Nothing). A scalar projection yields a 1-element list;
+/// `keys()`/`~`/`append()` yield multiple. Only meaningful when `q.is_projection()` (empty
+/// otherwise). The values are synthesized, never document nodes, so this is GET-output-only.
+pub fn calc_once_projection<S: SelectValue>(q: Query, json: &S) -> Vec<serde_json::Value> {
+    let Some(expr) = q.projection_expr().cloned() else {
+        return Vec::new();
+    };
     PathCalculator::<DummyTrackerGenerator> {
         query: None,
         tracker_generator: None,
@@ -154,9 +157,9 @@ mod json_path_tests {
         path_calculator.calc_paths(json)
     }
 
-    /// Evaluate a projection query, returning the single computed value (or `None` for
-    /// Nothing). Asserts the query is classified as a projection.
-    fn perform_projection(path: &str, json: &Value) -> Option<Value> {
+    /// Evaluate a projection query, returning its flat list of computed values. Asserts the
+    /// query is classified as a projection.
+    fn perform_projection_multi(path: &str, json: &Value) -> Vec<Value> {
         use crate::calc_once_projection;
         let query = json_path::compile(path).unwrap();
         assert!(
@@ -164,6 +167,17 @@ mod json_path_tests {
             "expected `{path}` to be a projection"
         );
         calc_once_projection(query, json)
+    }
+
+    /// Evaluate a single-value projection, returning the lone computed value (or `None` for
+    /// Nothing). Panics if the projection yields multiple values (use the `_multi` form).
+    fn perform_projection(path: &str, json: &Value) -> Option<Value> {
+        let mut values = perform_projection_multi(path, json);
+        assert!(
+            values.len() <= 1,
+            "`{path}` yielded multiple values; use perform_projection_multi"
+        );
+        values.pop()
     }
 
     macro_rules! verify_json {(
@@ -1513,6 +1527,11 @@ mod json_path_tests {
             "$.arr.length()",
             "length($.arr)",
             "($.a + 1)",
+            // get-keys (`~` / keys()) and append() are projections (synthesized output).
+            "$~",
+            "$.obj~",
+            "$.obj.keys()",
+            "$.a.append(1)",
         ] {
             let q = json_path::compile(path).unwrap();
             assert!(q.is_projection(), "`{path}` should be a projection");
@@ -1524,5 +1543,238 @@ mod json_path_tests {
         setup();
         // `$.a+1` is the field "a+1" (path mode), NOT arithmetic.
         verify_json!(path:"$.a+1", json:{"a+1": 7, "a": 2}, results:[7]);
+    }
+
+    #[test]
+    fn test_get_keys_projection() {
+        setup();
+        let doc = json!({"obj": {"x": 1, "y": 2}, "arr": [1, 2], "n": 5});
+        // `~` and its keys() alias emit member names as a flat list of strings
+        assert_eq!(
+            perform_projection_multi("$.obj~", &doc),
+            vec![json!("x"), json!("y")]
+        );
+        assert_eq!(
+            perform_projection_multi("$.obj.keys()", &doc),
+            vec![json!("x"), json!("y")]
+        );
+        // keys of the root
+        assert_eq!(
+            perform_projection_multi("$~", &doc),
+            vec![json!("obj"), json!("arr"), json!("n")]
+        );
+        // a multi-match receiver yields the keys of each matched object, flattened
+        // (non-object matches contribute nothing); `~` behaves the same.
+        let multi = json!({"a": [{"x": 1, "y": 2}, 5, {"z": 3}]});
+        assert_eq!(
+            perform_projection_multi("$.a[*].keys()", &multi),
+            vec![json!("x"), json!("y"), json!("z")]
+        );
+        assert_eq!(
+            perform_projection_multi("$.a[*]~", &multi),
+            vec![json!("x"), json!("y"), json!("z")]
+        );
+        // non-object / missing / empty-object -> empty
+        assert_eq!(
+            perform_projection_multi("$.arr~", &doc),
+            Vec::<Value>::new()
+        );
+        assert_eq!(
+            perform_projection_multi("$.n.keys()", &doc),
+            Vec::<Value>::new()
+        );
+        assert_eq!(
+            perform_projection_multi("$.missing~", &doc),
+            Vec::<Value>::new()
+        );
+        assert_eq!(
+            perform_projection_multi("$.obj~", &json!({"obj": {}})),
+            Vec::<Value>::new()
+        );
+        // `~` is terminal: it closes the chain, so no trailing path, method, or repeated `~`.
+        assert!(json_path::compile("$.obj~.x").is_err());
+        assert!(json_path::compile("$.obj.keys().x").is_err());
+        assert!(json_path::compile("$.obj~.length()").is_err());
+        assert!(json_path::compile("$.obj~.append(1)").is_err());
+        assert!(json_path::compile("$.obj~~").is_err());
+        // `~` attaches only to a bare term, never after a method.
+        assert!(json_path::compile("$.obj.keys()~").is_err());
+        // the `keys()` function form stays composable (only the `~` operator is terminal).
+        assert_eq!(
+            perform_projection_multi(r#"$.obj.keys().append("z")"#, &doc),
+            vec![json!("x"), json!("y"), json!("z")]
+        );
+    }
+
+    #[test]
+    fn test_append_projection() {
+        setup();
+        // A single matched array is appended INTO: `$.arr.append(x)` -> [...arr, x] (and the
+        // explicit `$.arr[*]` element form gives the same result).
+        let arr_doc = json!({"arr": [1, 2, 3]});
+        assert_eq!(
+            perform_projection_multi("$.arr.append(9)", &arr_doc),
+            vec![json!(1), json!(2), json!(3), json!(9)]
+        );
+        assert_eq!(
+            perform_projection_multi("$.arr[*].append(9)", &arr_doc),
+            vec![json!(1), json!(2), json!(3), json!(9)]
+        );
+        let doc = json!({"books": [{"t": "a", "price": 30}, {"t": "b", "price": 5}]});
+        // append(X) adds X as one extra element after the matched nodes (reply enrichment)
+        assert_eq!(
+            perform_projection_multi(r#"$.books[?(@.price >= 10)].append({"t":"X"})"#, &doc),
+            vec![json!({"t": "a", "price": 30}), json!({"t": "X"})]
+        );
+        // a scalar value works too
+        assert_eq!(
+            perform_projection_multi("$.books[?(@.price >= 10)].append(99)", &doc),
+            vec![json!({"t": "a", "price": 30}), json!(99)]
+        );
+        // no matched nodes -> just [X] (X is always appended)
+        assert_eq!(
+            perform_projection_multi(r#"$.books[?(@.price > 999)].append({"t":"X"})"#, &doc),
+            vec![json!({"t": "X"})]
+        );
+        // a Nothing append argument (e.g. a non-matching path) -> the whole result is Nothing
+        let xdoc = json!({"arr": [1, 2, 3], "other": [4, 5], "obj": {"k1": 1, "k2": 2}});
+        assert_eq!(
+            perform_projection_multi("$.arr.append($.missing)", &xdoc),
+            Vec::<Value>::new()
+        );
+        // a multi-value argument is appended as ONE wrapped element (a path array, or a
+        // synthesized keys() list) — not spread:
+        assert_eq!(
+            perform_projection_multi("$.arr.append($.other)", &xdoc),
+            vec![json!(1), json!(2), json!(3), json!([4, 5])]
+        );
+        assert_eq!(
+            perform_projection_multi("$.arr.append($.obj.keys())", &xdoc),
+            vec![json!(1), json!(2), json!(3), json!(["k1", "k2"])]
+        );
+    }
+
+    #[test]
+    fn test_count_and_length_of_synthesized_results() {
+        setup();
+        // count() and length() of a keys()/append() Results list both report its element
+        // count (not 0 / Nothing).
+        let doc = json!({"obj": {"x": 1, "y": 2, "z": 3}, "arr": [1, 2, 3]});
+        assert_eq!(
+            perform_projection_multi("$.obj.keys().count()", &doc),
+            vec![json!(3)]
+        );
+        assert_eq!(
+            perform_projection_multi("$.obj.keys().length()", &doc),
+            vec![json!(3)]
+        );
+        assert_eq!(
+            perform_projection_multi("$.arr.append(9).count()", &doc),
+            vec![json!(4)]
+        );
+        assert_eq!(
+            perform_projection_multi("$.arr.append(9).length()", &doc),
+            vec![json!(4)]
+        );
+    }
+
+    #[test]
+    fn test_value_of_single_key_result() {
+        setup();
+        // value() of a one-element synthesized list (a single-key object's keys) is that value
+        assert_eq!(
+            perform_projection_multi("$.obj.keys().value()", &json!({"obj": {"only": 1}})),
+            vec![json!("only")]
+        );
+        // more than one key -> Nothing (RFC value() on a multi-node nodelist)
+        assert_eq!(
+            perform_projection_multi("$.obj.keys().value()", &json!({"obj": {"a": 1, "b": 2}})),
+            Vec::<Value>::new()
+        );
+    }
+
+    #[test]
+    fn test_index_and_aggregate_on_results() {
+        setup();
+        let doc = json!({"obj": {"x": 1, "y": 2, "z": 3}, "arr": [1, 2, 3]});
+        // first()/last()/index() index into a synthesized list
+        assert_eq!(
+            perform_projection_multi("$.obj.keys().first()", &doc),
+            vec![json!("x")]
+        );
+        assert_eq!(
+            perform_projection_multi("$.obj.keys().last()", &doc),
+            vec![json!("z")]
+        );
+        assert_eq!(
+            perform_projection_multi("$.obj.keys().index(1)", &doc),
+            vec![json!("y")]
+        );
+        // out-of-range / empty -> Nothing
+        assert_eq!(
+            perform_projection_multi("$.o.keys().first()", &json!({"o": {}})),
+            Vec::<Value>::new()
+        );
+        // aggregations fold a numeric synthesized list; an all-string list is non-numeric
+        assert_eq!(
+            perform_projection_multi("$.arr.append(9).sum()", &doc),
+            vec![json!(15.0)]
+        );
+        assert_eq!(
+            perform_projection_multi("$.arr.append(9).max()", &doc),
+            vec![json!(9.0)]
+        );
+        assert_eq!(
+            perform_projection_multi("$.obj.keys().sum()", &doc),
+            Vec::<Value>::new()
+        );
+    }
+
+    #[test]
+    fn test_results_as_membership_and_set_operand() {
+        setup();
+        // A synthesized list (`keys()`) works as the array operand of `in`/`nin` ...
+        verify_json!(path:"$.vals[?@ in $.obj.keys()]",
+            json:{"obj":{"id":1,"name":"a"}, "vals":["id","zzz","name"]},
+            results:["id","name"]);
+        // ... and of the set operators (here as the left operand).
+        verify_json!(path:r#"$.a[?@.o.keys() anyof ["x"]]"#,
+            json:{"a":[{"o":{"x":1,"y":2}}, {"o":{"z":3}}]},
+            results:[{"o":{"x":1,"y":2}}]);
+        verify_json!(path:r#"$.a[?@.o.keys() subsetof ["x","y","z"]]"#,
+            json:{"a":[{"o":{"x":1,"y":2}}, {"o":{"z":3}}]},
+            results:[{"o":{"x":1,"y":2}}, {"o":{"z":3}}]);
+        // ... and `sizeof`/`empty` (the key count).
+        verify_json!(path:"$.a[?@.o.keys() sizeof 2]",
+            json:{"a":[{"o":{"x":1,"y":2}}, {"o":{"z":3}}]},
+            results:[{"o":{"x":1,"y":2}}]);
+        verify_json!(path:"$.a[?@.o.keys() empty true]",
+            json:{"a":[{"o":{}}, {"o":{"x":1}}]},
+            results:[{"o":{}}]);
+    }
+
+    #[test]
+    fn test_results_comparison_any_of() {
+        setup();
+        // ==, !=, and ordering compare a synthesized list any-of, like a `NodeList`.
+        verify_json!(path:r#"$.a[?@.o.keys() == "id"]"#,
+            json:{"a":[{"o":{"id":1,"name":"x"}}, {"o":{"zzz":3}}]},
+            results:[{"o":{"id":1,"name":"x"}}]);
+        verify_json!(path:r#"$.a[?@.o.keys() != "id"]"#,
+            json:{"a":[{"o":{"id":1}}, {"o":{"zzz":3}}]},
+            results:[{"o":{"zzz":3}}]);
+        verify_json!(path:r#"$.a[?@.o.keys() > "m"]"#,
+            json:{"a":[{"o":{"id":1}}, {"o":{"zzz":3}}]},
+            results:[{"o":{"zzz":3}}]);
+    }
+
+    #[test]
+    fn test_get_keys_existence_in_filter() {
+        setup();
+        // `?(@.o.keys())` is a non-empty-object test: an empty object's keys() is an empty
+        // synthesized list and must NOT match.
+        verify_json!(path:"$.a[?@.o.keys()]",
+            json:{"a":[{"o":{}}, {"o":{"x":1}}, {"o":{"y":2,"z":3}}]},
+            results:[{"o":{"x":1}}, {"o":{"y":2,"z":3}}]);
     }
 }

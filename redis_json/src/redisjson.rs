@@ -149,12 +149,12 @@ impl<'a> Path<'a> {
             }
             i
         }
-        // The operand at byte `i` is a rooted JSONPath (`$`, `$.`, `$[`) or a parenthesized
-        // group. A bare `$<name>` stays a legacy field, so `-$x` is a legacy field while
-        // `-$.a` is the projection `-($.a)`.
+        // The operand at byte `i` is a rooted JSONPath (`$`, `$.`, `$[`, or the root get-keys
+        // `$~`) or a parenthesized group. A bare `$<name>` stays a legacy field, so `-$x` is a
+        // legacy field while `-$.a` is the projection `-($.a)`.
         fn rooted_or_paren(b: &[u8], i: usize) -> bool {
             match b.get(i) {
-                Some(b'$') => i + 1 >= b.len() || matches!(b.get(i + 1), Some(b'.' | b'[')),
+                Some(b'$') => i + 1 >= b.len() || matches!(b.get(i + 1), Some(b'.' | b'[' | b'~')),
                 Some(b'(') => true,
                 _ => false,
             }

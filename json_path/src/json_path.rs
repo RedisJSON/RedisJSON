@@ -321,6 +321,22 @@ fn value_as_number<V: SelectValue>(v: &V) -> Option<Num> {
     }
 }
 
+fn literal_value_term<'i, 'j, S: SelectValue>(v: &Value) -> TermEvaluationResult<'i, 'j, S> {
+    match v {
+        Value::Number(n) => n.as_i64().map_or_else(
+            || {
+                n.as_f64()
+                    .map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Float)
+            },
+            TermEvaluationResult::Integer,
+        ),
+        Value::String(s) => TermEvaluationResult::String(s.clone()),
+        Value::Bool(b) => TermEvaluationResult::Bool(*b),
+        Value::Null => TermEvaluationResult::Null,
+        other => TermEvaluationResult::Literal(other.clone()),
+    }
+}
+
 /// Equality between two document values with `in`/`nin` number coercion: integers and
 /// doubles compare by numeric value (`1` == `1.0`); everything else uses deep `is_equal`
 /// equality. Mirrors `equals_value`, so the set operators agree with `in`/`nin`.
@@ -350,6 +366,7 @@ fn value_in_array<'i, 'j, S: SelectValue, V: SelectValue>(
         TermEvaluationResult::NodeList(list) => {
             list.iter().any(|v| values_equal(needle, v.as_ref()))
         }
+        TermEvaluationResult::Results(vs) => vs.iter().any(|v| values_equal(needle, v)),
         _ => false,
     }
 }
@@ -470,6 +487,7 @@ fn function_length<'i, 'j, S: SelectValue>(
         TermEvaluationResult::Value(v) => value_length(v.as_ref()),
         TermEvaluationResult::Literal(l) => value_length(l),
         TermEvaluationResult::NodeList(list) if list.len() == 1 => value_length(list[0].as_ref()),
+        TermEvaluationResult::Results(vs) => Some(vs.len()),
         TermEvaluationResult::NodeList(_)
         | TermEvaluationResult::Integer(_)
         | TermEvaluationResult::Float(_)
@@ -483,11 +501,13 @@ fn function_length<'i, 'j, S: SelectValue>(
 }
 
 /// RFC 9535 `count()`: number of nodes in a nodelist. A single value counts as 1,
-/// an empty/absent query (`Invalid`) as 0.
+/// an empty/absent query (`Invalid`) as 0. A synthesized `Results` list (`keys()`/`~`/
+/// `append()`) counts its elements, so `$.obj.keys().count()` is the key count.
 fn function_count<'i, 'j, S: SelectValue>(arg: &TermEvaluationResult<'i, 'j, S>) -> i64 {
     match arg {
         TermEvaluationResult::Invalid => 0,
         TermEvaluationResult::NodeList(list) => list.len() as i64,
+        TermEvaluationResult::Results(vs) => vs.len() as i64,
         TermEvaluationResult::Integer(_)
         | TermEvaluationResult::Float(_)
         | TermEvaluationResult::Str(_)
@@ -508,6 +528,11 @@ fn function_value<'i, 'j, S: SelectValue>(
             .pop()
             .map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Value),
         v @ TermEvaluationResult::Value(_) => v,
+        // A synthesized single-element list (e.g. `keys()` of a one-key object): its lone
+        // value, mirroring the single-node nodelist case.
+        TermEvaluationResult::Results(mut vs) if vs.len() == 1 => vs
+            .pop()
+            .map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Literal),
         TermEvaluationResult::NodeList(_)
         | TermEvaluationResult::Integer(_)
         | TermEvaluationResult::Float(_)
@@ -516,6 +541,7 @@ fn function_value<'i, 'j, S: SelectValue>(
         | TermEvaluationResult::Literal(_)
         | TermEvaluationResult::Bool(_)
         | TermEvaluationResult::Null
+        | TermEvaluationResult::Results(_)
         | TermEvaluationResult::Invalid => TermEvaluationResult::Invalid,
     }
 }
@@ -534,6 +560,7 @@ fn term_as_str<'a, 'i, 'j, S: SelectValue>(
         | TermEvaluationResult::Bool(_)
         | TermEvaluationResult::Null
         | TermEvaluationResult::NodeList(_)
+        | TermEvaluationResult::Results(_)
         | TermEvaluationResult::Invalid => None,
     }
 }
@@ -641,6 +668,11 @@ fn term_number_seq<'i, 'j, S: SelectValue>(
                 out.push(value_as_number(v.as_ref())?.as_f64());
             }
         }
+        TermEvaluationResult::Results(vs) => {
+            for v in vs {
+                out.push(value_as_number(v)?.as_f64());
+            }
+        }
         _ => return None,
     }
     (!out.is_empty()).then_some(out)
@@ -719,9 +751,121 @@ fn function_index<'i, 'j, S: SelectValue>(
             Some(i) => TermEvaluationResult::Value(list.swap_remove(i)),
             None => TermEvaluationResult::Invalid,
         },
+        Some(TermEvaluationResult::Results(mut vs)) => match resolve(idx, vs.len()) {
+            Some(i) => TermEvaluationResult::Literal(vs.swap_remove(i)),
+            None => TermEvaluationResult::Invalid,
+        },
         _ => TermEvaluationResult::Invalid,
     }
 }
+
+/// `obj.keys()` / `obj~`: the object's member names as a flat list of synthesized string
+/// results (`Results`). A multi-match receiver yields the keys of each matched object,
+/// flattened (mirroring how `append()` expands a multi-node receiver). A non-object receiver
+/// is Nothing.
+fn function_keys<'i, 'j, S: SelectValue>(
+    arg: Option<&TermEvaluationResult<'i, 'j, S>>,
+) -> TermEvaluationResult<'i, 'j, S> {
+    // Append an object's member names to `out`; a non-object contributes nothing.
+    fn collect_keys<V: SelectValue>(v: &V, out: &mut Vec<Value>) {
+        if v.get_type() == SelectValueType::Object {
+            if let Some(it) = v.keys() {
+                out.extend(it.map(|k| Value::String(k.to_owned())));
+            }
+        }
+    }
+    match arg {
+        Some(TermEvaluationResult::Value(v))
+            if v.as_ref().get_type() == SelectValueType::Object =>
+        {
+            let mut out = Vec::new();
+            collect_keys(v.as_ref(), &mut out);
+            TermEvaluationResult::Results(out)
+        }
+        Some(TermEvaluationResult::Literal(Value::Object(map))) => {
+            TermEvaluationResult::Results(map.keys().map(|k| Value::String(k.clone())).collect())
+        }
+        Some(TermEvaluationResult::NodeList(list)) => {
+            let mut out = Vec::new();
+            for node in list {
+                collect_keys(node.as_ref(), &mut out);
+            }
+            TermEvaluationResult::Results(out)
+        }
+        _ => TermEvaluationResult::Invalid,
+    }
+}
+
+/// `path.append(x)`: enrich the reply by appending `x` as a single element after the
+/// receiver's sequence, WITHOUT modifying the document. The receiver is taken as a sequence —
+/// a matched array's elements (so `$.arr.append(x)` -> `[...arr, x]`), or the matched node
+/// list for a multi-result receiver (so `$.a[?...].append(x)` -> `[...matched, x]`). A single
+/// non-array node is appended alongside (`[node, x]`); an absent/Nothing receiver yields just
+/// `[x]`. `x` itself is appended as ONE element: a multi-value `x` (a multi-node path or a
+/// synthesized list) is wrapped in an array, and a Nothing `x` makes the whole result Nothing.
+fn function_append<'i, 'j, S: SelectValue>(
+    receiver: Option<TermEvaluationResult<'i, 'j, S>>,
+    x: Option<TermEvaluationResult<'i, 'j, S>>,
+) -> TermEvaluationResult<'i, 'j, S> {
+    // The value to append, as one `serde_json::Value`. A Nothing argument (e.g. a
+    // non-matching `append($.missing)`) propagates -> the whole append is Nothing.
+    let to_append = match x {
+        None | Some(TermEvaluationResult::Invalid) => return TermEvaluationResult::Invalid,
+        // Wrap a multi-value argument so it is appended as a single collection (consistent
+        // for both a multi-node path and a synthesized `keys()`/`append()` list).
+        Some(TermEvaluationResult::NodeList(list)) => Value::Array(
+            list.iter()
+                .map(|v| serde_json::to_value(v).unwrap_or(Value::Null))
+                .collect(),
+        ),
+        Some(TermEvaluationResult::Results(vs)) => Value::Array(vs),
+        Some(other) => match term_to_outputs(other).into_iter().next() {
+            Some(v) => v,
+            // e.g. a non-finite float argument -> Nothing.
+            None => return TermEvaluationResult::Invalid,
+        },
+    };
+    let mut out = match receiver {
+        // Multiple matched nodes (e.g. a filter result): each node is one element.
+        Some(TermEvaluationResult::NodeList(list)) => list
+            .iter()
+            .map(|v| serde_json::to_value(v).unwrap_or(Value::Null))
+            .collect(),
+        // A single matched array is appended INTO — its elements are the sequence.
+        Some(TermEvaluationResult::Value(v)) if v.as_ref().get_type() == SelectValueType::Array => {
+            v.as_ref().values().map_or_else(Vec::new, |it| {
+                it.map(|e| serde_json::to_value(&e).unwrap_or(Value::Null))
+                    .collect()
+            })
+        }
+        Some(TermEvaluationResult::Literal(Value::Array(items))) => items,
+        Some(TermEvaluationResult::Results(vs)) => vs,
+        Some(TermEvaluationResult::Invalid) | None => Vec::new(),
+        // A single non-array node / scalar: appended alongside as one element.
+        Some(other) => term_to_outputs(other),
+    };
+    out.push(to_append);
+    TermEvaluationResult::Results(out)
+}
+const FN_LENGTH: &str = "length";
+const FN_COUNT: &str = "count";
+const FN_VALUE: &str = "value";
+const FN_CEILING: &str = "ceiling";
+const FN_FLOOR: &str = "floor";
+const FN_ABS: &str = "abs";
+const FN_CONCAT: &str = "concat";
+const FN_SUM: &str = "sum";
+const FN_MIN: &str = "min";
+const FN_MAX: &str = "max";
+const FN_AVG: &str = "avg";
+const FN_STDDEV: &str = "stddev";
+const FN_KEYS: &str = "keys";
+const FN_APPEND: &str = "append";
+const FN_FIRST: &str = "first";
+const FN_LAST: &str = "last";
+const FN_INDEX: &str = "index";
+const FN_MATCH: &str = "match";
+const FN_SEARCH: &str = "search";
 
 fn eval_function<'i, 'j, S: SelectValue>(
     name: &str,
@@ -732,35 +876,41 @@ fn eval_function<'i, 'j, S: SelectValue>(
     // malformed query like `ceiling(@, 9)` or `concat()` doesn't silently operate on a
     // subset of its arguments instead of failing.
     let arity_ok = match name {
-        "concat" => !args.is_empty(),
-        "index" => args.len() == 2,
-        "length" | "count" | "ceiling" | "floor" | "abs" | "sum" | "min" | "max" | "avg"
-        | "stddev" | "first" | "last" => args.len() == 1,
+        FN_CONCAT => !args.is_empty(),
+        // `index`/`append` take the receiver plus one explicit argument.
+        FN_INDEX | FN_APPEND => args.len() == 2,
+        FN_LENGTH | FN_COUNT | FN_CEILING | FN_FLOOR | FN_ABS | FN_SUM | FN_MIN | FN_MAX
+        | FN_AVG | FN_STDDEV | FN_FIRST | FN_LAST | FN_KEYS => args.len() == 1,
         _ => true,
     };
     if !arity_ok {
         return TermEvaluationResult::Invalid;
     }
     match name {
-        "length" => args
+        FN_LENGTH => args
             .first()
             .map_or(TermEvaluationResult::Invalid, function_length),
-        "count" => args.first().map_or(TermEvaluationResult::Invalid, |a| {
+        FN_COUNT => args.first().map_or(TermEvaluationResult::Invalid, |a| {
             TermEvaluationResult::Integer(function_count(a))
         }),
-        "value" if args.len() == 1 => function_value(args.pop().unwrap()),
-        "ceiling" => function_round(args.first(), f64::ceil),
-        "floor" => function_round(args.first(), f64::floor),
-        "abs" => function_abs(args.first()),
-        "concat" => function_concat(&args),
-        "sum" => function_aggregate(args.first(), agg_sum),
-        "min" => function_aggregate(args.first(), agg_min),
-        "max" => function_aggregate(args.first(), agg_max),
-        "avg" => function_aggregate(args.first(), agg_avg),
-        "stddev" => function_aggregate(args.first(), agg_stddev),
-        "first" => function_index(args.into_iter().next(), 0),
-        "last" => function_index(args.into_iter().next(), -1),
-        "index" => {
+        FN_VALUE if args.len() == 1 => function_value(args.pop().unwrap()),
+        FN_CEILING => function_round(args.first(), f64::ceil),
+        FN_FLOOR => function_round(args.first(), f64::floor),
+        FN_ABS => function_abs(args.first()),
+        FN_CONCAT => function_concat(&args),
+        FN_SUM => function_aggregate(args.first(), agg_sum),
+        FN_MIN => function_aggregate(args.first(), agg_min),
+        FN_MAX => function_aggregate(args.first(), agg_max),
+        FN_AVG => function_aggregate(args.first(), agg_avg),
+        FN_STDDEV => function_aggregate(args.first(), agg_stddev),
+        FN_KEYS => function_keys(args.first()),
+        FN_APPEND => {
+            let mut it = args.into_iter();
+            function_append(it.next(), it.next())
+        }
+        FN_FIRST => function_index(args.into_iter().next(), 0),
+        FN_LAST => function_index(args.into_iter().next(), -1),
+        FN_INDEX => {
             // index(array, n) — a fractional n is truncated toward zero; a non-numeric n
             // is Nothing.
             let mut it = args.into_iter();
@@ -772,8 +922,8 @@ fn eval_function<'i, 'j, S: SelectValue>(
             });
             idx.map_or(TermEvaluationResult::Invalid, |n| function_index(array, n))
         }
-        "match" | "search" => {
-            let full = name == "match";
+        FN_MATCH | FN_SEARCH => {
+            let full = name == FN_MATCH;
             let s = args.first().and_then(term_as_str);
             let re = args.get(1).and_then(term_as_str);
             match (s, re) {
@@ -790,31 +940,41 @@ fn eval_function<'i, 'j, S: SelectValue>(
     }
 }
 
-/// Convert a projection's evaluated `TermEvaluationResult` into the single output value as an
-/// impl-independent `serde_json::Value` (or `None` for Nothing, which becomes an empty result —
-/// like a non-matching path).
-#[allow(dead_code)]
-fn term_to_output<'i, 'j, S: SelectValue>(term: TermEvaluationResult<'i, 'j, S>) -> Option<Value> {
+/// Convert a projection's evaluated `TermEvaluationResult` into the flat list of output
+/// values (impl-independent `serde_json::Value`s) for the reply. A single computed value
+/// yields a 1-element list (serialized as `[v]`); `Results` (from `keys()`/`~`/`append()`)
+/// yields its values flat; Nothing yields the empty list.
+fn term_to_outputs<'i, 'j, S: SelectValue>(term: TermEvaluationResult<'i, 'j, S>) -> Vec<Value> {
     match term {
-        TermEvaluationResult::Integer(n) => Some(Value::from(n)),
-        TermEvaluationResult::Float(f) => serde_json::Number::from_f64(f).map(Value::Number),
-        TermEvaluationResult::Str(s) => Some(Value::from(s)),
-        TermEvaluationResult::String(s) => Some(Value::from(s)),
-        TermEvaluationResult::Bool(b) => Some(Value::from(b)),
-        TermEvaluationResult::Null => Some(Value::Null),
-        TermEvaluationResult::Literal(v) => Some(v),
+        TermEvaluationResult::Integer(n) => vec![Value::from(n)],
+        // A non-finite float (overflow / div-by-zero result) is Nothing -> empty.
+        TermEvaluationResult::Float(f) => serde_json::Number::from_f64(f)
+            .map(Value::Number)
+            .into_iter()
+            .collect(),
+        TermEvaluationResult::Str(s) => vec![Value::from(s)],
+        TermEvaluationResult::String(s) => vec![Value::from(s)],
+        TermEvaluationResult::Bool(b) => vec![Value::from(b)],
+        TermEvaluationResult::Null => vec![Value::Null],
+        TermEvaluationResult::Literal(v) => vec![v],
         // A real document node (e.g. `$.a.first()`, `value($.a)`): serialize it to a Value.
         TermEvaluationResult::Value(vref) => {
-            Some(serde_json::to_value(&vref).unwrap_or(Value::Null))
+            vec![serde_json::to_value(&vref).unwrap_or(Value::Null)]
         }
-        // Multiple nodes (e.g. `($..x)`): render as a JSON array.
-        TermEvaluationResult::NodeList(list) => Some(Value::Array(
+        // INTENTIONAL asymmetry with `Results` below: a `NodeList` is ONE computed value that
+        // happens to be a multi-node match, so it renders as a single JSON array (one output
+        // element). A `Results` IS the output sequence, so it spreads. (A parenthesized path is
+        // classified as a path, so a `NodeList` is rarely reached here for a projection.)
+        TermEvaluationResult::NodeList(list) => vec![Value::Array(
             list.iter()
                 .map(|v| serde_json::to_value(v).unwrap_or(Value::Null))
                 .collect(),
-        )),
+        )],
+        // Synthesized multi-value output (`keys()`/`~`/`append()`) is THE result list: spread
+        // flat (not wrapped) — see the `NodeList` note above.
+        TermEvaluationResult::Results(vs) => vs,
         // Nothing -> empty result.
-        TermEvaluationResult::Invalid => None,
+        TermEvaluationResult::Invalid => vec![],
     }
 }
 
@@ -1110,6 +1270,9 @@ enum TermEvaluationResult<'i, 'j, S: SelectValue> {
     /// Multiple results from a non-singular query (e.g. `@.*`, `@..key`).
     /// Per RFC 9535, comparisons succeed if ANY element satisfies the condition.
     NodeList(Vec<ValueRef<'j, S>>),
+    /// A flat list of synthesized, impl-independent output values produced by the
+    /// projection-only `keys()`/`~` and `append()` operators.
+    Results(Vec<Value>),
     Invalid,
 }
 
@@ -1208,6 +1371,12 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             (_, TermEvaluationResult::NodeList(list)) => list
                 .iter()
                 .any(|v| self.ord_cmp_matches(&TermEvaluationResult::Value(v.clone()), pred)),
+            (TermEvaluationResult::Results(vs), _) => vs
+                .iter()
+                .any(|v| literal_value_term(v).ord_cmp_matches(s, pred)),
+            (_, TermEvaluationResult::Results(vs)) => vs
+                .iter()
+                .any(|v| self.ord_cmp_matches(&literal_value_term(v), pred)),
             _ => match self.cmp(s) {
                 CmpResult::Ord(o) => pred(o),
                 CmpResult::NotComparable => false,
@@ -1239,6 +1408,13 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             (_, TermEvaluationResult::NodeList(list)) => list
                 .iter()
                 .any(|v| self.eq(&TermEvaluationResult::Value(v.clone()))),
+            // A synthesized list (`keys()`/`~`/`append()`) compares any-of, like `NodeList`.
+            (TermEvaluationResult::Results(vs), _) => {
+                vs.iter().any(|v| literal_value_term(v).eq(s))
+            }
+            (_, TermEvaluationResult::Results(vs)) => {
+                vs.iter().any(|v| self.eq(&literal_value_term(v)))
+            }
             (TermEvaluationResult::Value(v1), TermEvaluationResult::Value(v2)) => v1 == v2,
             // Structured literal operands deep-compare against the document value
             // (any `SelectValue`) via the cross-type `is_equal`. Like the existing
@@ -1277,6 +1453,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             | TermEvaluationResult::Bool(_)
             | TermEvaluationResult::Null
             | TermEvaluationResult::NodeList(_)
+            | TermEvaluationResult::Results(_)
             | TermEvaluationResult::Invalid => None,
         }
     }
@@ -1301,7 +1478,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             TermEvaluationResult::Null => other.get_type() == SelectValueType::Null,
             // self is numeric but `other` is not a number -> not equal
             TermEvaluationResult::Integer(_) | TermEvaluationResult::Float(_) => false,
-            TermEvaluationResult::Invalid => false,
+            TermEvaluationResult::Results(_) | TermEvaluationResult::Invalid => false,
         }
     }
 
@@ -1319,6 +1496,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             TermEvaluationResult::NodeList(list) => {
                 list.iter().any(|v| self.equals_value(v.as_ref()))
             }
+            TermEvaluationResult::Results(vs) => vs.iter().any(|v| self.equals_value(v)),
             TermEvaluationResult::Value(_)
             | TermEvaluationResult::Literal(_)
             | TermEvaluationResult::Integer(_)
@@ -1366,6 +1544,11 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             TermEvaluationResult::NodeList(list) => list
                 .iter()
                 .any(|v| TermEvaluationResult::Value(v.clone()).set_relate(rhs, require_all)),
+            // A synthesized list (`keys()`/`~`/`append()`) is the left array directly — its
+            // values are the elements (e.g. `$.obj.keys() anyof ["id","name"]`).
+            TermEvaluationResult::Results(vs) => {
+                combine(require_all, vs.iter().map(|v| value_in_array(v, rhs)))
+            }
             _ => false,
         }
     }
@@ -1397,6 +1580,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             TermEvaluationResult::String(s) => Some(s.chars().count()),
             TermEvaluationResult::Value(v) => arr_or_str_len(v.as_ref()),
             TermEvaluationResult::Literal(l) => arr_or_str_len(l),
+            TermEvaluationResult::Results(vs) => Some(vs.len()),
             _ => None,
         }
     }
@@ -1971,6 +2155,11 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         };
         let mut acc = self.evaluate_single_term(recv, json.clone(), calc_data);
         for method in it {
+            // The terminal `~` operator is the alias for `keys()`.
+            if method.as_rule() == Rule::get_keys_op {
+                acc = eval_function(FN_KEYS, vec![acc], &mut calc_data.regex_cache);
+                continue;
+            }
             let mut mi = method.into_inner();
             let name = mi.next().map_or("", |p| p.as_str());
             // The receiver is the implicit first argument; explicit args follow.
@@ -2035,8 +2224,11 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         } else {
             // A bare term is a test: a boolean result (e.g. `match(...)`) uses its
             // value; any other present value is truthy (existence), `Invalid` is false.
+            // A synthesized list (`keys()`/`~`/`append()`) exists iff it is non-empty, so
+            // `?(@.obj.keys())` means "obj has at least one key".
             match term1_val {
                 TermEvaluationResult::Bool(b) => b,
+                TermEvaluationResult::Results(vs) => !vs.is_empty(),
                 other => !matches!(other, TermEvaluationResult::Invalid),
             }
         }
@@ -2259,14 +2451,14 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         &self,
         json: ValueRef<'j, S>,
         expr: Pair<'i, Rule>,
-    ) -> Option<Value> {
+    ) -> Vec<Value> {
         let mut calc_data = PathCalculatorData {
             results: Vec::new(),
             root: json.clone(),
             regex_cache: HashMap::new(),
         };
         let term = self.evaluate_arith_expr(expr, json, &mut calc_data);
-        term_to_output(term)
+        term_to_outputs(term)
     }
 
     pub fn calc_with_paths_on_root<'j: 'i, S: SelectValue>(

@@ -358,6 +358,20 @@ class testResp3():
         # a malformed projection errors (RESP3 no longer swallows it to an empty array)
         r.expect('JSON.GET', 'doc', 'FORMAT', 'EXPAND', '$.x +').raiseError()
 
+    def test_resp3_get_keys_append(self):
+        # get-keys (`~`/keys()) and append() under the live RESP3 FORMAT EXPAND route.
+        r = self.env
+        r.skipOnVersionSmaller('7.0')
+        r.assertOk(r.execute_command('JSON.SET', 'd', '$',
+                                     '{"obj":{"x":1,"y":2},"books":[{"t":"a","price":30},{"t":"b","price":5}]}'))
+        # keys emit member names as a flat structured list
+        r.assertEqual(r.execute_command('JSON.GET', 'd', 'FORMAT', 'EXPAND', '$.obj~'), [['x', 'y']])
+        r.assertEqual(r.execute_command('JSON.GET', 'd', 'FORMAT', 'EXPAND', '$.obj.keys()'), [['x', 'y']])
+        # append enriches the reply with the extra element
+        r.assertEqual(
+            r.execute_command('JSON.GET', 'd', 'FORMAT', 'EXPAND', '$.books[?(@.price >= 10)].append({"t":"X"})'),
+            [[{'t': 'a', 'price': 30}, {'t': 'X'}]])
+
 
 def test_fail_with_resp2():
     r = Env(protocol=2)

@@ -1932,6 +1932,59 @@ def testProjectionEdgeCases(env):
     r.assertEqual(json.loads(r.execute_command('JSON.GET', 'doc', '$.a + 1', '$.nope.length()')),
                   {"$.a + 1": [3], "$.nope.length()": []})
 
+def testGetKeysAndAppend(env):
+    # `~` / keys() emit object member names; append(X) enriches the reply with X. Both are
+    # read-only projections (no document mutation).
+    r = env
+    doc = {"obj": {"x": 1, "y": 2}, "books": [{"t": "a", "price": 30}, {"t": "b", "price": 5}]}
+    r.expect('JSON.SET', 'd', '$', json.dumps(doc)).ok()
+    # get-keys: `~`, its keys() alias, and the root `$~`
+    r.expect('JSON.GET', 'd', '$.obj~').equal('["x","y"]')
+    r.expect('JSON.GET', 'd', '$.obj.keys()').equal('["x","y"]')
+    r.expect('JSON.GET', 'd', '$~').equal('["obj","books"]')
+    # a non-object selects no keys
+    r.expect('JSON.GET', 'd', '$.books~').equal('[]')
+    # a single matched array is appended INTO: `$.arr.append(x)` -> [...arr, x]
+    r.expect('JSON.SET', 'arrdoc', '$', json.dumps({"arr": [1, 2, 3]})).ok()
+    r.expect('JSON.GET', 'arrdoc', '$.arr.append(9)').equal('[1,2,3,9]')
+    r.expect('JSON.GET', 'arrdoc', '$.arr[*].append(9)').equal('[1,2,3,9]')
+    # append(X) adds X as one extra element after the matched nodes
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'd', '$.books[?(@.price >= 10)].append({"t":"X"})')),
+                  [{"t": "a", "price": 30}, {"t": "X"}])
+    # no matched nodes -> just [X]
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'd', '$.books[?(@.price > 999)].append({"t":"X"})')),
+                  [{"t": "X"}])
+    # the document is NOT modified by append/keys
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'd', '$')), [doc])
+    # JSON.MGET and JSON.RESP also evaluate the projection
+    r.assertEqual(r.execute_command('JSON.MGET', 'd', '$.obj~'), ['["x","y"]'])
+    r.assertEqual(r.execute_command('JSON.RESP', 'd', '$.obj~'), ['x', 'y'])
+    # mutating / node commands reject these projections (read-only)
+    r.expect('JSON.SET', 'd', '$.obj~', '5').raiseError()
+    r.expect('JSON.DEL', 'd', '$.books[?(@.price>10)].append({})').raiseError()
+    r.expect('JSON.TYPE', 'd', '$.obj.keys()').raiseError()
+    # `~` reserved: a field literally named with `~` is reachable via bracket notation,
+    # and the old dot form is now a parse error (documented breaking change).
+    r.expect('JSON.SET', 'd2', '$', json.dumps({"a~b": 5})).ok()
+    r.expect('JSON.GET', 'd2', '$["a~b"]').equal('[5]')
+    r.expect('JSON.GET', 'd2', '$.a~b').raiseError()
+    # `~` is terminal and attaches only to a bare term: `$.obj.keys()~` is a parse error
+    r.expect('JSON.GET', 'd', '$.obj.keys()~').raiseError()
+    # list functions compose on a synthesized list: count/length agree, index/aggregate work
+    r.expect('JSON.GET', 'd', '$.obj.keys().count()').equal('[2]')
+    r.expect('JSON.GET', 'd', '$.obj.keys().length()').equal('[2]')
+    r.expect('JSON.GET', 'd', '$.obj.keys().first()').equal('["x"]')
+    r.expect('JSON.GET', 'd', '$.obj.keys().index(1)').equal('["y"]')
+    # a multi-match receiver yields each matched object's keys, flattened (`~` too)
+    r.expect('JSON.SET', 'm', '$', json.dumps({"a": [{"x": 1, "y": 2}, {"z": 3}]})).ok()
+    r.expect('JSON.GET', 'm', '$.a[*].keys()').equal('["x","y","z"]')
+    r.expect('JSON.GET', 'm', '$.a[*]~').equal('["x","y","z"]')
+    # a Nothing append argument propagates -> the whole result is Nothing
+    r.expect('JSON.SET', 'd3', '$', json.dumps({"arr": [1, 2, 3], "other": [4, 5]})).ok()
+    r.expect('JSON.GET', 'd3', '$.arr.append($.missing)').equal('[]')
+    # a multi-value append argument is wrapped as one element (not spread)
+    r.expect('JSON.GET', 'd3', '$.arr.append($.other)').equal('[1,2,3,[4,5]]')
+
 def testMerge(env):
     # Test JSON.MERGE
     r = env
