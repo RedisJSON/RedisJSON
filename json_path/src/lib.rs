@@ -1744,6 +1744,28 @@ mod json_path_tests {
         verify_json!(path:r#"$.a[?@.o.keys() subsetof ["x","y","z"]]"#,
             json:{"a":[{"o":{"x":1,"y":2}}, {"o":{"z":3}}]},
             results:[{"o":{"x":1,"y":2}}, {"o":{"z":3}}]);
+        // ... and `sizeof`/`empty` (the key count).
+        verify_json!(path:"$.a[?@.o.keys() sizeof 2]",
+            json:{"a":[{"o":{"x":1,"y":2}}, {"o":{"z":3}}]},
+            results:[{"o":{"x":1,"y":2}}]);
+        verify_json!(path:"$.a[?@.o.keys() empty true]",
+            json:{"a":[{"o":{}}, {"o":{"x":1}}]},
+            results:[{"o":{}}]);
+    }
+
+    #[test]
+    fn test_results_comparison_any_of() {
+        setup();
+        // ==, !=, and ordering compare a synthesized list any-of, like a `NodeList`.
+        verify_json!(path:r#"$.a[?@.o.keys() == "id"]"#,
+            json:{"a":[{"o":{"id":1,"name":"x"}}, {"o":{"zzz":3}}]},
+            results:[{"o":{"id":1,"name":"x"}}]);
+        verify_json!(path:r#"$.a[?@.o.keys() != "id"]"#,
+            json:{"a":[{"o":{"id":1}}, {"o":{"zzz":3}}]},
+            results:[{"o":{"zzz":3}}]);
+        verify_json!(path:r#"$.a[?@.o.keys() > "m"]"#,
+            json:{"a":[{"o":{"id":1}}, {"o":{"zzz":3}}]},
+            results:[{"o":{"zzz":3}}]);
     }
 
     #[test]

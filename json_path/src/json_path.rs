@@ -321,6 +321,22 @@ fn value_as_number<V: SelectValue>(v: &V) -> Option<Num> {
     }
 }
 
+fn literal_value_term<'i, 'j, S: SelectValue>(v: &Value) -> TermEvaluationResult<'i, 'j, S> {
+    match v {
+        Value::Number(n) => n.as_i64().map_or_else(
+            || {
+                n.as_f64()
+                    .map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Float)
+            },
+            TermEvaluationResult::Integer,
+        ),
+        Value::String(s) => TermEvaluationResult::String(s.clone()),
+        Value::Bool(b) => TermEvaluationResult::Bool(*b),
+        Value::Null => TermEvaluationResult::Null,
+        other => TermEvaluationResult::Literal(other.clone()),
+    }
+}
+
 /// Equality between two document values with `in`/`nin` number coercion: integers and
 /// doubles compare by numeric value (`1` == `1.0`); everything else uses deep `is_equal`
 /// equality. Mirrors `equals_value`, so the set operators agree with `in`/`nin`.
@@ -1355,6 +1371,12 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             (_, TermEvaluationResult::NodeList(list)) => list
                 .iter()
                 .any(|v| self.ord_cmp_matches(&TermEvaluationResult::Value(v.clone()), pred)),
+            (TermEvaluationResult::Results(vs), _) => vs
+                .iter()
+                .any(|v| literal_value_term(v).ord_cmp_matches(s, pred)),
+            (_, TermEvaluationResult::Results(vs)) => vs
+                .iter()
+                .any(|v| self.ord_cmp_matches(&literal_value_term(v), pred)),
             _ => match self.cmp(s) {
                 CmpResult::Ord(o) => pred(o),
                 CmpResult::NotComparable => false,
@@ -1386,6 +1408,13 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             (_, TermEvaluationResult::NodeList(list)) => list
                 .iter()
                 .any(|v| self.eq(&TermEvaluationResult::Value(v.clone()))),
+            // A synthesized list (`keys()`/`~`/`append()`) compares any-of, like `NodeList`.
+            (TermEvaluationResult::Results(vs), _) => {
+                vs.iter().any(|v| literal_value_term(v).eq(s))
+            }
+            (_, TermEvaluationResult::Results(vs)) => {
+                vs.iter().any(|v| self.eq(&literal_value_term(v)))
+            }
             (TermEvaluationResult::Value(v1), TermEvaluationResult::Value(v2)) => v1 == v2,
             // Structured literal operands deep-compare against the document value
             // (any `SelectValue`) via the cross-type `is_equal`. Like the existing
@@ -1551,6 +1580,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             TermEvaluationResult::String(s) => Some(s.chars().count()),
             TermEvaluationResult::Value(v) => arr_or_str_len(v.as_ref()),
             TermEvaluationResult::Literal(l) => arr_or_str_len(l),
+            TermEvaluationResult::Results(vs) => Some(vs.len()),
             _ => None,
         }
     }
