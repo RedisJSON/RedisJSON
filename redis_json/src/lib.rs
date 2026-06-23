@@ -455,12 +455,13 @@ pub fn setup_panic_handler() {
 }
 
 /// Read Redis' `hide-user-data-from-log` server config via `CONFIG GET`.
-/// Returns `false` (the server's own default) when the config cannot be read
-/// or parsed.
+/// Fails closed: returns `true` (hide) unless the server explicitly disables
+/// redaction with `hide-user-data-from-log no`. So a read error or an older
+/// Redis that lacks the config keeps user data hidden rather than leaking it.
 #[cfg(not(feature = "as-library"))]
 fn read_hide_user_data_from_log(ctx: &Context) -> bool {
     let Ok(reply) = ctx.call("CONFIG", &["GET", "hide-user-data-from-log"]) else {
-        return false;
+        return true;
     };
     // RESP2 replies with a flat `[name, value]` array, RESP3 with a `{name: value}` map.
     let value = match reply {
@@ -468,9 +469,10 @@ fn read_hide_user_data_from_log(ctx: &Context) -> bool {
         RedisValue::Map(map) => map.into_values().next(),
         _ => None,
     };
-    matches!(
+    // Show user data only when the server explicitly opts out of redaction.
+    !matches!(
         value,
-        Some(RedisValue::SimpleString(s) | RedisValue::BulkString(s)) if s == "yes"
+        Some(RedisValue::SimpleString(s) | RedisValue::BulkString(s)) if s == "no"
     )
 }
 

@@ -1799,8 +1799,8 @@ mod json_path_tests {
         assert!(hide_user_data_from_log());
         let hidden = perform_search("$.foo[?@ > 2]", &j);
 
-        // Restore the default so other tests observe the verbose behaviour.
-        set_hide_user_data_from_log(false);
+        // Restore the hidden-by-default state for any later tests.
+        set_hide_user_data_from_log(true);
 
         assert_eq!(shown, hidden);
         assert_eq!(shown, vec![json!(3), json!(4)]);
