@@ -651,6 +651,11 @@ fn term_number_seq<'i, 'j, S: SelectValue>(
                 out.push(value_as_number(v.as_ref())?.as_f64());
             }
         }
+        TermEvaluationResult::Results(vs) => {
+            for v in vs {
+                out.push(value_as_number(v)?.as_f64());
+            }
+        }
         _ => return None,
     }
     (!out.is_empty()).then_some(out)
@@ -727,6 +732,10 @@ fn function_index<'i, 'j, S: SelectValue>(
         }
         Some(TermEvaluationResult::NodeList(mut list)) => match resolve(idx, list.len()) {
             Some(i) => TermEvaluationResult::Value(list.swap_remove(i)),
+            None => TermEvaluationResult::Invalid,
+        },
+        Some(TermEvaluationResult::Results(mut vs)) => match resolve(idx, vs.len()) {
+            Some(i) => TermEvaluationResult::Literal(vs.swap_remove(i)),
             None => TermEvaluationResult::Invalid,
         },
         _ => TermEvaluationResult::Invalid,

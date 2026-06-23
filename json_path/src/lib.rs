@@ -1683,6 +1683,43 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_index_and_aggregate_on_results() {
+        setup();
+        let doc = json!({"obj": {"x": 1, "y": 2, "z": 3}, "arr": [1, 2, 3]});
+        // first()/last()/index() index into a synthesized list
+        assert_eq!(
+            perform_projection_multi("$.obj.keys().first()", &doc),
+            vec![json!("x")]
+        );
+        assert_eq!(
+            perform_projection_multi("$.obj.keys().last()", &doc),
+            vec![json!("z")]
+        );
+        assert_eq!(
+            perform_projection_multi("$.obj.keys().index(1)", &doc),
+            vec![json!("y")]
+        );
+        // out-of-range / empty -> Nothing
+        assert_eq!(
+            perform_projection_multi("$.o.keys().first()", &json!({"o": {}})),
+            Vec::<Value>::new()
+        );
+        // aggregations fold a numeric synthesized list; an all-string list is non-numeric
+        assert_eq!(
+            perform_projection_multi("$.arr.append(9).sum()", &doc),
+            vec![json!(15.0)]
+        );
+        assert_eq!(
+            perform_projection_multi("$.arr.append(9).max()", &doc),
+            vec![json!(9.0)]
+        );
+        assert_eq!(
+            perform_projection_multi("$.obj.keys().sum()", &doc),
+            Vec::<Value>::new()
+        );
+    }
+
+    #[test]
     fn test_get_keys_existence_in_filter() {
         setup();
         // `?(@.o.keys())` is a non-empty-object test: an empty object's keys() is an empty

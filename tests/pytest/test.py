@@ -1970,9 +1970,11 @@ def testGetKeysAndAppend(env):
     r.expect('JSON.GET', 'd2', '$.a~b').raiseError()
     # `~` is terminal and attaches only to a bare term: `$.obj.keys()~` is a parse error
     r.expect('JSON.GET', 'd', '$.obj.keys()~').raiseError()
-    # count() and length() of a synthesized list agree on the element count
+    # list functions compose on a synthesized list: count/length agree, index/aggregate work
     r.expect('JSON.GET', 'd', '$.obj.keys().count()').equal('[2]')
     r.expect('JSON.GET', 'd', '$.obj.keys().length()').equal('[2]')
+    r.expect('JSON.GET', 'd', '$.obj.keys().first()').equal('["x"]')
+    r.expect('JSON.GET', 'd', '$.obj.keys().index(1)').equal('["y"]')
     # a Nothing append argument propagates -> the whole result is Nothing
     r.expect('JSON.SET', 'd3', '$', json.dumps({"arr": [1, 2, 3], "other": [4, 5]})).ok()
     r.expect('JSON.GET', 'd3', '$.arr.append($.missing)').equal('[]')
