@@ -20,6 +20,46 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
+
+/// Cached mirror of Redis' `hide-user-data-from-log` server config.
+///
+/// Defaults to `false`, which is Redis core's own default for the config. The
+/// RedisJSON module keeps it in sync — once at load time and again on every
+/// `CONFIG SET` (see `sync_hide_user_data_from_log` in the `redis_json`
+/// crate). When this crate is used outside the module (the standalone
+/// `jsonpath` binary or the unit tests) there is no server to read from, so
+/// the default preserves the previous, fully verbose tracing behaviour.
+static HIDE_USER_DATA_FROM_LOG: AtomicBool = AtomicBool::new(false);
+
+/// Update the cached value of Redis' `hide-user-data-from-log` server config.
+// Unused by the standalone `jsonpath` binary, which has no server to read from.
+#[allow(dead_code)]
+pub fn set_hide_user_data_from_log(hide: bool) {
+    HIDE_USER_DATA_FROM_LOG.store(hide, AtomicOrdering::Relaxed);
+}
+
+/// Whether user data must be kept out of the logs, mirroring Redis core's
+/// `hide-user-data-from-log` server config. Used to gate trace logs whose
+/// arguments would otherwise expose document values, query literals or paths.
+#[must_use]
+pub fn hide_user_data_from_log() -> bool {
+    HIDE_USER_DATA_FROM_LOG.load(AtomicOrdering::Relaxed)
+}
+
+/// `trace!` for log messages whose formatted arguments may contain user data —
+/// document values, query literals or JSON paths. Mirrors Redis core's
+/// `hide-user-data-from-log`: the message is emitted only while that server
+/// config is disabled (see [`hide_user_data_from_log`]), so enabling it
+/// keeps user data out of the logs. Structural traces (grammar rule names,
+/// "missing operand" diagnostics, …) stay on plain `trace!` and are unaffected.
+macro_rules! trace_user_data {
+    ($($arg:tt)*) => {
+        if !crate::json_path::hide_user_data_from_log() {
+            ::log::trace!($($arg)*);
+        }
+    };
+}
 
 // Macro to handle items() iterator for both Borrowed and Owned ValueRef cases
 macro_rules! value_ref_items {
@@ -934,7 +974,7 @@ fn eval_function<'i, 'j, S: SelectValue>(
             }
         }
         other => {
-            trace!("eval_function: unknown function {other:?}");
+            trace_user_data!("eval_function: unknown function {other:?}");
             TermEvaluationResult::Invalid
         }
     }
@@ -2183,18 +2223,18 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             trace!("evaluate_single_filter: missing first term");
             return false;
         };
-        trace!("evaluate_single_filter term1 {:?}", &term1);
+        trace_user_data!("evaluate_single_filter term1 {:?}", &term1);
         let term1_val = self.evaluate_arith_expr(term1, json.clone(), calc_data);
-        trace!("evaluate_single_filter term1_val {:?}", &term1_val);
+        trace_user_data!("evaluate_single_filter term1_val {:?}", &term1_val);
         if let Some(op) = curr.next() {
             trace!("evaluate_single_filter op {:?}", &op);
             let Some(term2) = curr.next() else {
                 trace!("evaluate_single_filter: missing second term");
                 return false;
             };
-            trace!("evaluate_single_filter term2 {:?}", &term2);
+            trace_user_data!("evaluate_single_filter term2 {:?}", &term2);
             let term2_val = self.evaluate_arith_expr(term2, json, calc_data);
-            trace!("evaluate_single_filter term2_val {:?}", &term2_val);
+            trace_user_data!("evaluate_single_filter term2_val {:?}", &term2_val);
             match op.as_rule() {
                 Rule::gt => term1_val.gt(&term2_val),
                 Rule::ge => term1_val.ge(&term2_val),
@@ -2269,7 +2309,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             trace!("evaluate_filter: missing first operand");
             return false;
         };
-        trace!("evaluate_filter first_filter {:?}", &first_filter);
+        trace_user_data!("evaluate_filter first_filter {:?}", &first_filter);
         let mut first_result = self.evaluate_filter_operand(first_filter, json.clone(), calc_data);
         trace!("evaluate_filter first_result {:?}", &first_result);
 
@@ -2290,7 +2330,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                         trace!("evaluate_filter &&: missing operand");
                         return false;
                     };
-                    trace!("evaluate_filter && second_filter {:?}", &second_filter);
+                    trace_user_data!("evaluate_filter && second_filter {:?}", &second_filter);
                     if !first_result {
                         continue; // Skip eval till next OR
                     }
@@ -2386,10 +2426,14 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                             };
 
                             if let Some(pt) = path_tracker {
-                                trace!("calc_internal type {:?} path_tracker {:?}", json_type, &pt);
+                                trace_user_data!(
+                                    "calc_internal type {:?} path_tracker {:?}",
+                                    json_type,
+                                    &pt
+                                );
                                 for item in unified_iter {
                                     let v = item.value();
-                                    trace!("calc_internal v {:?}", &v);
+                                    trace_user_data!("calc_internal v {:?}", &v);
                                     if self.evaluate_filter(
                                         curr.clone().into_inner(),
                                         v.clone(),
@@ -2408,7 +2452,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                                 trace!("calc_internal type {:?} path_tracker None", json_type);
                                 for item in unified_iter {
                                     let v = item.value();
-                                    trace!("calc_internal v {:?}", &v);
+                                    trace_user_data!("calc_internal v {:?}", &v);
                                     if self.evaluate_filter(
                                         curr.clone().into_inner(),
                                         v.clone(),
