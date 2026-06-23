@@ -743,24 +743,40 @@ fn function_index<'i, 'j, S: SelectValue>(
 }
 
 /// `obj.keys()` / `obj~`: the object's member names as a flat list of synthesized string
-/// results (`Results`). A non-object argument is Nothing.
+/// results (`Results`). A multi-match receiver yields the keys of each matched object,
+/// flattened (mirroring how `append()` expands a multi-node receiver). A non-object receiver
+/// is Nothing.
 fn function_keys<'i, 'j, S: SelectValue>(
     arg: Option<&TermEvaluationResult<'i, 'j, S>>,
 ) -> TermEvaluationResult<'i, 'j, S> {
-    let keys: Option<Vec<Value>> = match arg {
+    // Append an object's member names to `out`; a non-object contributes nothing.
+    fn collect_keys<V: SelectValue>(v: &V, out: &mut Vec<Value>) {
+        if v.get_type() == SelectValueType::Object {
+            if let Some(it) = v.keys() {
+                out.extend(it.map(|k| Value::String(k.to_owned())));
+            }
+        }
+    }
+    match arg {
         Some(TermEvaluationResult::Value(v))
             if v.as_ref().get_type() == SelectValueType::Object =>
         {
-            v.as_ref()
-                .keys()
-                .map(|it| it.map(|k| Value::String(k.to_owned())).collect())
+            let mut out = Vec::new();
+            collect_keys(v.as_ref(), &mut out);
+            TermEvaluationResult::Results(out)
         }
         Some(TermEvaluationResult::Literal(Value::Object(map))) => {
-            Some(map.keys().map(|k| Value::String(k.clone())).collect())
+            TermEvaluationResult::Results(map.keys().map(|k| Value::String(k.clone())).collect())
         }
-        _ => None,
-    };
-    keys.map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Results)
+        Some(TermEvaluationResult::NodeList(list)) => {
+            let mut out = Vec::new();
+            for node in list {
+                collect_keys(node.as_ref(), &mut out);
+            }
+            TermEvaluationResult::Results(out)
+        }
+        _ => TermEvaluationResult::Invalid,
+    }
 }
 
 /// `path.append(x)`: enrich the reply by appending `x` as a single element after the

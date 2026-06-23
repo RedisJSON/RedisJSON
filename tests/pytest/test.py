@@ -1975,6 +1975,10 @@ def testGetKeysAndAppend(env):
     r.expect('JSON.GET', 'd', '$.obj.keys().length()').equal('[2]')
     r.expect('JSON.GET', 'd', '$.obj.keys().first()').equal('["x"]')
     r.expect('JSON.GET', 'd', '$.obj.keys().index(1)').equal('["y"]')
+    # a multi-match receiver yields each matched object's keys, flattened (`~` too)
+    r.expect('JSON.SET', 'm', '$', json.dumps({"a": [{"x": 1, "y": 2}, {"z": 3}]})).ok()
+    r.expect('JSON.GET', 'm', '$.a[*].keys()').equal('["x","y","z"]')
+    r.expect('JSON.GET', 'm', '$.a[*]~').equal('["x","y","z"]')
     # a Nothing append argument propagates -> the whole result is Nothing
     r.expect('JSON.SET', 'd3', '$', json.dumps({"arr": [1, 2, 3], "other": [4, 5]})).ok()
     r.expect('JSON.GET', 'd3', '$.arr.append($.missing)').equal('[]')

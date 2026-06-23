@@ -1563,6 +1563,17 @@ mod json_path_tests {
             perform_projection_multi("$~", &doc),
             vec![json!("obj"), json!("arr"), json!("n")]
         );
+        // a multi-match receiver yields the keys of each matched object, flattened
+        // (non-object matches contribute nothing); `~` behaves the same.
+        let multi = json!({"a": [{"x": 1, "y": 2}, 5, {"z": 3}]});
+        assert_eq!(
+            perform_projection_multi("$.a[*].keys()", &multi),
+            vec![json!("x"), json!("y"), json!("z")]
+        );
+        assert_eq!(
+            perform_projection_multi("$.a[*]~", &multi),
+            vec![json!("x"), json!("y"), json!("z")]
+        );
         // non-object / missing / empty-object -> empty
         assert_eq!(
             perform_projection_multi("$.arr~", &doc),
