@@ -350,6 +350,7 @@ fn value_in_array<'i, 'j, S: SelectValue, V: SelectValue>(
         TermEvaluationResult::NodeList(list) => {
             list.iter().any(|v| values_equal(needle, v.as_ref()))
         }
+        TermEvaluationResult::Results(vs) => vs.iter().any(|v| values_equal(needle, v)),
         _ => false,
     }
 }
@@ -944,14 +945,17 @@ fn term_to_outputs<'i, 'j, S: SelectValue>(term: TermEvaluationResult<'i, 'j, S>
         TermEvaluationResult::Value(vref) => {
             vec![serde_json::to_value(&vref).unwrap_or(Value::Null)]
         }
-        // A multi-node value: render as one JSON array (a parenthesized path is classified as a
-        // path, so this is rarely reached for a projection).
+        // INTENTIONAL asymmetry with `Results` below: a `NodeList` is ONE computed value that
+        // happens to be a multi-node match, so it renders as a single JSON array (one output
+        // element). A `Results` IS the output sequence, so it spreads. (A parenthesized path is
+        // classified as a path, so a `NodeList` is rarely reached here for a projection.)
         TermEvaluationResult::NodeList(list) => vec![Value::Array(
             list.iter()
                 .map(|v| serde_json::to_value(v).unwrap_or(Value::Null))
                 .collect(),
         )],
-        // Synthesized multi-value output (`keys()`/`~`/`append()`): emitted flat.
+        // Synthesized multi-value output (`keys()`/`~`/`append()`) is THE result list: spread
+        // flat (not wrapped) — see the `NodeList` note above.
         TermEvaluationResult::Results(vs) => vs,
         // Nothing -> empty result.
         TermEvaluationResult::Invalid => vec![],
@@ -1463,6 +1467,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             TermEvaluationResult::NodeList(list) => {
                 list.iter().any(|v| self.equals_value(v.as_ref()))
             }
+            TermEvaluationResult::Results(vs) => vs.iter().any(|v| self.equals_value(v)),
             TermEvaluationResult::Value(_)
             | TermEvaluationResult::Literal(_)
             | TermEvaluationResult::Integer(_)
@@ -1471,7 +1476,6 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             | TermEvaluationResult::String(_)
             | TermEvaluationResult::Bool(_)
             | TermEvaluationResult::Null
-            | TermEvaluationResult::Results(_)
             | TermEvaluationResult::Invalid => false,
         }
     }
@@ -1511,6 +1515,11 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             TermEvaluationResult::NodeList(list) => list
                 .iter()
                 .any(|v| TermEvaluationResult::Value(v.clone()).set_relate(rhs, require_all)),
+            // A synthesized list (`keys()`/`~`/`append()`) is the left array directly — its
+            // values are the elements (e.g. `$.obj.keys() anyof ["id","name"]`).
+            TermEvaluationResult::Results(vs) => {
+                combine(require_all, vs.iter().map(|v| value_in_array(v, rhs)))
+            }
             _ => false,
         }
     }

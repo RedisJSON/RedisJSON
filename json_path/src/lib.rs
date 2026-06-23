@@ -1731,6 +1731,22 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_results_as_membership_and_set_operand() {
+        setup();
+        // A synthesized list (`keys()`) works as the array operand of `in`/`nin` ...
+        verify_json!(path:"$.vals[?@ in $.obj.keys()]",
+            json:{"obj":{"id":1,"name":"a"}, "vals":["id","zzz","name"]},
+            results:["id","name"]);
+        // ... and of the set operators (here as the left operand).
+        verify_json!(path:r#"$.a[?@.o.keys() anyof ["x"]]"#,
+            json:{"a":[{"o":{"x":1,"y":2}}, {"o":{"z":3}}]},
+            results:[{"o":{"x":1,"y":2}}]);
+        verify_json!(path:r#"$.a[?@.o.keys() subsetof ["x","y","z"]]"#,
+            json:{"a":[{"o":{"x":1,"y":2}}, {"o":{"z":3}}]},
+            results:[{"o":{"x":1,"y":2}}, {"o":{"z":3}}]);
+    }
+
+    #[test]
     fn test_get_keys_existence_in_filter() {
         setup();
         // `?(@.o.keys())` is a non-empty-object test: an empty object's keys() is an empty
