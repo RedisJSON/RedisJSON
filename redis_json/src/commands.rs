@@ -759,14 +759,14 @@ fn apply_updates<M: Manager>(
             UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value),
             UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, value),
         }
-            .unwrap_or(false)
+        .unwrap_or(false)
     } else {
         update_info.into_iter().fold(false, |updated, ui| {
             match ui {
                 UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value.clone()),
                 UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, value.clone()),
             }
-                .unwrap_or(updated)
+            .unwrap_or(updated)
         })
     }
 }
@@ -1276,18 +1276,18 @@ fn json_num_op<M: Manager>(
             op,
             cmd,
         )?
-            .into_iter()
-            .map(|v| {
-                v.map_or(RedisValue::Null, |v| {
-                    if let Some(i) = v.as_i64() {
-                        RedisValue::Integer(i)
-                    } else {
-                        RedisValue::Float(v.as_f64().unwrap_or_default())
-                    }
-                })
+        .into_iter()
+        .map(|v| {
+            v.map_or(RedisValue::Null, |v| {
+                if let Some(i) = v.as_i64() {
+                    RedisValue::Integer(i)
+                } else {
+                    RedisValue::Float(v.as_f64().unwrap_or_default())
+                }
             })
-            .collect_vec()
-            .into();
+        })
+        .collect_vec()
+        .into();
         Ok(res)
     } else if path.is_legacy() {
         json_num_op_legacy(
@@ -1347,7 +1347,7 @@ fn json_num_op_impl<M: Manager>(
                     NumOp::Pow => redis_key.pow_by(p, number),
                 }
             })
-                .transpose()
+            .transpose()
         })
         .try_collect()?;
     if need_notify {
@@ -3052,7 +3052,7 @@ pub fn json_debug_command_impl<M: Manager>(
                     }
                     None => 0,
                 }
-                    .into())
+                .into())
             } else {
                 Ok(match key.get_value()? {
                     Some(doc) => KeyValue::new(doc)
@@ -3062,7 +3062,7 @@ pub fn json_debug_command_impl<M: Manager>(
                         .try_collect()?,
                     None => vec![],
                 }
-                    .into())
+                .into())
             }
         }
         "DEFRAG_INFO" => defrag_info(ctx),
