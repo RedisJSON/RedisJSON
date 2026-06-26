@@ -456,9 +456,28 @@ pub fn json_set_command_impl<M: Manager>(
                 manager.apply_changes(ctx);
                 REDIS_OK
             } else {
-                Err(RedisError::Str(
-                    "ERR new objects must be created at the root",
-                ))
+                let mut root_obj = Value::Object(serde_json::Map::new());
+                let path_str = path.get_path();
+                let clean_path = path_str.trim_start_matches('$').trim_start_matches('.');
+
+                let mut current_node = &mut root_obj;
+                for key in clean_path.split('.').filter(|s| !s.is_empty()) {
+                    current_node = &mut current_node[key];
+                }
+
+                let val_as_json: Value = serde_json::from_str(value)
+                    .map_err(|_| RedisError::Str("ERR invalid JSON value provided"))?;
+                *current_node = val_as_json;
+
+                let root_str = serde_json::to_string(&root_obj)
+                    .map_err(|_| RedisError::Str("ERR JSON serialization error"))?;
+
+                let final_val = manager.from_str(&root_str, Format::JSON, true, fpha_type)?;
+
+                redis_key.set_value(Vec::new(), final_val)?;
+                redis_key.notify_keyspace_event(ctx, "json.set")?;
+                manager.apply_changes(ctx);
+                REDIS_OK
             }
         }
     }
@@ -740,14 +759,14 @@ fn apply_updates<M: Manager>(
             UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value),
             UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, value),
         }
-        .unwrap_or(false)
+            .unwrap_or(false)
     } else {
         update_info.into_iter().fold(false, |updated, ui| {
             match ui {
                 UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value.clone()),
                 UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, value.clone()),
             }
-            .unwrap_or(updated)
+                .unwrap_or(updated)
         })
     }
 }
@@ -1257,18 +1276,18 @@ fn json_num_op<M: Manager>(
             op,
             cmd,
         )?
-        .into_iter()
-        .map(|v| {
-            v.map_or(RedisValue::Null, |v| {
-                if let Some(i) = v.as_i64() {
-                    RedisValue::Integer(i)
-                } else {
-                    RedisValue::Float(v.as_f64().unwrap_or_default())
-                }
+            .into_iter()
+            .map(|v| {
+                v.map_or(RedisValue::Null, |v| {
+                    if let Some(i) = v.as_i64() {
+                        RedisValue::Integer(i)
+                    } else {
+                        RedisValue::Float(v.as_f64().unwrap_or_default())
+                    }
+                })
             })
-        })
-        .collect_vec()
-        .into();
+            .collect_vec()
+            .into();
         Ok(res)
     } else if path.is_legacy() {
         json_num_op_legacy(
@@ -1328,7 +1347,7 @@ fn json_num_op_impl<M: Manager>(
                     NumOp::Pow => redis_key.pow_by(p, number),
                 }
             })
-            .transpose()
+                .transpose()
         })
         .try_collect()?;
     if need_notify {
@@ -3033,7 +3052,7 @@ pub fn json_debug_command_impl<M: Manager>(
                     }
                     None => 0,
                 }
-                .into())
+                    .into())
             } else {
                 Ok(match key.get_value()? {
                     Some(doc) => KeyValue::new(doc)
@@ -3043,7 +3062,7 @@ pub fn json_debug_command_impl<M: Manager>(
                         .try_collect()?,
                     None => vec![],
                 }
-                .into())
+                    .into())
             }
         }
         "DEFRAG_INFO" => defrag_info(ctx),
