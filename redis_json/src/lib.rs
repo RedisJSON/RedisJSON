@@ -18,7 +18,6 @@ use redis_module::InfoContext;
 
 #[cfg(not(feature = "as-library"))]
 use redis_module::Status;
-#[cfg(not(feature = "as-library"))]
 use redis_module::{Context, RedisResult, RedisValue};
 
 #[cfg(not(feature = "as-library"))]
