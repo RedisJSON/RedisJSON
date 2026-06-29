@@ -7,7 +7,6 @@
 #
 import os
 import json
-from unittest import SkipTest
 from RLTest import Env, Defaults
 from includes import *
 
@@ -32,7 +31,9 @@ def _module_under_test():
 def _new_env():
     """A fresh Env loading the JSON module under test plus the LLAPI consumer."""
     if not LLAPI_MODULE or not os.path.exists(LLAPI_MODULE):
-        raise SkipTest('LLAPI_TEST_MODULE not set/built; run via `make pytest`')
+        raise RuntimeError(
+            f'LLAPI test module not built/available (LLAPI_TEST_MODULE={LLAPI_MODULE!r}); '
+            'it is built by tests/pytest/tests.sh')
     modules = _module_under_test() + [LLAPI_MODULE]
     # noDefaultModuleArgs: the global --module-args default is for a single module;
     # skip merging it so our two-module list isn't rejected as a count mismatch.

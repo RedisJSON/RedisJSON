@@ -519,7 +519,7 @@ if [[ -f "$LLAPI_TEST_DIR/module.c" ]]; then
 		-o "$LLAPI_TEST_DIR/llapi_test.so" "$LLAPI_TEST_DIR/module.c"; then
 		export LLAPI_TEST_MODULE="$LLAPI_TEST_DIR/llapi_test.so"
 	else
-		echo "warning: failed to build LLAPI test module; test_llapi.py will be skipped"
+		echo "warning: failed to build LLAPI test module; test_llapi.py will fail"
 	fi
 fi
 
