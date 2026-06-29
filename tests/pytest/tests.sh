@@ -504,6 +504,25 @@ if [[ $RLEC != 1 ]]; then
 	fi
 fi
 
+#----------------------------------------------- LLAPI test module -----------------------------------------------
+
+# test_llapi.py loads a small C consumer module that fetches the JSON shared API
+# (RedisJSON_V<n>) and exposes it as LLAPI.* commands. test_llapi.py skips itself if LLAPI_TEST_MODULE is unset.
+LLAPI_TEST_DIR="$HERE/llapi_test_module"
+if [[ -f "$LLAPI_TEST_DIR/module.c" ]]; then
+	case "$(uname -s)" in
+		Darwin) LLAPI_TEST_LDFLAGS="-bundle -undefined dynamic_lookup" ;;
+		*)      LLAPI_TEST_LDFLAGS="-shared" ;;
+	esac
+	if "${LLAPI_TEST_CC:-cc}" -fPIC $LLAPI_TEST_LDFLAGS -O2 -Wall \
+		-I"$ROOT/deps/RedisModulesSDK" -I"$ROOT/redis_json/src/include" \
+		-o "$LLAPI_TEST_DIR/llapi_test.so" "$LLAPI_TEST_DIR/module.c"; then
+		export LLAPI_TEST_MODULE="$LLAPI_TEST_DIR/llapi_test.so"
+	else
+		echo "warning: failed to build LLAPI test module; test_llapi.py will be skipped"
+	fi
+fi
+
 if [[ $QUICK == 1 ]]; then
 	GEN=${GEN:-1}
 	SLAVES=${SLAVES:-0}
