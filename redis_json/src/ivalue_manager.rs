@@ -20,7 +20,7 @@ use ijson::{
 };
 use json_path::select_value::{SelectValue, SelectValueType, MAX_DEPTH};
 use redis_module::key::{verify_type, KeyFlags, RedisKey, RedisKeyWritable};
-use redis_module::raw::{KeyType, RedisModuleKey, Status};
+use redis_module::raw::{RedisModuleKey, Status};
 use redis_module::RedisError;
 use redis_module::{Context, NotifyEvent, RedisResult, RedisString};
 use serde::de::DeserializeSeed;

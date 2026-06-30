@@ -507,7 +507,7 @@ fi
 #----------------------------------------------- LLAPI test module -----------------------------------------------
 
 # test_llapi.py loads a small C consumer module that fetches the JSON shared API
-# (RedisJSON_V<n>) and exposes it as LLAPI.* commands. test_llapi.py skips itself if LLAPI_TEST_MODULE is unset.
+# (RedisJSON_V<n>) and exposes it as LLAPI.* commands.
 LLAPI_TEST_DIR="$HERE/llapi_test_module"
 if [[ -f "$LLAPI_TEST_DIR/module.c" ]]; then
 	case "$(uname -s)" in
