@@ -911,6 +911,33 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_literal_built_once_independent_of_document_size() {
+        setup();
+        // Directly verifies the optimization (not just preserved semantics): the constant
+        // literal `[1,2,3]` must be materialized once per query.
+        fn build_count(path: &str, json: &Value) -> usize {
+            json_path::BUILD_LITERAL_CALLS.with(|c| c.set(0));
+            let _ = perform_search(path, json);
+            json_path::BUILD_LITERAL_CALLS.with(|c| c.get())
+        }
+
+        let path = "$.a[?@ in [1,2,3]]";
+        let small = json!({"a": [5, 1, 9, 2]});
+        let big: Vec<i64> = (0..200).collect();
+        let large = json!({ "a": big });
+
+        let c_small = build_count(path, &small);
+        let c_large = build_count(path, &large);
+
+        assert!(c_small > 0, "literal should be built at least once");
+        assert_eq!(
+            c_small, c_large,
+            "build_literal count scaled with document size ({c_small} vs {c_large}) — \
+             literal is not being cached across elements"
+        );
+    }
+
+    #[test]
     fn test_size_of_array_and_string() {
         setup();
         // array element count and string char count
