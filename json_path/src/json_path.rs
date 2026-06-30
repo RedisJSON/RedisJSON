@@ -1772,6 +1772,17 @@ struct PathCalculatorData<'i, S: SelectValue, UPT: UserPathTracker> {
     literal_cache: HashMap<usize, Rc<Value>>,
 }
 
+impl<'i, S: SelectValue, UPT: UserPathTracker> PathCalculatorData<'i, S, UPT> {
+    fn new(root: ValueRef<'i, S>) -> Self {
+        PathCalculatorData {
+            results: Vec::new(),
+            root,
+            regex_cache: HashMap::new(),
+            literal_cache: HashMap::new(),
+        }
+    }
+}
+
 // The following block of code is used to create a unified iterator for arrays and objects.
 // This can be used in places where we need to iterate over both arrays and objects, create a path tracker from them.
 enum Item<'a, S: SelectValue> {
@@ -2102,12 +2113,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             }
             Rule::from_current => match term.into_inner().next() {
                 Some(term) => {
-                    let mut calc_data = PathCalculatorData {
-                        results: Vec::new(),
-                        root: json.clone(),
-                        regex_cache: HashMap::new(),
-                        literal_cache: HashMap::new(),
-                    };
+                    let mut calc_data = PathCalculatorData::new(json.clone());
                     self.calc_internal(term.into_inner(), json, None, &mut calc_data);
                     Self::results_to_term(calc_data.results)
                 }
@@ -2115,12 +2121,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             },
             Rule::from_root => match term.into_inner().next() {
                 Some(term) => {
-                    let mut new_calc_data = PathCalculatorData {
-                        results: Vec::new(),
-                        root: calc_data.root.clone(),
-                        regex_cache: HashMap::new(),
-                        literal_cache: HashMap::new(),
-                    };
+                    let mut new_calc_data = PathCalculatorData::new(calc_data.root.clone());
                     self.calc_internal(
                         term.into_inner(),
                         calc_data.root.clone(),
@@ -2538,12 +2539,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         json: ValueRef<'j, S>,
         expr: Pair<'i, Rule>,
     ) -> Vec<Value> {
-        let mut calc_data = PathCalculatorData {
-            results: Vec::new(),
-            root: json.clone(),
-            regex_cache: HashMap::new(),
-            literal_cache: HashMap::new(),
-        };
+        let mut calc_data = PathCalculatorData::new(json.clone());
         let term = self.evaluate_arith_expr(expr, json, &mut calc_data);
         term_to_outputs(term)
     }
@@ -2553,12 +2549,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         json: ValueRef<'j, S>,
         root: Pairs<'i, Rule>,
     ) -> Vec<CalculationResult<'j, S, UPTG::PT>> {
-        let mut calc_data = PathCalculatorData {
-            results: Vec::new(),
-            root: json.clone(),
-            regex_cache: HashMap::new(),
-            literal_cache: HashMap::new(),
-        };
+        let mut calc_data = PathCalculatorData::new(json.clone());
         if self.tracker_generator.is_some() {
             self.calc_internal(root, json, Some(create_empty_tracker()), &mut calc_data);
         } else {
