@@ -16,7 +16,7 @@
  *
  * It binds the API *by name* ("RedisJSON_V<n>") and never depends on RedisJSON
  * internals, so the same tests can run against any module that exports the same
- * shared API (e.g. JsonHDT in the OSS test suite, MOD-14113).
+ * shared API.
  *
  * It must be loaded *after* the JSON module under test, e.g.:
  *   redis-server --loadmodule rejson.so --loadmodule llapi_test.so
