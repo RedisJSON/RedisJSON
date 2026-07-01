@@ -66,21 +66,25 @@ static const char *json_array_type_name(JSONArrayType t) {
     }
 }
 
-/* Open the key named by argv[1] and run get(path=argv[2]).
+/* Run get(path) on an already-opened RedisJSON handle.
  * On failure, replies with an error and returns NULL (caller should return). */
-static JSONResultsIterator open_and_get(RedisModuleCtx *ctx, RedisModuleString **argv) {
-    RedisJSON json = japi->openKey(ctx, argv[1]);
+static JSONResultsIterator get_iter(RedisModuleCtx *ctx, RedisJSON json, RedisModuleString *path_arg) {
     if (!json) {
         RedisModule_ReplyWithError(ctx, "ERR key does not exist or is not JSON");
         return NULL;
     }
-    const char *path = RedisModule_StringPtrLen(argv[2], NULL);
+    const char *path = RedisModule_StringPtrLen(path_arg, NULL);
     JSONResultsIterator it = japi->get(json, path);
     if (!it) {
         RedisModule_ReplyWithError(ctx, "ERR path could not be evaluated");
         return NULL;
     }
     return it;
+}
+
+/* Open the key named by argv[1] and run get(path=argv[2]). */
+static JSONResultsIterator open_and_get(RedisModuleCtx *ctx, RedisModuleString **argv) {
+    return get_iter(ctx, japi->openKey(ctx, argv[1]), argv[2]);
 }
 
 /* LLAPI.VERSION -> the bound shared-API version (integer). */
@@ -164,17 +168,8 @@ static int ResetCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 static int OpenFromStrCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 3) return RedisModule_WrongArity(ctx);
     const char *keyname = RedisModule_StringPtrLen(argv[1], NULL);
-    RedisJSON json = japi->openKeyFromStr(ctx, keyname);
-    if (!json) {
-        RedisModule_ReplyWithError(ctx, "ERR key does not exist or is not JSON");
-        return REDISMODULE_OK;
-    }
-    const char *path = RedisModule_StringPtrLen(argv[2], NULL);
-    JSONResultsIterator it = japi->get(json, path);
-    if (!it) {
-        RedisModule_ReplyWithError(ctx, "ERR path could not be evaluated");
-        return REDISMODULE_OK;
-    }
+    JSONResultsIterator it = get_iter(ctx, japi->openKeyFromStr(ctx, keyname), argv[2]);
+    if (!it) return REDISMODULE_OK;
     RedisModule_ReplyWithLongLong(ctx, (long long)japi->len(it));
     japi->freeIter(it);
     return REDISMODULE_OK;
@@ -183,17 +178,9 @@ static int OpenFromStrCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
 /* LLAPI.OPENFLAGS key path -> number of matched nodes (uses openKeyWithFlags, read). */
 static int OpenFlagsCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 3) return RedisModule_WrongArity(ctx);
-    RedisJSON json = japi->openKeyWithFlags(ctx, argv[1], REDISMODULE_READ);
-    if (!json) {
-        RedisModule_ReplyWithError(ctx, "ERR key does not exist or is not JSON");
-        return REDISMODULE_OK;
-    }
-    const char *path = RedisModule_StringPtrLen(argv[2], NULL);
-    JSONResultsIterator it = japi->get(json, path);
-    if (!it) {
-        RedisModule_ReplyWithError(ctx, "ERR path could not be evaluated");
-        return REDISMODULE_OK;
-    }
+    JSONResultsIterator it =
+        get_iter(ctx, japi->openKeyWithFlags(ctx, argv[1], REDISMODULE_READ), argv[2]);
+    if (!it) return REDISMODULE_OK;
     RedisModule_ReplyWithLongLong(ctx, (long long)japi->len(it));
     japi->freeIter(it);
     return REDISMODULE_OK;
@@ -361,17 +348,18 @@ static int GetArrayCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         japi->freeIter(it);
         return REDISMODULE_OK;
     }
+    if (japi->getType(node) != JSONType_Array) {
+        RedisModule_ReplyWithError(ctx, "ERR not an array");
+        japi->freeIter(it);
+        return REDISMODULE_OK;
+    }
 
     size_t len = 0;
     JSONArrayType atype = JSONArrayType_Heterogeneous;
-    const void *arr = japi->getArray(node, &len, &atype);
-    if (!arr && len == 0 && japi->getType(node) != JSONType_Array) {
-        RedisModule_ReplyWithError(ctx, "ERR not an array");
-    } else {
-        RedisModule_ReplyWithArray(ctx, 2);
-        RedisModule_ReplyWithSimpleString(ctx, json_array_type_name(atype));
-        RedisModule_ReplyWithLongLong(ctx, (long long)len);
-    }
+    japi->getArray(node, &len, &atype);
+    RedisModule_ReplyWithArray(ctx, 2);
+    RedisModule_ReplyWithSimpleString(ctx, json_array_type_name(atype));
+    RedisModule_ReplyWithLongLong(ctx, (long long)len);
     japi->freeIter(it);
     return REDISMODULE_OK;
 }
@@ -426,8 +414,13 @@ static int KeyValuesCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
 static int IsJsonCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 2) return RedisModule_WrongArity(ctx);
     RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
+    // A missing key (NULL handle) is not JSON; don't pass NULL to isJSON.
+    if (!key) {
+        RedisModule_ReplyWithLongLong(ctx, 0);
+        return REDISMODULE_OK;
+    }
     int res = japi->isJSON(key);
-    if (key) RedisModule_CloseKey(key);
+    RedisModule_CloseKey(key);
     RedisModule_ReplyWithLongLong(ctx, res);
     return REDISMODULE_OK;
 }
@@ -455,17 +448,18 @@ static int PathParseCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
     return REDISMODULE_OK;
 }
 
-/* Resolve the highest available shared-API version, "RedisJSON_V<n>" .. V1. */
+/* Bind the latest shared-API version. This module exercises functions across
+ * all API versions (V1..V7), so it requires a provider exporting the full,
+ * current struct; binding an older version could leave later fields undefined
+ * and dereferencing them would read past the provider's struct. */
 static int fetch_japi(RedisModuleCtx *ctx) {
     char name[32];
-    for (int v = RedisJSONAPI_LATEST_API_VER; v >= 1; v--) {
-        snprintf(name, sizeof(name), "RedisJSON_V%d", v);
-        const RedisJSONAPI *api = RedisModule_GetSharedAPI(ctx, name);
-        if (api) {
-            japi = api;
-            japi_ver = v;
-            return REDISMODULE_OK;
-        }
+    snprintf(name, sizeof(name), "RedisJSON_V%d", RedisJSONAPI_LATEST_API_VER);
+    const RedisJSONAPI *api = RedisModule_GetSharedAPI(ctx, name);
+    if (api) {
+        japi = api;
+        japi_ver = RedisJSONAPI_LATEST_API_VER;
+        return REDISMODULE_OK;
     }
     return REDISMODULE_ERR;
 }
@@ -483,7 +477,9 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
 
     if (fetch_japi(ctx) != REDISMODULE_OK) {
         RedisModule_Log(ctx, "warning",
-            "llapi_test: RedisJSON shared API not found; load a JSON module first");
+            "llapi_test: RedisJSON_V%d shared API not found; load a JSON module "
+            "exporting the current shared API first",
+            RedisJSONAPI_LATEST_API_VER);
         return REDISMODULE_ERR;
     }
     RedisModule_Log(ctx, "notice", "llapi_test: bound RedisJSON shared API V%d", japi_ver);
