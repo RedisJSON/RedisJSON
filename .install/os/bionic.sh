@@ -8,7 +8,7 @@
 
 apt_install software-properties-common lsb-core binfmt-support zlib1g-dev dirmngr
 echo "deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu bionic main" | $SUDO tee /etc/apt/sources.list.d/ubuntu-toolchain-r-test.list
-$SUDO apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 1E9377A2BA9EF27F || true
+$SUDO gpg --no-default-keyring --keyring /etc/apt/trusted.gpg --keyserver keyserver.ubuntu.com --recv-keys 1E9377A2BA9EF27F || true
 $SUDO apt-get update -qq
 debian_default_install
 apt_install gcc-10 g++-10 awscli
