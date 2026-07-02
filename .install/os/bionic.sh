@@ -6,7 +6,7 @@
 
 . "$LIB/packages.sh"
 
-apt_install software-properties-common lsb-core binfmt-support zlib1g-dev
+apt_install software-properties-common lsb-core binfmt-support zlib1g-dev dirmngr
 echo "deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu bionic main" | $SUDO tee /etc/apt/sources.list.d/ubuntu-toolchain-r-test.list
 $SUDO apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 1E9377A2BA9EF27F || true
 $SUDO apt-get update -qq
