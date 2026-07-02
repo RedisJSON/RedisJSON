@@ -6,9 +6,15 @@
 
 . "$LIB/packages.sh"
 
-apt_install software-properties-common lsb-core binfmt-support zlib1g-dev wget gpg
+export DEBIAN_FRONTEND=noninteractive
+echo 'debconf debconf/frontend select Noninteractive' | $SUDO debconf-set-selections 2>/dev/null || true
+echo 'tzdata tzdata/Areas select Etc' | $SUDO debconf-set-selections 2>/dev/null || true
+echo 'tzdata tzdata/Zones/Etc select UTC' | $SUDO debconf-set-selections 2>/dev/null || true
+$SUDO apt-get install -y --no-install-recommends gnupg wget 2>/dev/null || true
+wget -qO- "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x1E9377A2BA9EF27F" | $SUDO gpg --batch --no-tty --yes --dearmor -o /etc/apt/trusted.gpg.d/ubuntu-toolchain-r.gpg
+wget -qO- "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x2C277A0A352154E5" | $SUDO gpg --batch --no-tty --yes --dearmor -o /etc/apt/trusted.gpg.d/ubuntu-toolchain-r-2.gpg
 echo "deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu bionic main" | $SUDO tee /etc/apt/sources.list.d/ubuntu-toolchain-r-test.list
-wget -qO- "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x1E9377A2BA9EF27F" | $SUDO gpg --dearmor -o /etc/apt/trusted.gpg.d/ubuntu-toolchain-r.gpg || true
+apt_install software-properties-common lsb-core binfmt-support zlib1g-dev
 $SUDO apt-get update -qq
 debian_default_install
 apt_install gcc-10 g++-10 awscli
