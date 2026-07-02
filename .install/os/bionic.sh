@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# Ubuntu 18.04 (bionic). Toolchain PPA + gcc-10; cmake 3.28 from source.
+# Ubuntu 18.04 (bionic). gcc-10 is available in the ESM repos directly
+# (no toolchain-r PPA needed). cmake 3.28 built from source — apt cmake is 3.10.
 # No distro cargo — Rust comes from getrust.sh after setup-python.
 
 . "$LIB/packages.sh"
 
-apt_install software-properties-common lsb-core binfmt-support zlib1g-dev
-$SUDO add-apt-repository ppa:ubuntu-toolchain-r/test -y
 debian_default_install
-apt_install gcc-10 g++-10 awscli
+apt_install lsb-core binfmt-support zlib1g-dev gcc-10 g++-10 awscli
 $SUDO update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 60 \
     --slave /usr/bin/g++ g++ /usr/bin/g++-10
 
