@@ -6,9 +6,9 @@
 
 . "$LIB/packages.sh"
 
-apt_install software-properties-common lsb-core binfmt-support zlib1g-dev wget
+apt_install software-properties-common lsb-core binfmt-support zlib1g-dev wget gpg
 echo "deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu bionic main" | $SUDO tee /etc/apt/sources.list.d/ubuntu-toolchain-r-test.list
-wget -qO- "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x1E9377A2BA9EF27F" | $SUDO apt-key add - || true
+wget -qO- "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x1E9377A2BA9EF27F" | $SUDO gpg --dearmor -o /etc/apt/trusted.gpg.d/ubuntu-toolchain-r.gpg || true
 $SUDO apt-get update -qq
 debian_default_install
 apt_install gcc-10 g++-10 awscli
