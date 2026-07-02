@@ -7,6 +7,7 @@
 #
 import os
 import json
+import unittest
 from RLTest import Env, Defaults
 from includes import *
 
@@ -31,7 +32,10 @@ def _module_under_test():
 def _new_env():
     """A fresh Env loading the JSON module under test plus the LLAPI consumer."""
     if not LLAPI_MODULE or not os.path.exists(LLAPI_MODULE):
-        raise RuntimeError(
+        # Only tests.sh builds and exports the consumer .so (and it hard-fails the
+        # run if that build breaks). A direct `pytest`/IDE run leaves the env var
+        # unset, so skip cleanly there instead of erroring the whole file.
+        raise unittest.SkipTest(
             f'LLAPI test module not built/available (LLAPI_TEST_MODULE={LLAPI_MODULE!r}); '
             'it is built by tests/pytest/tests.sh')
     modules = _module_under_test() + [LLAPI_MODULE]
@@ -111,6 +115,9 @@ def testLLAPIOpenGetAndIter():
                     [10, 20, 30, 40])
     # A non-matching (but valid) path yields zero results, not an error.
     env.assertEqual(env.cmd('LLAPI.ITER_LEN', 'doc', '$.does_not_exist'), 0)
+    # ITER_JSON deliberately differs: whole-set serialization (getJSONFromIter)
+    # returns Status::Err for an empty result set, unlike len()/next().
+    env.expect('LLAPI.ITER_JSON', 'doc', '$.does_not_exist').raiseError()
 
 
 def testLLAPIReset():
