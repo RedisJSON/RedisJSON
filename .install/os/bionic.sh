@@ -24,8 +24,11 @@ install_aws_cli
 # may have already pinned something newer in this shared build container.
 _cur=$(gcc -dumpversion | cut -d. -f1)
 if [ "$_cur" -lt 10 ]; then
-    # g++ is registered as its own independent master by debian_default_install,
-    # not as a slave of gcc — --slave-grouping it here would conflict with that.
+    # cc/gcc/g++ are each registered as their own independent master by
+    # debian_default_install, not slaves of each other — --slave-grouping
+    # would conflict with that.
+    $SUDO update-alternatives --install /usr/bin/cc  cc  /usr/bin/gcc-10 60
+    $SUDO update-alternatives --set     cc  /usr/bin/gcc-10
     $SUDO update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 60
     $SUDO update-alternatives --set     gcc /usr/bin/gcc-10
     $SUDO update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-10 60
