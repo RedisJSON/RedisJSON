@@ -21,3 +21,5 @@ $SUDO make install
 cd /
 rm -rf /tmp/cmake-3.28.0 /tmp/cmake-3.28.0.tar.gz
 $SUDO ln -sf /usr/local/bin/cmake /usr/bin/cmake
+
+pip3 install dataclasses
