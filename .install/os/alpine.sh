@@ -12,5 +12,7 @@ if [ ! -e /usr/lib/libclang.so ]; then
         ln -sf libclang.so.21.1 /usr/lib/libclang.so
     elif [ -e /usr/lib/libclang.so.18.1 ]; then
         ln -sf libclang.so.18.1 /usr/lib/libclang.so
+    else
+        echo "alpine.sh: WARNING: no libclang.so.{21.1,18.1} found; bindgen's dlopen will fail later" >&2
     fi
 fi
