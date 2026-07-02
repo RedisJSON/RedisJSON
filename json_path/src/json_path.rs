@@ -20,6 +20,7 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 
 /// Cached mirror of Redis' `hide-user-data-from-log` server config.
@@ -285,14 +286,22 @@ fn unescape_string_value<'a>(pair: Pair<'a, Rule>) -> Cow<'a, str> {
     }
 }
 
+// Test-only counter of `build_literal` invocations on the current thread. Lets tests
+// assert that a constant filter literal is materialized once per query (cached) rather
+// than once per element. Thread-local so parallel tests don't interfere — evaluation is
+// synchronous, so every call runs on the thread that started the query.
+#[cfg(test)]
+thread_local! {
+    pub(crate) static BUILD_LITERAL_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// Recursively build an owned JSON `Value` from an array/object literal parse subtree
 /// (e.g. `[1,{"a":2}]`). Used for structured filter operands; compared against the
 /// document value via the cross-type `is_equal`.
 ///
-/// PERF/TODO: this runs per element during filter evaluation, so a constant literal
-/// (e.g. the array in `$.a[?@ in [1,2,...]]`) is rebuilt for every node. A follow-up
-/// could materialize literals once at `compile()` time and reuse them.
 fn build_literal(pair: Pair<Rule>) -> Value {
+    #[cfg(test)]
+    BUILD_LITERAL_CALLS.with(|c| c.set(c.get() + 1));
     match pair.as_rule() {
         Rule::array_literal => Value::Array(pair.into_inner().map(build_literal).collect()),
         Rule::object_literal => Value::Object(
@@ -373,7 +382,7 @@ fn literal_value_term<'i, 'j, S: SelectValue>(v: &Value) -> TermEvaluationResult
         Value::String(s) => TermEvaluationResult::String(s.clone()),
         Value::Bool(b) => TermEvaluationResult::Bool(*b),
         Value::Null => TermEvaluationResult::Null,
-        other => TermEvaluationResult::Literal(other.clone()),
+        other => TermEvaluationResult::Literal(Rc::new(other.clone())),
     }
 }
 
@@ -400,9 +409,10 @@ fn value_in_array<'i, 'j, S: SelectValue, V: SelectValue>(
             .as_ref()
             .values()
             .is_some_and(|mut it| it.any(|e| values_equal(needle, e.as_ref()))),
-        TermEvaluationResult::Literal(Value::Array(items)) => {
-            items.iter().any(|it| values_equal(needle, it))
-        }
+        TermEvaluationResult::Literal(l) => match l.as_ref() {
+            Value::Array(items) => items.iter().any(|it| values_equal(needle, it)),
+            _ => false,
+        },
         TermEvaluationResult::NodeList(list) => {
             list.iter().any(|v| values_equal(needle, v.as_ref()))
         }
@@ -525,7 +535,7 @@ fn function_length<'i, 'j, S: SelectValue>(
         TermEvaluationResult::Str(s) => Some(s.chars().count()),
         TermEvaluationResult::String(s) => Some(s.chars().count()),
         TermEvaluationResult::Value(v) => value_length(v.as_ref()),
-        TermEvaluationResult::Literal(l) => value_length(l),
+        TermEvaluationResult::Literal(l) => value_length(l.as_ref()),
         TermEvaluationResult::NodeList(list) if list.len() == 1 => value_length(list[0].as_ref()),
         TermEvaluationResult::Results(vs) => Some(vs.len()),
         TermEvaluationResult::NodeList(_)
@@ -570,9 +580,11 @@ fn function_value<'i, 'j, S: SelectValue>(
         v @ TermEvaluationResult::Value(_) => v,
         // A synthesized single-element list (e.g. `keys()` of a one-key object): its lone
         // value, mirroring the single-node nodelist case.
-        TermEvaluationResult::Results(mut vs) if vs.len() == 1 => vs
-            .pop()
-            .map_or(TermEvaluationResult::Invalid, TermEvaluationResult::Literal),
+        TermEvaluationResult::Results(mut vs) if vs.len() == 1 => {
+            vs.pop().map_or(TermEvaluationResult::Invalid, |v| {
+                TermEvaluationResult::Literal(Rc::new(v))
+            })
+        }
         TermEvaluationResult::NodeList(_)
         | TermEvaluationResult::Integer(_)
         | TermEvaluationResult::Float(_)
@@ -698,11 +710,14 @@ fn term_number_seq<'i, 'j, S: SelectValue>(
                 out.push(value_as_number(e.as_ref())?.as_f64());
             }
         }
-        TermEvaluationResult::Literal(Value::Array(items)) => {
-            for it in items {
-                out.push(value_as_number(it)?.as_f64());
+        TermEvaluationResult::Literal(l) => match l.as_ref() {
+            Value::Array(items) => {
+                for it in items {
+                    out.push(value_as_number(it)?.as_f64());
+                }
             }
-        }
+            _ => return None,
+        },
         TermEvaluationResult::NodeList(list) => {
             for v in list {
                 out.push(value_as_number(v.as_ref())?.as_f64());
@@ -781,18 +796,19 @@ fn function_index<'i, 'j, S: SelectValue>(
                 }),
             }
         }
-        Some(TermEvaluationResult::Literal(Value::Array(mut items))) => {
-            match resolve(idx, items.len()) {
-                Some(i) => TermEvaluationResult::Literal(items.swap_remove(i)),
+        Some(TermEvaluationResult::Literal(l)) => match l.as_ref() {
+            Value::Array(items) => match resolve(idx, items.len()) {
+                Some(i) => TermEvaluationResult::Literal(Rc::new(items[i].clone())),
                 None => TermEvaluationResult::Invalid,
-            }
-        }
+            },
+            _ => TermEvaluationResult::Invalid,
+        },
         Some(TermEvaluationResult::NodeList(mut list)) => match resolve(idx, list.len()) {
             Some(i) => TermEvaluationResult::Value(list.swap_remove(i)),
             None => TermEvaluationResult::Invalid,
         },
         Some(TermEvaluationResult::Results(mut vs)) => match resolve(idx, vs.len()) {
-            Some(i) => TermEvaluationResult::Literal(vs.swap_remove(i)),
+            Some(i) => TermEvaluationResult::Literal(Rc::new(vs.swap_remove(i))),
             None => TermEvaluationResult::Invalid,
         },
         _ => TermEvaluationResult::Invalid,
@@ -822,9 +838,12 @@ fn function_keys<'i, 'j, S: SelectValue>(
             collect_keys(v.as_ref(), &mut out);
             TermEvaluationResult::Results(out)
         }
-        Some(TermEvaluationResult::Literal(Value::Object(map))) => {
-            TermEvaluationResult::Results(map.keys().map(|k| Value::String(k.clone())).collect())
-        }
+        Some(TermEvaluationResult::Literal(l)) => match l.as_ref() {
+            Value::Object(map) => TermEvaluationResult::Results(
+                map.keys().map(|k| Value::String(k.clone())).collect(),
+            ),
+            _ => TermEvaluationResult::Invalid,
+        },
         Some(TermEvaluationResult::NodeList(list)) => {
             let mut out = Vec::new();
             for node in list {
@@ -878,7 +897,10 @@ fn function_append<'i, 'j, S: SelectValue>(
                     .collect()
             })
         }
-        Some(TermEvaluationResult::Literal(Value::Array(items))) => items,
+        Some(TermEvaluationResult::Literal(l)) => match l.as_ref() {
+            Value::Array(items) => items.clone(),
+            other => vec![other.clone()],
+        },
         Some(TermEvaluationResult::Results(vs)) => vs,
         Some(TermEvaluationResult::Invalid) | None => Vec::new(),
         // A single non-array node / scalar: appended alongside as one element.
@@ -996,7 +1018,9 @@ fn term_to_outputs<'i, 'j, S: SelectValue>(term: TermEvaluationResult<'i, 'j, S>
         TermEvaluationResult::String(s) => vec![Value::from(s)],
         TermEvaluationResult::Bool(b) => vec![Value::from(b)],
         TermEvaluationResult::Null => vec![Value::Null],
-        TermEvaluationResult::Literal(v) => vec![v],
+        TermEvaluationResult::Literal(v) => {
+            vec![Rc::try_unwrap(v).unwrap_or_else(|rc| (*rc).clone())]
+        }
         // A real document node (e.g. `$.a.first()`, `value($.a)`): serialize it to a Value.
         TermEvaluationResult::Value(vref) => {
             vec![serde_json::to_value(&vref).unwrap_or(Value::Null)]
@@ -1304,7 +1328,7 @@ enum TermEvaluationResult<'i, 'j, S: SelectValue> {
     String(String),
     Value(ValueRef<'j, S>),
     /// An array/object literal operand, e.g. `[1,2]` or `{"a":1}` in `?@==[1,2]`.
-    Literal(Value),
+    Literal(Rc<Value>),
     Bool(bool),
     Null,
     /// Multiple results from a non-singular query (e.g. `@.*`, `@..key`).
@@ -1462,13 +1486,13 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             // integers do not match doubles (e.g. `@ == [1]` does not match `[1.0]`),
             // unlike scalar `==` / `in` which coerce. Kept consistent with `is_equal`.
             (TermEvaluationResult::Value(v), TermEvaluationResult::Literal(l)) => {
-                is_equal(v.as_ref(), l)
+                is_equal(v.as_ref(), l.as_ref())
             }
             (TermEvaluationResult::Literal(l), TermEvaluationResult::Value(v)) => {
-                is_equal(l, v.as_ref())
+                is_equal(l.as_ref(), v.as_ref())
             }
             (TermEvaluationResult::Literal(l1), TermEvaluationResult::Literal(l2)) => {
-                is_equal(l1, l2)
+                is_equal(l1.as_ref(), l2.as_ref())
             }
             (_, _) => match self.cmp(s) {
                 CmpResult::Ord(o) => o.is_eq(),
@@ -1487,7 +1511,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             TermEvaluationResult::Integer(n) => Some(Num::Int(*n)),
             TermEvaluationResult::Float(f) => Some(Num::Float(*f)),
             TermEvaluationResult::Value(v) => value_as_number(v.as_ref()),
-            TermEvaluationResult::Literal(l) => value_as_number(l),
+            TermEvaluationResult::Literal(l) => value_as_number(l.as_ref()),
             TermEvaluationResult::Str(_)
             | TermEvaluationResult::String(_)
             | TermEvaluationResult::Bool(_)
@@ -1508,7 +1532,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
         }
         match self {
             TermEvaluationResult::Value(v) => is_equal(v.as_ref(), other),
-            TermEvaluationResult::Literal(l) => is_equal(l, other),
+            TermEvaluationResult::Literal(l) => is_equal(l.as_ref(), other),
             TermEvaluationResult::NodeList(list) => {
                 list.iter().any(|v| is_equal(v.as_ref(), other))
             }
@@ -1530,15 +1554,15 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
                 .as_ref()
                 .values()
                 .is_some_and(|mut it| it.any(|e| self.equals_value(e.as_ref()))),
-            TermEvaluationResult::Literal(Value::Array(items)) => {
-                items.iter().any(|it| self.equals_value(it))
-            }
+            TermEvaluationResult::Literal(l) => match l.as_ref() {
+                Value::Array(items) => items.iter().any(|it| self.equals_value(it)),
+                _ => false,
+            },
             TermEvaluationResult::NodeList(list) => {
                 list.iter().any(|v| self.equals_value(v.as_ref()))
             }
             TermEvaluationResult::Results(vs) => vs.iter().any(|v| self.equals_value(v)),
             TermEvaluationResult::Value(_)
-            | TermEvaluationResult::Literal(_)
             | TermEvaluationResult::Integer(_)
             | TermEvaluationResult::Float(_)
             | TermEvaluationResult::Str(_)
@@ -1578,9 +1602,12 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
                     combine(require_all, it.map(|e| value_in_array(e.as_ref(), rhs)))
                 })
             }
-            TermEvaluationResult::Literal(Value::Array(items)) => {
-                combine(require_all, items.iter().map(|e| value_in_array(e, rhs)))
-            }
+            TermEvaluationResult::Literal(l) => match l.as_ref() {
+                Value::Array(items) => {
+                    combine(require_all, items.iter().map(|e| value_in_array(e, rhs)))
+                }
+                _ => false,
+            },
             TermEvaluationResult::NodeList(list) => list
                 .iter()
                 .any(|v| TermEvaluationResult::Value(v.clone()).set_relate(rhs, require_all)),
@@ -1619,7 +1646,7 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
             TermEvaluationResult::Str(s) => Some(s.chars().count()),
             TermEvaluationResult::String(s) => Some(s.chars().count()),
             TermEvaluationResult::Value(v) => arr_or_str_len(v.as_ref()),
-            TermEvaluationResult::Literal(l) => arr_or_str_len(l),
+            TermEvaluationResult::Literal(l) => arr_or_str_len(l.as_ref()),
             TermEvaluationResult::Results(vs) => Some(vs.len()),
             _ => None,
         }
@@ -1629,7 +1656,10 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
     fn as_bool(&self) -> Option<bool> {
         match self {
             TermEvaluationResult::Bool(b) => Some(*b),
-            TermEvaluationResult::Literal(Value::Bool(b)) => Some(*b),
+            TermEvaluationResult::Literal(l) => match l.as_ref() {
+                Value::Bool(b) => Some(*b),
+                _ => None,
+            },
             TermEvaluationResult::Value(v) if v.as_ref().get_type() == SelectValueType::Bool => {
                 v.as_ref().get_bool()
             }
@@ -1736,6 +1766,21 @@ struct PathCalculatorData<'i, S: SelectValue, UPT: UserPathTracker> {
     /// Per-query compiled-regex cache (see `RegexCache`), threaded as `&mut` through
     /// filter evaluation. Dropped with this struct when the query ends.
     regex_cache: RegexCache,
+    /// Per-query materialized literal cache, keyed by the literal's parse
+    /// span start. Built once on first encounter and reused (via `Rc`) across every
+    /// element. Dropped with this struct when the query ends.
+    literal_cache: HashMap<usize, Rc<Value>>,
+}
+
+impl<'i, S: SelectValue, UPT: UserPathTracker> PathCalculatorData<'i, S, UPT> {
+    fn new(root: ValueRef<'i, S>) -> Self {
+        PathCalculatorData {
+            results: Vec::new(),
+            root,
+            regex_cache: HashMap::new(),
+            literal_cache: HashMap::new(),
+        }
+    }
 }
 
 // The following block of code is used to create a unified iterator for arrays and objects.
@@ -2043,7 +2088,13 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             Rule::boolean_false => TermEvaluationResult::Bool(false),
             Rule::null => TermEvaluationResult::Null,
             Rule::array_literal | Rule::object_literal => {
-                TermEvaluationResult::Literal(build_literal(term))
+                let key = term.as_span().start();
+                let literal = calc_data
+                    .literal_cache
+                    .entry(key)
+                    .or_insert_with(|| Rc::new(build_literal(term)))
+                    .clone();
+                TermEvaluationResult::Literal(literal)
             }
             Rule::function_call => {
                 let mut inner = term.into_inner();
@@ -2062,11 +2113,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             }
             Rule::from_current => match term.into_inner().next() {
                 Some(term) => {
-                    let mut calc_data = PathCalculatorData {
-                        results: Vec::new(),
-                        root: json.clone(),
-                        regex_cache: HashMap::new(),
-                    };
+                    let mut calc_data = PathCalculatorData::new(json.clone());
                     self.calc_internal(term.into_inner(), json, None, &mut calc_data);
                     Self::results_to_term(calc_data.results)
                 }
@@ -2074,11 +2121,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             },
             Rule::from_root => match term.into_inner().next() {
                 Some(term) => {
-                    let mut new_calc_data = PathCalculatorData {
-                        results: Vec::new(),
-                        root: calc_data.root.clone(),
-                        regex_cache: HashMap::new(),
-                    };
+                    let mut new_calc_data = PathCalculatorData::new(calc_data.root.clone());
                     self.calc_internal(
                         term.into_inner(),
                         calc_data.root.clone(),
@@ -2496,11 +2539,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         json: ValueRef<'j, S>,
         expr: Pair<'i, Rule>,
     ) -> Vec<Value> {
-        let mut calc_data = PathCalculatorData {
-            results: Vec::new(),
-            root: json.clone(),
-            regex_cache: HashMap::new(),
-        };
+        let mut calc_data = PathCalculatorData::new(json.clone());
         let term = self.evaluate_arith_expr(expr, json, &mut calc_data);
         term_to_outputs(term)
     }
@@ -2510,11 +2549,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         json: ValueRef<'j, S>,
         root: Pairs<'i, Rule>,
     ) -> Vec<CalculationResult<'j, S, UPTG::PT>> {
-        let mut calc_data = PathCalculatorData {
-            results: Vec::new(),
-            root: json.clone(),
-            regex_cache: HashMap::new(),
-        };
+        let mut calc_data = PathCalculatorData::new(json.clone());
         if self.tracker_generator.is_some() {
             self.calc_internal(root, json, Some(create_empty_tracker()), &mut calc_data);
         } else {
