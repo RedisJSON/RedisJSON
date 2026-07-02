@@ -456,9 +456,28 @@ pub fn json_set_command_impl<M: Manager>(
                 manager.apply_changes(ctx);
                 REDIS_OK
             } else {
-                Err(RedisError::Str(
-                    "ERR new objects must be created at the root",
-                ))
+                let mut root_obj = Value::Object(serde_json::Map::new());
+                let path_str = path.get_path();
+                let clean_path = path_str.trim_start_matches(JSON_ROOT_PATH.get_path()).trim_start_matches('.');
+
+                let mut current_node = &mut root_obj;
+                for key in clean_path.split('.').filter(|s| !s.is_empty()) {
+                    current_node = &mut current_node[key];
+                }
+
+                let val_as_json: Value = serde_json::from_str(value)
+                    .map_err(|_| RedisError::Str("ERR invalid JSON value provided"))?;
+                *current_node = val_as_json;
+
+                let root_str = serde_json::to_string(&root_obj)
+                    .map_err(|_| RedisError::Str("ERR JSON serialization error"))?;
+
+                let final_val = manager.from_str(&root_str, Format::JSON, true, fpha_type)?;
+
+                redis_key.set_value(Vec::new(), final_val)?;
+                redis_key.notify_keyspace_event(ctx, "json.set")?;
+                manager.apply_changes(ctx);
+                REDIS_OK
             }
         }
     }
