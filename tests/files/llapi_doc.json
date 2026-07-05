@@ -1,0 +1,17 @@
+{
+  "string": "hello world",
+  "int": 42,
+  "double": 4.2,
+  "bool_true": true,
+  "bool_false": false,
+  "null_val": null,
+  "object": {
+    "a": 1,
+    "b": "two",
+    "c": null
+  },
+  "het_array": [1, "two", 3.5, true, null, [10, 20], {"k": "v"}],
+  "num_array": [10, 20, 30, 40],
+  "empty_array": [],
+  "empty_object": {}
+}
