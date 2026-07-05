@@ -15,7 +15,6 @@ jobs:
         working-directory: .install
         run: |
           ./install_script.sh sudo
-          ./getrust.sh sudo
       - name: Clippy
         run: |
           source "$HOME/.cargo/env"
