@@ -911,6 +911,100 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_literal_built_once_independent_of_document_size() {
+        setup();
+        // Directly verifies the optimization (not just preserved semantics): the constant
+        // literal `[1,2,3]` must be materialized once per query.
+        fn build_count(path: &str, json: &Value) -> usize {
+            json_path::BUILD_LITERAL_CALLS.with(|c| c.set(0));
+            let _ = perform_search(path, json);
+            json_path::BUILD_LITERAL_CALLS.with(|c| c.get())
+        }
+
+        let path = "$.a[?@ in [1,2,3]]";
+        let small = json!({"a": [5, 1, 9, 2]});
+        let big: Vec<i64> = (0..200).collect();
+        let large = json!({ "a": big });
+
+        let c_small = build_count(path, &small);
+        let c_large = build_count(path, &large);
+
+        assert!(c_small > 0, "literal should be built at least once");
+        assert_eq!(
+            c_small, c_large,
+            "build_literal count scaled with document size ({c_small} vs {c_large}) — \
+             literal is not being cached across elements"
+        );
+    }
+
+    #[test]
+    fn test_scalar_literal_container_fallbacks() {
+        setup();
+        // `value_in_array`: scalar-literal haystack via `subsetof` element membership.
+        verify_json!(path:"$.a[?@ subsetof [9,8].index(0)]", json:{"a":[[1]]}, results:[]);
+        // `member_of`: scalar-literal RHS of `in`.
+        verify_json!(path:"$.a[?@ in [9,8].index(0)]", json:{"a":[1]}, results:[]);
+        // `set_relate`: scalar-literal LHS of `anyof`.
+        verify_json!(path:"$.a[?[9,8].index(0) anyof [1,2]]", json:{"a":[1]}, results:[]);
+        // `term_number_seq`: scalar literal fed to an aggregate.
+        verify_json!(path:"$.a[?[9,8].index(0).sum()]", json:{"a":[1]}, results:[]);
+        // `function_index`: `index()` of a scalar literal.
+        verify_json!(path:"$.a[?[9,8].index(0).index(0)]", json:{"a":[1]}, results:[]);
+        // `function_keys`: `keys()` of a scalar literal.
+        verify_json!(path:"$.a[?[9,8].index(0).keys()]", json:{"a":[1]}, results:[]);
+        // `as_bool`: scalar non-bool literal as the RHS of `empty`.
+        verify_json!(path:"$.a[?@ empty [9,8].index(0)]", json:{"a":[[]]}, results:[]);
+        // `function_append`: `append()` onto a scalar literal wraps it as a single element,
+        // so the synthesized list is non-empty and the element matches.
+        verify_json!(path:"$.a[?[9,8].index(0).append(7)]", json:{"a":[1]}, results:[1]);
+    }
+
+    #[test]
+    fn test_literal_in_subquery_built_once_per_query() {
+        setup();
+        fn build_count(path: &str, json: &Value) -> usize {
+            json_path::BUILD_LITERAL_CALLS.with(|c| c.set(0));
+            let _ = perform_search(path, json);
+            json_path::BUILD_LITERAL_CALLS.with(|c| c.get())
+        }
+
+        // Baseline: the flat query caches `[1,2,3]` once across all elements.
+        let once = build_count("$.a[?@ in [1,2,3]]", &json!({"a": [5, 1, 9, 2]}));
+        assert!(once > 0, "literal should be built at least once");
+
+        let path = "$.a[?@.b[?@ in [1,2,3]]]";
+        let two = json!({"a": [{"b": [9]}, {"b": [9]}]});
+        let four = json!({"a": [{"b": [9]}, {"b": [9]}, {"b": [9]}, {"b": [9]}]});
+
+        // Correctness is unaffected: no inner `b` element is in `[1,2,3]`, so nothing matches.
+        assert!(perform_search(path, &two).is_empty());
+        // Materialized the same single time as the flat case, independent of how many outer
+        // elements evaluate the subquery (before the shared cache it scaled with `$.a`'s size).
+        assert_eq!(build_count(path, &two), once);
+        assert_eq!(build_count(path, &four), once);
+    }
+
+    #[test]
+    fn test_regex_in_subquery_compiled_once_per_query() {
+        setup();
+        fn compile_count(path: &str, json: &Value) -> usize {
+            json_path::REGEX_COMPILE_CALLS.with(|c| c.set(0));
+            let _ = perform_search(path, json);
+            json_path::REGEX_COMPILE_CALLS.with(|c| c.get())
+        }
+
+        let path = "$.a[?@.b[?@ =~ \"x.*\"]]";
+        let two = json!({"a": [{"b": ["y"]}, {"b": ["y"]}]});
+        let four = json!({"a": [{"b": ["y"]}, {"b": ["y"]}, {"b": ["y"]}, {"b": ["y"]}]});
+
+        // Correctness is unaffected: no inner `b` value matches `x.*`, so nothing matches.
+        assert!(perform_search(path, &two).is_empty());
+        // Compiled exactly once, independent of the number of outer elements.
+        assert_eq!(compile_count(path, &two), 1);
+        assert_eq!(compile_count(path, &four), 1);
+    }
+
+    #[test]
     fn test_size_of_array_and_string() {
         setup();
         // array element count and string char count
