@@ -17,6 +17,7 @@ use redis_module::rediserror::RedisError;
 use regex::Regex;
 use serde_json::Value;
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -293,6 +294,14 @@ fn unescape_string_value<'a>(pair: Pair<'a, Rule>) -> Cow<'a, str> {
 #[cfg(test)]
 thread_local! {
     pub(crate) static BUILD_LITERAL_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+// Test-only counter of actual `Regex::new` compilations (cache misses) on the current
+// thread. Mirrors `BUILD_LITERAL_CALLS` for the regex cache: lets tests assert a constant
+// pattern is compiled once per query, including when it lives inside a nested subquery.
+#[cfg(test)]
+thread_local! {
+    pub(crate) static REGEX_COMPILE_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// Recursively build an owned JSON `Value` from an array/object literal parse subtree
@@ -634,10 +643,16 @@ fn regex_matches(cache: &mut RegexCache, pattern: &str, full: bool, s: &str) -> 
     if cache.len() < MAX_REGEX_CACHE || cache.contains_key(&key) {
         cache
             .entry(key)
-            .or_insert_with_key(|k| Regex::new(k).ok())
+            .or_insert_with_key(|k| {
+                #[cfg(test)]
+                REGEX_COMPILE_CALLS.with(|c| c.set(c.get() + 1));
+                Regex::new(k).ok()
+            })
             .as_ref()
             .is_some_and(|re| re.is_match(s))
     } else {
+        #[cfg(test)]
+        REGEX_COMPILE_CALLS.with(|c| c.set(c.get() + 1));
         Regex::new(&key).is_ok_and(|re| re.is_match(s))
     }
 }
@@ -1763,13 +1778,17 @@ pub struct CalculationResult<'i, S: SelectValue, UPT: UserPathTracker> {
 struct PathCalculatorData<'i, S: SelectValue, UPT: UserPathTracker> {
     results: Vec<CalculationResult<'i, S, UPT>>,
     root: ValueRef<'i, S>,
-    /// Per-query compiled-regex cache (see `RegexCache`), threaded as `&mut` through
-    /// filter evaluation. Dropped with this struct when the query ends.
-    regex_cache: RegexCache,
-    /// Per-query materialized literal cache, keyed by the literal's parse
-    /// span start. Built once on first encounter and reused (via `Rc`) across every
-    /// element. Dropped with this struct when the query ends.
-    literal_cache: HashMap<usize, Rc<Value>>,
+    /// Per-query compiled-regex cache (see `RegexCache`). Shared (via `Rc<RefCell<_>>`)
+    /// with the data of every `@`/`$` subquery so a constant pattern inside a nested
+    /// filter is compiled once per query, not once per outer element. Dropped when the
+    /// last reference — the top-level query data — ends.
+    regex_cache: Rc<RefCell<RegexCache>>,
+    /// Per-query materialized literal cache, keyed by the literal's parse span start.
+    /// Shared with subquery data like `regex_cache`, so a constant literal (e.g. the array
+    /// in `$.a[?@.b[?@ in [1,2,3]]]`) is built once per query rather than once per outer
+    /// element. The parse span is stable across the whole query, so the key is unique
+    /// query-wide even when the same cache is reused across subqueries.
+    literal_cache: Rc<RefCell<HashMap<usize, Rc<Value>>>>,
 }
 
 impl<'i, S: SelectValue, UPT: UserPathTracker> PathCalculatorData<'i, S, UPT> {
@@ -1777,8 +1796,23 @@ impl<'i, S: SelectValue, UPT: UserPathTracker> PathCalculatorData<'i, S, UPT> {
         PathCalculatorData {
             results: Vec::new(),
             root,
-            regex_cache: HashMap::new(),
-            literal_cache: HashMap::new(),
+            regex_cache: Rc::new(RefCell::new(HashMap::new())),
+            literal_cache: Rc::new(RefCell::new(HashMap::new())),
+        }
+    }
+
+    /// A subquery context rooted at `root` that reuses the parent query's constant caches
+    /// (literals + regexes). Results start empty; only the caches are shared.
+    fn new_sharing(
+        root: ValueRef<'i, S>,
+        regex_cache: Rc<RefCell<RegexCache>>,
+        literal_cache: Rc<RefCell<HashMap<usize, Rc<Value>>>>,
+    ) -> Self {
+        PathCalculatorData {
+            results: Vec::new(),
+            root,
+            regex_cache,
+            literal_cache,
         }
     }
 }
@@ -2091,6 +2125,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 let key = term.as_span().start();
                 let literal = calc_data
                     .literal_cache
+                    .borrow_mut()
                     .entry(key)
                     .or_insert_with(|| Rc::new(build_literal(term)))
                     .clone();
@@ -2103,7 +2138,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 for arg in inner {
                     args.push(self.evaluate_single_term(arg, json.clone(), calc_data));
                 }
-                eval_function(name, args, &mut calc_data.regex_cache)
+                eval_function(name, args, &mut calc_data.regex_cache.borrow_mut())
             }
             Rule::string_value | Rule::string_value_escape_1 | Rule::string_value_escape_2 => {
                 match unescape_string_value(term) {
@@ -2113,7 +2148,11 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             }
             Rule::from_current => match term.into_inner().next() {
                 Some(term) => {
-                    let mut calc_data = PathCalculatorData::new(json.clone());
+                    let mut calc_data = PathCalculatorData::new_sharing(
+                        json.clone(),
+                        calc_data.regex_cache.clone(),
+                        calc_data.literal_cache.clone(),
+                    );
                     self.calc_internal(term.into_inner(), json, None, &mut calc_data);
                     Self::results_to_term(calc_data.results)
                 }
@@ -2121,7 +2160,11 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             },
             Rule::from_root => match term.into_inner().next() {
                 Some(term) => {
-                    let mut new_calc_data = PathCalculatorData::new(calc_data.root.clone());
+                    let mut new_calc_data = PathCalculatorData::new_sharing(
+                        calc_data.root.clone(),
+                        calc_data.regex_cache.clone(),
+                        calc_data.literal_cache.clone(),
+                    );
                     self.calc_internal(
                         term.into_inner(),
                         calc_data.root.clone(),
@@ -2240,7 +2283,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         for method in it {
             // The terminal `~` operator is the alias for `keys()`.
             if method.as_rule() == Rule::get_keys_op {
-                acc = eval_function(FN_KEYS, vec![acc], &mut calc_data.regex_cache);
+                acc = eval_function(FN_KEYS, vec![acc], &mut calc_data.regex_cache.borrow_mut());
                 continue;
             }
             let mut mi = method.into_inner();
@@ -2250,7 +2293,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             for arg in mi {
                 args.push(self.evaluate_arith_operand(arg, json.clone(), calc_data));
             }
-            acc = eval_function(name, args, &mut calc_data.regex_cache);
+            acc = eval_function(name, args, &mut calc_data.regex_cache.borrow_mut());
         }
         acc
     }
@@ -2285,7 +2328,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 Rule::le => term1_val.le(&term2_val),
                 Rule::eq => term1_val.eq(&term2_val),
                 Rule::ne => term1_val.ne(&term2_val),
-                Rule::re => term1_val.re(&term2_val, &mut calc_data.regex_cache),
+                Rule::re => term1_val.re(&term2_val, &mut calc_data.regex_cache.borrow_mut()),
                 Rule::in_op => term1_val.member_of(&term2_val),
                 // `nin` is the strict negation of `in`: a non-array / absent RHS makes
                 // `in` false, so `nin` is true.
