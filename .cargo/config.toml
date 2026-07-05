@@ -2,3 +2,5 @@
 [target.x86_64-unknown-linux-gnu]
 rustflags = ["-L", "deps/readies/wd40/linux-x64"]
 
+[target.'cfg(target_env = "musl")']
+rustflags = ["-C", "target-feature=-crt-static"]

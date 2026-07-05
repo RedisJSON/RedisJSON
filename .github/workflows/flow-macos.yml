@@ -82,6 +82,7 @@ jobs:
           sparse-checkout-cone-mode: false
           sparse-checkout: |
             .install
+            rust-toolchain.toml
             tests/pytest/requirements.*
       - name: Setup specific
         working-directory: setup/.install
