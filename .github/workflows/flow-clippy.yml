@@ -15,7 +15,7 @@ jobs:
         working-directory: .install
         run: |
           ./install_script.sh sudo
-          ./getrust.sh sudo
       - name: Clippy
         run: |
+          source "$HOME/.cargo/env"
           cargo clippy --release -- -D warnings -W clippy::panic -W clippy::unimplemented -W clippy::todo
