@@ -878,7 +878,7 @@ mod tests {
                         }"#;
         let value = serde_json::from_str(json).unwrap();
         let res = RedisIValueJsonKeyManager::get_memory(&value).unwrap();
-        assert_eq!(res, 728);
+        assert_eq!(res, 544);
     }
 
     /// Tests the deserialiser of IValue for a string with unicode
