@@ -72,7 +72,7 @@ pub enum PathValue<'a, 'b: 'a> {
 
 impl<'a, 'b: 'a> PathValue<'a, 'b> {
     fn get_from_array(array: &'b mut IArray, index: usize) -> Option<Self> {
-        if index >= array.len() {
+        if index >= array.len() as usize {
             return None;
         }
         let type_tag = array.as_slice().type_tag();
@@ -464,7 +464,8 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             val.as_object_mut().map_or(Ok(false), |o| {
                 let res = !o.contains_key(key);
                 if res {
-                    o.insert(key.to_string(), v.take());
+                    o.insert(key.to_string(), v.take())
+                        .map_err(|e| RedisError::String(e.to_string()))?;
                 }
                 Ok(res)
             })
@@ -543,7 +544,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
 
                     arr.try_extend(args)
                         .map_err(|e| RedisError::String(e.to_string()))?;
-                    Ok(arr.len())
+                    Ok(arr.len() as usize)
                 })
                 .unwrap_or_else(|| Err(err_json("array")))
         })
@@ -587,7 +588,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                         U64(slice) => slice[idx as _..].rotate_right(args.len()),
                         F64(slice) => slice[idx as _..].rotate_right(args.len()),
                     };
-                    Ok(arr.len())
+                    Ok(arr.len() as usize)
                 })
                 .unwrap_or_else(|| Err(err_json("array")))
         })
@@ -653,7 +654,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                         F64(slice) => slice[0..].rotate_left(range.start),
                     };
                     array.truncate(range.end - range.start);
-                    array.len()
+                    array.len() as usize
                 })
                 .ok_or_else(|| err_json("array"))
         })
@@ -740,7 +741,9 @@ fn merge(doc: &mut IValue, mut patch: IValue) {
                 map.remove(key.as_str());
             } else {
                 merge(
-                    map.entry(key.as_str()).or_insert(IValue::NULL),
+                    // Since entry now will only fail on allocation error, and the alternative is to propagate the error,
+                    // which means copying the value before the operation, I prefer to unwrap here(same behavior as before).
+                    map.entry(key.as_str()).unwrap().or_insert(IValue::NULL),
                     value.take(),
                 )
             }
@@ -875,7 +878,7 @@ mod tests {
                         }"#;
         let value = serde_json::from_str(json).unwrap();
         let res = RedisIValueJsonKeyManager::get_memory(&value).unwrap();
-        assert_eq!(res, 728);
+        assert_eq!(res, 544);
     }
 
     /// Tests the deserialiser of IValue for a string with unicode

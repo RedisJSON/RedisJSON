@@ -216,8 +216,8 @@ impl SelectValue for IValue {
 
     fn len(&self) -> Option<usize> {
         match self.destructure_ref() {
-            DestructuredRef::Array(arr) => Some(arr.len()),
-            DestructuredRef::Object(o) => Some(o.len()),
+            DestructuredRef::Array(arr) => Some(arr.len() as usize),
+            DestructuredRef::Object(o) => Some(o.len() as usize),
             _ => None,
         }
     }
