@@ -653,8 +653,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
                         U64(slice) => slice[0..].rotate_left(range.start),
                         F64(slice) => slice[0..].rotate_left(range.start),
                     };
-                    // SAFETY: range.end and range.start difference is always positive and fits in u32
-                    array.truncate((range.end - range.start).try_into().unwrap());
+                    array.truncate(range.end - range.start);
                     array.len() as usize
                 })
                 .ok_or_else(|| err_json("array"))
