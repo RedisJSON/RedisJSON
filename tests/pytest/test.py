@@ -1731,7 +1731,7 @@ def testFilterSetRelations(env):
     r.expect('JSON.GET', 'doc', '$.a[?@ noneof [1,2,3]]').equal('[[4,5],[]]')
 
 def testFilterSizeEmpty(env):
-    # Test size/sizeof and empty operators (arrays and strings)
+    # Test size/sizeof and empty operators (arrays, objects, and strings)
     r = env
     # sizeof: array element count
     r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [[4, 5], [1], [7, 8, 9]]})).ok()
@@ -1741,10 +1741,13 @@ def testFilterSizeEmpty(env):
     # sizeof: string char count
     r.expect('JSON.SET', 'doc', '$', json.dumps({"a": ["ab", "abc", "xy"]})).ok()
     r.expect('JSON.GET', 'doc', '$.a[?@ sizeof 2]').equal('["ab","xy"]')
-    # empty true -> empty array/string; empty false -> non-empty
-    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [[], [1], "", [2, 3]]})).ok()
-    r.expect('JSON.GET', 'doc', '$.a[?@ empty true]').equal('[[],""]')
-    r.expect('JSON.GET', 'doc', '$.a[?@ empty false]').equal('[[1],[2,3]]')
+    # sizeof: object member count
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [{"x": 1, "y": 2}, {"x": 1}]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?@ sizeof 2]').equal('[{"x":1,"y":2}]')
+    # empty true -> empty array/object/string; empty false -> non-empty
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [[], [1], "", [2, 3], {}, {"k": 1}]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?@ empty true]').equal('[[],"",{}]')
+    r.expect('JSON.GET', 'doc', '$.a[?@ empty false]').equal('[[1],[2,3],{"k":1}]')
 
 def testFilterArithmetic(env):
     # Test arithmetic operators in filters: + - * / % and unary, with precedence
