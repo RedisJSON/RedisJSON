@@ -1645,15 +1645,15 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
         self.set_relate(rhs, false)
     }
 
-    /// Length of `self` as a sized sequence — array element count or string char count.
-    /// `None` for anything else (numbers, bools, null, objects). Used by the `sizeof`/
-    /// `empty` operators; a multi-result (nodelist) left operand is handled any-of by the
-    /// callers, so it never reaches here.
+    /// Length of `self` as a sized sequence — array element count, object member count,
+    /// or string char count. `None` for anything else (numbers, bools, null). Used by the
+    /// `sizeof`/`empty` operators; a multi-result (nodelist) left operand is handled
+    /// any-of by the callers, so it never reaches here.
     fn seq_length(&self) -> Option<usize> {
         fn arr_or_str_len<V: SelectValue>(v: &V) -> Option<usize> {
             match v.get_type() {
                 SelectValueType::String => v.as_str().map(|s| s.chars().count()),
-                SelectValueType::Array => v.len(),
+                SelectValueType::Array | SelectValueType::Object => v.len(),
                 _ => None,
             }
         }
@@ -1682,9 +1682,10 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
         }
     }
 
-    /// `left sizeof right`: true if `self` is an array/string whose length equals the
-    /// integer value of `right` (a fractional `right` is truncated toward zero). A
-    /// non-numeric `right` or non-array/string `self` yields false.
+    /// `left sizeof right`: true if `self` is an array/object/string whose length
+    /// (element/member/char count) equals the integer value of `right` (a fractional
+    /// `right` is truncated toward zero). A non-numeric `right` or non-array/object/string
+    /// `self` yields false.
     fn size_of(&self, rhs: &Self) -> bool {
         // Any-of over a multi-result left operand, matching `==`/`<`/`in`.
         if let TermEvaluationResult::NodeList(list) = self {
@@ -1709,9 +1710,9 @@ impl<'i, 'j, S: SelectValue> TermEvaluationResult<'i, 'j, S> {
         target >= 0 && self.seq_length().is_some_and(|len| len as i64 == target)
     }
 
-    /// `left empty right`: `right` is a boolean — `true` matches an empty array/string,
-    /// `false` a non-empty one. A non-boolean `right` or non-array/string `self` yields
-    /// false.
+    /// `left empty right`: `right` is a boolean — `true` matches an empty array/object/
+    /// string, `false` a non-empty one. A non-boolean `right` or non-array/object/string
+    /// `self` yields false.
     fn empty_check(&self, rhs: &Self) -> bool {
         // Any-of over a multi-result left operand, matching `==`/`<`/`in`.
         if let TermEvaluationResult::NodeList(list) = self {
