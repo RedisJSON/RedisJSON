@@ -1012,8 +1012,9 @@ mod json_path_tests {
         verify_json!(path:"$.a[?@ sizeof 2]", json:{"a":["ab","abc","xy"]}, results:["ab","xy"]);
         // `size` is accepted as an alias for `sizeof`
         verify_json!(path:"$.a[?@ size 2]", json:{"a":[[4,5],[1]]}, results:[[4,5]]);
-        // objects are NOT sized (only arrays/strings): a 2-member object must not match
-        verify_json!(path:"$.a[?@ sizeof 2]", json:{"a":[{"x":1,"y":2}, [3,4]]}, results:[[3,4]]);
+        // objects are sized too (member count): a 2-member object matches alongside a
+        // 2-element array
+        verify_json!(path:"$.a[?@ sizeof 2]", json:{"a":[{"x":1,"y":2}, [3,4], [5]]}, results:[{"x":1,"y":2},[3,4]]);
     }
 
     #[test]
@@ -1030,10 +1031,9 @@ mod json_path_tests {
         // empty true -> empty array/string; empty false -> non-empty
         verify_json!(path:"$.a[?@ empty true]", json:{"a":[[],[1],"",[2,3]]}, results:[[],""]);
         verify_json!(path:"$.a[?@ empty false]", json:{"a":[[],[1],"",[2,3]]}, results:[[1],[2,3]]);
-        // objects are NOT subject to empty (only arrays/strings): neither {} nor {"k":1}
-        // matches empty true or empty false
-        verify_json!(path:"$.a[?@ empty true]", json:{"a":[{}, [], {"k":1}]}, results:[[]]);
-        verify_json!(path:"$.a[?@ empty false]", json:{"a":[{}, [1], {"k":1}]}, results:[[1]]);
+        // objects are subject to empty too: {} is empty, {"k":1} is not
+        verify_json!(path:"$.a[?@ empty true]", json:{"a":[{}, [], {"k":1}]}, results:[{},[]]);
+        verify_json!(path:"$.a[?@ empty false]", json:{"a":[{}, [1], {"k":1}]}, results:[[1],{"k":1}]);
     }
 
     #[test]
