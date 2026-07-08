@@ -78,6 +78,7 @@ pub trait Manager {
         key: &RedisString,
         flags: KeyFlags,
     ) -> RedisResult<Self::ReadHolder>;
+    fn open_key_from_handle(&self, key: *mut RedisModuleKey) -> *const Self::V;
     fn open_key_write(&self, ctx: &Context, key: RedisString) -> RedisResult<Self::WriteHolder>;
     fn apply_changes(&self, ctx: &Context);
     #[allow(clippy::wrong_self_convention)]

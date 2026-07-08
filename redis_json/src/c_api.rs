@@ -18,7 +18,6 @@ use std::{
 
 use crate::formatter::ReplyFormatOptions;
 use crate::key_value::KeyValue;
-use crate::redisjson::RedisJSON;
 use json_path::select_value::{JSONArrayType, SelectValue, SelectValueType, ValueRef};
 use json_path::{compile, create};
 use redis_module::raw as rawmod;
@@ -158,13 +157,7 @@ pub fn json_api_open_key_from_handle_internal<M: Manager>(
         return null();
     }
 
-    let value =
-        unsafe { rawmod::RedisModule_ModuleTypeGetValue.unwrap()(key) }.cast::<RedisJSON<M::V>>();
-    if value.is_null() {
-        return null();
-    }
-
-    unsafe { &(*value).data }
+    manager.open_key_from_handle(key)
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
