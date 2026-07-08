@@ -18,6 +18,7 @@ use std::{
 
 use crate::formatter::ReplyFormatOptions;
 use crate::key_value::KeyValue;
+use crate::redisjson::RedisJSON;
 use json_path::select_value::{JSONArrayType, SelectValue, SelectValueType, ValueRef};
 use json_path::{compile, create};
 use redis_module::raw as rawmod;
@@ -25,7 +26,7 @@ use redis_module::{key::KeyFlags, Context, RedisString, Status};
 
 use crate::manager::{Manager, ReadHolder};
 
-pub const REDIS_JSONAPI_LATEST_API_VER: usize = 7;
+pub const REDIS_JSONAPI_LATEST_API_VER: usize = 8;
 
 //
 // structs
@@ -139,6 +140,31 @@ pub fn json_api_open_key_with_flags_internal<M: Manager>(
         }
     }
     null()
+}
+
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub fn json_api_open_key_from_handle_internal<M: Manager>(
+    manager: M,
+    key: *mut rawmod::RedisModuleKey,
+) -> *const M::V {
+    if key.is_null() {
+        return null();
+    }
+
+    let key_type = unsafe { rawmod::RedisModule_KeyType.unwrap()(key) };
+    if key_type != rawmod::REDISMODULE_KEYTYPE_MODULE as c_int
+        || !manager.is_json(key).unwrap_or(false)
+    {
+        return null();
+    }
+
+    let value =
+        unsafe { rawmod::RedisModule_ModuleTypeGetValue.unwrap()(key) }.cast::<RedisJSON<M::V>>();
+    if value.is_null() {
+        return null();
+    }
+
+    unsafe { &(*value).data }
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -540,6 +566,20 @@ macro_rules! redis_json_module_export_shared_api {
         }
 
         #[no_mangle]
+        pub extern "C" fn JSONAPI_openKeyFromHandle(
+            key: *mut rawmod::RedisModuleKey,
+        ) -> *mut c_void {
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
+                run: |mngr| { json_api_open_key_from_handle_internal(mngr, key) as *mut c_void },
+            )
+        }
+
+        #[no_mangle]
         pub extern "C" fn JSONAPI_get(key: *const c_void, path: *const c_char) -> *const c_void {
             run_on_manager!(
                 pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
@@ -903,6 +943,8 @@ macro_rules! redis_json_module_export_shared_api {
             freeJson: JSONAPI_freeJson,
             // V7 entries
             getArray: JSONAPI_getArray,
+            // V8 entries
+            openKeyFromHandle: JSONAPI_openKeyFromHandle,
         };
 
         #[repr(C)]
@@ -968,6 +1010,8 @@ macro_rules! redis_json_module_export_shared_api {
 
             // V7 entries
             pub getArray: extern "C" fn(json: *const c_void, len: *mut size_t, array_type: *mut JSONArrayType) -> *const c_void,
+            // V8 entries
+            pub openKeyFromHandle: extern "C" fn(key: *mut rawmod::RedisModuleKey) -> *mut c_void,
         }
     };
 }
