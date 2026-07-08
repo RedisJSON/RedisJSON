@@ -777,7 +777,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     }
 
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
-    fn open_key_from_handle(&self, key: *mut RedisModuleKey) -> *const IValue {
+    fn get_value_from_handle(&self, key: *mut RedisModuleKey) -> *const IValue {
         let value = unsafe { rawmod::RedisModule_ModuleTypeGetValue.unwrap()(key) }
             .cast::<RedisJSON<IValue>>();
         if value.is_null() {

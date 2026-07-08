@@ -186,11 +186,11 @@ static int OpenFlagsCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
     return REDISMODULE_OK;
 }
 
-/* LLAPI.OPENHANDLE key path -> number of matched nodes (uses openKeyFromHandle). */
-static int OpenHandleCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+/* LLAPI.GETJSONFROMHANDLE key path -> number of matched nodes (uses getJsonFromHandle). */
+static int GetJsonFromHandleCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 3) return RedisModule_WrongArity(ctx);
     RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
-    RedisJSON json = key ? japi->openKeyFromHandle(key) : NULL;
+    RedisJSON json = key ? japi->getJsonFromHandle(key) : NULL;
     JSONResultsIterator it = get_iter(ctx, json, argv[2]);
     if (!it) {
         if (key) RedisModule_CloseKey(key);
@@ -507,7 +507,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     REGISTER("LLAPI.RESET", ResetCmd);
     REGISTER("LLAPI.OPENFROMSTR", OpenFromStrCmd);
     REGISTER("LLAPI.OPENFLAGS", OpenFlagsCmd);
-    REGISTER("LLAPI.OPENHANDLE", OpenHandleCmd);
+    REGISTER("LLAPI.GETJSONFROMHANDLE", GetJsonFromHandleCmd);
     REGISTER("LLAPI.TYPE", TypeCmd);
     REGISTER("LLAPI.SCALAR", ScalarCmd);
     REGISTER("LLAPI.GETLEN", GetLenCmd);

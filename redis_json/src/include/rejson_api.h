@@ -174,9 +174,9 @@ typedef struct RedisJSONAPI {
   ////////////////
   // V8 entries //
   ////////////////
-  // Open a RedisJSON root from an already-open RedisModuleKey handle.
+  // Get a RedisJSON root from an already-open RedisModuleKey handle.
   // The caller owns the key handle and must keep it open while using the returned RedisJSON.
-  RedisJSON (*openKeyFromHandle)(RedisModuleKey *redis_key);
+  RedisJSON (*getJsonFromHandle)(RedisModuleKey *redis_key);
 
 } RedisJSONAPI;
 
