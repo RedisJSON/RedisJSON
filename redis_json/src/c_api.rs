@@ -142,7 +142,7 @@ pub fn json_api_open_key_with_flags_internal<M: Manager>(
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub fn json_api_open_key_from_handle_internal<M: Manager>(
+pub fn json_api_get_value_from_handle_internal<M: Manager>(
     manager: M,
     key: *mut rawmod::RedisModuleKey,
 ) -> *const M::V {
@@ -157,7 +157,7 @@ pub fn json_api_open_key_from_handle_internal<M: Manager>(
         return null();
     }
 
-    manager.open_key_from_handle(key)
+    manager.get_value_from_handle(key)
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -559,7 +559,7 @@ macro_rules! redis_json_module_export_shared_api {
         }
 
         #[no_mangle]
-        pub extern "C" fn JSONAPI_openKeyFromHandle(
+        pub extern "C" fn JSONAPI_getJsonFromHandle(
             key: *mut rawmod::RedisModuleKey,
         ) -> *mut c_void {
             run_on_manager!(
@@ -568,7 +568,7 @@ macro_rules! redis_json_module_export_shared_api {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
                 },
-                run: |mngr| { json_api_open_key_from_handle_internal(mngr, key) as *mut c_void },
+                run: |mngr| { json_api_get_value_from_handle_internal(mngr, key) as *mut c_void },
             )
         }
 
@@ -937,7 +937,7 @@ macro_rules! redis_json_module_export_shared_api {
             // V7 entries
             getArray: JSONAPI_getArray,
             // V8 entries
-            openKeyFromHandle: JSONAPI_openKeyFromHandle,
+            getJsonFromHandle: JSONAPI_getJsonFromHandle,
         };
 
         #[repr(C)]
@@ -1004,7 +1004,7 @@ macro_rules! redis_json_module_export_shared_api {
             // V7 entries
             pub getArray: extern "C" fn(json: *const c_void, len: *mut size_t, array_type: *mut JSONArrayType) -> *const c_void,
             // V8 entries
-            pub openKeyFromHandle: extern "C" fn(key: *mut rawmod::RedisModuleKey) -> *mut c_void,
+            pub getJsonFromHandle: extern "C" fn(key: *mut rawmod::RedisModuleKey) -> *mut c_void,
         }
     };
 }
