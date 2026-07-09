@@ -57,7 +57,7 @@ def _env_with_doc():
 def testLLAPIVersion():
     env = _new_env()
     ver = env.cmd('LLAPI.VERSION')
-    # RedisJSON exports up to V7; other modules may export a lower version.
+    # RedisJSON exports up to V8; other modules may export a lower version.
     env.assertTrue(isinstance(ver, int) and ver >= 1)
 
 
@@ -130,6 +130,7 @@ def testLLAPIOpenFromStrAndFlags():
     env = _env_with_doc()
     env.assertEqual(env.cmd('LLAPI.OPENFROMSTR', 'doc', '$.int'), 1)
     env.assertEqual(env.cmd('LLAPI.OPENFLAGS', 'doc', '$.int'), 1)
+    env.assertEqual(env.cmd('LLAPI.GETJSONFROMHANDLE', 'doc', '$.int'), 1)
 
 
 def testLLAPIGetAt():
@@ -184,6 +185,9 @@ def testLLAPIErrorsMissingOrWrongKey():
     env.expect('LLAPI.TYPE', 'missing', '$').raiseError()
     env.expect('LLAPI.TYPE', 'plain', '$').raiseError()
     env.expect('LLAPI.OPENFROMSTR', 'missing', '$').raiseError()
+    # getJsonFromHandle must reject a missing key (NULL handle) and a wrong-type key.
+    env.expect('LLAPI.GETJSONFROMHANDLE', 'missing', '$').raiseError()
+    env.expect('LLAPI.GETJSONFROMHANDLE', 'plain', '$').raiseError()
 
 
 def testLLAPIErrorsTypeMismatch():

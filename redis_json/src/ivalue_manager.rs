@@ -20,7 +20,7 @@ use ijson::{
 };
 use json_path::select_value::{SelectValue, SelectValueType, MAX_DEPTH};
 use redis_module::key::{verify_type, KeyFlags, RedisKey, RedisKeyWritable};
-use redis_module::raw::{RedisModuleKey, Status};
+use redis_module::raw::{self as rawmod, RedisModuleKey, Status};
 use redis_module::RedisError;
 use redis_module::{Context, NotifyEvent, RedisResult, RedisString};
 use serde::de::DeserializeSeed;
@@ -29,6 +29,7 @@ use serde_json::Number;
 use std::io::Cursor;
 use std::marker::PhantomData;
 use std::mem::size_of;
+use std::ptr::null;
 
 use crate::redisjson::RedisJSON;
 
@@ -773,6 +774,17 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     ) -> RedisResult<Self::ReadHolder> {
         let key = ctx.open_key_with_flags(key, flags);
         Ok(IValueKeyHolderRead { key })
+    }
+
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
+    fn get_value_from_handle(&self, key: *mut RedisModuleKey) -> *const IValue {
+        let value = unsafe { rawmod::RedisModule_ModuleTypeGetValue.unwrap()(key) }
+            .cast::<RedisJSON<IValue>>();
+        if value.is_null() {
+            return null();
+        }
+
+        unsafe { &(*value).data }
     }
 
     fn open_key_write(
