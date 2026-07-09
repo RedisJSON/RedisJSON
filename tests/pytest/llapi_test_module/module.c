@@ -186,6 +186,22 @@ static int OpenFlagsCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
     return REDISMODULE_OK;
 }
 
+/* LLAPI.GETJSONFROMHANDLE key path -> number of matched nodes (uses getJsonFromHandle). */
+static int GetJsonFromHandleCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if (argc != 3) return RedisModule_WrongArity(ctx);
+    RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
+    RedisJSON json = key ? japi->getJsonFromHandle(key) : NULL;
+    JSONResultsIterator it = get_iter(ctx, json, argv[2]);
+    if (!it) {
+        if (key) RedisModule_CloseKey(key);
+        return REDISMODULE_OK;
+    }
+    RedisModule_ReplyWithLongLong(ctx, (long long)japi->len(it));
+    japi->freeIter(it);
+    if (key) RedisModule_CloseKey(key);
+    return REDISMODULE_OK;
+}
+
 /* LLAPI.TYPE key path -> JSONType name of the first matched node. */
 static int TypeCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 3) return RedisModule_WrongArity(ctx);
@@ -449,7 +465,7 @@ static int PathParseCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
 }
 
 /* Bind the latest shared-API version. This module exercises functions across
- * all API versions (V1..V7), so it requires a provider exporting the full,
+ * all API versions (V1..V8), so it requires a provider exporting the full,
  * current struct; binding an older version could leave later fields undefined
  * and dereferencing them would read past the provider's struct. */
 static int fetch_japi(RedisModuleCtx *ctx) {
@@ -491,6 +507,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     REGISTER("LLAPI.RESET", ResetCmd);
     REGISTER("LLAPI.OPENFROMSTR", OpenFromStrCmd);
     REGISTER("LLAPI.OPENFLAGS", OpenFlagsCmd);
+    REGISTER("LLAPI.GETJSONFROMHANDLE", GetJsonFromHandleCmd);
     REGISTER("LLAPI.TYPE", TypeCmd);
     REGISTER("LLAPI.SCALAR", ScalarCmd);
     REGISTER("LLAPI.GETLEN", GetLenCmd);
