@@ -747,7 +747,7 @@ fn apply_updates<M: Manager>(
                 UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value.clone()),
                 UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, value.clone()),
             }
-            .unwrap_or(updated)
+            .map_or(updated, |v| v || updated)
         })
     }
 }

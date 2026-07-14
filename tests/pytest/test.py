@@ -1387,6 +1387,38 @@ def testMSET_Partial(env):
     env.expect("JSON.MSET", "a{s}", '$.x', '{}', "a{s}", '$.x.z[1]', '50', "a{s}",  '$.u', '70').ok()
     env.expect("JSON.GET", "a{s}", '$').equal('[{"x":{},"u":70}]')
 
+def testApplyUpdatesFoldDoesNotLoseEarlierSuccess(env):
+    """
+    Regression test for apply_updates() in commands.rs: when a single JSON.SET
+    matches multiple paths (e.g. via a recursive-descent path), the fold that
+    combines the per-path results uses `.unwrap_or(updated)`. This means a
+    LATER path that resolves to `Ok(false)` overwrites an EARLIER path that
+    resolved to `Ok(true)`, instead of OR-ing the results together.
+    """
+    chain_depth = 100
+    doc = '{"a":{"x":0},"b":' + ('{"n":' * chain_depth) + '{"x":0}' + ('}' * chain_depth) + '}'
+    env.expect("JSON.SET", "foldbug", "$", doc).ok()
+
+    # A value nested 60 arrays deep (calculate_value_depth() == 60).
+    patch_nesting = 60
+    patch = ('[' * patch_nesting) + '0' + (']' * patch_nesting)
+
+    # '$..x' matches both "a.x" (path depth 2: shallow + patch = 62 < 128, succeeds)
+    # and "b...x" (path depth 102: deep + patch = 162 >= 128, hits the recursion
+    # limit, swallowed to Ok(false) by set_value()).
+    res = env.cmd("JSON.SET", "foldbug", "$..x", patch)
+
+    # The shallow match succeeded, so the command must report success...
+    env.assertTrue(res is not None, message="JSON.SET reported no-op even though an earlier matched path succeeded")
+
+    # ...and the mutation must be visible regardless of the reply.
+    env.assertEqual(env.cmd("JSON.GET", "foldbug", "$.a.x"), '[' + patch + ']')
+
+    if env.useSlaves:
+        env.cmd('WAIT', '1', '10000')
+        slave_conn = env.getSlaveConnection()
+        env.assertEqual(slave_conn.execute_command("JSON.GET", "foldbug", "$.a.x"), '[' + patch + ']')
+
 def testMSET_Error(env):
     env.expect("JSON.SET", "a{s}", '$', '"a_val"').ok()
 
