@@ -713,28 +713,37 @@ pub fn json_mset_command_impl<M: Manager>(
         parsed.push((key, update_info, value_str));
     }
 
-    let res = parsed
-        .into_iter()
-        .fold(REDIS_OK, |res, (key, update_info, value_str)| {
-            let mut redis_key = manager.open_key_write(ctx, key)?;
+    let mut all_updated = true;
+    for (key, update_info, value_str) in parsed {
+        let mut redis_key = manager.open_key_write(ctx, key)?;
 
-            let value = manager.from_str(&value_str, Format::JSON, true, None)?;
+        let value = manager.from_str(&value_str, Format::JSON, true, None)?;
 
-            let updated = if let Some(update_info) = update_info {
-                !update_info.is_empty()
-                    && apply_updates::<M>(&mut redis_key, value, update_info).any_updated()
+        let (any_updated, key_all_updated) = if let Some(update_info) = update_info {
+            if update_info.is_empty() {
+                (false, false)
             } else {
-                // In case it is a root path
-                redis_key.set_value(Vec::new(), value)?
-            };
-            if updated {
-                redis_key.notify_keyspace_event(ctx, "json.mset")?
+                let result = apply_updates::<M>(&mut redis_key, value, update_info);
+                (result.any_updated(), result.all_updated())
             }
-            res
-        });
+        } else {
+            // In case it is a root path
+            let updated = redis_key.set_value(Vec::new(), value)?;
+            (updated, updated)
+        };
+
+        if any_updated {
+            redis_key.notify_keyspace_event(ctx, "json.mset")?;
+        }
+        all_updated &= key_all_updated;
+    }
 
     manager.apply_changes(ctx);
-    res
+    if all_updated {
+        REDIS_OK
+    } else {
+        Ok(RedisValue::Null)
+    }
 }
 
 enum ApplyUpdatesResult {
@@ -744,11 +753,19 @@ enum ApplyUpdatesResult {
 }
 
 impl ApplyUpdatesResult {
-    fn combine(self, updated: bool) -> Self {
-        match (self, updated) {
-            (Self::NoneUpdated, false) => Self::NoneUpdated,
-            (Self::NoneUpdated | Self::AllUpdated, true) => Self::AllUpdated,
-            (Self::AllUpdated, false) | (Self::SomeUpdated, _) => Self::SomeUpdated,
+    // Derived from both sides' own (any, all) flags rather than a transition
+    // table keyed on the previous variant: a variant alone can't tell "nothing
+    // processed yet" apart from "only failures so far", so combining by
+    // previous-state-plus-next-bool lets a later success look like full
+    // success even after an earlier failure.
+    fn combine(self, other: Self) -> Self {
+        match (
+            self.any_updated() || other.any_updated(),
+            self.all_updated() && other.all_updated(),
+        ) {
+            (false, _) => Self::NoneUpdated,
+            (true, true) => Self::AllUpdated,
+            (true, false) => Self::SomeUpdated,
         }
     }
 
@@ -782,16 +799,23 @@ fn apply_updates<M: Manager>(
             UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value),
             UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, value),
         }
-        .unwrap_or(false).into()
+        .unwrap_or(false)
+        .into()
     } else {
-        update_info.into_iter().fold(ApplyUpdatesResult::NoneUpdated, |acc, ui| {
-            let updated = match ui {
-                UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value.clone()),
-                UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, value.clone()),
-            }
-            .unwrap_or(false);
-            acc.combine(updated)
-        })
+        update_info
+            .into_iter()
+            .map(|ui| {
+                match ui {
+                    UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value.clone()),
+                    UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, value.clone()),
+                }
+                .unwrap_or(false)
+                .into()
+            })
+            .reduce(ApplyUpdatesResult::combine)
+            // SAFETY: `reduce` is guaranteed to return a value
+            // because the iterator is not empty
+            .unwrap()
     }
 }
 
