@@ -746,6 +746,7 @@ pub fn json_mset_command_impl<M: Manager>(
     }
 }
 
+#[allow(clippy::enum_variant_names)]
 enum ApplyUpdatesResult {
     NoneUpdated,
     SomeUpdated,
