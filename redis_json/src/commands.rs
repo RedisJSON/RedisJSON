@@ -439,12 +439,19 @@ pub fn json_set_command_impl<M: Manager>(
                 }
             } else {
                 let update_info = KeyValue::new(doc).find_paths(path.get_path(), op)?;
-                if !update_info.is_empty() && apply_updates::<M>(&mut redis_key, val, update_info) {
-                    redis_key.notify_keyspace_event(ctx, "json.set")?;
-                    manager.apply_changes(ctx);
-                    REDIS_OK
-                } else {
+                if update_info.is_empty() {
                     Ok(RedisValue::Null)
+                } else {
+                    let result = apply_updates::<M>(&mut redis_key, val, update_info);
+                    if result.any_updated() {
+                        redis_key.notify_keyspace_event(ctx, "json.set")?;
+                        manager.apply_changes(ctx);
+                    }
+                    if result.all_updated() {
+                        REDIS_OK
+                    } else {
+                        Ok(RedisValue::Null)
+                    }
                 }
             }
         }
@@ -714,7 +721,8 @@ pub fn json_mset_command_impl<M: Manager>(
             let value = manager.from_str(&value_str, Format::JSON, true, None)?;
 
             let updated = if let Some(update_info) = update_info {
-                !update_info.is_empty() && apply_updates::<M>(&mut redis_key, value, update_info)
+                !update_info.is_empty()
+                    && apply_updates::<M>(&mut redis_key, value, update_info).any_updated()
             } else {
                 // In case it is a root path
                 redis_key.set_value(Vec::new(), value)?
@@ -729,25 +737,60 @@ pub fn json_mset_command_impl<M: Manager>(
     res
 }
 
+enum ApplyUpdatesResult {
+    NoneUpdated,
+    SomeUpdated,
+    AllUpdated,
+}
+
+impl ApplyUpdatesResult {
+    fn combine(self, updated: bool) -> Self {
+        match (self, updated) {
+            (Self::NoneUpdated, false) => Self::NoneUpdated,
+            (Self::NoneUpdated | Self::AllUpdated, true) => Self::AllUpdated,
+            (Self::AllUpdated, false) | (Self::SomeUpdated, _) => Self::SomeUpdated,
+        }
+    }
+
+    fn any_updated(&self) -> bool {
+        !matches!(self, Self::NoneUpdated)
+    }
+
+    fn all_updated(&self) -> bool {
+        matches!(self, Self::AllUpdated)
+    }
+}
+
+impl From<bool> for ApplyUpdatesResult {
+    fn from(value: bool) -> Self {
+        if value {
+            Self::AllUpdated
+        } else {
+            Self::NoneUpdated
+        }
+    }
+}
+
 fn apply_updates<M: Manager>(
     redis_key: &mut M::WriteHolder,
     value: M::O,
     mut update_info: Vec<UpdateInfo>,
-) -> bool {
+) -> ApplyUpdatesResult {
     // If there is only one update info, we can avoid cloning the value
     if update_info.len() == 1 {
         match update_info.pop().unwrap() {
             UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value),
             UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, value),
         }
-        .unwrap_or(false)
+        .unwrap_or(false).into()
     } else {
-        update_info.into_iter().fold(false, |updated, ui| {
-            match ui {
+        update_info.into_iter().fold(ApplyUpdatesResult::NoneUpdated, |acc, ui| {
+            let updated = match ui {
                 UpdateInfo::SUI(sui) => redis_key.set_value(sui.path, value.clone()),
                 UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, value.clone()),
             }
-            .map_or(updated, |v| v || updated)
+            .unwrap_or(false);
+            acc.combine(updated)
         })
     }
 }

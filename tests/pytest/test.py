@@ -1388,13 +1388,6 @@ def testMSET_Partial(env):
     env.expect("JSON.GET", "a{s}", '$').equal('[{"x":{},"u":70}]')
 
 def testApplyUpdatesFoldDoesNotLoseEarlierSuccess(env):
-    """
-    Regression test for apply_updates() in commands.rs: when a single JSON.SET
-    matches multiple paths (e.g. via a recursive-descent path), the fold that
-    combines the per-path results uses `.unwrap_or(updated)`. This means a
-    LATER path that resolves to `Ok(false)` overwrites an EARLIER path that
-    resolved to `Ok(true)`, instead of OR-ing the results together.
-    """
     chain_depth = 100
     doc = '{"a":{"x":0},"b":' + ('{"n":' * chain_depth) + '{"x":0}' + ('}' * chain_depth) + '}'
     env.expect("JSON.SET", "foldbug", "$", doc).ok()
@@ -1408,13 +1401,14 @@ def testApplyUpdatesFoldDoesNotLoseEarlierSuccess(env):
     # limit, swallowed to Ok(false) by set_value()).
     res = env.cmd("JSON.SET", "foldbug", "$..x", patch)
 
-    # The shallow match succeeded, so the command must report success...
-    env.assertTrue(res is not None, message="JSON.SET reported no-op even though an earlier matched path succeeded")
+    # Not every matched path succeeded, so the command must report failure...
+    env.assertEqual(res, None, message="JSON.SET reported success even though one matched path failed")
 
-    # ...and the mutation must be visible regardless of the reply.
+    # ...but the path that DID succeed must still be applied...
     env.assertEqual(env.cmd("JSON.GET", "foldbug", "$.a.x"), '[' + patch + ']')
 
     if env.useSlaves:
+        # ...and replicated, so master and replica don't diverge.
         env.cmd('WAIT', '1', '10000')
         slave_conn = env.getSlaveConnection()
         env.assertEqual(slave_conn.execute_command("JSON.GET", "foldbug", "$.a.x"), '[' + patch + ']')
