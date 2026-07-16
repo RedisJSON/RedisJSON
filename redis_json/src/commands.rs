@@ -442,7 +442,10 @@ pub fn json_set_command_impl<M: Manager>(
                 if update_info.is_empty() {
                     Ok(RedisValue::Null)
                 } else {
-                    let result = apply_updates::<M>(&mut redis_key, val, update_info);
+                    let result: ApplyUpdatesResult =
+                        apply_updates::<M>(&mut redis_key, val, update_info);
+                    // If any path is updated, notify the keyspace event
+                    // But only return OK if all paths are updated, otherwise return null
                     if result.any_updated() {
                         redis_key.notify_keyspace_event(ctx, "json.set")?;
                         manager.apply_changes(ctx);
