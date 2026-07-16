@@ -138,7 +138,7 @@ jobs:
             export BINDGEN_EXTRA_CLANG_ARGS="-isysroot ${_SDK}"
             export CC=/usr/bin/clang CXX=/usr/bin/clang++
           fi
-          make test 2>&1 | tee test_output.log
+          PARALLEL=1 make test 2>&1 | tee test_output.log
       - name: Capture test results
         if: always()
         uses: ./.github/actions/capture-test-results
