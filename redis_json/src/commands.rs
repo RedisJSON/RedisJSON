@@ -817,9 +817,7 @@ fn apply_updates<M: Manager>(
                 .into()
             })
             .reduce(ApplyUpdatesResult::combine)
-            // SAFETY: `reduce` is guaranteed to return a value
-            // because the iterator is not empty
-            .unwrap()
+            .unwrap_or(ApplyUpdatesResult::NoneUpdated)
     }
 }
 
