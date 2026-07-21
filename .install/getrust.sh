@@ -1,50 +1,43 @@
 #!/bin/bash
+set -euo pipefail
 
-MODE=$1 # whether to install using sudo or not
+# Install the Rust toolchain pinned by rust-toolchain.toml via rustup.
+#
+# Contract (keeps bootstraps of co-located modules from colliding):
+#   - rustup owns ~/.rustup and ~/.cargo only; nothing is written to
+#     /usr/local/bin, /usr/bin, or shell profiles.
+#   - No default toolchain is set and `rustup update` is never run, so this
+#     script cannot change which Rust version any other checkout resolves.
+#     Version selection happens per-directory through rust-toolchain.toml
+#     (cargo/rustc in ~/.cargo/bin are rustup proxies that read it).
+#   - The Makefile prepends $(CARGO_HOME)/bin to PATH, so `make bootstrap`
+#     followed by `make build` works in the same shell without profile edits.
+#
+# Idempotent: re-running skips anything already installed.
+#
+# Called by install_script.sh with cwd = repo root. The historical MODE/sudo
+# argument is accepted but unused: everything here is user-scoped.
 
-# Download and install rustup
-$MODE curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+export PATH="$HOME/.cargo/bin:$PATH"
 
-# Source the cargo environment script to update the PATH
-echo "source $HOME/.cargo/env" >> $HOME/.bashrc
-source $HOME/.cargo/env
-
-# Update rustup
-$MODE rustup update
-
-# Install the toolchain specified in rust-toolchain.toml (if present)
-if [ -f "rust-toolchain.toml" ]; then
-    TOOLCHAIN=$(grep -E '^\s*channel\s*=' rust-toolchain.toml | sed 's/.*=\s*"\([^"]*\)".*/\1/' | tr -d ' ')
-    if [ -n "$TOOLCHAIN" ]; then
-        $MODE rustup toolchain install "$TOOLCHAIN"
-    else
-        $MODE rustup update nightly
-    fi
-else
-    $MODE rustup update nightly
+# Install rustup if missing. --default-toolchain none: the pinned toolchain is
+# installed explicitly below; installing `stable` here would just waste time
+# and disk. Also covers hosts that have a distro cargo but no rustup — the
+# rustup proxies are required for rust-toolchain.toml resolution.
+if ! command -v rustup &>/dev/null; then
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain none
 fi
 
-# Install required components for the active toolchain
-$MODE rustup component add rust-src
-$MODE rustup component add rustfmt
-$MODE rustup component add clippy
+TOOLCHAIN=$(sed -n 's/^[[:space:]]*channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust-toolchain.toml | head -1)
+if [ -z "$TOOLCHAIN" ]; then
+    echo "getrust.sh: cannot read pinned channel from $(pwd)/rust-toolchain.toml" >&2
+    exit 1
+fi
 
-# Symlink the toolchain into /usr/local/bin so it's on every shell's PATH —
-# not just bash-login shells that source ~/.cargo/env. This is what makes
-# `make build` work in the same shell session that just ran `make bootstrap`
-# (and also covers direct `make -C modules/<name>` calls, CI runners, and
-# any future script that shells out to cargo/rustc). $MODE handles
-# sudo-vs-no-sudo identically to the rest of the script. Best-effort: if
-# /usr/local/bin isn't writable the symlink silently no-ops; later login
-# shells still pick up cargo via the ~/.cargo/env hook above, but the
-# current shell would then not have cargo on PATH.
-for bin in rustc cargo rustup rustfmt cargo-fmt clippy-driver cargo-clippy; do
-    if [ -e "$HOME/.cargo/bin/$bin" ]; then
-        $MODE ln -sf "$HOME/.cargo/bin/$bin" "/usr/local/bin/$bin" 2>/dev/null || true
-    fi
-done
+rustup toolchain install "$TOOLCHAIN"
+rustup component add --toolchain "$TOOLCHAIN" rust-src rustfmt clippy
 
-# Verify cargo installation
+# Verify the full chain: proxy on PATH + rust-toolchain.toml resolution in
+# this directory + the toolchain we just installed.
 cargo --version
-
 rustup show

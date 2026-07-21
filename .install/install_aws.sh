@@ -9,6 +9,6 @@ then
     $MODE installer -pkg AWSCLIV2.pkg -target /
 else
     wget -O awscliv2.zip https://awscli.amazonaws.com/awscli-exe-linux-${ARCH}.zip
-    unzip awscliv2.zip
+    unzip -o awscliv2.zip
     $MODE ./aws/install
 fi

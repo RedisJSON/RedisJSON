@@ -10,6 +10,10 @@
 # Python
 *.pyc
 
+# LLAPI flow-test consumer module (built artifacts)
+tests/pytest/llapi_test_module/*.so
+tests/pytest/llapi_test_module/*.o
+
 # Redis
 # *.rdb
 

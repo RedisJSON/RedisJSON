@@ -18,8 +18,10 @@ use redis_module::InfoContext;
 
 #[cfg(not(feature = "as-library"))]
 use redis_module::Status;
+
 #[cfg(not(feature = "as-library"))]
-use redis_module::{Context, RedisResult, RedisValue};
+use redis_module::RedisResult;
+use redis_module::{Context, RedisValue};
 
 #[cfg(not(feature = "as-library"))]
 use redis_module::key::KeyFlags;
@@ -30,9 +32,9 @@ use crate::c_api::{
     json_api_free_key_values_iter, json_api_get, json_api_get_array, json_api_get_at,
     json_api_get_boolean, json_api_get_double, json_api_get_int, json_api_get_json,
     json_api_get_json_from_iter, json_api_get_key_value, json_api_get_len, json_api_get_string,
-    json_api_get_type, json_api_is_json, json_api_len, json_api_next, json_api_next_key_value,
-    json_api_open_key_internal, json_api_open_key_with_flags_internal, json_api_reset_iter,
-    LLAPI_CTX,
+    json_api_get_type, json_api_get_value_from_handle_internal, json_api_is_json, json_api_len,
+    json_api_next, json_api_next_key_value, json_api_open_key_internal,
+    json_api_open_key_with_flags_internal, json_api_reset_iter, LLAPI_CTX,
 };
 
 use crate::commands::{
@@ -457,7 +459,6 @@ pub fn setup_panic_handler() {
 /// Read Redis' `hide-user-data-from-log` server config via `CONFIG GET`.
 /// Returns `false` (the server's own default) when the config cannot be read
 /// or parsed.
-#[cfg(not(feature = "as-library"))]
 fn read_hide_user_data_from_log(ctx: &Context) -> bool {
     let Ok(reply) = ctx.call("CONFIG", &["GET", "hide-user-data-from-log"]) else {
         return false;
@@ -477,14 +478,12 @@ fn read_hide_user_data_from_log(ctx: &Context) -> bool {
 /// Refresh the json path engine's cached copy of Redis' `hide-user-data-from-log`
 /// server config, so its trace logs redact user data exactly when Redis core
 /// does. Called once at module load and again on every relevant `CONFIG SET`.
-#[cfg(not(feature = "as-library"))]
 pub fn sync_hide_user_data_from_log(ctx: &Context) {
     json_path::set_hide_user_data_from_log(read_hide_user_data_from_log(ctx));
 }
 
 /// Keep the cached `hide-user-data-from-log` value in sync when it is changed at
 /// runtime via `CONFIG SET`.
-#[cfg(not(feature = "as-library"))]
 #[::redis_module_macros::config_changed_event_handler]
 fn hide_user_data_config_changed(ctx: &Context, changed_configs: &[&str]) {
     if changed_configs.contains(&"hide-user-data-from-log") {

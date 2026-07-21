@@ -1,0 +1,209 @@
+name: Push Docker Images
+
+# Rollout notes:
+# - `.install/get-redis-ref.sh` is the source of truth for CI image tags.
+# - `docker-image-changes` forces PR CI to build locally and merged PR image
+#   publishing to rebuild/push the tag.
+# - Linux CI pulls prebuilt images first and falls back to building locally when
+#   an image is missing.
+
+on:
+  schedule:
+    - cron: '20 19 * * *' # 19:20 UTC, one hour before Event Nightly
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+      - master
+      - '[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+'
+      - 'release/**'
+  push:
+    branches:
+      - main
+      - master
+      - '[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+'
+      - 'release/**'
+    paths:
+      - 'pack/ramp.yml'
+  workflow_dispatch:
+    inputs:
+      architecture:
+        description: 'Architecture images to build'
+        type: choice
+        required: true
+        default: 'all'
+        options:
+          - all
+          - x86
+          - arm
+      force:
+        description: 'Rebuild and push images even if the tag already exists'
+        type: boolean
+        default: false
+
+jobs:
+  should-run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - name: Checkout
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+
+      - name: Check Docker image version change
+        id: check
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "::notice title=Docker image::Scheduled image publish before nightly"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            if [ "${{ github.event.pull_request.merged }}" = "true" ]; then
+              echo "::notice title=Docker image::Merged PR; checking/pushing missing or forced images"
+              echo "run=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "::notice title=Docker image::PR was closed without merge; skipping image push"
+              echo "run=false" >> "$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
+
+          if git diff --unified=0 HEAD^ HEAD -- pack/ramp.yml | grep -Eq '^[+-]compatible_redis_version:'; then
+            echo "::notice title=Docker image::compatible_redis_version changed; checking/pushing images"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=Docker image::compatible_redis_version did not change; skipping image push"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  setup-matrix:
+    if: ${{ needs.should-run.outputs.run == 'true' }}
+    needs: should-run
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Set matrix
+        id: set-matrix
+        env:
+          ARCHITECTURE: ${{ inputs.architecture || 'all' }}
+        run: |
+          X86_OS="bionic focal jammy rocky8 rocky9 bullseye amazonlinux2 amazonlinux2023 mariner2 azurelinux3 alpine noble resolute rocky10 alma8 alma9 alma10 bookworm trixie"
+          ARM_OS="bionic focal jammy rocky9 azurelinux3 amazonlinux2023 alpine noble resolute rocky8 rocky10 alma8 alma9 alma10 bullseye bookworm trixie mariner2"
+          MATRIX="["
+          add_platform() {
+            local arch="$1"
+            local image_arch="$2"
+            local runner="$3"
+            local platform="$4"
+            local os_list="$5"
+            for os in $os_list; do
+              MATRIX="${MATRIX}{\"arch\":\"${arch}\",\"image_arch\":\"${image_arch}\",\"runner\":\"${runner}\",\"platform\":\"${platform}\",\"os\":\"${os}\"},"
+            done
+          }
+          if [ "$ARCHITECTURE" = "all" ] || [ "$ARCHITECTURE" = "x86" ]; then
+            add_platform "x64" "x86" "ubuntu-22.04" "linux/amd64" "$X86_OS"
+          fi
+          if [ "$ARCHITECTURE" = "all" ] || [ "$ARCHITECTURE" = "arm" ]; then
+            add_platform "arm64" "arm" "ubuntu24-arm64-4-16" "linux/arm64" "$ARM_OS"
+          fi
+          MATRIX="${MATRIX%,}]"
+          echo "matrix=${MATRIX}" >> "$GITHUB_OUTPUT"
+          echo "Generated matrix: ${MATRIX}"
+
+  push-images:
+    name: ${{ matrix.image.os }}-${{ matrix.image.image_arch }}
+    needs: setup-matrix
+    runs-on: ${{ matrix.image.runner }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      # Throttle the fan-out: all arm64 jobs pull from ports.ubuntu.com (no CDN)
+      # in one synchronized burst otherwise, causing apt connection timeouts.
+      max-parallel: 8
+      matrix:
+        image: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
+    env:
+      OS: ${{ matrix.image.os }}
+      IMAGE_ARCH: ${{ matrix.image.image_arch }}
+      DOCKER_PLATFORM: ${{ matrix.image.platform }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          submodules: 'recursive'
+
+      - name: Login to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Set Redis ref
+        run: |
+          echo "REDIS_REF=$(.install/get-redis-ref.sh)" >> "$GITHUB_ENV"
+
+      - name: Set Docker Image
+        run: |
+          repo="$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          image_tag="$(.install/get-redis-ref.sh)"
+          echo "DOCKER_IMAGE=ghcr.io/${repo}/redisjson-${IMAGE_ARCH}-${OS}:${image_tag}" >> "$GITHUB_ENV"
+
+      - name: Check Docker Image
+        id: check-image
+        run: |
+          image_tag="$(.install/get-redis-ref.sh)"
+          force_rebuild=false
+          if [ "${{ inputs.force || false }}" = "true" ]; then
+            force_rebuild=true
+          fi
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ contains(github.event.pull_request.labels.*.name, 'docker-image-changes') }}" = "true" ]; then
+            force_rebuild=true
+          fi
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$image_tag" = "unstable" ]; then
+            force_rebuild=true
+          fi
+
+          if [ "$force_rebuild" = "true" ]; then
+            echo "::notice title=Docker image::Force rebuild requested; rebuilding existing tag if present: ${DOCKER_IMAGE}"
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if docker buildx imagetools inspect "${DOCKER_IMAGE}" >/dev/null 2>&1; then
+            echo "::notice title=Docker image::Image already exists, skipping build: ${DOCKER_IMAGE}"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=Docker image::Image is missing, building: ${DOCKER_IMAGE}"
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and Push Docker Image
+        if: ${{ steps.check-image.outputs.exists != 'true' }}
+        run: |
+          echo "Building and pushing ${DOCKER_IMAGE}"
+          docker buildx build \
+            --platform "${DOCKER_PLATFORM}" \
+            -f "Dockerfile.${OS}" \
+            --build-arg REDIS_REF="${REDIS_REF}" \
+            -t "${DOCKER_IMAGE}" \
+            --provenance=false \
+            --push \
+            .

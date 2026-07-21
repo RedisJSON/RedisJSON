@@ -174,12 +174,12 @@ RUST_SOEXT.macos=dylib
 build:
 ifneq ($(NIGHTLY),1)
 	$(SHOW)set -e ;\
-	export RUSTFLAGS="$(RUST_FLAGS)" ;\
+	$(if $(RUST_FLAGS),export RUSTFLAGS="$(RUST_FLAGS)" ;,)\
 	cargo build --all --all-targets $(CARGO_FLAGS)
 else
 	$(SHOW)set -e ;\
-	export RUSTFLAGS="$(RUST_FLAGS)" ;\
-	export RUSTDOCFLAGS="$(RUST_DOCFLAGS)" ;\
+	$(if $(RUST_FLAGS),export RUSTFLAGS="$(RUST_FLAGS)" ;,)\
+	$(if $(RUST_DOCFLAGS),export RUSTDOCFLAGS="$(RUST_DOCFLAGS)" ;,)\
 	cargo $(CARGO_TOOLCHAIN) build --target $(RUST_TARGET) $(CARGO_FLAGS)
 endif
 	$(SHOW)cp $(TARGET_DIR)/librejson.$(RUST_SOEXT.$(OS)) $(TARGET)

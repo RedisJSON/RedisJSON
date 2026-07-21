@@ -1385,17 +1385,86 @@ def testMSET(env):
 
 
 def testMSET_Partial(env):
-    # Make sure MSET doesn't stop on the first update that can't be updated
+    # MSET doesn't stop processing on the first update that can't be applied
+    # (later keys still get updated)... but since not every update in the
+    # command succeeded, the overall reply must be nil, not OK.
     env.expect("JSON.SET", "a{s}", '$', '{"x": {"y":[10,20], "z":[30,40]}}').ok()
     env.expect("JSON.SET", "b{s}", '$', '{"x": 60}').ok()
-    env.expect("JSON.MSET", "a{s}", '$.x', '{}', "a{s}", '$.x.z[1]', '50', 'b{s}', '$.x', '70').ok()
+    env.assertEqual(env.cmd("JSON.MSET", "a{s}", '$.x', '{}', "a{s}", '$.x.z[1]', '50', 'b{s}', '$.x', '70'), None)
     env.expect("JSON.GET", "a{s}", '$').equal('[{"x":{}}]')
     env.expect("JSON.GET", "b{s}", '$').equal('[{"x":70}]')
 
     # Update the same key twice with a failure in the middle
     env.expect("JSON.SET", "a{s}", '$', '{"x": {"y":[10,20], "z":[30,40]}}').ok()
-    env.expect("JSON.MSET", "a{s}", '$.x', '{}', "a{s}", '$.x.z[1]', '50', "a{s}",  '$.u', '70').ok()
+    env.assertEqual(env.cmd("JSON.MSET", "a{s}", '$.x', '{}', "a{s}", '$.x.z[1]', '50', "a{s}",  '$.u', '70'), None)
     env.expect("JSON.GET", "a{s}", '$').equal('[{"x":{},"u":70}]')
+
+def testMSET_FailsOverallIfAnyKeyFailed(env):
+    # key a{s}: succeeds. key b{s}: path doesn't match anything -> fails.
+    # key c{s}: succeeds. Overall reply must be nil, but a{s}/c{s} must still
+    # be updated and notified/replicated -- only the reply reflects the
+    # all-or-nothing contract, not the underlying per-key writes.
+    env.expect("JSON.SET", "a{s}", '$', '{"x": 1}').ok()
+    env.expect("JSON.SET", "b{s}", '$', '{"x": 1}').ok()
+    env.expect("JSON.SET", "c{s}", '$', '{"x": 1}').ok()
+
+    with env.getClusterConnectionIfNeeded() as r:
+        r.execute_command('config', 'set', 'notify-keyspace-events', 'KEA')
+
+        pubsub = r.pubsub()
+        pubsub.psubscribe('__key*')
+
+        time.sleep(1)
+        env.assertEqual('psubscribe', pubsub.get_message(timeout=1)['type'])
+
+        res = env.cmd(
+            "JSON.MSET",
+            "a{s}", '$.x', '2',
+            "b{s}", '$.no.such.path', '2',  # missing intermediate object -> can't be created
+            "c{s}", '$.x', '2',
+        )
+        env.assertEqual(res, None, message="JSON.MSET reported success even though key b{s} failed")
+
+        env.expect("JSON.GET", "a{s}", '$').equal('[{"x":2}]')
+        env.expect("JSON.GET", "b{s}", '$').equal('[{"x":1}]')
+        env.expect("JSON.GET", "c{s}", '$').equal('[{"x":2}]')
+
+        # Only a{s} and c{s} were actually updated -> only they get notified
+        # (event name, then key name), b{s} gets nothing.
+        for key in ('a{s}', 'c{s}'):
+            msg = pubsub.get_message(timeout=1)
+            env.assertEqual(msg['type'], 'pmessage')
+            env.assertEqual(msg['data'], 'json.mset')
+            msg = pubsub.get_message(timeout=1)
+            env.assertEqual(msg['type'], 'pmessage')
+            env.assertEqual(msg['data'], key)
+        env.assertEqual(pubsub.get_message(timeout=1), None)
+
+def testApplyUpdatesFoldDoesNotLoseEarlierSuccess(env):
+    chain_depth = 100
+    doc = '{"a":{"x":0},"b":' + ('{"n":' * chain_depth) + '{"x":0}' + ('}' * chain_depth) + '}'
+    env.expect("JSON.SET", "foldbug", "$", doc).ok()
+
+    # A value nested 60 arrays deep (calculate_value_depth() == 60).
+    patch_nesting = 60
+    patch = ('[' * patch_nesting) + '0' + (']' * patch_nesting)
+
+    # '$..x' matches both "a.x" (path depth 2: shallow + patch = 62 < 128, succeeds)
+    # and "b...x" (path depth 102: deep + patch = 162 >= 128, hits the recursion
+    # limit, swallowed to Ok(false) by set_value()).
+    res = env.cmd("JSON.SET", "foldbug", "$..x", patch)
+
+    # Not every matched path succeeded, so the command must report failure...
+    env.assertEqual(res, None, message="JSON.SET reported success even though one matched path failed")
+
+    # ...but the path that DID succeed must still be applied...
+    env.assertEqual(env.cmd("JSON.GET", "foldbug", "$.a.x"), '[' + patch + ']')
+
+    if env.useSlaves:
+        # ...and replicated, so master and replica don't diverge.
+        env.cmd('WAIT', '1', '10000')
+        slave_conn = env.getSlaveConnection()
+        env.assertEqual(slave_conn.execute_command("JSON.GET", "foldbug", "$.a.x"), '[' + patch + ']')
 
 def testMSET_Error(env):
     env.expect("JSON.SET", "a{s}", '$', '"a_val"').ok()
@@ -1741,7 +1810,7 @@ def testFilterSetRelations(env):
     r.expect('JSON.GET', 'doc', '$.a[?@ noneof [1,2,3]]').equal('[[4,5],[]]')
 
 def testFilterSizeEmpty(env):
-    # Test size/sizeof and empty operators (arrays and strings)
+    # Test size/sizeof and empty operators (arrays, objects, and strings)
     r = env
     # sizeof: array element count
     r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [[4, 5], [1], [7, 8, 9]]})).ok()
@@ -1751,10 +1820,13 @@ def testFilterSizeEmpty(env):
     # sizeof: string char count
     r.expect('JSON.SET', 'doc', '$', json.dumps({"a": ["ab", "abc", "xy"]})).ok()
     r.expect('JSON.GET', 'doc', '$.a[?@ sizeof 2]').equal('["ab","xy"]')
-    # empty true -> empty array/string; empty false -> non-empty
-    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [[], [1], "", [2, 3]]})).ok()
-    r.expect('JSON.GET', 'doc', '$.a[?@ empty true]').equal('[[],""]')
-    r.expect('JSON.GET', 'doc', '$.a[?@ empty false]').equal('[[1],[2,3]]')
+    # sizeof: object member count
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [{"x": 1, "y": 2}, {"x": 1}]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?@ sizeof 2]').equal('[{"x":1,"y":2}]')
+    # empty true -> empty array/object/string; empty false -> non-empty
+    r.expect('JSON.SET', 'doc', '$', json.dumps({"a": [[], [1], "", [2, 3], {}, {"k": 1}]})).ok()
+    r.expect('JSON.GET', 'doc', '$.a[?@ empty true]').equal('[[],"",{}]')
+    r.expect('JSON.GET', 'doc', '$.a[?@ empty false]').equal('[[1],[2,3],{"k":1}]')
 
 def testFilterArithmetic(env):
     # Test arithmetic operators in filters: + - * / % and unary, with precedence
@@ -2348,8 +2420,9 @@ def testJsonDicLimitsInMSet(env):
     depth = 100
     doc_2 = nest_object(depth, 5, "__leaf", 128)
 
-    # TODO: when mset will be atomic, this should fail since test_1 doc is not updated due depth limit exceed
-    r.expect('JSON.MSET', 'test_1{s}', '$..__leaf', doc_2, 'test_2{s}', '$', doc_2).ok()
+    # test_1 doc is not updated due to depth limit exceeded, so MSET must
+    # report overall failure even though test_2 did get updated.
+    r.assertEqual(r.execute_command('JSON.MSET', 'test_1{s}', '$..__leaf', doc_2, 'test_2{s}', '$', doc_2), None)
 
     r.assertEqual(r.execute_command("JSON.GET", 'test_1{s}', '$..__leaf'), '[42]')
 
