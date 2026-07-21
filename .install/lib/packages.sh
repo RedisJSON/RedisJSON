@@ -7,6 +7,13 @@
 # Sourced by os/<osnick>.sh after lib/pm.sh. All variables here are plain
 # space-separated strings so callers can splat them with `apt_install $SET`.
 
+# Optional = installed by bootstrap but NOT in the README's minimal build-dep
+# list: tests/coverage/debug and feature libs the core build/run doesn't need.
+# Only affects `make bootstrap check-deps` (reported separately, never fails).
+# Shared superset across modules; names this module doesn't install are simply
+# never matched.
+OPTIONAL_PKGS="valgrind gdb lcov tcl jq py3-numpy py3-psutil py3-cryptography openssh xsimd openblas-dev"
+
 # Install AWS CLI v2 from the official installer (arch-aware). Skips if
 # already present — handles pre-installed AMIs without failing.
 install_aws_cli() {

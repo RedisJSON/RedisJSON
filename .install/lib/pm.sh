@@ -45,6 +45,14 @@ fi
 CHECK_DEPS="${CHECK_DEPS:-0}"
 DEPS_OK=""
 DEPS_MISSING=""
+DEPS_OPT_OK=""
+DEPS_OPT_MISSING=""
+
+# Optional deps are marked in lib/packages.sh (OPTIONAL_PKGS); default empty
+# here so a check works even before packages.sh is sourced. Still installed
+# normally — this only splits them into a separate check-deps bucket.
+OPTIONAL_PKGS="${OPTIONAL_PKGS:-}"
+_is_optional() { case " $OPTIONAL_PKGS " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 
 if [ "$CHECK_DEPS" = 1 ]; then
     SUDO=":"   # ':' is the shell no-op builtin; it ignores its arguments
@@ -66,7 +74,11 @@ _pkg_installed() {
 
 _check_pkgs() {
     for _p in "$@"; do
-        if _pkg_installed "$_p"; then DEPS_OK="$DEPS_OK $_p"; else DEPS_MISSING="$DEPS_MISSING $_p"; fi
+        if _is_optional "$_p"; then
+            if _pkg_installed "$_p"; then DEPS_OPT_OK="$DEPS_OPT_OK $_p"; else DEPS_OPT_MISSING="$DEPS_OPT_MISSING $_p"; fi
+        else
+            if _pkg_installed "$_p"; then DEPS_OK="$DEPS_OK $_p"; else DEPS_MISSING="$DEPS_MISSING $_p"; fi
+        fi
     done
 }
 
