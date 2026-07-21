@@ -394,12 +394,12 @@ pub fn json_api_get_with_path<M: Manager>(
             &*(json_path.cast::<json_path::json_path::Query>()),
         )
     };
-    // `JSONAPI_pathParse` rejects projections, so a compiled handle is always a plain path,
-    // matching `json_api_get` (which returns null for projections).
-    debug_assert!(
-        !query.is_projection(),
-        "JSONAPI_pathParse must never hand back a projection handle"
-    );
+    // A projection yields a synthesized value with no document node, so it is not exposed here:
+    // mirror `json_api_get` and return null (`JSONAPI_pathParse` already rejects projections, so
+    // this is not reachable through the public API, but keep parity at the FFI boundary).
+    if query.is_projection() {
+        return null();
+    }
     let path_calculator = create(query);
     let res = path_calculator.calc(v);
     Box::into_raw(Box::new(ResultsIterator {
@@ -1196,6 +1196,21 @@ mod tests {
             json_api_free_iter(ivalue_mngr(), it_str as *mut c_void);
             json_api_free_iter(ivalue_mngr(), it_cmp as *mut c_void);
         }
+    }
+
+    /// Like `json_api_get`, `json_api_get_with_path` must return null for a projection path
+    /// (a synthesized value with no document node) rather than exposing it.
+    #[test]
+    fn test_json_api_get_with_path_rejects_projection() {
+        let doc: IValue = serde_json::from_str(r#"{"a":2}"#).unwrap();
+        let query = json_path::compile("$.a + 1").unwrap();
+        assert!(query.is_projection(), "'$.a + 1' should be a projection");
+        let res = json_api_get_with_path(
+            ivalue_mngr(),
+            &doc as *const IValue as *const c_void,
+            &query as *const json_path::json_path::Query as *const c_void,
+        );
+        assert_eq!(res, null(), "a projection handle must not be evaluated");
     }
 
     #[test]
