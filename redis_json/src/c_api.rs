@@ -394,7 +394,7 @@ pub fn json_api_get_with_path<M: Manager>(
             &*(json_path.cast::<json_path::json_path::Query>()),
         )
     };
-    // Mirror `json_api_get`: projections are not exposed by the LLAPI.
+    // Projections are not exposed by the LLAPI.
     if query.is_projection() {
         return null();
     }
