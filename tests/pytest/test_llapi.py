@@ -57,7 +57,7 @@ def _env_with_doc():
 def testLLAPIVersion():
     env = _new_env()
     ver = env.cmd('LLAPI.VERSION')
-    # RedisJSON exports up to V8; other modules may export a lower version.
+    # RedisJSON exports up to V9; other modules may export a lower version.
     env.assertTrue(isinstance(ver, int) and ver >= 1)
 
 
@@ -167,6 +167,17 @@ def testLLAPIPathParse():
     env.assertEqual(single, 0)
 
 
+def testLLAPIOpenGetWithPath():
+    env = _env_with_doc()
+    # getWithPath (pathParse + evaluate the compiled handle) must return exactly what the
+    # string-based OPEN_GET returns, for scalar, object and multi-value paths.
+    for path in ('$.int', '$.string', '$.object', '$.num_array[*]', '$.het_array[*]'):
+        env.assertEqual(env.cmd('LLAPI.OPEN_GET_WITH_PATH', 'doc', path),
+                        env.cmd('LLAPI.OPEN_GET', 'doc', path), message=path)
+    env.assertEqual([json.loads(x) for x in env.cmd('LLAPI.OPEN_GET_WITH_PATH', 'doc', '$.num_array[*]')],
+                    [10, 20, 30, 40])
+
+
 def testLLAPIIsJson():
     env = _env_with_doc()
     env.cmd('SET', 'plain', 'notjson')
@@ -216,3 +227,14 @@ def testLLAPIErrorsBadPath():
     # Projection / computed paths are not exposed by the LLAPI.
     env.expect('LLAPI.OPEN_GET', 'doc', '$.int + 1').raiseError()
     env.expect('LLAPI.PATHPARSE', '$.int + 1').raiseError()
+
+
+def testLLAPIOpenGetWithPathErrors():
+    env = _env_with_doc()
+    env.cmd('SET', 'plain', 'notjson')
+    # Missing / non-JSON key.
+    env.expect('LLAPI.OPEN_GET_WITH_PATH', 'missing', '$.int').raiseError()
+    env.expect('LLAPI.OPEN_GET_WITH_PATH', 'plain', '$.int').raiseError()
+    # Malformed path and projection are rejected at pathParse (before evaluation).
+    env.expect('LLAPI.OPEN_GET_WITH_PATH', 'doc', '$[').raiseError()
+    env.expect('LLAPI.OPEN_GET_WITH_PATH', 'doc', '$.int + 1').raiseError()
