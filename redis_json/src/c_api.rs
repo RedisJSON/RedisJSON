@@ -394,9 +394,7 @@ pub fn json_api_get_with_path<M: Manager>(
             &*(json_path.cast::<json_path::json_path::Query>()),
         )
     };
-    // A projection yields a synthesized value with no document node, so it is not exposed here:
-    // mirror `json_api_get` and return null (`JSONAPI_pathParse` already rejects projections, so
-    // this is not reachable through the public API, but keep parity at the FFI boundary).
+    // Mirror `json_api_get`: projections are not exposed by the LLAPI.
     if query.is_projection() {
         return null();
     }
@@ -1198,8 +1196,6 @@ mod tests {
         }
     }
 
-    /// Like `json_api_get`, `json_api_get_with_path` must return null for a projection path
-    /// (a synthesized value with no document node) rather than exposing it.
     #[test]
     fn test_json_api_get_with_path_rejects_projection() {
         let doc: IValue = serde_json::from_str(r#"{"a":2}"#).unwrap();
