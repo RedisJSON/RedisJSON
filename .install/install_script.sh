@@ -74,6 +74,15 @@ if [ "${CHECK_DEPS:-0}" = 1 ]; then
     n_ok=$(set -- $DEPS_OK; echo $#)
     n_missing=$(set -- $DEPS_MISSING; echo $#)
     total=$((n_ok + n_missing))
+    # Aggregate mode: when the outer bootstrap sets DEPS_REPORT_FILE, don't
+    # print a per-module list — append machine-readable records and let the
+    # caller print one deduped union across all modules.
+    if [ -n "${DEPS_REPORT_FILE:-}" ]; then
+        for _p in $DEPS_OK;      do echo "ok $_p"      >> "$DEPS_REPORT_FILE"; done
+        for _p in $DEPS_MISSING; do echo "missing $_p" >> "$DEPS_REPORT_FILE"; done
+        echo "==> [redisjson] checked: $n_ok installed, $n_missing missing"
+        exit 0
+    fi
     echo
     echo "==> [redisjson] dependency check (OSNICK=$OSNICK, PM=$PM) — nothing was installed"
     # Colors on a real terminal; plain text when piped (CI logs) so no
