@@ -9,7 +9,7 @@
 
 # Optional = installed by bootstrap but NOT in the README's minimal build-dep
 # list: tests/coverage/debug and feature libs the core build/run doesn't need.
-# Only affects `make bootstrap check-deps` (reported separately, never fails).
+# Only affects `make bootstrap list` (reported separately, never fails).
 # Shared superset across modules; names this module doesn't install are simply
 # never matched.
 OPTIONAL_PKGS="valgrind gdb lcov tcl jq clang-format py3-numpy python3-numpy py3-psutil python3-psutil py3-cryptography python3-cryptography openssh xsimd openblas-dev curl tar uv zlib1g-dev zlib-dev zlib-devel libbz2-dev bzip2-dev bzip2-devel libblocksruntime-dev libev-dev libev-devel libevent-dev libevent-devel"
