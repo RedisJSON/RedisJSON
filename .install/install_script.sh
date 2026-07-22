@@ -47,8 +47,8 @@ echo "==> [redisjson] OSNICK=$OSNICK PM=$PM"
 # match the current user (common in CI containers). `--global` with wildcard
 # `*` is intentional: `git config --local` would itself fail under "dubious
 # ownership", so a global rule is needed before any per-repo command can run.
-# Skipped in list mode — a check must not mutate anything.
-if [ "${CHECK_DEPS:-0}" != 1 ]; then
+# Skipped in list/dry-run mode — neither may mutate anything.
+if [ "${CHECK_DEPS:-0}" != 1 ] && [ "${DRY_RUN:-0}" != 1 ]; then
     git config --global --add safe.directory '*' || true
 fi
 
@@ -61,6 +61,8 @@ fi
 if [ "$OSNICK" != "alpine" ]; then
     if [ "${CHECK_DEPS:-0}" = 1 ]; then
         if command -v cargo >/dev/null 2>&1; then DEPS_OK="$DEPS_OK rust"; else DEPS_MISSING="$DEPS_MISSING rust"; fi
+    elif [ "${DRY_RUN:-0}" = 1 ]; then
+        command -v cargo >/dev/null 2>&1 || _dry_line "bash $HERE/getrust.sh $MODE   # Rust toolchain via rustup (rust-toolchain.toml pin)"
     elif [ -x "$HERE/getrust.sh" ]; then
         echo "==> [redisjson] installing Rust via .install/getrust.sh"
         (cd "$ROOT" && bash "$HERE/getrust.sh" "$MODE")
@@ -68,6 +70,11 @@ if [ "$OSNICK" != "alpine" ]; then
         echo "install_script.sh: getrust.sh missing at $HERE/getrust.sh" >&2
         exit 1
     fi
+fi
+
+if [ "${DRY_RUN:-0}" = 1 ]; then
+    _dry_line "==> [redisjson] dry-run complete — commands above are what bootstrap would run for missing deps (nothing installed)"
+    exit 0
 fi
 
 if [ "${CHECK_DEPS:-0}" = 1 ]; then
