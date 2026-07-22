@@ -14,14 +14,16 @@ override ROOT:=$(shell cd $(ROOT) && pwd)
 INSTALL_SCRIPT_MODE ?= $(if $(filter Linux,$(shell uname -s)),sudo,)
 
 bootstrap:
-ifeq ($(CHECK_DEPS),1)
+ifeq ($(filter list,$(MAKECMDGOALS)),list)
 	@cd $(ROOT)/.install && CHECK_DEPS=1 ./install_script.sh $(INSTALL_SCRIPT_MODE)
 else
 	@rm -rf $(ROOT)/venv
 	@cd $(ROOT)/.install && ./install_script.sh $(INSTALL_SCRIPT_MODE)
 endif
 
-.PHONY: bootstrap
+list: ; @:
+
+.PHONY: bootstrap list
 
 else
 
