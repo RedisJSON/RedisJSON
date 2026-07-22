@@ -87,8 +87,11 @@ if [ "$CHECK_DEPS" = 1 ] || [ "$DRY_RUN" = 1 ]; then
 fi
 
 # dry-run output is blue on a real terminal, plain when piped (CI logs).
-if [ "$DRY_RUN" = 1 ] && [ -t 1 ]; then _DRY_C="$(printf '\033[1;34m')"; _DRY_R="$(printf '\033[0m')"; else _DRY_C=""; _DRY_R=""; fi
-_dry_line() { printf '%s%s%s\n' "$_DRY_C" "$*" "$_DRY_R"; }
+if [ "$DRY_RUN" = 1 ] && [ -t 1 ]; then
+    _DRY_C="$(printf '\033[0;34m')"; _DRY_H="$(printf '\033[1;36m')"; _DRY_R="$(printf '\033[0m')"
+else _DRY_C=""; _DRY_H=""; _DRY_R=""; fi
+_dry_line() { printf '%s%s%s\n' "$_DRY_C" "$*" "$_DRY_R"; }   # a command  (blue)
+_dry_head() { printf '%s%s%s\n' "$_DRY_H" "$*" "$_DRY_R"; }   # a headline (cyan)
 
 # _run CMD... — one wrapper for every "would-install" command, so callers
 # never branch on the mode:
