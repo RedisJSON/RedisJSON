@@ -54,6 +54,28 @@ DEPS_OPT_MISSING=""
 OPTIONAL_PKGS="${OPTIONAL_PKGS:-}"
 _is_optional() { case " $OPTIONAL_PKGS " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 
+# MIN_VERSIONS (lib/packages.sh): sparse "pkg:minversion" list -- only deps
+# with a real floor. Everything else is presence-only. Default empty.
+MIN_VERSIONS="${MIN_VERSIONS:-}"
+_min_for() { for _e in $MIN_VERSIONS; do case "$_e" in "$1:"*) echo "${_e#*:}"; return ;; esac; done; }
+
+# Read a tool's installed version from the tool itself (not the package DB --
+# e.g. cmake is overlaid into /usr/local by install_cmake.sh, so dpkg would
+# report the stale apt version).
+_get_installed_version() {
+    case "$1" in
+        gcc|g++) "$1" -dumpversion 2>/dev/null ;;
+        *)       "$1" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 ;;
+    esac
+}
+
+# version_ge HAVE WANT -> 0 if HAVE >= WANT (strips -rev/+build suffixes).
+version_ge() {
+    _have="${1%%[-+]*}"; _want="${2%%[-+]*}"
+    _s=sort; sort -V </dev/null >/dev/null 2>&1 || { command -v gsort >/dev/null 2>&1 && _s=gsort; }
+    [ "$(printf '%s\n%s\n' "$_want" "$_have" | "$_s" -V | head -1)" = "$_want" ]
+}
+
 if [ "$CHECK_DEPS" = 1 ]; then
     SUDO=":"   # ':' is the shell no-op builtin; it ignores its arguments
 fi
@@ -77,7 +99,14 @@ _check_pkgs() {
         if _is_optional "$_p"; then
             if _pkg_installed "$_p"; then DEPS_OPT_OK="$DEPS_OPT_OK $_p"; else DEPS_OPT_MISSING="$DEPS_OPT_MISSING $_p"; fi
         else
-            if _pkg_installed "$_p"; then DEPS_OK="$DEPS_OK $_p"; else DEPS_MISSING="$DEPS_MISSING $_p"; fi
+            _min=$(_min_for "$_p")
+            if ! _pkg_installed "$_p"; then
+                if [ -n "$_min" ]; then DEPS_MISSING="$DEPS_MISSING $_p:$_min"; else DEPS_MISSING="$DEPS_MISSING $_p"; fi
+            elif [ -n "$_min" ] && _have=$(_get_installed_version "$_p") && [ -n "$_have" ] && ! version_ge "$_have" "$_min"; then
+                DEPS_MISSING="$DEPS_MISSING $_p:$_min"
+            else
+                DEPS_OK="$DEPS_OK $_p"
+            fi
         fi
     done
 }
