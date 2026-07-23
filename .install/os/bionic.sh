@@ -10,8 +10,11 @@ export DEBIAN_FRONTEND=noninteractive
 echo 'debconf debconf/frontend select Noninteractive' | $SUDO debconf-set-selections 2>/dev/null || true
 echo 'tzdata tzdata/Areas select Etc' | $SUDO debconf-set-selections 2>/dev/null || true
 echo 'tzdata tzdata/Zones/Etc select UTC' | $SUDO debconf-set-selections 2>/dev/null || true
-$SUDO apt-get update -qq
-$SUDO apt-get install -y --no-install-recommends gnupg wget curl ca-certificates
+# apt_install (not a raw apt-get call) so this runs apt-get update first —
+# on a fresh base image with no apt index yet, a raw "apt-get install"
+# here can fail silently and leave gnupg/wget missing for the next step.
+# It also routes through _check_pkgs (list) / dry-run printing like the rest.
+apt_install gnupg wget curl ca-certificates
 # keyserver fetches are raw network — skip during a check/dry-run.
 if [ "$CHECK_DEPS" != 1 ] && [ "$DRY_RUN" != 1 ]; then
     wget -qO- "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x1E9377A2BA9EF27F" | $SUDO gpg --batch --no-tty --yes --dearmor -o /etc/apt/trusted.gpg.d/ubuntu-toolchain-r.gpg || true
@@ -55,6 +58,8 @@ if [ "$CHECK_DEPS" != 1 ] && [ "$DRY_RUN" != 1 ]; then
     fi
     pip3 install dataclasses
 elif [ "$DRY_RUN" = 1 ]; then
-    _dry_line "build cmake 3.28 from source (if cmake < 3.28), then \$SUDO make install"
+    if ! cmake --version 2>/dev/null | grep -qE 'cmake version 3\.(2[89]|[3-9][0-9])'; then
+        _dry_line "build cmake 3.28 from source, then \$SUDO make install"
+    fi
     _dry_line "pip3 install dataclasses"
 fi
