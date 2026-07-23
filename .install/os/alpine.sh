@@ -18,7 +18,7 @@ if [ ! -e /usr/lib/libclang.so ]; then
         [ -e "$_c" ] && { _libclang="$_c"; break; }
     done
     if [ -n "$_libclang" ]; then
-        $SUDO ln -sf "$_libclang" /usr/lib/libclang.so
+        _run ln -sf "$_libclang" /usr/lib/libclang.so
     else
         echo "alpine.sh: WARNING: no libclang.so found; bindgen's dlopen will fail later" >&2
     fi

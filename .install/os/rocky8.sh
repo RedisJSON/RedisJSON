@@ -15,5 +15,5 @@ dnf_install clang-tools-extra
 # clean EL8 image with this block removed — if everything passes, drop it.
 # `|| true` keeps a missing/blocked pip from breaking the rest of the bootstrap.
 if command -v python3 >/dev/null 2>&1 && ! python3 -c 'import dataclasses' 2>/dev/null; then
-    python3 -m pip install --disable-pip-version-check -q 'dataclasses>=0.8,<1' || true
+    _sh 'python3 -m pip install --disable-pip-version-check -q "dataclasses>=0.8,<1" || true'
 fi
