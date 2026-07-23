@@ -65,7 +65,7 @@ _min_for() { for _e in $MIN_VERSIONS; do case "$_e" in "$1:"*) echo "${_e#*:}"; 
 _get_installed_version() {
     case "$1" in
         gcc|g++) "$1" -dumpversion 2>/dev/null ;;
-        *)       "$1" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 ;;
+        *)       "$1" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 || true ;;
     esac
 }
 
