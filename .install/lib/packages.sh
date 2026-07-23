@@ -7,9 +7,36 @@
 # Sourced by os/<osnick>.sh after lib/pm.sh. All variables here are plain
 # space-separated strings so callers can splat them with `apt_install $SET`.
 
+# Optional = installed by bootstrap but NOT in the README's minimal build-dep
+# list: tests/coverage/debug and feature libs the core build/run doesn't need.
+# Only affects `make bootstrap list` (reported separately, never fails).
+# Shared superset across modules; names this module doesn't install are simply
+# never matched.
+OPTIONAL_PKGS="valgrind gdb lcov tcl jq clang-format py3-numpy python3-numpy py3-psutil python3-psutil py3-cryptography python3-cryptography openssh xsimd openblas-dev curl tar uv zlib1g-dev zlib-dev zlib-devel libbz2-dev bzip2-dev bzip2-devel libblocksruntime-dev libev-dev libev-devel libevent-dev libevent-devel awscli"
+
+# MIN_VERSIONS: sparse "pkg:minversion" list — only deps with a real floor a
+# package-manager install can actually satisfy. Everything else is presence-only.
+# (cmake is intentionally NOT here: its >= 3.25 requirement is provisioned by
+# install_cmake.sh during a real `make bootstrap`, not by the distro package, so
+# a version floor here would be unsatisfiable by the apt/dnf `cmake` and would
+# only make `list`/`dry-run` disagree.)
+MIN_VERSIONS=""
+
 # Install AWS CLI v2 from the official installer (arch-aware). Skips if
 # already present — handles pre-installed AMIs without failing.
 install_aws_cli() {
+    # aws-cli is an optional CI artifact-upload tool, not a build/run dep.
+    # list/dry-run must not mutate: the curl+unzip below hit the network and
+    # write /tmp, so short-circuit before them. list records it as optional.
+    if [ "${CHECK_DEPS:-0}" = 1 ] || [ "${DRY_RUN:-0}" = 1 ]; then
+        if command -v aws >/dev/null 2>&1; then
+            DEPS_OPT_OK="$DEPS_OPT_OK awscli"
+        else
+            DEPS_OPT_MISSING="$DEPS_OPT_MISSING awscli"
+            [ "${DRY_RUN:-0}" = 1 ] && _dry_line 'curl -fSL --retry 3 "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip && unzip -o /tmp/awscliv2.zip -d /tmp/awscli-install && sudo /tmp/awscli-install/aws/install && rm -rf /tmp/awscliv2.zip /tmp/awscli-install'
+        fi
+        return 0
+    fi
     if command -v aws &>/dev/null; then
         return 0
     fi
