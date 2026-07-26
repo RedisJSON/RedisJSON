@@ -87,20 +87,38 @@ static JSONResultsIterator open_and_get(RedisModuleCtx *ctx, RedisModuleString *
     return get_iter(ctx, japi->openKey(ctx, argv[1]), argv[2]);
 }
 
-/* LLAPI.VERSION -> the bound shared-API version (integer). */
-static int VersionCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    REDISMODULE_NOT_USED(argv);
-    if (argc != 1) return RedisModule_WrongArity(ctx);
-    RedisModule_ReplyWithLongLong(ctx, japi_ver);
-    return REDISMODULE_OK;
+/* Like open_and_get, but compiles path=argv[2] (pathParse) and evaluates it via getWithPath.
+ * The compiled path is freed here: the returned iterator borrows the document, not the path.
+ * On failure, replies with an error (surfacing the pathParse message) and returns NULL. */
+static JSONResultsIterator open_and_get_with_path(RedisModuleCtx *ctx, RedisModuleString **argv) {
+    RedisJSON json = japi->openKey(ctx, argv[1]);
+    if (!json) {
+        RedisModule_ReplyWithError(ctx, "ERR key does not exist or is not JSON");
+        return NULL;
+    }
+    const char *path = RedisModule_StringPtrLen(argv[2], NULL);
+    RedisModuleString *err = NULL;
+    JSONPath p = japi->pathParse(path, ctx, &err);
+    if (!p) {
+        if (err) {
+            RedisModule_ReplyWithError(ctx, RedisModule_StringPtrLen(err, NULL));
+            RedisModule_FreeString(ctx, err);
+        } else {
+            RedisModule_ReplyWithError(ctx, "ERR pathParse failed");
+        }
+        return NULL;
+    }
+    JSONResultsIterator it = japi->getWithPath(json, p);
+    japi->pathFree(p);
+    if (!it) {
+        RedisModule_ReplyWithError(ctx, "ERR path could not be evaluated");
+        return NULL;
+    }
+    return it;
 }
 
-/* LLAPI.OPEN_GET key path -> array of the JSON string of every matched node. */
-static int OpenGetCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    if (argc != 3) return RedisModule_WrongArity(ctx);
-    JSONResultsIterator it = open_and_get(ctx, argv);
-    if (!it) return REDISMODULE_OK;
-
+/* Reply with an array of the JSON string of every node in `it`. Does not free `it`. */
+static void reply_nodes_as_json(RedisModuleCtx *ctx, JSONResultsIterator it) {
     RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_LEN);
     long n = 0;
     RedisJSON node;
@@ -115,6 +133,22 @@ static int OpenGetCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         n++;
     }
     RedisModule_ReplySetArrayLength(ctx, n);
+}
+
+/* LLAPI.VERSION -> the bound shared-API version (integer). */
+static int VersionCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    REDISMODULE_NOT_USED(argv);
+    if (argc != 1) return RedisModule_WrongArity(ctx);
+    RedisModule_ReplyWithLongLong(ctx, japi_ver);
+    return REDISMODULE_OK;
+}
+
+/* LLAPI.OPEN_GET key path -> array of the JSON string of every matched node. */
+static int OpenGetCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if (argc != 3) return RedisModule_WrongArity(ctx);
+    JSONResultsIterator it = open_and_get(ctx, argv);
+    if (!it) return REDISMODULE_OK;
+    reply_nodes_as_json(ctx, it);
     japi->freeIter(it);
     return REDISMODULE_OK;
 }
@@ -464,8 +498,19 @@ static int PathParseCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
     return REDISMODULE_OK;
 }
 
+/* LLAPI.OPEN_GET_WITH_PATH key path -> like OPEN_GET, but obtains the iterator from a pre-compiled
+ * path (pathParse + getWithPath) instead of the string `get`. Must match LLAPI.OPEN_GET. */
+static int OpenGetWithPathCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if (argc != 3) return RedisModule_WrongArity(ctx);
+    JSONResultsIterator it = open_and_get_with_path(ctx, argv);
+    if (!it) return REDISMODULE_OK;
+    reply_nodes_as_json(ctx, it);
+    japi->freeIter(it);
+    return REDISMODULE_OK;
+}
+
 /* Bind the latest shared-API version. This module exercises functions across
- * all API versions (V1..V8), so it requires a provider exporting the full,
+ * all API versions (V1..V9), so it requires a provider exporting the full,
  * current struct; binding an older version could leave later fields undefined
  * and dereferencing them would read past the provider's struct. */
 static int fetch_japi(RedisModuleCtx *ctx) {
@@ -517,6 +562,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     REGISTER("LLAPI.KEYVALUES", KeyValuesCmd);
     REGISTER("LLAPI.ISJSON", IsJsonCmd);
     REGISTER("LLAPI.PATHPARSE", PathParseCmd);
+    REGISTER("LLAPI.OPEN_GET_WITH_PATH", OpenGetWithPathCmd);
 
     return REDISMODULE_OK;
 }
