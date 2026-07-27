@@ -10,7 +10,15 @@ fi
 
 brew_default_install
 
-if ! command -v python3 >/dev/null 2>&1; then
+if command -v python3 >/dev/null 2>&1; then
+    # present — record for the list count (macOS python isn't in BREW_BASE)
+    if [ "${CHECK_DEPS:-0}" = 1 ]; then DEPS_OK="$DEPS_OK python@3.11"; fi
+elif [ "${CHECK_DEPS:-0}" = 1 ]; then
+    # list: record as missing so it matches dry-run and a real install
+    DEPS_MISSING="$DEPS_MISSING python@3.11"
+elif [ "${DRY_RUN:-0}" = 1 ]; then
+    _dry_line "HOMEBREW_NO_AUTO_UPDATE=1 brew install python@3.11"
+else
     HOMEBREW_NO_AUTO_UPDATE=1 _run brew install python@3.11
 fi
 
