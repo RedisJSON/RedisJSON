@@ -153,9 +153,9 @@ apt_install() {
     # connections mid-build; without retries a single dropped fetch fails the
     # whole docker build (exit 100). Retry each download before giving up.
     local apt_retry="-o Acquire::Retries=5"
-    if [ "$DRY_RUN" != 1 ] && [ "$_pm_apt_updated" = 0 ]; then
+    if [ "$_pm_apt_updated" = 0 ]; then
         export DEBIAN_FRONTEND=noninteractive
-        $SUDO apt-get update -qq $apt_retry
+        _run apt-get update -qq $apt_retry
         _pm_apt_updated=1
     fi
     # env goes THROUGH sudo: sudo's env_reset strips exported variables, so a
