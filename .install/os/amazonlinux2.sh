@@ -24,7 +24,11 @@ yum_install autogen cmake3 awscli
 # step on arm (where centos-release-scl / devtoolset-11 can never install).
 if [ "$(uname -m)" = "x86_64" ]; then
     ls /etc/yum.repos.d/*sclo*.repo >/dev/null 2>&1 || _run yum-config-manager --add-repo http://vault.centos.org/centos/7/sclo/x86_64/rh/
-    yum_install centos-release-scl scl-utils
+    # centos-release-scl is a CentOS package (absent from Amazon Linux 2 repos,
+    # and CentOS 7's SCL vault is EOL) — and redundant here: the SCL repo is
+    # added directly above and devtoolset installs with --nogpgcheck. Only
+    # scl-utils is needed (present in amzn2 base).
+    yum_install scl-utils
     [ -d /opt/rh/devtoolset-11 ] || _run yum -y install --nogpgcheck --skip-broken \
         devtoolset-11-gcc devtoolset-11-gcc-c++ devtoolset-11-make || true
 fi
