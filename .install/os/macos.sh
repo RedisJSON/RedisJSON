@@ -10,9 +10,8 @@ fi
 
 brew_default_install
 
-if ! command -v python3 >/dev/null 2>&1 && [ "${CHECK_DEPS:-0}" != 1 ]; then
-    echo "==> [redisjson] python3 not on PATH; installing brew python@3.11"
-    HOMEBREW_NO_AUTO_UPDATE=1 brew install python@3.11
+if ! command -v python3 >/dev/null 2>&1; then
+    HOMEBREW_NO_AUTO_UPDATE=1 _run brew install python@3.11
 fi
 
 LLVM_VERSION="18"
@@ -29,8 +28,8 @@ update_profile() {
 }
 
 # PATH munging writes to the user's shell profiles / $GITHUB_PATH — mutations.
-# Skip entirely in list mode: a check must not modify anything.
-if [ "${CHECK_DEPS:-0}" != 1 ]; then
+# Skip entirely in list/dry-run mode: neither may modify anything.
+if [ "${CHECK_DEPS:-0}" != 1 ] && [ "${DRY_RUN:-0}" != 1 ]; then
     [ -f "$HOME/.bash_profile" ] && update_profile "$HOME/.bash_profile"
     [ -f "$HOME/.zshrc" ]        && update_profile "$HOME/.zshrc"
 

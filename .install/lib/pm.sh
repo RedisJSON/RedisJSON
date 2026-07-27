@@ -76,9 +76,33 @@ version_ge() {
     [ "$(printf '%s\n%s\n' "$_want" "$_have" | "$_s" -V | head -1)" = "$_want" ]
 }
 
-if [ "$CHECK_DEPS" = 1 ]; then
-    SUDO=":"   # ':' is the shell no-op builtin; it ignores its arguments
+# DRY_RUN=1: run the bootstrap flow but install nothing — for each MISSING
+# package, print the exact install command that WOULD run (the same single
+# line the primitive executes normally, via _run — no duplicated command).
+DRY_RUN="${DRY_RUN:-0}"
+
+if [ "$CHECK_DEPS" = 1 ] || [ "$DRY_RUN" = 1 ]; then
+    _SUDO_DISPLAY="$SUDO"   # remember the real sudo prefix for dry-run printing
+    SUDO=":"                # neutralize privileged side-commands (no mutation)
 fi
+
+# dry-run output is blue on a real terminal, plain when piped (CI logs).
+if [ "$DRY_RUN" = 1 ] && [ -t 1 ]; then _DRY_C="$(printf '\033[1;34m')"; _DRY_R="$(printf '\033[0m')"; else _DRY_C=""; _DRY_R=""; fi
+_dry_line() { printf '%s%s%s\n' "$_DRY_C" "$*" "$_DRY_R"; }
+
+# _run CMD... — one wrapper for every "would-install" command, so callers
+# never branch on the mode:
+#   install  -> execute it (with the real sudo prefix)
+#   dry-run  -> print it (blue), don't execute
+#   list     -> skip it (a check neither installs nor prints)
+_run() {
+    if [ "$CHECK_DEPS" = 1 ]; then return 0
+    elif [ "$DRY_RUN" = 1 ]; then _dry_line "${_SUDO_DISPLAY:+$_SUDO_DISPLAY }$*"
+    else ${_SUDO_DISPLAY:-$SUDO} "$@"; fi
+}
+
+# Echo (space-separated) only the packages from "$@" that are NOT installed.
+_missing_only() { for _p in "$@"; do _pkg_installed "$_p" || printf '%s ' "$_p"; done; }
 
 # Read-only "is this package installed?" probe, per package manager.
 _pkg_installed() {
@@ -121,16 +145,17 @@ _pm_apt_updated=0
 apt_install() {
     [ "$#" -gt 0 ] || return 0
     if [ "$CHECK_DEPS" = 1 ]; then _check_pkgs "$@"; return 0; fi
-    if [ "$_pm_apt_updated" = 0 ]; then
+    if [ "$DRY_RUN" = 1 ]; then set -- $(_missing_only "$@"); [ "$#" -gt 0 ] || return 0; fi
+    if [ "$DRY_RUN" != 1 ] && [ "$_pm_apt_updated" = 0 ]; then
         export DEBIAN_FRONTEND=noninteractive
         $SUDO apt-get update -qq
         _pm_apt_updated=1
     fi
-    # env goes THROUGH $SUDO: sudo's env_reset strips exported variables, so a
+    # env goes THROUGH sudo: sudo's env_reset strips exported variables, so a
     # plain export upstream never reaches dpkg — debconf (e.g. tzdata on focal,
     # which the base image doesn't preinstall) then blocks on an interactive
     # prompt and the bootstrap hangs.
-    $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -yqq --no-install-recommends "$@"
+    _run env DEBIAN_FRONTEND=noninteractive apt-get install -yqq --no-install-recommends "$@"
 }
 
 # `--allowerasing` lets dnf pick our `curl` over the slimmer `curl-minimal`
@@ -138,13 +163,15 @@ apt_install() {
 dnf_install() {
     [ "$#" -gt 0 ] || return 0
     if [ "$CHECK_DEPS" = 1 ]; then _check_pkgs "$@"; return 0; fi
-    $SUDO dnf -y install --allowerasing --skip-broken "$@"
+    if [ "$DRY_RUN" = 1 ]; then set -- $(_missing_only "$@"); [ "$#" -gt 0 ] || return 0; fi
+    _run dnf -y install --allowerasing --skip-broken "$@"
 }
 
 yum_install() {
     [ "$#" -gt 0 ] || return 0
     if [ "$CHECK_DEPS" = 1 ]; then _check_pkgs "$@"; return 0; fi
-    $SUDO yum -y install --skip-broken "$@"
+    if [ "$DRY_RUN" = 1 ]; then set -- $(_missing_only "$@"); [ "$#" -gt 0 ] || return 0; fi
+    _run yum -y install --skip-broken "$@"
 }
 
 # tdnf has no --skip-broken and aborts the whole transaction if any single
@@ -154,8 +181,10 @@ yum_install() {
 tdnf_install() {
     [ "$#" -gt 0 ] || return 0
     if [ "$CHECK_DEPS" = 1 ]; then _check_pkgs "$@"; return 0; fi
+    if [ "$DRY_RUN" = 1 ]; then set -- $(_missing_only "$@"); fi
     local pkg out
     for pkg in "$@"; do
+        if [ "$DRY_RUN" = 1 ]; then _run tdnf -y install "$pkg"; continue; fi
         # Capture combined output so a real failure (network/GPG/conflict) is
         # distinguishable from the "package not in repo" common case. We still
         # tolerate the miss, but surface the last line of tdnf's diagnostic so
@@ -169,7 +198,8 @@ tdnf_install() {
 apk_install() {
     [ "$#" -gt 0 ] || return 0
     if [ "$CHECK_DEPS" = 1 ]; then _check_pkgs "$@"; return 0; fi
-    $SUDO apk add --no-cache "$@"
+    if [ "$DRY_RUN" = 1 ]; then set -- $(_missing_only "$@"); [ "$#" -gt 0 ] || return 0; fi
+    _run apk add --no-cache "$@"
 }
 
 # brew exits non-zero when a formula is already installed/linked. We tolerate
@@ -178,6 +208,7 @@ apk_install() {
 brew_install() {
     [ "$#" -gt 0 ] || return 0
     if [ "$CHECK_DEPS" = 1 ]; then _check_pkgs "$@"; return 0; fi
+    if [ "$DRY_RUN" = 1 ]; then set -- $(_missing_only "$@"); [ "$#" -gt 0 ] || return 0; _run brew install "$@"; return 0; fi
     if ! command -v brew >/dev/null 2>&1; then
         echo "pm.sh: brew not installed; install from https://brew.sh" >&2
         exit 1
