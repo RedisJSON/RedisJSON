@@ -19,7 +19,7 @@ elif [ "${CHECK_DEPS:-0}" = 1 ]; then
 elif [ "${DRY_RUN:-0}" = 1 ]; then
     _dry_line "HOMEBREW_NO_AUTO_UPDATE=1 brew install python@3.11"
 else
-    HOMEBREW_NO_AUTO_UPDATE=1 _run brew install python@3.11
+    _run env HOMEBREW_NO_AUTO_UPDATE=1 brew install python@3.11
 fi
 
 LLVM_VERSION="18"

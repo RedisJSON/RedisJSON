@@ -248,7 +248,7 @@ apk_install() {
 brew_install() {
     [ "$#" -gt 0 ] || return 0
     if [ "$CHECK_DEPS" = 1 ]; then _check_pkgs "$@"; return 0; fi
-    if [ "$DRY_RUN" = 1 ]; then set -- $(_missing_only "$@"); [ "$#" -gt 0 ] || return 0; _run brew install "$@"; return 0; fi
+    if [ "$DRY_RUN" = 1 ]; then set -- $(_missing_only "$@"); [ "$#" -gt 0 ] || return 0; _run env HOMEBREW_NO_AUTO_UPDATE=1 brew install "$@"; return 0; fi
     if ! command -v brew >/dev/null 2>&1; then
         echo "pm.sh: brew not installed; install from https://brew.sh" >&2
         exit 1
