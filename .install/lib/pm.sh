@@ -34,6 +34,15 @@ else
     exit 1
 fi
 
+# Root container without a real sudo binary (e.g. a slim amazonlinux2 Docker
+# image running install_script.sh directly as root): make `sudo` a transparent
+# pass-through so literal-`sudo` steps in _sh strings (incl. pipes like
+# `| sudo tee` / `| sudo gpg` and `&& sudo make install`) still run. When NOT
+# root, a missing sudo is a genuine error — leave it unmasked.
+if [ "$(id -u)" = 0 ] && ! command -v sudo >/dev/null 2>&1; then
+    sudo() { "$@"; }
+fi
+
 # ----------------------------------------------------------------------------
 # list mode: when CHECK_DEPS=1 the install primitives below do NOT
 # install — they query whether each package is already present and record it
