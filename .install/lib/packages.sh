@@ -33,7 +33,7 @@ install_aws_cli() {
             DEPS_OPT_OK="$DEPS_OPT_OK awscli"
         else
             DEPS_OPT_MISSING="$DEPS_OPT_MISSING awscli"
-            [ "${DRY_RUN:-0}" = 1 ] && _dry_line "curl -fSL <awscli-v2>.zip && unzip && \$SUDO ./aws/install"
+            [ "${DRY_RUN:-0}" = 1 ] && _dry_line 'curl -fSL --retry 3 "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip && unzip -o /tmp/awscliv2.zip -d /tmp/awscli-install && sudo /tmp/awscli-install/aws/install && rm -rf /tmp/awscliv2.zip /tmp/awscli-install'
         fi
         return 0
     fi

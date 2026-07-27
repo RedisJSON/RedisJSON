@@ -104,6 +104,17 @@ _run() {
     else ${_SUDO_DISPLAY:-$SUDO} "$@"; fi
 }
 
+# _sh 'RAW SHELL' — a mutating step that doesn't fit _run (pipes, redirects,
+# cd/&&-chains, source builds). dry-run: print it verbatim so the output stays a
+# copy-pasteable script; list: skip; else: execute via eval. Write the string
+# with a literal `sudo` (these raw steps are Linux-only, where bootstrap ensures
+# sudo) so the printed line runs as-is.
+_sh() {
+    if [ "$DRY_RUN" = 1 ]; then _dry_line "$1"
+    elif [ "$CHECK_DEPS" = 1 ]; then return 0
+    else eval "$1"; fi
+}
+
 # Echo (space-separated) only the packages from "$@" that are NOT installed.
 _missing_only() { for _p in "$@"; do _pkg_installed "$_p" || printf '%s ' "$_p"; done; }
 
@@ -241,10 +252,14 @@ debian_default_install() {
 }
 
 rhel_default_install() {
-    case "$PM" in
-        dnf) $SUDO dnf -y groupinstall "Development Tools" || true ;;
-        yum) $SUDO yum -y groupinstall "Development Tools" || true ;;
-    esac
+    # "Development Tools" is a large meta-group; skip it once the core compiler
+    # trio is present so re-runs / dry-run don't keep re-listing it.
+    if ! rpm -q gcc gcc-c++ make >/dev/null 2>&1; then
+        case "$PM" in
+            dnf) _sh 'sudo dnf -y groupinstall "Development Tools" || true' ;;
+            yum) _sh 'sudo yum -y groupinstall "Development Tools" || true' ;;
+        esac
+    fi
     case "$PM" in
         dnf) dnf_install $RHEL_BASE ;;
         yum) yum_install $RHEL_BASE ;;
@@ -271,14 +286,20 @@ _pm_enable_el8_extras() {
         # shellcheck disable=SC1091
         . /etc/os-release
         if [ "${ID:-}" = "rhel" ] && [ "${VERSION_ID%%.*}" = "8" ]; then
-            local rid
-            rid=$(dnf repolist --all 2>/dev/null \
+            # `local rid=$(...)` (single line) is intentional: the `local`
+            # builtin returns its own exit status (always 0), which masks
+            # the pipeline's pipefail-propagated grep exit when no repo
+            # matches. Splitting into `local rid; rid=$(...)` makes the
+            # assignment a simple command and set -e aborts install_script.sh
+            # before the diagnostic below can run.
+            local rid=$(dnf repolist --all 2>/dev/null \
                 | grep -i 'codeready-builder-for-rhel-8' \
                 | grep -vi source \
                 | head -1 \
                 | awk '{print $1}')
             if [ -n "$rid" ]; then
-                $SUDO dnf config-manager --set-enabled "$rid"
+                dnf repolist --enabled 2>/dev/null | grep -q "$rid" \
+                    || _run dnf config-manager --set-enabled "$rid"
                 return 0
             fi
             echo "pm.sh: RHEL 8 needs CodeReady Builder; no codeready-builder-for-rhel-8 repo found." >&2
@@ -286,9 +307,9 @@ _pm_enable_el8_extras() {
             return 1
         fi
     fi
-    $SUDO dnf config-manager --set-enabled powertools 2>/dev/null \
-        || $SUDO dnf config-manager --set-enabled crb 2>/dev/null \
-        || true
+    # Skip if a secondary repo (powertools/crb/codeready) is already enabled.
+    dnf repolist --enabled 2>/dev/null | grep -qiE 'powertools|crb|codeready' \
+        || _sh 'sudo dnf config-manager --set-enabled powertools 2>/dev/null || sudo dnf config-manager --set-enabled crb 2>/dev/null || true'
 }
 
 # EL8 (Alma 8, Rocky 8, RHEL 8): base-RHEL gcc is 8.5; we layer gcc-toolset-11
@@ -300,18 +321,26 @@ _pm_enable_el8_extras() {
 # download its own 3.12, then psutil's wheel-less aarch64 source build would
 # fail looking for Python.h that matches the wrong interpreter.
 el8_default_install() {
-    $SUDO dnf -y install epel-release
+    rpm -q epel-release >/dev/null 2>&1 || _run dnf -y install epel-release
     _pm_enable_el8_extras
     rhel_default_install
     dnf_install \
         gcc-toolset-11-gcc gcc-toolset-11-gcc-c++ gcc-toolset-11-libatomic-devel \
         python3.11 python3.11-devel xz
-    $SUDO cp /opt/rh/gcc-toolset-11/enable /etc/profile.d/gcc-toolset-11.sh 2>/dev/null || true
-    $SUDO ln -sf /opt/rh/gcc-toolset-11/root/usr/bin/gcc  /usr/local/bin/gcc  || true
-    $SUDO ln -sf /opt/rh/gcc-toolset-11/root/usr/bin/g++  /usr/local/bin/g++  || true
-    $SUDO ln -sf /opt/rh/gcc-toolset-11/root/usr/bin/cc   /usr/local/bin/cc   || true
-    $SUDO ln -sf /opt/rh/gcc-toolset-11/root/usr/bin/as   /usr/local/bin/as   || true
-    $SUDO ln -sf /opt/rh/gcc-toolset-11/root/usr/bin/make /usr/local/bin/make || true
+    # Symlink the toolset compiler into /usr/local/bin — skip once gcc already points there.
+    if [ "$(readlink -f /usr/local/bin/gcc 2>/dev/null)" != /opt/rh/gcc-toolset-11/root/usr/bin/gcc ]; then
+        _run cp /opt/rh/gcc-toolset-11/enable /etc/profile.d/gcc-toolset-11.sh 2>/dev/null || true
+        _run ln -sf /opt/rh/gcc-toolset-11/root/usr/bin/gcc  /usr/local/bin/gcc  || true
+        _run ln -sf /opt/rh/gcc-toolset-11/root/usr/bin/g++  /usr/local/bin/g++  || true
+        _run ln -sf /opt/rh/gcc-toolset-11/root/usr/bin/cc   /usr/local/bin/cc   || true
+        _run ln -sf /opt/rh/gcc-toolset-11/root/usr/bin/as   /usr/local/bin/as   || true
+        _run ln -sf /opt/rh/gcc-toolset-11/root/usr/bin/make /usr/local/bin/make || true
+    fi
+    # Point python3 at 3.11 — skip once it already is.
+    if ! python3 --version 2>/dev/null | grep -q '3\.11'; then
+        _run update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 2000000
+        _run update-alternatives --set python3 /usr/bin/python3.11
+    fi
     export SETUP_PYTHON_VERSION="${SETUP_PYTHON_VERSION:-3.11}"
 }
 
@@ -321,10 +350,13 @@ el9_default_install() {
     rhel_default_install
     dnf_install \
         gcc-toolset-13-gcc gcc-toolset-13-gcc-c++ gcc-toolset-13-libatomic-devel
-    $SUDO cp /opt/rh/gcc-toolset-13/enable /etc/profile.d/gcc-toolset-13.sh 2>/dev/null || true
-    $SUDO ln -sf /opt/rh/gcc-toolset-13/root/usr/bin/gcc  /usr/local/bin/gcc  || true
-    $SUDO ln -sf /opt/rh/gcc-toolset-13/root/usr/bin/g++  /usr/local/bin/g++  || true
-    $SUDO ln -sf /opt/rh/gcc-toolset-13/root/usr/bin/cc   /usr/local/bin/cc   || true
-    $SUDO ln -sf /opt/rh/gcc-toolset-13/root/usr/bin/as   /usr/local/bin/as   || true
-    $SUDO ln -sf /opt/rh/gcc-toolset-13/root/usr/bin/make /usr/local/bin/make || true
+    # Symlink the toolset compiler into /usr/local/bin — skip once gcc already points there.
+    if [ "$(readlink -f /usr/local/bin/gcc 2>/dev/null)" != /opt/rh/gcc-toolset-13/root/usr/bin/gcc ]; then
+        _run cp /opt/rh/gcc-toolset-13/enable /etc/profile.d/gcc-toolset-13.sh 2>/dev/null || true
+        _run ln -sf /opt/rh/gcc-toolset-13/root/usr/bin/gcc  /usr/local/bin/gcc  || true
+        _run ln -sf /opt/rh/gcc-toolset-13/root/usr/bin/g++  /usr/local/bin/g++  || true
+        _run ln -sf /opt/rh/gcc-toolset-13/root/usr/bin/cc   /usr/local/bin/cc   || true
+        _run ln -sf /opt/rh/gcc-toolset-13/root/usr/bin/as   /usr/local/bin/as   || true
+        _run ln -sf /opt/rh/gcc-toolset-13/root/usr/bin/make /usr/local/bin/make || true
+    fi
 }
