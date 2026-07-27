@@ -14,10 +14,13 @@
 # never matched.
 OPTIONAL_PKGS="valgrind gdb lcov tcl jq clang-format py3-numpy python3-numpy py3-psutil python3-psutil py3-cryptography python3-cryptography openssh xsimd openblas-dev curl tar uv zlib1g-dev zlib-dev zlib-devel libbz2-dev bzip2-dev bzip2-devel libblocksruntime-dev libev-dev libev-devel libevent-dev libevent-devel"
 
-# MIN_VERSIONS: sparse "pkg:minversion" -- only deps with a real floor; a
-# present-but-older dep is reported as missing, tagged with the version.
-# cmake 3.25 = what install_cmake.sh provisions (apt 3.22 is too old).
-MIN_VERSIONS="cmake:3.25"
+# MIN_VERSIONS: sparse "pkg:minversion" list — only deps with a real floor a
+# package-manager install can actually satisfy. Everything else is presence-only.
+# (cmake is intentionally NOT here: its >= 3.25 requirement is provisioned by
+# install_cmake.sh during a real `make bootstrap`, not by the distro package, so
+# a version floor here would be unsatisfiable by the apt/dnf `cmake` and would
+# only make `list`/`dry-run` disagree.)
+MIN_VERSIONS=""
 
 # Install AWS CLI v2 from the official installer (arch-aware). Skips if
 # already present — handles pre-installed AMIs without failing.
