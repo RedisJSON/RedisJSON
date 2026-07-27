@@ -78,8 +78,10 @@ if [ "${CHECK_DEPS:-0}" = 1 ]; then
     # print a per-module list — append machine-readable records and let the
     # caller print one deduped union across all modules.
     if [ -n "${DEPS_REPORT_FILE:-}" ]; then
-        for _p in $DEPS_OK;      do echo "ok $_p"      >> "$DEPS_REPORT_FILE"; done
-        for _p in $DEPS_MISSING; do echo "missing $_p" >> "$DEPS_REPORT_FILE"; done
+        for _p in $DEPS_OK;           do echo "ok $_p"           >> "$DEPS_REPORT_FILE"; done
+        for _p in $DEPS_MISSING;      do echo "missing $_p"      >> "$DEPS_REPORT_FILE"; done
+        for _p in $DEPS_OPT_OK;       do echo "opt_ok $_p"       >> "$DEPS_REPORT_FILE"; done
+        for _p in $DEPS_OPT_MISSING;  do echo "opt_missing $_p"  >> "$DEPS_REPORT_FILE"; done
         echo "==> [redisjson] checked: $n_ok installed, $n_missing missing"
         exit 0
     fi
@@ -104,7 +106,12 @@ if [ "${CHECK_DEPS:-0}" = 1 ]; then
     else
         echo "${GRN}installed: $n_ok/$total (set VERBOSE=1 to list)${RST}"
     fi
-    # Non-zero exit when anything is missing so CI / callers can gate on it.
+    # Optional (tests/coverage/debug) — reported separately, never fails the check.
+    if [ -n "$DEPS_OPT_MISSING" ]; then
+        echo "optional, not installed (tests/coverage/debug only):"
+        for _p in $DEPS_OPT_MISSING; do echo "    $_p"; done
+    fi
+    # Non-zero exit only when a REQUIRED dep is missing; optional gaps don't fail.
     [ "$n_missing" -eq 0 ] || exit 1
     exit 0
 fi
