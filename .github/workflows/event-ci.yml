@@ -3,6 +3,7 @@ name: Event CI
 permissions:
   id-token: write
   contents: read
+  packages: read
 
 on:
   pull_request:
@@ -31,6 +32,7 @@ jobs:
     with:
       arch: x64
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+      use_prebuilt_images: ${{ !contains(github.event.pull_request.labels.*.name, 'docker-image-changes') }}
     secrets: inherit
   build-linux-arm64:
     uses: ./.github/workflows/flow-linux.yml
@@ -38,6 +40,7 @@ jobs:
     with:
       arch: arm64
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+      use_prebuilt_images: ${{ !contains(github.event.pull_request.labels.*.name, 'docker-image-changes') }}
     secrets: inherit
   macos:
     uses: ./.github/workflows/flow-macos.yml
@@ -53,6 +56,7 @@ jobs:
       os: jammy
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
       run_valgrind: true
+      use_prebuilt_images: ${{ !contains(github.event.pull_request.labels.*.name, 'docker-image-changes') }}
     secrets: inherit
   linux-sanitizer:
     needs: [prepare-values, docs-only]

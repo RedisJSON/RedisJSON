@@ -3,6 +3,7 @@ name: Event TAG
 permissions:
   id-token: write
   contents: read
+  packages: read
   
 on:
   push:
