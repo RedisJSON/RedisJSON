@@ -93,7 +93,9 @@ if [ "${CHECK_DEPS:-0}" = 1 ]; then
     # "not installed" is the headline of a check run — print it first, bold red.
     if [ -n "$DEPS_MISSING" ]; then
         echo "${RED}NOT INSTALLED ($n_missing):${RST}"
-        for _p in $DEPS_MISSING; do echo "${RED}    $_p${RST}"; done
+        for _p in $DEPS_MISSING; do
+            case "$_p" in *:*) echo "${RED}    ${_p%%:*} (>= ${_p#*:})${RST}" ;; *) echo "${RED}    $_p${RST}" ;; esac
+        done
     else
         echo "${GRN}not installed: (none)${RST}"
     fi
