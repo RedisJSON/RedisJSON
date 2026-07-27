@@ -78,7 +78,6 @@ RHEL_BASE="
     libev-devel libevent-devel
     clang clang-devel
     tcl
-    python3 python3-pip python3-devel
     cmake
     unzip rsync valgrind lcov jq tar which gdb
 "

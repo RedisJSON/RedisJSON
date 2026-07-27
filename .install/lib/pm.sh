@@ -276,8 +276,8 @@ rhel_default_install() {
         esac
     fi
     case "$PM" in
-        dnf) dnf_install $RHEL_BASE ;;
-        yum) yum_install $RHEL_BASE ;;
+        dnf) dnf_install $RHEL_BASE; dnf_install ${RHEL_PYTHON-python3 python3-pip python3-devel} ;;
+        yum) yum_install $RHEL_BASE; yum_install ${RHEL_PYTHON-python3 python3-pip python3-devel} ;;
     esac
 }
 
@@ -338,6 +338,11 @@ _pm_enable_el8_extras() {
 el8_default_install() {
     rpm -q epel-release >/dev/null 2>&1 || _run dnf -y install epel-release
     _pm_enable_el8_extras
+    # el8's python is python3.11 (installed below). The base `python3` rpm is
+    # named python36, so `rpm -q python3` never matches → list/dry-run would flag
+    # it missing forever and never converge. Tell rhel_default_install to add no
+    # bare python3 here; 3.11 is what el8 actually uses.
+    local RHEL_PYTHON=""
     rhel_default_install
     dnf_install \
         gcc-toolset-11-gcc gcc-toolset-11-gcc-c++ gcc-toolset-11-libatomic-devel \
