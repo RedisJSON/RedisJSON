@@ -347,8 +347,12 @@ el8_default_install() {
     dnf_install \
         gcc-toolset-11-gcc gcc-toolset-11-gcc-c++ gcc-toolset-11-libatomic-devel \
         python3.11 python3.11-devel xz
-    # Symlink the toolset compiler into /usr/local/bin — skip once gcc already points there.
-    if [ "$(readlink -f /usr/local/bin/gcc 2>/dev/null)" != /opt/rh/gcc-toolset-11/root/usr/bin/gcc ]; then
+    # gcc-toolset-11 is this module's compiler. Skip when the active gcc/g++ is
+    # already >= 11 — so a higher toolset another module wired up (e.g.
+    # RediSearch's gcc-toolset-13) is ACCEPTED, not downgraded back to 11; only
+    # wire ours when gcc is below it. Re-links the full set if either is stale.
+    if ! version_ge "$(gcc -dumpversion 2>/dev/null || echo 0)" 11 \
+       || ! version_ge "$(g++ -dumpversion 2>/dev/null || echo 0)" 11; then
         _run cp /opt/rh/gcc-toolset-11/enable /etc/profile.d/gcc-toolset-11.sh 2>/dev/null || true
         _run ln -sf /opt/rh/gcc-toolset-11/root/usr/bin/gcc  /usr/local/bin/gcc  || true
         _run ln -sf /opt/rh/gcc-toolset-11/root/usr/bin/g++  /usr/local/bin/g++  || true
