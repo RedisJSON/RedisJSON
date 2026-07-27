@@ -129,8 +129,15 @@ _check_pkgs() {
             _min=$(_min_for "$_p")
             if ! _pkg_installed "$_p"; then
                 if [ -n "$_min" ]; then DEPS_MISSING="$DEPS_MISSING $_p:$_min"; else DEPS_MISSING="$DEPS_MISSING $_p"; fi
-            elif [ -n "$_min" ] && _have=$(_get_installed_version "$_p") && [ -n "$_have" ] && ! version_ge "$_have" "$_min"; then
-                DEPS_MISSING="$DEPS_MISSING $_p:$_min"
+            elif [ -n "$_min" ]; then
+                # has a floor: treat an unknown/unparseable version as NOT
+                # satisfied (fail-safe) rather than silently recording it OK.
+                _have=$(_get_installed_version "$_p")
+                if [ -z "$_have" ] || ! version_ge "$_have" "$_min"; then
+                    DEPS_MISSING="$DEPS_MISSING $_p:$_min"
+                else
+                    DEPS_OK="$DEPS_OK $_p"
+                fi
             else
                 DEPS_OK="$DEPS_OK $_p"
             fi
