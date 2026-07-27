@@ -149,16 +149,20 @@ apt_install() {
     [ "$#" -gt 0 ] || return 0
     if [ "$CHECK_DEPS" = 1 ]; then _check_pkgs "$@"; return 0; fi
     if [ "$DRY_RUN" = 1 ]; then set -- $(_missing_only "$@"); [ "$#" -gt 0 ] || return 0; fi
+    # Acquire::Retries: ports.ubuntu.com (arm64 mirror) intermittently drops
+    # connections mid-build; without retries a single dropped fetch fails the
+    # whole docker build (exit 100). Retry each download before giving up.
+    local apt_retry="-o Acquire::Retries=5"
     if [ "$DRY_RUN" != 1 ] && [ "$_pm_apt_updated" = 0 ]; then
         export DEBIAN_FRONTEND=noninteractive
-        $SUDO apt-get update -qq
+        $SUDO apt-get update -qq $apt_retry
         _pm_apt_updated=1
     fi
     # env goes THROUGH sudo: sudo's env_reset strips exported variables, so a
     # plain export upstream never reaches dpkg — debconf (e.g. tzdata on focal,
     # which the base image doesn't preinstall) then blocks on an interactive
     # prompt and the bootstrap hangs.
-    _run env DEBIAN_FRONTEND=noninteractive apt-get install -yqq --no-install-recommends "$@"
+    _run env DEBIAN_FRONTEND=noninteractive apt-get install -yqq --no-install-recommends $apt_retry "$@"
 }
 
 # `--allowerasing` lets dnf pick our `curl` over the slimmer `curl-minimal`
