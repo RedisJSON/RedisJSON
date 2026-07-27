@@ -10,7 +10,7 @@ fi
 
 brew_default_install
 
-if ! command -v python3 >/dev/null 2>&1; then
+if ! command -v python3 >/dev/null 2>&1 && [ "${CHECK_DEPS:-0}" != 1 ]; then
     echo "==> [redisjson] python3 not on PATH; installing brew python@3.11"
     HOMEBREW_NO_AUTO_UPDATE=1 brew install python@3.11
 fi
@@ -28,13 +28,17 @@ update_profile() {
         || printf '%s\n' "$newpath" >> "$profile_path"
 }
 
-[ -f "$HOME/.bash_profile" ] && update_profile "$HOME/.bash_profile"
-[ -f "$HOME/.zshrc" ]        && update_profile "$HOME/.zshrc"
+# PATH munging writes to the user's shell profiles / $GITHUB_PATH — mutations.
+# Skip entirely in check-deps mode: a check must not modify anything.
+if [ "${CHECK_DEPS:-0}" != 1 ]; then
+    [ -f "$HOME/.bash_profile" ] && update_profile "$HOME/.bash_profile"
+    [ -f "$HOME/.zshrc" ]        && update_profile "$HOME/.zshrc"
 
-# GitHub Actions: $GITHUB_PATH expects one directory per line (not an export
-# statement). Writing the full `export PATH=...` line would add a single
-# garbage entry to PATH instead of prepending the three directories.
-if [ -n "${GITHUB_PATH:-}" ]; then
-    printf '%s\n%s\n%s\n' "$COREUTILS" "$LLVM" "$GNUBIN" >> "$GITHUB_PATH"
+    # GitHub Actions: $GITHUB_PATH expects one directory per line (not an export
+    # statement). Writing the full `export PATH=...` line would add a single
+    # garbage entry to PATH instead of prepending the three directories.
+    if [ -n "${GITHUB_PATH:-}" ]; then
+        printf '%s\n%s\n%s\n' "$COREUTILS" "$LLVM" "$GNUBIN" >> "$GITHUB_PATH"
+    fi
 fi
 true
