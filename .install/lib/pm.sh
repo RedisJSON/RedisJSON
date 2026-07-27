@@ -35,7 +35,7 @@ else
 fi
 
 # ----------------------------------------------------------------------------
-# check-deps mode: when CHECK_DEPS=1 the install primitives below do NOT
+# list mode: when CHECK_DEPS=1 the install primitives below do NOT
 # install — they query whether each package is already present and record it
 # into DEPS_OK / DEPS_MISSING (printed as a summary by install_script.sh).
 # SUDO is neutralised to a no-op so stray privileged side-commands
@@ -50,7 +50,7 @@ DEPS_OPT_MISSING=""
 
 # Optional deps are marked in lib/packages.sh (OPTIONAL_PKGS); default empty
 # here so a check works even before packages.sh is sourced. Still installed
-# normally — this only splits them into a separate check-deps bucket.
+# normally — this only splits them into a separate list bucket.
 OPTIONAL_PKGS="${OPTIONAL_PKGS:-}"
 _is_optional() { case " $OPTIONAL_PKGS " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 

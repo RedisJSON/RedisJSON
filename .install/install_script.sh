@@ -47,7 +47,7 @@ echo "==> [redisjson] OSNICK=$OSNICK PM=$PM"
 # match the current user (common in CI containers). `--global` with wildcard
 # `*` is intentional: `git config --local` would itself fail under "dubious
 # ownership", so a global rule is needed before any per-repo command can run.
-# Skipped in check-deps mode — a check must not mutate anything.
+# Skipped in list mode — a check must not mutate anything.
 if [ "${CHECK_DEPS:-0}" != 1 ]; then
     git config --global --add safe.directory '*' || true
 fi
@@ -56,7 +56,7 @@ fi
 . "$LIB/setup-python.sh"
 
 # Install Rust toolchain via rustup (skipped on Alpine: musl rustc/cargo
-# come from apk via lib/packages.sh's ALPINE_BASE). In check-deps mode we
+# come from apk via lib/packages.sh's ALPINE_BASE). In list mode we
 # record whether cargo is present instead of installing it.
 if [ "$OSNICK" != "alpine" ]; then
     if [ "${CHECK_DEPS:-0}" = 1 ]; then

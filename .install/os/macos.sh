@@ -29,7 +29,7 @@ update_profile() {
 }
 
 # PATH munging writes to the user's shell profiles / $GITHUB_PATH — mutations.
-# Skip entirely in check-deps mode: a check must not modify anything.
+# Skip entirely in list mode: a check must not modify anything.
 if [ "${CHECK_DEPS:-0}" != 1 ]; then
     [ -f "$HOME/.bash_profile" ] && update_profile "$HOME/.bash_profile"
     [ -f "$HOME/.zshrc" ]        && update_profile "$HOME/.zshrc"

@@ -13,7 +13,7 @@
 # than producing a confusing `uv venv ""` failure later.
 : "${ROOT:?setup-python.sh: ROOT not set (must be sourced by install_script.sh)}"
 
-# check-deps mode: record uv presence like any other dep, install nothing.
+# list mode: record uv presence like any other dep, install nothing.
 if [ "${CHECK_DEPS:-0}" = 1 ]; then
     # uv presence, routed through OPTIONAL_PKGS like any other dep.
     if command -v uv >/dev/null 2>&1; then _uv=ok; else _uv=missing; fi
