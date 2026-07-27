@@ -45,9 +45,9 @@ fi
 # cmake 3.28 from source (apt ships 3.10) — only when the installed cmake is
 # older. Each step prints in dry-run; skipped entirely once cmake is new enough.
 if ! cmake --version 2>/dev/null | grep -qE 'cmake version 3\.(2[89]|[3-9][0-9])'; then
-    _sh 'cd /tmp && wget -q https://cmake.org/files/v3.28/cmake-3.28.0.tar.gz && tar -xzf cmake-3.28.0.tar.gz'
-    _sh 'cd /tmp/cmake-3.28.0 && ./configure && make -j"$(nproc)" && sudo make install'
-    _sh 'cd / && rm -rf /tmp/cmake-3.28.0 /tmp/cmake-3.28.0.tar.gz && sudo ln -sf /usr/local/bin/cmake /usr/bin/cmake'
+    _sh '(cd /tmp && wget -q https://cmake.org/files/v3.28/cmake-3.28.0.tar.gz && tar -xzf cmake-3.28.0.tar.gz)'
+    _sh '(cd /tmp/cmake-3.28.0 && ./configure && make -j"$(nproc)" && sudo make install)'
+    _sh 'rm -rf /tmp/cmake-3.28.0 /tmp/cmake-3.28.0.tar.gz && sudo ln -sf /usr/local/bin/cmake /usr/bin/cmake'
 fi
 # dataclasses backport (Python 3.6 lacks it) — skip if already importable.
 if ! python3 -c 'import dataclasses' >/dev/null 2>&1; then
