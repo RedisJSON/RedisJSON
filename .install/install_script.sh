@@ -73,7 +73,7 @@ if [ "$OSNICK" != "alpine" ]; then
 fi
 
 if [ "${DRY_RUN:-0}" = 1 ]; then
-    _dry_line "==> [redisjson] dry-run complete — commands above are what bootstrap would run for missing deps (nothing installed)"
+    _dry_head "==> [redisjson] dry-run complete — commands above are what bootstrap would run for missing deps (nothing installed)"
     exit 0
 fi
 
