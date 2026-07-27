@@ -12,7 +12,7 @@
 # Only affects `make bootstrap check-deps` (reported separately, never fails).
 # Shared superset across modules; names this module doesn't install are simply
 # never matched.
-OPTIONAL_PKGS="valgrind gdb lcov tcl jq clang-format py3-numpy python3-numpy py3-psutil python3-psutil py3-cryptography python3-cryptography openssh xsimd openblas-dev curl tar uv"
+OPTIONAL_PKGS="valgrind gdb lcov tcl jq clang-format py3-numpy python3-numpy py3-psutil python3-psutil py3-cryptography python3-cryptography openssh xsimd openblas-dev curl tar uv zlib1g-dev zlib-dev zlib-devel libbz2-dev bzip2-dev bzip2-devel libblocksruntime-dev libev-dev libev-devel libevent-dev libevent-devel"
 
 # Install AWS CLI v2 from the official installer (arch-aware). Skips if
 # already present — handles pre-installed AMIs without failing.

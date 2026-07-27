@@ -15,7 +15,13 @@
 
 # check-deps mode: record uv presence like any other dep, install nothing.
 if [ "${CHECK_DEPS:-0}" = 1 ]; then
-    if command -v uv >/dev/null 2>&1; then DEPS_OK="$DEPS_OK uv"; else DEPS_MISSING="$DEPS_MISSING uv"; fi
+    # uv presence, routed through OPTIONAL_PKGS like any other dep.
+    if command -v uv >/dev/null 2>&1; then _uv=ok; else _uv=missing; fi
+    if _is_optional uv; then
+        [ "$_uv" = ok ] && DEPS_OPT_OK="$DEPS_OPT_OK uv" || DEPS_OPT_MISSING="$DEPS_OPT_MISSING uv"
+    else
+        [ "$_uv" = ok ] && DEPS_OK="$DEPS_OK uv" || DEPS_MISSING="$DEPS_MISSING uv"
+    fi
     return 0 2>/dev/null || exit 0
 fi
 : "${HERE:?setup-python.sh: HERE not set (must be sourced by install_script.sh)}"
