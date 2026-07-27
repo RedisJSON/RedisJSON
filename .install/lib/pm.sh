@@ -357,7 +357,7 @@ el8_default_install() {
         _run ln -sf /opt/rh/gcc-toolset-11/root/usr/bin/make /usr/local/bin/make || true
     fi
     # Point python3 at 3.11 — skip once it already is.
-    if ! python3 --version 2>/dev/null | grep -q '3\.11'; then
+    if ! /usr/bin/python3 --version 2>/dev/null | grep -q '3\.11'; then
         _run update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 2000000
         _run update-alternatives --set python3 /usr/bin/python3.11
     fi
