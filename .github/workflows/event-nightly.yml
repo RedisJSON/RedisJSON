@@ -27,11 +27,6 @@ on:
         required: false
         type: boolean
         default: false
-      approve-lower-baseline:
-        description: 'Accept a slower perf result as the new baseline (lower the bar)'
-        required: false
-        type: boolean
-        default: false
 jobs:
   prepare-values:
     runs-on: ubuntu-latest
@@ -165,14 +160,16 @@ jobs:
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
       beta-version: ${{needs.prepare-values.outputs.beta-version}}
     secrets: inherit
+  # Safety net over the per-merge gate in event-push-to-integ.yml: catches a regression that
+  # crept in while the per-merge run was skipped or failed. Reads RedisTimeSeries only, so it
+  # needs no build and does not depend on the other nightly jobs.
+  # enforce is off while the thresholds are calibrated against real EC2 variance -- see
+  # tests/benchmarks/Readme.md before turning it on.
   perf-regression:
     uses: ./.github/workflows/flow-perf-regression.yml
-    needs: [prepare-values]
     with:
-      redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
-      beta-version: ${{needs.prepare-values.outputs.beta-version}}
-      regression-threshold: 5
-      approve-lower-baseline: ${{ github.event_name == 'workflow_dispatch' && inputs.approve-lower-baseline || false }}
+      branch: ${{ github.ref_name }}
+      enforce: false
     secrets: inherit
   test-summary:
     uses: ./.github/workflows/test-summary.yml

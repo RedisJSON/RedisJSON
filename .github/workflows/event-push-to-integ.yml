@@ -11,3 +11,14 @@ jobs:
   benchmark:
     uses: ./.github/workflows/benchmark-runner.yml
     secrets: inherit
+
+  # Runs once the new results are in RedisTimeSeries, so a regression is attributed to the commit
+  # that caused it. enforce is off while the thresholds are calibrated against real EC2 variance
+  # -- see tests/benchmarks/Readme.md before turning it on.
+  perf-regression:
+    needs: [benchmark]
+    uses: ./.github/workflows/flow-perf-regression.yml
+    with:
+      branch: ${{ github.ref_name }}
+      enforce: false
+    secrets: inherit
