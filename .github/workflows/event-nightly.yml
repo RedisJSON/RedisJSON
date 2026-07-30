@@ -27,6 +27,11 @@ on:
         required: false
         type: boolean
         default: false
+      approve-lower-baseline:
+        description: 'Accept a slower perf result as the new baseline (lower the bar)'
+        required: false
+        type: boolean
+        default: false
 jobs:
   prepare-values:
     runs-on: ubuntu-latest
@@ -160,12 +165,21 @@ jobs:
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
       beta-version: ${{needs.prepare-values.outputs.beta-version}}
     secrets: inherit
+  perf-regression:
+    uses: ./.github/workflows/flow-perf-regression.yml
+    needs: [prepare-values]
+    with:
+      redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
+      beta-version: ${{needs.prepare-values.outputs.beta-version}}
+      regression-threshold: 5
+      approve-lower-baseline: ${{ github.event_name == 'workflow_dispatch' && inputs.approve-lower-baseline || false }}
+    secrets: inherit
   test-summary:
     uses: ./.github/workflows/test-summary.yml
-    needs: [prepare-values, build-linux-x64, build-linux-arm64, macos, linux-valgrind, linux-sanitizer, random-traffic]
+    needs: [prepare-values, build-linux-x64, build-linux-arm64, macos, linux-valgrind, linux-sanitizer, random-traffic, perf-regression]
     if: always() && (github.event_name == 'schedule' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.send-slack-message == true))
     with:
       redis-ref: ${{ needs.prepare-values.outputs.redis-ref }}
       send-slack-message: ${{ github.event_name == 'schedule' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.send-slack-message == true) }}
-      job-failures: ${{ needs.build-linux-x64.result == 'failure' && 'build-linux-x64 ' || '' }}${{ needs.build-linux-arm64.result == 'failure' && 'build-linux-arm64 ' || '' }}${{ needs.macos.result == 'failure' && 'macos ' || '' }}${{ needs.linux-valgrind.result == 'failure' && 'linux-valgrind ' || '' }}${{ needs.linux-sanitizer.result == 'failure' && 'linux-sanitizer ' || '' }}${{ needs.random-traffic.result == 'failure' && 'random-traffic' || '' }}
+      job-failures: ${{ needs.build-linux-x64.result == 'failure' && 'build-linux-x64 ' || '' }}${{ needs.build-linux-arm64.result == 'failure' && 'build-linux-arm64 ' || '' }}${{ needs.macos.result == 'failure' && 'macos ' || '' }}${{ needs.linux-valgrind.result == 'failure' && 'linux-valgrind ' || '' }}${{ needs.linux-sanitizer.result == 'failure' && 'linux-sanitizer ' || '' }}${{ needs.random-traffic.result == 'failure' && 'random-traffic ' || '' }}${{ needs.perf-regression.result == 'failure' && 'perf-regression' || '' }}
     secrets: inherit

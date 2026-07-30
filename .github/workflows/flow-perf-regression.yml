@@ -1,0 +1,258 @@
+name: Performance Regression Tests
+
+# Day-over-day throughput regression gate.
+#
+# How it works:
+#   * Runs a self-contained redis-benchmark suite against the freshly built
+#     module (no AWS / RedisTimeSeries needed) and records ops/sec per command.
+#   * Downloads the *previous* nightly's baseline artifact (perf-report-baseline
+#     from event-nightly.yml on master) and compares each metric.
+#   * A metric that is more than `regression-threshold`% SLOWER than the
+#     baseline fails the job (turns the nightly red).
+#   * The baseline is a RATCHET: it only moves in the faster direction
+#     automatically. When today is slower we keep the old (faster) baseline so
+#     the bar does not erode silently. To deliberately accept a slower baseline
+#     ("lower the bar"), re-run the nightly via workflow_dispatch with
+#     approve-lower-baseline=true.
+
+on:
+  workflow_call:
+    inputs:
+      redis-ref:
+        description: 'Redis ref to checkout'
+        type: string
+        default: 'unstable'
+      beta-version:
+        description: 'Beta version for reporting'
+        type: string
+        required: false
+      regression-threshold:
+        description: 'Percent slowdown vs baseline that fails the job'
+        type: number
+        default: 5
+      approve-lower-baseline:
+        description: 'Accept a slower result as the new baseline (lower the bar)'
+        type: boolean
+        default: false
+
+jobs:
+  perf-regression:
+    runs-on: ubuntu-latest
+    env:
+      PIP_BREAK_SYSTEM_PACKAGES: 1
+      # How many benchmark requests per command and how many repetitions we
+      # keep the best of (peak throughput => less downward noise on shared CI).
+      REQUESTS: 200000
+      CLIENTS: 16
+      REPS: 3
+      THRESHOLD: ${{ inputs.regression-threshold }}
+      APPROVE_LOWER: ${{ inputs.approve-lower-baseline }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          submodules: 'recursive'
+
+      - name: Get Redis
+        uses: actions/checkout@v5
+        with:
+          repository: redis/redis
+          ref: ${{ inputs.redis-ref }}
+          path: redis
+          submodules: 'recursive'
+
+      - name: Build Redis
+        run: |
+          cd redis
+          make -j$(nproc)
+          sudo make install
+
+      - name: Get version info
+        id: version
+        run: |
+          VERSION=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "short_commit=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Build RedisJSON
+        run: |
+          . "$HOME/.cargo/env"
+          cargo build --release
+          # Copy librejson.so to rejson.so (expected by tooling)
+          cp target/release/librejson.so target/release/rejson.so
+
+      - name: Run Benchmarks
+        id: bench
+        run: |
+          set -e
+          MODULE="$(pwd)/target/release/rejson.so"
+          REPORT="$(pwd)/perf_current.txt"
+          : > "$REPORT"
+
+          echo "Starting redis-server with $MODULE"
+          redis-server --daemonize yes --port 6379 --save '' --loadmodule "$MODULE"
+
+          # Wait for the server to accept connections
+          for i in $(seq 1 30); do
+            if redis-cli -p 6379 ping >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          redis-cli -p 6379 ping
+
+          # Seed representative documents
+          redis-cli -p 6379 JSON.SET small '$' '{"n":0,"s":"hello","arr":[1,2,3,4,5],"obj":{"a":1,"b":2}}'
+          LARGE=$(python3 -c 'import json; print(json.dumps({"store":{"book":[{"id":i,"title":"title-"+str(i),"price":i*1.5,"tags":["x","y","z"]} for i in range(500)]}}))')
+          redis-cli -p 6379 JSON.SET large '$' "$LARGE"
+
+          # run_bench <metric-name> <redis-benchmark command args...>
+          run_bench() {
+            name="$1"; shift
+            best=0
+            for r in $(seq 1 "$REPS"); do
+              out=$(redis-benchmark -p 6379 -n "$REQUESTS" -c "$CLIENTS" -P 1 -q "$@" 2>/dev/null \
+                    | grep -i "requests per second" | head -1)
+              rps=$(echo "$out" | grep -oiE '[0-9]+(\.[0-9]+)? requests per second' \
+                    | grep -oE '^[0-9]+(\.[0-9]+)?')
+              rps=${rps:-0}
+              best=$(awk -v a="$best" -v b="$rps" 'BEGIN{print (b>a)?b:a}')
+            done
+            echo "METRIC:${name}_rps:${best}" >> "$REPORT"
+            echo "  ${name}: ${best} ops/sec (best of ${REPS})"
+          }
+
+          run_bench json_get_scalar   JSON.GET small '$.n'
+          run_bench json_get_fulldoc  JSON.GET small '$'
+          run_bench json_set_scalar   JSON.SET small '$.n' 12345
+          run_bench json_numincrby    JSON.NUMINCRBY small '$.n' 1
+          run_bench json_get_nested   JSON.GET large '$.store.book[10]'
+          run_bench json_arrlen       JSON.ARRLEN small '$.arr'
+
+          redis-cli -p 6379 shutdown nosave || true
+
+          echo "=== Current performance report ==="
+          cat "$REPORT"
+
+      - name: Download previous baseline
+        id: download-baseline
+        uses: dawidd6/action-download-artifact@v20
+        continue-on-error: true
+        with:
+          workflow: event-nightly.yml
+          branch: master
+          name: perf-report-baseline
+          path: baseline/
+          if_no_artifact_found: ignore
+
+      - name: Compare, ratchet, and gate
+        id: compare
+        run: |
+          set -e
+          CUR="perf_current.txt"
+          BASE="baseline/perf_report.txt"
+          NEWBASE="perf_report.txt"       # ratcheted baseline we upload for tomorrow
+          : > "$NEWBASE"
+
+          THRESHOLD="${THRESHOLD:-5}"
+          APPROVE_LOWER="${APPROVE_LOWER:-false}"
+          REGRESSED=0
+
+          {
+            echo "### 📊 Performance Regression (day-over-day)"
+            echo ""
+            echo "Threshold: **${THRESHOLD}%** slower than baseline fails · Approve-lower-baseline: **${APPROVE_LOWER}**"
+            echo ""
+            echo "| Metric | Baseline | Today | Change | New baseline | Status |"
+            echo "|--------|----------|-------|--------|--------------|--------|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          have_base=0
+          [ -f "$BASE" ] && have_base=1
+
+          while IFS= read -r line; do
+            case "$line" in METRIC:*) ;; *) continue;; esac
+            key=$(echo "$line" | cut -d: -f2)
+            cur=$(echo "$line" | cut -d: -f3 | tr -d '[:space:]')
+            [ -z "$cur" ] && cur=0
+
+            base=""
+            if [ "$have_base" -eq 1 ]; then
+              base=$(grep "^METRIC:${key}:" "$BASE" | head -1 | cut -d: -f3 | tr -d '[:space:]' || echo "")
+            fi
+
+            if [ -z "$base" ]; then
+              # No prior value for this metric -> seed baseline with today.
+              echo "METRIC:${key}:${cur}" >> "$NEWBASE"
+              echo "| ${key} | N/A | ${cur} | N/A | ${cur} | ℹ️ new |" >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+
+            # Higher rps is better. drop% = (base - cur)/base*100 (positive = slower).
+            # Ratchet: keep the faster value unless we are approving a lower bar.
+            result=$(awk -v base="$base" -v cur="$cur" -v thr="$THRESHOLD" -v approve="$APPROVE_LOWER" 'BEGIN {
+                if (base <= 0) { printf("0.00 %.4f OK", cur); exit }
+                drop = (base - cur) / base * 100.0;
+                regressed = (drop > thr) ? 1 : 0;
+                if (approve == "true") { nb = cur } else { nb = (cur > base) ? cur : base }
+                st = regressed ? "REG" : ((drop < -thr) ? "FAST" : "OK");
+                printf("%.2f %.4f %s", drop, nb, st);
+              }')
+            drop=$(echo "$result" | awk '{print $1}')
+            newbase=$(echo "$result" | awk '{print $2}')
+            status=$(echo "$result" | awk '{print $3}')
+
+            echo "METRIC:${key}:${newbase}" >> "$NEWBASE"
+
+            case "$status" in
+              REG)
+                icon="❌ -${drop}%"
+                if [ "$APPROVE_LOWER" != "true" ]; then REGRESSED=1; fi
+                ;;
+              FAST) icon="🚀 +$(awk -v d="$drop" 'BEGIN{printf "%.2f", -d}')%";;
+              *)    icon="✅ ${drop}%";;
+            esac
+            echo "| ${key} | ${base} | ${cur} | ${drop}% slower | ${newbase} | ${icon} |" >> "$GITHUB_STEP_SUMMARY"
+          done < "$CUR"
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$have_base" -eq 0 ]; then
+            echo "ℹ️ No previous baseline found — today's numbers become the first baseline." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo "=== New (ratcheted) baseline to be published ==="
+          cat "$NEWBASE"
+
+          if [ "$REGRESSED" -eq 1 ]; then
+            {
+              echo ""
+              echo "❌ **Performance regression detected (> ${THRESHOLD}% slower than baseline).**"
+              echo "The baseline was kept at its faster value (not lowered)."
+              echo "If this slowdown is expected, re-run the nightly via *Run workflow* with"
+              echo "**approve-lower-baseline = true** to accept the new (slower) baseline."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Performance regression::One or more metrics regressed by more than ${THRESHOLD}%"
+            exit 1
+          fi
+
+          echo "✅ No performance regression beyond ${THRESHOLD}%." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish ratcheted baseline
+        # Always publish so the ratchet state persists to the next nightly, even
+        # when the gate failed (we keep the old, faster baseline on regression).
+        if: always() && hashFiles('perf_report.txt') != ''
+        uses: actions/upload-artifact@v6
+        with:
+          name: perf-report-baseline
+          path: perf_report.txt
+          retention-days: 90
+
+      - name: Upload detailed report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: perf-report-${{ steps.version.outputs.short_commit }}
+          path: |
+            perf_current.txt
+            perf_report.txt
+          if-no-files-found: ignore
+          retention-days: 90
