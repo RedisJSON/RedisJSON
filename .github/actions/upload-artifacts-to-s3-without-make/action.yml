@@ -26,6 +26,9 @@ runs:
   using: composite
   steps:
     - name: Configure AWS credentials and upload artifcats # todo - use aws role instead
+      # Pull requests from forks never get the repository secrets, so there is
+      # nothing to upload with. Skip rather than fail the whole build.
+      if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
       shell: bash
       run: |
           echo ::group::install aws cli
