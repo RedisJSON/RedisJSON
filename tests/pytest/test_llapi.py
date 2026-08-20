@@ -140,6 +140,14 @@ def testLLAPIGetAt():
     env.assertEqual(json.loads(env.cmd('LLAPI.GETAT', 'doc', '$.num_array', '2')), 30)
 
 
+def testLLAPIGetAtScan():
+    env = _env_with_doc()
+    # Reads every element through getAt(), the way RediSearch reads a vector.
+    env.assertEqual(env.cmd('LLAPI.GETAT_SCAN', 'doc', '$.num_array'), 4)
+    env.assertEqual(env.cmd('LLAPI.GETAT_SCAN', 'doc', '$.het_array'), 7)
+    env.assertEqual(env.cmd('LLAPI.GETAT_SCAN', 'doc', '$.empty_array'), 0)
+
+
 def testLLAPIGetArray():
     env = _env_with_doc()
     # Homogeneous numeric array: RedisJSON packs it into a typed buffer.
@@ -217,6 +225,9 @@ def testLLAPIErrorsGetAt():
     env.expect('LLAPI.GETAT', 'doc', '$.num_array', '99').raiseError()
     # Not an array.
     env.expect('LLAPI.GETAT', 'doc', '$.int', '0').raiseError()
+    # Scanning a non-array is an error, not an empty scan.
+    env.expect('LLAPI.GETAT_SCAN', 'doc', '$.int').raiseError()
+    env.expect('LLAPI.GETAT_SCAN', 'doc', '$.object').raiseError()
 
 
 def testLLAPIErrorsBadPath():
