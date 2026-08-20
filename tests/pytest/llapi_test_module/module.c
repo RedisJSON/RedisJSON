@@ -386,6 +386,47 @@ static int GetAtCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     return REDISMODULE_OK;
 }
 
+/* LLAPI.GETAT_SCAN key path -> number of elements read.
+ * Reads the whole array one element at a time via getAt(), which is how a consumer
+ * such as RediSearch reads a vector. What gets measured is the full scan rather than a
+ * single indexed read, so any per-element cost that depends on the index - or simply
+ * grows - shows up here as super-linear growth in the array length. */
+static int GetAtScanCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if (argc != 3) return RedisModule_WrongArity(ctx);
+    JSONResultsIterator it = open_and_get(ctx, argv);
+    if (!it) return REDISMODULE_OK;
+
+    RedisJSON node = japi->next(it);
+    if (!node) {
+        RedisModule_ReplyWithError(ctx, "ERR no value at path");
+        japi->freeIter(it);
+        return REDISMODULE_OK;
+    }
+    if (japi->getType(node) != JSONType_Array) {
+        RedisModule_ReplyWithError(ctx, "ERR not an array");
+        japi->freeIter(it);
+        return REDISMODULE_OK;
+    }
+
+    size_t len = 0;
+    if (japi->getLen(node, &len) != REDISMODULE_OK) {
+        RedisModule_ReplyWithError(ctx, "ERR getLen failed");
+        japi->freeIter(it);
+        return REDISMODULE_OK;
+    }
+
+    RedisJSONPtr buf = japi->allocJson();
+    long long read = 0;
+    for (size_t i = 0; i < len; i++) {
+        if (japi->getAt(node, i, buf) != REDISMODULE_OK) break;
+        read++;
+    }
+    japi->freeJson(buf);
+    japi->freeIter(it);
+    RedisModule_ReplyWithLongLong(ctx, read);
+    return REDISMODULE_OK;
+}
+
 /* LLAPI.GETARRAY key path -> [array_type_name, length]. Exercises getArray. */
 static int GetArrayCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 3) return RedisModule_WrongArity(ctx);
@@ -558,6 +599,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     REGISTER("LLAPI.GETLEN", GetLenCmd);
     REGISTER("LLAPI.GETJSON", GetJsonCmd);
     REGISTER("LLAPI.GETAT", GetAtCmd);
+    REGISTER("LLAPI.GETAT_SCAN", GetAtScanCmd);
     REGISTER("LLAPI.GETARRAY", GetArrayCmd);
     REGISTER("LLAPI.KEYVALUES", KeyValuesCmd);
     REGISTER("LLAPI.ISJSON", IsJsonCmd);
