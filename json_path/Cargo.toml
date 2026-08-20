@@ -18,6 +18,7 @@ regex = "1"
 itertools = "0.13"
 
 [dev-dependencies]
+half = "2.0.0"
 env_logger = "0.10" # do not change this version without running a full ci cycle
 
 [[bin]]

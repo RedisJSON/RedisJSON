@@ -602,6 +602,7 @@ version = "0.1.0"
 dependencies = [
  "bson",
  "env_logger",
+ "half",
  "ijson",
  "itertools",
  "log",
