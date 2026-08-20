@@ -1271,6 +1271,77 @@ mod tests {
     }
 
     #[test]
+    fn test_json_api_get_at_on_packed_arrays() {
+        // RediSearch reads vectors element by element through JSONAPI_getAt, so packed
+        // (homogeneous) arrays must be indexable directly - see `IValue::get_index`.
+        macro_rules! assert_get_at {
+            ($($variant:ident => $primitive:ty : $values:expr),* $(,)?) => {
+                $({
+                    let values: Vec<$primitive> = $values;
+                    let array = IValue::from(values.clone());
+                    assert_eq!(
+                        array.get_array_type(),
+                        Some(JSONArrayType::$variant),
+                        "{} values should be stored as a packed array",
+                        stringify!($variant)
+                    );
+                    let array_ptr = &array as *const IValue as *const c_void;
+                    let result_wrapper = json_api_alloc_json(ivalue_mngr());
+
+                    for (index, value) in values.iter().enumerate() {
+                        let status =
+                            json_api_get_at(ivalue_mngr(), array_ptr, index, result_wrapper);
+                        assert_eq!(
+                            status,
+                            Status::Ok as c_int,
+                            "{}[{index}]",
+                            stringify!($variant)
+                        );
+                        let result_ptr = unsafe { *(result_wrapper as *const *const c_void) };
+                        let result_value = unsafe { &*(result_ptr as *const IValue) };
+                        assert_eq!(
+                            result_value,
+                            &IValue::from(*value),
+                            "{}[{index}]",
+                            stringify!($variant)
+                        );
+                    }
+
+                    // Out of bounds
+                    let status =
+                        json_api_get_at(ivalue_mngr(), array_ptr, values.len(), result_wrapper);
+                    assert_eq!(
+                        status,
+                        Status::Err as c_int,
+                        "{}[{}]",
+                        stringify!($variant),
+                        values.len()
+                    );
+                    let result_ptr = unsafe { *(result_wrapper as *const *const c_void) };
+                    assert_eq!(result_ptr, null(), "{}", stringify!($variant));
+
+                    json_api_free_json(ivalue_mngr(), result_wrapper);
+                })*
+            };
+        }
+
+        assert_get_at! {
+            I8 => i8 : vec![1i8, 2i8, 3i8],
+            U8 => u8 : vec![1u8, 2u8, 3u8],
+            I16 => i16 : vec![1000i16, 1001i16, 1002i16],
+            U16 => u16 : vec![1000u16, 1001u16, 1002u16],
+            F16 => f16 : vec![f16::from_f32(1.25), f16::from_f32(2.5)],
+            BF16 => bf16 : vec![bf16::from_f32(1.25), bf16::from_f32(2.5)],
+            I32 => i32 : vec![1_000_000i32, 2_000_000i32],
+            U32 => u32 : vec![1_000_000u32, 2_000_000u32],
+            F32 => f32 : vec![1.25f32, 2.5f32],
+            I64 => i64 : vec![1i64 << 40, 2i64 << 40],
+            U64 => u64 : vec![1u64 << 40, 2u64 << 40],
+            F64 => f64 : vec![1.25f64, 2.5f64],
+        }
+    }
+
+    #[test]
     fn test_json_api_get_array() {
         fn call_get_array(value: &IValue) -> (*const c_void, size_t, JSONArrayType) {
             let mut len: size_t = size_t::MAX;
