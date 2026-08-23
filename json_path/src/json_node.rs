@@ -209,8 +209,21 @@ impl SelectValue for IValue {
     }
 
     fn get_index<'a>(&'a self, index: usize) -> Option<ValueRef<'a, Self>> {
-        self.as_array()
-            .and_then(|arr| arr.iter().nth(index).map(Into::into))
+        use ijson::array::ArraySliceRef;
+        let arr = self.as_array()?;
+        // Index the backing slice directly. `IArray::get` only covers heterogeneous
+        // arrays, and `arr.iter().nth(index)` walks (and allocates) one element at a
+        // time, which makes a full read of a typed array quadratic.
+        macro_rules! indexed {
+            ($($variant:ident),*) => {
+                match arr.as_slice() {
+                    ArraySliceRef::Heterogeneous(s) => s.get(index).map(ValueRef::Borrowed),
+                    $(ArraySliceRef::$variant(s) =>
+                        s.get(index).map(|&v| ValueRef::Owned(IValue::from(v))),)*
+                }
+            }
+        }
+        indexed!(I8, U8, I16, U16, F16, BF16, I32, U32, F32, I64, U64, F64)
     }
 
     fn is_array(&self) -> bool {
@@ -242,5 +255,37 @@ impl SelectValue for IValue {
 
     fn get_double(&self) -> f64 {
         self.as_number().expect("not a number").to_f64_lossy()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_index_on_typed_and_heterogeneous_arrays() {
+        let heterogeneous = IValue::from(vec![IValue::from(1), IValue::from("two")]);
+        assert!(heterogeneous
+            .as_array()
+            .unwrap()
+            .as_slice()
+            .is_heterogeneous());
+        assert_eq!(heterogeneous.get_index(0).unwrap().get_long(), 1);
+        assert_eq!(heterogeneous.get_index(1).unwrap().as_str(), "two");
+        assert!(heterogeneous.get_index(2).is_none());
+
+        let floats = IValue::from(vec![1.5f32, 2.5, 3.5]);
+        assert!(floats.as_array().unwrap().as_slice().is_typed());
+        assert_eq!(floats.get_index(0).unwrap().get_double(), 1.5);
+        assert_eq!(floats.get_index(2).unwrap().get_double(), 3.5);
+        assert!(floats.get_index(3).is_none());
+
+        let longs = IValue::from(vec![10i64, 20, 30]);
+        assert!(longs.as_array().unwrap().as_slice().is_typed());
+        assert_eq!(longs.get_index(1).unwrap().get_long(), 20);
+        assert!(longs.get_index(3).is_none());
+
+        let not_an_array = IValue::from(1);
+        assert!(not_an_array.get_index(0).is_none());
     }
 }
