@@ -232,8 +232,21 @@ impl SelectValue for IValue {
     }
 
     fn get_index<'a>(&'a self, index: usize) -> Option<ValueRef<'a, Self>> {
-        self.as_array()
-            .and_then(|arr| arr.iter().nth(index).map(Into::into))
+        use ijson::array::ArraySliceRef;
+        let arr = self.as_array()?;
+        // Index the backing slice directly. `IArray::get` only covers heterogeneous
+        // arrays, and `arr.iter().nth(index)` walks (and allocates) one element at a
+        // time, which makes a full read of a typed array quadratic.
+        macro_rules! indexed {
+            ($($variant:ident),*) => {
+                match arr.as_slice() {
+                    ArraySliceRef::Heterogeneous(s) => s.get(index).map(ValueRef::Borrowed),
+                    $(ArraySliceRef::$variant(s) =>
+                        s.get(index).map(|&v| ValueRef::Owned(IValue::from(v))),)*
+                }
+            }
+        }
+        indexed!(I8, U8, I16, U16, F16, BF16, I32, U32, F32, I64, U64, F64)
     }
 
     fn is_array(&self) -> bool {
@@ -324,5 +337,36 @@ impl SelectValue for IValue {
             }
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_index_on_typed_and_heterogeneous_arrays() {
+        let heterogeneous = IValue::from(vec![IValue::from(1), IValue::from("two")]);
+        assert_eq!(
+            heterogeneous.get_array_type(),
+            Some(JSONArrayType::Heterogeneous)
+        );
+        assert_eq!(heterogeneous.get_index(0).unwrap().get_long(), Some(1));
+        assert_eq!(heterogeneous.get_index(1).unwrap().as_str(), Some("two"));
+        assert!(heterogeneous.get_index(2).is_none());
+
+        let floats = IValue::from(vec![1.5f32, 2.5, 3.5]);
+        assert_eq!(floats.get_array_type(), Some(JSONArrayType::F32));
+        assert_eq!(floats.get_index(0).unwrap().get_double(), Some(1.5));
+        assert_eq!(floats.get_index(2).unwrap().get_double(), Some(3.5));
+        assert!(floats.get_index(3).is_none());
+
+        let longs = IValue::from(vec![10i64, 20, 30]);
+        assert_eq!(longs.get_array_type(), Some(JSONArrayType::I64));
+        assert_eq!(longs.get_index(1).unwrap().get_long(), Some(20));
+        assert!(longs.get_index(3).is_none());
+
+        let not_an_array = IValue::from(1);
+        assert!(not_an_array.get_index(0).is_none());
     }
 }
