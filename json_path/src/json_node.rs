@@ -369,5 +369,4 @@ mod tests {
         let not_an_array = IValue::from(1);
         assert!(not_an_array.get_index(0).is_none());
     }
-
 }
