@@ -918,6 +918,49 @@ def testArrTrimCommand(env):
     r.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', '.arr', -4, 1), 0)
 
 
+def testArrTrimExtremeIndices(env):
+
+    r = env
+    I64_MIN = -9223372036854775808
+    I64_MAX = 9223372036854775807
+
+    def reset():
+        r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{ "arr": [10, 20, 30, 40, 50] }'))
+
+    # `i64::MIN` is further from the end than the array is long, so it clamps to 0
+    for path, res in [('.arr', 1), ('$.arr', [1])]:
+        reset()
+        r.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', path, I64_MIN, I64_MIN), res)
+        r.assertListEqual(json.loads(r.execute_command('JSON.GET', 'test', '.arr')), [10])
+
+        reset()
+        r.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', path, 0, I64_MIN), res)
+        r.assertListEqual(json.loads(r.execute_command('JSON.GET', 'test', '.arr')), [10])
+
+    reset()
+    r.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', '.arr', I64_MIN, -1), 5)
+    r.assertListEqual(json.loads(r.execute_command('JSON.GET', 'test', '.arr')), [10, 20, 30, 40, 50])
+
+    # `i64::MIN + 1` negates fine and clamps the same way
+    r.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', '.arr', I64_MIN + 1, -1), 5)
+    r.assertListEqual(json.loads(r.execute_command('JSON.GET', 'test', '.arr')), [10, 20, 30, 40, 50])
+
+    r.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', '.arr', 0, I64_MIN + 1), 1)
+    r.assertListEqual(json.loads(r.execute_command('JSON.GET', 'test', '.arr')), [10])
+
+    reset()
+    r.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', '.arr', 0, I64_MAX), 5)
+    r.assertListEqual(json.loads(r.execute_command('JSON.GET', 'test', '.arr')), [10, 20, 30, 40, 50])
+
+    # start past the end of the array trims everything
+    r.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', '.arr', I64_MAX, I64_MAX), 0)
+    r.assertListEqual(json.loads(r.execute_command('JSON.GET', 'test', '.arr')), [])
+
+    # an empty array stays empty instead of underflowing
+    r.assertEqual(r.execute_command('JSON.ARRTRIM', 'test', '.arr', I64_MIN, I64_MIN), 0)
+    r.assertListEqual(json.loads(r.execute_command('JSON.GET', 'test', '.arr')), [])
+
+
 def testArrPopCommand(env):
     """Test JSON.ARRPOP command"""
 
