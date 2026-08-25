@@ -510,20 +510,12 @@ fi
 # (RedisJSON_V<n>) and exposes it as LLAPI.* commands.
 LLAPI_TEST_DIR="$HERE/llapi_test_module"
 if [[ -f "$LLAPI_TEST_DIR/module.c" ]]; then
-	if [[ ! -f "$ROOT/deps/RedisModulesSDK/redismodule.h" ]]; then
-		git -C "$ROOT" submodule update --init deps/RedisModulesSDK
-	fi
-	case "$(uname -s)" in
-		Darwin) LLAPI_TEST_LDFLAGS="-bundle -undefined dynamic_lookup" ;;
-		*)      LLAPI_TEST_LDFLAGS="-shared" ;;
-	esac
-	if ! "${LLAPI_TEST_CC:-cc}" -fPIC $LLAPI_TEST_LDFLAGS -O2 -Wall \
-		-I"$ROOT/deps/RedisModulesSDK" -I"$ROOT/redis_json/src/include" \
-		-o "$LLAPI_TEST_DIR/llapi_test.so" "$LLAPI_TEST_DIR/module.c"; then
+	# Same builder the benchmark flow uses, so the two can't drift apart.
+	if ! LLAPI_TEST_SO=$("$LLAPI_TEST_DIR/build.sh"); then
 		echo "ERROR: failed to build LLAPI test module ($LLAPI_TEST_DIR/module.c)" >&2
 		exit 1
 	fi
-	export LLAPI_TEST_MODULE="$LLAPI_TEST_DIR/llapi_test.so"
+	export LLAPI_TEST_MODULE="$LLAPI_TEST_SO"
 fi
 
 if [[ $QUICK == 1 ]]; then

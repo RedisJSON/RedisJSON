@@ -1,0 +1,16 @@
+version: 0.2
+name: "llapi_getat_last_packed_f32_1280"
+description: "LLAPI.GETAT vec:f32:1280 $ 1279 -- a single indexed read of the last element of a 1280-element packed f32 array. Isolates the cost of one getAt(), which should be independent of the index. See RED-213492."
+
+dbconfig:
+  - init_commands:
+    - ['EVAL', "local t={} local dim=tonumber(ARGV[1]) for i=1,dim do t[i]=string.format('%.2f',70000+(i%8)*0.25) end return redis.call('JSON.SET',KEYS[1],'$','['..table.concat(t,',')..']')", '1', 'vec:f32:1280', '1280']
+clientconfig:
+  - tool: redis-benchmark
+  - min-tool-version: "6.2.0"
+  - parameters:
+    - clients: 16
+    - requests: 1000000
+    - threads: 2
+    - pipeline: 1
+    - command: 'LLAPI.GETAT vec:f32:1280 $ 1279'

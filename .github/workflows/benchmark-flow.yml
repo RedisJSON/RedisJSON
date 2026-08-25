@@ -68,6 +68,11 @@ jobs:
           . $HOME/.cargo/env
           make build
 
+      - name: Build LLAPI test module
+        # Loaded next to the module under test so the llapi_*.yml benchmarks can
+        # drive the shared C API (getAt/getArray) through LLAPI.* commands.
+        run: ./tests/pytest/llapi_test_module/build.sh
+
       - name: Prepare automation
         run: |
           ./deps/readies/bin/getpy3
@@ -97,6 +102,7 @@ jobs:
           BENCHMARK_RUNNER_GROUP_TOTAL: ${{ inputs.benchmark_runner_group_total }}
         run: redisbench-admin run-remote
               --module_path ../../${{ inputs.module_path }}
+              --module_path ../../tests/pytest/llapi_test_module/llapi_test.so
               --github_actor ${{ github.triggering_actor }}
               --github_repo ${{ github.event.repository.name }}
               --github_org ${{ github.repository_owner }}

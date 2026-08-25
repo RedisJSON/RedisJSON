@@ -1,0 +1,16 @@
+version: 0.2
+name: "llapi_getat_scan_packed_f32_1280"
+description: "LLAPI.GETAT_SCAN vec:f32:1280 $ -- reads a 1280-element packed f32 array one element at a time through the shared C API getAt(), the access pattern RediSearch uses to read a vector. Compare against llapi_getat_scan_packed_f32_320/1280: per-element cost must not grow with the array length. See RED-213492."
+
+dbconfig:
+  - init_commands:
+    - ['EVAL', "local t={} local dim=tonumber(ARGV[1]) for i=1,dim do t[i]=string.format('%.2f',70000+(i%8)*0.25) end return redis.call('JSON.SET',KEYS[1],'$','['..table.concat(t,',')..']')", '1', 'vec:f32:1280', '1280']
+clientconfig:
+  - tool: redis-benchmark
+  - min-tool-version: "6.2.0"
+  - parameters:
+    - clients: 16
+    - requests: 20000
+    - threads: 2
+    - pipeline: 1
+    - command: 'LLAPI.GETAT_SCAN vec:f32:1280 $'
