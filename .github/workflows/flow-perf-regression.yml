@@ -1,0 +1,121 @@
+name: Performance Regression Gate
+
+# Reads the benchmark results that the EC2 perf suite (benchmark-flow.yml) already pushed to
+# RedisTimeSeries and checks the newest ones against a ratcheted baseline. It runs no benchmark
+# of its own -- GitHub runners are not a trustworthy source of performance signal, so the only
+# numbers trusted here are the ones measured on the perf EC2 fleet.
+#
+# The baseline is the best trailing-window median in the query window, so it only ever moves in
+# the faster direction: a slow run cannot lower it. Lowering the bar is a reviewed change to
+# tests/benchmarks/perf-baselines.json. See tests/benchmarks/perf_regression_gate.py.
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Branch whose benchmark history to gate'
+        type: string
+        default: master
+      enforce:
+        description: 'Fail the job when a regression is detected'
+        type: boolean
+        default: false
+      threshold-pct:
+        description: 'Regression threshold, in percent'
+        type: string
+        default: '5.0'
+      window:
+        description: 'Runs per median, for both the current window and each baseline candidate'
+        type: number
+        default: 3
+      days:
+        description: 'How far back to read history'
+        type: number
+        default: 180
+      triggering-env:
+        description: "Must match benchmark-flow.yml's triggering_env"
+        type: string
+        default: circleci
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch whose benchmark history to gate'
+        type: string
+        default: master
+      enforce:
+        description: 'Fail the job when a regression is detected'
+        type: boolean
+        default: false
+      discover:
+        description: 'Print the RedisTimeSeries series and labels that exist, then stop'
+        type: boolean
+        default: false
+      threshold-pct:
+        description: 'Regression threshold, in percent'
+        type: string
+        default: '5.0'
+      window:
+        description: 'Runs per median, for both the current window and each baseline candidate'
+        type: number
+        default: 3
+      days:
+        description: 'How far back to read history'
+        type: number
+        default: 180
+      triggering-env:
+        description: "Must match benchmark-flow.yml's triggering_env"
+        type: string
+        default: circleci
+
+jobs:
+  perf-regression:
+    name: Perf regression gate (${{ inputs.enforce && 'enforcing' || 'warn-only' }})
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        # Pinned: the gate parses TS.MRANGE replies, whose shape depends on the client version.
+        run: pip install 'redis==5.*' PyYAML
+
+      - name: Check performance RedisTimeSeries credentials are available
+        env:
+          RTS_HOST: ${{ secrets.PERFORMANCE_RTS_HOST }}
+        run: |
+          if [ -z "$RTS_HOST" ]; then
+            echo "::error::PERFORMANCE_RTS_HOST is not set. This gate reads the perf RedisTimeSeries instance and cannot run without it."
+            exit 1
+          fi
+
+      - name: Check for performance regressions
+        working-directory: tests/benchmarks
+        env:
+          PERFORMANCE_RTS_HOST: ${{ secrets.PERFORMANCE_RTS_HOST }}
+          PERFORMANCE_RTS_PORT: ${{ secrets.PERFORMANCE_RTS_PORT }}
+          PERFORMANCE_RTS_AUTH: ${{ secrets.PERFORMANCE_RTS_AUTH }}
+        run: |
+          python3 perf_regression_gate.py \
+            --github-org "${{ github.repository_owner }}" \
+            --github-repo "${{ github.event.repository.name }}" \
+            --branch "${{ inputs.branch || 'master' }}" \
+            --triggering-env "${{ inputs.triggering-env || 'circleci' }}" \
+            --threshold-pct "${{ inputs.threshold-pct || '5.0' }}" \
+            --window "${{ inputs.window || 3 }}" \
+            --days "${{ inputs.days || 180 }}" \
+            --json-out perf-regression-report.json \
+            ${{ inputs.discover && '--discover' || '' }} \
+            ${{ inputs.enforce && '--enforce' || '' }}
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-regression-report-${{ inputs.branch || 'master' }}
+          path: tests/benchmarks/perf-regression-report.json
+          if-no-files-found: ignore

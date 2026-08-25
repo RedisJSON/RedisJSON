@@ -1,0 +1,32 @@
+{
+  "_comment": [
+    "Human-approved performance baselines. This file is the ONLY way the performance bar can be",
+    "lowered: perf_regression_gate.py derives its baseline as the best trailing-window median in",
+    "RedisTimeSeries, which by construction never moves in the slower direction on its own.",
+    "",
+    "Add an entry here to accept a regression as the new normal -- a deliberate trade-off whose",
+    "reason is recorded and reviewed like any other change. Entries need 'test_name' and 'metric',",
+    "plus at least one of:",
+    "  baseline       absolute value to compare against, replacing the derived one",
+    "  threshold_pct  per-test regression threshold, replacing the global one",
+    "Include 'approved_on', 'approved_by' and 'reason' so the cost stays traceable.",
+    "",
+    "'metric' must match the metric label exactly as the gate reports it. Where a test measures",
+    "several commands under one metric the gate appends the context path, e.g.",
+    "\"Ops/sec @ <metric_context_path>\"; copy the string out of the job summary.",
+    "",
+    "The gate still reports the derived baseline alongside the approved one, so an accepted",
+    "regression stays visible instead of disappearing.",
+    "",
+    "Example:",
+    "  {",
+    "    \"test_name\": \"json_get_fulldoc_jsonsl-1\",",
+    "    \"metric\": \"Ops/sec\",",
+    "    \"baseline\": 118000,",
+    "    \"approved_on\": \"2026-07-30\",",
+    "    \"approved_by\": \"tom.gabsow\",",
+    "    \"reason\": \"MOD-XXXXX added bounds checks on the parse path; 4% cost accepted.\"",
+    "  }"
+  ],
+  "baselines": []
+}

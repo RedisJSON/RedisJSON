@@ -1,4 +1,7 @@
 *.json
+# Approved performance baselines are source, not benchmark output: the gate reads them from git
+# so that lowering the performance bar is a reviewed change. See Readme.md.
+!perf-baselines.json
 *.txt
 *.csv
 datasets/*.rdb
