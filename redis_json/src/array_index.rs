@@ -14,8 +14,6 @@ pub trait ArrayIndex {
 impl ArrayIndex for i64 {
     fn normalize(self, len: i64) -> usize {
         let index = if self < 0 {
-            // `saturating_neg` guards `i64::MIN`, which clamps to 0 like any other
-            // index further from the end than the array is long
             len - len.min(self.saturating_neg())
         } else if len > 0 {
             (len - 1).min(self)
