@@ -127,6 +127,16 @@ def testSetInvalidPathShouldFail(env):
         r.expect('JSON.SET', 'test', i, 'null').raiseError()
         assertNotExists(r, 'test%s' % i)
 
+def testSetWithNotExistPathShouldSucceed(env):
+    """Test that deep non-existing paths are automatically created when the key does not exist"""
+    r = env
+    r.cmd('DEL', 'test')
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$.foo.bar', '"baz"'))
+    result = json.loads(r.execute_command('JSON.GET', 'test', '.'))
+    expected = {"foo": {"bar": "baz"}}
+
+    r.assertEqual(result, expected)
+
 def testSetRootWithJSONValuesShouldSucceed(env):
     """Test that the root of a JSON key can be set with any valid JSON"""
     r = env
