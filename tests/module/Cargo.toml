@@ -1,0 +1,36 @@
+# cargo-features = ["edition2021"]
+
+[package]
+name = "testLLAPI"
+version = "99.99.99"
+authors = ["Ephraim Feldblum <ephraim.feldblum@redis.com>"]
+edition = "2021"
+build = "build.rs"
+description = "Test module for low level C API for RedisJSON"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+name = "testmod"
+
+[dependencies]
+redisjson = { git = "https://github.com/RedisJSON/RedisJSON" }
+cstr = "0.2.10"
+const_format = "0.2.26"
+konst = "0.2.19"
+function_name = "0.3.0"
+
+bitflags = "1.3"
+log = "0.4"
+libc = "0.2"
+jsonpath_lib = { git = "https://github.com/RedisJSON/jsonpath.git", branch = "generic_json_path" }
+redis-module = { path = "/home/ephraim_feldblum/git/redismodule-rs", features = ["experimental-api"]}
+# redis-module = { version="1.0", features = ["experimental-api"]}
+itertools = "0.10"
+
+
+[build-dependencies]
+bindgen = "0.61"
+cc = "1.0"
+
+[profile.release]
+debug = 1
