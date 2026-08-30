@@ -107,7 +107,10 @@ include $(MK)/rules
 
 MODULE_NAME=rejson.so
 
-RUST_TARGET:=$(shell eval $$(rustc --print cfg | grep =); echo $$target_arch-$$target_vendor-$$target_os-$$target_env)
+# Lazy (=, not :=): with `:=` this forked rustc while merely PARSING the
+# Makefile, so even a no-op build printed `rustc: command not found` when the
+# toolchain was absent (e.g. under sudo). Only the NIGHTLY path below uses it.
+RUST_TARGET = $(shell eval $$(rustc --print cfg | grep =); echo $$target_arch-$$target_vendor-$$target_os-$$target_env)
 CARGO_TOOLCHAIN=
 CARGO_FLAGS=
 RUST_FLAGS=
@@ -180,7 +183,21 @@ RUST_SOEXT.linux=so
 RUST_SOEXT.freebsd=so
 RUST_SOEXT.macos=dylib
 
-build:
+# $(TARGET) is a real file, so make can decide from timestamps whether cargo
+# needs to run at all — an already-built tree then installs with no rust
+# toolchain present (`cargo` is not on root's PATH under sudo). When something
+# did change, cargo runs as before and applies its own finer fingerprinting.
+#
+# Inputs cargo actually compiles from: the workspace and member manifests, the
+# lockfile, the pinned toolchain, every .rs, and the .pest grammars (json_path
+# includes grammar.pest via #[grammar = "grammar.pest"]).
+RUST_SOURCES := $(shell find $(ROOT)/json_path $(ROOT)/redis_json \
+        \( -name '*.rs' -o -name '*.pest' -o -name 'Cargo.toml' \) -print 2>/dev/null) \
+    $(ROOT)/Cargo.toml $(ROOT)/Cargo.lock $(wildcard $(ROOT)/rust-toolchain.toml)
+
+build: $(TARGET)
+
+$(TARGET): $(RUST_SOURCES)
 ifneq ($(NIGHTLY),1)
 	$(SHOW)set -e ;\
 	$(if $(RUST_FLAGS),export RUSTFLAGS="$(RUST_FLAGS)" ;,)\
