@@ -195,6 +195,9 @@ RUST_SOURCES := $(shell find $(ROOT)/json_path $(ROOT)/redis_json \
         \( -name '*.rs' -o -name '*.pest' -o -name 'Cargo.toml' \) -print 2>/dev/null) \
     $(ROOT)/Cargo.toml $(ROOT)/Cargo.lock $(wildcard $(ROOT)/rust-toolchain.toml)
 
+# Not exported: recipes do not need it, and a large env string can break exec.
+unexport RUST_SOURCES
+
 build: $(TARGET)
 
 $(TARGET): $(RUST_SOURCES)
