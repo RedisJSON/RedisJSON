@@ -107,10 +107,6 @@ include $(MK)/rules
 
 MODULE_NAME=rejson.so
 
-# Lazy (=, not :=): with `:=` this forked rustc while merely PARSING the
-# Makefile, so even a no-op build printed `rustc: command not found` when the
-# toolchain was absent (e.g. under sudo). Only the NIGHTLY path below uses it.
-RUST_TARGET = $(shell eval $$(rustc --print cfg | grep =); echo $$target_arch-$$target_vendor-$$target_os-$$target_env)
 CARGO_TOOLCHAIN=
 CARGO_FLAGS=
 RUST_FLAGS=
@@ -141,6 +137,7 @@ RUST_FLAGS += -g -C force-frame-pointers=yes
 endif
 
 ifeq ($(NIGHTLY),1)
+	RUST_TARGET:=$(shell eval $$(rustc --print cfg | grep =); echo $$target_arch-$$target_vendor-$$target_os-$$target_env)
 	TARGET_DIR=$(BINDIR)/target/$(RUST_TARGET)/debug
 
 	ifeq ($(RUST_GOOD_NIGHTLY),)
@@ -191,16 +188,36 @@ RUST_SOEXT.macos=dylib
 # Inputs cargo actually compiles from: the workspace and member manifests, the
 # lockfile, the pinned toolchain, every .rs, and the .pest grammars (json_path
 # includes grammar.pest via #[grammar = "grammar.pest"]).
+RUST_SOURCE_GOALS := build all default bench benchmark coverage
+ifneq ($(filter $(RUST_SOURCE_GOALS),$(MAKECMDGOALS))$(if $(MAKECMDGOALS),,default),)
 RUST_SOURCES := $(shell find $(ROOT)/json_path $(ROOT)/redis_json \
         \( -name '*.rs' -o -name '*.pest' -o -name 'Cargo.toml' \) -print 2>/dev/null) \
     $(ROOT)/Cargo.toml $(ROOT)/Cargo.lock $(wildcard $(ROOT)/rust-toolchain.toml)
+endif
 
 # Not exported: recipes do not need it, and a large env string can break exec.
 unexport RUST_SOURCES
 
+RUST_BUILD_FLAGS=$(BINDIR)/.rejson-build-flags
+
 build: $(TARGET)
 
-$(TARGET): $(RUST_SOURCES)
+$(RUST_BUILD_FLAGS): FORCE
+	$(SHOW)mkdir -p $(@D)
+	$(SHOW){ \
+		printf '%s\n' 'DEBUG=$(DEBUG)' 'NIGHTLY=$(NIGHTLY)' 'SAN=$(SAN)' 'COV=$(COV)' 'PROFILE=$(PROFILE)' \
+			'RUST_FLAGS=$(RUST_FLAGS)' 'RUST_DOCFLAGS=$(RUST_DOCFLAGS)' 'CARGO_FLAGS=$(CARGO_FLAGS)' \
+			'CARGO_TOOLCHAIN=$(CARGO_TOOLCHAIN)' 'TARGET_DIR=$(TARGET_DIR)'; \
+	} > $@.tmp
+	$(SHOW)had_stamp=0; [ -f $@ ] && had_stamp=1; \
+	if [ $$had_stamp = 1 ] && cmp -s $@.tmp $@; then \
+		rm $@.tmp; \
+	else \
+		mv $@.tmp $@; \
+		if [ $$had_stamp = 0 ] && [ -f $(TARGET) ] && [ "$(NIGHTLY)" != 1 ]; then touch -r $(TARGET) $@; fi; \
+	fi
+
+$(TARGET): $(RUST_SOURCES) $(RUST_BUILD_FLAGS)
 ifneq ($(NIGHTLY),1)
 	$(SHOW)set -e ;\
 	$(if $(RUST_FLAGS),export RUSTFLAGS="$(RUST_FLAGS)" ;,)\
@@ -220,12 +237,13 @@ endif
 
 clean:
 ifneq ($(ALL),1)
+	$(SHOW)rm -f $(TARGET) $(RUST_BUILD_FLAGS)
 	$(SHOW)cargo clean
 else
 	$(SHOW)rm -rf $(BINDIR)
 endif
 
-.PHONY: build clean
+.PHONY: build clean FORCE
 
 #----------------------------------------------------------------------------------------------
 
