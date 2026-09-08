@@ -51,6 +51,7 @@ use crate::commands::{
 use crate::redisjson::Format;
 
 mod array_index;
+pub mod auto_create;
 mod backward;
 pub mod c_api;
 pub mod commands;
@@ -407,6 +408,20 @@ macro_rules! redis_json_module_create {
             init: json_init_config,
             init: initialize,
             info: $info_func,
+            configurations: [
+                i64: [],
+                string: [],
+                bool: [[
+                    "json-auto-create-deep-paths",
+                    &$crate::auto_create::AUTO_CREATE_DEEP_PATHS,
+                    false,
+                    ::redis_module::configuration::ConfigurationFlags::IMMUTABLE
+                        | ::redis_module::configuration::ConfigurationFlags::UNPREFIXED,
+                    None
+                ]],
+                enum: [],
+                module_args_as_configuration: true,
+            ]
         }
     }
 }
