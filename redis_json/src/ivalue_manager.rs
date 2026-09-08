@@ -850,6 +850,15 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         }
     }
 
+    fn nest_in_objects(&self, keys: &[String], value: IValue) -> RedisResult<IValue> {
+        keys.iter().rev().try_fold(value, |inner, key| {
+            let mut obj = IObject::new();
+            obj.insert(key.as_str(), inner)
+                .map_err(|e| RedisError::String(e.to_string()))?;
+            Ok(obj.into())
+        })
+    }
+
     fn get_memory(v: &Self::V) -> RedisResult<usize> {
         Ok(v.mem_allocated() + size_of::<IValue>())
     }
@@ -868,6 +877,65 @@ mod tests {
     use super::*;
 
     static SINGLE_THREAD_TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn manager() -> RedisIValueJsonKeyManager<'static> {
+        RedisIValueJsonKeyManager {
+            phantom: PhantomData,
+        }
+    }
+
+    fn keys(names: &[&str]) -> Vec<String> {
+        names.iter().map(|n| (*n).to_string()).collect()
+    }
+
+    #[test]
+    fn nest_in_objects_returns_the_value_when_there_are_no_keys() {
+        let value: IValue = serde_json::from_str("5").unwrap();
+        let nested = manager().nest_in_objects(&[], value.clone()).unwrap();
+        assert_eq!(nested, value);
+    }
+
+    #[test]
+    fn nest_in_objects_builds_the_chain_outermost_key_first() {
+        let value: IValue = serde_json::from_str("5").unwrap();
+        let nested = manager()
+            .nest_in_objects(&keys(&["b", "c"]), value)
+            .unwrap();
+        let expected: IValue = serde_json::from_str(r#"{"b":{"c":5}}"#).unwrap();
+        assert_eq!(nested, expected);
+    }
+
+    #[test]
+    fn nest_in_objects_preserves_a_container_value() {
+        let value: IValue = serde_json::from_str(r#"{"x":[1,2]}"#).unwrap();
+        let nested = manager().nest_in_objects(&keys(&["a"]), value).unwrap();
+        let expected: IValue = serde_json::from_str(r#"{"a":{"x":[1,2]}}"#).unwrap();
+        assert_eq!(nested, expected);
+    }
+
+    #[test]
+    fn nest_in_objects_adds_one_depth_per_key() {
+        // This is what makes `dict_add`'s pre-mutation depth check exact for a
+        // whole created chain: patch_depth grows by one per level.
+        let value: IValue = serde_json::from_str(r#"{"x":1}"#).unwrap();
+        assert_eq!(value.calculate_value_depth(), 1);
+        for n in 0..4 {
+            let nested = manager()
+                .nest_in_objects(&keys(&["k"; 4][..n]), value.clone())
+                .unwrap();
+            assert_eq!(nested.calculate_value_depth(), 1 + n, "{n} keys");
+        }
+    }
+
+    #[test]
+    fn nest_in_objects_keeps_keys_that_need_escaping() {
+        let value: IValue = serde_json::from_str("1").unwrap();
+        let nested = manager()
+            .nest_in_objects(&keys(&["a b", "c\"d"]), value)
+            .unwrap();
+        let expected: IValue = serde_json::from_str(r#"{"a b":{"c\"d":1}}"#).unwrap();
+        assert_eq!(nested, expected);
+    }
 
     #[test]
     fn test_get_memory() {
