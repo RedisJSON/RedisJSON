@@ -193,6 +193,41 @@ impl<'i> Query<'i> {
         })
     }
 
+    /// Pop the last path segment, but only when it names exactly one object key
+    /// -- `foo` in `$.a.foo`, `$.a["foo"]` or `$..foo`.
+    ///
+    /// Returns `None` and leaves the query untouched for every segment that
+    /// could address more than one member (`*`, `..`, a filter, a slice, an
+    /// index list, a multi-name union) or that addresses an array index. This
+    /// lets a caller peel the trailing run of plain object keys off a path and
+    /// keep the rest as a prefix to evaluate.
+    ///
+    /// Unlike [`Self::pop_last`], which returns the *first* name of a
+    /// multi-name union such as `$['a','b']`, this rejects such a segment --
+    /// and it invalidates the cached `is_static`/`size`, so a later call
+    /// reflects the truncated query rather than the original.
+    #[allow(dead_code)]
+    pub fn pop_last_object_key(&mut self) -> Option<String> {
+        let mut remaining = self.root.clone();
+        let last = remaining.next_back()?;
+        let key = match last.as_rule() {
+            Rule::literal => last.as_str().to_string(),
+            Rule::string_list => {
+                let mut names = last.into_inner();
+                let first = names.next()?;
+                if names.next().is_some() {
+                    return None;
+                }
+                unescape_string_value(first).into_owned()
+            }
+            _ => return None,
+        };
+        self.root = remaining;
+        self.is_static = None;
+        self.size = None;
+        Some(key)
+    }
+
     /// Returns the amount of elements in the json path
     /// Example: $.foo.bar has 2 elements
     #[allow(dead_code)]
@@ -2692,6 +2727,109 @@ mod json_path_compiler_tests {
             query.unwrap().pop_last().unwrap(),
             ("\"".to_string(), JsonPathToken::String)
         );
+    }
+
+    #[test]
+    fn test_pop_last_object_key_accepts_dot_field() {
+        let mut query = compile("$.foo").unwrap();
+        assert_eq!(query.pop_last_object_key(), Some("foo".to_string()));
+        assert_eq!(query.pop_last_object_key(), None);
+    }
+
+    #[test]
+    fn test_pop_last_object_key_accepts_bracket_string() {
+        for path in [r#"$["foo"]"#, "$['foo']"] {
+            let mut query = compile(path).unwrap();
+            assert_eq!(
+                query.pop_last_object_key(),
+                Some("foo".to_string()),
+                "path {path}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_pop_last_object_key_unescapes_bracket_string() {
+        for (path, expected) in [
+            (r#"$["\\"]"#, "\\"),
+            (r#"$["\""]"#, "\""),
+            (r#"$['\'']"#, "'"),
+        ] {
+            let mut query = compile(path).unwrap();
+            assert_eq!(
+                query.pop_last_object_key(),
+                Some(expected.to_string()),
+                "path {path}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_pop_last_object_key_peels_a_whole_static_path() {
+        let mut query = compile("$.a.b.c").unwrap();
+        assert_eq!(query.pop_last_object_key(), Some("c".to_string()));
+        assert_eq!(query.pop_last_object_key(), Some("b".to_string()));
+        assert_eq!(query.pop_last_object_key(), Some("a".to_string()));
+        assert_eq!(query.pop_last_object_key(), None);
+    }
+
+    #[test]
+    fn test_pop_last_object_key_stops_at_a_descendant_segment() {
+        // `$..foo` is `full_scan` + `literal`, so only `foo` peels off.
+        let mut query = compile("$..foo").unwrap();
+        assert_eq!(query.pop_last_object_key(), Some("foo".to_string()));
+        assert_eq!(query.pop_last_object_key(), None);
+    }
+
+    #[test]
+    fn test_pop_last_object_key_rejects_multi_name_union() {
+        // `pop_last` would hand back just the first name here; we must not.
+        let mut query = compile("$[\"a\",\"b\"]").unwrap();
+        assert_eq!(query.pop_last_object_key(), None);
+    }
+
+    #[test]
+    fn test_pop_last_object_key_rejects_non_object_key_segments() {
+        for path in [
+            "$[1]",      // array index
+            "$[0,1]",    // index list
+            "$[0:2]",    // slice
+            "$[0:3:2]",  // slice with step
+            "$.*",       // wildcard
+            "$..*",      // descendant wildcard
+            "$..[0]",    // descendant index
+            "$[?(@.a)]", // filter
+        ] {
+            let mut query = compile(path).unwrap();
+            assert_eq!(query.pop_last_object_key(), None, "path {path}");
+        }
+    }
+
+    #[test]
+    fn test_pop_last_object_key_leaves_query_untouched_when_rejected() {
+        let mut query = compile("$['a','b'].c").unwrap();
+        assert_eq!(query.pop_last_object_key(), Some("c".to_string()));
+        // The union is refused, and refusing it must not consume it.
+        assert_eq!(query.pop_last_object_key(), None);
+        assert_eq!(query.pop_last_object_key(), None);
+        assert_eq!(query.size(), 1);
+        assert!(!query.is_static());
+    }
+
+    #[test]
+    fn test_pop_last_object_key_invalidates_cached_size_and_staticness() {
+        let mut query = compile("$.a.*").unwrap();
+        assert_eq!(query.size(), 2);
+        assert!(!query.is_static());
+        // Nothing peels off a trailing wildcard, so the cache stays valid.
+        assert_eq!(query.pop_last_object_key(), None);
+        assert_eq!(query.size(), 2);
+
+        let mut query = compile("$.a.b").unwrap();
+        assert_eq!(query.size(), 2);
+        assert_eq!(query.pop_last_object_key(), Some("b".to_string()));
+        assert_eq!(query.size(), 1, "size must reflect the truncated query");
+        assert!(query.is_static());
     }
 
     #[test]
