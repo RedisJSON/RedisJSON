@@ -241,12 +241,19 @@ pub(crate) fn materialize<M: Manager>(
 pub(crate) enum Seed {
     /// `JSON.ARRAPPEND`, `JSON.ARRINSERT`
     EmptyArray,
+    /// `JSON.NUMINCRBY` -- `0 + n == n`. `MULTBY`/`POWBY` get no seed at all:
+    /// `0 * n` and `0 ^ n` would fabricate a wrong answer.
+    Zero,
+    /// `JSON.STRAPPEND` -- `"" + s == s`
+    EmptyString,
 }
 
 impl Seed {
     const fn as_json(self) -> &'static str {
         match self {
             Self::EmptyArray => "[]",
+            Self::Zero => "0",
+            Self::EmptyString => "\"\"",
         }
     }
 }

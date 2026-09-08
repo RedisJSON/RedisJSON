@@ -272,6 +272,39 @@ CASES = [
          ERR('computed/projection expressions'),
          ERR('computed/projection expressions')),
 
+    # ---------------- JSON.NUMINCRBY ----------------
+    # `0` is the seed, so a created leaf answers with the increment itself.
+    # Note RESP2 replies to a JSONPath here with a JSON *string*, not an array.
+    case('{"a":{}}', ('JSON.NUMINCRBY', KEY, '$.a.b', '5'),
+         '[5]', '[]', '[{"a":{"b":5}}]', '[{"a":{}}]'),
+    case('{}', ('JSON.NUMINCRBY', KEY, '$.a.b.c', '2.5'),
+         '[2.5]', '[]', '[{"a":{"b":{"c":2.5}}}]', '[{}]'),
+    # legacy NUMINCRBY replies with the number as a string
+    case('{"a":{}}', ('JSON.NUMINCRBY', KEY, '.a.b', '5'),
+         '5', ERR('does not contains a number'),
+         '[{"a":{"b":5}}]', '[{"a":{}}]'),
+    case('{"a":"str"}', ('JSON.NUMINCRBY', KEY, '$.a', '5'),
+         '[null]', '[null]', '[{"a":"str"}]', '[{"a":"str"}]'),
+    case(None, ('JSON.NUMINCRBY', KEY, '$.a.b', '5'),
+         ERR("key that doesn't exist"), ERR("key that doesn't exist")),
+    # MULTBY and POWBY are excluded: `0 * n` and `0 ^ n` would fabricate an
+    # answer, so they have no seed and create nothing in either mode.
+    case('{}', ('JSON.NUMMULTBY', KEY, '$.a.b', '5'),
+         '[]', '[]', '[{}]', '[{}]'),
+    case('{}', ('JSON.NUMPOWBY', KEY, '$.a.b', '5'),
+         '[]', '[]', '[{}]', '[{}]'),
+
+    # ---------------- JSON.STRAPPEND ----------------
+    case('{"a":{}}', ('JSON.STRAPPEND', KEY, '$.a.b', '"hi"'),
+         [2], [], '[{"a":{"b":"hi"}}]', '[{"a":{}}]'),
+    # an existing string is appended to, not reseeded
+    case('{"s":"x"}', ('JSON.STRAPPEND', KEY, '$.s', '"y"'),
+         [2], [2], '[{"s":"xy"}]', '[{"s":"xy"}]'),
+    case('{"a":{}}', ('JSON.STRAPPEND', KEY, '.a.b', '"hi"'),
+         2, ERR('not a string'), '[{"a":{"b":"hi"}}]', '[{"a":{}}]'),
+    case(None, ('JSON.STRAPPEND', KEY, '$.a.b', '"hi"'),
+         ERR("key that doesn't exist"), ERR("key that doesn't exist")),
+
     # ---------------- legacy and projection paths ----------------
     # legacy (dot) paths create too
     case('{"a":{}}', ('JSON.SET', KEY, '.a.b.c', '5'),
@@ -324,6 +357,16 @@ def test_all_cases_with_auto_create_disabled():
         ['json-auto-create-deep-paths', 'no'])
     for c in CASES:
         _check(env, c, c.off, c.doc_off, c.doc2_off, 'OFF')
+
+
+def test_numincrby_creates_under_resp3():
+    """The seed lands above the RESP2/RESP3 split in `json_num_op`, so the two
+    protocols differ only in the shape of the reply, never in what was created.
+    """
+    env = Env(protocol=3, moduleArgs=AUTO_CREATE_ARGS, noDefaultModuleArgs=True)
+    env.expect('JSON.SET', KEY, '$', '{"a":{}}').ok()
+    env.expect('JSON.NUMINCRBY', KEY, '$.a.b', '5').equal([5])
+    env.expect('JSON.GET', KEY, '$').equal('[{"a":{"b":5}}]')
 
 
 def test_created_document_survives_rdb_reload():

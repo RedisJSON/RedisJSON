@@ -1447,6 +1447,11 @@ fn json_num_op<M: Manager>(
     let number = args.next_str()?;
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
+    if matches!(op, NumOp::Incr) {
+        // Only NUMINCRBY has an identity to seed a created leaf with, so
+        // MULTBY and POWBY keep their reply for a path that does not exist.
+        seed_missing_paths(&manager, &mut redis_key, path.get_path(), Seed::Zero)?;
+    }
 
     // check context flags to see if RESP3 is enabled
     if is_resp3(ctx) {
@@ -1902,6 +1907,8 @@ pub fn json_str_append_command_impl<M: Manager>(
     }
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
+    // The empty string leaves the append below to produce `json` on its own.
+    seed_missing_paths(&manager, &mut redis_key, path.get_path(), Seed::EmptyString)?;
 
     if path.is_legacy() {
         json_str_append_legacy(manager, &mut redis_key, ctx, path.get_path(), json)
