@@ -25,7 +25,7 @@ use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use std::cmp::Ordering;
 use std::str::FromStr;
 
-use json_path::{calc_once_with_paths, compile, json_path::UserPathTracker};
+use json_path::{calc_once_with_paths, compile, json_path::Query, json_path::UserPathTracker};
 
 use serde_json::{Number, Value};
 
@@ -738,6 +738,35 @@ macro_rules! json_mset_command {
     };
 }
 
+/// One validated `key path value` triplet of `JSON.MSET`, ready to apply.
+struct MsetTriplet {
+    key: RedisString,
+    path: String,
+    /// Object keys to build a whole document from, for a key with nothing to
+    /// write into: empty for `$`, the path's key chain for a key that does not
+    /// exist yet.
+    new_doc_keys: Vec<String>,
+    value: String,
+}
+
+/// Reject a path `JSON.MSET` could never apply, before anything is written.
+///
+/// The plan itself is thrown away: the second pass makes its own, against the
+/// document as the previous triplets left it. Only the errors matter here, and
+/// they are the ones `JSON.SET` gives for the same path.
+fn validate_mset_path<V: SelectValue>(
+    doc: &V,
+    query: Query,
+    create_intermediates: bool,
+) -> RedisResult<()> {
+    let updates = KeyValue::new(doc).find_update_paths(query.clone(), SetOptions::None)?;
+    let sites = plan_creation(query.clone(), doc, create_intermediates)?;
+    if updates.is_empty() && sites.is_empty() {
+        nothing_to_write(query, doc)?;
+    }
+    Ok(())
+}
+
 pub fn json_mset_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
@@ -748,9 +777,10 @@ pub fn json_mset_command_impl<M: Manager>(
     if args.len() < 3 {
         return Err(RedisError::WrongArity);
     }
+    let create_intermediates = auto_create_enabled();
 
     // Parse the arguments, validate the keys and the paths
-    let mut parsed: Vec<(RedisString, Option<Vec<UpdateInfo>>, String)> = Vec::new();
+    let mut parsed: Vec<MsetTriplet> = Vec::new();
     while let Ok(key) = args.next_arg() {
         let mut redis_key = manager.open_key_write(ctx, key.clone())?;
         let key_value = redis_key.get_value()?;
@@ -758,39 +788,83 @@ pub fn json_mset_command_impl<M: Manager>(
         // Validate the path
         let path_str = args.next_str()?.to_string();
         let path = Path::new(&path_str);
-        let update_info = if path == JSON_ROOT_PATH {
-            None
+        let new_doc_keys = if path == JSON_ROOT_PATH {
+            Vec::new()
         } else if let Some(existing) = key_value {
-            Some(KeyValue::new(existing).find_paths(path.get_path(), SetOptions::None)?)
+            validate_mset_path(existing, compile(path.get_path())?, create_intermediates)?;
+            Vec::new()
         } else {
-            return Err(RedisError::Str(
+            // Nothing to write into, so the path has to describe a document on
+            // its own. Without auto-creation only `$` ever does.
+            let chain = if create_intermediates {
+                root_key_chain(compile(path.get_path())?)?
+            } else {
+                None
+            };
+            chain.ok_or(RedisError::Str(
                 "ERR new objects must be created at the root",
-            ));
+            ))?
         };
 
         let value_str = args.next_str()?.to_string();
         // Validate the value(We deliberately do not store the created value, and recreate it again later)
-        let _ = manager.from_str(&value_str, Format::JSON, true, None)?;
-        parsed.push((key, update_info, value_str));
+        let value = manager.from_str(&value_str, Format::JSON, true, None)?;
+        // Building the document now also checks its depth, so the second pass
+        // -- which runs once earlier triplets have been written -- cannot fail
+        // on it.
+        let _ = manager.nest_in_objects(&new_doc_keys, value)?;
+        parsed.push(MsetTriplet {
+            key,
+            path: path_str,
+            new_doc_keys,
+            value: value_str,
+        });
     }
 
     let mut all_updated = true;
-    for (key, update_info, value_str) in parsed {
+    for triplet in parsed {
+        let MsetTriplet {
+            key,
+            path,
+            new_doc_keys,
+            value,
+        } = triplet;
         let mut redis_key = manager.open_key_write(ctx, key)?;
 
-        let value = manager.from_str(&value_str, Format::JSON, true, None)?;
+        let value = manager.from_str(&value, Format::JSON, true, None)?;
+        let path = Path::new(&path);
+        let current = redis_key.get_value()?;
 
-        let (any_updated, key_all_updated) = if let Some(update_info) = update_info {
-            if update_info.is_empty() {
-                (false, false)
-            } else {
-                let result = apply_updates::<M>(&mut redis_key, value, update_info);
-                (result.any_updated(), result.all_updated())
+        let (any_updated, key_all_updated) = match current {
+            Some(doc) if path != JSON_ROOT_PATH => {
+                // Planned here, not in the first pass: each triplet must see
+                // the document as the previous triplets left it, not as the
+                // command found it.
+                let query = compile(path.get_path())?;
+                let update_info =
+                    KeyValue::new(doc).find_update_paths(query.clone(), SetOptions::None)?;
+                let sites = plan_creation(query, doc, create_intermediates)?;
+                let has_sites = !sites.is_empty();
+                let all_created =
+                    materialize::<M>(&manager, &mut redis_key, &sites, &value).is_ok();
+                let result = if update_info.is_empty() {
+                    ApplyUpdatesResult::from(has_sites)
+                } else {
+                    apply_updates::<M>(&mut redis_key, value, update_info)
+                };
+                (
+                    has_sites || result.any_updated(),
+                    all_created && result.all_updated(),
+                )
             }
-        } else {
-            // In case it is a root path
-            let updated = redis_key.set_value(Vec::new(), value)?;
-            (updated, updated)
+            _ => {
+                // A root path, or a key that does not exist yet and is built
+                // out of its path's object keys: either way, one whole
+                // document in one write.
+                let doc = manager.nest_in_objects(&new_doc_keys, value)?;
+                let updated = redis_key.set_value(Vec::new(), doc)?;
+                (updated, updated)
+            }
         };
 
         if any_updated {

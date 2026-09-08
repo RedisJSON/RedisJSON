@@ -11,7 +11,6 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
-    auto_create::{nothing_to_write, plan_creation, CreateSite},
     commands::{prepare_paths_for_updating, FoundIndex, ObjectLen, Values},
     formatter::{RedisJsonFormatter, ReplyFormatOptions},
     manager::{err_invalid_path, err_json, err_projection_readonly, SetUpdateInfo, UpdateInfo},
@@ -389,23 +388,6 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         Ok(res
             .into_iter()
             .map(|v| UpdateInfo::SUI(SetUpdateInfo { path: v }))
-            .collect())
-    }
-
-    pub fn find_paths(&mut self, path: &str, option: SetOptions) -> RedisResult<Vec<UpdateInfo>> {
-        let query = compile(path)?;
-        let updates = self.find_update_paths(query.clone(), option)?;
-        if !updates.is_empty() || option == SetOptions::AlreadyExists {
-            return Ok(updates);
-        }
-        let sites = plan_creation(query.clone(), self.val.as_ref(), false)?;
-        if sites.is_empty() {
-            nothing_to_write(query, self.val.as_ref())?;
-            return Ok(Vec::new());
-        }
-        Ok(sites
-            .into_iter()
-            .map(CreateSite::into_add_update_info)
             .collect())
     }
 

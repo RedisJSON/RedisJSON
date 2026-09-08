@@ -19,7 +19,7 @@ use json_path::json_path::{JsonPathToken, Query};
 use json_path::select_value::{SelectValue, SelectValueType, ValueRef};
 use redis_module::{RedisError, RedisResult, RedisValue};
 
-use crate::manager::{err_projection_readonly, AddUpdateInfo, Manager, UpdateInfo, WriteHolder};
+use crate::manager::{err_projection_readonly, Manager, WriteHolder};
 
 /// Backing store for the `json-auto-create-deep-paths` module config,
 /// registered in the `redis_module!` block (see `lib.rs`). The SDK writes here
@@ -47,21 +47,6 @@ pub(crate) struct CreateSite {
     pub parent: Vec<String>,
     pub levels: Vec<String>,
     pub leaf: String,
-}
-
-impl CreateSite {
-    /// The equivalent [`UpdateInfo`], for callers still expressing writes that
-    /// way. Only meaningful for a shallow site, where no levels are missing.
-    pub(crate) fn into_add_update_info(self) -> UpdateInfo {
-        debug_assert!(
-            self.levels.is_empty(),
-            "a site with missing intermediate levels cannot become an AUI"
-        );
-        UpdateInfo::AUI(AddUpdateInfo {
-            path: self.parent,
-            key: self.leaf,
-        })
-    }
 }
 
 /// Sites the write must create at `query`. Pure planning: the only error is a
