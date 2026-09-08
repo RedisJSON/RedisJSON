@@ -77,12 +77,17 @@ impl CreateSite {
 /// buys. Without it, only a final missing key under an already-existing parent
 /// is created -- static paths only, and with the historical errors, exactly as
 /// RedisJSON has always behaved. With it, missing intermediate levels and
-/// multi-target paths are created too, and those same historical rules still
-/// supply the reply whenever nothing turns out to be creatable.
+/// multi-target paths are created too.
+///
+/// `nothing_matched` says whether the write has any updates of its own to
+/// apply. Only when it does not do the historical rules get to supply the
+/// reply -- otherwise a path that happens to create nothing would be turned
+/// into an error.
 pub(crate) fn plan_creation<V: SelectValue>(
     query: Query,
     doc: &V,
     create_intermediates: bool,
+    nothing_matched: bool,
 ) -> RedisResult<Vec<CreateSite>> {
     if query.is_projection() {
         return Err(err_projection_readonly());
@@ -93,7 +98,10 @@ pub(crate) fn plan_creation<V: SelectValue>(
             return Ok(sites);
         }
     }
-    plan_single_key(query, doc)
+    if nothing_matched {
+        return plan_single_key(query, doc);
+    }
+    Ok(Vec::new())
 }
 
 /// Peel the trailing object keys and plan one site per prefix match. Pure:
@@ -262,11 +270,11 @@ mod tests {
     }
 
     fn plan(path: &str, json: &str) -> Vec<CreateSite> {
-        plan_creation(compile(path).unwrap(), &doc(json), true).unwrap()
+        plan_creation(compile(path).unwrap(), &doc(json), true, true).unwrap()
     }
 
     fn err(path: &str, json: &str) -> String {
-        plan_creation(compile(path).unwrap(), &doc(json), true)
+        plan_creation(compile(path).unwrap(), &doc(json), true, true)
             .unwrap_err()
             .to_string()
     }
@@ -402,7 +410,7 @@ mod tests {
 
     #[test]
     fn without_create_intermediates_only_a_final_key_is_created() {
-        let leaf_only = |path, json| plan_creation(compile(path).unwrap(), &doc(json), false);
+        let leaf_only = |path, json| plan_creation(compile(path).unwrap(), &doc(json), false, true);
         // One missing key under an existing parent: allowed, as it always was.
         assert_eq!(
             leaf_only("$.a.b", r#"{"a":{}}"#).unwrap(),
@@ -421,7 +429,8 @@ mod tests {
 
     #[test]
     fn rejects_a_projection_path() {
-        let err = plan_creation(compile("$.a + 1").unwrap(), &doc(r#"{"a":1}"#), true).unwrap_err();
+        let err =
+            plan_creation(compile("$.a + 1").unwrap(), &doc(r#"{"a":1}"#), true, true).unwrap_err();
         assert!(format!("{err}").contains("projection"), "{err}");
     }
 

@@ -398,7 +398,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         if !updates.is_empty() || option == SetOptions::AlreadyExists {
             return Ok(updates);
         }
-        Ok(plan_creation(query, self.val.as_ref(), false)?
+        Ok(plan_creation(query, self.val.as_ref(), false, true)?
             .into_iter()
             .map(CreateSite::into_add_update_info)
             .collect())

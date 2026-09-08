@@ -252,3 +252,107 @@ def test_created_document_survives_rdb_reload():
     for _ in env.retry_with_rdb_reload():
         env.assertExists('k')
         env.expect('JSON.GET', 'k', '$').equal('[{"a":{"b":{"c":5}}}]')
+
+
+# --------------------------------------------------------------------------- #
+# JSON.MERGE
+# --------------------------------------------------------------------------- #
+
+def test_json_merge_creates_missing_levels_on_existing_key():
+    env = _env()
+    env.expect('JSON.SET', 'k', '$', '{"a":{}}').ok()
+    env.expect('JSON.MERGE', 'k', '$.a.b.c', '5').ok()
+    env.expect('JSON.GET', 'k', '$').equal('[{"a":{"b":{"c":5}}}]')
+
+
+def test_json_merge_creates_a_whole_new_document():
+    env = _env()
+    env.expect('JSON.MERGE', 'nk', '$.a.b.c', '5').ok()
+    env.expect('JSON.GET', 'nk', '$').equal('[{"a":{"b":{"c":5}}}]')
+
+
+def test_json_merge_returns_nil_when_intermediate_is_a_scalar():
+    env = _env()
+    env.expect('JSON.SET', 'k', '$', '{"a":3}').ok()
+    env.expect('JSON.MERGE', 'k', '$.a.b', '5').equal(None)
+    env.expect('JSON.GET', 'k', '$').equal('[{"a":3}]')
+
+
+def test_json_merge_still_errors_on_absent_key_with_an_array_index():
+    env = _env()
+    env.expect('JSON.MERGE', 'nk', '$.a[0].b', '5').raiseError().contains(
+        'new objects must be created at the root')
+    env.expect('EXISTS', 'nk').equal(0)
+
+
+def test_json_merge_null_at_a_created_path_matches_an_existing_one():
+    """A top-level null patch replaces; it only deletes as an object member.
+
+    So creating a path and putting null in it is consistent with merging null
+    into a path that already exists -- neither deletes anything.
+    """
+    env = _env()
+    env.expect('JSON.SET', 'existing', '$', '{"a":{"b":1}}').ok()
+    env.expect('JSON.MERGE', 'existing', '$.a', 'null').ok()
+    env.expect('JSON.GET', 'existing', '$').equal('[{"a":null}]')
+
+    env.expect('JSON.SET', 'created', '$', '{}').ok()
+    env.expect('JSON.MERGE', 'created', '$.a.b', 'null').ok()
+    env.expect('JSON.GET', 'created', '$').equal('[{"a":{"b":null}}]')
+
+
+def test_json_merge_null_member_still_deletes():
+    env = _env()
+    env.expect('JSON.SET', 'k', '$', '{"a":{"b":1,"c":2}}').ok()
+    env.expect('JSON.MERGE', 'k', '$.a', '{"b":null}').ok()
+    env.expect('JSON.GET', 'k', '$').equal('[{"a":{"c":2}}]')
+
+
+def test_json_merge_union_creates_missing_and_merges_existing():
+    env = _env()
+    env.expect('JSON.SET', 'k', '$', '{"a":{},"b":{"c":{"x":1}}}').ok()
+    env.expect('JSON.MERGE', 'k', "$['a','b'].c", '{"y":2}').ok()
+    env.expect('JSON.GET', 'k', '$').equal(
+        '[{"a":{"c":{"y":2}},"b":{"c":{"x":1,"y":2}}}]')
+
+
+def test_json_merge_max_depth_is_rejected_before_writing_anything():
+    env = _env()
+    deep = '.'.join('a%d' % i for i in range(200))
+    env.expect('JSON.SET', 'k', '$', '{"keep":1}').ok()
+    env.expect('JSON.MERGE', 'k', '$.' + deep, '5').raiseError().contains(
+        'recursion limit exceeded')
+    env.expect('JSON.GET', 'k', '$').equal('[{"keep":1}]')
+
+
+# --------------------------------------------------------------------------- #
+# A path that matches but creates nothing must not be turned into an error
+# --------------------------------------------------------------------------- #
+
+def test_non_static_path_that_matches_but_creates_nothing_still_updates():
+    env = _env()
+    env.expect('JSON.SET', 'k', '$', '{"a":{"a":1}}').ok()
+    env.expect('JSON.SET', 'k', '$..a', '5').ok()
+    env.expect('JSON.GET', 'k', '$').equal('[{"a":5}]')
+
+
+def test_wildcard_that_matches_everything_still_updates():
+    env = _env()
+    env.expect('JSON.SET', 'k', '$', '{"p":{"n":1},"q":{"n":2}}').ok()
+    env.expect('JSON.SET', 'k', '$.*.n', '9').ok()
+    env.expect('JSON.GET', 'k', '$').equal('[{"p":{"n":9},"q":{"n":9}}]')
+
+
+def test_descendant_index_that_matches_still_updates():
+    env = _env()
+    env.expect('JSON.SET', 'k', '$', '{"arr":[1,2]}').ok()
+    env.expect('JSON.SET', 'k', '$..[0]', '9').ok()
+    env.expect('JSON.GET', 'k', '$').equal('[{"arr":[9,2]}]')
+
+
+def test_merge_non_static_path_that_matches_still_merges():
+    env = _env()
+    env.expect('JSON.SET', 'k', '$', '{"a":{"a":1}}').ok()
+    env.expect('JSON.MERGE', 'k', '$..a', '{"a":"b"}').ok()
+    # prepare_paths_for_updating is skipped for MERGE, so both matches apply
+    env.expect('JSON.GET', 'k', '$').equal('[{"a":{"a":{"a":"b"}}}]')

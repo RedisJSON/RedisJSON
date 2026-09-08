@@ -53,3 +53,30 @@ def test_array_index_errors_are_unchanged(env):
         'array index out of range')
     env.expect('JSON.SET', 'k', '$.a.b[0]', '7').raiseError().contains(
         'array index out of range')
+
+
+def test_merge_missing_intermediate_still_returns_nil(env):
+    env.expect('JSON.SET', 'k', '$', '{"a":{}}').ok()
+    env.expect('JSON.MERGE', 'k', '$.a.b.c', '5').equal(None)
+    env.expect('JSON.GET', 'k', '$').equal('[{"a":{}}]')
+
+
+def test_merge_absent_key_still_errors(env):
+    env.expect('JSON.MERGE', 'nk', '$.a.b', '5').raiseError().contains(
+        'new objects must be created at the root')
+    env.expect('EXISTS', 'nk').equal(0)
+
+
+def test_merge_missing_leaf_under_an_existing_object_still_works(env):
+    env.expect('JSON.SET', 'k', '$', '{"a":{}}').ok()
+    env.expect('JSON.MERGE', 'k', '$.a.b', '5').ok()
+    env.expect('JSON.GET', 'k', '$').equal('[{"a":{"b":5}}]')
+
+
+def test_non_static_path_that_matches_still_updates(env):
+    env.expect('JSON.SET', 'k', '$', '{"a":{"a":1}}').ok()
+    env.expect('JSON.SET', 'k', '$..a', '5').ok()
+    env.expect('JSON.GET', 'k', '$').equal('[{"a":5}]')
+    env.expect('JSON.SET', 'k2', '$', '{"a":{"a":1}}').ok()
+    env.expect('JSON.MERGE', 'k2', '$..a', '{"a":"b"}').ok()
+    env.expect('JSON.GET', 'k2', '$').equal('[{"a":{"a":{"a":"b"}}}]')

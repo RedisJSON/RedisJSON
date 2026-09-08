@@ -442,11 +442,10 @@ pub fn json_set_command_impl<M: Manager>(
                 let query = compile(path.get_path())?;
                 let create_intermediates = auto_create_enabled();
                 let update_info = KeyValue::new(doc).find_update_paths(query.clone(), op)?;
-                let plan_needed = update_info.is_empty() || create_intermediates;
-                let sites = if op == SetOptions::AlreadyExists || !plan_needed {
+                let sites = if op == SetOptions::AlreadyExists {
                     Vec::new()
                 } else {
-                    plan_creation(query, doc, create_intermediates)?
+                    plan_creation(query, doc, create_intermediates, update_info.is_empty())?
                 };
                 if update_info.is_empty() && sites.is_empty() {
                     Ok(RedisValue::Null)
@@ -611,15 +610,29 @@ pub fn json_merge_command_impl<M: Manager>(
                 manager.apply_changes(ctx);
                 REDIS_OK
             } else {
-                let mut update_info =
-                    KeyValue::new(doc).find_paths(path.get_path(), SetOptions::MergeExisting)?;
-                if !update_info.is_empty() {
-                    let mut res = false;
+                let query = compile(path.get_path())?;
+                let create_intermediates = auto_create_enabled();
+                let mut update_info = KeyValue::new(doc)
+                    .find_update_paths(query.clone(), SetOptions::MergeExisting)?;
+                // Plan whenever nothing matched, and also alongside the updates
+                // once intermediates are allowed, since a multi-target path can
+                // match some places and miss others.
+                let sites =
+                    plan_creation(query, doc, create_intermediates, update_info.is_empty())?;
+                if update_info.is_empty() && sites.is_empty() {
+                    Ok(RedisValue::Null)
+                } else {
+                    // A created leaf takes the value as-is: merging into
+                    // nothing is the same as setting.
+                    let mut res = !sites.is_empty();
+                    if res {
+                        materialize::<M>(&manager, &mut redis_key, &sites, &val)?;
+                    }
                     if update_info.len() == 1 {
                         res = match update_info.pop().unwrap() {
                             UpdateInfo::SUI(sui) => redis_key.merge_value(sui.path, val)?,
                             UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, val)?,
-                        }
+                        } || res;
                     } else {
                         for ui in update_info {
                             res = match ui {
@@ -639,22 +652,33 @@ pub fn json_merge_command_impl<M: Manager>(
                     } else {
                         Ok(RedisValue::Null)
                     }
-                } else {
-                    Ok(RedisValue::Null)
                 }
             }
         }
         None => {
-            if path == JSON_ROOT_PATH {
-                // Nothing to merge with it's a new doc
-                redis_key.set_value(Vec::new(), val)?;
-                redis_key.notify_keyspace_event(ctx, "json.merge")?;
-                manager.apply_changes(ctx);
-                REDIS_OK
+            // Nothing to merge with: it's a new doc, built in one write from
+            // the path's object-key chain. `None` means the path has a segment
+            // we cannot invent.
+            let new_doc = if path == JSON_ROOT_PATH {
+                Some(val)
+            } else if auto_create_enabled() {
+                match root_key_chain(compile(path.get_path())?)? {
+                    Some(keys) => Some(manager.nest_in_objects(&keys, val)?),
+                    None => None,
+                }
             } else {
-                Err(RedisError::Str(
+                None
+            };
+            match new_doc {
+                Some(doc) => {
+                    redis_key.set_value(Vec::new(), doc)?;
+                    redis_key.notify_keyspace_event(ctx, "json.merge")?;
+                    manager.apply_changes(ctx);
+                    REDIS_OK
+                }
+                None => Err(RedisError::Str(
                     "ERR new objects must be created at the root",
-                ))
+                )),
             }
         }
     }
