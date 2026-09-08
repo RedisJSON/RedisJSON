@@ -1,11 +1,19 @@
 # -*- coding: utf-8 -*-
 """
-Flow tests for auto-creation of deep paths (MOD-18185 / RED-202601).
+Auto-creation of deep paths.
 
-The `json-auto-create-deep-paths` config is IMMUTABLE, so it cannot be toggled
-inside a running env -- these tests run in their own env with the config on, and
-`test_auto_create_paths_disabled.py` covers the default (off) behavior.
+`json-auto-create-deep-paths` is IMMUTABLE, so it cannot be toggled inside a
+running env. Rather than keep two parallel files, every case below states its
+expectation for *both* modes in one place, and two thin runners replay the whole
+table against an enabled and a disabled env. The disabled column doubles as the
+regression guard for today's behavior.
+
+RLTest reuses one server per set of env params, so the two modes cannot be live
+at the same time -- hence one env per test function rather than a pair inside
+each test.
 """
+
+from collections import namedtuple
 
 from RLTest import Env, Defaults
 
@@ -13,238 +21,218 @@ Defaults.decode_responses = True
 
 AUTO_CREATE_ARGS = 'json-auto-create-deep-paths yes'
 
+KEY = 'k'
 
-def _env():
-    """A fresh Env with auto-creation enabled."""
-    # noDefaultModuleArgs: don't merge the global --module-args, which would
-    # otherwise be appended alongside ours.
-    return Env(moduleArgs=AUTO_CREATE_ARGS, noDefaultModuleArgs=True)
+#: Expected outcomes. `OK`/`NIL` are literal replies; `ERR(fragment)` requires an
+#: error whose message contains `fragment`.
+OK = 'OK'
+NIL = None
+
+Err = namedtuple('Err', 'fragment')
 
 
-def test_config_is_enabled_and_immutable():
-    env = _env()
+def ERR(fragment):
+    return Err(fragment)
+
+
+#: doc     -- JSON to seed KEY with, or None to leave the key absent
+#: cmd     -- command args after the key
+#: on/off  -- expected reply with the config enabled / disabled
+#: doc_on  -- expected `JSON.GET KEY $` afterwards with the config enabled
+#: doc_off -- ditto, disabled. None means "don't check".
+Case = namedtuple('Case', 'doc cmd on off doc_on doc_off')
+
+
+def case(doc, cmd, on, off, doc_on=None, doc_off=None):
+    return Case(doc, cmd, on, off, doc_on, doc_off)
+
+
+def _env(enabled):
+    # noDefaultModuleArgs: don't merge the global --module-args on top of ours.
+    if enabled:
+        return Env(moduleArgs=AUTO_CREATE_ARGS, noDefaultModuleArgs=True)
+    return Env(noDefaultModuleArgs=True)
+
+
+def _check(env, c, expected, expected_doc, mode):
+    """Run one case against one env and assert that mode's expectation."""
+    env.cmd('DEL', KEY)
+    if c.doc is not None:
+        env.expect('JSON.SET', KEY, '$', c.doc).ok()
+
+    label = '[%s] %s %r on %r' % (mode, c.cmd[0], c.cmd[1:], c.doc)
+    attempt = env.expect(*(c.cmd[:1] + (KEY,) + c.cmd[1:]))
+    if isinstance(expected, Err):
+        attempt.raiseError().contains(expected.fragment)
+    elif expected is NIL:
+        attempt.equal(None)
+    else:
+        attempt.equal(expected)
+
+    if expected_doc is not None:
+        env.assertEqual(env.cmd('JSON.GET', KEY, '$'), expected_doc, message=label)
+
+
+DEEP = '$.' + '.'.join('a%d' % i for i in range(200))
+
+CASES = [
+    # ---------------- JSON.SET, existing key ----------------
+    # a whole missing chain
+    case('{"a":{}}', ('JSON.SET', '$.a.b.c', '5'),
+         OK, NIL, '[{"a":{"b":{"c":5}}}]', '[{"a":{}}]'),
+    case('{}', ('JSON.SET', '$.a.b.c.d', '5'),
+         OK, NIL, '[{"a":{"b":{"c":{"d":5}}}}]', '[{}]'),
+    # only the final key missing: has always worked
+    case('{"a":{}}', ('JSON.SET', '$.a.b', '5'),
+         OK, OK, '[{"a":{"b":5}}]', '[{"a":{"b":5}}]'),
+    # siblings survive
+    case('{"a":{"keep":1}}', ('JSON.SET', '$.a.b.c', '5'),
+         OK, NIL, '[{"a":{"keep":1,"b":{"c":5}}}]', '[{"a":{"keep":1}}]'),
+    # a non-object in the way is a nil, never an error
+    case('{"a":3}', ('JSON.SET', '$.a.b.c', '5'),
+         NIL, NIL, '[{"a":3}]', '[{"a":3}]'),
+    case('{"a":[1,2]}', ('JSON.SET', '$.a.b', '5'),
+         NIL, NIL, '[{"a":[1,2]}]', '[{"a":[1,2]}]'),
+    # descent through an existing array element is fine
+    case('{"a":[{},{}]}', ('JSON.SET', '$.a[1].b.c', '5'),
+         OK, NIL, '[{"a":[{},{"b":{"c":5}}]}]', '[{"a":[{},{}]}]'),
+
+    # ---------------- JSON.SET, absent key ----------------
+    case(None, ('JSON.SET', '$.a.b.c', '5'),
+         OK, ERR('new objects must be created at the root'),
+         '[{"a":{"b":{"c":5}}}]'),
+    case(None, ('JSON.SET', '$.a', '5'),
+         OK, ERR('new objects must be created at the root'), '[{"a":5}]'),
+    case(None, ('JSON.SET', '$.a.b', '{"d":{}}'),
+         OK, ERR('new objects must be created at the root'),
+         '[{"a":{"b":{"d":{}}}}]'),
+    # a segment we cannot invent keeps the error in both modes
+    case(None, ('JSON.SET', '$.a[0].b', '5'),
+         ERR('new objects must be created at the root'),
+         ERR('new objects must be created at the root')),
+    case(None, ('JSON.SET', '$..a', '5'),
+         ERR('new objects must be created at the root'),
+         ERR('new objects must be created at the root')),
+
+    # ---------------- NX / XX ----------------
+    # XX means "only update what exists", so it must never create
+    case('{}', ('JSON.SET', '$.a.b.c', '5', 'XX'), NIL, NIL, '[{}]', '[{}]'),
+    case(None, ('JSON.SET', '$.a.b', '5', 'XX'), NIL, NIL),
+    # NX creates
+    case('{}', ('JSON.SET', '$.a.b.c', '5', 'NX'),
+         OK, NIL, '[{"a":{"b":{"c":5}}}]', '[{}]'),
+    # ... but never overwrites
+    case('{"a":{"b":{"c":1}}}', ('JSON.SET', '$.a.b.c', '5', 'NX'),
+         NIL, NIL, '[{"a":{"b":{"c":1}}}]', '[{"a":{"b":{"c":1}}}]'),
+
+    # ---------------- multi-target paths ----------------
+    # a union creates the missing target and updates the existing one
+    case('{"a":{},"b":{"c":1}}', ('JSON.SET', "$['a','b'].c", '9'),
+         OK, OK, '[{"a":{"c":9},"b":{"c":9}}]', '[{"a":{},"b":{"c":9}}]'),
+    # non-object matches are skipped rather than failing the command
+    case('{"p":{},"q":{},"s":"str"}', ('JSON.SET', '$.*.n', '7'),
+         OK, ERR('static path'),
+         '[{"p":{"n":7},"q":{"n":7},"s":"str"}]', '[{"p":{},"q":{},"s":"str"}]'),
+    # a descendant matches the root as well as every node below it
+    case('{"a":{}}', ('JSON.SET', '$..n', '7'),
+         OK, ERR('static path'), '[{"a":{"n":7},"n":7}]', '[{"a":{}}]'),
+    case('{"a":[{},{},{}]}', ('JSON.SET', '$.a[0:2].b', '7'),
+         OK, ERR('static path'),
+         '[{"a":[{"b":7},{"b":7},{}]}]', '[{"a":[{},{},{}]}]'),
+
+    # ------ a path that matches but creates nothing still updates ------
+    # creation must not turn a working multi-target update into an error
+    case('{"a":{"a":1}}', ('JSON.SET', '$..a', '5'),
+         OK, OK, '[{"a":5}]', '[{"a":5}]'),
+    case('{"p":{"n":1},"q":{"n":2}}', ('JSON.SET', '$.*.n', '9'),
+         OK, OK, '[{"p":{"n":9},"q":{"n":9}}]', '[{"p":{"n":9},"q":{"n":9}}]'),
+    case('{"arr":[1,2]}', ('JSON.SET', '$..[0]', '9'),
+         OK, OK, '[{"arr":[9,2]}]', '[{"arr":[9,2]}]'),
+    case('{"a":{"a":1}}', ('JSON.MERGE', '$..a', '{"a":"b"}'),
+         OK, OK, '[{"a":{"a":{"a":"b"}}}]', '[{"a":{"a":{"a":"b"}}}]'),
+
+    # ---------------- array indexes are never created ----------------
+    case('{"arr":[]}', ('JSON.SET', '$.arr[0]', '7'),
+         ERR('array index out of range'), ERR('array index out of range'),
+         '[{"arr":[]}]', '[{"arr":[]}]'),
+    case('{"arr":[]}', ('JSON.SET', '$.a.b[0]', '7'),
+         ERR('array index out of range'), ERR('array index out of range')),
+    case('{"arr":[]}', ('JSON.SET', '$..[9]', '7'),
+         ERR('static path'), ERR('static path')),
+
+    # ---------------- JSON.MERGE ----------------
+    case('{"a":{}}', ('JSON.MERGE', '$.a.b.c', '5'),
+         OK, NIL, '[{"a":{"b":{"c":5}}}]', '[{"a":{}}]'),
+    case(None, ('JSON.MERGE', '$.a.b.c', '5'),
+         OK, ERR('new objects must be created at the root'),
+         '[{"a":{"b":{"c":5}}}]'),
+    case('{"a":{}}', ('JSON.MERGE', '$.a.b', '5'),
+         OK, OK, '[{"a":{"b":5}}]', '[{"a":{"b":5}}]'),
+    case('{"a":3}', ('JSON.MERGE', '$.a.b', '5'), NIL, NIL),
+    case(None, ('JSON.MERGE', '$.a[0].b', '5'),
+         ERR('new objects must be created at the root'),
+         ERR('new objects must be created at the root')),
+    case('{"a":{},"b":{"c":{"x":1}}}', ('JSON.MERGE', "$['a','b'].c", '{"y":2}'),
+         OK, OK,
+         '[{"a":{"c":{"y":2}},"b":{"c":{"x":1,"y":2}}}]',
+         '[{"a":{},"b":{"c":{"x":1,"y":2}}}]'),
+    # A top-level null patch replaces; it only deletes as an object member. So a
+    # created path holding null matches merging null into one that already
+    # exists -- neither deletes anything.
+    case('{"a":{"b":1}}', ('JSON.MERGE', '$.a', 'null'),
+         OK, OK, '[{"a":null}]', '[{"a":null}]'),
+    case('{}', ('JSON.MERGE', '$.a.b', 'null'),
+         OK, NIL, '[{"a":{"b":null}}]', '[{}]'),
+    case('{"a":{"b":1,"c":2}}', ('JSON.MERGE', '$.a', '{"b":null}'),
+         OK, OK, '[{"a":{"c":2}}]', '[{"a":{"c":2}}]'),
+
+    # ---------------- legacy and projection paths ----------------
+    # legacy (dot) paths create too
+    case('{"a":{}}', ('JSON.SET', '.a.b.c', '5'),
+         OK, NIL, '[{"a":{"b":{"c":5}}}]', '[{"a":{}}]'),
+    # a computed expression is read-only in both modes
+    case('{"a":1}', ('JSON.SET', '$.a + 1', '5'),
+         ERR('computed/projection expressions'),
+         ERR('computed/projection expressions')),
+
+    # ------ value formats survive creation (the leaf is never re-serialized) --
+    case('{}', ('JSON.SET', '$.a.b', '{"x":[1,2],"y":null}'),
+         OK, NIL, '[{"a":{"b":{"x":[1,2],"y":null}}}]', '[{}]'),
+    case('{}', ('JSON.SET', '$.a.b', '[1.5,2.5,3.5]', 'FPHA', 'FP32'),
+         OK, NIL, '[{"a":{"b":[1.5,2.5,3.5]}}]', '[{}]'),
+
+    # ---------------- MAX_DEPTH, nothing half-created ----------------
+    case('{"keep":1}', ('JSON.SET', DEEP, '5'),
+         ERR('recursion limit exceeded'), NIL, '[{"keep":1}]', '[{"keep":1}]'),
+    case('{"keep":1}', ('JSON.MERGE', DEEP, '5'),
+         ERR('recursion limit exceeded'), NIL, '[{"keep":1}]', '[{"keep":1}]'),
+    case(None, ('JSON.SET', DEEP, '5'),
+         ERR('recursion limit exceeded'),
+         ERR('new objects must be created at the root')),
+]
+
+
+def test_all_cases_with_auto_create_enabled():
+    env = _env(True)
     env.expect('CONFIG', 'GET', 'json-auto-create-deep-paths').equal(
         ['json-auto-create-deep-paths', 'yes'])
+    # load-time only
     env.expect('CONFIG', 'SET', 'json-auto-create-deep-paths', 'no').raiseError()
+    for c in CASES:
+        _check(env, c, c.on, c.doc_on, 'ON')
 
 
-# --------------------------------------------------------------------------- #
-# JSON.SET -- existing key
-# --------------------------------------------------------------------------- #
+def test_all_cases_with_auto_create_disabled():
+    """The disabled column is the regression guard for today's behavior."""
+    env = _env(False)
+    env.expect('CONFIG', 'GET', 'json-auto-create-deep-paths').equal(
+        ['json-auto-create-deep-paths', 'no'])
+    for c in CASES:
+        _check(env, c, c.off, c.doc_off, 'OFF')
 
-def test_json_set_creates_missing_levels_on_existing_key():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{"a":{}}').ok()
-    env.expect('JSON.SET', 'k', '$.a.b.c', '5').ok()
-    env.expect('JSON.GET', 'k', '$').equal('[{"a":{"b":{"c":5}}}]')
-
-
-def test_json_set_creates_a_single_missing_leaf():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{"a":{}}').ok()
-    env.expect('JSON.SET', 'k', '$.a.b', '5').ok()
-    env.expect('JSON.GET', 'k', '$').equal('[{"a":{"b":5}}]')
-
-
-def test_json_set_creates_from_an_empty_document():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{}').ok()
-    env.expect('JSON.SET', 'k', '$.a.b.c.d', '5').ok()
-    env.expect('JSON.GET', 'k', '$').equal('[{"a":{"b":{"c":{"d":5}}}}]')
-
-
-def test_json_set_returns_nil_when_intermediate_is_a_scalar():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{"a":3}').ok()
-    env.expect('JSON.SET', 'k', '$.a.b.c', '5').equal(None)
-    env.expect('JSON.GET', 'k', '$').equal('[{"a":3}]')
-
-
-def test_json_set_returns_nil_when_intermediate_is_an_array():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{"a":[1,2]}').ok()
-    env.expect('JSON.SET', 'k', '$.a.b', '5').equal(None)
-    env.expect('JSON.GET', 'k', '$').equal('[{"a":[1,2]}]')
-
-
-def test_json_set_preserves_siblings_when_creating():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{"a":{"keep":1}}').ok()
-    env.expect('JSON.SET', 'k', '$.a.b.c', '5').ok()
-    env.expect('JSON.GET', 'k', '$').equal('[{"a":{"keep":1,"b":{"c":5}}}]')
-
-
-def test_json_set_creates_through_an_existing_array_element():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{"a":[{},{}]}').ok()
-    env.expect('JSON.SET', 'k', '$.a[1].b.c', '5').ok()
-    env.expect('JSON.GET', 'k', '$').equal('[{"a":[{},{"b":{"c":5}}]}]')
-
-
-# --------------------------------------------------------------------------- #
-# JSON.SET -- absent key
-# --------------------------------------------------------------------------- #
-
-def test_json_set_creates_a_whole_new_document():
-    env = _env()
-    env.expect('JSON.SET', 'newkey', '$.a.b.c', '5').ok()
-    env.expect('JSON.GET', 'newkey', '$').equal('[{"a":{"b":{"c":5}}}]')
-
-
-def test_json_set_creates_a_new_document_for_a_single_key():
-    env = _env()
-    env.expect('JSON.SET', 'newkey', '$.a', '5').ok()
-    env.expect('JSON.GET', 'newkey', '$').equal('[{"a":5}]')
-
-
-def test_json_set_creates_a_new_document_with_an_object_value():
-    env = _env()
-    env.expect('JSON.SET', 'newkey', '$.a.b', '{"d":{}}').ok()
-    env.expect('JSON.GET', 'newkey', '$').equal('[{"a":{"b":{"d":{}}}}]')
-
-
-def test_json_set_still_errors_on_absent_key_with_an_array_index():
-    env = _env()
-    env.expect('JSON.SET', 'nk', '$.a[0].b', '5').raiseError().contains(
-        'new objects must be created at the root')
-    env.expect('EXISTS', 'nk').equal(0)
-
-
-def test_json_set_still_errors_on_absent_key_with_a_descendant_path():
-    env = _env()
-    env.expect('JSON.SET', 'nk', '$..a', '5').raiseError().contains(
-        'new objects must be created at the root')
-    env.expect('EXISTS', 'nk').equal(0)
-
-
-# --------------------------------------------------------------------------- #
-# NX / XX
-# --------------------------------------------------------------------------- #
-
-def test_json_set_xx_never_creates():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{}').ok()
-    env.expect('JSON.SET', 'k', '$.a.b.c', '5', 'XX').equal(None)
-    env.expect('JSON.GET', 'k', '$').equal('[{}]')
-
-
-def test_json_set_xx_never_creates_a_document():
-    env = _env()
-    env.expect('JSON.SET', 'nk', '$.a.b', '5', 'XX').equal(None)
-    env.expect('EXISTS', 'nk').equal(0)
-
-
-def test_json_set_nx_creates():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{}').ok()
-    env.expect('JSON.SET', 'k', '$.a.b.c', '5', 'NX').ok()
-    env.expect('JSON.GET', 'k', '$').equal('[{"a":{"b":{"c":5}}}]')
-
-
-def test_json_set_nx_does_not_overwrite_an_existing_leaf():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{"a":{"b":{"c":1}}}').ok()
-    env.expect('JSON.SET', 'k', '$.a.b.c', '5', 'NX').equal(None)
-    env.expect('JSON.GET', 'k', '$').equal('[{"a":{"b":{"c":1}}}]')
-
-
-# --------------------------------------------------------------------------- #
-# Multi-target paths
-# --------------------------------------------------------------------------- #
-
-def test_json_set_union_creates_missing_and_updates_existing():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{"a":{},"b":{"c":1}}').ok()
-    env.expect('JSON.SET', 'k', "$['a','b'].c", '9').ok()
-    env.expect('JSON.GET', 'k', '$').equal('[{"a":{"c":9},"b":{"c":9}}]')
-
-
-def test_json_set_wildcard_creates_under_every_object():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{"p":{},"q":{},"s":"str"}').ok()
-    env.expect('JSON.SET', 'k', '$.*.n', '7').ok()
-    env.expect('JSON.GET', 'k', '$').equal('[{"p":{"n":7},"q":{"n":7},"s":"str"}]')
-
-
-def test_json_set_descendant_creates_under_root_and_every_object():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{"a":{}}').ok()
-    env.expect('JSON.SET', 'k', '$..n', '7').ok()
-    env.expect('JSON.GET', 'k', '$').equal('[{"a":{"n":7},"n":7}]')
-
-
-def test_json_set_slice_creates_in_each_sliced_element():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{"a":[{},{},{}]}').ok()
-    env.expect('JSON.SET', 'k', '$.a[0:2].b', '7').ok()
-    env.expect('JSON.GET', 'k', '$').equal('[{"a":[{"b":7},{"b":7},{}]}]')
-
-
-# --------------------------------------------------------------------------- #
-# Preserved errors and no-ops
-# --------------------------------------------------------------------------- #
-
-def test_array_indexes_are_never_created():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{"arr":[]}').ok()
-    env.expect('JSON.SET', 'k', '$.arr[0]', '7').raiseError().contains(
-        'array index out of range')
-    env.expect('JSON.SET', 'k', '$.a.b[0]', '7').raiseError().contains(
-        'array index out of range')
-    env.expect('JSON.GET', 'k', '$').equal('[{"arr":[]}]')
-
-
-def test_max_depth_is_rejected_before_writing_anything():
-    env = _env()
-    deep = '.'.join('a%d' % i for i in range(200))
-    env.expect('JSON.SET', 'nk', '$.' + deep, '5').raiseError().contains(
-        'recursion limit exceeded')
-    env.expect('EXISTS', 'nk').equal(0)
-
-    env.expect('JSON.SET', 'k', '$', '{"keep":1}').ok()
-    env.expect('JSON.SET', 'k', '$.' + deep, '5').raiseError().contains(
-        'recursion limit exceeded')
-    # nothing half-created
-    env.expect('JSON.GET', 'k', '$').equal('[{"keep":1}]')
-
-
-def test_legacy_path_creates_too():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{"a":{}}').ok()
-    env.expect('JSON.SET', 'k', '.a.b.c', '5').ok()
-    env.expect('JSON.GET', 'k', '$').equal('[{"a":{"b":{"c":5}}}]')
-
-
-def test_projection_path_is_rejected():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{"a":1}').ok()
-    env.expect('JSON.SET', 'k', '$.a + 1', '5').raiseError()
-
-
-# --------------------------------------------------------------------------- #
-# Value formats survive creation (the leaf value is never re-serialized)
-# --------------------------------------------------------------------------- #
-
-def test_created_leaf_keeps_a_container_value():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{}').ok()
-    env.expect('JSON.SET', 'k', '$.a.b', '{"x":[1,2],"y":null}').ok()
-    env.expect('JSON.GET', 'k', '$').equal('[{"a":{"b":{"x":[1,2],"y":null}}}]')
-
-
-def test_created_leaf_supports_fpha():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{}').ok()
-    env.expect('JSON.SET', 'k', '$.a.b', '[1.5,2.5,3.5]', 'FPHA', 'FP32').ok()
-    env.expect('JSON.GET', 'k', '$').equal('[{"a":{"b":[1.5,2.5,3.5]}}]')
-
-
-# --------------------------------------------------------------------------- #
-# Persistence
-# --------------------------------------------------------------------------- #
 
 def test_created_document_survives_rdb_reload():
-    env = _env()
+    env = _env(True)
     env.skipOnCluster()
     if env.useAof:
         env.skip()
@@ -252,107 +240,3 @@ def test_created_document_survives_rdb_reload():
     for _ in env.retry_with_rdb_reload():
         env.assertExists('k')
         env.expect('JSON.GET', 'k', '$').equal('[{"a":{"b":{"c":5}}}]')
-
-
-# --------------------------------------------------------------------------- #
-# JSON.MERGE
-# --------------------------------------------------------------------------- #
-
-def test_json_merge_creates_missing_levels_on_existing_key():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{"a":{}}').ok()
-    env.expect('JSON.MERGE', 'k', '$.a.b.c', '5').ok()
-    env.expect('JSON.GET', 'k', '$').equal('[{"a":{"b":{"c":5}}}]')
-
-
-def test_json_merge_creates_a_whole_new_document():
-    env = _env()
-    env.expect('JSON.MERGE', 'nk', '$.a.b.c', '5').ok()
-    env.expect('JSON.GET', 'nk', '$').equal('[{"a":{"b":{"c":5}}}]')
-
-
-def test_json_merge_returns_nil_when_intermediate_is_a_scalar():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{"a":3}').ok()
-    env.expect('JSON.MERGE', 'k', '$.a.b', '5').equal(None)
-    env.expect('JSON.GET', 'k', '$').equal('[{"a":3}]')
-
-
-def test_json_merge_still_errors_on_absent_key_with_an_array_index():
-    env = _env()
-    env.expect('JSON.MERGE', 'nk', '$.a[0].b', '5').raiseError().contains(
-        'new objects must be created at the root')
-    env.expect('EXISTS', 'nk').equal(0)
-
-
-def test_json_merge_null_at_a_created_path_matches_an_existing_one():
-    """A top-level null patch replaces; it only deletes as an object member.
-
-    So creating a path and putting null in it is consistent with merging null
-    into a path that already exists -- neither deletes anything.
-    """
-    env = _env()
-    env.expect('JSON.SET', 'existing', '$', '{"a":{"b":1}}').ok()
-    env.expect('JSON.MERGE', 'existing', '$.a', 'null').ok()
-    env.expect('JSON.GET', 'existing', '$').equal('[{"a":null}]')
-
-    env.expect('JSON.SET', 'created', '$', '{}').ok()
-    env.expect('JSON.MERGE', 'created', '$.a.b', 'null').ok()
-    env.expect('JSON.GET', 'created', '$').equal('[{"a":{"b":null}}]')
-
-
-def test_json_merge_null_member_still_deletes():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{"a":{"b":1,"c":2}}').ok()
-    env.expect('JSON.MERGE', 'k', '$.a', '{"b":null}').ok()
-    env.expect('JSON.GET', 'k', '$').equal('[{"a":{"c":2}}]')
-
-
-def test_json_merge_union_creates_missing_and_merges_existing():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{"a":{},"b":{"c":{"x":1}}}').ok()
-    env.expect('JSON.MERGE', 'k', "$['a','b'].c", '{"y":2}').ok()
-    env.expect('JSON.GET', 'k', '$').equal(
-        '[{"a":{"c":{"y":2}},"b":{"c":{"x":1,"y":2}}}]')
-
-
-def test_json_merge_max_depth_is_rejected_before_writing_anything():
-    env = _env()
-    deep = '.'.join('a%d' % i for i in range(200))
-    env.expect('JSON.SET', 'k', '$', '{"keep":1}').ok()
-    env.expect('JSON.MERGE', 'k', '$.' + deep, '5').raiseError().contains(
-        'recursion limit exceeded')
-    env.expect('JSON.GET', 'k', '$').equal('[{"keep":1}]')
-
-
-# --------------------------------------------------------------------------- #
-# A path that matches but creates nothing must not be turned into an error
-# --------------------------------------------------------------------------- #
-
-def test_non_static_path_that_matches_but_creates_nothing_still_updates():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{"a":{"a":1}}').ok()
-    env.expect('JSON.SET', 'k', '$..a', '5').ok()
-    env.expect('JSON.GET', 'k', '$').equal('[{"a":5}]')
-
-
-def test_wildcard_that_matches_everything_still_updates():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{"p":{"n":1},"q":{"n":2}}').ok()
-    env.expect('JSON.SET', 'k', '$.*.n', '9').ok()
-    env.expect('JSON.GET', 'k', '$').equal('[{"p":{"n":9},"q":{"n":9}}]')
-
-
-def test_descendant_index_that_matches_still_updates():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{"arr":[1,2]}').ok()
-    env.expect('JSON.SET', 'k', '$..[0]', '9').ok()
-    env.expect('JSON.GET', 'k', '$').equal('[{"arr":[9,2]}]')
-
-
-def test_merge_non_static_path_that_matches_still_merges():
-    env = _env()
-    env.expect('JSON.SET', 'k', '$', '{"a":{"a":1}}').ok()
-    env.expect('JSON.MERGE', 'k', '$..a', '{"a":"b"}').ok()
-    # prepare_paths_for_updating is skipped for MERGE, so both matches apply
-    env.expect('JSON.GET', 'k', '$').equal('[{"a":{"a":{"a":"b"}}}]')
