@@ -851,6 +851,9 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     }
 
     fn nest_in_objects(&self, keys: &[String], value: IValue) -> RedisResult<IValue> {
+        if keys.len() + value.calculate_value_depth() >= MAX_DEPTH {
+            return Err(err_recursion_limit_exceeded());
+        }
         keys.iter().rev().try_fold(value, |inner, key| {
             let mut obj = IObject::new();
             obj.insert(key.as_str(), inner)

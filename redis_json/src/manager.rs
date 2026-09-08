@@ -89,12 +89,14 @@ pub trait Manager {
         limit_depth: bool,
         fpha_type: Option<FloatType>,
     ) -> RedisResult<Self::O>;
-    
+
     /// Build a chain of single-key objects around `value`, outermost key first:
     /// `["b", "c"]` with `5` gives `{"b":{"c":5}}`. Empty `keys` returns `value`.
     ///
     /// Lets a deep path be created in a single write, so the depth limit is
-    /// checked before anything is mutated.
+    /// checked before anything is mutated. Errors if the result would exceed
+    /// the nesting limit on its own -- the caller cannot check that, since
+    /// `Self::O` is opaque to it.
     fn nest_in_objects(&self, keys: &[String], value: Self::O) -> RedisResult<Self::O>;
     fn get_memory(v: &Self::V) -> RedisResult<usize>;
     fn is_json(&self, key: *mut RedisModuleKey) -> RedisResult<bool>;

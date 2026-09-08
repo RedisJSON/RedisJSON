@@ -3,20 +3,18 @@ use std::collections::HashMap;
 
 use json_path::{
     calc_once, calc_once_paths, calc_once_projection, compile,
-    json_path::JsonPathToken,
+    json_path::Query,
     select_value::{is_equal, SelectValue, SelectValueType, ValueRef},
 };
-use redis_module::{redisvalue::RedisValueKey, RedisError, RedisResult, RedisValue};
+use redis_module::{redisvalue::RedisValueKey, RedisResult, RedisValue};
 use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
+    auto_create::{plan_creation, CreateSite},
     commands::{prepare_paths_for_updating, FoundIndex, ObjectLen, Values},
     formatter::{RedisJsonFormatter, ReplyFormatOptions},
-    manager::{
-        err_invalid_path, err_json, err_projection_readonly, AddUpdateInfo, SetUpdateInfo,
-        UpdateInfo,
-    },
+    manager::{err_invalid_path, err_json, err_projection_readonly, SetUpdateInfo, UpdateInfo},
     redisjson::{normalize_arr_indices, Path, ReplyFormat, SetOptions},
 };
 
@@ -369,82 +367,41 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    fn find_add_paths(&mut self, path: &str) -> RedisResult<Vec<UpdateInfo>> {
-        let mut query = compile(path)?;
+    /// Paths of the nodes `query` already matches, to be overwritten in place.
+    ///
+    /// Empty when nothing matches, and always empty for `NX`, which only ever
+    /// adds. Never falls back to adding -- see [`Self::find_add_paths`].
+    pub fn find_update_paths(
+        &mut self,
+        query: Query,
+        option: SetOptions,
+    ) -> RedisResult<Vec<UpdateInfo>> {
+        if option == SetOptions::NotExists {
+            return Ok(Vec::new());
+        }
         if query.is_projection() {
             return Err(err_projection_readonly());
         }
-        if !query.is_static() {
-            return Err(RedisError::Str("Err wrong static path"));
+        let mut res = calc_once_paths(query, self.val.as_ref());
+        if option != SetOptions::MergeExisting {
+            prepare_paths_for_updating(&mut res);
         }
-
-        if query.size() < 1 {
-            return Err(RedisError::Str("Err path must end with object key to set"));
-        }
-
-        let (last, token_type) = query.pop_last().unwrap();
-
-        match token_type {
-            JsonPathToken::String => {
-                if query.size() == 1 {
-                    // Adding to the root
-                    Ok(vec![UpdateInfo::AUI(AddUpdateInfo {
-                        path: Vec::new(),
-                        key: last,
-                    })])
-                } else {
-                    // Adding somewhere in existing object
-                    let res = calc_once_paths(query, self.val.as_ref());
-
-                    Ok(res
-                        .into_iter()
-                        .map(|v| {
-                            UpdateInfo::AUI(AddUpdateInfo {
-                                path: v,
-                                key: last.to_string(),
-                            })
-                        })
-                        .collect())
-                }
-            }
-            JsonPathToken::Number => {
-                // if we reach here with array path we are either out of range
-                // or no-oping an NX where the value is already present
-
-                let query = compile(path)?;
-                let res = calc_once_paths(query, self.val.as_ref());
-
-                if res.is_empty() {
-                    Err(RedisError::Str("ERR array index out of range"))
-                } else {
-                    Ok(Vec::new())
-                }
-            }
-        }
+        Ok(res
+            .into_iter()
+            .map(|v| UpdateInfo::SUI(SetUpdateInfo { path: v }))
+            .collect())
     }
 
     pub fn find_paths(&mut self, path: &str, option: SetOptions) -> RedisResult<Vec<UpdateInfo>> {
-        if option != SetOptions::NotExists {
-            let query = compile(path)?;
-            if query.is_projection() {
-                return Err(err_projection_readonly());
-            }
-            let mut res = calc_once_paths(query, self.val.as_ref());
-            if option != SetOptions::MergeExisting {
-                prepare_paths_for_updating(&mut res);
-            }
-            if !res.is_empty() {
-                return Ok(res
-                    .into_iter()
-                    .map(|v| UpdateInfo::SUI(SetUpdateInfo { path: v }))
-                    .collect());
-            }
+        let query = compile(path)?;
+        let updates = self.find_update_paths(query.clone(), option)?;
+        if !updates.is_empty() || option == SetOptions::AlreadyExists {
+            return Ok(updates);
         }
-        if option == SetOptions::AlreadyExists {
-            Ok(Vec::new()) // empty vector means no updates
-        } else {
-            self.find_add_paths(path)
-        }
+        Ok(plan_creation(query, self.val.as_ref(), false)?
+            .into_iter()
+            .map(CreateSite::into_add_update_info)
+            .collect())
     }
 
     pub fn to_string_single(&self, path: &str, format: &ReplyFormatOptions) -> RedisResult<String> {

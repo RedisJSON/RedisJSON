@@ -146,7 +146,7 @@ pub enum JsonPathToken {
 }
 
 /* Struct that represent a compiled json path query. */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Query<'i> {
     // query: QueryElement<'i>
     pub root: Pairs<'i, Rule>,

@@ -7,6 +7,7 @@
  * GNU Affero General Public License v3 (AGPLv3).
  */
 
+use crate::auto_create::{auto_create_enabled, materialize, plan_creation, root_key_chain};
 use crate::defrag::defrag_info;
 use crate::formatter::ReplyFormatOptions;
 use crate::key_value::KeyValue;
@@ -438,15 +439,30 @@ pub fn json_set_command_impl<M: Manager>(
                     Ok(RedisValue::Null)
                 }
             } else {
-                let update_info = KeyValue::new(doc).find_paths(path.get_path(), op)?;
-                if update_info.is_empty() {
+                let query = compile(path.get_path())?;
+                let create_intermediates = auto_create_enabled();
+                let update_info = KeyValue::new(doc).find_update_paths(query.clone(), op)?;
+                let plan_needed = update_info.is_empty() || create_intermediates;
+                let sites = if op == SetOptions::AlreadyExists || !plan_needed {
+                    Vec::new()
+                } else {
+                    plan_creation(query, doc, create_intermediates)?
+                };
+                if update_info.is_empty() && sites.is_empty() {
                     Ok(RedisValue::Null)
                 } else {
-                    let result: ApplyUpdatesResult =
-                        apply_updates::<M>(&mut redis_key, val, update_info);
-                    // If any path is updated, notify the keyspace event
+                    let created = !sites.is_empty();
+                    if created {
+                        materialize::<M>(&manager, &mut redis_key, &sites, &val)?;
+                    }
+                    let result: ApplyUpdatesResult = if update_info.is_empty() {
+                        ApplyUpdatesResult::AllUpdated
+                    } else {
+                        apply_updates::<M>(&mut redis_key, val, update_info)
+                    };
+                    // If anything changed, notify the keyspace event.
                     // But only return OK if all paths are updated, otherwise return null
-                    if result.any_updated() {
+                    if created || result.any_updated() {
                         redis_key.notify_keyspace_event(ctx, "json.set")?;
                         manager.apply_changes(ctx);
                     }
@@ -460,15 +476,29 @@ pub fn json_set_command_impl<M: Manager>(
         }
         (None, SetOptions::AlreadyExists) => Ok(RedisValue::Null),
         _ => {
-            if path == JSON_ROOT_PATH {
-                redis_key.set_value(Vec::new(), val)?;
-                redis_key.notify_keyspace_event(ctx, "json.set")?;
-                manager.apply_changes(ctx);
-                REDIS_OK
+            let new_doc = if path == JSON_ROOT_PATH {
+                Some(val)
+            } else if auto_create_enabled() {
+                // There is no document to walk yet, so the whole thing is built
+                // in one write from the path's object-key chain. `None` means
+                // the path has a segment we cannot invent.
+                match root_key_chain(compile(path.get_path())?)? {
+                    Some(keys) => Some(manager.nest_in_objects(&keys, val)?),
+                    None => None,
+                }
             } else {
-                Err(RedisError::Str(
+                None
+            };
+            match new_doc {
+                Some(doc) => {
+                    redis_key.set_value(Vec::new(), doc)?;
+                    redis_key.notify_keyspace_event(ctx, "json.set")?;
+                    manager.apply_changes(ctx);
+                    REDIS_OK
+                }
+                None => Err(RedisError::Str(
                     "ERR new objects must be created at the root",
-                ))
+                )),
             }
         }
     }
