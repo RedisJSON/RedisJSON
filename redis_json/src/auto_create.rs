@@ -14,12 +14,13 @@
 
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 
-use json_path::calc_once_paths;
 use json_path::json_path::{JsonPathToken, Query};
 use json_path::select_value::{SelectValue, SelectValueType, ValueRef};
+use json_path::{calc_once_paths, compile};
 use redis_module::{RedisError, RedisResult, RedisValue};
 
 use crate::manager::{err_projection_readonly, Manager, WriteHolder};
+use crate::redisjson::Format;
 
 /// Backing store for the `json-auto-create-deep-paths` module config,
 /// registered in the `redis_module!` block (see `lib.rs`). The SDK writes here
@@ -232,6 +233,55 @@ pub(crate) fn materialize<M: Manager>(
             Ok(leaf_path)
         })
         .collect()
+}
+
+/// What a created leaf starts out as, for the commands that need something of
+/// their own type to act on.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Seed {
+    /// `JSON.ARRAPPEND`, `JSON.ARRINSERT`
+    EmptyArray,
+}
+
+impl Seed {
+    const fn as_json(self) -> &'static str {
+        match self {
+            Self::EmptyArray => "[]",
+        }
+    }
+}
+
+/// Create the missing object levels of `path` and leave `seed` at each new
+/// leaf, so the command that follows needs no change of its own.
+///
+/// Three things are deliberately left alone:
+///
+/// - the config being off, in which case this does nothing at all;
+/// - an absent key, since only `JSON.SET`/`JSON.MSET`/`JSON.MERGE` create a
+///   document;
+/// - a path that already resolves, so a match of the wrong type still gets the
+///   command's own reply for it rather than being overwritten with a seed.
+pub(crate) fn seed_missing_paths<M: Manager>(
+    manager: &M,
+    key: &mut M::WriteHolder,
+    path: &str,
+    seed: Seed,
+) -> RedisResult<()> {
+    if !auto_create_enabled() {
+        return Ok(());
+    }
+    let sites = match key.get_value()? {
+        Some(root) => plan_creation(compile(path)?, root, true)?,
+        None => return Ok(()),
+    };
+    if sites.is_empty() {
+        return Ok(());
+    }
+    // Parsed only once there is something to create; a seed cannot fail to
+    // parse.
+    let seed = manager.from_str(seed.as_json(), Format::JSON, true, None)?;
+    materialize::<M>(manager, key, &sites, &seed)?;
+    Ok(())
 }
 
 #[cfg(test)]

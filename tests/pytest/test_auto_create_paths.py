@@ -229,6 +229,49 @@ CASES = [
          ERR('new objects must be created at the root'),
          '[{"keep":1}]', '[{"keep":1}]'),
 
+    # ---------------- JSON.ARRAPPEND ----------------
+    # the created leaf is seeded with `[]`, then the append runs unchanged
+    case('{"a":{}}', ('JSON.ARRAPPEND', KEY, '$.a.b', '1'),
+         [1], [], '[{"a":{"b":[1]}}]', '[{"a":{}}]'),
+    case('{}', ('JSON.ARRAPPEND', KEY, '$.a.b.c', '1', '2'),
+         [2], [], '[{"a":{"b":{"c":[1,2]}}}]', '[{}]'),
+    # legacy paths reply with the new length, and error on no match
+    case('{"a":{}}', ('JSON.ARRAPPEND', KEY, '.a.b', '1'),
+         1, ERR('Path does not exist or not an array'),
+         '[{"a":{"b":[1]}}]', '[{"a":{}}]'),
+    # an existing array is appended to, never reseeded
+    case('{"a":{"b":[1]}}', ('JSON.ARRAPPEND', KEY, '$.a.b', '2'),
+         [2], [2], '[{"a":{"b":[1,2]}}]', '[{"a":{"b":[1,2]}}]'),
+    # a match of the wrong type keeps its own per-match null -- the seed only
+    # ever lands where the path resolved to nothing
+    case('{"a":"str"}', ('JSON.ARRAPPEND', KEY, '$.a', '1'),
+         [None], [None], '[{"a":"str"}]', '[{"a":"str"}]'),
+    # an absent key stays an error: only SET/MSET/MERGE create a document
+    case(None, ('JSON.ARRAPPEND', KEY, '$.a.b', '1'),
+         ERR("key that doesn't exist"), ERR("key that doesn't exist")),
+    case('{"p":{},"q":{}}', ('JSON.ARRAPPEND', KEY, '$.*.n', '9'),
+         [1, 1], [], '[{"p":{"n":[9]},"q":{"n":[9]}}]', '[{"p":{},"q":{}}]'),
+
+    # ---------------- JSON.ARRINSERT ----------------
+    case('{}', ('JSON.ARRINSERT', KEY, '$.a.b', '0', '1'),
+         [1], [], '[{"a":{"b":[1]}}]', '[{}]'),
+    # 0 is the only index an empty array can satisfy, so any other one creates
+    # nothing at all rather than failing with a stray `[]` left behind
+    case('{}', ('JSON.ARRINSERT', KEY, '$.a.b', '1', '1'),
+         [], [], '[{}]', '[{}]'),
+    # an existing array keeps every index it already supports
+    case('{"a":{"b":[1,2]}}', ('JSON.ARRINSERT', KEY, '$.a.b', '1', '9'),
+         [3], [3], '[{"a":{"b":[1,9,2]}}]', '[{"a":{"b":[1,9,2]}}]'),
+    case('{"a":{}}', ('JSON.ARRINSERT', KEY, '.a.b', '0', '1'),
+         1, ERR('Path does not exist or not an array'),
+         '[{"a":{"b":[1]}}]', '[{"a":{}}]'),
+    case(None, ('JSON.ARRINSERT', KEY, '$.a.b', '0', '1'),
+         ERR("key that doesn't exist"), ERR("key that doesn't exist")),
+    # a projection stays read-only for these too
+    case('{"a":1}', ('JSON.ARRAPPEND', KEY, '$.a + 1', '1'),
+         ERR('computed/projection expressions'),
+         ERR('computed/projection expressions')),
+
     # ---------------- legacy and projection paths ----------------
     # legacy (dot) paths create too
     case('{"a":{}}', ('JSON.SET', KEY, '.a.b.c', '5'),

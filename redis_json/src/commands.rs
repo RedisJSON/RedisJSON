@@ -9,6 +9,7 @@
 
 use crate::auto_create::{
     auto_create_enabled, materialize, nothing_to_write, plan_creation, root_key_chain,
+    seed_missing_paths, Seed,
 };
 use crate::defrag::defrag_info;
 use crate::formatter::ReplyFormatOptions;
@@ -2119,6 +2120,8 @@ pub fn json_arr_append_command_impl<M: Manager>(
         })?;
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
+    // An empty array is what makes the append below work unchanged.
+    seed_missing_paths(&manager, &mut redis_key, path.get_path(), Seed::EmptyArray)?;
 
     if path.is_legacy() {
         json_arr_append_legacy(manager, &mut redis_key, ctx, &path, args)
@@ -2368,6 +2371,12 @@ pub fn json_arr_insert_command_impl<M: Manager>(
             Ok(acc)
         })?;
     let mut redis_key = manager.open_key_write(ctx, key)?;
+    if index == 0 {
+        // A created array is empty, so 0 is the only index an insert into it
+        // can satisfy. Any other index keeps today's out-of-range error, rather
+        // than failing the command with a stray `[]` left behind.
+        seed_missing_paths(&manager, &mut redis_key, path.get_path(), Seed::EmptyArray)?;
+    }
     if path.is_legacy() {
         json_arr_insert_legacy(manager, &mut redis_key, ctx, path.get_path(), index, args)
     } else {
