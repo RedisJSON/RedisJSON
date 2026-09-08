@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use json_path::calc_once_paths;
 use json_path::json_path::{JsonPathToken, Query};
 use json_path::select_value::{SelectValue, SelectValueType, ValueRef};
-use redis_module::{RedisError, RedisResult};
+use redis_module::{RedisError, RedisResult, RedisValue};
 
 use crate::manager::{err_projection_readonly, AddUpdateInfo, Manager, UpdateInfo, WriteHolder};
 
@@ -64,8 +64,8 @@ impl CreateSite {
     }
 }
 
-/// Everything a write must create at `query`, and the single entry point for
-/// it -- there is no separate shallow path for callers to remember.
+/// Sites the write must create at `query`. Pure planning: the only error is a
+/// bad path.
 ///
 /// Peels the trailing run of plain object keys off `query`
 /// ([`json_path::json_path::Query::pop_last_object_key`]) and evaluates the
@@ -74,34 +74,52 @@ impl CreateSite {
 /// affect the command's reply.
 ///
 /// `create_intermediates` is what the `json-auto-create-deep-paths` config
-/// buys. Without it, only a final missing key under an already-existing parent
-/// is created -- static paths only, and with the historical errors, exactly as
-/// RedisJSON has always behaved. With it, missing intermediate levels and
-/// multi-target paths are created too.
+/// buys. Without it this is held to what RedisJSON has always done -- a final
+/// missing key under an already-existing parent, single-target paths only.
 ///
-/// `nothing_matched` says whether the write has any updates of its own to
-/// apply. Only when it does not do the historical rules get to supply the
-/// reply -- otherwise a path that happens to create nothing would be turned
-/// into an error.
+/// An empty result is not necessarily an error: see [`nothing_to_write`].
 pub(crate) fn plan_creation<V: SelectValue>(
     query: Query,
     doc: &V,
     create_intermediates: bool,
-    nothing_matched: bool,
 ) -> RedisResult<Vec<CreateSite>> {
     if query.is_projection() {
         return Err(err_projection_readonly());
     }
+    let sites = plan_sites(query.clone(), doc);
     if create_intermediates {
-        let sites = plan_sites(query.clone(), doc);
-        if !sites.is_empty() {
-            return Ok(sites);
-        }
+        return Ok(sites);
     }
-    if nothing_matched {
-        return plan_single_key(query, doc);
+    if !query.clone().is_static() {
+        return Ok(Vec::new());
     }
-    Ok(Vec::new())
+    Ok(sites
+        .into_iter()
+        .filter(|site| site.levels.is_empty())
+        .collect())
+}
+
+/// The reply RedisJSON has always given for a write that matched nothing and
+/// could create nothing: an error for a path that could never have worked,
+/// otherwise `nil`.
+pub(crate) fn nothing_to_write<V: SelectValue>(
+    mut query: Query,
+    doc: &V,
+) -> RedisResult<RedisValue> {
+    if !query.is_static() {
+        return Err(RedisError::Str("Err wrong static path"));
+    }
+    if query.size() < 1 {
+        return Err(RedisError::Str("Err path must end with object key to set"));
+    }
+    // A trailing array index is never created, so either it is out of range or
+    // an NX is no-oping over a value that is already there.
+    if matches!(query.clone().pop_last(), Some((_, JsonPathToken::Number)))
+        && calc_once_paths(query, doc).is_empty()
+    {
+        return Err(RedisError::Str("ERR array index out of range"));
+    }
+    Ok(RedisValue::Null)
 }
 
 /// Peel the trailing object keys and plan one site per prefix match. Pure:
@@ -120,34 +138,6 @@ fn plan_sites<V: SelectValue>(mut query: Query, doc: &V) -> Vec<CreateSite> {
         .into_iter()
         .filter_map(|prefix| plan_site(doc, prefix, &suffix))
         .collect()
-}
-
-/// Add a single missing object key under an already-existing parent, which is
-/// all RedisJSON has ever done, and report the errors it has always reported.
-fn plan_single_key<V: SelectValue>(mut query: Query, doc: &V) -> RedisResult<Vec<CreateSite>> {
-    if !query.is_static() {
-        return Err(RedisError::Str("Err wrong static path"));
-    }
-    if query.size() < 1 {
-        return Err(RedisError::Str("Err path must end with object key to set"));
-    }
-
-    // A trailing array index is never created; either it is out of range or an
-    // NX is no-oping over a value that is already there.
-    let last_is_index = matches!(query.clone().pop_last(), Some((_, JsonPathToken::Number)));
-    if last_is_index {
-        return if calc_once_paths(query, doc).is_empty() {
-            Err(RedisError::Str("ERR array index out of range"))
-        } else {
-            Ok(Vec::new())
-        };
-    }
-
-    // A static path has at most one match, so this is at most one site.
-    Ok(plan_sites(query, doc)
-        .into_iter()
-        .filter(|site| site.levels.is_empty())
-        .collect())
 }
 
 /// The object-key chain a path addresses from the document root, or `None`
@@ -270,13 +260,15 @@ mod tests {
     }
 
     fn plan(path: &str, json: &str) -> Vec<CreateSite> {
-        plan_creation(compile(path).unwrap(), &doc(json), true, true).unwrap()
+        plan_creation(compile(path).unwrap(), &doc(json), true).unwrap()
     }
 
-    fn err(path: &str, json: &str) -> String {
-        plan_creation(compile(path).unwrap(), &doc(json), true, true)
-            .unwrap_err()
-            .to_string()
+    /// The reply a command gives once nothing was matched and nothing planned.
+    fn no_write(path: &str, json: &str) -> String {
+        match nothing_to_write(compile(path).unwrap(), &doc(json)) {
+            Ok(reply) => format!("{reply:?}"),
+            Err(e) => e.to_string(),
+        }
     }
 
     fn site(parent: &[&str], levels: &[&str], leaf: &str) -> CreateSite {
@@ -323,15 +315,22 @@ mod tests {
 
     #[test]
     fn never_creates_a_trailing_array_index() {
-        // The MUST: array elements are never invented. Nothing is creatable, so
-        // the historical replies stand.
+        // The MUST: array elements are never invented, even with intermediates
+        // allowed -- so nothing is planned and the historical replies stand.
+        for (path, json) in [
+            ("$.a.b[0]", r#"{"a":{"b":[]}}"#),
+            ("$.a[0]", "{}"),
+            ("$..[0]", r#"{"a":[]}"#),
+        ] {
+            assert!(plan(path, json).is_empty(), "path {path}");
+        }
         assert_eq!(
-            err("$.a.b[0]", r#"{"a":{"b":[]}}"#),
+            no_write("$.a.b[0]", r#"{"a":{"b":[]}}"#),
             "ERR array index out of range"
         );
-        assert_eq!(err("$.a[0]", "{}"), "ERR array index out of range");
+        assert_eq!(no_write("$.a[0]", "{}"), "ERR array index out of range");
         // `$..[0]` is not static, so it is refused before the index matters.
-        assert_eq!(err("$..[0]", r#"{"a":[]}"#), "Err wrong static path");
+        assert_eq!(no_write("$..[0]", r#"{"a":[]}"#), "Err wrong static path");
     }
 
     #[test]
@@ -367,7 +366,7 @@ mod tests {
         );
         // Neither `a` nor `b` exists, and a union is not static, so nothing is
         // creatable and the historical error stands.
-        assert_eq!(err("$['a','b'].c", "{}"), "Err wrong static path");
+        assert_eq!(no_write("$['a','b'].c", "{}"), "Err wrong static path");
     }
 
     #[test]
@@ -410,7 +409,7 @@ mod tests {
 
     #[test]
     fn without_create_intermediates_only_a_final_key_is_created() {
-        let leaf_only = |path, json| plan_creation(compile(path).unwrap(), &doc(json), false, true);
+        let leaf_only = |path, json| plan_creation(compile(path).unwrap(), &doc(json), false);
         // One missing key under an existing parent: allowed, as it always was.
         assert_eq!(
             leaf_only("$.a.b", r#"{"a":{}}"#).unwrap(),
@@ -419,18 +418,17 @@ mod tests {
         // A whole missing chain: not created, and nothing matched -> nil.
         assert!(leaf_only("$.a.b.c", r#"{"a":{}}"#).unwrap().is_empty());
         // Multi-target paths stay refused.
+        // Multi-target paths plan nothing, and the reply helper reports why.
+        assert!(leaf_only("$.*.n", r#"{"p":{},"q":{}}"#).unwrap().is_empty());
         assert_eq!(
-            leaf_only("$.*.n", r#"{"p":{},"q":{}}"#)
-                .unwrap_err()
-                .to_string(),
+            no_write("$.*.n", r#"{"p":{},"q":{}}"#),
             "Err wrong static path"
         );
     }
 
     #[test]
     fn rejects_a_projection_path() {
-        let err =
-            plan_creation(compile("$.a + 1").unwrap(), &doc(r#"{"a":1}"#), true, true).unwrap_err();
+        let err = plan_creation(compile("$.a + 1").unwrap(), &doc(r#"{"a":1}"#), true).unwrap_err();
         assert!(format!("{err}").contains("projection"), "{err}");
     }
 

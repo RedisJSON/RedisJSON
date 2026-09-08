@@ -7,7 +7,9 @@
  * GNU Affero General Public License v3 (AGPLv3).
  */
 
-use crate::auto_create::{auto_create_enabled, materialize, plan_creation, root_key_chain};
+use crate::auto_create::{
+    auto_create_enabled, materialize, nothing_to_write, plan_creation, root_key_chain,
+};
 use crate::defrag::defrag_info;
 use crate::formatter::ReplyFormatOptions;
 use crate::key_value::KeyValue;
@@ -445,10 +447,14 @@ pub fn json_set_command_impl<M: Manager>(
                 let sites = if op == SetOptions::AlreadyExists {
                     Vec::new()
                 } else {
-                    plan_creation(query, doc, create_intermediates, update_info.is_empty())?
+                    plan_creation(query.clone(), doc, create_intermediates)?
                 };
                 if update_info.is_empty() && sites.is_empty() {
-                    Ok(RedisValue::Null)
+                    if op == SetOptions::AlreadyExists {
+                        Ok(RedisValue::Null)
+                    } else {
+                        nothing_to_write(query, doc)
+                    }
                 } else {
                     let created = !sites.is_empty();
                     if created {
@@ -614,13 +620,11 @@ pub fn json_merge_command_impl<M: Manager>(
                 let create_intermediates = auto_create_enabled();
                 let mut update_info = KeyValue::new(doc)
                     .find_update_paths(query.clone(), SetOptions::MergeExisting)?;
-                // Plan whenever nothing matched, and also alongside the updates
-                // once intermediates are allowed, since a multi-target path can
-                // match some places and miss others.
-                let sites =
-                    plan_creation(query, doc, create_intermediates, update_info.is_empty())?;
+                // Creation runs alongside the updates, not instead of them: a
+                // multi-target path can match some places and miss others.
+                let sites = plan_creation(query.clone(), doc, create_intermediates)?;
                 if update_info.is_empty() && sites.is_empty() {
-                    Ok(RedisValue::Null)
+                    nothing_to_write(query, doc)
                 } else {
                     // A created leaf takes the value as-is: merging into
                     // nothing is the same as setting.
