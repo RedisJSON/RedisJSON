@@ -375,6 +375,29 @@ def test_created_document_survives_rdb_reload():
     if env.useAof:
         env.skip()
     env.expect('JSON.SET', KEY, '$.a.b.c', '5').ok()
+    # A seeded leaf is a normal value once created, so it has to survive too.
+    env.expect('JSON.ARRAPPEND', KEY, '$.a.b.arr', '1').equal([1])
     for _ in env.retry_with_rdb_reload():
         env.assertExists(KEY)
-        env.expect('JSON.GET', KEY, '$').equal('[{"a":{"b":{"c":5}}}]')
+        env.expect('JSON.GET', KEY, '$').equal('[{"a":{"b":{"c":5,"arr":[1]}}}]')
+
+
+def test_created_paths_replicate():
+    """`apply_changes` replicates verbatim, so the replica re-runs the command
+    and has to auto-create the structure itself. That converges only because
+    both nodes were loaded with the config on -- a mismatched pair is
+    divergent by design (R5) and is deliberately not asserted.
+    """
+    env = _env(True)
+    if not env.useSlaves:
+        env.skip()
+    env.skipOnCluster()
+
+    # An absent key, built entirely from the path, plus a seeded leaf under it.
+    env.expect('JSON.SET', KEY, '$.a.b.c', '5').ok()
+    env.expect('JSON.ARRAPPEND', KEY, '$.a.b.arr', '1').equal([1])
+
+    env.cmd('WAIT', '1', '10000')
+    replica = env.getSlaveConnection()
+    env.assertEqual(replica.execute_command('JSON.GET', KEY, '$'),
+                    '[{"a":{"b":{"c":5,"arr":[1]}}}]')
