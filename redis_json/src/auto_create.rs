@@ -11,12 +11,53 @@
 //!
 //! Without it, `JSON.SET k $.a.b.c 5` errors when `k` is absent and returns a
 //! silent `nil` when `k` exists but `$.a.b` does not.
+//!
+//! Creation flow and terminology (for an existing document):
+//!
+//! A "seeded command" modifies a value rather than assigning one: NUMINCRBY,
+//! STRAPPEND, ARRAPPEND, or ARRINSERT at index 0. When its target is missing,
+//! auto-creation supplies an initial value (the "seed") before the operation.
+//! Existing targets keep their values; only newly created leaves get seeds.
+//!
+//! 1. Plan: `plan_creation` reads the document and returns `CreateSite`s, not
+//!    JSON nodes. Each site describes an existing `parent`, missing object
+//!    `levels`, and the final `leaf` key. Planning does not change the document.
+//!    For seeded commands, `plan_seed_paths` also captures concrete targets
+//!    before any writes, so creating nodes cannot change filter matches.
+//! 2. Validate: before attaching anything, `materialize` checks the deepest
+//!    planned leaf against the depth limit. Seeded commands also check operand
+//!    types and the final depth of array items before writing their seeds.
+//! 3. Build and attach: for each site, `nest_in_objects` builds the missing
+//!    subtree as a standalone value, not yet attached to the key. `dict_add`
+//!    then attaches it to the existing parent: this is where creation mutates
+//!    the document. Sites are built and attached one at a time; this is not a
+//!    copy of the whole document or a general rollback mechanism.
+//! 4. Apply: SET/MERGE supply their value as the new leaf. Commands that operate
+//!    on a value first need a `Seed`: `[]` for arrays, `0` for increment, or
+//!    `""` for string append. After attachment, the command applies its operand
+//!    to the captured targets. The seed's `items`, `increment`, or `suffix`
+//!    field is that operand, carried along for validation, not the seed value.
+//!
+//! Example: incrementing `$.a.b.c` by 5 in `{"a":{}}` plans parent `["a"]`,
+//! levels `["b"]`, leaf `"c"`; builds `{"c":0}` off-key; attaches it as `a.b`;
+//! then increments the attached `c` to 5.
+//!
+//! Two-level example: `JSON.ARRAPPEND k $.users[*].settings.ui.tags "\"dark\""`
+//! on `{"users":[{},{}]}` plans two sites, with parents `["users","0"]` and
+//! `["users","1"]`. Each has levels `["settings","ui"]` and leaf `"tags"`.
+//! After validation, each site builds `{"ui":{"tags":[]}}` off-key and
+//! attaches it under its parent's `settings` key. The command then appends
+//! `"dark"` at both captured targets, producing:
+//! `{"users":[{"settings":{"ui":{"tags":["dark"]}}},{"settings":{"ui":{"tags":["dark"]}}}]}`.
+//!
+//! For an absent key, SET/MSET/MERGE instead use `root_key_chain` and
+//! `nest_in_objects` to build the whole document before storing it.
 
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 
-use json_path::json_path::{JsonPathToken, Query};
+use json_path::json_path::{JsonPathToken, Query, UserPathTracker};
 use json_path::select_value::{SelectValue, SelectValueType, ValueRef};
-use json_path::{calc_once_paths, compile};
+use json_path::{calc_once_paths, calc_once_with_paths, compile};
 use redis_module::{RedisError, RedisResult, RedisValue};
 
 use serde_json::Value;
@@ -95,10 +136,10 @@ pub(crate) fn nothing_to_write<V: SelectValue>(
     doc: &V,
 ) -> RedisResult<RedisValue> {
     if !query.is_static() {
-        return Err(RedisError::Str("Err wrong static path"));
+        return Err(RedisError::Str("ERR wrong static path"));
     }
     if query.size() < 1 {
-        return Err(RedisError::Str("Err path must end with object key to set"));
+        return Err(RedisError::Str("ERR path must end with object key to set"));
     }
     // A trailing array index is never created, so either it is out of range or
     // an NX is no-oping over a value that is already there.
@@ -240,35 +281,80 @@ pub(crate) fn materialize<M: Manager>(
 /// What a created leaf starts out as, for the commands that need something of
 /// their own type to act on.
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum Seed {
+pub(crate) enum Seed<'a, O> {
     /// `JSON.ARRAPPEND`, `JSON.ARRINSERT`
-    EmptyArray,
+    EmptyArray { items: &'a [O] },
     /// `JSON.NUMINCRBY` -- `0 + n == n`. `MULTBY`/`POWBY` get no seed at all:
     /// `0 * n` and `0 ^ n` would fabricate a wrong answer.
-    Zero,
+    Zero { increment: &'a str },
     /// `JSON.STRAPPEND` -- `"" + s == s`
-    EmptyString,
+    EmptyString { suffix: &'a str },
 }
 
-impl Seed {
-    const fn as_json(self) -> &'static str {
+impl<O> Seed<'_, O> {
+    fn accepts(&self, value_type: SelectValueType) -> bool {
         match self {
-            Self::EmptyArray => "[]",
-            Self::Zero => "0",
-            Self::EmptyString => "\"\"",
+            Self::EmptyArray { .. } => value_type == SelectValueType::Array,
+            Self::Zero { .. } => {
+                matches!(value_type, SelectValueType::Long | SelectValueType::Double)
+            }
+            Self::EmptyString { .. } => value_type == SelectValueType::String,
         }
     }
 
-    fn check_operand(self, json: &str) -> RedisResult<()> {
+    const fn as_json(&self) -> &'static str {
+        match self {
+            Self::EmptyArray { .. } => "[]",
+            Self::Zero { .. } => "0",
+            Self::EmptyString { .. } => "\"\"",
+        }
+    }
+
+    /// `operand` is the JSON the command is about to apply, for the seeds whose
+    /// type constrains it (see [`Seed::check_operand`]). `None` where the command
+    /// has already parsed it.
+    fn operand(&self) -> Option<&str> {
+        match self {
+            Self::EmptyArray { .. } => None,
+            Self::Zero { increment } => Some(increment),
+            Self::EmptyString { suffix } => Some(suffix),
+        }
+    }
+
+    fn check_operand(&self) -> RedisResult<()> {
+        let Some(json) = self.operand() else {
+            return Ok(());
+        };
         let value: Value = serde_json::from_str(json)?;
         match self {
             // A created leaf is `0`, so only a number can be added to it.
-            Self::Zero if !matches!(value, Value::Number(_)) => {
+            Self::Zero { .. } if !matches!(value, Value::Number(_)) => {
                 Err(RedisError::Str("bad input number"))
             }
-            Self::EmptyString if !matches!(value, Value::String(_)) => Err(err_json("string")),
+            Self::EmptyString { .. } if !matches!(value, Value::String(_)) => {
+                Err(err_json("string"))
+            }
             _ => Ok(()),
         }
+    }
+
+    fn check_array_depth<M: Manager<O = O>>(
+        &self,
+        manager: &M,
+        paths: &[Option<Vec<String>>],
+    ) -> RedisResult<()>
+    where
+        O: Clone,
+    {
+        if let Self::EmptyArray { items } = self {
+            if let Some(depth) = paths.iter().flatten().map(Vec::len).max() {
+                let keys = vec![String::new(); depth + 1];
+                for value in *items {
+                    manager.nest_in_objects(&keys, value.clone())?;
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -283,37 +369,77 @@ impl Seed {
 /// - a path that already resolves, so a match of the wrong type still gets the
 ///   command's own reply for it rather than being overwritten with a seed.
 ///
-/// `operand` is the JSON the command is about to apply, for the seeds whose
-/// type constrains it (see [`Seed::check_operand`]). `None` where the command
-/// has already parsed it.
+/// Returns concrete targets captured before mutation, including wrong-type
+/// matches as `None`. Array operands are checked at their final depth before
+/// seeding; `create` disables creation for MULTBY/POWBY and nonzero ARRINSERT.
+/// The `create` guard lives in the command handlers.
 pub(crate) fn seed_missing_paths<M: Manager>(
     manager: &M,
     key: &mut M::WriteHolder,
     path: &str,
-    seed: Seed,
-    operand: Option<&str>,
-) -> RedisResult<()> {
-    if !auto_create_enabled() {
-        return Ok(());
-    }
-    let sites = match key.get_value()? {
-        Some(root) => plan_creation(compile(path)?, root, true)?,
-        None => return Ok(()),
-    };
+    seed: Seed<'_, M::O>,
+) -> RedisResult<Vec<Option<Vec<String>>>> {
+    let root = key.get_value()?.ok_or_else(RedisError::nonexistent_key)?;
+    let (paths, sites) = plan_seed_paths(compile(path)?, root, &seed)?;
     if sites.is_empty() {
-        return Ok(());
+        return Ok(paths);
     }
     // Checked only here, where a seed is about to be written: a command that
     // creates nothing keeps whatever reply it has always given for an operand
     // it cannot use.
-    if let Some(operand) = operand {
-        seed.check_operand(operand)?;
-    }
+    seed.check_operand()?;
+    seed.check_array_depth(manager, &paths)?;
     // Parsed only once there is something to create; a seed cannot fail to
     // parse.
     let seed = manager.from_str(seed.as_json(), Format::JSON, true, None)?;
     materialize::<M>(manager, key, &sites, &seed)?;
-    Ok(())
+    Ok(paths)
+}
+
+fn plan_seed_paths<V: SelectValue, O>(
+    mut query: Query,
+    root: &V,
+    seed: &Seed<'_, O>,
+) -> RedisResult<(Vec<Option<Vec<String>>>, Vec<CreateSite>)> {
+    if query.is_projection() {
+        return Err(err_projection_readonly());
+    }
+    let sites = if auto_create_enabled() {
+        plan_creation(query.clone(), root, true)?
+    } else {
+        Vec::new()
+    };
+    if sites.is_empty() {
+        let paths = calc_once_with_paths(query, root)
+            .into_iter()
+            .map(|matched| {
+                seed.accepts(matched.res.get_type())
+                    .then(|| matched.path_tracker.unwrap().to_string_path())
+            })
+            .collect();
+        return Ok((paths, sites));
+    }
+    // Evaluate the prefix on the original document. Re-evaluating a filter
+    // after seeding can lose matches or select unrelated new targets.
+    let mut suffix = Vec::new();
+    while let Some(key) = query.pop_last_object_key() {
+        suffix.push(key);
+    }
+    suffix.reverse();
+    let paths: Vec<_> = calc_once_paths(query, root)
+        .into_iter()
+        .filter_map(|prefix| {
+            let site = plan_site(root, prefix.clone(), &suffix);
+            let mut path = prefix;
+            path.extend(suffix.iter().cloned());
+            if site.is_some() {
+                Some(Some(path))
+            } else {
+                node_at(root, &path).map(|node| seed.accepts(node.get_type()).then_some(path))
+            }
+        })
+        .collect();
+    Ok((paths, sites))
 }
 
 #[cfg(test)]
@@ -397,7 +523,7 @@ mod tests {
         );
         assert_eq!(no_write("$.a[0]", "{}"), "ERR array index out of range");
         // `$..[0]` is not static, so it is refused before the index matters.
-        assert_eq!(no_write("$..[0]", r#"{"a":[]}"#), "Err wrong static path");
+        assert_eq!(no_write("$..[0]", r#"{"a":[]}"#), "ERR wrong static path");
     }
 
     #[test]
@@ -433,7 +559,7 @@ mod tests {
         );
         // Neither `a` nor `b` exists, and a union is not static, so nothing is
         // creatable and the historical error stands.
-        assert_eq!(no_write("$['a','b'].c", "{}"), "Err wrong static path");
+        assert_eq!(no_write("$['a','b'].c", "{}"), "ERR wrong static path");
     }
 
     #[test]
@@ -489,7 +615,7 @@ mod tests {
         assert!(leaf_only("$.*.n", r#"{"p":{},"q":{}}"#).unwrap().is_empty());
         assert_eq!(
             no_write("$.*.n", r#"{"p":{},"q":{}}"#),
-            "Err wrong static path"
+            "ERR wrong static path"
         );
     }
 

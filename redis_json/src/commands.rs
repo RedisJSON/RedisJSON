@@ -13,7 +13,7 @@ use crate::auto_create::{
 };
 use crate::defrag::defrag_info;
 use crate::formatter::ReplyFormatOptions;
-use crate::key_value::KeyValue;
+use crate::key_value::{CreationPolicy, KeyValue, SetPlan};
 use crate::manager::{
     err_invalid_path, err_invalid_path_or, err_projection_readonly, Manager, ReadHolder,
     UpdateInfo, WriteHolder,
@@ -444,12 +444,15 @@ pub fn json_set_command_impl<M: Manager>(
             } else {
                 let query = compile(path.get_path())?;
                 let create_intermediates = auto_create_enabled();
-                let update_info = KeyValue::new(doc).find_update_paths(query.clone(), op)?;
-                let sites = if op == SetOptions::AlreadyExists {
-                    Vec::new()
+                let creation = if create_intermediates {
+                    CreationPolicy::MissingObjects
                 } else {
-                    plan_creation(query.clone(), doc, create_intermediates)?
+                    CreationPolicy::FinalKeyOnly
                 };
+                let SetPlan {
+                    updates: update_info,
+                    creations: sites,
+                } = KeyValue::new(doc).plan_set(query.clone(), op, creation)?;
                 if update_info.is_empty() && sites.is_empty() {
                     if op == SetOptions::AlreadyExists {
                         Ok(RedisValue::Null)
@@ -620,7 +623,7 @@ pub fn json_merge_command_impl<M: Manager>(
                 let query = compile(path.get_path())?;
                 let create_intermediates = auto_create_enabled();
                 let mut update_info = KeyValue::new(doc)
-                    .find_update_paths(query.clone(), SetOptions::MergeExisting)?;
+                    .find_existing_targets(query.clone(), SetOptions::MergeExisting)?;
                 // Creation runs alongside the updates, not instead of them: a
                 // multi-target path can match some places and miss others.
                 let sites = plan_creation(query.clone(), doc, create_intermediates)?;
@@ -748,6 +751,7 @@ struct MsetTriplet {
     /// exist yet.
     new_doc_keys: Vec<String>,
     value: String,
+    update_info: Option<Vec<UpdateInfo>>,
 }
 
 /// Reject a path `JSON.MSET` could never apply, before anything is written.
@@ -755,14 +759,13 @@ struct MsetTriplet {
 /// The plan itself is thrown away: the second pass makes its own, against the
 /// document as the previous triplets left it. Only the errors matter here, and
 /// they are the ones `JSON.SET` gives for the same path.
-fn validate_mset_path<V: SelectValue>(
-    doc: &V,
-    query: Query,
-    create_intermediates: bool,
-) -> RedisResult<()> {
-    let updates = KeyValue::new(doc).find_update_paths(query.clone(), SetOptions::None)?;
-    let sites = plan_creation(query.clone(), doc, create_intermediates)?;
-    if updates.is_empty() && sites.is_empty() {
+fn validate_mset_path<V: SelectValue>(doc: &V, query: Query) -> RedisResult<()> {
+    let plan = KeyValue::new(doc).plan_set(
+        query.clone(),
+        SetOptions::None,
+        CreationPolicy::MissingObjects,
+    )?;
+    if plan.updates.is_empty() && plan.creations.is_empty() {
         nothing_to_write(query, doc)?;
     }
     Ok(())
@@ -789,10 +792,23 @@ pub fn json_mset_command_impl<M: Manager>(
         // Validate the path
         let path_str = args.next_str()?.to_string();
         let path = Path::new(&path_str);
+        let mut update_info = None;
         let new_doc_keys = if path == JSON_ROOT_PATH {
             Vec::new()
         } else if let Some(existing) = key_value {
-            validate_mset_path(existing, compile(path.get_path())?, create_intermediates)?;
+            if create_intermediates {
+                validate_mset_path(existing, compile(path.get_path())?)?;
+            } else {
+                update_info = Some(
+                    KeyValue::new(existing)
+                        .plan_set(
+                            compile(path.get_path())?,
+                            SetOptions::None,
+                            CreationPolicy::FinalKeyOnly,
+                        )?
+                        .updates,
+                );
+            }
             Vec::new()
         } else {
             // Nothing to write into, so the path has to describe a document on
@@ -819,6 +835,7 @@ pub fn json_mset_command_impl<M: Manager>(
             path: path_str,
             new_doc_keys,
             value: value_str,
+            update_info,
         });
     }
 
@@ -829,6 +846,7 @@ pub fn json_mset_command_impl<M: Manager>(
             path,
             new_doc_keys,
             value,
+            update_info,
         } = triplet;
         let mut redis_key = manager.open_key_write(ctx, key)?;
 
@@ -836,15 +854,25 @@ pub fn json_mset_command_impl<M: Manager>(
         let path = Path::new(&path);
         let current = redis_key.get_value()?;
 
-        let (any_updated, key_all_updated) = match current {
-            Some(doc) if path != JSON_ROOT_PATH => {
+        let (any_updated, key_all_updated) = match (update_info, current) {
+            (Some(updates), _) => {
+                let result = apply_updates::<M>(&mut redis_key, value, updates);
+                (result.any_updated(), result.all_updated())
+            }
+            (None, Some(doc)) if path != JSON_ROOT_PATH => {
                 // Planned here, not in the first pass: each triplet must see
                 // the document as the previous triplets left it, not as the
                 // command found it.
                 let query = compile(path.get_path())?;
-                let update_info =
-                    KeyValue::new(doc).find_update_paths(query.clone(), SetOptions::None)?;
-                let sites = plan_creation(query, doc, create_intermediates)?;
+                let creation = if create_intermediates {
+                    CreationPolicy::MissingObjects
+                } else {
+                    CreationPolicy::FinalKeyOnly
+                };
+                let SetPlan {
+                    updates: update_info,
+                    creations: sites,
+                } = KeyValue::new(doc).plan_set(query, SetOptions::None, creation)?;
                 let has_sites = !sites.is_empty();
                 let all_created =
                     materialize::<M>(&manager, &mut redis_key, &sites, &value).is_ok();
@@ -1450,62 +1478,56 @@ fn json_num_op<M: Manager>(
     let number = args.next_str()?;
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
-    if matches!(op, NumOp::Incr) {
-        // Only NUMINCRBY has an identity to seed a created leaf with, so
-        // MULTBY and POWBY keep their reply for a path that does not exist.
+    // Only NUMINCRBY has an identity to seed a created leaf with, so
+    // MULTBY and POWBY keep their reply for a path that does not exist.
+    let create = matches!(op, NumOp::Incr);
+    let paths = if create {
         seed_missing_paths(
             &manager,
             &mut redis_key,
             path.get_path(),
-            Seed::Zero,
-            Some(number),
-        )?;
-    }
+            Seed::Zero { increment: number },
+        )?
+    } else {
+        let root = redis_key
+            .get_value()?
+            .ok_or_else(RedisError::nonexistent_key)?;
+        find_all_paths(path.get_path(), root, |v| {
+            matches!(
+                v.get_type(),
+                SelectValueType::Long | SelectValueType::Double
+            )
+        })?
+    };
 
     // check context flags to see if RESP3 is enabled
     if is_resp3(ctx) {
-        let res = json_num_op_impl(
-            manager,
-            &mut redis_key,
-            ctx,
-            path.get_path(),
-            number,
-            op,
-            cmd,
-        )?
-        .into_iter()
-        .map(|v| {
-            v.map_or(RedisValue::Null, |v| {
-                if let Some(i) = v.as_i64() {
-                    RedisValue::Integer(i)
-                } else {
-                    RedisValue::Float(v.as_f64().unwrap_or_default())
-                }
+        let res = json_num_op_impl(manager, &mut redis_key, ctx, paths, number, op, cmd)?
+            .into_iter()
+            .map(|v| {
+                v.map_or(RedisValue::Null, |v| {
+                    if let Some(i) = v.as_i64() {
+                        RedisValue::Integer(i)
+                    } else {
+                        RedisValue::Float(v.as_f64().unwrap_or_default())
+                    }
+                })
             })
-        })
-        .collect_vec()
-        .into();
+            .collect_vec()
+            .into();
         Ok(res)
     } else if path.is_legacy() {
         json_num_op_legacy(
             manager,
             &mut redis_key,
             ctx,
-            path.get_path(),
+            paths.into_iter().flatten().collect(),
             number,
             op,
             cmd,
         )
     } else {
-        let results = json_num_op_impl(
-            manager,
-            &mut redis_key,
-            ctx,
-            path.get_path(),
-            number,
-            op,
-            cmd,
-        )?;
+        let results = json_num_op_impl(manager, &mut redis_key, ctx, paths, number, op, cmd)?;
 
         // Convert to RESP2 format return as one JSON array
         let values = to_json_value::<Number>(results, Value::Null);
@@ -1517,21 +1539,11 @@ fn json_num_op_impl<M: Manager>(
     manager: M,
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
-    path: &str,
+    paths: Vec<Option<Vec<String>>>,
     number: &str,
     op: NumOp,
     cmd: &str,
 ) -> RedisResult<Vec<Option<Number>>> {
-    let root = redis_key
-        .get_value()?
-        .ok_or_else(RedisError::nonexistent_key)?;
-    let paths = find_all_paths(path, root, |v| {
-        matches!(
-            v.get_type(),
-            SelectValueType::Double | SelectValueType::Long
-        )
-    })?;
-
     let mut need_notify = false;
     let res = paths
         .into_iter()
@@ -1558,17 +1570,11 @@ fn json_num_op_legacy<M: Manager>(
     manager: M,
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
-    path: &str,
+    paths: Vec<Vec<String>>,
     number: &str,
     op: NumOp,
     cmd: &str,
 ) -> RedisResult {
-    let root = redis_key
-        .get_value()?
-        .ok_or_else(RedisError::nonexistent_key)?;
-    let paths = find_paths(path, root, |v| {
-        v.get_type() == SelectValueType::Double || v.get_type() == SelectValueType::Long
-    })?;
     if !paths.is_empty() {
         let res = paths
             .into_iter()
@@ -1917,18 +1923,23 @@ pub fn json_str_append_command_impl<M: Manager>(
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
     // The empty string leaves the append below to produce `json` on its own.
-    seed_missing_paths(
+    let paths = seed_missing_paths(
         &manager,
         &mut redis_key,
         path.get_path(),
-        Seed::EmptyString,
-        Some(json),
+        Seed::EmptyString { suffix: json },
     )?;
 
     if path.is_legacy() {
-        json_str_append_legacy(manager, &mut redis_key, ctx, path.get_path(), json)
+        json_str_append_legacy(
+            manager,
+            &mut redis_key,
+            ctx,
+            paths.into_iter().flatten().collect(),
+            json,
+        )
     } else {
-        json_str_append_impl(manager, &mut redis_key, ctx, path.get_path(), json)
+        json_str_append_impl(manager, &mut redis_key, ctx, paths, json)
     }
 }
 
@@ -1936,15 +1947,9 @@ fn json_str_append_impl<M: Manager>(
     manager: M,
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
-    path: &str,
+    paths: Vec<Option<Vec<String>>>,
     json: &str,
 ) -> RedisResult {
-    let root = redis_key
-        .get_value()?
-        .ok_or_else(RedisError::nonexistent_key)?;
-
-    let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::String)?;
-
     let mut res = vec![];
     let mut need_notify = false;
     for p in paths {
@@ -1967,14 +1972,9 @@ fn json_str_append_legacy<M: Manager>(
     manager: M,
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
-    path: &str,
+    paths: Vec<Vec<String>>,
     json: &str,
 ) -> RedisResult {
-    let root = redis_key
-        .get_value()?
-        .ok_or_else(RedisError::nonexistent_key)?;
-
-    let paths = find_paths(path, root, |v| v.get_type() == SelectValueType::String)?;
     if !paths.is_empty() {
         let mut res = None;
         for p in paths {
@@ -2143,12 +2143,23 @@ pub fn json_arr_append_command_impl<M: Manager>(
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
     // An empty array is what makes the append below work unchanged.
-    seed_missing_paths(&manager, &mut redis_key, path.get_path(), Seed::EmptyArray, None)?;
+    let paths = seed_missing_paths(
+        &manager,
+        &mut redis_key,
+        path.get_path(),
+        Seed::EmptyArray { items: &args },
+    )?;
 
     if path.is_legacy() {
-        json_arr_append_legacy(manager, &mut redis_key, ctx, &path, args)
+        json_arr_append_legacy(
+            manager,
+            &mut redis_key,
+            ctx,
+            paths.into_iter().flatten().collect(),
+            args,
+        )
     } else {
-        json_arr_append_impl(manager, &mut redis_key, ctx, path.get_path(), args)
+        json_arr_append_impl(manager, &mut redis_key, ctx, paths, args)
     }
 }
 
@@ -2156,15 +2167,9 @@ fn json_arr_append_legacy<M: Manager>(
     manager: M,
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
-    path: &Path,
+    mut paths: Vec<Vec<String>>,
     args: Vec<M::O>,
 ) -> RedisResult {
-    let root = redis_key
-        .get_value()?
-        .ok_or_else(RedisError::nonexistent_key)?;
-    let mut paths = find_paths(path.get_path(), root, |v| {
-        v.get_type() == SelectValueType::Array
-    })?;
     if paths.is_empty() {
         Err(err_invalid_path_or("not an array"))
     } else if paths.len() == 1 {
@@ -2187,14 +2192,9 @@ fn json_arr_append_impl<M: Manager>(
     manager: M,
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
-    path: &str,
+    paths: Vec<Option<Vec<String>>>,
     args: Vec<M::O>,
 ) -> RedisResult {
-    let root = redis_key
-        .get_value()?
-        .ok_or_else(RedisError::nonexistent_key)?;
-    let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
-
     let mut res = vec![];
     let mut need_notify = false;
     for p in paths {
@@ -2393,16 +2393,36 @@ pub fn json_arr_insert_command_impl<M: Manager>(
             Ok(acc)
         })?;
     let mut redis_key = manager.open_key_write(ctx, key)?;
-    if index == 0 {
-        // A created array is empty, so 0 is the only index an insert into it
-        // can satisfy. Any other index keeps today's out-of-range error, rather
-        // than failing the command with a stray `[]` left behind.
-        seed_missing_paths(&manager, &mut redis_key, path.get_path(), Seed::EmptyArray, None)?;
-    }
-    if path.is_legacy() {
-        json_arr_insert_legacy(manager, &mut redis_key, ctx, path.get_path(), index, args)
+    // A created array is empty, so 0 is the only index an insert into it
+    // can satisfy. Any other index keeps today's out-of-range error, rather
+    // than failing the command with a stray `[]` left behind.
+    let create = index == 0;
+    let paths = if create {
+        seed_missing_paths(
+            &manager,
+            &mut redis_key,
+            path.get_path(),
+            Seed::EmptyArray { items: &args },
+        )?
     } else {
-        json_arr_insert_impl(manager, &mut redis_key, ctx, path.get_path(), index, args)
+        let root = redis_key
+            .get_value()?
+            .ok_or_else(RedisError::nonexistent_key)?;
+        find_all_paths(path.get_path(), root, |v| {
+            v.get_type() == SelectValueType::Array
+        })?
+    };
+    if path.is_legacy() {
+        json_arr_insert_legacy(
+            manager,
+            &mut redis_key,
+            ctx,
+            paths.into_iter().flatten().collect(),
+            index,
+            args,
+        )
+    } else {
+        json_arr_insert_impl(manager, &mut redis_key, ctx, paths, index, args)
     }
 }
 
@@ -2410,16 +2430,10 @@ fn json_arr_insert_impl<M: Manager>(
     manager: M,
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
-    path: &str,
+    paths: Vec<Option<Vec<String>>>,
     index: i64,
     args: Vec<M::O>,
 ) -> RedisResult {
-    let root = redis_key
-        .get_value()?
-        .ok_or_else(RedisError::nonexistent_key)?;
-
-    let paths = find_all_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
-
     let mut res = vec![RedisValue::Null; paths.len()];
     let mut need_notify = false;
 
@@ -2446,15 +2460,10 @@ fn json_arr_insert_legacy<M: Manager>(
     manager: M,
     redis_key: &mut M::WriteHolder,
     ctx: &Context,
-    path: &str,
+    mut paths: Vec<Vec<String>>,
     index: i64,
     args: Vec<M::O>,
 ) -> RedisResult {
-    let root = redis_key
-        .get_value()?
-        .ok_or_else(RedisError::nonexistent_key)?;
-
-    let mut paths = find_paths(path, root, |v| v.get_type() == SelectValueType::Array)?;
     if paths.is_empty() {
         return Err(err_invalid_path_or("not an array"));
     }

@@ -11,14 +11,32 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
+    auto_create::{nothing_to_write, plan_creation, CreateSite},
     commands::{prepare_paths_for_updating, FoundIndex, ObjectLen, Values},
     formatter::{RedisJsonFormatter, ReplyFormatOptions},
-    manager::{err_invalid_path, err_json, err_projection_readonly, SetUpdateInfo, UpdateInfo},
+    manager::{
+        err_invalid_path, err_json, err_projection_readonly, AddUpdateInfo, SetUpdateInfo,
+        UpdateInfo,
+    },
     redisjson::{normalize_arr_indices, Path, ReplyFormat, SetOptions},
 };
 
 pub struct KeyValue<'a, V: SelectValue> {
     val: ValueRef<'a, V>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CreationPolicy {
+    /// Preserve SET's original behavior: add only a final key to an existing parent.
+    FinalKeyOnly,
+    /// Allow missing object chains alongside updates to existing targets.
+    MissingObjects,
+}
+
+/// Existing writes and detached-subtree creation are applied separately.
+pub(crate) struct SetPlan {
+    pub updates: Vec<UpdateInfo>,
+    pub creations: Vec<CreateSite>,
 }
 
 impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
@@ -366,12 +384,13 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    /// Paths of the nodes `query` already matches, to be overwritten in place.
+    /// Find existing targets matched by `query`, returned as `SetUpdateInfo` entries.
+    /// This only selects targets; it does not modify the document or plan additions.
     ///
     /// Empty when nothing matches, and always empty for `NX`, which only ever
-    /// adds. Never falls back to adding -- see [`Self::find_add_paths`].
-    pub fn find_update_paths(
-        &mut self,
+    /// adds. To include permitted additions, use [`Self::plan_set`].
+    pub fn find_existing_targets(
+        &self,
         query: Query,
         option: SetOptions,
     ) -> RedisResult<Vec<UpdateInfo>> {
@@ -389,6 +408,46 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             .into_iter()
             .map(|v| UpdateInfo::SUI(SetUpdateInfo { path: v }))
             .collect())
+    }
+
+    /// Plan SET writes by combining [`Self::find_existing_targets`] with additions
+    /// permitted by `creation`, without mutating the document.
+    /// `FinalKeyOnly` puts final-key additions in `updates`; `MissingObjects`
+    /// puts missing object chains in `creations` for separate materialization.
+    pub(crate) fn plan_set(
+        &self,
+        query: Query,
+        option: SetOptions,
+        creation: CreationPolicy,
+    ) -> RedisResult<SetPlan> {
+        let mut plan = SetPlan {
+            updates: self.find_existing_targets(query.clone(), option)?,
+            creations: Vec::new(),
+        };
+        if option == SetOptions::AlreadyExists {
+            return Ok(plan);
+        }
+        if creation == CreationPolicy::MissingObjects {
+            plan.creations = plan_creation(query, self.val.as_ref(), true)?;
+            return Ok(plan);
+        }
+        if !plan.updates.is_empty() {
+            return Ok(plan);
+        }
+        let sites = plan_creation(query.clone(), self.val.as_ref(), false)?;
+        if sites.is_empty() {
+            nothing_to_write(query, self.val.as_ref())?;
+        }
+        plan.updates = sites
+            .into_iter()
+            .map(|site| {
+                UpdateInfo::AUI(AddUpdateInfo {
+                    path: site.parent,
+                    key: site.leaf,
+                })
+            })
+            .collect();
+        Ok(plan)
     }
 
     pub fn to_string_single(&self, path: &str, format: &ReplyFormatOptions) -> RedisResult<String> {

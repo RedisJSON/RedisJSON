@@ -217,6 +217,11 @@ CASES = [
          OK, NIL, '[{"a":{"b":1,"c":2}}]', '[{}]'),
     case('{}', ('JSON.MSET', KEY, '$.a.b', '1', KEY, '$.a.b', '2'),
          OK, NIL, '[{"a":{"b":2}}]', '[{}]'),
+    # Replacing an ancestor with a scalar invalidates a later target. MSET
+    # returns nil, keeps the earlier write, and still applies subsequent triplets.
+    case('{"a":{"b":1}}',
+         ('JSON.MSET', KEY, '$.a', '5', KEY, '$.a.b', '2', KEY, '$.after', '3'),
+         NIL, NIL, '[{"a":5,"after":3}]', '[{"a":5,"after":3}]'),
     # Two keys at once, each creating its own chain.
     case('{}', ('JSON.MSET', KEY, '$.a.b', '1', KEY2, '$.c.d', '2'),
          OK, NIL, '[{"a":{"b":1}}]', '[{}]',
@@ -422,6 +427,11 @@ def test_created_paths_replicate():
     env.assertEqual(replica.execute_command('JSON.GET', KEY, '$'),
                     '[{"a":{"b":{"c":5,"arr":[1]}}}]')
 
+    env.expect('JSON.SET', KEY, '$', '{"a":{}}').ok()
+    env.expect('JSON.ARRAPPEND', KEY, '$[?(@ == {})].n', '1').equal([1])
+    env.cmd('WAIT', '1', '10000')
+    env.assertEqual(replica.execute_command('JSON.GET', KEY, '$'), '[{"a":{"n":[1]}}]')
+
 
 def _nested(depth):
     """A chain of `depth` single-key objects, innermost first."""
@@ -429,6 +439,56 @@ def _nested(depth):
     for _ in range(depth):
         node = {'d': node}
     return node
+
+
+def test_array_creation_checks_operand_depth_before_writing():
+    env = _env(True)
+    value = json.dumps(_nested(125))
+    for path in ('$.a.b.c', '.a.b.c'):
+        for command, args in (('JSON.ARRAPPEND', (value,)),
+                              ('JSON.ARRINSERT', ('0', value))):
+            env.expect('JSON.SET', KEY, '$', '{}').ok()
+            env.expect(command, KEY, path, *args).raiseError().contains('recursion limit exceeded')
+            env.expect('JSON.GET', KEY, '$').equal('[{}]')
+
+
+def test_seeded_commands_preserve_filter_targets():
+    env = _env(True)
+    for command, args, reply, value in (
+            ('JSON.ARRAPPEND', ('1',), 1, [1]),
+            ('JSON.ARRINSERT', ('0', '1'), 1, [1]),
+            ('JSON.NUMINCRBY', ('5',), 5, 5),
+            ('JSON.STRAPPEND', ('"hi"',), 2, 'hi')):
+        for path in ('$[?(@ == {})].n', '.[?(@ == {})].n'):
+            env.expect('JSON.SET', KEY, '$', '{"a":{}}').ok()
+            expected = [reply] if path.startswith('$') else reply
+            if command == 'JSON.NUMINCRBY':
+                expected = json.dumps(expected)
+            env.expect(command, KEY, path, *args).equal(expected)
+            env.expect('JSON.GET', KEY, '$').equal(
+                json.dumps([{'a': {'n': value}}], separators=(',', ':')))
+
+    env.expect('JSON.SET', KEY, '$', '{"a":{},"b":{"n":"wrong"},"c":{"n":[2]}}').ok()
+    env.expect('JSON.ARRAPPEND', KEY, "$['a','b','c','a'].n", '1').equal([1, None, 2, 2])
+    env.expect('JSON.GET', KEY, '$').equal(
+        '[{"a":{"n":[1,1]},"b":{"n":"wrong"},"c":{"n":[2,1]}}]')
+
+
+def test_mset_disabled_preserves_original_targets():
+    env = _env(False)
+    env.expect('JSON.SET', KEY, '$', '{"a":{"x":1}}').ok()
+    env.expect('JSON.MSET', KEY, '$.a.x', '2', KEY, '$[?(@.x==1)].x', '3').ok()
+    env.expect('JSON.GET', KEY, '$').equal('[{"a":{"x":3}}]')
+    env.expect('JSON.SET', KEY, '$', '{"a":{}}').ok()
+    env.expect('JSON.MSET', KEY, '$.a', '{"b":1}', KEY, '$.a.b', '2').equal(None)
+    env.expect('JSON.GET', KEY, '$').equal('[{"a":{"b":1}}]')
+
+
+def test_set_disabled_preserves_depth_failure_reply():
+    env = _env(False)
+    env.expect('JSON.SET', KEY, '$', '{}').ok()
+    env.expect('JSON.SET', KEY, '$.a', json.dumps(_nested(126))).equal(None)
+    env.expect('JSON.GET', KEY, '$').equal('[{}]')
 
 
 def test_multi_site_creation_is_all_or_nothing():
