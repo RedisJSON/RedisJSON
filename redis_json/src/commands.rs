@@ -848,13 +848,16 @@ pub fn json_mset_command_impl<M: Manager>(
                 let has_sites = !sites.is_empty();
                 let all_created =
                     materialize::<M>(&manager, &mut redis_key, &sites, &value).is_ok();
+                // What was actually created, as opposed to planned: a plan that
+                // failed wrote nothing, and must not report the key as changed.
+                let created = has_sites && all_created;
                 let result = if update_info.is_empty() {
-                    ApplyUpdatesResult::from(has_sites)
+                    ApplyUpdatesResult::from(created)
                 } else {
                     apply_updates::<M>(&mut redis_key, value, update_info)
                 };
                 (
-                    has_sites || result.any_updated(),
+                    created || result.any_updated(),
                     all_created && result.all_updated(),
                 )
             }
@@ -1450,7 +1453,13 @@ fn json_num_op<M: Manager>(
     if matches!(op, NumOp::Incr) {
         // Only NUMINCRBY has an identity to seed a created leaf with, so
         // MULTBY and POWBY keep their reply for a path that does not exist.
-        seed_missing_paths(&manager, &mut redis_key, path.get_path(), Seed::Zero)?;
+        seed_missing_paths(
+            &manager,
+            &mut redis_key,
+            path.get_path(),
+            Seed::Zero,
+            Some(number),
+        )?;
     }
 
     // check context flags to see if RESP3 is enabled
@@ -1908,7 +1917,13 @@ pub fn json_str_append_command_impl<M: Manager>(
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
     // The empty string leaves the append below to produce `json` on its own.
-    seed_missing_paths(&manager, &mut redis_key, path.get_path(), Seed::EmptyString)?;
+    seed_missing_paths(
+        &manager,
+        &mut redis_key,
+        path.get_path(),
+        Seed::EmptyString,
+        Some(json),
+    )?;
 
     if path.is_legacy() {
         json_str_append_legacy(manager, &mut redis_key, ctx, path.get_path(), json)
@@ -2128,7 +2143,7 @@ pub fn json_arr_append_command_impl<M: Manager>(
 
     let mut redis_key = manager.open_key_write(ctx, key)?;
     // An empty array is what makes the append below work unchanged.
-    seed_missing_paths(&manager, &mut redis_key, path.get_path(), Seed::EmptyArray)?;
+    seed_missing_paths(&manager, &mut redis_key, path.get_path(), Seed::EmptyArray, None)?;
 
     if path.is_legacy() {
         json_arr_append_legacy(manager, &mut redis_key, ctx, &path, args)
@@ -2382,7 +2397,7 @@ pub fn json_arr_insert_command_impl<M: Manager>(
         // A created array is empty, so 0 is the only index an insert into it
         // can satisfy. Any other index keeps today's out-of-range error, rather
         // than failing the command with a stray `[]` left behind.
-        seed_missing_paths(&manager, &mut redis_key, path.get_path(), Seed::EmptyArray)?;
+        seed_missing_paths(&manager, &mut redis_key, path.get_path(), Seed::EmptyArray, None)?;
     }
     if path.is_legacy() {
         json_arr_insert_legacy(manager, &mut redis_key, ctx, path.get_path(), index, args)

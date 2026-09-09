@@ -13,6 +13,8 @@ at the same time -- hence one env per test function rather than a pair inside
 each test.
 """
 
+import json
+import time
 from collections import namedtuple
 
 from RLTest import Env, Defaults
@@ -305,6 +307,24 @@ CASES = [
     case(None, ('JSON.STRAPPEND', KEY, '$.a.b', '"hi"'),
          ERR("key that doesn't exist"), ERR("key that doesn't exist")),
 
+    # ------ an operand the operation would reject creates nothing ------
+    # The seed is written before the operation runs, so an operand that fails
+    # further down would leave it behind on a command that errors out -- and an
+    # errored command never reaches `apply_changes`, so that write would never
+    # replicate. Both are refused before the seed instead.
+    case('{}', ('JSON.NUMINCRBY', KEY, '$.a.b', 'notanumber'),
+         ERR('expected ident'), '[]', '[{}]', '[{}]'),
+    case('{}', ('JSON.NUMINCRBY', KEY, '$.a.b', '"5"'),
+         ERR('bad input number'), '[]', '[{}]', '[{}]'),
+    case('{}', ('JSON.STRAPPEND', KEY, '$.a.b', '5'),
+         ERR('expected string'), [], '[{}]', '[{}]'),
+    case('{}', ('JSON.STRAPPEND', KEY, '$.a.b', 'notjson'),
+         ERR('expected ident'), [], '[{}]', '[{}]'),
+    # A path that resolves seeds nothing, so a bad operand there keeps the
+    # per-match reply it has always had rather than becoming an error.
+    case('{"a":"str"}', ('JSON.NUMINCRBY', KEY, '$.a', '"5"'),
+         '[null]', '[null]', '[{"a":"str"}]', '[{"a":"str"}]'),
+
     # ---------------- legacy and projection paths ----------------
     # legacy (dot) paths create too
     case('{"a":{}}', ('JSON.SET', KEY, '.a.b.c', '5'),
@@ -401,3 +421,54 @@ def test_created_paths_replicate():
     replica = env.getSlaveConnection()
     env.assertEqual(replica.execute_command('JSON.GET', KEY, '$'),
                     '[{"a":{"b":{"c":5,"arr":[1]}}}]')
+
+
+def _nested(depth):
+    """A chain of `depth` single-key objects, innermost first."""
+    node = {}
+    for _ in range(depth):
+        node = {'d': node}
+    return node
+
+
+def test_multi_site_creation_is_all_or_nothing():
+    """A path can match at several depths at once, and only the deepest match
+    may blow the nesting limit. The shallower sites must not be written anyway:
+    the command errors out before `apply_changes`, so those writes would stay on
+    the primary alone, unreplicated and unannounced.
+    """
+    env = _env(True)
+    doc = json.dumps({'s': {}, 'deep': _nested(70)}, separators=(',', ':'))
+    suffix = '.'.join('x%d' % i for i in range(60))
+
+    env.expect('JSON.SET', KEY, '$', doc).ok()
+    env.expect('JSON.SET', KEY, '$..*.' + suffix, '5') \
+       .raiseError().contains('recursion limit exceeded')
+    # `$.s` is shallow enough to take the chain on its own, and is the site that
+    # used to be written before the deep one failed.
+    env.expect('JSON.GET', KEY, '$.s').equal('[{}]')
+    env.expect('JSON.GET', KEY, '$').equal('[%s]' % doc)
+
+
+def test_mset_does_not_notify_when_nothing_was_written():
+    """`JSON.MSET` cannot raise a write it failed to make as an error -- earlier
+    triplets are already applied by then -- so it reports nil. It must not also
+    announce a change that never happened.
+    """
+    env = _env(True)
+    env.skipOnCluster()
+    with env.getClusterConnectionIfNeeded() as r:
+        r.execute_command('CONFIG', 'SET', 'notify-keyspace-events', 'KEA')
+        pubsub = r.pubsub()
+        pubsub.psubscribe('__key*')
+        time.sleep(1)
+        env.assertEqual('psubscribe', pubsub.get_message(timeout=1)['type'])
+
+        env.assertEqual('OK', r.execute_command('JSON.SET', KEY, '$', '{"keep":1}'))
+        env.assertEqual('json.set', pubsub.get_message(timeout=1)['data'])
+        env.assertEqual(KEY, pubsub.get_message(timeout=1)['data'])
+
+        # Too deep to create, on a key that exists: nil, and no event.
+        env.assertEqual(None, r.execute_command('JSON.MSET', KEY, DEEP, '5'))
+        env.assertEqual(None, pubsub.get_message(timeout=1))
+        env.assertEqual('[{"keep":1}]', r.execute_command('JSON.GET', KEY, '$'))

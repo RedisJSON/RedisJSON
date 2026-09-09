@@ -19,7 +19,9 @@ use json_path::select_value::{SelectValue, SelectValueType, ValueRef};
 use json_path::{calc_once_paths, compile};
 use redis_module::{RedisError, RedisResult, RedisValue};
 
-use crate::manager::{err_projection_readonly, Manager, WriteHolder};
+use serde_json::Value;
+
+use crate::manager::{err_json, err_projection_readonly, Manager, WriteHolder};
 use crate::redisjson::Format;
 
 /// Backing store for the `json-auto-create-deep-paths` module config,
@@ -202,8 +204,7 @@ fn node_at<'a, V: SelectValue>(node: &'a V, path: &[String]) -> Option<&'a V> {
     }
 }
 
-/// Create every site's missing structure and return each created leaf's
-/// concrete path, in the same order as `sites`.
+/// Create every site's missing structure.
 ///
 /// `leaf` is what ends up at the deepest key: the command's own value for
 /// `JSON.SET`/`JSON.MERGE`, or a seed (`[]`, `0`, `""`) for the commands whose
@@ -218,21 +219,22 @@ pub(crate) fn materialize<M: Manager>(
     key: &mut M::WriteHolder,
     sites: &[CreateSite],
     leaf: &M::O,
-) -> RedisResult<Vec<Vec<String>>> {
-    sites
+) -> RedisResult<()> {
+    if let Some(deepest) = sites
         .iter()
-        .map(|site| {
-            let mut keys = site.levels.clone();
-            keys.push(site.leaf.clone());
-            // `keys[0]` is added to `parent`; the rest nest inside it.
-            let value = manager.nest_in_objects(&keys[1..], leaf.clone())?;
-            key.dict_add(site.parent.clone(), &keys[0], value)?;
-
-            let mut leaf_path = site.parent.clone();
-            leaf_path.extend(keys);
-            Ok(leaf_path)
-        })
-        .collect()
+        .map(|site| site.parent.len() + 1 + site.levels.len())
+        .max()
+    {
+        manager.nest_in_objects(&vec![String::new(); deepest], leaf.clone())?;
+    }
+    for site in sites {
+        let mut keys = site.levels.clone();
+        keys.push(site.leaf.clone());
+        // `keys[0]` is added to `parent`; the rest nest inside it.
+        let value = manager.nest_in_objects(&keys[1..], leaf.clone())?;
+        key.dict_add(site.parent.clone(), &keys[0], value)?;
+    }
+    Ok(())
 }
 
 /// What a created leaf starts out as, for the commands that need something of
@@ -256,6 +258,18 @@ impl Seed {
             Self::EmptyString => "\"\"",
         }
     }
+
+    fn check_operand(self, json: &str) -> RedisResult<()> {
+        let value: Value = serde_json::from_str(json)?;
+        match self {
+            // A created leaf is `0`, so only a number can be added to it.
+            Self::Zero if !matches!(value, Value::Number(_)) => {
+                Err(RedisError::Str("bad input number"))
+            }
+            Self::EmptyString if !matches!(value, Value::String(_)) => Err(err_json("string")),
+            _ => Ok(()),
+        }
+    }
 }
 
 /// Create the missing object levels of `path` and leave `seed` at each new
@@ -268,11 +282,16 @@ impl Seed {
 ///   document;
 /// - a path that already resolves, so a match of the wrong type still gets the
 ///   command's own reply for it rather than being overwritten with a seed.
+///
+/// `operand` is the JSON the command is about to apply, for the seeds whose
+/// type constrains it (see [`Seed::check_operand`]). `None` where the command
+/// has already parsed it.
 pub(crate) fn seed_missing_paths<M: Manager>(
     manager: &M,
     key: &mut M::WriteHolder,
     path: &str,
     seed: Seed,
+    operand: Option<&str>,
 ) -> RedisResult<()> {
     if !auto_create_enabled() {
         return Ok(());
@@ -283,6 +302,12 @@ pub(crate) fn seed_missing_paths<M: Manager>(
     };
     if sites.is_empty() {
         return Ok(());
+    }
+    // Checked only here, where a seed is about to be written: a command that
+    // creates nothing keeps whatever reply it has always given for an operand
+    // it cannot use.
+    if let Some(operand) = operand {
+        seed.check_operand(operand)?;
     }
     // Parsed only once there is something to create; a seed cannot fail to
     // parse.
