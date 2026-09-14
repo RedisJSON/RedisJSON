@@ -9,7 +9,7 @@
 
 use crate::auto_create::{
     auto_create_enabled, materialize, nest_in_objects, nothing_to_write, plan_creation,
-    root_key_chain, seed_missing_paths, Seed,
+    root_key_chain, seed_missing_paths, validate_legacy_creation_path, Seed,
 };
 use crate::defrag::defrag_info;
 use crate::formatter::ReplyFormatOptions;
@@ -460,12 +460,13 @@ pub fn json_set_command_impl<M: Manager>(
                         nothing_to_write(query, doc)
                     }
                 } else {
-                    let created = materialize::<M>(&manager, &mut redis_key, &sites, &val).finish(
-                        &manager,
-                        &mut redis_key,
-                        ctx,
-                        "json.set",
-                    )?;
+                    let created = materialize::<M>(&manager, &mut redis_key, &sites, &val)
+                        .apply_partial_changes_on_error(
+                            &manager,
+                            &mut redis_key,
+                            ctx,
+                            "json.set",
+                        )?;
                     let result: ApplyUpdatesResult = if update_info.is_empty() {
                         ApplyUpdatesResult::AllUpdated
                     } else {
@@ -648,12 +649,13 @@ pub fn json_merge_command_impl<M: Manager>(
                 } else {
                     // A created leaf takes the value as-is: merging into
                     // nothing is the same as setting.
-                    let mut res = materialize::<M>(&manager, &mut redis_key, &sites, &val).finish(
-                        &manager,
-                        &mut redis_key,
-                        ctx,
-                        "json.merge",
-                    )?;
+                    let mut res = materialize::<M>(&manager, &mut redis_key, &sites, &val)
+                        .apply_partial_changes_on_error(
+                            &manager,
+                            &mut redis_key,
+                            ctx,
+                            "json.merge",
+                        )?;
                     if update_info.len() == 1 {
                         res = match update_info.pop().unwrap() {
                             UpdateInfo::SUI(sui) => redis_key.merge_value(sui.path, val)?,
@@ -784,7 +786,7 @@ fn validate_mset_path<V: SelectValue>(doc: &V, query: Query) -> RedisResult<()> 
         CreationPolicy::MissingObjects,
     )?;
     if plan.updates.is_empty() && plan.creations.is_empty() {
-        nothing_to_write(query, doc)?;
+        validate_legacy_creation_path(query, doc)?;
     }
     Ok(())
 }

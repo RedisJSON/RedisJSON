@@ -32,6 +32,9 @@
 //!    then attaches it to the existing parent: this is where creation mutates
 //!    the document. Sites are built and attached one at a time; this is not a
 //!    copy of the whole document or a general rollback mechanism.
+//!    This per-site walkthrough separates the payload from its attachment key.
+//!    Execution prepares all complete objects, including that key, before any
+//!    attachment: `$.a.b.c` builds `{"b":{"c":0}}` for existing parent `a`.
 //! 4. Apply: SET/MERGE supply their value as the new leaf. Commands that operate
 //!    on a value first need a `Seed`: `[]` for arrays, `0` for increment, or
 //!    `""` for string append. After attachment, the command applies its operand
@@ -133,10 +136,18 @@ pub(crate) fn plan_creation<V: SelectValue>(
 /// The reply RedisJSON has always given for a write that matched nothing and
 /// could create nothing: an error for a path that could never have worked,
 /// otherwise `nil`.
-pub(crate) fn nothing_to_write<V: SelectValue>(
+pub(crate) fn nothing_to_write<V: SelectValue>(query: Query, doc: &V) -> RedisResult<RedisValue> {
+    validate_legacy_creation_path(query, doc)?;
+    Ok(RedisValue::Null)
+}
+
+/// Check legacy path restrictions before planning a final-key addition or
+/// returning a no-write reply. This does not check whether a parent exists or
+/// accepts object keys; `dict_add` validates the parent when applying the plan.
+pub(crate) fn validate_legacy_creation_path<V: SelectValue>(
     mut query: Query,
     doc: &V,
-) -> RedisResult<RedisValue> {
+) -> RedisResult<()> {
     if !query.is_static() {
         return Err(RedisError::Str("ERR wrong static path"));
     }
@@ -150,7 +161,7 @@ pub(crate) fn nothing_to_write<V: SelectValue>(
     {
         return Err(RedisError::Str("ERR array index out of range"));
     }
-    Ok(RedisValue::Null)
+    Ok(())
 }
 
 /// Peel the trailing object keys and plan one site per prefix match. Pure:
@@ -348,6 +359,8 @@ fn build_creation_subtree<M: Manager>(
 /// cannot traverse a missing path element working unchanged.
 /// Overlapping sites share one attachment: their branches are combined off-key,
 /// and every subtree is built successfully before the first attachment.
+/// `prepare_creations` includes the outermost missing key in each detached
+/// object. Its entries become owned `dict_add` arguments before attachment starts.
 pub(crate) fn materialize<M: Manager>(
     manager: &M,
     key: &mut M::WriteHolder,
@@ -368,7 +381,7 @@ pub(crate) struct CreationResult {
 impl CreationResult {
     /// Finalize partial creation before returning an attachment error. On success,
     /// the command finalizes once its remaining operations have completed.
-    pub fn finish<M: Manager>(
+    pub fn apply_partial_changes_on_error<M: Manager>(
         self,
         manager: &M,
         key: &mut M::WriteHolder,
@@ -392,38 +405,22 @@ fn materialize_with<M: Manager>(
 ) -> CreationResult {
     let mut any_created = false;
     let result = (|| {
-        if let Some(deepest) = sites
-            .iter()
-            .map(|site| site.parent.len() + 1 + site.levels.len())
-            .max()
-        {
-            check_depth::<M::V>(leaf.borrow(), deepest)?;
+        let prepared = prepare_creations(manager, sites, leaf)?;
+        let mut additions = Vec::with_capacity(prepared.len());
+        for (parent, object) in prepared {
+            for (name, value) in object
+                .borrow()
+                .items()
+                .ok_or_else(crate::manager::err_bad_object)?
+            {
+                additions.push((
+                    parent.clone(),
+                    name.to_owned(),
+                    manager.clone_value(value.as_ref()),
+                ));
+            }
         }
-        let mut groups: Vec<(Vec<String>, String, Vec<Vec<String>>)> = Vec::new();
-        let mut group_indices = HashMap::new();
-        for site in sites {
-            let mut keys = site.levels.clone();
-            keys.push(site.leaf.clone());
-            // `keys[0]` is added to `parent`; the rest nest inside it.
-            let index = *group_indices
-                .entry((site.parent.clone(), keys[0].clone()))
-                .or_insert_with(|| {
-                    groups.push((site.parent.clone(), keys[0].clone(), Vec::new()));
-                    groups.len() - 1
-                });
-            groups[index].2.push(keys[1..].to_vec());
-        }
-        let values = groups
-            .iter()
-            .map(|(_, _, paths)| {
-                if paths.len() == 1 {
-                    nest_in_objects(manager, &paths[0], leaf.clone())
-                } else {
-                    build_creation_subtree(manager, paths, leaf)
-                }
-            })
-            .collect::<RedisResult<Vec<_>>>()?;
-        for ((parent, name, _), value) in groups.into_iter().zip(values) {
+        for (parent, name, value) in additions {
             if !attach(parent, &name, value)? {
                 return Err(err_invalid_path());
             }
@@ -435,6 +432,48 @@ fn materialize_with<M: Manager>(
         any_created,
         result,
     }
+}
+
+/// Build all missing branches as complete detached objects paired with their
+/// existing parents. For `$.a.x.y = 5` with `a` present, return parent `["a"]`
+/// and object `{"x":{"y":5}}`. No document writes occur in this phase.
+fn prepare_creations<M: Manager>(
+    manager: &M,
+    sites: &[CreateSite],
+    leaf: &M::O,
+) -> RedisResult<Vec<(Vec<String>, M::O)>> {
+    if let Some(deepest) = sites
+        .iter()
+        .map(|site| site.parent.len() + 1 + site.levels.len())
+        .max()
+    {
+        check_depth::<M::V>(leaf.borrow(), deepest)?;
+    }
+    let mut groups: Vec<(Vec<String>, Vec<Vec<String>>)> = Vec::new();
+    let mut group_indices = HashMap::new();
+    for site in sites {
+        let mut keys = site.levels.clone();
+        keys.push(site.leaf.clone());
+        // `keys[0]` is added to `parent`; the rest nest inside it.
+        let index = *group_indices
+            .entry((site.parent.clone(), keys[0].clone()))
+            .or_insert_with(|| {
+                groups.push((site.parent.clone(), Vec::new()));
+                groups.len() - 1
+            });
+        groups[index].1.push(keys);
+    }
+    groups
+        .into_iter()
+        .map(|(parent, paths)| {
+            let object = if paths.len() == 1 {
+                nest_in_objects(manager, &paths[0], leaf.clone())?
+            } else {
+                build_creation_subtree(manager, &paths, leaf)?
+            };
+            Ok((parent, object))
+        })
+        .collect()
 }
 
 /// What a created leaf starts out as, for the commands that need something of
@@ -551,7 +590,8 @@ pub(crate) fn seed_missing_paths<M: Manager>(
     if let Seed::Zero { increment } = &seed {
         validate_increments(root, &paths, increment)?;
     }
-    materialize::<M>(manager, key, &sites, &value).finish(manager, key, ctx, command)?;
+    materialize::<M>(manager, key, &sites, &value)
+        .apply_partial_changes_on_error(manager, key, ctx, command)?;
     Ok(paths)
 }
 
@@ -688,6 +728,45 @@ mod tests {
                 "the first attachment must still count"
             );
         }
+    }
+
+    #[test]
+    fn creation_build_failure_prevents_every_attachment() {
+        let manager = crate::ivalue_manager::RedisIValueJsonKeyManager {
+            phantom: std::marker::PhantomData,
+        };
+        let sites = [
+            site(&["a"], &["x"], "y"),
+            site(&["b"], &[], "x"),
+            site(&["b"], &["x"], "y"),
+        ];
+        let creation = materialize_with(&manager, &sites, &doc("5"), |_, _, _| {
+            panic!("nothing may attach before every subtree is built")
+        });
+        assert!(!creation.any_created);
+        assert_eq!(
+            creation.result.unwrap_err().to_string(),
+            crate::manager::err_bad_object().to_string()
+        );
+    }
+
+    #[test]
+    fn prepared_creations_include_outermost_missing_keys() {
+        let manager = crate::ivalue_manager::RedisIValueJsonKeyManager {
+            phantom: std::marker::PhantomData,
+        };
+        let root = doc(r#"{"a":{"keep":1},"b":{}}"#);
+        let before = root.clone();
+        let sites = plan_creation(compile("$.*.x.y").unwrap(), &root, true).unwrap();
+        let prepared = prepare_creations(&manager, &sites, &doc("5")).unwrap();
+        assert_eq!(
+            prepared,
+            vec![
+                (vec!["a".into()], doc(r#"{"x":{"y":5}}"#)),
+                (vec!["b".into()], doc(r#"{"x":{"y":5}}"#)),
+            ]
+        );
+        assert_eq!(root, before);
     }
 
     #[test]

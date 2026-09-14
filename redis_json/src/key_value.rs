@@ -11,7 +11,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
-    auto_create::{nothing_to_write, plan_creation, CreateSite},
+    auto_create::{plan_creation, validate_legacy_creation_path, CreateSite},
     commands::{prepare_paths_for_updating, FoundIndex, ObjectLen, Values},
     formatter::{RedisJsonFormatter, ReplyFormatOptions},
     manager::{
@@ -435,7 +435,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             return Ok(plan);
         }
         // Preserve final-key validation in dict_add, including typed-array parents.
-        let _ = nothing_to_write(query.clone(), self.val.as_ref())?;
+        validate_legacy_creation_path(query.clone(), self.val.as_ref())?;
         let mut parent_query = query;
         if let Some(key) = parent_query.pop_last_object_key() {
             plan.updates = calc_once_paths(parent_query, self.val.as_ref())
