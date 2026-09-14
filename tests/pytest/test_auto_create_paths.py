@@ -490,6 +490,38 @@ def test_set_disabled_preserves_depth_failure_reply():
     env.expect('JSON.GET', KEY, '$').equal('[{}]')
 
 
+def test_set_replacements_discard_descendant_creations():
+    env = _env(True)
+    for command in ('JSON.SET', 'JSON.MSET'):
+        for initial, expected in (
+            ({'a': {'a': {}}}, {'a': {'a': 5}}),
+            ({'a': {'a': {}}, 'branch': {}},
+             {'a': {'a': 5}, 'branch': {'a': {'a': 5}}}),
+            ({'a': 0, 'items': [{'a': {'a': {}}}, {}]},
+             {'a': 0, 'items': [{'a': {'a': 5}}, {'a': {'a': 5}}]}),
+        ):
+            env.expect('JSON.SET', KEY, '$', json.dumps(initial)).ok()
+            env.expect(command, KEY, '$..a.a', '5').ok()
+            env.assertEqual(json.loads(env.cmd('JSON.GET', KEY)), expected)
+            if env.useSlaves and not env.isCluster():
+                env.cmd('WAIT', '1', '10000')
+                env.assertEqual(json.loads(env.getSlaveConnection().execute_command('JSON.GET', KEY)), expected)
+
+
+def test_merge_and_nx_keep_descendant_creations():
+    env = _env(True)
+    descendants = {'a': {'n': 5, 'a': {'n': 5}}}
+    for args, expected in (
+        (('JSON.MERGE', KEY, '$..a.a', '{"n":5}'),
+         {'a': {'a': dict(descendants, n=5)}}),
+        (('JSON.SET', KEY, '$..a.a', '{"n":5}', 'NX'),
+         {'a': {'a': descendants}}),
+    ):
+        env.expect('JSON.SET', KEY, '$', '{"a":{"a":{}}}').ok()
+        env.expect(*args).ok()
+        env.assertEqual(json.loads(env.cmd('JSON.GET', KEY)), expected)
+
+
 def test_overlapping_creation_sites():
     env = _env(True)
     for command in ('JSON.SET', 'JSON.MSET', 'JSON.MERGE', 'JSON.ARRAPPEND',
