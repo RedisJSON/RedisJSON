@@ -60,6 +60,7 @@ mod formatter;
 pub mod ivalue_manager;
 mod key_value;
 pub mod manager;
+pub mod number;
 pub mod redisjson;
 
 pub const GIT_SHA: Option<&str> = std::option_env!("GIT_SHA");

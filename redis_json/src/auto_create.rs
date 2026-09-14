@@ -53,16 +53,18 @@
 //! For an absent key, SET/MSET/MERGE instead use `root_key_chain` and
 //! `nest_in_objects` to build the whole document before storing it.
 
+use std::borrow::Borrow;
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 
 use json_path::json_path::{JsonPathToken, Query, UserPathTracker};
-use json_path::select_value::{SelectValue, SelectValueType, ValueRef};
+use json_path::select_value::{SelectValue, SelectValueType, ValueRef, MAX_DEPTH};
 use json_path::{calc_once_paths, calc_once_with_paths, compile};
-use redis_module::{RedisError, RedisResult, RedisValue};
+use redis_module::{Context, RedisError, RedisResult, RedisValue};
 
 use serde_json::Value;
 
-use crate::manager::{err_json, err_projection_readonly, Manager, WriteHolder};
+use crate::manager::{err_invalid_path, err_json, err_projection_readonly, Manager, WriteHolder};
 use crate::redisjson::Format;
 
 /// Backing store for the `json-auto-create-deep-paths` module config,
@@ -115,12 +117,12 @@ pub(crate) fn plan_creation<V: SelectValue>(
     if query.is_projection() {
         return Err(err_projection_readonly());
     }
-    let sites = plan_sites(query.clone(), doc);
+    if !create_intermediates && !query.clone().is_static() {
+        return Ok(Vec::new());
+    }
+    let sites = plan_sites(query, doc);
     if create_intermediates {
         return Ok(sites);
-    }
-    if !query.clone().is_static() {
-        return Ok(Vec::new());
     }
     Ok(sites
         .into_iter()
@@ -245,6 +247,95 @@ fn node_at<'a, V: SelectValue>(node: &'a V, path: &[String]) -> Option<&'a V> {
     }
 }
 
+/// Build a chain of single-key objects around `value`, outermost key first:
+/// `["b", "c"]` with `5` gives `{"b":{"c":5}}`. Empty `keys` returns `value`.
+///
+/// Lets a deep path be created in a single write, so the depth limit is
+/// checked before anything is mutated. Errors if the result would exceed
+/// the nesting limit on its own -- the caller cannot check that, since
+/// `Self::O` is opaque to it.
+/// The borrowed value view supplies depth; both backends use the shared limit.
+pub(crate) fn nest_in_objects<M: Manager>(
+    manager: &M,
+    keys: &[String],
+    value: M::O,
+) -> RedisResult<M::O> {
+    check_depth::<M::V>(value.borrow(), keys.len())?;
+    keys.iter().rev().try_fold(value, |inner, key| {
+        manager.create_object(vec![(key.clone(), inner)])
+    })
+}
+
+fn check_depth<V: SelectValue>(value: &V, parent_depth: usize) -> RedisResult<()> {
+    if parent_depth.saturating_add(value.calculate_value_depth()) >= MAX_DEPTH {
+        return Err(crate::manager::err_recursion_limit_exceeded());
+    }
+    Ok(())
+}
+
+/// Build overlapping object paths into one detached subtree, preserving every leaf.
+fn build_creation_subtree<M: Manager>(
+    manager: &M,
+    paths: &[Vec<String>],
+    leaf: &M::O,
+) -> RedisResult<M::O> {
+    fn build<M: Manager>(
+        manager: &M,
+        paths: &[&[String]],
+        existing: Option<&M::V>,
+        leaf: &M::O,
+    ) -> RedisResult<M::O> {
+        let replaces_value = paths.first().is_some_and(|path| path.is_empty());
+        let existing = if replaces_value {
+            Some(leaf.borrow())
+        } else {
+            existing
+        };
+        let mut branches: Vec<(&str, Vec<&[String]>)> = Vec::new();
+        let mut indices = HashMap::new();
+        for path in paths {
+            if let Some((name, rest)) = path.split_first() {
+                let index = *indices.entry(name.as_str()).or_insert_with(|| {
+                    branches.push((name, Vec::new()));
+                    branches.len() - 1
+                });
+                branches[index].1.push(rest);
+            }
+        }
+        if branches.is_empty() {
+            return if replaces_value {
+                Ok(leaf.clone())
+            } else {
+                existing.map_or_else(
+                    || manager.create_object(Vec::new()),
+                    |value| Ok(manager.clone_value(value)),
+                )
+            };
+        }
+        let mut fields = Vec::new();
+        if let Some(value) = existing {
+            for (name, child) in value.items().ok_or_else(crate::manager::err_bad_object)? {
+                let child = match indices.get(name) {
+                    Some(&index) => build(manager, &branches[index].1, Some(child.as_ref()), leaf)?,
+                    None => manager.clone_value(child.as_ref()),
+                };
+                fields.push((name.to_owned(), child));
+            }
+        }
+        for (name, paths) in branches {
+            if !existing.is_some_and(|value| value.contains_key(name)) {
+                fields.push((name.to_owned(), build(manager, &paths, None, leaf)?));
+            }
+        }
+        manager.create_object(fields)
+    }
+
+    let mut paths: Vec<_> = paths.iter().map(Vec::as_slice).collect();
+    // Set ancestor leaves first, then add any descendants to those values.
+    paths.sort_by_key(|path| path.len());
+    build(manager, &paths, None, leaf)
+}
+
 /// Create every site's missing structure.
 ///
 /// `leaf` is what ends up at the deepest key: the command's own value for
@@ -255,27 +346,95 @@ fn node_at<'a, V: SelectValue>(node: &'a V, path: &[String]) -> Option<&'a V> {
 /// whole missing chain as its value. That keeps the write atomic -- the depth
 /// limit is checked before anything is mutated -- and keeps managers that
 /// cannot traverse a missing path element working unchanged.
+/// Overlapping sites share one attachment: their branches are combined off-key,
+/// and every subtree is built successfully before the first attachment.
 pub(crate) fn materialize<M: Manager>(
     manager: &M,
     key: &mut M::WriteHolder,
     sites: &[CreateSite],
     leaf: &M::O,
-) -> RedisResult<()> {
-    if let Some(deepest) = sites
-        .iter()
-        .map(|site| site.parent.len() + 1 + site.levels.len())
-        .max()
-    {
-        manager.nest_in_objects(&vec![String::new(); deepest], leaf.clone())?;
+) -> CreationResult {
+    materialize_with(manager, sites, leaf, |parent, name, value| {
+        key.dict_add(parent, name, value)
+    })
+}
+
+/// Attachment progress is separate from completion: a later write can fail.
+pub(crate) struct CreationResult {
+    pub any_created: bool,
+    pub result: RedisResult<()>,
+}
+
+impl CreationResult {
+    /// Finalize partial creation before returning an attachment error. On success,
+    /// the command finalizes once its remaining operations have completed.
+    pub fn finish<M: Manager>(
+        self,
+        manager: &M,
+        key: &mut M::WriteHolder,
+        ctx: &Context,
+        command: &str,
+    ) -> RedisResult<bool> {
+        if self.any_created && self.result.is_err() {
+            let notified = key.notify_keyspace_event(ctx, command);
+            manager.apply_changes(ctx);
+            notified?;
+        }
+        self.result.map(|()| self.any_created)
     }
-    for site in sites {
-        let mut keys = site.levels.clone();
-        keys.push(site.leaf.clone());
-        // `keys[0]` is added to `parent`; the rest nest inside it.
-        let value = manager.nest_in_objects(&keys[1..], leaf.clone())?;
-        key.dict_add(site.parent.clone(), &keys[0], value)?;
+}
+
+fn materialize_with<M: Manager>(
+    manager: &M,
+    sites: &[CreateSite],
+    leaf: &M::O,
+    mut attach: impl FnMut(Vec<String>, &str, M::O) -> RedisResult<bool>,
+) -> CreationResult {
+    let mut any_created = false;
+    let result = (|| {
+        if let Some(deepest) = sites
+            .iter()
+            .map(|site| site.parent.len() + 1 + site.levels.len())
+            .max()
+        {
+            check_depth::<M::V>(leaf.borrow(), deepest)?;
+        }
+        let mut groups: Vec<(Vec<String>, String, Vec<Vec<String>>)> = Vec::new();
+        let mut group_indices = HashMap::new();
+        for site in sites {
+            let mut keys = site.levels.clone();
+            keys.push(site.leaf.clone());
+            // `keys[0]` is added to `parent`; the rest nest inside it.
+            let index = *group_indices
+                .entry((site.parent.clone(), keys[0].clone()))
+                .or_insert_with(|| {
+                    groups.push((site.parent.clone(), keys[0].clone(), Vec::new()));
+                    groups.len() - 1
+                });
+            groups[index].2.push(keys[1..].to_vec());
+        }
+        let values = groups
+            .iter()
+            .map(|(_, _, paths)| {
+                if paths.len() == 1 {
+                    nest_in_objects(manager, &paths[0], leaf.clone())
+                } else {
+                    build_creation_subtree(manager, paths, leaf)
+                }
+            })
+            .collect::<RedisResult<Vec<_>>>()?;
+        for ((parent, name, _), value) in groups.into_iter().zip(values) {
+            if !attach(parent, &name, value)? {
+                return Err(err_invalid_path());
+            }
+            any_created = true;
+        }
+        Ok(())
+    })();
+    CreationResult {
+        any_created,
+        result,
     }
-    Ok(())
 }
 
 /// What a created leaf starts out as, for the commands that need something of
@@ -338,19 +497,14 @@ impl<O> Seed<'_, O> {
         }
     }
 
-    fn check_array_depth<M: Manager<O = O>>(
-        &self,
-        manager: &M,
-        paths: &[Option<Vec<String>>],
-    ) -> RedisResult<()>
+    fn check_array_depth<V: SelectValue>(&self, paths: &[Option<Vec<String>>]) -> RedisResult<()>
     where
-        O: Clone,
+        O: Borrow<V>,
     {
         if let Self::EmptyArray { items } = self {
             if let Some(depth) = paths.iter().flatten().map(Vec::len).max() {
-                let keys = vec![String::new(); depth + 1];
                 for value in *items {
-                    manager.nest_in_objects(&keys, value.clone())?;
+                    check_depth::<V>(value.borrow(), depth + 1)?;
                 }
             }
         }
@@ -376,6 +530,8 @@ impl<O> Seed<'_, O> {
 pub(crate) fn seed_missing_paths<M: Manager>(
     manager: &M,
     key: &mut M::WriteHolder,
+    ctx: &Context,
+    command: &str,
     path: &str,
     seed: Seed<'_, M::O>,
 ) -> RedisResult<Vec<Option<Vec<String>>>> {
@@ -388,12 +544,39 @@ pub(crate) fn seed_missing_paths<M: Manager>(
     // creates nothing keeps whatever reply it has always given for an operand
     // it cannot use.
     seed.check_operand()?;
-    seed.check_array_depth(manager, &paths)?;
+    seed.check_array_depth::<M::V>(&paths)?;
     // Parsed only once there is something to create; a seed cannot fail to
     // parse.
-    let seed = manager.from_str(seed.as_json(), Format::JSON, true, None)?;
-    materialize::<M>(manager, key, &sites, &seed)?;
+    let value = manager.from_str(seed.as_json(), Format::JSON, true, None)?;
+    if let Seed::Zero { increment } = &seed {
+        validate_increments(root, &paths, increment)?;
+    }
+    materialize::<M>(manager, key, &sites, &value).finish(manager, key, ctx, command)?;
     Ok(paths)
+}
+
+fn validate_increments<V: SelectValue>(
+    root: &V,
+    paths: &[Option<Vec<String>>],
+    increment: &str,
+) -> RedisResult<()> {
+    use crate::number::number_op_result;
+    use ijson::IValue;
+
+    let operand: Value = serde_json::from_str(increment)?;
+    let zero = IValue::from(0);
+    let mut values: HashMap<_, IValue> = HashMap::new();
+    for path in paths.iter().flatten() {
+        let result = if let Some(value) = values.get(path) {
+            number_op_result(value, &operand, i128::checked_add, |a, b| a + b)
+        } else if let Some(value) = node_at(root, path) {
+            number_op_result(value, &operand, i128::checked_add, |a, b| a + b)
+        } else {
+            number_op_result(&zero, &operand, i128::checked_add, |a, b| a + b)
+        }?;
+        values.insert(path, result.into());
+    }
+    Ok(())
 }
 
 fn plan_seed_paths<V: SelectValue, O>(
@@ -470,6 +653,162 @@ mod tests {
             levels: levels.iter().map(|s| (*s).to_string()).collect(),
             leaf: leaf.to_string(),
         }
+    }
+
+    #[test]
+    fn creation_reports_progress_when_second_attachment_fails() {
+        let manager = crate::ivalue_manager::RedisIValueJsonKeyManager {
+            phantom: std::marker::PhantomData,
+        };
+        let sites = [
+            site(&[], &[], "a"),
+            site(&[], &[], "b"),
+            site(&[], &[], "c"),
+        ];
+        for fail_with_error in [false, true] {
+            let mut attached = Vec::new();
+            let mut attempts = 0;
+            let creation = materialize_with(&manager, &sites, &doc("5"), |_, name, value| {
+                attempts += 1;
+                if attempts == 2 {
+                    return if fail_with_error {
+                        Err(err_invalid_path())
+                    } else {
+                        Ok(false)
+                    };
+                }
+                attached.push((name.to_owned(), value));
+                Ok(true)
+            });
+            assert_eq!(attached, vec![("a".to_owned(), doc("5"))]);
+            assert_eq!(attempts, 2);
+            assert!(creation.result.is_err());
+            assert!(
+                creation.any_created,
+                "the first attachment must still count"
+            );
+        }
+    }
+
+    #[test]
+    fn increment_validation_checks_duplicate_existing_and_missing_targets() {
+        // This fixture allows one increment on the existing number, and two on a
+        // new zero. One more increment overflows in either case.
+        let root = doc(r#"{"n":5000000000000000000}"#);
+        let before = root.clone();
+        let increment = "4000000000000000000";
+        let existing = Some(vec!["n".into()]);
+        let missing = Some(vec!["new".into()]);
+        let paths = [existing.clone(), None, missing.clone(), missing.clone()];
+        validate_increments(&root, &paths, increment).unwrap();
+        for extra in [existing, missing] {
+            let mut paths = paths.to_vec();
+            paths.push(extra);
+            let error = validate_increments(&root, &paths, increment).unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                crate::manager::err_numeric_overflow().to_string()
+            );
+        }
+        assert_eq!(root, before);
+    }
+
+    #[test]
+    fn overlapping_subtrees_preserve_object_leaves() {
+        let manager = crate::ivalue_manager::RedisIValueJsonKeyManager {
+            phantom: std::marker::PhantomData,
+        };
+        let leaf = doc(r#"{"keep":null,"a":{"old":1}}"#);
+        let paths = vec![
+            vec!["a".into(), "b".into()],
+            vec![],
+            vec!["a".into(), "b".into()],
+            vec!["c\"d".into()],
+        ];
+        let built = build_creation_subtree(&manager, &paths, &leaf).unwrap();
+        assert_eq!(
+            built,
+            doc(
+                r#"{"keep":null,"a":{"old":1,"b":{"keep":null,"a":{"old":1}}},"c\"d":{"keep":null,"a":{"old":1}}}"#
+            )
+        );
+        assert_eq!(leaf, doc(r#"{"keep":null,"a":{"old":1}}"#));
+
+        let scalar = doc("5");
+        let error = build_creation_subtree(&manager, &paths, &scalar).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            crate::manager::err_bad_object().to_string()
+        );
+    }
+
+    #[test]
+    fn disabled_dynamic_creation_does_not_read_the_document() {
+        #[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize)]
+        struct Unreadable;
+
+        impl SelectValue for Unreadable {
+            fn get_type(&self) -> SelectValueType {
+                panic!("document was traversed")
+            }
+            fn contains_key(&self, _: &str) -> bool {
+                unreachable!()
+            }
+            fn values(&self) -> Option<Box<dyn Iterator<Item = ValueRef<'_, Self>> + '_>> {
+                unreachable!()
+            }
+            fn keys(&self) -> Option<Box<dyn Iterator<Item = &str> + '_>> {
+                unreachable!()
+            }
+            fn items(&self) -> Option<Box<dyn Iterator<Item = (&str, ValueRef<'_, Self>)> + '_>> {
+                unreachable!()
+            }
+            fn len(&self) -> Option<usize> {
+                unreachable!()
+            }
+            fn is_empty(&self) -> Option<bool> {
+                unreachable!()
+            }
+            fn get_key(&self, _: &str) -> Option<ValueRef<'_, Self>> {
+                unreachable!()
+            }
+            fn get_index(&self, _: usize) -> Option<ValueRef<'_, Self>> {
+                unreachable!()
+            }
+            fn is_array(&self) -> bool {
+                unreachable!()
+            }
+            fn is_double(&self) -> Option<bool> {
+                unreachable!()
+            }
+            fn get_str(&self) -> Option<String> {
+                unreachable!()
+            }
+            fn as_str(&self) -> Option<&str> {
+                unreachable!()
+            }
+            fn get_bool(&self) -> Option<bool> {
+                unreachable!()
+            }
+            fn get_long(&self) -> Option<i64> {
+                unreachable!()
+            }
+            fn get_double(&self) -> Option<f64> {
+                unreachable!()
+            }
+            fn get_array(&self) -> *const std::ffi::c_void {
+                unreachable!()
+            }
+            fn get_array_type(&self) -> Option<json_path::select_value::JSONArrayType> {
+                unreachable!()
+            }
+        }
+
+        assert!(
+            plan_creation(compile("$..missing.a.b").unwrap(), &Unreadable, false)
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]

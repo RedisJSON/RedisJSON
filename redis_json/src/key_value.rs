@@ -434,19 +434,20 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         if !plan.updates.is_empty() {
             return Ok(plan);
         }
-        let sites = plan_creation(query.clone(), self.val.as_ref(), false)?;
-        if sites.is_empty() {
-            nothing_to_write(query, self.val.as_ref())?;
-        }
-        plan.updates = sites
-            .into_iter()
-            .map(|site| {
-                UpdateInfo::AUI(AddUpdateInfo {
-                    path: site.parent,
-                    key: site.leaf,
+        // Preserve final-key validation in dict_add, including typed-array parents.
+        let _ = nothing_to_write(query.clone(), self.val.as_ref())?;
+        let mut parent_query = query;
+        if let Some(key) = parent_query.pop_last_object_key() {
+            plan.updates = calc_once_paths(parent_query, self.val.as_ref())
+                .into_iter()
+                .map(|path| {
+                    UpdateInfo::AUI(AddUpdateInfo {
+                        path,
+                        key: key.clone(),
+                    })
                 })
-            })
-            .collect();
+                .collect();
+        }
         Ok(plan)
     }
 

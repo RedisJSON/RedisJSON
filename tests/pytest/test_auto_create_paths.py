@@ -178,7 +178,6 @@ CASES = [
          '[{"a":{"b":{"c":5}}}]'),
     case('{"a":{}}', ('JSON.MERGE', KEY, '$.a.b', '5'),
          OK, OK, '[{"a":{"b":5}}]', '[{"a":{"b":5}}]'),
-    case('{"a":3}', ('JSON.MERGE', KEY, '$.a.b', '5'), NIL, NIL),
     case(None, ('JSON.MERGE', KEY, '$.a[0].b', '5'),
          ERR('new objects must be created at the root'),
          ERR('new objects must be created at the root')),
@@ -489,6 +488,65 @@ def test_set_disabled_preserves_depth_failure_reply():
     env.expect('JSON.SET', KEY, '$', '{}').ok()
     env.expect('JSON.SET', KEY, '$.a', json.dumps(_nested(126))).equal(None)
     env.expect('JSON.GET', KEY, '$').equal('[{}]')
+
+
+def test_overlapping_creation_sites():
+    env = _env(True)
+    for command in ('JSON.SET', 'JSON.MSET', 'JSON.MERGE', 'JSON.ARRAPPEND',
+                    'JSON.ARRINSERT', 'JSON.NUMINCRBY', 'JSON.STRAPPEND'):
+        env.expect('JSON.SET', KEY, '$', '{"a":{}}').ok()
+        args = [command, KEY, '$..a.a.b']
+        if command == 'JSON.ARRINSERT':
+            args.append('0')
+        args.append('"x"' if command == 'JSON.STRAPPEND' else '5')
+        reply = env.cmd(*args)
+        value = [5] if command in ('JSON.ARRAPPEND', 'JSON.ARRINSERT') else (
+            'x' if command == 'JSON.STRAPPEND' else 5)
+        env.assertEqual(reply, OK if command in ('JSON.SET', 'JSON.MSET', 'JSON.MERGE')
+                        else [1, 1] if command in ('JSON.ARRAPPEND', 'JSON.ARRINSERT', 'JSON.STRAPPEND')
+                        else '[5,5]')
+        expected = {'a': {'a': {'b': value, 'a': {'b': value}}}}
+        env.assertEqual(json.loads(env.cmd('JSON.GET', KEY)), expected)
+        if env.useSlaves and not env.isCluster():
+            env.cmd('WAIT', '1', '10000')
+            env.assertEqual(json.loads(env.getSlaveConnection().execute_command('JSON.GET', KEY)), expected)
+
+
+def test_increment_overflow_does_not_leave_seeds():
+    env = _env(True)
+    for doc, path, increment in (
+        ('{"p":{"n":1e308},"q":{}}', '$.*.n', '1e308'),
+        ('{"q":{},"p":{"n":9223372036854775807}}', '$.*.n', '1'),
+        ('{"p":{"n":9223372036854775806},"q":{}}', "$['p','p','q'].n", '1'),
+    ):
+        env.expect('JSON.SET', KEY, '$', doc).ok()
+        before = env.cmd('JSON.GET', KEY)
+        env.expect('JSON.NUMINCRBY', KEY, path, increment).raiseError()
+        env.expect('JSON.GET', KEY).equal(before)
+        if env.useSlaves and not env.isCluster():
+            env.cmd('WAIT', '1', '10000')
+            env.assertEqual(env.getSlaveConnection().execute_command('JSON.GET', KEY), before)
+
+
+def test_merge_disabled_rejects_typed_array_parent():
+    env = _env(False)
+    env.expect('JSON.SET', KEY, '$', '[1,2]').ok()
+    env.expect('JSON.MERGE', KEY, '$[0].a', '5').raiseError().contains('bad object type')
+    env.expect('JSON.GET', KEY).equal('[1,2]')
+
+
+def test_merge_enabled_preserves_scalar_parent():
+    env = _env(True)
+    env.expect('JSON.SET', KEY, '$', '{"a":3}').ok()
+    env.expect('JSON.MERGE', KEY, '$.a.b', '5').equal(None)
+    env.expect('JSON.GET', KEY).equal('{"a":3}')
+
+
+def test_merge_disabled_preserves_scalar_parent_reply():
+    env = _env(False)
+    env.expect('JSON.SET', KEY, '$', '{"a":3}').ok()
+    env.expect('JSON.MERGE', KEY, '$.a.b', '5').equal(None)
+    env.expect('JSON.GET', KEY).equal('{"a":3}')
 
 
 def test_multi_site_creation_is_all_or_nothing():

@@ -8,8 +8,8 @@
  */
 
 use crate::auto_create::{
-    auto_create_enabled, materialize, nothing_to_write, plan_creation, root_key_chain,
-    seed_missing_paths, Seed,
+    auto_create_enabled, materialize, nest_in_objects, nothing_to_write, plan_creation,
+    root_key_chain, seed_missing_paths, Seed,
 };
 use crate::defrag::defrag_info;
 use crate::formatter::ReplyFormatOptions;
@@ -460,10 +460,12 @@ pub fn json_set_command_impl<M: Manager>(
                         nothing_to_write(query, doc)
                     }
                 } else {
-                    let created = !sites.is_empty();
-                    if created {
-                        materialize::<M>(&manager, &mut redis_key, &sites, &val)?;
-                    }
+                    let created = materialize::<M>(&manager, &mut redis_key, &sites, &val).finish(
+                        &manager,
+                        &mut redis_key,
+                        ctx,
+                        "json.set",
+                    )?;
                     let result: ApplyUpdatesResult = if update_info.is_empty() {
                         ApplyUpdatesResult::AllUpdated
                     } else {
@@ -492,7 +494,7 @@ pub fn json_set_command_impl<M: Manager>(
                 // in one write from the path's object-key chain. `None` means
                 // the path has a segment we cannot invent.
                 match root_key_chain(compile(path.get_path())?)? {
-                    Some(keys) => Some(manager.nest_in_objects(&keys, val)?),
+                    Some(keys) => Some(nest_in_objects(&manager, &keys, val)?),
                     None => None,
                 }
             } else {
@@ -622,20 +624,36 @@ pub fn json_merge_command_impl<M: Manager>(
             } else {
                 let query = compile(path.get_path())?;
                 let create_intermediates = auto_create_enabled();
-                let mut update_info = KeyValue::new(doc)
-                    .find_existing_targets(query.clone(), SetOptions::MergeExisting)?;
+                let mut update_info = if create_intermediates {
+                    KeyValue::new(doc)
+                        .find_existing_targets(query.clone(), SetOptions::MergeExisting)?
+                } else {
+                    KeyValue::new(doc)
+                        .plan_set(
+                            query.clone(),
+                            SetOptions::MergeExisting,
+                            CreationPolicy::FinalKeyOnly,
+                        )?
+                        .updates
+                };
                 // Creation runs alongside the updates, not instead of them: a
                 // multi-target path can match some places and miss others.
-                let sites = plan_creation(query.clone(), doc, create_intermediates)?;
+                let sites = if create_intermediates {
+                    plan_creation(query.clone(), doc, true)?
+                } else {
+                    Vec::new()
+                };
                 if update_info.is_empty() && sites.is_empty() {
                     nothing_to_write(query, doc)
                 } else {
                     // A created leaf takes the value as-is: merging into
                     // nothing is the same as setting.
-                    let mut res = !sites.is_empty();
-                    if res {
-                        materialize::<M>(&manager, &mut redis_key, &sites, &val)?;
-                    }
+                    let mut res = materialize::<M>(&manager, &mut redis_key, &sites, &val).finish(
+                        &manager,
+                        &mut redis_key,
+                        ctx,
+                        "json.merge",
+                    )?;
                     if update_info.len() == 1 {
                         res = match update_info.pop().unwrap() {
                             UpdateInfo::SUI(sui) => redis_key.merge_value(sui.path, val)?,
@@ -671,7 +689,7 @@ pub fn json_merge_command_impl<M: Manager>(
                 Some(val)
             } else if auto_create_enabled() {
                 match root_key_chain(compile(path.get_path())?)? {
-                    Some(keys) => Some(manager.nest_in_objects(&keys, val)?),
+                    Some(keys) => Some(nest_in_objects(&manager, &keys, val)?),
                     None => None,
                 }
             } else {
@@ -829,7 +847,7 @@ pub fn json_mset_command_impl<M: Manager>(
         // Building the document now also checks its depth, so the second pass
         // -- which runs once earlier triplets have been written -- cannot fail
         // on it.
-        let _ = manager.nest_in_objects(&new_doc_keys, value)?;
+        let _ = nest_in_objects(&manager, &new_doc_keys, value)?;
         parsed.push(MsetTriplet {
             key,
             path: path_str,
@@ -873,12 +891,13 @@ pub fn json_mset_command_impl<M: Manager>(
                     updates: update_info,
                     creations: sites,
                 } = KeyValue::new(doc).plan_set(query, SetOptions::None, creation)?;
-                let has_sites = !sites.is_empty();
-                let all_created =
-                    materialize::<M>(&manager, &mut redis_key, &sites, &value).is_ok();
+                let creation = materialize::<M>(&manager, &mut redis_key, &sites, &value);
+                let all_created = creation.result.is_ok();
                 // What was actually created, as opposed to planned: a plan that
                 // failed wrote nothing, and must not report the key as changed.
-                let created = has_sites && all_created;
+                // Attachment errors differ from planning failures: earlier successful
+                // attachments still require notification and replication.
+                let created = creation.any_created;
                 let result = if update_info.is_empty() {
                     ApplyUpdatesResult::from(created)
                 } else {
@@ -893,7 +912,7 @@ pub fn json_mset_command_impl<M: Manager>(
                 // A root path, or a key that does not exist yet and is built
                 // out of its path's object keys: either way, one whole
                 // document in one write.
-                let doc = manager.nest_in_objects(&new_doc_keys, value)?;
+                let doc = nest_in_objects(&manager, &new_doc_keys, value)?;
                 let updated = redis_key.set_value(Vec::new(), doc)?;
                 (updated, updated)
             }
@@ -1485,6 +1504,8 @@ fn json_num_op<M: Manager>(
         seed_missing_paths(
             &manager,
             &mut redis_key,
+            ctx,
+            cmd,
             path.get_path(),
             Seed::Zero { increment: number },
         )?
@@ -1926,6 +1947,8 @@ pub fn json_str_append_command_impl<M: Manager>(
     let paths = seed_missing_paths(
         &manager,
         &mut redis_key,
+        ctx,
+        "json.strappend",
         path.get_path(),
         Seed::EmptyString { suffix: json },
     )?;
@@ -2146,6 +2169,8 @@ pub fn json_arr_append_command_impl<M: Manager>(
     let paths = seed_missing_paths(
         &manager,
         &mut redis_key,
+        ctx,
+        "json.arrappend",
         path.get_path(),
         Seed::EmptyArray { items: &args },
     )?;
@@ -2401,6 +2426,8 @@ pub fn json_arr_insert_command_impl<M: Manager>(
         seed_missing_paths(
             &manager,
             &mut redis_key,
+            ctx,
+            "json.arrinsert",
             path.get_path(),
             Seed::EmptyArray { items: &args },
         )?

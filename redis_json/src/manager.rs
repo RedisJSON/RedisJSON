@@ -11,6 +11,7 @@ pub use ijson::FloatType;
 use json_path::select_value::SelectValue;
 use redis_module::key::KeyFlags;
 use serde_json::Number;
+use std::borrow::Borrow;
 
 use redis_module::raw::RedisModuleKey;
 use redis_module::RedisError;
@@ -68,7 +69,9 @@ pub trait Manager {
      * always possible so they are separated
      */
     type V: SelectValue;
-    type O: Clone;
+    /// An owned JSON value that can be assembled before attachment to a key.
+    /// The borrowed view may have a different type and need not support mutable children.
+    type O: Clone + Borrow<Self::V>;
     type WriteHolder: WriteHolder<Self::O, Self::V>;
     type ReadHolder: ReadHolder<Self::V>;
     fn open_key_read(&self, ctx: &Context, key: &RedisString) -> RedisResult<Self::ReadHolder>;
@@ -90,14 +93,14 @@ pub trait Manager {
         fpha_type: Option<FloatType>,
     ) -> RedisResult<Self::O>;
 
-    /// Build a chain of single-key objects around `value`, outermost key first:
-    /// `["b", "c"]` with `5` gives `{"b":{"c":5}}`. Empty `keys` returns `value`.
-    ///
-    /// Lets a deep path be created in a single write, so the depth limit is
-    /// checked before anything is mutated. Errors if the result would exceed
-    /// the nesting limit on its own -- the caller cannot check that, since
-    /// `Self::O` is opaque to it.
-    fn nest_in_objects(&self, keys: &[String], value: Self::O) -> RedisResult<Self::O>;
+    /// Copy a JSON value into detached storage, preserving its value representation.
+    fn clone_value(&self, value: &Self::V) -> Self::O;
+
+    /// Construct an object from unique fields, in the supplied order, taking ownership
+    /// of their values. On failure, release any values already consumed.
+    /// Implementations must not mutate stored documents or emit replication effects.
+    fn create_object(&self, fields: Vec<(String, Self::O)>) -> RedisResult<Self::O>;
+
     fn get_memory(v: &Self::V) -> RedisResult<usize>;
     fn is_json(&self, key: *mut RedisModuleKey) -> RedisResult<bool>;
 }
