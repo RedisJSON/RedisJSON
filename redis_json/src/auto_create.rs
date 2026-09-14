@@ -182,6 +182,51 @@ fn plan_sites<V: SelectValue>(mut query: Query, doc: &V) -> Vec<CreateSite> {
         .collect()
 }
 
+/// Visit existing and creatable targets in query order using one prefix evaluation.
+/// A missing value type marks a target that will be created. Blocked paths are
+/// omitted; existing values retain their type, even if a command cannot use it.
+pub(crate) fn plan_write_paths<V: SelectValue>(
+    mut query: Query,
+    root: &V,
+    mut visit: impl FnMut(Vec<String>, Option<SelectValueType>),
+) -> RedisResult<Vec<CreateSite>> {
+    if query.is_projection() {
+        return Err(err_projection_readonly());
+    }
+    let mut suffix = Vec::new();
+    while let Some(key) = query.pop_last_object_key() {
+        suffix.push(key);
+    }
+    if suffix.is_empty() {
+        for matched in calc_once_with_paths(query, root) {
+            visit(
+                matched.path_tracker.unwrap().to_string_path(),
+                Some(matched.res.get_type()),
+            );
+        }
+        return Ok(Vec::new());
+    }
+    suffix.reverse();
+    // Evaluate the prefix on the original document. Re-evaluating a filter
+    // after seeding can lose matches or select unrelated new targets.
+    let mut sites = Vec::new();
+    for matched in calc_once_with_paths(query, root) {
+        let prefix = matched.path_tracker.unwrap().to_string_path();
+        match resolve_object_suffix(matched.res.as_ref(), prefix, &suffix) {
+            Some(ObjectTarget::Existing(path, kind)) => visit(path, Some(kind)),
+            Some(ObjectTarget::Missing(site)) => {
+                let mut path = site.parent.clone();
+                path.extend(site.levels.iter().cloned());
+                path.push(site.leaf.clone());
+                visit(path, None);
+                sites.push(site);
+            }
+            None => {}
+        }
+    }
+    Ok(sites)
+}
+
 /// The object-key chain a path addresses from the document root, or `None`
 /// when the path is not a plain chain of object keys.
 ///
@@ -212,7 +257,23 @@ fn plan_site<V: SelectValue>(
     prefix: Vec<String>,
     suffix: &[String],
 ) -> Option<CreateSite> {
-    let mut node = node_at(root, &prefix)?;
+    match resolve_object_suffix(node_at(root, &prefix)?, prefix, suffix)? {
+        ObjectTarget::Missing(site) => Some(site),
+        ObjectTarget::Existing(..) => None,
+    }
+}
+
+enum ObjectTarget {
+    Existing(Vec<String>, SelectValueType),
+    Missing(CreateSite),
+}
+
+/// Walk the suffix once, stopping at its existing value or first missing key.
+fn resolve_object_suffix<V: SelectValue>(
+    mut node: &V,
+    prefix: Vec<String>,
+    suffix: &[String],
+) -> Option<ObjectTarget> {
     let mut parent = prefix;
 
     for (i, key) in suffix.iter().enumerate() {
@@ -229,15 +290,15 @@ fn plan_site<V: SelectValue>(
             Some(ValueRef::Owned(_)) => return None,
             None => {
                 let (levels, leaf) = suffix[i..].split_at(suffix.len() - i - 1);
-                return Some(CreateSite {
+                return Some(ObjectTarget::Missing(CreateSite {
                     parent,
                     levels: levels.to_vec(),
                     leaf: leaf[0].clone(),
-                });
+                }));
             }
         }
     }
-    None
+    Some(ObjectTarget::Existing(parent, node.get_type()))
 }
 
 /// Follow a concrete path from `node` and return the document node it
@@ -408,17 +469,10 @@ fn materialize_with<M: Manager>(
         let prepared = prepare_creations(manager, sites, leaf)?;
         let mut additions = Vec::with_capacity(prepared.len());
         for (parent, object) in prepared {
-            for (name, value) in object
-                .borrow()
-                .items()
-                .ok_or_else(crate::manager::err_bad_object)?
-            {
-                additions.push((
-                    parent.clone(),
-                    name.to_owned(),
-                    manager.clone_value(value.as_ref()),
-                ));
-            }
+            let mut fields = manager.take_object_fields(object)?;
+            let (name, value) = fields.next().ok_or_else(crate::manager::err_bad_object)?;
+            debug_assert!(fields.next().is_none());
+            additions.push((parent, name, value));
         }
         for (parent, name, value) in additions {
             if !attach(parent, &name, value)? {
@@ -437,6 +491,8 @@ fn materialize_with<M: Manager>(
 /// Build all missing branches as complete detached objects paired with their
 /// existing parents. For `$.a.x.y = 5` with `a` present, return parent `["a"]`
 /// and object `{"x":{"y":5}}`. No document writes occur in this phase.
+/// Each object contains exactly one outermost missing key; overlapping paths
+/// under that key are combined into its value.
 fn prepare_creations<M: Manager>(
     manager: &M,
     sites: &[CreateSite],
@@ -620,19 +676,14 @@ fn validate_increments<V: SelectValue>(
 }
 
 fn plan_seed_paths<V: SelectValue, O>(
-    mut query: Query,
+    query: Query,
     root: &V,
     seed: &Seed<'_, O>,
 ) -> RedisResult<(Vec<Option<Vec<String>>>, Vec<CreateSite>)> {
     if query.is_projection() {
         return Err(err_projection_readonly());
     }
-    let sites = if auto_create_enabled() {
-        plan_creation(query.clone(), root, true)?
-    } else {
-        Vec::new()
-    };
-    if sites.is_empty() {
+    if !auto_create_enabled() {
         let paths = calc_once_with_paths(query, root)
             .into_iter()
             .map(|matched| {
@@ -640,28 +691,16 @@ fn plan_seed_paths<V: SelectValue, O>(
                     .then(|| matched.path_tracker.unwrap().to_string_path())
             })
             .collect();
-        return Ok((paths, sites));
+        return Ok((paths, Vec::new()));
     }
-    // Evaluate the prefix on the original document. Re-evaluating a filter
-    // after seeding can lose matches or select unrelated new targets.
-    let mut suffix = Vec::new();
-    while let Some(key) = query.pop_last_object_key() {
-        suffix.push(key);
-    }
-    suffix.reverse();
-    let paths: Vec<_> = calc_once_paths(query, root)
-        .into_iter()
-        .filter_map(|prefix| {
-            let site = plan_site(root, prefix.clone(), &suffix);
-            let mut path = prefix;
-            path.extend(suffix.iter().cloned());
-            if site.is_some() {
-                Some(Some(path))
-            } else {
-                node_at(root, &path).map(|node| seed.accepts(node.get_type()).then_some(path))
-            }
-        })
-        .collect();
+    let mut paths = Vec::new();
+    let sites = plan_write_paths(query, root, |path, value_type| {
+        paths.push(
+            value_type
+                .is_none_or(|value_type| seed.accepts(value_type))
+                .then_some(path),
+        );
+    })?;
     Ok((paths, sites))
 }
 
@@ -693,6 +732,76 @@ mod tests {
             levels: levels.iter().map(|s| (*s).to_string()).collect(),
             leaf: leaf.to_string(),
         }
+    }
+
+    #[test]
+    fn combined_write_planning_preserves_matches_and_creation_sites() {
+        let root = doc(
+            r#"{"a":{"n":1},"b":{},"c":{"n":"wrong"},"d":3,"arr":[1,2],"objects":[{},{"n":0}]}"#,
+        );
+        for path in [
+            "$.*.n",
+            "$['b','a','a','c','d'].n",
+            "$..n",
+            "$.arr[*]",
+            "$.arr[0]",
+            "$.objects[?(@.n==0)].x",
+            "$.*.missing.x",
+            "$.a.n",
+            "$.unknown.a",
+        ] {
+            let query = compile(path).unwrap();
+            let expected: Vec<_> = calc_once_with_paths(query.clone(), &root)
+                .into_iter()
+                .map(|matched| {
+                    (
+                        matched.path_tracker.unwrap().to_string_path(),
+                        matched.res.get_type(),
+                    )
+                })
+                .collect();
+            let mut existing = Vec::new();
+            let sites = plan_write_paths(query.clone(), &root, |path, value_type| {
+                if let Some(value_type) = value_type {
+                    existing.push((path, value_type));
+                }
+            })
+            .unwrap();
+            assert_eq!(existing, expected, "{path}");
+            assert_eq!(sites, plan_creation(query, &root, true).unwrap(), "{path}");
+        }
+    }
+
+    #[test]
+    fn combined_write_planning_keeps_missing_and_duplicate_targets_in_order() {
+        let root = doc(r#"{"a":{"n":1},"b":{},"c":{"n":"wrong"},"d":3}"#);
+        let mut targets = Vec::new();
+        plan_write_paths(
+            compile("$['b','a','a','c','d'].n").unwrap(),
+            &root,
+            |path, kind| {
+                targets.push((path, kind));
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            targets,
+            vec![
+                (vec!["b".to_owned(), "n".to_owned()], None),
+                (
+                    vec!["a".to_owned(), "n".to_owned()],
+                    Some(SelectValueType::Long)
+                ),
+                (
+                    vec!["a".to_owned(), "n".to_owned()],
+                    Some(SelectValueType::Long)
+                ),
+                (
+                    vec!["c".to_owned(), "n".to_owned()],
+                    Some(SelectValueType::String)
+                ),
+            ]
+        );
     }
 
     #[test]

@@ -11,7 +11,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
-    auto_create::{plan_creation, validate_legacy_creation_path, CreateSite},
+    auto_create::{plan_creation, plan_write_paths, validate_legacy_creation_path, CreateSite},
     commands::{prepare_paths_for_updating, FoundIndex, ObjectLen, Values},
     formatter::{RedisJsonFormatter, ReplyFormatOptions},
     manager::{
@@ -414,21 +414,42 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     /// permitted by `creation`, without mutating the document.
     /// `FinalKeyOnly` puts final-key additions in `updates`; `MissingObjects`
     /// puts missing object chains in `creations` for separate materialization.
+    /// With missing-object creation enabled, both are captured by one prefix evaluation.
     pub(crate) fn plan_set(
         &self,
         query: Query,
         option: SetOptions,
         creation: CreationPolicy,
     ) -> RedisResult<SetPlan> {
+        if creation == CreationPolicy::MissingObjects && option != SetOptions::AlreadyExists {
+            if option == SetOptions::NotExists {
+                return Ok(SetPlan {
+                    updates: Vec::new(),
+                    creations: plan_creation(query, self.val.as_ref(), true)?,
+                });
+            }
+            let mut paths = Vec::new();
+            let creations = plan_write_paths(query, self.val.as_ref(), |path, value_type| {
+                if value_type.is_some() {
+                    paths.push(path);
+                }
+            })?;
+            if option != SetOptions::MergeExisting {
+                prepare_paths_for_updating(&mut paths);
+            }
+            return Ok(SetPlan {
+                updates: paths
+                    .into_iter()
+                    .map(|path| UpdateInfo::SUI(SetUpdateInfo { path }))
+                    .collect(),
+                creations,
+            });
+        }
         let mut plan = SetPlan {
             updates: self.find_existing_targets(query.clone(), option)?,
             creations: Vec::new(),
         };
         if option == SetOptions::AlreadyExists {
-            return Ok(plan);
-        }
-        if creation == CreationPolicy::MissingObjects {
-            plan.creations = plan_creation(query, self.val.as_ref(), true)?;
             return Ok(plan);
         }
         if !plan.updates.is_empty() {

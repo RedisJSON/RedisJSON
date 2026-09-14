@@ -8,8 +8,8 @@
  */
 
 use crate::auto_create::{
-    auto_create_enabled, materialize, nest_in_objects, nothing_to_write, plan_creation,
-    root_key_chain, seed_missing_paths, validate_legacy_creation_path, Seed,
+    auto_create_enabled, materialize, nest_in_objects, nothing_to_write, root_key_chain,
+    seed_missing_paths, validate_legacy_creation_path, Seed,
 };
 use crate::defrag::defrag_info;
 use crate::formatter::ReplyFormatOptions;
@@ -26,7 +26,9 @@ use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use std::cmp::Ordering;
 use std::str::FromStr;
 
-use json_path::{calc_once_with_paths, compile, json_path::Query, json_path::UserPathTracker};
+use json_path::{
+    calc_once, calc_once_with_paths, compile, json_path::Query, json_path::UserPathTracker,
+};
 
 use serde_json::{Number, Value};
 
@@ -625,25 +627,21 @@ pub fn json_merge_command_impl<M: Manager>(
             } else {
                 let query = compile(path.get_path())?;
                 let create_intermediates = auto_create_enabled();
-                let mut update_info = if create_intermediates {
-                    KeyValue::new(doc)
-                        .find_existing_targets(query.clone(), SetOptions::MergeExisting)?
+                let creation = if create_intermediates {
+                    CreationPolicy::MissingObjects
                 } else {
-                    KeyValue::new(doc)
-                        .plan_set(
-                            query.clone(),
-                            SetOptions::MergeExisting,
-                            CreationPolicy::FinalKeyOnly,
-                        )?
-                        .updates
+                    CreationPolicy::FinalKeyOnly
                 };
                 // Creation runs alongside the updates, not instead of them: a
                 // multi-target path can match some places and miss others.
-                let sites = if create_intermediates {
-                    plan_creation(query.clone(), doc, true)?
-                } else {
-                    Vec::new()
-                };
+                let SetPlan {
+                    updates: mut update_info,
+                    creations: sites,
+                } = KeyValue::new(doc).plan_set(
+                    query.clone(),
+                    SetOptions::MergeExisting,
+                    creation,
+                )?;
                 if update_info.is_empty() && sites.is_empty() {
                     nothing_to_write(query, doc)
                 } else {
@@ -780,6 +778,12 @@ struct MsetTriplet {
 /// document as the previous triplets left it. Only the errors matter here, and
 /// they are the ones `JSON.SET` gives for the same path.
 fn validate_mset_path<V: SelectValue>(doc: &V, query: Query) -> RedisResult<()> {
+    if query.is_projection() {
+        return Err(err_projection_readonly());
+    }
+    if !calc_once(query.clone(), doc).is_empty() {
+        return Ok(());
+    }
     let plan = KeyValue::new(doc).plan_set(
         query.clone(),
         SetOptions::None,

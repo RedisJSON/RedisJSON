@@ -847,6 +847,17 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         Ok(object.into())
     }
 
+    fn take_object_fields(
+        &self,
+        object: IValue,
+    ) -> RedisResult<impl Iterator<Item = (String, IValue)>> {
+        Ok(object
+            .into_object()
+            .map_err(|_| crate::manager::err_bad_object())?
+            .into_iter()
+            .map(|(name, value)| (name.to_string(), value)))
+    }
+
     fn get_memory(v: &Self::V) -> RedisResult<usize> {
         Ok(v.mem_allocated() + size_of::<IValue>())
     }
@@ -875,6 +886,27 @@ mod tests {
 
     fn keys(names: &[&str]) -> Vec<String> {
         names.iter().map(|n| (*n).to_string()).collect()
+    }
+
+    #[test]
+    fn taking_object_fields_moves_array_storage_and_preserves_order() {
+        let manager = manager();
+        let object: IValue = serde_json::from_str(r#"{"z":[1,2,3],"a":{"n":1}}"#).unwrap();
+        let array = object.get_key("z").unwrap().get_array();
+        assert!(!array.is_null());
+        let fields: Vec<_> = manager.take_object_fields(object).unwrap().collect();
+        assert_eq!(
+            fields
+                .iter()
+                .map(|(name, _)| name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["z", "a"]
+        );
+        assert_eq!(fields[0].1.get_array(), array);
+        assert_eq!(
+            fields[1].1,
+            serde_json::from_str::<IValue>(r#"{"n":1}"#).unwrap()
+        );
     }
 
     #[test]
