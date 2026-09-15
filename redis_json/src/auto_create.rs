@@ -67,7 +67,10 @@ use redis_module::{Context, RedisError, RedisResult, RedisValue};
 
 use serde_json::Value;
 
-use crate::manager::{err_invalid_path, err_json, err_projection_readonly, Manager, WriteHolder};
+use crate::manager::{
+    err_invalid_path, err_json, err_projection_readonly, err_recursion_limit_exceeded, Manager,
+    WriteHolder, ERR_RECURSION_LIMIT_EXCEEDED,
+};
 use crate::redisjson::Format;
 
 /// Backing store for the `json-auto-create-deep-paths` module config,
@@ -99,7 +102,7 @@ pub(crate) struct CreateSite {
 }
 
 /// Sites the write must create at `query`. Pure planning: the only error is a
-/// bad path.
+/// bad or over-deep path.
 ///
 /// Peels the trailing run of plain object keys off `query`
 /// ([`json_path::json_path::Query::pop_last_object_key`]) and evaluates the
@@ -123,7 +126,13 @@ pub(crate) fn plan_creation<V: SelectValue>(
     if !create_intermediates && !query.clone().is_static() {
         return Ok(Vec::new());
     }
-    let sites = plan_sites(query, doc);
+    let sites = match plan_sites(query, doc) {
+        // Disabled mode skips missing intermediate objects, including over-deep chains.
+        Err(RedisError::Str(ERR_RECURSION_LIMIT_EXCEEDED)) if !create_intermediates => {
+            return Ok(Vec::new());
+        }
+        result => result?,
+    };
     if create_intermediates {
         return Ok(sites);
     }
@@ -148,6 +157,9 @@ pub(crate) fn validate_legacy_creation_path<V: SelectValue>(
     mut query: Query,
     doc: &V,
 ) -> RedisResult<()> {
+    if query.is_projection() {
+        return Err(err_projection_readonly());
+    }
     if !query.is_static() {
         return Err(RedisError::Str("ERR wrong static path"));
     }
@@ -165,26 +177,37 @@ pub(crate) fn validate_legacy_creation_path<V: SelectValue>(
 }
 
 /// Peel the trailing object keys and plan one site per prefix match. Pure:
-/// no restrictions, no errors, empty when nothing is creatable.
-fn plan_sites<V: SelectValue>(mut query: Query, doc: &V) -> Vec<CreateSite> {
+/// no mutations, empty when nothing is creatable.
+/// An impossibly deep suffix errors at the first creatable site.
+fn plan_sites<V: SelectValue>(mut query: Query, doc: &V) -> RedisResult<Vec<CreateSite>> {
     let mut suffix = Vec::new();
     while let Some(key) = query.pop_last_object_key() {
         suffix.push(key);
     }
     if suffix.is_empty() {
-        return Vec::new();
+        return Ok(Vec::new());
     }
     suffix.reverse();
 
+    // Resolve the prefix before checking depth so blocked or unmatched paths
+    // keep their replies. MSET handles the depth error explicitly as nil.
     calc_once_paths(query, doc)
         .into_iter()
         .filter_map(|prefix| plan_site(doc, prefix, &suffix))
+        .map(|site| {
+            if suffix.len() >= MAX_DEPTH {
+                Err(err_recursion_limit_exceeded())
+            } else {
+                Ok(site)
+            }
+        })
         .collect()
 }
 
 /// Visit existing and creatable targets in query order using one prefix evaluation.
 /// A missing value type marks a target that will be created. Blocked paths are
 /// omitted; existing values retain their type, even if a command cannot use it.
+/// An impossibly deep suffix errors before visiting the first creatable target.
 pub(crate) fn plan_write_paths<V: SelectValue>(
     mut query: Query,
     root: &V,
@@ -215,6 +238,11 @@ pub(crate) fn plan_write_paths<V: SelectValue>(
         match resolve_object_suffix(matched.res.as_ref(), prefix, &suffix) {
             Some(ObjectTarget::Existing(path, kind)) => visit(path, Some(kind)),
             Some(ObjectTarget::Missing(site)) => {
+                // No target with this suffix can fit. Reject before exposing a
+                // target or allocating the remaining creation sites.
+                if suffix.len() >= MAX_DEPTH {
+                    return Err(err_recursion_limit_exceeded());
+                }
                 let mut path = site.parent.clone();
                 path.extend(site.levels.iter().cloned());
                 path.push(site.leaf.clone());
@@ -731,6 +759,85 @@ mod tests {
             parent: parent.iter().map(|s| (*s).to_string()).collect(),
             levels: levels.iter().map(|s| (*s).to_string()).collect(),
             leaf: leaf.to_string(),
+        }
+    }
+
+    #[test]
+    fn impossible_suffix_does_not_expand_every_creation_site() {
+        let mut root = ijson::IObject::new();
+        for i in 0..64 {
+            root.insert(format!("p{i}"), doc("{}")).unwrap();
+        }
+        let root: IValue = root.into();
+        let manager = crate::ivalue_manager::RedisIValueJsonKeyManager {
+            phantom: std::marker::PhantomData,
+        };
+        for depth in [MAX_DEPTH - 2, MAX_DEPTH, 1500] {
+            let suffix = (0..depth)
+                .map(|i| format!("x{i}"))
+                .collect::<Vec<_>>()
+                .join(".");
+            for prefix in ["$.*", "$..*"] {
+                let path = format!("{prefix}.{suffix}");
+                let query = compile(&path).unwrap();
+                let sites = plan_creation(query.clone(), &root, true);
+                let mut targets = Vec::new();
+                let write_sites = plan_write_paths(query, &root, |path, kind| {
+                    assert!(kind.is_none());
+                    targets.push(path);
+                });
+                if depth >= MAX_DEPTH {
+                    for result in [sites, write_sites] {
+                        assert_eq!(
+                            result.unwrap_err().to_string(),
+                            crate::manager::err_recursion_limit_exceeded().to_string()
+                        );
+                    }
+                    assert!(
+                        targets.is_empty(),
+                        "an invalid plan must not expose a target"
+                    );
+                } else {
+                    let sites = sites.unwrap();
+                    assert_eq!(write_sites.unwrap(), sites);
+                    assert_eq!(targets.len(), 64);
+                    assert_eq!(
+                        prepare_creations(&manager, &sites, &doc("5"))
+                            .unwrap()
+                            .len(),
+                        64
+                    );
+                }
+
+                let blocked = doc(r#"{"a":{"x0":1},"b":3}"#);
+                assert!(plan_creation(compile(&path).unwrap(), &blocked, true)
+                    .unwrap()
+                    .is_empty());
+                assert!(plan_write_paths(compile(&path).unwrap(), &blocked, |_, _| {
+                    panic!("blocked paths must not produce targets")
+                })
+                .unwrap()
+                .is_empty());
+            }
+            let static_path = format!("$.{suffix}");
+            assert!(plan_creation(compile(&static_path).unwrap(), &root, false)
+                .unwrap()
+                .is_empty());
+        }
+    }
+
+    #[test]
+    fn set_nx_rejects_projections_in_both_creation_modes() {
+        use crate::key_value::{CreationPolicy, KeyValue};
+        use crate::redisjson::SetOptions;
+
+        let root = doc(r#"{"a":1}"#);
+        for creation in [CreationPolicy::FinalKeyOnly, CreationPolicy::MissingObjects] {
+            let error = KeyValue::new(&root)
+                .plan_set(compile("$.a + 1").unwrap(), SetOptions::NotExists, creation)
+                .err()
+                .unwrap();
+            assert_eq!(error.to_string(), err_projection_readonly().to_string());
         }
     }
 

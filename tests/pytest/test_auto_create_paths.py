@@ -337,6 +337,9 @@ CASES = [
     case('{"a":1}', ('JSON.SET', KEY, '$.a + 1', '5'),
          ERR('computed/projection expressions'),
          ERR('computed/projection expressions')),
+    case('{"a":1}', ('JSON.SET', KEY, '$.a + 1', '5', 'NX'),
+         ERR('computed/projection expressions'),
+         ERR('computed/projection expressions'), '[{"a":1}]', '[{"a":1}]'),
 
     # ------ value formats survive creation (the leaf is never re-serialized) --
     case('{}', ('JSON.SET', KEY, '$.a.b', '{"x":[1,2],"y":null}'),
@@ -560,10 +563,33 @@ def test_increment_overflow_does_not_leave_seeds():
             env.assertEqual(env.getSlaveConnection().execute_command('JSON.GET', KEY), before)
 
 
+def test_incompatible_overlapping_creations_leave_document_unchanged():
+    env = _env(True)
+    for command in ('JSON.SET', 'JSON.MSET', 'JSON.MERGE', 'JSON.ARRAPPEND',
+                    'JSON.ARRINSERT', 'JSON.NUMINCRBY', 'JSON.STRAPPEND'):
+        env.expect('JSON.SET', KEY, '$', '{"a":{}}').ok()
+        args = [command, KEY, '$..a.a']
+        if command == 'JSON.ARRINSERT':
+            args.append('0')
+        args.append('"x"' if command == 'JSON.STRAPPEND' else '5')
+        if command == 'JSON.MSET':
+            env.expect(*args).equal(None)
+        else:
+            env.expect(*args).raiseError().contains('bad object type')
+        env.expect('JSON.GET', KEY).equal('{"a":{}}')
+
+
 def test_merge_disabled_rejects_typed_array_parent():
     env = _env(False)
     env.expect('JSON.SET', KEY, '$', '[1,2]').ok()
     env.expect('JSON.MERGE', KEY, '$[0].a', '5').raiseError().contains('bad object type')
+    env.expect('JSON.GET', KEY).equal('[1,2]')
+
+
+def test_merge_enabled_preserves_typed_array_parent():
+    env = _env(True)
+    env.expect('JSON.SET', KEY, '$', '[1,2]').ok()
+    env.expect('JSON.MERGE', KEY, '$[0].a', '5').equal(None)
     env.expect('JSON.GET', KEY).equal('[1,2]')
 
 
@@ -598,6 +624,52 @@ def test_multi_site_creation_is_all_or_nothing():
     # used to be written before the deep one failed.
     env.expect('JSON.GET', KEY, '$.s').equal('[{}]')
     env.expect('JSON.GET', KEY, '$').equal('[%s]' % doc)
+
+
+def test_impossible_suffix_preserves_depth_and_no_write_replies():
+    env = _env(True)
+    suffix = '.'.join('x%d' % i for i in range(1500))
+    doc = json.dumps({'p%d' % i: {} for i in range(64)}, separators=(',', ':'))
+    for command in ('JSON.SET', 'JSON.MSET', 'JSON.MERGE', 'JSON.ARRAPPEND',
+                    'JSON.ARRINSERT', 'JSON.NUMINCRBY', 'JSON.STRAPPEND'):
+        for prefix, source, creatable in (
+            ('$..*', doc, True),
+            ('$.missing[*]', doc, False),
+            ('$.*', '{"a":{"x0":1},"b":3}', False),
+        ):
+            env.expect('JSON.SET', KEY, '$', source).ok()
+            before = env.cmd('JSON.GET', KEY)
+            args = [command, KEY, prefix + '.' + suffix]
+            if command == 'JSON.ARRINSERT':
+                args.append('0')
+            args.append('"x"' if command == 'JSON.STRAPPEND' else '5')
+            reply = env.expect(*args)
+            if creatable:
+                if command == 'JSON.MSET':
+                    reply.equal(None)
+                else:
+                    reply.raiseError().contains('recursion limit exceeded')
+            elif command in ('JSON.SET', 'JSON.MSET', 'JSON.MERGE'):
+                reply.raiseError().contains('wrong static path')
+            else:
+                reply.equal('[]' if command == 'JSON.NUMINCRBY' else [])
+            env.expect('JSON.GET', KEY).equal(before)
+
+
+def test_mset_depth_failure_preserves_other_triplets():
+    env = _env(True)
+    env.expect('JSON.SET', KEY, '$', '{}').ok()
+    env.expect('JSON.MSET', KEY, '$.before', '1', KEY, DEEP, '5',
+               KEY, '$.after', '2').equal(None)
+    expected = {'before': 1, 'after': 2}
+    env.assertEqual(json.loads(env.cmd('JSON.GET', KEY)), expected)
+    if env.useSlaves and not env.isCluster():
+        env.cmd('WAIT', '1', '10000')
+        env.assertEqual(json.loads(env.getSlaveConnection().execute_command('JSON.GET', KEY)), expected)
+
+    env.expect('JSON.MSET', KEY, '$.before', '3', KEY, DEEP, '5',
+               KEY, '$.before + 1', '2').raiseError().contains('computed/projection expressions')
+    env.assertEqual(json.loads(env.cmd('JSON.GET', KEY)), expected)
 
 
 def test_mset_does_not_notify_when_nothing_was_written():

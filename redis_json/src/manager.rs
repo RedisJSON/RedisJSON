@@ -140,8 +140,10 @@ pub fn err_invalid_path_or(or: &str) -> RedisError {
     RedisError::String(format!("ERR Path does not exist or {or}"))
 }
 
+pub(crate) const ERR_RECURSION_LIMIT_EXCEEDED: &str = "ERR recursion limit exceeded";
+
 pub fn err_recursion_limit_exceeded() -> RedisError {
-    RedisError::Str("ERR recursion limit exceeded")
+    RedisError::Str(ERR_RECURSION_LIMIT_EXCEEDED)
 }
 
 pub fn err_numeric_overflow() -> RedisError {

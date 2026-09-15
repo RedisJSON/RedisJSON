@@ -389,7 +389,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     ///
     /// Empty when nothing matches, and always empty for `NX`, which only ever
     /// adds. To include permitted additions, use [`Self::plan_set`].
-    pub fn find_existing_targets(
+    fn find_existing_targets(
         &self,
         query: Query,
         option: SetOptions,

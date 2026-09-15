@@ -16,7 +16,7 @@ use crate::formatter::ReplyFormatOptions;
 use crate::key_value::{CreationPolicy, KeyValue, SetPlan};
 use crate::manager::{
     err_invalid_path, err_invalid_path_or, err_projection_readonly, Manager, ReadHolder,
-    UpdateInfo, WriteHolder,
+    UpdateInfo, WriteHolder, ERR_RECURSION_LIMIT_EXCEEDED,
 };
 use crate::redisjson::{Format, Path, ReplyFormat, SetOptions, JSON_ROOT_PATH};
 use ijson::FloatType;
@@ -777,6 +777,7 @@ struct MsetTriplet {
 /// The plan itself is thrown away: the second pass makes its own, against the
 /// document as the previous triplets left it. Only the errors matter here, and
 /// they are the ones `JSON.SET` gives for the same path.
+/// Depth failures on existing keys are deferred to MSET's nil handling in pass two.
 fn validate_mset_path<V: SelectValue>(doc: &V, query: Query) -> RedisResult<()> {
     if query.is_projection() {
         return Err(err_projection_readonly());
@@ -784,11 +785,16 @@ fn validate_mset_path<V: SelectValue>(doc: &V, query: Query) -> RedisResult<()> 
     if !calc_once(query.clone(), doc).is_empty() {
         return Ok(());
     }
-    let plan = KeyValue::new(doc).plan_set(
+    let plan = match KeyValue::new(doc).plan_set(
         query.clone(),
         SetOptions::None,
         CreationPolicy::MissingObjects,
-    )?;
+    ) {
+        Ok(plan) => plan,
+        // Depth failure is an unapplied triplet, not a validation error in MSET.
+        Err(RedisError::Str(ERR_RECURSION_LIMIT_EXCEEDED)) => return Ok(()),
+        Err(error) => return Err(error),
+    };
     if plan.updates.is_empty() && plan.creations.is_empty() {
         validate_legacy_creation_path(query, doc)?;
     }
@@ -893,11 +899,23 @@ pub fn json_mset_command_impl<M: Manager>(
                 } else {
                     CreationPolicy::FinalKeyOnly
                 };
+                let plan = match KeyValue::new(doc).plan_set(query, SetOptions::None, creation) {
+                    Ok(plan) => plan,
+                    Err(RedisError::Str(ERR_RECURSION_LIMIT_EXCEEDED)) => {
+                        // Keep MSET's nil reply and continue the other triplets.
+                        // Earlier writes still reach apply_changes below.
+                        all_updated = false;
+                        continue;
+                    }
+                    Err(error) => return Err(error),
+                };
                 let SetPlan {
                     updates: update_info,
                     creations: sites,
-                } = KeyValue::new(doc).plan_set(query, SetOptions::None, creation)?;
+                } = plan;
                 let creation = materialize::<M>(&manager, &mut redis_key, &sites, &value);
+                // MSET deliberately folds materialization errors into a nil
+                // reply, matching failed updates; earlier triplets may be applied.
                 let all_created = creation.result.is_ok();
                 // What was actually created, as opposed to planned: a plan that
                 // failed wrote nothing, and must not report the key as changed.
