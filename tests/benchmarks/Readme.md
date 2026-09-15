@@ -42,6 +42,11 @@ nightly analysis:
 3. A human merges it, accepting the higher bar. Leaving it unmerged keeps the
    current baselines.
 
+One benchmark is currently excluded from CI by a `--test-regex` in
+`benchmark-flow.yml`: `json_nummultby_num_2`, where `redis-benchmark` has
+exited 1 with an empty result set since at least 2026-08-09. It therefore has
+no floor and produces no data at all — re-enable it once that is fixed.
+
 `update_kpis.py` can only **raise** a floor, to `measured * (1 - margin)`
 (margin 5% by default), so a baseline cannot drift downwards even by accident —
 a slower run proposes nothing, and lowering a floor is always a hand edit in a
