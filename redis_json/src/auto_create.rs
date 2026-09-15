@@ -659,7 +659,7 @@ pub(crate) fn seed_missing_paths<M: Manager>(
     seed: Seed<'_, M::O>,
 ) -> RedisResult<Vec<Option<Vec<String>>>> {
     let root = key.get_value()?.ok_or_else(RedisError::nonexistent_key)?;
-    let (paths, sites) = plan_seed_paths(compile(path)?, root, &seed)?;
+    let SeedPlan { paths, sites } = plan_seed_paths(compile(path)?, root, &seed)?;
     if sites.is_empty() {
         return Ok(paths);
     }
@@ -703,11 +703,16 @@ fn validate_increments<V: SelectValue>(
     Ok(())
 }
 
+struct SeedPlan {
+    paths: Vec<Option<Vec<String>>>,
+    sites: Vec<CreateSite>,
+}
+
 fn plan_seed_paths<V: SelectValue, O>(
     query: Query,
     root: &V,
     seed: &Seed<'_, O>,
-) -> RedisResult<(Vec<Option<Vec<String>>>, Vec<CreateSite>)> {
+) -> RedisResult<SeedPlan> {
     if query.is_projection() {
         return Err(err_projection_readonly());
     }
@@ -719,7 +724,10 @@ fn plan_seed_paths<V: SelectValue, O>(
                     .then(|| matched.path_tracker.unwrap().to_string_path())
             })
             .collect();
-        return Ok((paths, Vec::new()));
+        return Ok(SeedPlan {
+            paths,
+            sites: Vec::new(),
+        });
     }
     let mut paths = Vec::new();
     let sites = plan_write_paths(query, root, |path, value_type| {
@@ -729,7 +737,7 @@ fn plan_seed_paths<V: SelectValue, O>(
                 .then_some(path),
         );
     })?;
-    Ok((paths, sites))
+    Ok(SeedPlan { paths, sites })
 }
 
 #[cfg(test)]

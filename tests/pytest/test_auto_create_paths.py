@@ -185,6 +185,12 @@ CASES = [
          OK, OK,
          '[{"a":{"c":{"y":2}},"b":{"c":{"x":1,"y":2}}}]',
          '[{"a":{},"b":{"c":{"x":1,"y":2}}}]'),
+    case('{"items":[{},{"details":{"keep":1}},3]}',
+         ('JSON.MERGE', KEY, '$.items[*].details.profile', '{"active":true}'),
+         OK, ERR('wrong static path'),
+         '[{"items":[{"details":{"profile":{"active":true}}},'
+         '{"details":{"keep":1,"profile":{"active":true}}},3]}]',
+         '[{"items":[{},{"details":{"keep":1}},3]}]'),
     # A top-level null patch replaces; it only deletes as an object member. So a
     # created path holding null matches merging null into one that already
     # exists -- neither deletes anything.
@@ -545,6 +551,16 @@ def test_overlapping_creation_sites():
         if env.useSlaves and not env.isCluster():
             env.cmd('WAIT', '1', '10000')
             env.assertEqual(json.loads(env.getSlaveConnection().execute_command('JSON.GET', KEY)), expected)
+
+
+def test_overlapping_creations_replace_conflicting_leaf_fields():
+    env = _env(True)
+    for command in ('JSON.SET', 'JSON.MSET', 'JSON.MERGE'):
+        for leaf in ({'a': 1, 'keep': 2}, {'a': {'old': 1}, 'keep': 2}):
+            env.expect('JSON.SET', KEY, '$', '{"a":{}}').ok()
+            env.expect(command, KEY, '$..a.a', json.dumps(leaf)).ok()
+            env.assertEqual(json.loads(env.cmd('JSON.GET', KEY)),
+                            {'a': {'a': {'a': leaf, 'keep': 2}}})
 
 
 def test_increment_overflow_does_not_leave_seeds():
