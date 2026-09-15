@@ -12,3 +12,7 @@ clientconfig:
     - keyspacelen: 100000
     - command: "JSON.SET __rand_int__ $"
     - x: "./datasets/parser-0000.json"
+
+kpis:
+  - ge:
+      "$.Tests.Overall.rps": 46671.12
