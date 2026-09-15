@@ -80,7 +80,10 @@ jobs:
       - name: Run CI benchmarks on aws for envs ${{ inputs.allowed_envs }}
         timeout-minutes: 240 # timeout for the step
         working-directory: tests/benchmarks
-        continue-on-error: true
+        # No continue-on-error: the `kpis` floors committed in each benchmark yml
+        # are the performance baseline, and run-remote already exits non-zero
+        # when a run comes in below one (results_dict_kpi_check). Swallowing the
+        # exit code here would make the baseline gate decorative.
         env:
           # Hard-coded
           PERF_CALLGRAPH_MODE: dwarf
@@ -111,6 +114,17 @@ jobs:
               --redistimeseries_host ${{ secrets.PERFORMANCE_RTS_HOST }}
               --redistimeseries_port ${{ secrets.PERFORMANCE_RTS_PORT }}
               --redistimeseries_pass '${{ secrets.PERFORMANCE_RTS_AUTH }}'
+
+      # Kept so a baseline bump can be proposed off a run's own numbers
+      # (tests/benchmarks/update_kpis.py) without re-running the benchmarks.
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ inputs.benchmark_runner_group_member_id }}
+          path: tests/benchmarks/*.json
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Generate Pull Request Performance info
         if: github.event.number
