@@ -30,14 +30,30 @@ import os
 import re
 import sys
 
-METRIC = "$.Tests.Overall.rps"
-BLOCK = 'kpis:\n  - ge:\n      "{metric}": {value}\n'
-# Matches the metric line inside an existing kpis block, quoted or not.
-VALUE_RE = re.compile(
-    r'^(?P<indent>[ \t]*)(?P<key>["\']?\$\.Tests\.Overall\.rps["\']?)'
-    r"[ \t]*:[ \t]*(?P<value>[0-9][0-9.eE+-]*)[ \t]*$",
-    re.MULTILINE,
-)
+# Throughput metric per benchmark tool, in the order we probe for it. Which one
+# a result file carries depends on its `clientconfig.tool`: redis-benchmark
+# results are keyed under Tests.Overall, memtier_benchmark under "ALL STATS".
+# Both paths are among the comparison metrics in defaults.yml.
+METRICS = [
+    ("$.Tests.Overall.rps", ("Tests", "Overall", "rps")),
+    ('$."ALL STATS".Totals."Ops/sec"', ("ALL STATS", "Totals", "Ops/sec")),
+]
+BLOCK = "kpis:\n  - ge:\n      {key}: {value}\n"
+
+
+def yaml_key(metric):
+    """Quote a jsonpath for use as a YAML mapping key."""
+    return "'{}'".format(metric) if '"' in metric else '"{}"'.format(metric)
+
+
+def value_re(metric):
+    """Matches this metric's line inside an existing kpis block, quoted or not."""
+    return re.compile(
+        r"^(?P<indent>[ \t]*)(?P<key>[\"']?"
+        + re.escape(metric)
+        + r"[\"']?)[ \t]*:[ \t]*(?P<value>[0-9][0-9.eE+-]*)[ \t]*$",
+        re.MULTILINE,
+    )
 
 
 def benchmark_name(path):
@@ -48,8 +64,11 @@ def benchmark_name(path):
     return None
 
 
-def result_value(results_dir, name):
-    """rps of this run for `name`, or None when the run did not cover it.
+def result_metric(results_dir, name):
+    """(metric, value) measured for `name`.
+
+    Returns (None, None) when the run did not cover this benchmark, and
+    (None, reason) when it produced a result we cannot read a throughput from.
 
     Result files are named
     <start>-<org>-<repo>-<branch>-<test_name>-<deployment>-<sha>.json
@@ -60,24 +79,32 @@ def result_value(results_dir, name):
     pattern = "*-{}-*.json".format(glob.escape(name))
     matches = glob.glob(os.path.join(results_dir, pattern))
     if not matches:
-        return None
+        return None, None
     if len(matches) > 1:
-        raise SystemExit("{}: ambiguous result files {}".format(name, matches))
+        return None, "ambiguous result files {}".format(matches)
     with open(matches[0]) as f:
-        tests = json.load(f).get("Tests", {})
-    if "Overall" not in tests or "rps" not in tests["Overall"]:
-        raise SystemExit("{}: no Tests.Overall.rps in {}".format(name, matches[0]))
-    return float(tests["Overall"]["rps"])
+        results = json.load(f)
+    for metric, path in METRICS:
+        node = results
+        for key in path:
+            if not isinstance(node, dict) or key not in node:
+                node = None
+                break
+            node = node[key]
+        if node is not None:
+            return metric, float(node)
+    return None, "no known throughput metric in {}".format(os.path.basename(matches[0]))
 
 
-def raise_floor(text, floor):
-    """Return (new_text, applied). Rewrites or appends the kpis floor."""
-    match = VALUE_RE.search(text)
+def raise_floor(text, metric, floor):
+    """Return (new_text, applied). Rewrites or appends this metric's kpis floor."""
+    match = value_re(metric).search(text)
     if match is None:
         if "kpis:" in text:
-            raise SystemExit("kpis block present but has no {} floor".format(METRIC))
+            raise SystemExit("kpis block present but has no {} floor".format(metric))
         sep = "" if text.endswith("\n") else "\n"
-        return text + sep + "\n" + BLOCK.format(metric=METRIC, value=floor), True
+        block = BLOCK.format(key=yaml_key(metric), value=floor)
+        return text + sep + "\n" + block, True
     if floor <= float(match.group("value")):
         return text, False
     line = "{}{}: {}".format(match.group("indent"), match.group("key"), floor)
@@ -101,19 +128,26 @@ def main(argv=None):
         return self_test()
 
     updated = []
+    unreadable = []
     for path in sorted(glob.glob(os.path.join(args.benchmarks_dir, "*.yml"))):
         if os.path.basename(path) == "defaults.yml":
             continue
         name = benchmark_name(path)
         if name is None:
             continue
-        value = result_value(args.results_dir, name)
-        if value is None:
+        metric, value = result_metric(args.results_dir, name)
+        if metric is None:
+            # A benchmark this run did not cover is silent; one that produced an
+            # unreadable result is reported, so a gap is never mistaken for a
+            # baseline that is simply already high enough.
+            if value is not None:
+                unreadable.append(name)
+                print("SKIPPED {}: {}".format(name, value))
             continue
         floor = round(value * (1.0 - args.margin), 2)
         with open(path) as f:
             text = f.read()
-        new_text, applied = raise_floor(text, floor)
+        new_text, applied = raise_floor(text, metric, floor)
         if applied:
             with open(path, "w") as f:
                 f.write(new_text)
@@ -123,26 +157,39 @@ def main(argv=None):
             print("kept {} floor ({} measured)".format(name, value))
 
     print("{} baseline(s) raised".format(len(updated)))
+    if unreadable:
+        print("{} benchmark(s) skipped: {}".format(len(unreadable), ", ".join(unreadable)))
+        return 1
     return 0
 
 
 def self_test():
+    rps, ops = METRICS[0][0], METRICS[1][0]
+
     text = 'version: 0.2\nname: "t"\n'
-    text, applied = raise_floor(text, 100.0)
+    text, applied = raise_floor(text, rps, 100.0)
     assert applied and '"$.Tests.Overall.rps": 100.0' in text, text
 
-    text, applied = raise_floor(text, 150.0)
+    text, applied = raise_floor(text, rps, 150.0)
     assert applied and "150.0" in text, text
 
     # A slower run must not lower the floor.
-    text, applied = raise_floor(text, 120.0)
+    text, applied = raise_floor(text, rps, 120.0)
     assert not applied and "150.0" in text, text
 
     # Unquoted keys and deeper indentation are recognised, not duplicated.
     other = "kpis:\n  - ge:\n        $.Tests.Overall.rps: 10\n"
-    other, applied = raise_floor(other, 20.0)
+    other, applied = raise_floor(other, rps, 20.0)
     assert applied and other.count("$.Tests.Overall.rps") == 1, other
     assert other == "kpis:\n  - ge:\n        $.Tests.Overall.rps: 20.0\n", other
+
+    # The memtier metric contains double quotes, so its YAML key is
+    # single-quoted, and it must round-trip like the redis-benchmark one.
+    memtier = 'name: "t"\n'
+    memtier, applied = raise_floor(memtier, ops, 149.02)
+    assert applied and "'$.\"ALL STATS\".Totals.\"Ops/sec\"': 149.02" in memtier, memtier
+    memtier, applied = raise_floor(memtier, ops, 100.0)
+    assert not applied and memtier.count("Ops/sec") == 1, memtier
 
     print("self-test ok")
     return 0
