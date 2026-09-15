@@ -460,6 +460,20 @@ def test_array_creation_checks_operand_depth_before_writing():
             env.expect('JSON.GET', KEY, '$').equal('[{}]')
 
 
+def test_seeded_arrays_handle_typed_array_conversion():
+    env = _env(True)
+    for fpha in ('FP16', 'FP32', 'FP64'):
+        for operand in (1e100, 'text', None, {'n': 1}, [1, 2]):
+            for command in ('JSON.ARRAPPEND', 'JSON.ARRINSERT'):
+                env.expect('JSON.SET', KEY, '$',
+                           '{"new":{},"typed":{"a":[1.0,2.0]}}', 'FPHA', fpha).ok()
+                args = ('0', json.dumps(operand)) if command == 'JSON.ARRINSERT' else (json.dumps(operand),)
+                env.expect(command, KEY, "$['new','typed'].a", *args).equal([1, 3])
+                typed = [operand, 1, 2] if command == 'JSON.ARRINSERT' else [1, 2, operand]
+                env.assertEqual(json.loads(env.cmd('JSON.GET', KEY)),
+                                {'new': {'a': [operand]}, 'typed': {'a': typed}})
+
+
 def test_seeded_commands_preserve_filter_targets():
     env = _env(True)
     for command, args, reply, value in (
@@ -480,6 +494,56 @@ def test_seeded_commands_preserve_filter_targets():
     env.expect('JSON.ARRAPPEND', KEY, "$['a','b','c','a'].n", '1').equal([1, None, 2, 2])
     env.expect('JSON.GET', KEY, '$').equal(
         '[{"a":{"n":[1,1]},"b":{"n":"wrong"},"c":{"n":[2,1]}}]')
+
+
+def test_mset_dynamic_paths_see_earlier_creations():
+    env = _env(True)
+    for first_path, first_value, path, expected in (
+        ('$.a', '{}', '$.*.b', {'a': {'b': 2}}),
+        ('$.a', '{"tag":1}', '$[?(@.tag==1)].b', {'a': {'tag': 1, 'b': 2}}),
+        ('$.a', '[{}]', '$.a[*].b', {'a': [{'b': 2}]}),
+        ('$.a', '{}', "$['a','missing'].b", {'a': {'b': 2}}),
+        ('$', '{"a":{}}', '$.*.b', {'a': {'b': 2}}),
+    ):
+        for existing in (False, True):
+            env.cmd('DEL', KEY)
+            if existing:
+                env.expect('JSON.SET', KEY, '$', '{}').ok()
+            env.expect('JSON.MSET', KEY, first_path, first_value, KEY, path, '2').ok()
+            env.assertEqual(json.loads(env.cmd('JSON.GET', KEY)), expected)
+
+
+def test_mset_deferred_paths_preserve_validation():
+    env = _env(True)
+    for path, value, error in (
+        ('$[', '2', 'Error occurred at position'),
+        ('$.a + 1', '2', 'computed/projection'),
+        ('$.*.b', '{', 'EOF'),
+    ):
+        env.expect('JSON.SET', KEY, '$', '{}').ok()
+        env.expect('JSON.MSET', KEY, '$.a', '{}', KEY, path, value).raiseError().contains(error)
+        env.expect('JSON.GET', KEY, '$').equal('[{}]')
+
+    for existing in (False, True):
+        env.expect('JSON.SET', KEY, '$', '{}').ok()
+        env.cmd('DEL', KEY2)
+        if existing:
+            env.expect('JSON.SET', KEY2, '$', '{}').ok()
+        error = 'wrong static path' if existing else 'new objects must be created at the root'
+        env.expect('JSON.MSET', KEY, '$.a', '{}', KEY2, '$.*.b', '2').raiseError().contains(error)
+        env.expect('JSON.GET', KEY, '$').equal('[{}]')
+        env.expect('JSON.GET', KEY2, '$').equal('[{}]' if existing else None)
+
+
+def test_mset_deferred_path_without_targets_returns_nil():
+    env = _env(True)
+    for existing in (False, True):
+        env.cmd('DEL', KEY)
+        if existing:
+            env.expect('JSON.SET', KEY, '$', '{}').ok()
+        env.expect('JSON.MSET', KEY, '$.a', '1', KEY, '$.*.b', '2',
+                   KEY, '$.after', '3').equal(None)
+        env.expect('JSON.GET', KEY, '$').equal('[{"a":1,"after":3}]')
 
 
 def test_mset_disabled_preserves_original_targets():

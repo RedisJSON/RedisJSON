@@ -25,6 +25,7 @@ use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use std::borrow::Borrow;
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::str::FromStr;
 
 use json_path::{
@@ -774,6 +775,8 @@ struct MsetTriplet {
     /// Object keys to build a whole document from, for a key with nothing to
     /// write into: empty for `$`, the path's key chain for a key that does not
     /// exist yet.
+    /// Later triplets on the same key leave this empty and use the document
+    /// produced by earlier triplets instead.
     new_doc_keys: Vec<String>,
     value: String,
     update_info: Option<Vec<UpdateInfo>>,
@@ -822,15 +825,25 @@ pub fn json_mset_command_impl<M: Manager>(
 
     // Parse the arguments, validate the keys and the paths
     let mut parsed: Vec<MsetTriplet> = Vec::new();
+    let mut seen_keys = HashSet::new();
     while let Ok(key) = args.next_arg() {
         let mut redis_key = manager.open_key_write(ctx, key.clone())?;
         let key_value = redis_key.get_value()?;
+        let replan = create_intermediates && !seen_keys.insert(key.clone());
 
         // Validate the path
         let path_str = args.next_str()?.to_string();
         let path = Path::new(&path_str);
         let mut update_info = None;
         let new_doc_keys = if path == JSON_ROOT_PATH {
+            Vec::new()
+        } else if replan {
+            // Earlier triplets may create this key or change what the path
+            // matches. Validate syntax and projections now; resolve targets
+            // in pass two, where an unapplied triplet contributes a nil reply.
+            if compile(path.get_path())?.is_projection() {
+                return Err(err_projection_readonly());
+            }
             Vec::new()
         } else if let Some(existing) = key_value {
             if create_intermediates {
