@@ -98,12 +98,15 @@ jobs:
           BENCHMARK_GLOB: ${{ inputs.benchmark_glob }}
           BENCHMARK_RUNNER_GROUP_M_ID: ${{ inputs.benchmark_runner_group_member_id }}
           BENCHMARK_RUNNER_GROUP_TOTAL: ${{ inputs.benchmark_runner_group_total }}
-        # json_nummultby_num_2 is excluded: redis-benchmark has exited 1 there
-        # with an empty result set since at least 2026-08-09 (silently, while
-        # this step still carried continue-on-error). Left in, it would redden
-        # every run and make a real regression indistinguishable from it.
+        # NOTE: json_nummultby_num_2 fails on every run (MOD-18654, broken since
+        # at least 2026-08-09), so this step is expected to be red until that is
+        # fixed. A KPI floor breach is therefore NOT distinguishable from job
+        # status alone -- classify by log line:
+        #   "Condition on ... is False. Failing test expectations" -> regression
+        #   "Failed to run remote benchmark for test '...'"        -> MOD-18654
+        # All other benchmarks still run and still report; run-remote is not
+        # given --fail_fast.
         run: redisbench-admin run-remote
-              --test-regex '^(?!json_nummultby_num_2\.yml).*'
               --module_path ../../${{ inputs.module_path }}
               --github_actor ${{ github.triggering_actor }}
               --github_repo ${{ github.event.repository.name }}

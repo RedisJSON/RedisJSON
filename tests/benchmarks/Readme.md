@@ -42,10 +42,21 @@ nightly analysis:
 3. A human merges it, accepting the higher bar. Leaving it unmerged keeps the
    current baselines.
 
-One benchmark is currently excluded from CI by a `--test-regex` in
-`benchmark-flow.yml`: `json_nummultby_num_2`, where `redis-benchmark` has
-exited 1 with an empty result set since at least 2026-08-09. It therefore has
-no floor and produces no data at all — re-enable it once that is fixed.
+One benchmark, `json_nummultby_num_2`, fails on every run — `redis-benchmark`
+exits 1 with an empty result set, and has since at least 2026-08-09
+(MOD-18654). It still runs, and it has no floor of its own.
+
+That means **the benchmark job is red on every run until MOD-18654 is fixed**,
+so job status alone does not tell you whether a baseline was breached. Read the
+log instead:
+
+| Log line | Meaning |
+|---|---|
+| `Condition on <metric> <measured> ge <floor> is False` | performance regression |
+| `Failed to run remote benchmark for test '<name>'` | the benchmark itself errored (MOD-18654) |
+
+The other 42 benchmarks run and report regardless — `run-remote` is not given
+`--fail_fast`, so one failing test does not stop the rest.
 
 `update_kpis.py` can only **raise** a floor, to `measured * (1 - margin)`
 (margin 5% by default), so a baseline cannot drift downwards even by accident —
