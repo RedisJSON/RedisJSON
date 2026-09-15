@@ -517,6 +517,19 @@ def test_set_replacements_discard_descendant_creations():
                 env.assertEqual(json.loads(env.getSlaveConnection().execute_command('JSON.GET', KEY)), expected)
 
 
+def test_merge_replacements_discard_descendant_creations():
+    env = _env(True)
+    for patch in (5, 1.5, True, 'value', [1, 2], None):
+        for initial, expected in (
+            ({'a': {'a': {}}}, {'a': {'a': patch}}),
+            ({'a': {'a': {}}, 'branch': {}},
+             {'a': {'a': patch}, 'branch': {'a': {'a': patch}}}),
+        ):
+            env.expect('JSON.SET', KEY, '$', json.dumps(initial)).ok()
+            env.expect('JSON.MERGE', KEY, '$..a.a', json.dumps(patch)).ok()
+            env.assertEqual(json.loads(env.cmd('JSON.GET', KEY)), expected)
+
+
 def test_merge_and_nx_keep_descendant_creations():
     env = _env(True)
     descendants = {'a': {'n': 5, 'a': {'n': 5}}}

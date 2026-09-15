@@ -23,6 +23,7 @@ use ijson::FloatType;
 use json_path::select_value::{SelectValue, SelectValueType, ValueRef};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
+use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::str::FromStr;
 
@@ -634,14 +635,20 @@ pub fn json_merge_command_impl<M: Manager>(
                 };
                 // Creation runs alongside the updates, not instead of them: a
                 // multi-target path can match some places and miss others.
-                let SetPlan {
-                    updates: mut update_info,
-                    creations: sites,
-                } = KeyValue::new(doc).plan_set(
+                let mut plan = KeyValue::new(doc).plan_set(
                     query.clone(),
                     SetOptions::MergeExisting,
                     creation,
                 )?;
+                // Non-object patches replace their targets, discarding anything below them.
+                let patch: &M::V = val.borrow();
+                if patch.get_type() != SelectValueType::Object {
+                    plan.discard_descendant_creations();
+                }
+                let SetPlan {
+                    updates: mut update_info,
+                    creations: sites,
+                } = plan;
                 if update_info.is_empty() && sites.is_empty() {
                     nothing_to_write(query, doc)
                 } else {

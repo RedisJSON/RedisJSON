@@ -39,6 +39,25 @@ pub(crate) struct SetPlan {
     pub creations: Vec<CreateSite>,
 }
 
+impl SetPlan {
+    pub(crate) fn discard_descendant_creations(&mut self) {
+        if self.creations.is_empty() || self.updates.is_empty() {
+            return;
+        }
+        let replacements: HashSet<_> = self
+            .updates
+            .iter()
+            .filter_map(|update| match update {
+                UpdateInfo::SUI(update) => Some(update.path.as_slice()),
+                UpdateInfo::AUI(_) => None,
+            })
+            .collect();
+        self.creations.retain(|site| {
+            !(0..=site.parent.len()).any(|len| replacements.contains(&site.parent[..len]))
+        });
+    }
+}
+
 impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     pub const fn new(v: &'a V) -> KeyValue<'a, V> {
         KeyValue {
@@ -429,29 +448,26 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 });
             }
             let mut paths = Vec::new();
-            let mut creations = plan_write_paths(query, self.val.as_ref(), |path, value_type| {
+            let creations = plan_write_paths(query, self.val.as_ref(), |path, value_type| {
                 if value_type.is_some() {
                     paths.push(path);
                 }
             })?;
             if option != SetOptions::MergeExisting {
                 prepare_paths_for_updating(&mut paths);
-                // Replacing an existing ancestor discards every creation below it.
-                if !creations.is_empty() && !paths.is_empty() {
-                    let replacements: HashSet<_> = paths.iter().map(Vec::as_slice).collect();
-                    creations.retain(|site| {
-                        !(0..=site.parent.len())
-                            .any(|len| replacements.contains(&site.parent[..len]))
-                    });
-                }
             }
-            return Ok(SetPlan {
+            let mut plan = SetPlan {
                 updates: paths
                     .into_iter()
                     .map(|path| UpdateInfo::SUI(SetUpdateInfo { path }))
                     .collect(),
                 creations,
-            });
+            };
+            // Replacing an existing ancestor discards every creation below it.
+            if option != SetOptions::MergeExisting {
+                plan.discard_descendant_creations();
+            }
+            return Ok(plan);
         }
         let mut plan = SetPlan {
             updates: self.find_existing_targets(query.clone(), option)?,
