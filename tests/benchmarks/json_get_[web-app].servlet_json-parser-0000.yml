@@ -13,3 +13,7 @@ clientconfig:
     - threads: 2
     - pipeline: 1
     - command: 'JSON.GET json-parser-0000 $.["\"web-app\""].servlet'
+
+kpis:
+  - ge:
+      "$.Tests.Overall.rps": 82597.21

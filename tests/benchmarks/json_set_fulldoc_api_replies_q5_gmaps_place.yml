@@ -13,3 +13,7 @@ clientconfig:
     - keyspacelen: 10000
     - command: 'JSON.SET __rand_int__ $'
     - x: "./datasets/api_replies_q5_gmaps_place.json"
+
+kpis:
+  - ge:
+      "$.Tests.Overall.rps": 2148.57

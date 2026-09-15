@@ -13,3 +13,7 @@ clientconfig:
     - threads: 2
     - pipeline: 1
     - command: 'JSON.SET jsonsl-yahoo2 $.ResultSet.totalResultsAvailable 1'
+
+kpis:
+  - ge:
+      "$.Tests.Overall.rps": 103816.06

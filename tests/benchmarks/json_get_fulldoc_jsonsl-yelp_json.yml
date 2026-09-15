@@ -13,3 +13,7 @@ clientconfig:
     - threads: 2
     - pipeline: 1
     - command: 'JSON.GET jsonsl-yelp $'
+
+kpis:
+  - ge:
+      "$.Tests.Overall.rps": 17911.69
