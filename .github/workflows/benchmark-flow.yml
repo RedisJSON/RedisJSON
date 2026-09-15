@@ -80,7 +80,10 @@ jobs:
       - name: Run CI benchmarks on aws for envs ${{ inputs.allowed_envs }}
         timeout-minutes: 240 # timeout for the step
         working-directory: tests/benchmarks
-        continue-on-error: true
+        # No continue-on-error: the `kpis` floors committed in each benchmark yml
+        # are the performance baseline, and run-remote already exits non-zero
+        # when a run comes in below one (results_dict_kpi_check). Swallowing the
+        # exit code here would make the baseline gate decorative.
         env:
           # Hard-coded
           PERF_CALLGRAPH_MODE: dwarf
@@ -95,6 +98,14 @@ jobs:
           BENCHMARK_GLOB: ${{ inputs.benchmark_glob }}
           BENCHMARK_RUNNER_GROUP_M_ID: ${{ inputs.benchmark_runner_group_member_id }}
           BENCHMARK_RUNNER_GROUP_TOTAL: ${{ inputs.benchmark_runner_group_total }}
+        # NOTE: json_nummultby_num_2 fails on every run (MOD-18654, broken since
+        # at least 2026-08-09), so this step is expected to be red until that is
+        # fixed. A KPI floor breach is therefore NOT distinguishable from job
+        # status alone -- classify by log line:
+        #   "Condition on ... is False. Failing test expectations" -> regression
+        #   "Failed to run remote benchmark for test '...'"        -> MOD-18654
+        # All other benchmarks still run and still report; run-remote is not
+        # given --fail_fast.
         run: redisbench-admin run-remote
               --module_path ../../${{ inputs.module_path }}
               --github_actor ${{ github.triggering_actor }}
@@ -112,8 +123,25 @@ jobs:
               --redistimeseries_port ${{ secrets.PERFORMANCE_RTS_PORT }}
               --redistimeseries_pass '${{ secrets.PERFORMANCE_RTS_AUTH }}'
 
+      # Kept so a baseline bump can be proposed off a run's own numbers
+      # (tests/benchmarks/update_kpis.py) without re-running the benchmarks.
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          # triggering_env distinguishes the profiler matrix, which reuses the
+          # same member ids in the same workflow run -- upload-artifact@v6
+          # requires unique names.
+          name: benchmark-results-${{ inputs.triggering_env }}-${{ inputs.benchmark_runner_group_member_id }}
+          path: tests/benchmarks/*.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      # always(): a KPI floor breach fails the step above, and a bare
+      # `github.event.number` is implicitly `success() && ...`, which would drop
+      # the comparison comment exactly on the runs that need it.
       - name: Generate Pull Request Performance info
-        if: github.event.number
+        if: always() && github.event.number
         continue-on-error: true
         env:
           PERFORMANCE_GH_TOKEN: ${{ secrets.PERFORMANCE_GH_TOKEN }}

@@ -160,12 +160,22 @@ jobs:
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
       beta-version: ${{needs.prepare-values.outputs.beta-version}}
     secrets: inherit
+  # Gates on the `kpis` floors committed in each benchmark yml. Raising a floor
+  # after a faster run is proposed out of band from the nightly analysis, never
+  # written by CI -- see tests/benchmarks/README.md.
+  benchmark:
+    # Not on push: event-push-to-integ.yml already benchmarks those same pushes,
+    # and test-summary is schedule/dispatch-only, so a push-triggered run here
+    # would burn a second set of EC2 instances and report nowhere.
+    if: github.event_name != 'push'
+    uses: ./.github/workflows/benchmark-runner.yml
+    secrets: inherit
   test-summary:
     uses: ./.github/workflows/test-summary.yml
-    needs: [prepare-values, build-linux-x64, build-linux-arm64, macos, linux-valgrind, linux-sanitizer, random-traffic]
+    needs: [prepare-values, build-linux-x64, build-linux-arm64, macos, linux-valgrind, linux-sanitizer, random-traffic, benchmark]
     if: always() && (github.event_name == 'schedule' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.send-slack-message == true))
     with:
       redis-ref: ${{ needs.prepare-values.outputs.redis-ref }}
       send-slack-message: ${{ github.event_name == 'schedule' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.send-slack-message == true) }}
-      job-failures: ${{ needs.build-linux-x64.result == 'failure' && 'build-linux-x64 ' || '' }}${{ needs.build-linux-arm64.result == 'failure' && 'build-linux-arm64 ' || '' }}${{ needs.macos.result == 'failure' && 'macos ' || '' }}${{ needs.linux-valgrind.result == 'failure' && 'linux-valgrind ' || '' }}${{ needs.linux-sanitizer.result == 'failure' && 'linux-sanitizer ' || '' }}${{ needs.random-traffic.result == 'failure' && 'random-traffic' || '' }}
+      job-failures: ${{ needs.build-linux-x64.result == 'failure' && 'build-linux-x64 ' || '' }}${{ needs.build-linux-arm64.result == 'failure' && 'build-linux-arm64 ' || '' }}${{ needs.macos.result == 'failure' && 'macos ' || '' }}${{ needs.linux-valgrind.result == 'failure' && 'linux-valgrind ' || '' }}${{ needs.linux-sanitizer.result == 'failure' && 'linux-sanitizer ' || '' }}${{ needs.random-traffic.result == 'failure' && 'random-traffic ' || '' }}${{ needs.benchmark.result == 'failure' && 'benchmark' || '' }}
     secrets: inherit
