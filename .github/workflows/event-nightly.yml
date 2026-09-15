@@ -164,6 +164,10 @@ jobs:
   # after a faster run is proposed out of band from the nightly analysis, never
   # written by CI -- see tests/benchmarks/Readme.md.
   benchmark:
+    # Not on push: event-push-to-integ.yml already benchmarks those same pushes,
+    # and test-summary is schedule/dispatch-only, so a push-triggered run here
+    # would burn a second set of EC2 instances and report nowhere.
+    if: github.event_name != 'push'
     uses: ./.github/workflows/benchmark-runner.yml
     secrets: inherit
   test-summary:

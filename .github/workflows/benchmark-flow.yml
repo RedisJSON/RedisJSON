@@ -126,13 +126,19 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-results-${{ inputs.benchmark_runner_group_member_id }}
+          # triggering_env distinguishes the profiler matrix, which reuses the
+          # same member ids in the same workflow run -- upload-artifact@v4
+          # requires unique names.
+          name: benchmark-results-${{ inputs.triggering_env }}-${{ inputs.benchmark_runner_group_member_id }}
           path: tests/benchmarks/*.json
           if-no-files-found: ignore
           retention-days: 30
 
+      # always(): a KPI floor breach fails the step above, and a bare
+      # `github.event.number` is implicitly `success() && ...`, which would drop
+      # the comparison comment exactly on the runs that need it.
       - name: Generate Pull Request Performance info
-        if: github.event.number
+        if: always() && github.event.number
         continue-on-error: true
         env:
           PERFORMANCE_GH_TOKEN: ${{ secrets.PERFORMANCE_GH_TOKEN }}

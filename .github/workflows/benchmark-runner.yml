@@ -16,6 +16,9 @@ on:
 jobs:
   benchmark-json-oss-standalone:
     strategy:
+      # One group failing its KPI floor must not cancel the others -- they carry
+      # the rest of the suite's results, and the gate is per-benchmark.
+      fail-fast: false
       matrix:
         member_id: [1, 2, 3]
     uses: ./.github/workflows/benchmark-flow.yml
@@ -27,6 +30,9 @@ jobs:
   benchmark-json-oss-standalone-profiler:
     if: ${{ inputs.run_profiler }}
     strategy:
+      # One group failing its KPI floor must not cancel the others -- they carry
+      # the rest of the suite's results, and the gate is per-benchmark.
+      fail-fast: false
       matrix:
         member_id: [1, 2, 3]
     uses: ./.github/workflows/benchmark-flow.yml

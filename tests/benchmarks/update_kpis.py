@@ -74,9 +74,15 @@ def result_metric(results_dir, name):
     <start>-<org>-<repo>-<branch>-<test_name>-<deployment>-<sha>.json
     (redisbench_admin.utils.remote.get_run_full_filename).
     """
-    # Many benchmark names contain [0] / [web-app], which glob reads as
+    # The filename joins branch and test_name with the same '-' separator, so
+    # anchoring on the test name alone lets a branch that happens to contain a
+    # benchmark name bind the wrong result. The deployment type always follows
+    # the test name and always starts "oss-" (oss-standalone, oss-cluster), so
+    # require that too.
+    #
+    # Many benchmark names also contain [0] / [web-app], which glob reads as
     # character classes -- escape them.
-    pattern = "*-{}-*.json".format(glob.escape(name))
+    pattern = "*-{}-oss-*.json".format(glob.escape(name))
     matches = glob.glob(os.path.join(results_dir, pattern))
     if not matches:
         return None, None
