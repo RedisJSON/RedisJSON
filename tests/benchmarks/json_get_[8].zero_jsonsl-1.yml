@@ -13,3 +13,7 @@ clientconfig:
     - threads: 2
     - pipeline: 1
     - command: 'JSON.GET jsonsl-1 $.[8].zero'
+
+kpis:
+  - ge:
+      "$.Tests.Overall.rps": 121009.86

@@ -13,3 +13,7 @@ clientconfig:
     - threads: 2
     - pipeline: 1
     - command: 'JSON.GET pass-100 $'
+
+kpis:
+  - ge:
+      "$.Tests.Overall.rps": 136678.86

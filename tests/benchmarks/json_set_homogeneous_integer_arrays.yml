@@ -13,3 +13,7 @@ clientconfig:
     - keyspacelen: 100000
     - command: "JSON.SET __rand_int__ $"
     - x: "./datasets/homogeneous_integer_arrays.json"
+
+kpis:
+  - ge:
+      "$.Tests.Overall.rps": 20637.82

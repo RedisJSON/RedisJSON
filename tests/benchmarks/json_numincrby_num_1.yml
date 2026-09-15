@@ -13,3 +13,7 @@ clientconfig:
     - threads: 2
     - pipeline: 1
     - command: 'JSON.NUMINCRBY num $ 1'
+
+kpis:
+  - ge:
+      "$.Tests.Overall.rps": 113084.47

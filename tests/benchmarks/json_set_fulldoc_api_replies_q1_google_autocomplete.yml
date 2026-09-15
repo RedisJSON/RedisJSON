@@ -13,3 +13,7 @@ clientconfig:
     - keyspacelen: 100000
     - command: "JSON.SET __rand_int__ $"
     - x: "./datasets/api_replies_q1_google_autocomplete.json"
+
+kpis:
+  - ge:
+      "$.Tests.Overall.rps": 59925.18

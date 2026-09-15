@@ -12,3 +12,7 @@ clientconfig:
     - keyspacelen: 10000
     - command: "JSON.SET __rand_int__ $"
     - x: "./datasets/pass-jsonsl-yahoo2.json"
+
+kpis:
+  - ge:
+      "$.Tests.Overall.rps": 14379.12
