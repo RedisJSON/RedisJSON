@@ -162,7 +162,7 @@ jobs:
     secrets: inherit
   # Gates on the `kpis` floors committed in each benchmark yml. Raising a floor
   # after a faster run is proposed out of band from the nightly analysis, never
-  # written by CI -- see tests/benchmarks/Readme.md.
+  # written by CI -- see tests/benchmarks/README.md.
   benchmark:
     # Not on push: event-push-to-integ.yml already benchmarks those same pushes,
     # and test-summary is schedule/dispatch-only, so a push-triggered run here

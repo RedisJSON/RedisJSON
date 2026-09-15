@@ -127,10 +127,10 @@ jobs:
       # (tests/benchmarks/update_kpis.py) without re-running the benchmarks.
       - name: Upload benchmark results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           # triggering_env distinguishes the profiler matrix, which reuses the
-          # same member ids in the same workflow run -- upload-artifact@v4
+          # same member ids in the same workflow run -- upload-artifact@v6
           # requires unique names.
           name: benchmark-results-${{ inputs.triggering_env }}-${{ inputs.benchmark_runner_group_member_id }}
           path: tests/benchmarks/*.json
