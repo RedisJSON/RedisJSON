@@ -11,6 +11,7 @@ pub use ijson::FloatType;
 use json_path::select_value::SelectValue;
 use redis_module::key::KeyFlags;
 use serde_json::Number;
+use std::borrow::Borrow;
 
 use redis_module::raw::RedisModuleKey;
 use redis_module::RedisError;
@@ -68,7 +69,9 @@ pub trait Manager {
      * always possible so they are separated
      */
     type V: SelectValue;
-    type O: Clone;
+    /// An owned JSON value that can be assembled before attachment to a key.
+    /// The borrowed view may have a different type and need not support mutable children.
+    type O: Clone + Borrow<Self::V>;
     type WriteHolder: WriteHolder<Self::O, Self::V>;
     type ReadHolder: ReadHolder<Self::V>;
     fn open_key_read(&self, ctx: &Context, key: &RedisString) -> RedisResult<Self::ReadHolder>;
@@ -89,6 +92,30 @@ pub trait Manager {
         limit_depth: bool,
         fpha_type: Option<FloatType>,
     ) -> RedisResult<Self::O>;
+
+    /// Copy a JSON value into detached storage, preserving its value representation.
+    fn clone_value(&self, value: &Self::V) -> Self::O;
+
+    /// Construct an object from unique fields, in the supplied order, taking ownership
+    /// of their values. On failure, release any values already consumed.
+    /// Implementations must not mutate stored documents or emit replication effects.
+    fn create_object(&self, fields: Vec<(String, Self::O)>) -> RedisResult<Self::O>;
+
+    /// Consume a detached object into owned fields, preserving their order and values.
+    /// Backends that cannot detach children may copy them before releasing the object.
+    fn take_object_fields(
+        &self,
+        object: Self::O,
+    ) -> RedisResult<impl Iterator<Item = (String, Self::O)>> {
+        let fields: Vec<_> = object
+            .borrow()
+            .items()
+            .ok_or_else(err_bad_object)?
+            .map(|(name, value)| (name.to_owned(), self.clone_value(value.as_ref())))
+            .collect();
+        Ok(fields.into_iter())
+    }
+
     fn get_memory(v: &Self::V) -> RedisResult<usize>;
     fn is_json(&self, key: *mut RedisModuleKey) -> RedisResult<bool>;
 }
@@ -113,8 +140,10 @@ pub fn err_invalid_path_or(or: &str) -> RedisError {
     RedisError::String(format!("ERR Path does not exist or {or}"))
 }
 
+pub(crate) const ERR_RECURSION_LIMIT_EXCEEDED: &str = "ERR recursion limit exceeded";
+
 pub fn err_recursion_limit_exceeded() -> RedisError {
-    RedisError::Str("ERR recursion limit exceeded")
+    RedisError::Str(ERR_RECURSION_LIMIT_EXCEEDED)
 }
 
 pub fn err_numeric_overflow() -> RedisError {

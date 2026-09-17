@@ -10,6 +10,7 @@
 use crate::manager::{
     err_invalid_path, err_json, err_recursion_limit_exceeded, Manager, ReadHolder, WriteHolder,
 };
+use crate::number::number_op_result;
 use crate::redisjson::normalize_arr_start_index;
 use crate::Format;
 use crate::REDIS_JSON_TYPE;
@@ -18,7 +19,7 @@ use ijson::array::{ArrayTag, IArray, TryExtend};
 use ijson::{
     DestructuredMut, FPHAConfig, FloatType, INumber, IObject, IString, IValue, IValueDeserSeed,
 };
-use json_path::select_value::{SelectValue, SelectValueType, MAX_DEPTH};
+use json_path::select_value::{SelectValue, MAX_DEPTH};
 use redis_module::key::{verify_type, KeyFlags, RedisKey, RedisKeyWritable};
 use redis_module::raw::{self as rawmod, RedisModuleKey, Status};
 use redis_module::RedisError;
@@ -195,25 +196,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
             ) => {
                 match $v {
                     PathValue::IValue(v) => {
-                        let new_val = match (v.get_type(), in_value.as_i64()) {
-                            (SelectValueType::Long, Some(num2)) => {
-                                let num1 = v
-                                    .get_long()
-                                    .ok_or(crate::manager::err_not_a_number())?;
-                                Ok(op_int(num1 as i128, num2 as i128)
-                                    .and_then(|r| i64::try_from(r).ok())
-                                    .ok_or(crate::manager::err_numeric_overflow())?
-                                    .into())
-                            }
-                            _ => {
-                                let num1 = v
-                                    .get_double()
-                                    .ok_or(crate::manager::err_not_a_number())?;
-                                let num2 = in_value.as_f64().ok_or(crate::manager::err_not_a_number())?;
-                                INumber::try_from(op_float(num1, num2))
-                                    .map_err(|_| crate::manager::err_not_a_number())
-                            }
-                        }?;
+                        let new_val = number_op_result(v, in_value, op_int, op_float)?;
                         *v = IValue::from(new_val.clone());
                         Ok(NumOpResult::INumber(new_val))
                     }
@@ -850,6 +833,31 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         }
     }
 
+    fn clone_value(&self, value: &IValue) -> IValue {
+        value.clone()
+    }
+
+    fn create_object(&self, fields: Vec<(String, IValue)>) -> RedisResult<IValue> {
+        let mut object = IObject::new();
+        for (name, value) in fields {
+            object
+                .insert(name.as_str(), value)
+                .map_err(|e| RedisError::String(e.to_string()))?;
+        }
+        Ok(object.into())
+    }
+
+    fn take_object_fields(
+        &self,
+        object: IValue,
+    ) -> RedisResult<impl Iterator<Item = (String, IValue)>> {
+        Ok(object
+            .into_object()
+            .map_err(|_| crate::manager::err_bad_object())?
+            .into_iter()
+            .map(|(name, value)| (name.to_string(), value)))
+    }
+
     fn get_memory(v: &Self::V) -> RedisResult<usize> {
         Ok(v.mem_allocated() + size_of::<IValue>())
     }
@@ -866,8 +874,83 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::auto_create::nest_in_objects;
 
     static SINGLE_THREAD_TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn manager() -> RedisIValueJsonKeyManager<'static> {
+        RedisIValueJsonKeyManager {
+            phantom: PhantomData,
+        }
+    }
+
+    fn keys(names: &[&str]) -> Vec<String> {
+        names.iter().map(|n| (*n).to_string()).collect()
+    }
+
+    #[test]
+    fn taking_object_fields_moves_array_storage_and_preserves_order() {
+        let manager = manager();
+        let object: IValue = serde_json::from_str(r#"{"z":[1,2,3],"a":{"n":1}}"#).unwrap();
+        let array = object.get_key("z").unwrap().get_array();
+        assert!(!array.is_null());
+        let fields: Vec<_> = manager.take_object_fields(object).unwrap().collect();
+        assert_eq!(
+            fields
+                .iter()
+                .map(|(name, _)| name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["z", "a"]
+        );
+        assert_eq!(fields[0].1.get_array(), array);
+        assert_eq!(
+            fields[1].1,
+            serde_json::from_str::<IValue>(r#"{"n":1}"#).unwrap()
+        );
+    }
+
+    #[test]
+    fn nest_in_objects_returns_the_value_when_there_are_no_keys() {
+        let value: IValue = serde_json::from_str("5").unwrap();
+        let nested = nest_in_objects(&manager(), &[], value.clone()).unwrap();
+        assert_eq!(nested, value);
+    }
+
+    #[test]
+    fn nest_in_objects_builds_the_chain_outermost_key_first() {
+        let value: IValue = serde_json::from_str("5").unwrap();
+        let nested = nest_in_objects(&manager(), &keys(&["b", "c"]), value).unwrap();
+        let expected: IValue = serde_json::from_str(r#"{"b":{"c":5}}"#).unwrap();
+        assert_eq!(nested, expected);
+    }
+
+    #[test]
+    fn nest_in_objects_preserves_a_container_value() {
+        let value: IValue = serde_json::from_str(r#"{"x":[1,2]}"#).unwrap();
+        let nested = nest_in_objects(&manager(), &keys(&["a"]), value).unwrap();
+        let expected: IValue = serde_json::from_str(r#"{"a":{"x":[1,2]}}"#).unwrap();
+        assert_eq!(nested, expected);
+    }
+
+    #[test]
+    fn nest_in_objects_adds_one_depth_per_key() {
+        // This is what makes `dict_add`'s pre-mutation depth check exact for a
+        // whole created chain: patch_depth grows by one per level.
+        let value: IValue = serde_json::from_str(r#"{"x":1}"#).unwrap();
+        assert_eq!(value.calculate_value_depth(), 1);
+        for n in 0..4 {
+            let nested = nest_in_objects(&manager(), &keys(&["k"; 4][..n]), value.clone()).unwrap();
+            assert_eq!(nested.calculate_value_depth(), 1 + n, "{n} keys");
+        }
+    }
+
+    #[test]
+    fn nest_in_objects_keeps_keys_that_need_escaping() {
+        let value: IValue = serde_json::from_str("1").unwrap();
+        let nested = nest_in_objects(&manager(), &keys(&["a b", "c\"d"]), value).unwrap();
+        let expected: IValue = serde_json::from_str(r#"{"a b":{"c\"d":1}}"#).unwrap();
+        assert_eq!(nested, expected);
+    }
 
     #[test]
     fn test_get_memory() {

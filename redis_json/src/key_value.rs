@@ -1,16 +1,17 @@
 use itertools::Itertools;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use json_path::{
     calc_once, calc_once_paths, calc_once_projection, compile,
-    json_path::JsonPathToken,
+    json_path::Query,
     select_value::{is_equal, SelectValue, SelectValueType, ValueRef},
 };
-use redis_module::{redisvalue::RedisValueKey, RedisError, RedisResult, RedisValue};
+use redis_module::{redisvalue::RedisValueKey, RedisResult, RedisValue};
 use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
+    auto_create::{plan_creation, plan_write_paths, validate_legacy_creation_path, CreateSite},
     commands::{prepare_paths_for_updating, FoundIndex, ObjectLen, Values},
     formatter::{RedisJsonFormatter, ReplyFormatOptions},
     manager::{
@@ -22,6 +23,39 @@ use crate::{
 
 pub struct KeyValue<'a, V: SelectValue> {
     val: ValueRef<'a, V>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CreationPolicy {
+    /// Preserve SET's original behavior: add only a final key to an existing parent.
+    FinalKeyOnly,
+    /// Allow missing object chains alongside updates to existing targets.
+    MissingObjects,
+}
+
+/// Existing writes and detached-subtree creation are applied separately.
+pub(crate) struct SetPlan {
+    pub updates: Vec<UpdateInfo>,
+    pub creations: Vec<CreateSite>,
+}
+
+impl SetPlan {
+    pub(crate) fn discard_descendant_creations(&mut self) {
+        if self.creations.is_empty() || self.updates.is_empty() {
+            return;
+        }
+        let replacements: HashSet<_> = self
+            .updates
+            .iter()
+            .filter_map(|update| match update {
+                UpdateInfo::SUI(update) => Some(update.path.as_slice()),
+                UpdateInfo::AUI(_) => None,
+            })
+            .collect();
+        self.creations.retain(|site| {
+            !(0..=site.parent.len()).any(|len| replacements.contains(&site.parent[..len]))
+        });
+    }
 }
 
 impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
@@ -369,82 +403,97 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    fn find_add_paths(&mut self, path: &str) -> RedisResult<Vec<UpdateInfo>> {
-        let mut query = compile(path)?;
+    /// Find existing targets matched by `query`, returned as `SetUpdateInfo` entries.
+    /// This only selects targets; it does not modify the document or plan additions.
+    ///
+    /// Empty when nothing matches, and always empty for `NX`, which only ever
+    /// adds. To include permitted additions, use [`Self::plan_set`].
+    fn find_existing_targets(
+        &self,
+        query: Query,
+        option: SetOptions,
+    ) -> RedisResult<Vec<UpdateInfo>> {
+        if option == SetOptions::NotExists {
+            return Ok(Vec::new());
+        }
         if query.is_projection() {
             return Err(err_projection_readonly());
         }
-        if !query.is_static() {
-            return Err(RedisError::Str("Err wrong static path"));
+        let mut res = calc_once_paths(query, self.val.as_ref());
+        if option != SetOptions::MergeExisting {
+            prepare_paths_for_updating(&mut res);
         }
-
-        if query.size() < 1 {
-            return Err(RedisError::Str("Err path must end with object key to set"));
-        }
-
-        let (last, token_type) = query.pop_last().unwrap();
-
-        match token_type {
-            JsonPathToken::String => {
-                if query.size() == 1 {
-                    // Adding to the root
-                    Ok(vec![UpdateInfo::AUI(AddUpdateInfo {
-                        path: Vec::new(),
-                        key: last,
-                    })])
-                } else {
-                    // Adding somewhere in existing object
-                    let res = calc_once_paths(query, self.val.as_ref());
-
-                    Ok(res
-                        .into_iter()
-                        .map(|v| {
-                            UpdateInfo::AUI(AddUpdateInfo {
-                                path: v,
-                                key: last.to_string(),
-                            })
-                        })
-                        .collect())
-                }
-            }
-            JsonPathToken::Number => {
-                // if we reach here with array path we are either out of range
-                // or no-oping an NX where the value is already present
-
-                let query = compile(path)?;
-                let res = calc_once_paths(query, self.val.as_ref());
-
-                if res.is_empty() {
-                    Err(RedisError::Str("ERR array index out of range"))
-                } else {
-                    Ok(Vec::new())
-                }
-            }
-        }
+        Ok(res
+            .into_iter()
+            .map(|v| UpdateInfo::SUI(SetUpdateInfo { path: v }))
+            .collect())
     }
 
-    pub fn find_paths(&mut self, path: &str, option: SetOptions) -> RedisResult<Vec<UpdateInfo>> {
-        if option != SetOptions::NotExists {
-            let query = compile(path)?;
-            if query.is_projection() {
-                return Err(err_projection_readonly());
+    /// Plan SET writes by combining [`Self::find_existing_targets`] with additions
+    /// permitted by `creation`, without mutating the document.
+    /// `FinalKeyOnly` puts final-key additions in `updates`; `MissingObjects`
+    /// puts missing object chains in `creations` for separate materialization.
+    /// With missing-object creation enabled, both are captured by one prefix evaluation.
+    pub(crate) fn plan_set(
+        &self,
+        query: Query,
+        option: SetOptions,
+        creation: CreationPolicy,
+    ) -> RedisResult<SetPlan> {
+        if creation == CreationPolicy::MissingObjects && option != SetOptions::AlreadyExists {
+            if option == SetOptions::NotExists {
+                return Ok(SetPlan {
+                    updates: Vec::new(),
+                    creations: plan_creation(query, self.val.as_ref(), true)?,
+                });
             }
-            let mut res = calc_once_paths(query, self.val.as_ref());
+            let mut paths = Vec::new();
+            let creations = plan_write_paths(query, self.val.as_ref(), |path, value_type| {
+                if value_type.is_some() {
+                    paths.push(path);
+                }
+            })?;
             if option != SetOptions::MergeExisting {
-                prepare_paths_for_updating(&mut res);
+                prepare_paths_for_updating(&mut paths);
             }
-            if !res.is_empty() {
-                return Ok(res
+            let mut plan = SetPlan {
+                updates: paths
                     .into_iter()
-                    .map(|v| UpdateInfo::SUI(SetUpdateInfo { path: v }))
-                    .collect());
+                    .map(|path| UpdateInfo::SUI(SetUpdateInfo { path }))
+                    .collect(),
+                creations,
+            };
+            // Replacing an existing ancestor discards every creation below it.
+            if option != SetOptions::MergeExisting {
+                plan.discard_descendant_creations();
             }
+            return Ok(plan);
         }
+        let mut plan = SetPlan {
+            updates: self.find_existing_targets(query.clone(), option)?,
+            creations: Vec::new(),
+        };
         if option == SetOptions::AlreadyExists {
-            Ok(Vec::new()) // empty vector means no updates
-        } else {
-            self.find_add_paths(path)
+            return Ok(plan);
         }
+        if !plan.updates.is_empty() {
+            return Ok(plan);
+        }
+        // Preserve final-key validation in dict_add, including typed-array parents.
+        validate_legacy_creation_path(query.clone(), self.val.as_ref())?;
+        let mut parent_query = query;
+        if let Some(key) = parent_query.pop_last_object_key() {
+            plan.updates = calc_once_paths(parent_query, self.val.as_ref())
+                .into_iter()
+                .map(|path| {
+                    UpdateInfo::AUI(AddUpdateInfo {
+                        path,
+                        key: key.clone(),
+                    })
+                })
+                .collect();
+        }
+        Ok(plan)
     }
 
     pub fn to_string_single(&self, path: &str, format: &ReplyFormatOptions) -> RedisResult<String> {

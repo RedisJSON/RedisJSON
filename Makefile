@@ -280,7 +280,7 @@ COV_EXCLUDE.llvm += $(foreach D,$(COV_EXCLUDE_DIRS),'$(realpath $(ROOT))/$(D)/*'
 coverage:
 	$(SHOW)$(MAKE) build COV=1
 	$(SHOW)$(COVERAGE_RESET.llvm)
-	-$(SHOW)$(MAKE) test COV=1
+	$(SHOW)$(MAKE) test COV=1
 	$(SHOW)$(COVERAGE_COLLECT_REPORT.llvm)
 
 .PHONY: coverage
