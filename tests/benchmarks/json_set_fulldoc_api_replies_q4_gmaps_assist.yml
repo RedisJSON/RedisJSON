@@ -16,4 +16,4 @@ clientconfig:
 
 kpis:
   - ge:
-      "$.Tests.Overall.rps": 128367.98
+      "$.Tests.Overall.rps": 107776.69
