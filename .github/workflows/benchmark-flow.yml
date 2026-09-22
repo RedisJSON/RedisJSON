@@ -165,7 +165,23 @@ jobs:
         # is absent and breaches are reported without failing the job.
         run: |
           mkdir -p kpi-state
-          python3 check_kpis.py --previous kpi-state/state.json --state-out kpi-state/state.json
+          python3 check_kpis.py --previous kpi-state/state.json --state-out kpi-state/state.json \
+            --findings-out kpi-state/findings.json
+
+      # Every benchmark under its floor is a finding worth a ticket, whether or
+      # not it repeated -- the floor already sits 5% below a measured baseline.
+      # The job does not fail on a single one (that would put it back to red on
+      # roughly half the nights, MOD-18822), so the findings have to leave the
+      # run in a form the nightly analysis can pick up and file from: this
+      # artifact, plus the table the check writes to the run summary.
+      - name: Upload KPI findings
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: benchmark-kpi-findings-${{ inputs.triggering_env }}-${{ inputs.benchmark_runner_group_member_id }}
+          path: tests/benchmarks/kpi-state/findings.json
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Save this run's KPI verdict
         if: always()

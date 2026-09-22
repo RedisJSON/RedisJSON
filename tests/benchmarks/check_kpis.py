@@ -14,10 +14,21 @@ not have regressed. Re-seeding the floors does not help: they were re-seeded
 the week before and every one of those breaches is on the new floors.
 
 So this script takes the verdict over from redisbench-admin's own check and
-requires a breach to repeat before it fails the job. No benchmark breached on
-consecutive nights in that four-night sample, so the repeat requirement removes
-every false alarm observed, while a genuine slowdown -- which does not go away
-overnight -- still fails, one night later than it otherwise would.
+splits the two things that were conflated in one exit code:
+
+* **Every** benchmark that comes in under its floor is a finding, whatever the
+  shortfall -- the floor is already 5% below a measured baseline, so being below
+  it at all is worth a ticket. Findings go to the step summary and to
+  ``kpi-state/findings.json``, which the nightly analysis reads to decide what
+  to file.
+* Only a breach the previous run saw too fails the job. No benchmark breached on
+  consecutive nights across that four-night sample, so this keeps job status
+  meaning "something is wrong" instead of "it was Tuesday", while a genuine
+  slowdown -- which does not go away overnight -- still fails, one night later
+  than it otherwise would.
+
+A first-time breach is therefore never silently passed; it is passed *and
+recorded*. Nothing here files a ticket by itself.
 
 This is a stopgap for the gate, not a fix for the measurement: a regression
 smaller than the harness's own spread stays invisible either way. Narrowing
@@ -26,12 +37,13 @@ should become per-benchmark and this repeat requirement can be revisited.
 
 Usage (from tests/benchmarks, after a run left its result json files there):
 
-    python3 check_kpis.py --previous prev.json --state-out state.json
+    python3 check_kpis.py --previous prev.json --state-out state.json \
+        --findings-out findings.json
     python3 check_kpis.py --self-test
 
-Exit status is 0 when nothing breached twice in a row (first-time breaches are
-reported as warnings) and 1 on a confirmed breach, or when the run produced no
-results at all.
+Exit status is 0 when nothing breached twice in a row -- first-time breaches are
+still listed and still written to the findings file -- and 1 on a confirmed
+breach, or when the run produced no results at all.
 """
 
 import argparse
@@ -104,6 +116,68 @@ def verdict(benchmarks_dir, results_dirs, previous):
     return rows, breached
 
 
+def findings(rows):
+    """The rows the nightly analysis has to look at, worst shortfall first."""
+    out = []
+    for name, floor, value, status in rows:
+        if status in (BREACH, CONFIRMED):
+            out.append(
+                {
+                    "benchmark": name,
+                    "status": status,
+                    "floor": floor,
+                    "measured": value,
+                    "shortfall_pct": round((1.0 - value / floor) * 100, 2),
+                }
+            )
+        elif status == UNGATED:
+            out.append({"benchmark": name, "status": status, "floor": None, "measured": value})
+    out.sort(key=lambda f: -(f.get("shortfall_pct") or 0))
+    return out
+
+
+def step_summary(found):
+    """A markdown table for $GITHUB_STEP_SUMMARY, so a breach is visible in the
+    run without opening the log. Every breach is ticket-worthy; which ones get
+    filed is decided during the nightly analysis."""
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not path:
+        return
+    lines = ["## Benchmark KPI floors", ""]
+    if not found:
+        lines.append("Every gated benchmark met its floor.")
+    else:
+        lines += [
+            "| benchmark | floor | measured | short | |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+        for f in found:
+            if f["status"] == UNGATED:
+                lines.append(
+                    "| `{}` | _none_ | {} | | ungated (MOD-18654) |".format(
+                        f["benchmark"], "no result" if f["measured"] is None else "{:.0f}".format(f["measured"])
+                    )
+                )
+            else:
+                lines.append(
+                    "| `{}` | {:.0f} | {:.0f} | -{:.1f}% | {} |".format(
+                        f["benchmark"],
+                        f["floor"],
+                        f["measured"],
+                        f["shortfall_pct"],
+                        "**breached twice -- fails the job**" if f["status"] == CONFIRMED else "breached once",
+                    )
+                )
+        lines += [
+            "",
+            "A benchmark under its floor is under a baseline already set 5% low, so each row "
+            "above is worth a ticket -- file during the nightly analysis. The job only fails "
+            "on a breach the previous run saw too (MOD-18822).",
+        ]
+    with open(path, "a") as f:
+        f.write("\n".join(lines) + "\n")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--benchmarks-dir", default=".")
@@ -115,6 +189,10 @@ def main(argv=None):
     )
     parser.add_argument("--previous", help="state file written by the previous run")
     parser.add_argument("--state-out", help="where to write this run's state")
+    parser.add_argument(
+        "--findings-out",
+        help="where to write every breach found, for the nightly analysis to triage",
+    )
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args(argv)
 
@@ -136,6 +214,12 @@ def main(argv=None):
     if args.state_out:
         with open(args.state_out, "w") as f:
             json.dump({"breached": sorted(breached)}, f, indent=2)
+
+    found = findings(rows)
+    if args.findings_out:
+        with open(args.findings_out, "w") as f:
+            json.dump(found, f, indent=2)
+    step_summary(found)
 
     for name, floor, value, status in rows:
         if status == OK:
@@ -169,6 +253,14 @@ def main(argv=None):
     if counts[OK] + counts[BREACH] + counts[CONFIRMED] == 0:
         print("FAIL: no benchmark produced a result -- the run itself is broken")
         return 1
+    if counts[BREACH] or counts[CONFIRMED]:
+        # Said once, plainly, because the exit code no longer says it: a breach
+        # is a breach whether or not it repeats, and the nightly analysis is
+        # where it turns into a ticket.
+        print(
+            "{} benchmark(s) below their floor -- each one is worth a ticket; "
+            "file during the nightly analysis".format(counts[BREACH] + counts[CONFIRMED])
+        )
     if counts[CONFIRMED]:
         print("FAIL: {} benchmark(s) below their floor twice in a row".format(counts[CONFIRMED]))
         return 1
@@ -223,6 +315,24 @@ def self_test():
         assert ("bare", None, None, UNGATED) in rows, rows
         assert ("unquoted", 50.0, None, MISSING) in rows, rows
 
+        rows, _ = verdict(tmp, [tmp], {"fast"})
+        found = findings(rows)
+        # Every breach is listed whether or not it repeated, worst first, and a
+        # benchmark with no floor is listed without one rather than dropped.
+        # "unquoted" has a floor but no result, so it is not measured rather
+        # than ungated, and only a benchmark with no floor at all is listed as
+        # ungated ("bare", standing in for json_nummultby_num_2).
+        assert [(f["benchmark"], f["status"]) for f in found] == [("bare", UNGATED)], found
+        write("slow", 100.0, 60.0)
+        rows, _ = verdict(tmp, [tmp], {"slow"})
+        found = findings(rows)
+        assert found[0]["benchmark"] == "slow" and found[0]["status"] == CONFIRMED, found
+        assert found[0]["shortfall_pct"] == 40.0, found
+
+        out = os.path.join(tmp, "findings.json")
+        assert main(["--benchmarks-dir", tmp, "--results-dir", tmp, "--findings-out", out]) == 0
+        assert json.load(open(out))[0]["benchmark"] == "slow"
+        write("slow", 100.0, 110.0)
         assert main(["--benchmarks-dir", tmp, "--results-dir", tmp]) == 0
         assert main(["--benchmarks-dir", tmp, "--results-dir", os.path.join(tmp, "empty")]) == 1
     finally:
