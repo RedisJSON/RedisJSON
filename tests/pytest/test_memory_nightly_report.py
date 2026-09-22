@@ -220,9 +220,9 @@ def get_test_documents():
         }
     }
     documents['large_repetition'] = {
-        'doc': {**documents['large']['doc'], 'repeated_strings': ['Redis is very fast. '] * 50},
+        'doc': {**documents['large']['doc'], 'repeated_strings': ['Redis is very fast. '] * 400},
         'category': 'shared-strings',
-        'description': 'Large document with a shared 20-byte string used 50 times'
+        'description': 'Large document with a shared 20-byte string used 400 times'
     }
     return documents
 
