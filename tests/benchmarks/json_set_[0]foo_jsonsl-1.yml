@@ -13,3 +13,7 @@ clientconfig:
     - threads: 2
     - pipeline: 1
     - command: 'JSON.SET jsonsl-1 $.[0] "\"foo\""'
+
+kpis:
+  - ge:
+      "$.Tests.Overall.rps": 103441.15

@@ -25,7 +25,7 @@ use redis_module::{key::KeyFlags, Context, RedisString, Status};
 
 use crate::manager::{Manager, ReadHolder};
 
-pub const REDIS_JSONAPI_LATEST_API_VER: usize = 8;
+pub const REDIS_JSONAPI_LATEST_API_VER: usize = 9;
 
 //
 // structs
@@ -370,6 +370,43 @@ pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -
     .cast::<c_void>()
 }
 
+/// Like [`json_api_get`], but takes a compiled path handle (from `JSONAPI_pathParse`) instead of a
+/// path string.
+///
+/// Unlike `json_api_get`, which compiles a private [`Query`], this borrows the caller's handle, so
+/// it must not be evaluated concurrently from multiple threads ([`Query`] is not `Sync`).
+///
+/// [`Query`]: json_path::json_path::Query
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub fn json_api_get_with_path<M: Manager>(
+    _: M,
+    val: *const c_void,
+    json_path: *const c_void,
+) -> *const c_void {
+    if val.is_null() || json_path.is_null() {
+        return null();
+    }
+    // SAFETY: caller guarantees `val` is a live `M::V` and `json_path` a `Query` from
+    // `JSONAPI_pathParse`, both owned for this call; we only borrow them immutably.
+    let (v, query) = unsafe {
+        (
+            &*(val.cast::<M::V>()),
+            &*(json_path.cast::<json_path::json_path::Query>()),
+        )
+    };
+    // Projections are not exposed by the LLAPI.
+    if query.is_projection() {
+        return null();
+    }
+    let path_calculator = create(query);
+    let res = path_calculator.calc(v);
+    Box::into_raw(Box::new(ResultsIterator {
+        results: res,
+        pos: 0,
+    }))
+    .cast::<c_void>()
+}
+
 pub fn json_api_is_json<M: Manager>(m: M, key: *mut rawmod::RedisModuleKey) -> c_int {
     m.is_json(key).map_or(0, |res| res as c_int)
 }
@@ -581,6 +618,18 @@ macro_rules! redis_json_module_export_shared_api {
                     _ => $default_manager
                 },
                 run: |mngr|{json_api_get(mngr, key, path)},
+            )
+        }
+
+        #[no_mangle]
+        pub extern "C" fn JSONAPI_getWithPath(key: *const c_void, json_path: *const c_void) -> *const c_void {
+            run_on_manager!(
+                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
+                run: |mngr|{json_api_get_with_path(mngr, key, json_path)},
             )
         }
 
@@ -938,6 +987,8 @@ macro_rules! redis_json_module_export_shared_api {
             getArray: JSONAPI_getArray,
             // V8 entries
             getJsonFromHandle: JSONAPI_getJsonFromHandle,
+            // V9 entries
+            getWithPath: JSONAPI_getWithPath,
         };
 
         #[repr(C)]
@@ -1005,6 +1056,8 @@ macro_rules! redis_json_module_export_shared_api {
             pub getArray: extern "C" fn(json: *const c_void, len: *mut size_t, array_type: *mut JSONArrayType) -> *const c_void,
             // V8 entries
             pub getJsonFromHandle: extern "C" fn(key: *mut rawmod::RedisModuleKey) -> *mut c_void,
+            // V9 entries
+            pub getWithPath: extern "C" fn(val: *const c_void, path: *const c_void) -> *const c_void,
         }
     };
 }
@@ -1087,6 +1140,73 @@ mod tests {
             null(),
             "a projection path must not be exposed via the LLAPI"
         );
+    }
+
+    fn ivalue_mngr() -> RedisIValueJsonKeyManager<'static> {
+        RedisIValueJsonKeyManager {
+            phantom: PhantomData,
+        }
+    }
+
+    /// `getWithPath` (evaluate a pre-compiled `Query`) must return exactly the same results as the
+    /// string-based `get` (compile-then-evaluate) for every kind of path.
+    #[test]
+    fn test_json_api_get_with_path_matches_get() {
+        use std::ffi::CString;
+        let doc: IValue = serde_json::from_str(
+            r#"{"entityName":"Alpha","event":{"id":42,"type":"A","tags":[7,8,9]},"n":null}"#,
+        )
+        .unwrap();
+        let doc_ptr = &doc as *const IValue as *const c_void;
+
+        for p in [
+            "$.entityName",    // single scalar
+            "$.event.id",      // nested scalar
+            "$.event",         // object node
+            "$.event.tags[*]", // multi-result
+            "$.event.missing", // no match
+            "$.n",             // null value
+        ] {
+            let cpath = CString::new(p).unwrap();
+            let it_str = json_api_get(ivalue_mngr(), doc_ptr, cpath.as_ptr());
+
+            let query = json_path::compile(p).unwrap();
+            let qptr = &query as *const json_path::json_path::Query as *const c_void;
+            let it_cmp = json_api_get_with_path(ivalue_mngr(), doc_ptr, qptr);
+
+            assert_eq!(
+                it_str.is_null(),
+                it_cmp.is_null(),
+                "null-ness parity for path {p}"
+            );
+            if it_str.is_null() {
+                continue;
+            }
+            let n = json_api_len(ivalue_mngr(), it_str);
+            assert_eq!(n, json_api_len(ivalue_mngr(), it_cmp), "len parity for {p}");
+            for _ in 0..n {
+                let a = json_api_next(ivalue_mngr(), it_str as *mut c_void);
+                let b = json_api_next(ivalue_mngr(), it_cmp as *mut c_void);
+                let av = unsafe { &*(a as *const IValue) };
+                let bv = unsafe { &*(b as *const IValue) };
+                assert_eq!(av, bv, "value parity for {p}");
+            }
+            json_api_free_iter(ivalue_mngr(), it_str as *mut c_void);
+            json_api_free_iter(ivalue_mngr(), it_cmp as *mut c_void);
+        }
+    }
+
+    #[test]
+    fn test_json_api_get_with_path_rejects_projection() {
+        let doc: IValue = serde_json::from_str(r#"{"a":2}"#).unwrap();
+        let query = json_path::compile("$.a + 1").unwrap();
+        assert!(query.is_projection(), "'$.a + 1' should be a projection");
+        let res = json_api_get_with_path(
+            ivalue_mngr(),
+            &doc as *const IValue as *const c_void,
+            &query as *const json_path::json_path::Query as *const c_void,
+        );
+        assert_eq!(res, null(), "a projection handle must not be evaluated");
     }
 
     #[test]

@@ -9,6 +9,43 @@
 # install_script.sh: all pip work lives here so `make bootstrap` is just
 # install_script.sh + done.
 
+# uv installs to ~/.local/bin (or ~/.cargo/bin), which is not on PATH in the
+# non-login bootstrap subshell — detect it there too, not just via PATH.
+_have_uv() { command -v uv >/dev/null 2>&1 || [ -x "$HOME/.local/bin/uv" ] || [ -x "$HOME/.cargo/bin/uv" ]; }
+
+# list / dry-run are read-only dependency reports — they must run in EVERY
+# environment, so handle them BEFORE the ROOT/HERE asserts below.
+if [ "${CHECK_DEPS:-0}" = 1 ]; then
+    # uv presence, routed through OPTIONAL_PKGS like any other dep.
+    if _have_uv; then _uv=ok; else _uv=missing; fi
+    if _is_optional uv; then
+        [ "$_uv" = ok ] && DEPS_OPT_OK="$DEPS_OPT_OK uv" || DEPS_OPT_MISSING="$DEPS_OPT_MISSING uv"
+    else
+        [ "$_uv" = ok ] && DEPS_OK="$DEPS_OK uv" || DEPS_MISSING="$DEPS_MISSING uv"
+    fi
+    return 0 2>/dev/null || exit 0
+fi
+
+if [ "${DRY_RUN:-0}" = 1 ]; then
+    # Print the exact uv + venv + pip sequence bootstrap would run (nothing is
+    # executed) so dry-run output is a copy-pasteable script. Guarded on what's
+    # already present so a provisioned host prints only the gaps: uv install
+    # only if uv is missing; venv + pip only if the venv doesn't exist yet
+    # (mirrors the real `[ ! -d venv ]` guard below).
+    if [ ! -d "$ROOT/venv" ]; then
+        _have_uv || _dry_line "curl -LsSf https://astral.sh/uv/install.sh | sh"
+        # uv installs to ~/.local/bin (or ~/.cargo/bin), which may not be on
+        # PATH — export it so the uv commands below resolve when pasted, exactly
+        # as bootstrap does after installing uv.
+        _dry_line 'export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"'
+        _dry_line "uv venv \"$ROOT/venv\" --python \"${SETUP_PYTHON_VERSION:-3.12}\""
+        _dry_line "uv pip install --python \"$ROOT/venv/bin/python\" --upgrade pip wheel \"setuptools<81\""
+        _dry_line "uv pip install --python \"$ROOT/venv/bin/python\" -r \"$HERE/build_package_requirements.txt\""
+        [ -f "$ROOT/tests/pytest/requirements.txt" ] && _dry_line "uv pip install --python \"$ROOT/venv/bin/python\" -r \"$ROOT/tests/pytest/requirements.txt\""
+    fi
+    return 0 2>/dev/null || exit 0
+fi
+
 # Required by callers — set by install_script.sh. Fail fast if absent rather
 # than producing a confusing `uv venv ""` failure later.
 : "${ROOT:?setup-python.sh: ROOT not set (must be sourced by install_script.sh)}"

@@ -11,3 +11,7 @@ clientconfig:
     - threads: 2
     - pipeline: 1
     - command: 'HSET key_hash field1 value1 field2 value2'
+
+kpis:
+  - ge:
+      "$.Tests.Overall.rps": 165889.45

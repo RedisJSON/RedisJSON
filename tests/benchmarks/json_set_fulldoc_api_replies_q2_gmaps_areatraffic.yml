@@ -13,3 +13,7 @@ clientconfig:
     - keyspacelen: 100000
     - command: "JSON.SET __rand_int__ $"
     - x: "./datasets/api_replies_q2_gmaps_areatraffic.json"
+
+kpis:
+  - ge:
+      "$.Tests.Overall.rps": 80890.15

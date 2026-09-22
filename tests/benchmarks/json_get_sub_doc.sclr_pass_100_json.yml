@@ -13,3 +13,7 @@ clientconfig:
     - threads: 2
     - pipeline: 1
     - command: 'JSON.GET pass-100 $.sub_doc.sclr'
+
+kpis:
+  - ge:
+      "$.Tests.Overall.rps": 111790.12

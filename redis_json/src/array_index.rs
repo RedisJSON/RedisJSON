@@ -14,7 +14,7 @@ pub trait ArrayIndex {
 impl ArrayIndex for i64 {
     fn normalize(self, len: i64) -> usize {
         let index = if self < 0 {
-            len - len.min(-self)
+            len - len.min(self.saturating_neg())
         } else if len > 0 {
             (len - 1).min(self)
         } else {
@@ -43,5 +43,16 @@ mod tests {
         assert_eq!(0.normalize(0), 0);
         assert_eq!((-1).normalize(0), 0);
         assert_eq!(1.normalize(0), 0);
+    }
+
+    #[test]
+    fn test_index_out_of_i64_range() {
+        // `i64::MIN` cannot be negated, so it must not be negated unguarded
+        assert_eq!(i64::MIN.normalize(5), 0);
+        assert_eq!(i64::MIN.normalize(0), 0);
+        assert_eq!((i64::MIN + 1).normalize(5), 0);
+        assert_eq!((i64::MIN + 1).normalize(0), 0);
+        assert_eq!(i64::MAX.normalize(5), 4);
+        assert_eq!(i64::MAX.normalize(0), 0);
     }
 }

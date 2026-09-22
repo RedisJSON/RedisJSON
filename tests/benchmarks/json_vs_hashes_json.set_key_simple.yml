@@ -12,3 +12,7 @@ clientconfig:
     - pipeline: 1
     - keyspacelen: 500000
     - command: 'JSON.SET __rand_int__ $ "{\"field1\":\"value1\",\"field2\":\"value2\"}"'
+
+kpis:
+  - ge:
+      "$.Tests.Overall.rps": 135840.85

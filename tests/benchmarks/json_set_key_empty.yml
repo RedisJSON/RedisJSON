@@ -13,3 +13,7 @@ clientconfig:
     - threads: 2
     - pipeline: 1
     - command: 'JSON.SET key $ {}'
+
+kpis:
+  - ge:
+      "$.Tests.Overall.rps": 163624.46
