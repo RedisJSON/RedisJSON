@@ -81,14 +81,12 @@ jobs:
         timeout-minutes: 240 # timeout for the step
         working-directory: tests/benchmarks
         # run-remote applies the committed `kpis` floors itself
-        # (results_dict_kpi_check) and exits non-zero on the first run below one.
-        # That verdict is a single sample, and the harness's own run-to-run spread
-        # is 22-49% above ~100k rps against floors set only 5% low (MOD-18822), so
-        # it fires on quiet nights and would miss a real slowdown. The verdict is
-        # taken instead by the "Check KPI floors" step below, which requires a
-        # breach to repeat before failing. Swallowing this exit code also hides a
-        # whole-run harness failure, which is why that step fails the job when no
-        # benchmark produced a result at all.
+        # (results_dict_kpi_check), but its exit code cannot say whether a
+        # benchmark came in under its floor or never ran at all -- telling those
+        # apart meant grepping the log. continue-on-error hands the verdict to
+        # the "Check KPI floors" step below, which names each one, writes the
+        # breaches out for the nightly analysis to file from, and fails the job
+        # on any breach, including a run where nothing measured at all.
         continue-on-error: true
         env:
           # Hard-coded
@@ -141,39 +139,19 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-      # A breach only fails the job when the previous run saw it too, so the
-      # verdict has to survive between runs, and a workflow's only carry-forward
-      # state is its cache. The key holds the ref, so a PR run cannot inherit
-      # master's breaches; the member id, because the benchmarks are sharded
-      # three ways and each shard judges its own; and the run id, so every run
-      # writes its own entry -- the prefix in restore-keys then resolves to the
-      # most recent earlier one.
-      - name: Restore the previous run's KPI verdict
-        if: always()
-        uses: actions/cache/restore@v4
-        with:
-          path: tests/benchmarks/kpi-state
-          key: kpi-state-${{ inputs.triggering_env }}-${{ github.ref_name }}-${{ inputs.benchmark_runner_group_member_id }}-${{ github.run_id }}
-          restore-keys: |
-            kpi-state-${{ inputs.triggering_env }}-${{ github.ref_name }}-${{ inputs.benchmark_runner_group_member_id }}-
-
-      - name: Check KPI floors (fails on a breach seen two runs in a row)
+      # run-remote's own floor check is left advisory above so that this one
+      # can name what went wrong -- a floor breach and a benchmark that never
+      # ran are different findings, and only the first is a ticket about
+      # RedisJSON. Every breach fails the job; the floors are not touched.
+      - name: Check KPI floors
         if: always()
         working-directory: tests/benchmarks
-        # The same path in and out: the previous verdict is read before this
-        # run's is written. On a cache miss -- a first run on a ref -- the file
-        # is absent and breaches are reported without failing the job.
         run: |
           mkdir -p kpi-state
-          python3 check_kpis.py --previous kpi-state/state.json --state-out kpi-state/state.json \
-            --findings-out kpi-state/findings.json
+          python3 check_kpis.py --findings-out kpi-state/findings.json
 
-      # Every benchmark under its floor is a finding worth a ticket, whether or
-      # not it repeated -- the floor already sits 5% below a measured baseline.
-      # The job does not fail on a single one (that would put it back to red on
-      # roughly half the nights, MOD-18822), so the findings have to leave the
-      # run in a form the nightly analysis can pick up and file from: this
-      # artifact, plus the table the check writes to the run summary.
+      # Uploaded even when the step above fails -- especially then: this is what
+      # the nightly analysis files the tickets from.
       - name: Upload KPI findings
         if: always()
         uses: actions/upload-artifact@v6
@@ -182,13 +160,6 @@ jobs:
           path: tests/benchmarks/kpi-state/findings.json
           if-no-files-found: ignore
           retention-days: 30
-
-      - name: Save this run's KPI verdict
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: tests/benchmarks/kpi-state
-          key: kpi-state-${{ inputs.triggering_env }}-${{ github.ref_name }}-${{ inputs.benchmark_runner_group_member_id }}-${{ github.run_id }}
 
       # always(): a KPI floor breach fails an earlier step, and a bare
       # `github.event.number` is implicitly `success() && ...`, which would drop
