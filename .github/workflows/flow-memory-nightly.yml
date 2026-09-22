@@ -193,6 +193,8 @@ jobs:
           echo "|---------------|----------|" >> $GITHUB_STEP_SUMMARY
           echo "| Small | ${SMALL}x |" >> $GITHUB_STEP_SUMMARY
           echo "| Large | ${LARGE}x |" >> $GITHUB_STEP_SUMMARY
+          REPETITION=$(grep "METRIC:large_repetition_overhead_ratio:" memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]')
+          echo "| Large documents with repetition | ${REPETITION}x |" >> $GITHUB_STEP_SUMMARY
           if [ -n "$HOMO_U8_SM" ]; then
             echo "| Homo u8[100] | ${HOMO_U8_SM}x |" >> $GITHUB_STEP_SUMMARY
           fi
@@ -205,6 +207,12 @@ jobs:
           if [ -n "$HOMO_INT" ]; then
             echo "| Homo int[10K] | ${HOMO_INT}x |" >> $GITHUB_STEP_SUMMARY
           fi
+          for CASE in shared_text_objects unique_text_objects; do
+            RATIO=$(grep "METRIC:${CASE}_overhead_ratio:" memory_report.txt | head -1 | cut -d: -f3 | tr -d '[:space:]' || true)
+            if [ -n "$RATIO" ]; then
+              echo "| ${CASE} | ${RATIO}x |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "_RedisJSON uses ${OVERHEAD}x more memory than regular Redis strings_" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

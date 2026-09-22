@@ -35,7 +35,7 @@ from common import *
 
 def get_test_documents():
     """Return all test documents with metadata"""
-    return {
+    documents = {
         'tiny': {
             'doc': {"id": 1, "name": "test"},
             'category': 'basic',
@@ -144,6 +144,22 @@ def get_test_documents():
             'category': 'array-heavy',
             'description': 'Large array (1000 items)'
         },
+        'shared_text_objects': {
+            'doc': {'data': [
+                {'id': i, 'description': ("Shared description. " * 64)[:1024]}
+                for i in range(1000)
+            ]},
+            'category': 'shared-strings',
+            'description': 'Synthetic: 1000 objects sharing a 1 KiB description'
+        },
+        'unique_text_objects': {
+            'doc': {'data': [
+                {'id': i, 'description': f"{i:04d}" + ("Shared description. " * 64)[:1020]}
+                for i in range(1000)
+            ]},
+            'category': 'unique-strings',
+            'description': 'Control: same-size objects with unique 1 KiB descriptions'
+        },
         'nested_moderate': {
             'doc': _create_nested(5),
             'category': 'nested',
@@ -203,6 +219,12 @@ def get_test_documents():
             'description': 'Large homogeneous int array (10K items)'
         }
     }
+    documents['large_repetition'] = {
+        'doc': {**documents['large']['doc'], 'repeated_strings': ['OK'] * 50},
+        'category': 'shared-strings',
+        'description': 'Large document with a 2-byte string used 50 times'
+    }
+    return documents
 
 def _create_nested(depth, current=0):
     """Helper to create nested documents"""
@@ -295,6 +317,8 @@ def print_key_metrics(results):
     print(f"   • Small documents:  {small['json_vs_string_ratio']:.2f}x overhead")
     print(f"   • Medium documents: {medium['json_vs_string_ratio']:.2f}x overhead")
     print(f"   • Large documents:  {large['json_vs_string_ratio']:.2f}x overhead")
+    repeated = next(r for r in results if r['name'] == 'large_repetition')
+    print(f"   • Large documents with repetition: {repeated['json_vs_string_ratio']:.2f}x overhead")
     
     # Find best and worst cases
     best = min(results, key=lambda r: r['json_vs_string_ratio'])
@@ -555,10 +579,13 @@ def test_nightly_memory_report_summary_only(env):
         'small': all_docs['small'],
         'medium': all_docs['medium'],
         'large': all_docs['large'],
+        'large_repetition': all_docs['large_repetition'],
         'homogeneous_u8_small': all_docs['homogeneous_u8_small'],
         'homogeneous_u8_large': all_docs['homogeneous_u8_large'],
         'homogeneous_float_large': all_docs['homogeneous_float_large'],
-        'homogeneous_int_large': all_docs['homogeneous_int_large']
+        'homogeneous_int_large': all_docs['homogeneous_int_large'],
+        'shared_text_objects': all_docs['shared_text_objects'],
+        'unique_text_objects': all_docs['unique_text_objects']
     }
     
     results = []
