@@ -1415,6 +1415,9 @@ def testMSET(env):
     env.expect("JSON.MSET", "new_a{s}", '$.x.y', '1', "new_b{s}", '$.p.q', '"v"').ok()
     env.expect("JSON.GET", "new_a{s}", '$').equal('[{"x":{"y":1}}]')
     env.expect("JSON.GET", "new_b{s}", '$').equal('[{"p":{"q":"v"}}]')
+
+    env.expect("JSON.MSET", "same{s}", '$.a.b', '1', "same{s}", '$.a.c', '2').ok()
+    env.expect("JSON.GET", "same{s}", '$').equal('[{"a":{"b":1,"c":2}}]')
     env.expect('CONFIG', 'SET', 'ReJSON.auto-path-create', 'no').equal('OK')
 
 

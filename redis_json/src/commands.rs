@@ -735,8 +735,7 @@ pub fn json_mset_command_impl<M: Manager>(
     enum MsetAction {
         SetRoot,
         Updates(Vec<UpdateInfo>),
-        CreateNested(Vec<String>),
-        CreateOnExisting(Vec<String>),
+        CreatePath(Vec<String>),
     }
 
     let mut parsed: Vec<(RedisString, MsetAction, String)> = Vec::new();
@@ -753,14 +752,14 @@ pub fn json_mset_command_impl<M: Manager>(
                 KeyValue::new(existing).find_paths(path.get_path(), SetOptions::None)?;
             if updates.is_empty() && crate::auto_path_create_enabled() {
                 match static_object_path_keys(path.get_path()) {
-                    Ok(keys) => MsetAction::CreateOnExisting(keys),
+                    Ok(keys) => MsetAction::CreatePath(keys),
                     Err(_) => MsetAction::Updates(updates),
                 }
             } else {
                 MsetAction::Updates(updates)
             }
         } else if crate::auto_path_create_enabled() {
-            MsetAction::CreateNested(static_object_path_keys(path.get_path())?)
+            MsetAction::CreatePath(static_object_path_keys(path.get_path())?)
         } else {
             return Err(RedisError::Str(
                 "ERR new objects must be created at the root",
@@ -791,13 +790,13 @@ pub fn json_mset_command_impl<M: Manager>(
                 let updated = redis_key.set_value(Vec::new(), value)?;
                 (updated, updated)
             }
-            MsetAction::CreateNested(keys) => {
-                let nested = manager.wrap_in_object_path(&keys, value)?;
-                let updated = redis_key.set_value(Vec::new(), nested)?;
-                (updated, updated)
-            }
-            MsetAction::CreateOnExisting(keys) => {
-                let updated = redis_key.set_value_creating_path(&keys, value)?;
+            MsetAction::CreatePath(keys) => {
+                let updated = if redis_key.get_value()?.is_some() {
+                    redis_key.set_value_creating_path(&keys, value)?
+                } else {
+                    let nested = manager.wrap_in_object_path(&keys, value)?;
+                    redis_key.set_value(Vec::new(), nested)?
+                };
                 (updated, updated)
             }
         };
