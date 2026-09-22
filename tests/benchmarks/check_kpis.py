@@ -23,9 +23,10 @@ data:
 
 * ``kpi-state/findings.json`` and a table in the run summary list every breach,
   worst shortfall first, for the nightly analysis to file from.
-* A benchmark that produced no result is reported as such, not as a breach
-  (``json_nummultby_num_2`` errors on every run -- MOD-18654, Won't Do -- and has
-  no floor, so it is listed as ungated and does not decide the job either way).
+* A benchmark ``run-remote`` failed to run is a finding of its own, read from the
+  run log, because with ``run-remote`` continuing on error nothing else would
+  fail the job for it. ``--known-broken`` exempts the ones already resolved as
+  Won't Do (``json_nummultby_num_2``, MOD-18654), and only those.
 * A run where nothing at all measured fails, so swallowing run-remote's exit
   code cannot hide a broken harness.
 
@@ -47,11 +48,15 @@ import argparse
 import glob
 import json
 import os
+import re
 import sys
 
 from update_kpis import METRICS, benchmark_name, result_metric, value_re
 
-OK, BREACH, MISSING, UNGATED = "ok", "breach", "missing", "ungated"
+OK, BREACH, MISSING, UNGATED, ERRORED = "ok", "breach", "missing", "ungated", "errored"
+
+# redisbench_admin.run_remote logs exactly this per benchmark it could not run.
+RUN_FAILED_RE = re.compile(r"Failed to run remote benchmark for test '([^']+)'")
 
 
 def floor_of(text):
@@ -96,9 +101,25 @@ def verdict(benchmarks_dir, results_dirs):
     return rows
 
 
-def findings(rows):
+def errored(run_log, known_broken):
+    """Benchmarks run-remote reported it could not run, minus the known-broken.
+
+    `run-remote` is given continue-on-error so that this script owns the verdict,
+    which means an errored benchmark no longer fails the step by itself. Its
+    result file is simply absent, and absent is indistinguishable from "this
+    shard was never given that benchmark" -- so the log is the only place that
+    says a benchmark was meant to run and did not.
+    """
+    if not run_log or not os.path.exists(run_log):
+        return []
+    with open(run_log, errors="replace") as f:
+        names = RUN_FAILED_RE.findall(f.read())
+    return sorted({n for n in names if n not in known_broken})
+
+
+def findings(rows, failed_to_run=()):
     """The rows worth a ticket, worst shortfall first, plus the ungated ones."""
-    out = []
+    out = [{"benchmark": name, "status": ERRORED, "floor": None, "measured": None} for name in failed_to_run]
     for name, floor, value, status in rows:
         if status == BREACH:
             out.append(
@@ -128,7 +149,9 @@ def step_summary(found):
     else:
         lines += ["| benchmark | floor | measured | short | |", "| --- | --- | --- | --- | --- |"]
         for f in found:
-            if f["status"] == UNGATED:
+            if f["status"] == ERRORED:
+                lines.append("| `{}` | | did not run | | errored -- file a ticket |".format(f["benchmark"]))
+            elif f["status"] == UNGATED:
                 shown = "no result" if f["measured"] is None else "{:.0f}".format(f["measured"])
                 lines.append("| `{}` | _none_ | {} | | ungated (MOD-18654) |".format(f["benchmark"], shown))
             else:
@@ -159,6 +182,13 @@ def main(argv=None):
         "--findings-out",
         help="where to write every breach found, for the nightly analysis to triage",
     )
+    parser.add_argument("--run-log", help="run-remote's captured output, read for benchmarks that failed to run")
+    parser.add_argument(
+        "--known-broken",
+        action="append",
+        default=[],
+        help="benchmark already known not to run (MOD-18654); repeatable",
+    )
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args(argv)
 
@@ -166,12 +196,15 @@ def main(argv=None):
         return self_test()
 
     rows = verdict(args.benchmarks_dir, args.results_dirs or ["."])
-    found = findings(rows)
+    failed_to_run = errored(args.run_log, set(args.known_broken))
+    found = findings(rows, failed_to_run)
     if args.findings_out:
         with open(args.findings_out, "w") as f:
             json.dump(found, f, indent=2)
     step_summary(found)
 
+    for name in failed_to_run:
+        print("ERRORED: {} (run-remote could not run it)".format(name))
     for name, floor, value, status in rows:
         if status == OK:
             continue
@@ -193,13 +226,14 @@ def main(argv=None):
     if counts[OK] + counts[BREACH] == 0:
         print("FAIL: no benchmark produced a result -- the run itself is broken")
         return 1
+    if failed_to_run:
+        print("FAIL: {} benchmark(s) failed to run: {}".format(len(failed_to_run), ", ".join(failed_to_run)))
     if counts[BREACH]:
         print(
             "FAIL: {} benchmark(s) more than 5% below baseline -- file a ticket for each, "
             "and do not update the floors".format(counts[BREACH])
         )
-        return 1
-    return 0
+    return 1 if (counts[BREACH] or failed_to_run) else 0
 
 
 def self_test():
@@ -250,6 +284,27 @@ def self_test():
 
         # Nothing measured at all is a broken run, not a clean one.
         assert main(["--benchmarks-dir", tmp, "--results-dir", os.path.join(tmp, "empty")]) == 1
+
+        # A benchmark run-remote could not run fails the job on its own, since
+        # continue-on-error means nothing else will -- except the ones passed as
+        # already known broken (json_nummultby_num_2's case).
+        write("slow", 100.0, 110.0)  # back above its floor: isolate the error case
+        log = os.path.join(tmp, "run.log")
+        with open(log, "w") as f:
+            f.write(
+                "Failed to run remote benchmark for test 'json_nummultby_num_2'\n"
+                "some other line\n"
+                "Failed to run remote benchmark for test 'fast'\n"
+            )
+        assert errored(log, {"json_nummultby_num_2"}) == ["fast"], errored(log, {"json_nummultby_num_2"})
+        assert errored(log, set()) == ["fast", "json_nummultby_num_2"]
+        assert errored(None, set()) == [] and errored(os.path.join(tmp, "nope.log"), set()) == []
+        args = ["--benchmarks-dir", tmp, "--results-dir", tmp, "--run-log", log]
+        assert main(args + ["--known-broken", "json_nummultby_num_2", "--known-broken", "fast"]) == 0
+        assert main(args + ["--known-broken", "json_nummultby_num_2"]) == 1
+        out = os.path.join(tmp, "f2.json")
+        main(args + ["--known-broken", "json_nummultby_num_2", "--findings-out", out])
+        assert [f["status"] for f in json.load(open(out))][0] == ERRORED
     finally:
         shutil.rmtree(tmp)
 
