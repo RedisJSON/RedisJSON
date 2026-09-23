@@ -169,36 +169,49 @@ jobs:
           jq -s 'add | unique_by([.benchmark, .status]) | sort_by(-(.shortfall_pct // 0))' \
             $FINDINGS > kpi-findings.json
           BREACHES=$(jq '[.[] | select(.status == "breach")] | length' kpi-findings.json)
+          # A benchmark that failed to run or returned an unusable result failed
+          # its shard job too, so it cannot be reported as a clean night.
+          OTHER=$(jq '[.[] | select(.status == "errored" or .status == "unreadable")] | length' kpi-findings.json)
+          ROWS=$(jq 'length' kpi-findings.json)
           echo "breaches=$BREACHES" >> $GITHUB_OUTPUT
+          echo "other=$OTHER" >> $GITHUB_OUTPUT
 
           # Same table the benchmark job renders, so the two reports read alike.
           {
             echo "## Benchmark KPI floors"
             echo ""
-            if [ "$BREACHES" = "0" ]; then
+            if [ "$ROWS" = "0" ]; then
               echo "Every gated benchmark met its floor."
             else
               echo "| benchmark | floor | measured | short | |"
               echo "| --- | --- | --- | --- | --- |"
               jq -r '.[] | select(.status == "breach") |
                 "| `\(.benchmark)` | \(.floor | round) | \(.measured | round) | -\(.shortfall_pct * 10 | round / 10)% | breached — file a ticket |"' kpi-findings.json
+              jq -r '.[] | select(.status == "errored" or .status == "unreadable") |
+                "| `\(.benchmark)` | | \(.status) | | file a ticket |"' kpi-findings.json
+              jq -r '.[] | select(.status == "ungated") |
+                "| `\(.benchmark)` | _none_ | \(.measured // "no result" | tostring) | | no floor seeded yet |"' kpi-findings.json
+              echo ""
+              if [ "$BREACHES" = "0" ] && [ "$OTHER" = "0" ]; then
+                echo "Every gated benchmark met its floor."
+              else
+                echo "Each row above is worth a ticket: a benchmark under its floor is more than 5% below its baseline, and one that failed to run or returned an unusable result was never checked against its floor at all. File during the nightly analysis, and do not move the floor."
+              fi
             fi
-            jq -r '.[] | select(.status == "ungated") |
-              "| `\(.benchmark)` | _none_ | \(.measured // "no result" | tostring) | | no floor seeded yet |"' kpi-findings.json
-            jq -r '.[] | select(.status == "errored" or .status == "unreadable") |
-              "| `\(.benchmark)` | | \(.status) | | file a ticket |"' kpi-findings.json
-            echo ""
-            echo "A benchmark under its floor is more than 5% below its baseline: file a ticket during the nightly analysis, and do not move the floor."
           } >> $GITHUB_STEP_SUMMARY
 
           # Slack renders no tables, so the same rows go out as bullets.
           {
             echo "slack<<KPI_EOF"
-            if [ "$BREACHES" = "0" ]; then
+            if [ "$BREACHES" = "0" ] && [ "$OTHER" = "0" ]; then
               echo "✅ All gated benchmarks met their floors"
             else
               jq -r '.[] | select(.status == "breach") |
                 "• *\(.benchmark)* — ❌ \(.measured | round) vs floor \(.floor | round) (-\(.shortfall_pct * 10 | round / 10)%)"' kpi-findings.json
+              jq -r '.[] | select(.status == "errored") |
+                "• *\(.benchmark)* — ❌ failed to run"' kpi-findings.json
+              jq -r '.[] | select(.status == "unreadable") |
+                "• *\(.benchmark)* — ❌ result unreadable, floor not applied"' kpi-findings.json
             fi
             echo "KPI_EOF"
           } >> $GITHUB_OUTPUT
