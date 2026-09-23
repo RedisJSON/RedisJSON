@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use json_path::{
     calc_once, calc_once_paths, calc_once_projection, compile,
@@ -11,7 +11,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
-    auto_create::{plan_creation, plan_write_paths, validate_legacy_creation_path, CreateSite},
+    auto_create::validate_legacy_creation_path,
     commands::{prepare_paths_for_updating, FoundIndex, ObjectLen, Values},
     formatter::{RedisJsonFormatter, ReplyFormatOptions},
     manager::{
@@ -23,39 +23,6 @@ use crate::{
 
 pub struct KeyValue<'a, V: SelectValue> {
     val: ValueRef<'a, V>,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum CreationPolicy {
-    /// Preserve SET's original behavior: add only a final key to an existing parent.
-    FinalKeyOnly,
-    /// Allow missing object chains alongside updates to existing targets.
-    MissingObjects,
-}
-
-/// Existing writes and detached-subtree creation are applied separately.
-pub(crate) struct SetPlan {
-    pub updates: Vec<UpdateInfo>,
-    pub creations: Vec<CreateSite>,
-}
-
-impl SetPlan {
-    pub(crate) fn discard_descendant_creations(&mut self) {
-        if self.creations.is_empty() || self.updates.is_empty() {
-            return;
-        }
-        let replacements: HashSet<_> = self
-            .updates
-            .iter()
-            .filter_map(|update| match update {
-                UpdateInfo::SUI(update) => Some(update.path.as_slice()),
-                UpdateInfo::AUI(_) => None,
-            })
-            .collect();
-        self.creations.retain(|site| {
-            !(0..=site.parent.len()).any(|len| replacements.contains(&site.parent[..len]))
-        });
-    }
 }
 
 impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
@@ -407,7 +374,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
     /// This only selects targets; it does not modify the document or plan additions.
     ///
     /// Empty when nothing matches, and always empty for `NX`, which only ever
-    /// adds. To include permitted additions, use [`Self::plan_set`].
+    /// adds. To include permitted additions, use [`Self::find_paths`].
     fn find_existing_targets(
         &self,
         query: Query,
@@ -429,61 +396,20 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
             .collect())
     }
 
-    /// Plan SET writes by combining [`Self::find_existing_targets`] with additions
-    /// permitted by `creation`, without mutating the document.
-    /// `FinalKeyOnly` puts final-key additions in `updates`; `MissingObjects`
-    /// puts missing object chains in `creations` for separate materialization.
-    /// With missing-object creation enabled, both are captured by one prefix evaluation.
-    pub(crate) fn plan_set(
+    /// Preserve the existing final-field-only SET behavior when auto-create is off.
+    pub(crate) fn find_paths(
         &self,
         query: Query,
         option: SetOptions,
-        creation: CreationPolicy,
-    ) -> RedisResult<SetPlan> {
-        if creation == CreationPolicy::MissingObjects && option != SetOptions::AlreadyExists {
-            if option == SetOptions::NotExists {
-                return Ok(SetPlan {
-                    updates: Vec::new(),
-                    creations: plan_creation(query, self.val.as_ref(), true)?,
-                });
-            }
-            let mut paths = Vec::new();
-            let creations = plan_write_paths(query, self.val.as_ref(), |path, value_type| {
-                if value_type.is_some() {
-                    paths.push(path);
-                }
-            })?;
-            if option != SetOptions::MergeExisting {
-                prepare_paths_for_updating(&mut paths);
-            }
-            let mut plan = SetPlan {
-                updates: paths
-                    .into_iter()
-                    .map(|path| UpdateInfo::SUI(SetUpdateInfo { path }))
-                    .collect(),
-                creations,
-            };
-            // Replacing an existing ancestor discards every creation below it.
-            if option != SetOptions::MergeExisting {
-                plan.discard_descendant_creations();
-            }
-            return Ok(plan);
+    ) -> RedisResult<Vec<UpdateInfo>> {
+        let updates = self.find_existing_targets(query.clone(), option)?;
+        if option == SetOptions::AlreadyExists || !updates.is_empty() {
+            return Ok(updates);
         }
-        let mut plan = SetPlan {
-            updates: self.find_existing_targets(query.clone(), option)?,
-            creations: Vec::new(),
-        };
-        if option == SetOptions::AlreadyExists {
-            return Ok(plan);
-        }
-        if !plan.updates.is_empty() {
-            return Ok(plan);
-        }
-        // Preserve final-key validation in dict_add, including typed-array parents.
         validate_legacy_creation_path(query.clone(), self.val.as_ref())?;
         let mut parent_query = query;
-        if let Some(key) = parent_query.pop_last_object_key() {
-            plan.updates = calc_once_paths(parent_query, self.val.as_ref())
+        Ok(if let Some(key) = parent_query.pop_last_object_key() {
+            calc_once_paths(parent_query, self.val.as_ref())
                 .into_iter()
                 .map(|path| {
                     UpdateInfo::AUI(AddUpdateInfo {
@@ -491,9 +417,10 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                         key: key.clone(),
                     })
                 })
-                .collect();
-        }
-        Ok(plan)
+                .collect()
+        } else {
+            Vec::new()
+        })
     }
 
     pub fn to_string_single(&self, path: &str, format: &ReplyFormatOptions) -> RedisResult<String> {

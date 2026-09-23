@@ -8,12 +8,12 @@
  */
 
 use crate::auto_create::{
-    auto_create_enabled, materialize, nest_in_objects, nothing_to_write, root_key_chain,
-    seed_missing_paths, validate_legacy_creation_path, Seed,
+    attach_creations, auto_create_enabled, can_create, nest_in_objects, nothing_to_write,
+    prepare_set, root_key_chain, seed_missing_paths, validate_legacy_creation_path, Seed,
 };
 use crate::defrag::defrag_info;
 use crate::formatter::ReplyFormatOptions;
-use crate::key_value::{CreationPolicy, KeyValue, SetPlan};
+use crate::key_value::KeyValue;
 use crate::manager::{
     err_invalid_path, err_invalid_path_or, err_projection_readonly, Manager, ReadHolder,
     UpdateInfo, WriteHolder, ERR_RECURSION_LIMIT_EXCEEDED,
@@ -23,7 +23,6 @@ use ijson::FloatType;
 use json_path::select_value::{SelectValue, SelectValueType, ValueRef};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
-use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -447,24 +446,15 @@ pub fn json_set_command_impl<M: Manager>(
                 }
             } else {
                 let query = compile(path.get_path())?;
-                let create_intermediates = auto_create_enabled();
-                let creation = if create_intermediates {
-                    CreationPolicy::MissingObjects
-                } else {
-                    CreationPolicy::FinalKeyOnly
-                };
-                let SetPlan {
-                    updates: update_info,
-                    creations: sites,
-                } = KeyValue::new(doc).plan_set(query.clone(), op, creation)?;
-                if update_info.is_empty() && sites.is_empty() {
+                let (update_info, additions) = prepare_set(&manager, doc, query.clone(), &val, op)?;
+                if update_info.is_empty() && additions.as_ref().is_ok_and(Vec::is_empty) {
                     if op == SetOptions::AlreadyExists {
                         Ok(RedisValue::Null)
                     } else {
                         nothing_to_write(query, doc)
                     }
                 } else {
-                    let created = materialize::<M>(&manager, &mut redis_key, &sites, &val)
+                    let created = attach_creations::<M>(&mut redis_key, additions)
                         .apply_partial_changes_on_error(
                             &manager,
                             &mut redis_key,
@@ -628,34 +618,19 @@ pub fn json_merge_command_impl<M: Manager>(
                 REDIS_OK
             } else {
                 let query = compile(path.get_path())?;
-                let create_intermediates = auto_create_enabled();
-                let creation = if create_intermediates {
-                    CreationPolicy::MissingObjects
-                } else {
-                    CreationPolicy::FinalKeyOnly
-                };
-                // Creation runs alongside the updates, not instead of them: a
-                // multi-target path can match some places and miss others.
-                let mut plan = KeyValue::new(doc).plan_set(
+                let (mut update_info, additions) = prepare_set(
+                    &manager,
+                    doc,
                     query.clone(),
+                    &val,
                     SetOptions::MergeExisting,
-                    creation,
                 )?;
-                // Non-object patches replace their targets, discarding anything below them.
-                let patch: &M::V = val.borrow();
-                if patch.get_type() != SelectValueType::Object {
-                    plan.discard_descendant_creations();
-                }
-                let SetPlan {
-                    updates: mut update_info,
-                    creations: sites,
-                } = plan;
-                if update_info.is_empty() && sites.is_empty() {
+                if update_info.is_empty() && additions.as_ref().is_ok_and(Vec::is_empty) {
                     nothing_to_write(query, doc)
                 } else {
                     // A created leaf takes the value as-is: merging into
                     // nothing is the same as setting.
-                    let mut res = materialize::<M>(&manager, &mut redis_key, &sites, &val)
+                    let mut res = attach_creations::<M>(&mut redis_key, additions)
                         .apply_partial_changes_on_error(
                             &manager,
                             &mut redis_key,
@@ -784,28 +759,13 @@ struct MsetTriplet {
 
 /// Reject a path `JSON.MSET` could never apply, before anything is written.
 ///
-/// The plan itself is thrown away: the second pass makes its own, against the
-/// document as the previous triplets left it. Only the errors matter here, and
-/// they are the ones `JSON.SET` gives for the same path.
-/// Depth failures on existing keys are deferred to MSET's nil handling in pass two.
+/// Later triplets are resolved against the document left by previous writes.
+/// Depth failures on existing keys retain MSET's nil handling in pass two.
 fn validate_mset_path<V: SelectValue>(doc: &V, query: Query) -> RedisResult<()> {
     if query.is_projection() {
         return Err(err_projection_readonly());
     }
-    if !calc_once(query.clone(), doc).is_empty() {
-        return Ok(());
-    }
-    let plan = match KeyValue::new(doc).plan_set(
-        query.clone(),
-        SetOptions::None,
-        CreationPolicy::MissingObjects,
-    ) {
-        Ok(plan) => plan,
-        // Depth failure is an unapplied triplet, not a validation error in MSET.
-        Err(RedisError::Str(ERR_RECURSION_LIMIT_EXCEEDED)) => return Ok(()),
-        Err(error) => return Err(error),
-    };
-    if plan.updates.is_empty() && plan.creations.is_empty() {
+    if calc_once(query.clone(), doc).is_empty() && !can_create(query.clone(), doc)? {
         validate_legacy_creation_path(query, doc)?;
     }
     Ok(())
@@ -829,7 +789,7 @@ pub fn json_mset_command_impl<M: Manager>(
     while let Ok(key) = args.next_arg() {
         let mut redis_key = manager.open_key_write(ctx, key.clone())?;
         let key_value = redis_key.get_value()?;
-        let replan = create_intermediates && !seen_keys.insert(key.clone());
+        let resolve_later = create_intermediates && !seen_keys.insert(key.clone());
 
         // Validate the path
         let path_str = args.next_str()?.to_string();
@@ -837,7 +797,7 @@ pub fn json_mset_command_impl<M: Manager>(
         let mut update_info = None;
         let new_doc_keys = if path == JSON_ROOT_PATH {
             Vec::new()
-        } else if replan {
+        } else if resolve_later {
             // Earlier triplets may create this key or change what the path
             // matches. Validate syntax and projections now; resolve targets
             // in pass two, where an unapplied triplet contributes a nil reply.
@@ -851,12 +811,7 @@ pub fn json_mset_command_impl<M: Manager>(
             } else {
                 update_info = Some(
                     KeyValue::new(existing)
-                        .plan_set(
-                            compile(path.get_path())?,
-                            SetOptions::None,
-                            CreationPolicy::FinalKeyOnly,
-                        )?
-                        .updates,
+                        .find_paths(compile(path.get_path())?, SetOptions::None)?,
                 );
             }
             Vec::new()
@@ -910,35 +865,22 @@ pub fn json_mset_command_impl<M: Manager>(
                 (result.any_updated(), result.all_updated())
             }
             (None, Some(doc)) if path != JSON_ROOT_PATH => {
-                // Planned here, not in the first pass: each triplet must see
-                // the document as the previous triplets left it, not as the
-                // command found it.
+                // Each triplet sees the document left by earlier writes.
                 let query = compile(path.get_path())?;
-                let creation = if create_intermediates {
-                    CreationPolicy::MissingObjects
-                } else {
-                    CreationPolicy::FinalKeyOnly
-                };
-                let plan = match KeyValue::new(doc).plan_set(query, SetOptions::None, creation) {
-                    Ok(plan) => plan,
-                    Err(RedisError::Str(ERR_RECURSION_LIMIT_EXCEEDED)) => {
-                        // Keep MSET's nil reply and continue the other triplets.
-                        // Earlier writes still reach apply_changes below.
-                        all_updated = false;
-                        continue;
-                    }
-                    Err(error) => return Err(error),
-                };
-                let SetPlan {
-                    updates: update_info,
-                    creations: sites,
-                } = plan;
-                let creation = materialize::<M>(&manager, &mut redis_key, &sites, &value);
+                let (update_info, additions) =
+                    match prepare_set(&manager, doc, query, &value, SetOptions::None) {
+                        Ok(prepared) => prepared,
+                        Err(RedisError::Str(ERR_RECURSION_LIMIT_EXCEEDED)) => {
+                            all_updated = false;
+                            continue;
+                        }
+                        Err(error) => return Err(error),
+                    };
+                let creation = attach_creations::<M>(&mut redis_key, additions);
                 // MSET deliberately folds materialization errors into a nil
                 // reply, matching failed updates; earlier triplets may be applied.
                 let all_created = creation.result.is_ok();
-                // What was actually created, as opposed to planned: a plan that
-                // failed wrote nothing, and must not report the key as changed.
+                // Preparation failures wrote nothing and must not notify.
                 // Attachment errors differ from planning failures: earlier successful
                 // attachments still require notification and replication.
                 let created = creation.any_created;
