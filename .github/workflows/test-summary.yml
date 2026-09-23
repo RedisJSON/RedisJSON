@@ -164,10 +164,15 @@ jobs:
             exit 0
           fi
 
-          # unique_by: every shard reports the same ungated benchmark, so the
-          # three files would otherwise repeat it three times.
-          jq -s 'add | unique_by([.benchmark, .status]) | sort_by(-(.shortfall_pct // 0))' \
-            $FINDINGS > kpi-findings.json
+          # Every shard reports the same ungated benchmark, so the three files
+          # repeat it -- and only the shard that was given it has a `measured`,
+          # the others carry null. Dedupe on (benchmark, status) keeping the copy
+          # that measured it, or the table would say "no result" for a benchmark
+          # another shard timed.
+          jq -s 'add
+                 | group_by([.benchmark, .status])
+                 | map(sort_by(.measured == null)[0])
+                 | sort_by(-(.shortfall_pct // 0))' $FINDINGS > kpi-findings.json
           BREACHES=$(jq '[.[] | select(.status == "breach")] | length' kpi-findings.json)
           # A benchmark that failed to run or returned an unusable result failed
           # its shard job too, so it cannot be reported as a clean night.

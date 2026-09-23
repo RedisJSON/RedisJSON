@@ -105,15 +105,17 @@ def verdict(benchmarks_dir, results_dirs):
         with open(path) as f:
             metric, floor = floor_of(f.read())
         value, problem = measured(results_dirs, name)
-        if problem is not None:
-            rows.append((name, floor, None, UNREADABLE))
-            continue
+        # Ungated is checked first: with no floor there is nothing for an
+        # unusable result to be measured against, and UNREADABLE carries its
+        # floor into the summary table as a number.
         if metric is None:
             # No floor to check. update_kpis.py writes one only from a run that
             # returned a result, so a benchmark that has just started producing
             # results (json_nummultby_num_2, #1643) sits here until a floor is
             # seeded for it -- reported, and not deciding the job.
             rows.append((name, floor, value, UNGATED))
+        elif problem is not None:
+            rows.append((name, floor, None, UNREADABLE))
         elif value is None:
             rows.append((name, floor, value, MISSING))
         else:
@@ -366,6 +368,21 @@ def self_test():
         out = os.path.join(tmp, "f2.json")
         main(args + ["--known-broken", "json_nummultby_num_2", "--findings-out", out])
         assert [f["status"] for f in json.load(open(out))][0] == ERRORED
+
+        # A floor-less benchmark whose result cannot be read has nothing to be
+        # checked against, so it stays ungated -- and its row must not try to
+        # format a floor that does not exist.
+        bare_broken = os.path.join(tmp, "1-org-repo-master-bare-oss-standalone-sha.json")
+        with open(bare_broken, "w") as f:
+            json.dump({"Tests": {"Overall": {"nope": 1}}}, f)
+        assert {r[0]: r[3] for r in verdict(tmp, [tmp])}["bare"] == UNGATED
+        assert [f for f in findings(verdict(tmp, [tmp])) if f["benchmark"] == "bare"][0]["floor"] is None
+        os.environ["GITHUB_STEP_SUMMARY"] = os.path.join(tmp, "summary.md")
+        try:
+            assert main(["--benchmarks-dir", tmp, "--results-dir", tmp]) == 0
+        finally:
+            del os.environ["GITHUB_STEP_SUMMARY"]
+        os.remove(bare_broken)
 
         # A result file that exists but carries no known throughput metric must
         # fail, not pass as "this shard did not run it".
