@@ -12,4 +12,4 @@ clientconfig:
     - requests: 5000000
     - threads: 2
     - pipeline: 1
-    - command: 'JSON.NUMMULTBY num $ 2'
+    - command: 'JSON.NUMMULTBY num $ -1'
