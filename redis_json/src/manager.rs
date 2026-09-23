@@ -101,21 +101,6 @@ pub trait Manager {
     /// Implementations must not mutate stored documents or emit replication effects.
     fn create_object(&self, fields: Vec<(String, Self::O)>) -> RedisResult<Self::O>;
 
-    /// Consume a detached object into owned fields, preserving their order and values.
-    /// Backends that cannot detach children may copy them before releasing the object.
-    fn take_object_fields(
-        &self,
-        object: Self::O,
-    ) -> RedisResult<impl Iterator<Item = (String, Self::O)>> {
-        let fields: Vec<_> = object
-            .borrow()
-            .items()
-            .ok_or_else(err_bad_object)?
-            .map(|(name, value)| (name.to_owned(), self.clone_value(value.as_ref())))
-            .collect();
-        Ok(fields.into_iter())
-    }
-
     fn get_memory(v: &Self::V) -> RedisResult<usize>;
     fn is_json(&self, key: *mut RedisModuleKey) -> RedisResult<bool>;
 }
