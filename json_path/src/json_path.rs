@@ -146,7 +146,7 @@ pub enum JsonPathToken {
 }
 
 /* Struct that represent a compiled json path query. */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Query<'i> {
     // query: QueryElement<'i>
     pub root: Pairs<'i, Rule>,
@@ -191,6 +191,41 @@ impl<'i> Query<'i> {
             }),
             _ => None,
         })
+    }
+
+    /// Pop the last path segment, but only when it names exactly one object key
+    /// -- `foo` in `$.a.foo`, `$.a["foo"]` or `$..foo`.
+    ///
+    /// Returns `None` and leaves the query untouched for every segment that
+    /// could address more than one member (`*`, `..`, a filter, a slice, an
+    /// index list, a multi-name union) or that addresses an array index. This
+    /// lets a caller peel the trailing run of plain object keys off a path and
+    /// keep the rest as a prefix to evaluate.
+    ///
+    /// Unlike [`Self::pop_last`], which returns the *first* name of a
+    /// multi-name union such as `$['a','b']`, this rejects such a segment --
+    /// and it invalidates the cached `is_static`/`size`, so a later call
+    /// reflects the truncated query rather than the original.
+    #[allow(dead_code)]
+    pub fn pop_last_object_key(&mut self) -> Option<String> {
+        let mut remaining = self.root.clone();
+        let last = remaining.next_back()?;
+        let key = match last.as_rule() {
+            Rule::literal => last.as_str().to_string(),
+            Rule::string_list => {
+                let mut names = last.into_inner();
+                let first = names.next()?;
+                if names.next().is_some() {
+                    return None;
+                }
+                unescape_string_value(first).into_owned()
+            }
+            _ => return None,
+        };
+        self.root = remaining;
+        self.is_static = None;
+        self.size = None;
+        Some(key)
     }
 
     /// Returns the amount of elements in the json path
@@ -1775,9 +1810,9 @@ pub struct CalculationResult<'i, S: SelectValue, UPT: UserPathTracker> {
     pub path_tracker: Option<UPT>,
 }
 
-#[derive(Debug)]
-struct PathCalculatorData<'i, S: SelectValue, UPT: UserPathTracker> {
+struct PathCalculatorData<'v, 'i, S: SelectValue, UPT: UserPathTracker> {
     results: Vec<CalculationResult<'i, S, UPT>>,
+    visitor: Option<&'v mut dyn FnMut(CalculationResult<'i, S, UPT>)>,
     root: ValueRef<'i, S>,
     /// Per-query compiled-regex cache (see `RegexCache`). Shared (via `Rc<RefCell<_>>`)
     /// with the data of every `@`/`$` subquery so a constant pattern inside a nested
@@ -1792,10 +1827,19 @@ struct PathCalculatorData<'i, S: SelectValue, UPT: UserPathTracker> {
     literal_cache: Rc<RefCell<HashMap<usize, Rc<Value>>>>,
 }
 
-impl<'i, S: SelectValue, UPT: UserPathTracker> PathCalculatorData<'i, S, UPT> {
+impl<'v, 'i, S: SelectValue, UPT: UserPathTracker> PathCalculatorData<'v, 'i, S, UPT> {
+    fn emit(&mut self, result: CalculationResult<'i, S, UPT>) {
+        if let Some(visit) = &mut self.visitor {
+            visit(result);
+        } else {
+            self.results.push(result);
+        }
+    }
+
     fn new(root: ValueRef<'i, S>) -> Self {
         PathCalculatorData {
             results: Vec::new(),
+            visitor: None,
             root,
             regex_cache: Rc::new(RefCell::new(HashMap::new())),
             literal_cache: Rc::new(RefCell::new(HashMap::new())),
@@ -1811,6 +1855,7 @@ impl<'i, S: SelectValue, UPT: UserPathTracker> PathCalculatorData<'i, S, UPT> {
     ) -> Self {
         PathCalculatorData {
             results: Vec::new(),
+            visitor: None,
             root,
             regex_cache,
             literal_cache,
@@ -1895,7 +1940,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         pairs: Pairs<'i, Rule>,
         json: ValueRef<'j, S>,
         path_tracker: Option<PathTracker<'l, 'k>>,
-        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+        calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
     ) {
         match json.get_type() {
             SelectValueType::Object => {
@@ -1921,7 +1966,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         pairs: Pairs<'i, Rule>,
         json: ValueRef<'j, S>,
         path_tracker: Option<PathTracker<'l, 'k>>,
-        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+        calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
     ) {
         match json.get_type() {
             SelectValueType::Object => {
@@ -1946,7 +1991,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         curr: Pair<'i, Rule>,
         json: ValueRef<'j, S>,
         path_tracker: Option<PathTracker<'l, 'k>>,
-        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+        calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
     ) {
         let key = curr.as_str();
         value_ref_get_key!(json, key).map(|val| {
@@ -1963,7 +2008,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         curr: Pair<'i, Rule>,
         json: ValueRef<'j, S>,
         path_tracker: Option<PathTracker<'l, 'k>>,
-        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+        calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
     ) {
         for c in curr.into_inner() {
             let unescaped = unescape_string_value(c);
@@ -2011,7 +2056,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         curr: Pair<'i, Rule>,
         json: ValueRef<'j, S>,
         path_tracker: Option<PathTracker<'l, 'k>>,
-        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+        calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
     ) {
         if json.get_type() != SelectValueType::Array {
             return;
@@ -2034,7 +2079,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         curr: Pair<'i, Rule>,
         json: ValueRef<'j, S>,
         path_tracker: Option<PathTracker<'l, 'k>>,
-        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+        calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
     ) {
         if json.get_type() != SelectValueType::Array {
             return;
@@ -2107,7 +2152,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         &self,
         term: Pair<'i, Rule>,
         json: ValueRef<'j, S>,
-        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+        calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
     ) -> TermEvaluationResult<'i, 'j, S> {
         match term.as_rule() {
             Rule::decimal => {
@@ -2188,7 +2233,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         &self,
         expr: Pair<'i, Rule>,
         json: ValueRef<'j, S>,
-        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+        calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
     ) -> TermEvaluationResult<'i, 'j, S> {
         let mut inner = expr.into_inner();
         let Some(first) = inner.next() else {
@@ -2210,7 +2255,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         &self,
         term: Pair<'i, Rule>,
         json: ValueRef<'j, S>,
-        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+        calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
     ) -> TermEvaluationResult<'i, 'j, S> {
         let mut inner = term.into_inner();
         let Some(first) = inner.next() else {
@@ -2233,7 +2278,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         &self,
         factor: Pair<'i, Rule>,
         json: ValueRef<'j, S>,
-        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+        calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
     ) -> TermEvaluationResult<'i, 'j, S> {
         let mut inner = factor.into_inner();
         let Some(first) = inner.next() else {
@@ -2257,7 +2302,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         &self,
         operand: Pair<'i, Rule>,
         json: ValueRef<'j, S>,
-        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+        calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
     ) -> TermEvaluationResult<'i, 'j, S> {
         match operand.as_rule() {
             Rule::arith_expr => self.evaluate_arith_expr(operand, json, calc_data),
@@ -2274,7 +2319,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         &self,
         chain: Pair<'i, Rule>,
         json: ValueRef<'j, S>,
-        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+        calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
     ) -> TermEvaluationResult<'i, 'j, S> {
         let mut it = chain.into_inner();
         let Some(recv) = it.next() else {
@@ -2303,7 +2348,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         &self,
         curr: Pair<'i, Rule>,
         json: ValueRef<'j, S>,
-        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+        calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
     ) -> bool {
         let mut curr = curr.into_inner();
         let Some(term1) = curr.next() else {
@@ -2367,7 +2412,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         &self,
         operand: Pair<'i, Rule>,
         json: ValueRef<'j, S>,
-        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+        calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
     ) -> bool {
         match operand.as_rule() {
             Rule::single_filter => self.evaluate_single_filter(operand, json, calc_data),
@@ -2390,7 +2435,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         &self,
         mut curr: Pairs<'i, Rule>,
         json: ValueRef<'j, S>,
-        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+        calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
     ) -> bool {
         let Some(first_filter) = curr.next() else {
             trace!("evaluate_filter: missing first operand");
@@ -2472,7 +2517,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         mut pairs: Pairs<'i, Rule>,
         json: ValueRef<'j, S>,
         path_tracker: Option<PathTracker<'l, 'k>>,
-        calc_data: &mut PathCalculatorData<'j, S, UPTG::PT>,
+        calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
     ) {
         let curr = pairs.next();
         match curr {
@@ -2555,7 +2600,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                         // to a primitive value, it selects nothing."
                     }
                     Rule::EOI => {
-                        calc_data.results.push(CalculationResult {
+                        calc_data.emit(CalculationResult {
                             res: json,
                             path_tracker: path_tracker.map(|pt| self.generate_path(pt)),
                         });
@@ -2566,7 +2611,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 }
             }
             None => {
-                calc_data.results.push(CalculationResult {
+                calc_data.emit(CalculationResult {
                     res: json,
                     path_tracker: path_tracker.map(|pt| self.generate_path(pt)),
                 });
@@ -2586,6 +2631,24 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         let mut calc_data = PathCalculatorData::new(json.clone());
         let term = self.evaluate_arith_expr(expr, json, &mut calc_data);
         term_to_outputs(term)
+    }
+
+    /// Visit matches in query order without retaining them. Filter subqueries
+    /// keep their own result buffers and never invoke this visitor.
+    #[allow(dead_code)] // The standalone binary only uses the collecting API.
+    pub fn visit_with_paths_on_root<'j: 'i, S: SelectValue>(
+        &self,
+        json: ValueRef<'j, S>,
+        root: Pairs<'i, Rule>,
+        visit: &mut impl FnMut(CalculationResult<'j, S, UPTG::PT>),
+    ) {
+        let mut calc_data = PathCalculatorData::new(json.clone());
+        calc_data.visitor = Some(visit);
+        let tracker = self
+            .tracker_generator
+            .as_ref()
+            .map(|_| create_empty_tracker());
+        self.calc_internal(root, json, tracker, &mut calc_data);
     }
 
     pub fn calc_with_paths_on_root<'j: 'i, S: SelectValue>(
@@ -2692,6 +2755,109 @@ mod json_path_compiler_tests {
             query.unwrap().pop_last().unwrap(),
             ("\"".to_string(), JsonPathToken::String)
         );
+    }
+
+    #[test]
+    fn test_pop_last_object_key_accepts_dot_field() {
+        let mut query = compile("$.foo").unwrap();
+        assert_eq!(query.pop_last_object_key(), Some("foo".to_string()));
+        assert_eq!(query.pop_last_object_key(), None);
+    }
+
+    #[test]
+    fn test_pop_last_object_key_accepts_bracket_string() {
+        for path in [r#"$["foo"]"#, "$['foo']"] {
+            let mut query = compile(path).unwrap();
+            assert_eq!(
+                query.pop_last_object_key(),
+                Some("foo".to_string()),
+                "path {path}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_pop_last_object_key_unescapes_bracket_string() {
+        for (path, expected) in [
+            (r#"$["\\"]"#, "\\"),
+            (r#"$["\""]"#, "\""),
+            (r#"$['\'']"#, "'"),
+        ] {
+            let mut query = compile(path).unwrap();
+            assert_eq!(
+                query.pop_last_object_key(),
+                Some(expected.to_string()),
+                "path {path}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_pop_last_object_key_peels_a_whole_static_path() {
+        let mut query = compile("$.a.b.c").unwrap();
+        assert_eq!(query.pop_last_object_key(), Some("c".to_string()));
+        assert_eq!(query.pop_last_object_key(), Some("b".to_string()));
+        assert_eq!(query.pop_last_object_key(), Some("a".to_string()));
+        assert_eq!(query.pop_last_object_key(), None);
+    }
+
+    #[test]
+    fn test_pop_last_object_key_stops_at_a_descendant_segment() {
+        // `$..foo` is `full_scan` + `literal`, so only `foo` peels off.
+        let mut query = compile("$..foo").unwrap();
+        assert_eq!(query.pop_last_object_key(), Some("foo".to_string()));
+        assert_eq!(query.pop_last_object_key(), None);
+    }
+
+    #[test]
+    fn test_pop_last_object_key_rejects_multi_name_union() {
+        // `pop_last` would hand back just the first name here; we must not.
+        let mut query = compile("$[\"a\",\"b\"]").unwrap();
+        assert_eq!(query.pop_last_object_key(), None);
+    }
+
+    #[test]
+    fn test_pop_last_object_key_rejects_non_object_key_segments() {
+        for path in [
+            "$[1]",      // array index
+            "$[0,1]",    // index list
+            "$[0:2]",    // slice
+            "$[0:3:2]",  // slice with step
+            "$.*",       // wildcard
+            "$..*",      // descendant wildcard
+            "$..[0]",    // descendant index
+            "$[?(@.a)]", // filter
+        ] {
+            let mut query = compile(path).unwrap();
+            assert_eq!(query.pop_last_object_key(), None, "path {path}");
+        }
+    }
+
+    #[test]
+    fn test_pop_last_object_key_leaves_query_untouched_when_rejected() {
+        let mut query = compile("$['a','b'].c").unwrap();
+        assert_eq!(query.pop_last_object_key(), Some("c".to_string()));
+        // The union is refused, and refusing it must not consume it.
+        assert_eq!(query.pop_last_object_key(), None);
+        assert_eq!(query.pop_last_object_key(), None);
+        assert_eq!(query.size(), 1);
+        assert!(!query.is_static());
+    }
+
+    #[test]
+    fn test_pop_last_object_key_invalidates_cached_size_and_staticness() {
+        let mut query = compile("$.a.*").unwrap();
+        assert_eq!(query.size(), 2);
+        assert!(!query.is_static());
+        // Nothing peels off a trailing wildcard, so the cache stays valid.
+        assert_eq!(query.pop_last_object_key(), None);
+        assert_eq!(query.size(), 2);
+
+        let mut query = compile("$.a.b").unwrap();
+        assert_eq!(query.size(), 2);
+        assert_eq!(query.pop_last_object_key(), Some("b".to_string()));
+        assert_eq!(query.size(), 1, "size must reflect the truncated query");
+        assert!(query.is_static());
     }
 
     #[test]

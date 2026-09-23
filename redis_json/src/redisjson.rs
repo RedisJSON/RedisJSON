@@ -51,7 +51,7 @@ pub fn normalize_arr_indices(start: i64, end: i64, len: i64) -> (i64, i64) {
     (start, end)
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum SetOptions {
     NotExists,
     AlreadyExists,
