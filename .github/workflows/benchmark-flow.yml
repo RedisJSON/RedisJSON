@@ -81,6 +81,11 @@ jobs:
         id: run_remote
         timeout-minutes: 240 # timeout for the step
         working-directory: tests/benchmarks
+        # shell: bash for pipefail. A bare `run:` gets `bash -e {0}` with no
+        # pipefail (checked in the job log), so `| tee run-remote.log` below
+        # would report tee's exit code, this step would always be `success`,
+        # and the --run-outcome guard in the check would never fire.
+        shell: bash
         # run-remote applies the committed `kpis` floors itself
         # (results_dict_kpi_check), but its exit code cannot say whether a
         # benchmark came in under its floor or never ran at all -- telling those
