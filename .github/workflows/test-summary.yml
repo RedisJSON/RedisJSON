@@ -150,8 +150,63 @@ jobs:
           
           echo "Summary: Passed=$TOTAL_PASSED, Failed=$TOTAL_FAILED, Skipped=$TOTAL_SKIPPED"
       
+      # The benchmark gate writes its table on each of the three shard jobs, but
+      # this is the report people actually read, so restate the floor breaches
+      # here. No extra download needed: the step above pulls every artifact of
+      # the run, kpi findings included.
+      - name: Summarize benchmark KPI floors
+        id: kpi
+        if: always()
+        run: |
+          FINDINGS=$(ls benchmark-kpi-findings-*/findings.json 2>/dev/null || true)
+          if [ -z "$FINDINGS" ]; then
+            echo "No KPI findings artifacts in this run (benchmark job skipped or never uploaded)."
+            exit 0
+          fi
+
+          # unique_by: every shard reports the same ungated benchmark, so the
+          # three files would otherwise repeat it three times.
+          jq -s 'add | unique_by([.benchmark, .status]) | sort_by(-(.shortfall_pct // 0))' \
+            $FINDINGS > kpi-findings.json
+          BREACHES=$(jq '[.[] | select(.status == "breach")] | length' kpi-findings.json)
+          echo "breaches=$BREACHES" >> $GITHUB_OUTPUT
+
+          # Same table the benchmark job renders, so the two reports read alike.
+          {
+            echo "## Benchmark KPI floors"
+            echo ""
+            if [ "$BREACHES" = "0" ]; then
+              echo "Every gated benchmark met its floor."
+            else
+              echo "| benchmark | floor | measured | short | |"
+              echo "| --- | --- | --- | --- | --- |"
+              jq -r '.[] | select(.status == "breach") |
+                "| `\(.benchmark)` | \(.floor | round) | \(.measured | round) | -\(.shortfall_pct * 10 | round / 10)% | breached — file a ticket |"' kpi-findings.json
+            fi
+            jq -r '.[] | select(.status == "ungated") |
+              "| `\(.benchmark)` | _none_ | no result | | ungated (MOD-18654) |"' kpi-findings.json
+            jq -r '.[] | select(.status == "errored" or .status == "unreadable") |
+              "| `\(.benchmark)` | | \(.status) | | file a ticket |"' kpi-findings.json
+            echo ""
+            echo "A benchmark under its floor is more than 5% below its baseline: file a ticket during the nightly analysis, and do not move the floor."
+          } >> $GITHUB_STEP_SUMMARY
+
+          # Slack renders no tables, so the same rows go out as bullets.
+          {
+            echo "slack<<KPI_EOF"
+            if [ "$BREACHES" = "0" ]; then
+              echo "✅ All gated benchmarks met their floors"
+            else
+              jq -r '.[] | select(.status == "breach") |
+                "• *\(.benchmark)* — ❌ \(.measured | round) vs floor \(.floor | round) (-\(.shortfall_pct * 10 | round / 10)%)"' kpi-findings.json
+            fi
+            echo "KPI_EOF"
+          } >> $GITHUB_OUTPUT
+
       - name: Format and send Slack message
         if: always() && inputs.send-slack-message == true
+        env:
+          KPI_SLACK: ${{ steps.kpi.outputs.slack }}
         run: |
           echo "=== Starting Slack message step ==="
           echo "Summary file output: ${{ steps.aggregate.outputs.summary_file }}"
@@ -242,11 +297,20 @@ jobs:
           # Build Slack payload with blocks
           # Escape special characters for JSON using jq for proper escaping
           COMMIT_MSG_ESC=$(echo "$COMMIT_MSG" | jq -Rs . | sed 's/^"//;s/"$//')
+
+          # Benchmark KPI floors, as an extra block rather than folded into the
+          # OS list: a floor breach is a performance finding, not a failed test.
+          # jq builds the fragment so the benchmark names and percentages cannot
+          # break the payload; empty when the benchmark job produced nothing.
+          KPI_BLOCK=""
+          if [ -n "$(echo "$KPI_SLACK" | tr -d '[:space:]')" ]; then
+            KPI_BLOCK=,$(jq -nc --arg t "$KPI_SLACK" '{type:"section",text:{type:"mrkdwn",text:("*Benchmark KPI floors:*\n" + $t)}}')
+          fi
           FAILED_OS_SUMMARY_ESC=$(echo "$FAILED_OS_SUMMARY" | jq -Rs . | sed 's/^"//;s/"$//')
           FULL_OS_SUMMARY_ESC=$(echo "$FULL_OS_SUMMARY" | jq -Rs . | sed 's/^"//;s/"$//')
           
           # Build JSON payload using printf to avoid heredoc YAML parsing issues
-          PAYLOAD=$(printf '{"text":"Event Nightly Test Results","blocks":[{"type":"header","text":{"type":"plain_text","text":"%s - Event Nightly"}},{"type":"section","fields":[{"type":"mrkdwn","text":"*Redis Version:*\n%s"},{"type":"mrkdwn","text":"*Build:*\n%s"}]},{"type":"section","text":{"type":"mrkdwn","text":"*Commit:* %s"}},{"type":"divider"},{"type":"section","text":{"type":"mrkdwn","text":"*Overall Summary*\n✅ Passed: %s | ❌ Failed: %s | ⏭️ Skipped: %s"}},{"type":"section","text":{"type":"mrkdwn","text":"<%s|View Workflow Run>"}},{"type":"divider"},{"type":"section","text":{"type":"mrkdwn","text":"*Failed OSs:*\n%s"}},{"type":"actions","elements":[{"type":"button","text":{"type":"plain_text","text":"Show Full Summary","emoji":true},"url":"%s","style":"primary"}]}]}' \
+          PAYLOAD=$(printf '{"text":"Event Nightly Test Results","blocks":[{"type":"header","text":{"type":"plain_text","text":"%s - Event Nightly"}},{"type":"section","fields":[{"type":"mrkdwn","text":"*Redis Version:*\n%s"},{"type":"mrkdwn","text":"*Build:*\n%s"}]},{"type":"section","text":{"type":"mrkdwn","text":"*Commit:* %s"}},{"type":"divider"},{"type":"section","text":{"type":"mrkdwn","text":"*Overall Summary*\n✅ Passed: %s | ❌ Failed: %s | ⏭️ Skipped: %s"}},{"type":"section","text":{"type":"mrkdwn","text":"<%s|View Workflow Run>"}},{"type":"divider"},{"type":"section","text":{"type":"mrkdwn","text":"*Failed OSs:*\n%s"}}%s,{"type":"actions","elements":[{"type":"button","text":{"type":"plain_text","text":"Show Full Summary","emoji":true},"url":"%s","style":"primary"}]}]}' \
             "$REPO_NAME" \
             "$REDIS_VERSION" \
             "$COMMIT_SHA" \
@@ -256,6 +320,7 @@ jobs:
             "$TOTAL_SKIPPED" \
             "$WORKFLOW_URL" \
             "$FAILED_OS_SUMMARY_ESC" \
+            "$KPI_BLOCK" \
             "$WORKFLOW_URL")
           
           # Send to Slack
