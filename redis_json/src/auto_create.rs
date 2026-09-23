@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use json_path::json_path::{JsonPathToken, Query, UserPathTracker};
 use json_path::select_value::{SelectValue, SelectValueType, ValueRef, MAX_DEPTH};
-use json_path::{calc_once_paths, calc_once_with_paths, compile};
+use json_path::{calc_once_paths, calc_once_with_paths, compile, visit_once_with_paths};
 use redis_module::{Context, RedisError, RedisResult, RedisValue};
 use serde_json::Value;
 
@@ -137,28 +137,18 @@ fn prepare_paths<M: Manager>(
         return Err(err_projection_readonly());
     }
     let suffix = object_suffix(&mut query);
-    let mut matches: Vec<_> = calc_once_with_paths(query, root)
-        .into_iter()
-        .enumerate()
-        .map(|(order, matched)| {
-            (
-                order,
-                matched.path_tracker.unwrap().to_string_path(),
-                matched.res,
-            )
-        })
-        .collect();
-    matches.sort_by_key(|(_, path, _)| path.len());
-    let mut targets = Vec::with_capacity(matches.len());
-    let mut additions: Vec<Addition<M::O>> = Vec::new();
-    let mut indices = HashMap::new();
+    let mut pending = Vec::new();
     let mut replacements = HashSet::new();
     let mut created_targets = HashSet::new();
-    let mut failure = None;
-    let mut leaf_depth = None;
-    for (order, mut prefix, node) in matches {
-        walk_suffix(
-            node.as_ref(),
+    let mut resolution = Ok(());
+    visit_once_with_paths(query, root, |matched| {
+        if resolution.is_err() {
+            return;
+        }
+        let mut prefix = matched.path_tracker.unwrap().to_string_path();
+        let prefix_depth = prefix.len();
+        resolution = walk_suffix(
+            matched.res.as_ref(),
             &suffix,
             &mut prefix,
             &mut |parent, missing, kind| {
@@ -167,61 +157,68 @@ fn prepare_paths<M: Manager>(
                 }
                 let mut target = parent.to_vec();
                 target.extend_from_slice(missing);
-                targets.push((order, target.clone(), kind));
                 if kind.is_some() {
                     if replace {
-                        replacements.insert(target);
+                        replacements.insert(target.clone());
                     }
-                    return Ok(());
+                } else if created_targets.insert(target.clone()) {
+                    pending.push((prefix_depth, parent.to_vec(), missing.len()));
                 }
-                if (0..=parent.len()).any(|len| replacements.contains(&parent[..len]))
-                    || !created_targets.insert(target.clone())
-                {
-                    return Ok(());
-                }
-                let depth =
-                    *leaf_depth.get_or_insert_with(|| leaf.borrow().calculate_value_depth());
-                // Check every creation even after a build error: depth failures
-                // take precedence, as they did when all sites were validated first.
-                if target.len().saturating_add(depth) >= MAX_DEPTH {
-                    failure = Some(err_recursion_limit_exceeded());
-                    return Ok(());
-                }
-                if failure.is_some() {
-                    return Ok(());
-                }
-                let result = (|| {
-                    let key = &missing[0];
-                    let group = (parent.to_vec(), key.clone());
-                    if let Some(&index) = indices.get(&group) {
-                        let addition: &mut Addition<M::O> = &mut additions[index];
-                        addition.value = build_branch(
-                            manager,
-                            Some(addition.value.clone()),
-                            &missing[1..],
-                            leaf,
-                        )?;
-                    } else {
-                        let value = build_branch(manager, None, &missing[1..], leaf)?;
-                        indices.insert(group, additions.len());
-                        additions.push(Addition {
-                            parent: parent.to_vec(),
-                            key: key.clone(),
-                            value,
-                        });
-                    }
-                    Ok(())
-                })();
-                if let Err(error) = result {
-                    failure = Some(error);
-                }
+                visit(target, kind);
                 Ok(())
             },
-        )?;
-    }
-    targets.sort_by_key(|(order, _, _)| *order);
-    for (_, path, kind) in targets {
-        visit(path, kind);
+        );
+    });
+    resolution?;
+
+    // Only missing branches need buffering. Selectors can yield descendants
+    // before ancestors, so build in prefix-depth order after all replacements
+    // are known; otherwise a discarded descendant could cause a false error.
+    pending.sort_by_key(|(depth, _, _)| *depth);
+    let mut additions: Vec<Addition<M::O>> = Vec::new();
+    let mut indices = HashMap::new();
+    let mut failure = None;
+    let mut leaf_depth = None;
+    for (_, parent, missing_len) in pending {
+        if (0..=parent.len()).any(|len| replacements.contains(&parent[..len])) {
+            continue;
+        }
+        let missing = &suffix[suffix.len() - missing_len..];
+        let depth = *leaf_depth.get_or_insert_with(|| leaf.borrow().calculate_value_depth());
+        // Check every creation even after a build error: depth failures take precedence.
+        if parent
+            .len()
+            .saturating_add(missing_len)
+            .saturating_add(depth)
+            >= MAX_DEPTH
+        {
+            failure = Some(err_recursion_limit_exceeded());
+            continue;
+        }
+        if failure.is_some() {
+            continue;
+        }
+        let result = (|| {
+            let key = &missing[0];
+            let group = (parent.clone(), key.clone());
+            if let Some(&index) = indices.get(&group) {
+                let addition: &mut Addition<M::O> = &mut additions[index];
+                addition.value =
+                    build_branch(manager, Some(addition.value.clone()), &missing[1..], leaf)?;
+            } else {
+                let value = build_branch(manager, None, &missing[1..], leaf)?;
+                indices.insert(group, additions.len());
+                additions.push(Addition {
+                    parent,
+                    key: key.clone(),
+                    value,
+                });
+            }
+            Ok(())
+        })();
+        if let Err(error) = result {
+            failure = Some(error);
+        }
     }
     Ok(match failure {
         Some(error) => Err(error),
@@ -263,8 +260,12 @@ pub(crate) fn can_create<V: SelectValue>(mut query: Query, root: &V) -> RedisRes
     }
     let suffix = object_suffix(&mut query);
     let mut found = false;
-    for matched in calc_once_with_paths(query, root) {
-        walk_suffix(
+    let mut resolution = Ok(());
+    visit_once_with_paths(query, root, |matched| {
+        if found || resolution.is_err() {
+            return;
+        }
+        resolution = walk_suffix(
             matched.res.as_ref(),
             &suffix,
             &mut Vec::new(),
@@ -272,11 +273,9 @@ pub(crate) fn can_create<V: SelectValue>(mut query: Query, root: &V) -> RedisRes
                 found |= kind.is_none();
                 Ok(())
             },
-        )?;
-        if found {
-            break;
-        }
-    }
+        );
+    });
+    resolution?;
     Ok(found)
 }
 
@@ -567,6 +566,41 @@ mod tests {
     }
     fn prepare(path: &str, root: &IValue, leaf: &IValue) -> RedisResult<Vec<Addition<IValue>>> {
         prepare_paths(&manager(), compile(path)?, root, leaf, false, |_, _| {})?
+    }
+
+    #[test]
+    fn streaming_preparation_preserves_many_existing_and_missing_targets() {
+        let root: IValue = serde_json::from_value(serde_json::Value::Array(
+            (0..1000)
+                .map(|i| {
+                    if i % 2 == 0 {
+                        serde_json::json!({"age": i})
+                    } else {
+                        serde_json::json!({})
+                    }
+                })
+                .collect(),
+        ))
+        .unwrap();
+        let before = root.clone();
+        let mut targets = Vec::new();
+        let additions = prepare_paths(
+            &manager(),
+            compile("$[*].age").unwrap(),
+            &root,
+            &doc("42"),
+            true,
+            |path, kind| targets.push((path, kind.is_some())),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(targets.len(), 1000);
+        assert_eq!(additions.len(), 500);
+        for (i, (path, exists)) in targets.iter().enumerate() {
+            assert_eq!(path, &[i.to_string(), "age".into()]);
+            assert_eq!(*exists, i % 2 == 0);
+        }
+        assert_eq!(root, before);
     }
 
     #[test]

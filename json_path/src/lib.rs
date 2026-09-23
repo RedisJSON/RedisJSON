@@ -119,6 +119,20 @@ pub fn calc_once_with_paths<'p, S: SelectValue>(
     .calc_with_paths_on_root(ValueRef::Borrowed(json), root)
 }
 
+/// Visit each match immediately, preserving query order and duplicate matches.
+/// Unlike `calc_once_with_paths`, this does not collect the matches into a vector.
+pub fn visit_once_with_paths<'p, S: SelectValue>(
+    q: Query<'_>,
+    json: &'p S,
+    mut visit: impl FnMut(CalculationResult<'p, S, PTracker>),
+) {
+    PathCalculator {
+        query: None,
+        tracker_generator: Some(PTrackerGenerator),
+    }
+    .visit_with_paths_on_root(ValueRef::Borrowed(json), q.root, &mut visit);
+}
+
 /// A version of `calc_once` that returns only paths as Vec<Vec<String>>.
 pub fn calc_once_paths<S: SelectValue>(q: Query, json: &S) -> Vec<Vec<String>> {
     let root = q.root;
@@ -140,6 +154,35 @@ mod json_path_tests {
     use crate::{create, create_with_generator};
     use serde_json::json;
     use serde_json::Value;
+
+    #[test]
+    fn streaming_matches_preserve_order_duplicates_and_filter_isolation() {
+        let doc = json!({
+            "limit": 10,
+            "a": [
+                {"age": 30, "children": [{"age": 20}]},
+                {"age": 5, "children": [{"age": 2}]}
+            ],
+            "age": 40
+        });
+        for path in [
+            "$",
+            "$..age",
+            "$..*",
+            "$.a[1,0,1].age",
+            "$.a[0:2]",
+            "$.a[?@.age > $.limit]",
+            "$.a[?@.children[?@.age > $.limit]]",
+            "$..missing",
+        ] {
+            let expected = crate::calc_once_with_paths(crate::compile(path).unwrap(), &doc);
+            let mut actual = Vec::new();
+            crate::visit_once_with_paths(crate::compile(path).unwrap(), &doc, |matched| {
+                actual.push(matched);
+            });
+            assert_eq!(actual, expected, "{path}");
+        }
+    }
 
     #[allow(dead_code)]
     pub fn setup() {
