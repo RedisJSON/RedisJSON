@@ -53,7 +53,14 @@ import sys
 
 from update_kpis import METRICS, benchmark_name, result_metric, value_re
 
-OK, BREACH, MISSING, UNGATED, ERRORED = "ok", "breach", "missing", "ungated", "errored"
+OK, BREACH, MISSING, UNGATED, ERRORED, UNREADABLE = (
+    "ok",
+    "breach",
+    "missing",
+    "ungated",
+    "errored",
+    "unreadable",
+)
 
 # redisbench_admin.run_remote logs exactly this per benchmark it could not run.
 RUN_FAILED_RE = re.compile(r"Failed to run remote benchmark for test '([^']+)'")
@@ -69,12 +76,21 @@ def floor_of(text):
 
 
 def measured(results_dirs, name):
-    """Throughput measured for `name` in the first results dir that has it."""
+    """(value, problem) for `name`, from the first results dir that has it.
+
+    `result_metric` returns (None, reason) when a result file exists but cannot
+    be read -- ambiguous duplicates, or no known throughput metric in it. That
+    reason has to be carried out of here: dropping it leaves the benchmark
+    looking unmeasured, which is how a shard says "not mine", and its floor
+    would never be applied.
+    """
     for results_dir in results_dirs:
         metric, value = result_metric(results_dir, name)
         if metric is not None:
-            return value
-    return None
+            return value, None
+        if value is not None:
+            return None, value
+    return None, None
 
 
 def verdict(benchmarks_dir, results_dirs):
@@ -88,7 +104,10 @@ def verdict(benchmarks_dir, results_dirs):
             continue
         with open(path) as f:
             metric, floor = floor_of(f.read())
-        value = measured(results_dirs, name)
+        value, problem = measured(results_dirs, name)
+        if problem is not None:
+            rows.append((name, floor, None, UNREADABLE))
+            continue
         if metric is None:
             # No floor to check. update_kpis.py only writes one for a benchmark
             # that has produced a result, so this is how a benchmark broken
@@ -101,8 +120,8 @@ def verdict(benchmarks_dir, results_dirs):
     return rows
 
 
-def errored(run_log, known_broken):
-    """Benchmarks run-remote reported it could not run, minus the known-broken.
+def log_failures(run_log, known_broken):
+    """(unexpected, known) benchmarks run-remote reported it could not run.
 
     `run-remote` is given continue-on-error so that this script owns the verdict,
     which means an errored benchmark no longer fails the step by itself. Its
@@ -111,10 +130,10 @@ def errored(run_log, known_broken):
     says a benchmark was meant to run and did not.
     """
     if not run_log or not os.path.exists(run_log):
-        return []
+        return [], []
     with open(run_log, errors="replace") as f:
-        names = RUN_FAILED_RE.findall(f.read())
-    return sorted({n for n in names if n not in known_broken})
+        names = set(RUN_FAILED_RE.findall(f.read()))
+    return sorted(names - known_broken), sorted(names & known_broken)
 
 
 def findings(rows, failed_to_run=()):
@@ -131,6 +150,8 @@ def findings(rows, failed_to_run=()):
                     "shortfall_pct": round((1.0 - value / floor) * 100, 2),
                 }
             )
+        elif status == UNREADABLE:
+            out.append({"benchmark": name, "status": status, "floor": floor, "measured": None})
         elif status == UNGATED:
             out.append({"benchmark": name, "status": status, "floor": None, "measured": value})
     out.sort(key=lambda f: -(f.get("shortfall_pct") or 0))
@@ -149,7 +170,13 @@ def step_summary(found):
     else:
         lines += ["| benchmark | floor | measured | short | |", "| --- | --- | --- | --- | --- |"]
         for f in found:
-            if f["status"] == ERRORED:
+            if f["status"] == UNREADABLE:
+                lines.append(
+                    "| `{}` | {:.0f} | unreadable | | result unusable -- file a ticket |".format(
+                        f["benchmark"], f["floor"]
+                    )
+                )
+            elif f["status"] == ERRORED:
                 lines.append("| `{}` | | did not run | | errored -- file a ticket |".format(f["benchmark"]))
             elif f["status"] == UNGATED:
                 shown = "no result" if f["measured"] is None else "{:.0f}".format(f["measured"])
@@ -184,6 +211,10 @@ def main(argv=None):
     )
     parser.add_argument("--run-log", help="run-remote's captured output, read for benchmarks that failed to run")
     parser.add_argument(
+        "--run-outcome",
+        help="run-remote's step outcome; a non-success nothing in its log explains fails the job",
+    )
+    parser.add_argument(
         "--known-broken",
         action="append",
         default=[],
@@ -196,7 +227,7 @@ def main(argv=None):
         return self_test()
 
     rows = verdict(args.benchmarks_dir, args.results_dirs or ["."])
-    failed_to_run = errored(args.run_log, set(args.known_broken))
+    failed_to_run, known_failed = log_failures(args.run_log, set(args.known_broken))
     found = findings(rows, failed_to_run)
     if args.findings_out:
         with open(args.findings_out, "w") as f:
@@ -211,29 +242,57 @@ def main(argv=None):
         if status == BREACH:
             print("BREACH: {} ({:.2f} vs floor {:.2f}, -{:.1f}%)".format(
                 name, value, floor, (1.0 - value / floor) * 100))
+        elif status == UNREADABLE:
+            print("UNREADABLE: {} (result file present but unusable)".format(name))
         elif status == UNGATED:
             print("UNGATED: {} (no floor{})".format(name, "" if value is not None else ", no result"))
         # A benchmark the shards did not give this job is not a finding, and
         # update_kpis.py stays silent on one too.
 
-    counts = {status: sum(1 for row in rows if row[3] == status) for status in (OK, BREACH, MISSING, UNGATED)}
+    counts = {
+        status: sum(1 for row in rows if row[3] == status)
+        for status in (OK, BREACH, MISSING, UNGATED, UNREADABLE)
+    }
     print(
-        "{} benchmark(s): {} ok, {} breached, {} not measured, {} ungated".format(
-            len(rows), counts[OK], counts[BREACH], counts[MISSING], counts[UNGATED]
+        "{} benchmark(s): {} ok, {} breached, {} unreadable, {} not measured, {} ungated".format(
+            len(rows), counts[OK], counts[BREACH], counts[UNREADABLE], counts[MISSING], counts[UNGATED]
         )
     )
 
     if counts[OK] + counts[BREACH] == 0:
         print("FAIL: no benchmark produced a result -- the run itself is broken")
         return 1
+    if counts[UNREADABLE]:
+        print("FAIL: {} result(s) could not be read, so their floors were never applied".format(counts[UNREADABLE]))
     if failed_to_run:
         print("FAIL: {} benchmark(s) failed to run: {}".format(len(failed_to_run), ", ".join(failed_to_run)))
+
+    # run-remote runs under continue-on-error, so a timeout or a crash partway
+    # through leaves its remaining benchmarks simply absent -- and absent is how
+    # a shard says "not mine". If the step did not succeed and nothing in its
+    # log accounts for that (no breach, no failed-to-run line), the run ended
+    # for a reason we cannot see, and green would be a lie.
+    # ponytail: a timeout on a night when a known-broken benchmark also errored
+    # still reads as accounted-for. Closing that needs each shard's expected
+    # benchmark list, which redisbench-admin does not expose -- neither i % 3
+    # nor contiguous thirds of the sorted yml list reproduces the real split.
+    unaccounted = (
+        args.run_outcome not in (None, "success")
+        and not counts[BREACH]
+        and not failed_to_run
+        and not known_failed
+    )
+    if unaccounted:
+        print(
+            "FAIL: run-remote ended as '{}' and nothing in its log explains it -- "
+            "treat the results as incomplete".format(args.run_outcome)
+        )
     if counts[BREACH]:
         print(
             "FAIL: {} benchmark(s) more than 5% below baseline -- file a ticket for each, "
             "and do not update the floors".format(counts[BREACH])
         )
-    return 1 if (counts[BREACH] or failed_to_run) else 0
+    return 1 if (counts[BREACH] or failed_to_run or counts[UNREADABLE] or unaccounted) else 0
 
 
 def self_test():
@@ -296,15 +355,34 @@ def self_test():
                 "some other line\n"
                 "Failed to run remote benchmark for test 'fast'\n"
             )
-        assert errored(log, {"json_nummultby_num_2"}) == ["fast"], errored(log, {"json_nummultby_num_2"})
-        assert errored(log, set()) == ["fast", "json_nummultby_num_2"]
-        assert errored(None, set()) == [] and errored(os.path.join(tmp, "nope.log"), set()) == []
+        assert log_failures(log, {"json_nummultby_num_2"}) == (["fast"], ["json_nummultby_num_2"])
+        assert log_failures(log, set()) == (["fast", "json_nummultby_num_2"], [])
+        assert log_failures(None, set()) == ([], [])
+        assert log_failures(os.path.join(tmp, "nope.log"), set()) == ([], [])
         args = ["--benchmarks-dir", tmp, "--results-dir", tmp, "--run-log", log]
         assert main(args + ["--known-broken", "json_nummultby_num_2", "--known-broken", "fast"]) == 0
         assert main(args + ["--known-broken", "json_nummultby_num_2"]) == 1
         out = os.path.join(tmp, "f2.json")
         main(args + ["--known-broken", "json_nummultby_num_2", "--findings-out", out])
         assert [f["status"] for f in json.load(open(out))][0] == ERRORED
+
+        # A result file that exists but carries no known throughput metric must
+        # fail, not pass as "this shard did not run it".
+        broken = os.path.join(tmp, "1-org-repo-master-gone-oss-standalone-sha.json")
+        with open(broken, "w") as f:
+            json.dump({"Tests": {"Overall": {"something_else": 1}}}, f)
+        assert {r[0]: r[3] for r in verdict(tmp, [tmp])}["gone"] == UNREADABLE
+        assert main(["--benchmarks-dir", tmp, "--results-dir", tmp]) == 1
+        os.remove(broken)
+
+        # A non-success run-remote is tolerated while its log accounts for it --
+        # a breach, an errored benchmark, or a known-broken one -- and fails when
+        # nothing does.
+        clean = ["--benchmarks-dir", tmp, "--results-dir", tmp]
+        assert main(clean + ["--run-outcome", "success"]) == 0
+        assert main(clean + ["--run-outcome", "failure"]) == 1
+        assert main(clean + ["--run-outcome", "failure", "--run-log", log,
+                             "--known-broken", "json_nummultby_num_2", "--known-broken", "fast"]) == 0
     finally:
         shutil.rmtree(tmp)
 

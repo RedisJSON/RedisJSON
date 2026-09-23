@@ -78,6 +78,7 @@ jobs:
 
           
       - name: Run CI benchmarks on aws for envs ${{ inputs.allowed_envs }}
+        id: run_remote
         timeout-minutes: 240 # timeout for the step
         working-directory: tests/benchmarks
         # run-remote applies the committed `kpis` floors itself
@@ -152,10 +153,14 @@ jobs:
         # absent, which is indistinguishable from a benchmark this shard was
         # never given. --known-broken exempts json_nummultby_num_2 and nothing
         # else, so any *other* benchmark failing to run still fails the job.
+        # --run-outcome catches the case the log cannot name: a step timeout or
+        # crash partway through, where the benchmarks that never started leave
+        # no line behind at all.
         run: |
           mkdir -p kpi-state
           python3 check_kpis.py --findings-out kpi-state/findings.json \
-            --run-log run-remote.log --known-broken json_nummultby_num_2
+            --run-log run-remote.log --known-broken json_nummultby_num_2 \
+            --run-outcome '${{ steps.run_remote.outcome }}'
 
       # Uploaded even when the step above fails -- especially then: this is what
       # the nightly analysis files the tickets from.
