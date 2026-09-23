@@ -108,12 +108,12 @@ jobs:
           BENCHMARK_GLOB: ${{ inputs.benchmark_glob }}
           BENCHMARK_RUNNER_GROUP_M_ID: ${{ inputs.benchmark_runner_group_member_id }}
           BENCHMARK_RUNNER_GROUP_TOTAL: ${{ inputs.benchmark_runner_group_total }}
-        # NOTE: json_nummultby_num_2 errors on every run (MOD-18654, resolved
-        # Won't Do, broken since at least 2026-08-09). It never produced a result,
-        # so it has no `kpis` floor either; the check below lists it as ungated
-        # instead of failing on it, which is what keeps the job status usable. All
-        # other benchmarks still run and still report; run-remote is not given
-        # --fail_fast.
+        # NOTE: json_nummultby_num_2 produces a result again as of #1643
+        # (MOD-18654) but has no `kpis` floor yet -- update_kpis.py seeds one only
+        # from a run that returned a result, and no run had until now. Until a
+        # floor is seeded it is reported as ungated and does not decide the job.
+        # run-remote is not given --fail_fast, so one benchmark failing does not
+        # stop the others.
         run: redisbench-admin run-remote
               --module_path ../../${{ inputs.module_path }}
               --github_actor ${{ github.triggering_actor }}
@@ -156,16 +156,15 @@ jobs:
         # --run-log: with run-remote continuing on error, a benchmark it could
         # not run would otherwise leave no trace -- its result file is simply
         # absent, which is indistinguishable from a benchmark this shard was
-        # never given. --known-broken exempts json_nummultby_num_2 and nothing
-        # else, so any *other* benchmark failing to run still fails the job.
-        # --run-outcome catches the case the log cannot name: a step timeout or
-        # crash partway through, where the benchmarks that never started leave
-        # no line behind at all.
+        # never given. No --known-broken: json_nummultby_num_2 was the only
+        # exemption and #1643 fixed it, so every benchmark failing to run now
+        # fails the job. --run-outcome catches what the log cannot name: a step
+        # timeout or crash partway through, where the benchmarks that never
+        # started leave no line behind at all.
         run: |
           mkdir -p kpi-state
           python3 check_kpis.py --findings-out kpi-state/findings.json \
-            --run-log run-remote.log --known-broken json_nummultby_num_2 \
-            --run-outcome '${{ steps.run_remote.outcome }}'
+            --run-log run-remote.log --run-outcome '${{ steps.run_remote.outcome }}'
 
       # Uploaded even when the step above fails -- especially then: this is what
       # the nightly analysis files the tickets from.

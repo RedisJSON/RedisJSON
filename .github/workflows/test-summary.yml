@@ -184,7 +184,7 @@ jobs:
                 "| `\(.benchmark)` | \(.floor | round) | \(.measured | round) | -\(.shortfall_pct * 10 | round / 10)% | breached — file a ticket |"' kpi-findings.json
             fi
             jq -r '.[] | select(.status == "ungated") |
-              "| `\(.benchmark)` | _none_ | no result | | ungated (MOD-18654) |"' kpi-findings.json
+              "| `\(.benchmark)` | _none_ | \(.measured // "no result" | tostring) | | no floor seeded yet |"' kpi-findings.json
             jq -r '.[] | select(.status == "errored" or .status == "unreadable") |
               "| `\(.benchmark)` | | \(.status) | | file a ticket |"' kpi-findings.json
             echo ""

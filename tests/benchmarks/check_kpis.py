@@ -17,16 +17,16 @@ hand edit in a reviewed PR.
 redisbench-admin already checks the floors at the end of ``run-remote``, but its
 exit code answers one question with two meanings -- a floor breach and a
 benchmark that failed to run at all both just make the step red, which is why
-telling them apart currently means grepping the log. This script takes the
-verdict over so that each one is named, and so the breaches leave the run as
-data:
+telling them apart used to mean grepping the log. This script takes the verdict
+over so that each one is named, and so the breaches leave the run as data:
 
 * ``kpi-state/findings.json`` and a table in the run summary list every breach,
   worst shortfall first, for the nightly analysis to file from.
 * A benchmark ``run-remote`` failed to run is a finding of its own, read from the
   run log, because with ``run-remote`` continuing on error nothing else would
-  fail the job for it. ``--known-broken`` exempts the ones already resolved as
-  Won't Do (``json_nummultby_num_2``, MOD-18654), and only those.
+  fail the job for it. ``--known-broken`` can exempt a benchmark already known
+  not to run; nothing uses it now that #1643 fixed ``json_nummultby_num_2``
+  (MOD-18654), and it should stay empty unless another one breaks for good.
 * A run where nothing at all measured fails, so swallowing run-remote's exit
   code cannot hide a broken harness.
 
@@ -109,9 +109,10 @@ def verdict(benchmarks_dir, results_dirs):
             rows.append((name, floor, None, UNREADABLE))
             continue
         if metric is None:
-            # No floor to check. update_kpis.py only writes one for a benchmark
-            # that has produced a result, so this is how a benchmark broken
-            # since before the baselines were seeded looks.
+            # No floor to check. update_kpis.py writes one only from a run that
+            # returned a result, so a benchmark that has just started producing
+            # results (json_nummultby_num_2, #1643) sits here until a floor is
+            # seeded for it -- reported, and not deciding the job.
             rows.append((name, floor, value, UNGATED))
         elif value is None:
             rows.append((name, floor, value, MISSING))
@@ -180,7 +181,7 @@ def step_summary(found):
                 lines.append("| `{}` | | did not run | | errored -- file a ticket |".format(f["benchmark"]))
             elif f["status"] == UNGATED:
                 shown = "no result" if f["measured"] is None else "{:.0f}".format(f["measured"])
-                lines.append("| `{}` | _none_ | {} | | ungated (MOD-18654) |".format(f["benchmark"], shown))
+                lines.append("| `{}` | _none_ | {} | | no floor seeded yet |".format(f["benchmark"], shown))
             else:
                 lines.append(
                     "| `{}` | {:.0f} | {:.0f} | -{:.1f}% | breached -- file a ticket |".format(
@@ -218,7 +219,7 @@ def main(argv=None):
         "--known-broken",
         action="append",
         default=[],
-        help="benchmark already known not to run (MOD-18654); repeatable",
+        help="benchmark already known not to run, exempt from failing the job; repeatable",
     )
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args(argv)
@@ -314,7 +315,7 @@ def self_test():
         write("fast", 100.0, 120.0)
         write("slow", 100.0, 90.0)
         write("gone", 100.0, None)
-        # No floor at all -- json_nummultby_num_2's shape.
+        # No floor at all -- a benchmark awaiting its first seeded floor.
         with open(os.path.join(tmp, "bare.yml"), "w") as f:
             f.write('name: "bare"\n')
         # Unquoted key and deeper indentation still read as a floor.
