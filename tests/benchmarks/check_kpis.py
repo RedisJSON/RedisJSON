@@ -142,7 +142,13 @@ def log_failures(run_log, known_broken):
 def findings(rows, failed_to_run=()):
     """The rows worth a ticket, worst shortfall first, plus the ungated ones."""
     out = [{"benchmark": name, "status": ERRORED, "floor": None, "measured": None} for name in failed_to_run]
+    # A benchmark that failed to run also has no result, and if it has no floor
+    # either it would come back from `rows` as ungated -- two lines for one
+    # benchmark, both asking for a ticket. The errored row is the useful one.
+    already = set(failed_to_run)
     for name, floor, value, status in rows:
+        if name in already:
+            continue
         if status == BREACH:
             out.append(
                 {
@@ -163,7 +169,12 @@ def findings(rows, failed_to_run=()):
 
 def step_summary(found):
     """A markdown table for $GITHUB_STEP_SUMMARY, so a breach is visible in the
-    run without opening the log."""
+    run without opening the log.
+
+    An ungated benchmark is listed but is not a finding, so it must not drag the
+    file-a-ticket footer onto an otherwise clean run -- on push-to-integ this
+    table is the only KPI report anyone sees.
+    """
     path = os.environ.get("GITHUB_STEP_SUMMARY")
     if not path:
         return
@@ -190,11 +201,16 @@ def step_summary(found):
                         f["benchmark"], f["floor"], f["measured"], f["shortfall_pct"]
                     )
                 )
-        lines += [
-            "",
-            "A benchmark under its floor is more than 5% below its baseline: file a ticket "
-            "during the nightly analysis, and do not move the floor.",
-        ]
+        if any(f["status"] in (BREACH, ERRORED, UNREADABLE) for f in found):
+            lines += [
+                "",
+                "Each row above is worth a ticket: a benchmark under its floor is more than 5% "
+                "below its baseline, and one that failed to run or returned an unusable result "
+                "was never checked against its floor at all. File during the nightly analysis, "
+                "and do not move the floor.",
+            ]
+        else:
+            lines += ["", "Every gated benchmark met its floor."]
     with open(path, "a") as f:
         f.write("\n".join(lines) + "\n")
 
@@ -392,6 +408,28 @@ def self_test():
         assert {r[0]: r[3] for r in verdict(tmp, [tmp])}["gone"] == UNREADABLE
         assert main(["--benchmarks-dir", tmp, "--results-dir", tmp]) == 1
         os.remove(broken)
+
+        # A benchmark that failed to run and has no floor is one row, not two,
+        # and the row that survives is the actionable one.
+        dual = os.path.join(tmp, "dual.log")
+        with open(dual, "w") as f:
+            f.write("Failed to run remote benchmark for test 'bare'\n")
+        rows = verdict(tmp, [tmp])
+        both = findings(rows, ["bare"])
+        assert [f["status"] for f in both if f["benchmark"] == "bare"] == [ERRORED], both
+
+        # The footer follows the rows that need a ticket, so an ungated-only run
+        # does not tell anyone to file one.
+        summary = os.path.join(tmp, "s.md")
+        os.environ["GITHUB_STEP_SUMMARY"] = summary
+        try:
+            step_summary(findings(verdict(tmp, [tmp])))
+            text = open(summary).read()
+            assert "no floor seeded yet" in text, text
+            assert "worth a ticket" not in text, text
+            assert "Every gated benchmark met its floor." in text, text
+        finally:
+            del os.environ["GITHUB_STEP_SUMMARY"]
 
         # A non-success run-remote is tolerated while its log accounts for it --
         # a breach, an errored benchmark, or a known-broken one -- and fails when
