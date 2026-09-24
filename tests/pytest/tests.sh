@@ -665,6 +665,14 @@ fi
 
 # install_git_lfs
 
+# cluster-bus-port-protected-mode is rejected by a redis that does not have it,
+# and a rejected directive stops the server from starting. It exists in redis 8.12
+# and up, where it also defaults to enabled and so refuses an unauthenticated
+# cluster bus, and in the 8.2.10/8.4.7/8.6.7/8.8.3/8.10.2 backports, where it
+# defaults to disabled. Set CLUSTER_BUS_PROTECTED_MODE= to omit it for an older redis.
+CLUSTER_BUS_ARGS="--cluster_bus_port_protected_mode ${CLUSTER_BUS_PROTECTED_MODE-no}"
+[[ -z ${CLUSTER_BUS_PROTECTED_MODE-no} ]] && CLUSTER_BUS_ARGS=""
+
 #------------------------------------------------------------------------------------- Env only
 
 if [[ $ENV_ONLY == 1 ]]; then
@@ -681,14 +689,6 @@ fi
 if [[ ! -z $REDIS ]]; then
 	RLTEST_ARGS+=" --env existing-env --existing-env-addr $REDIS"
 fi
-
-# cluster-bus-port-protected-mode is rejected by a redis that does not have it,
-# and a rejected directive stops the server from starting. It exists in redis 8.12
-# and up, where it also defaults to enabled and so refuses an unauthenticated
-# cluster bus, and in the 8.2.10/8.4.7/8.6.7/8.8.3/8.10.2 backports, where it
-# defaults to disabled. Set CLUSTER_BUS_PROTECTED_MODE= to omit it for an older redis.
-CLUSTER_BUS_ARGS="--cluster_bus_port_protected_mode ${CLUSTER_BUS_PROTECTED_MODE-no}"
-[[ -z ${CLUSTER_BUS_PROTECTED_MODE-no} ]] && CLUSTER_BUS_ARGS=""
 
 E=0
 
