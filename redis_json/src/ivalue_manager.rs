@@ -133,6 +133,52 @@ where
     )
 }
 
+fn wrap_ivalue_in_object_path(keys: &[String], leaf: IValue) -> RedisResult<IValue> {
+    if keys.is_empty() {
+        return Ok(leaf);
+    }
+    if keys.len() + leaf.calculate_value_depth() >= MAX_DEPTH {
+        return Err(err_recursion_limit_exceeded());
+    }
+    let mut current = leaf;
+    for key in keys.iter().rev() {
+        let mut obj = IObject::new();
+        obj.insert(key.as_str(), current)
+            .map_err(|e| RedisError::String(e.to_string()))?;
+        current = obj.into();
+    }
+    Ok(current)
+}
+
+fn ensure_object_path_and_set(node: &mut IValue, keys: &[String], leaf: IValue) -> RedisResult<bool> {
+    if keys.is_empty() {
+        *node = leaf;
+        return Ok(true);
+    }
+    if !node.is_object() {
+        return Ok(false);
+    }
+    let key = &keys[0];
+    let rest = &keys[1..];
+    let obj = node.as_object_mut().ok_or_else(crate::manager::err_bad_object)?;
+
+    if rest.is_empty() {
+        obj.insert(key.as_str(), leaf)
+            .map_err(|e| RedisError::String(e.to_string()))?;
+        return Ok(true);
+    }
+
+    if !obj.contains_key(key.as_str()) {
+        let nested = wrap_ivalue_in_object_path(rest, leaf)?;
+        obj.insert(key.as_str(), nested)
+            .map_err(|e| RedisError::String(e.to_string()))?;
+        return Ok(true);
+    }
+
+    let child = obj.get_mut(key.as_str()).ok_or_else(err_invalid_path)?;
+    ensure_object_path_and_set(child, rest, leaf)
+}
+
 ///
 /// Removes a value at a given `path`, starting from `root`
 ///
@@ -425,6 +471,17 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             })
             .is_ok())
         }
+    }
+
+    fn set_value_creating_path(&mut self, keys: &[String], v: IValue) -> RedisResult<bool> {
+        if keys.is_empty() {
+            return self.set_root(v);
+        }
+        if keys.len() + v.calculate_value_depth() >= MAX_DEPTH {
+            return Err(err_recursion_limit_exceeded());
+        }
+        let root = self.get_value()?.ok_or(RedisError::nonexistent_key())?;
+        ensure_object_path_and_set(root, keys, v)
     }
 
     fn merge_value(&mut self, path: Vec<String>, mut v: IValue) -> RedisResult<bool> {
@@ -850,6 +907,10 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         }
     }
 
+    fn wrap_in_object_path(&self, keys: &[String], leaf: IValue) -> RedisResult<IValue> {
+        wrap_ivalue_in_object_path(keys, leaf)
+    }
+
     fn get_memory(v: &Self::V) -> RedisResult<usize> {
         Ok(v.mem_allocated() + size_of::<IValue>())
     }
@@ -919,5 +980,19 @@ mod tests {
                 .unwrap(),
             "\u{a0}\u{a0}\u{a0}\u{a0}\u{a0}\u{a0}\u{a0}"
         );
+    }
+
+    #[test]
+    fn test_wrap_in_object_path() {
+        let _guard = SINGLE_THREAD_TEST_MUTEX.lock();
+        let manager = RedisIValueJsonKeyManager {
+            phantom: PhantomData,
+        };
+        let leaf = manager.from_str(r#""baz""#, Format::JSON, true, None).unwrap();
+        let wrapped = manager
+            .wrap_in_object_path(&["foo".into(), "bar".into()], leaf)
+            .unwrap();
+        let expected: IValue = serde_json::from_str(r#"{"foo":{"bar":"baz"}}"#).unwrap();
+        assert_eq!(wrapped, expected);
     }
 }

@@ -40,6 +40,7 @@ pub trait WriteHolder<O: Clone, V: SelectValue> {
     fn delete(&mut self) -> RedisResult<()>;
     fn get_value(&mut self) -> RedisResult<Option<&mut V>>;
     fn set_value(&mut self, path: Vec<String>, v: O) -> RedisResult<bool>;
+    fn set_value_creating_path(&mut self, keys: &[String], v: O) -> RedisResult<bool>;
     fn merge_value(&mut self, path: Vec<String>, v: O) -> RedisResult<bool>;
     fn dict_add(&mut self, path: Vec<String>, key: &str, v: O) -> RedisResult<bool>;
     fn delete_path(&mut self, path: Vec<String>) -> RedisResult<bool>;
@@ -89,6 +90,7 @@ pub trait Manager {
         limit_depth: bool,
         fpha_type: Option<FloatType>,
     ) -> RedisResult<Self::O>;
+    fn wrap_in_object_path(&self, keys: &[String], leaf: Self::O) -> RedisResult<Self::O>;
     fn get_memory(v: &Self::V) -> RedisResult<usize>;
     fn is_json(&self, key: *mut RedisModuleKey) -> RedisResult<bool>;
 }

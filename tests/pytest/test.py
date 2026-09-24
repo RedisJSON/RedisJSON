@@ -127,6 +127,44 @@ def testSetInvalidPathShouldFail(env):
         r.expect('JSON.SET', 'test', i, 'null').raiseError()
         assertNotExists(r, 'test%s' % i)
 
+def testSetWithNotExistPathShouldSucceed(env):
+    """Test that deep non-existing paths are automatically created when auto-path-create is on"""
+    r = env
+    r.expect('CONFIG', 'SET', 'ReJSON.auto-path-create', 'yes').equal('OK')
+
+    r.cmd('DEL', 'test')
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$.foo.bar', '"baz"'))
+    result = json.loads(r.execute_command('JSON.GET', 'test', '.'))
+    r.assertEqual(result, {"foo": {"bar": "baz"}})
+
+    r.cmd('DEL', 'test')
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$["foo"]["bar.baz"]', '1'))
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'test', '.')), {"foo": {"bar.baz": 1}})
+
+    r.cmd('DEL', 'test')
+    r.assertOk(r.execute_command('JSON.SET', 'test', '.a.b.c', '{"x":true}'))
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'test', '.')), {"a": {"b": {"c": {"x": True}}}})
+
+    r.cmd('DEL', 'test')
+    r.assertIsNone(r.execute_command('JSON.SET', 'test', '$.a.b', '1', 'XX'))
+    assertNotExists(r, 'test')
+
+    r.cmd('DEL', 'test')
+    r.expect('JSON.SET', 'test', '$.a[0].b', '1').raiseError().contains('new objects must be created at the root')
+    assertNotExists(r, 'test')
+
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$', '{}'))
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$.a.b.c', '1'))
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'test', '.')), {"a": {"b": {"c": 1}}})
+
+    r.expect('CONFIG', 'SET', 'ReJSON.auto-path-create', 'no').equal('OK')
+    r.cmd('DEL', 'test')
+    r.expect('JSON.SET', 'test', '$.foo.bar', '"baz"').raiseError().contains('new objects must be created at the root')
+    assertNotExists(r, 'test')
+    r.assertOk(r.execute_command('JSON.SET', 'test', '$', '{}'))
+    r.assertIsNone(r.execute_command('JSON.SET', 'test', '$.a.b.c', '1'))
+    r.assertEqual(json.loads(r.execute_command('JSON.GET', 'test', '.')), {})
+
 def testSetRootWithJSONValuesShouldSucceed(env):
     """Test that the root of a JSON key can be set with any valid JSON"""
     r = env
@@ -1416,6 +1454,15 @@ def testMSET(env):
     env.expect("JSON.MSET", "a{s}", '$.ab', '"a_val2"', "b{s}", '$..bb', '"b_val2"').ok()
     env.expect("JSON.MGET", "a{s}", "b{s}", '$').equal(['[{"aa":"a_val","ab":"a_val2"}]', '[{"bb":"b_val2"}]'])
 
+    env.expect('CONFIG', 'SET', 'ReJSON.auto-path-create', 'yes').equal('OK')
+    env.expect("JSON.MSET", "new_a{s}", '$.x.y', '1', "new_b{s}", '$.p.q', '"v"').ok()
+    env.expect("JSON.GET", "new_a{s}", '$').equal('[{"x":{"y":1}}]')
+    env.expect("JSON.GET", "new_b{s}", '$').equal('[{"p":{"q":"v"}}]')
+
+    env.expect("JSON.MSET", "same{s}", '$.a.b', '1', "same{s}", '$.a.c', '2').ok()
+    env.expect("JSON.GET", "same{s}", '$').equal('[{"a":{"b":1,"c":2}}]')
+    env.expect('CONFIG', 'SET', 'ReJSON.auto-path-create', 'no').equal('OK')
+
 
 def testMSET_Partial(env):
     # MSET doesn't stop processing on the first update that can't be applied
@@ -2120,8 +2167,14 @@ def testMerge(env):
     # Test merge error - invalid JSON
     r.expect('JSON.MERGE', 'test_merge', '$.a', '{"b":{"h":"i" "bye"}}').error().contains("expected")
 
-    # Test with none existing key with path $.a
-    r.expect('JSON.MERGE', 'test_merge_new', '$.a', '{"a":"i"}').raiseError()
+    # Test with none existing key with path $.a (requires auto-path-create)
+    r.expect('JSON.MERGE', 'test_merge_new', '$.a', '{"a":"i"}').raiseError().contains(
+        'new objects must be created at the root')
+    r.expect('CONFIG', 'SET', 'ReJSON.auto-path-create', 'yes').equal('OK')
+    r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_new', '$.a', '{"a":"i"}'))
+    r.expect('JSON.GET', 'test_merge_new').equal('{"a":{"a":"i"}}')
+    r.expect('CONFIG', 'SET', 'ReJSON.auto-path-create', 'no').equal('OK')
+    r.cmd('DEL', 'test_merge_new')
 
     # Test with none existing key -> create key
     r.assertOk(r.execute_command('JSON.MERGE', 'test_merge_new', '$', '{"h":"i"}'))
