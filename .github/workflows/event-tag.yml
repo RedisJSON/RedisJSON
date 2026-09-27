@@ -46,6 +46,7 @@ jobs:
     uses: ./.github/workflows/flow-linux.yml
     needs: [prepare-values]
     with:
+      os: bionic focal jammy rocky9 azurelinux3 amazonlinux2023 alpine noble resolute rocky8 rocky10 alma8 alma9 alma10 bullseye bookworm trixie mariner2
       arch: arm64
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
     secrets: inherit
