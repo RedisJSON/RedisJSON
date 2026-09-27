@@ -160,14 +160,25 @@ jobs:
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
       beta-version: ${{needs.prepare-values.outputs.beta-version}}
     secrets: inherit
-  # Gates on the `kpis` floors committed in each benchmark yml. Raising a floor
-  # after a faster run is proposed out of band from the nightly analysis, never
-  # written by CI -- see tests/benchmarks/README.md.
+  # DISABLED 2026-09-27. The performance lane is set aside while the harness's
+  # run-to-run variance is investigated (MOD-18823): across ten nights spanning
+  # only two commits, the breach count per night was 1, 0, 8, 0, 12, 4, 3, 9, 1,
+  # 15, with a different set of benchmarks each night and one benchmark swinging
+  # 38% between consecutive runs. A red nightly therefore says nothing about
+  # RedisJSON, and nothing below ~46k rps has ever breached, so the floors are
+  # not the problem either -- see MOD-18823 for the measurement.
+  #
+  # To re-enable, restore the `if` below to `github.event_name != 'push'`. The
+  # original reason for that condition still holds: event-push-to-integ.yml
+  # already benchmarks those same pushes, and test-summary is
+  # schedule/dispatch-only, so a push-triggered run here would burn a second set
+  # of EC2 instances and report nowhere.
+  #
+  # Left wired into test-summary's `needs` and `job-failures` on purpose: a
+  # skipped job resolves immediately and reports `skipped`, not `failure`, so the
+  # summary is unaffected and re-enabling stays a one-line change.
   benchmark:
-    # Not on push: event-push-to-integ.yml already benchmarks those same pushes,
-    # and test-summary is schedule/dispatch-only, so a push-triggered run here
-    # would burn a second set of EC2 instances and report nowhere.
-    if: github.event_name != 'push'
+    if: false
     uses: ./.github/workflows/benchmark-runner.yml
     secrets: inherit
   test-summary:
