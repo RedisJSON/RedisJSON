@@ -639,6 +639,31 @@ def test_creation_failure_preserves_independent_existing_targets():
         env.expect('JSON.GET', KEY).equal(before)
 
 
+def test_mset_preparation_failure_skips_all_targets_in_triplet():
+    env = _env(True)
+    for initial, path, value in (
+        ({'existing': {'a': {'a': 1}}, 'missing': {'a': {}}}, '$..a.a', 5),
+        ({'shallow': {'n': 1}, 'deep': _nested(70)}, '$..n', _nested(60)),
+    ):
+        env.expect('JSON.SET', KEY, '$', json.dumps(initial)).ok()
+        env.expect('JSON.MSET', KEY, path, json.dumps(value)).equal(None)
+        env.assertEqual(json.loads(env.cmd('JSON.GET', KEY)), initial)
+        if env.useSlaves and not env.isCluster():
+            env.cmd('WAIT', '1', '10000')
+            env.assertEqual(json.loads(env.getSlaveConnection().execute_command('JSON.GET', KEY)), initial)
+
+        # A failed triplet leaves its existing targets alone without undoing
+        # an earlier triplet or preventing a later one on the same key.
+        env.expect('JSON.SET', KEY, '$', json.dumps(initial)).ok()
+        env.expect('JSON.MSET', KEY, '$.before', '1', KEY, path, json.dumps(value),
+                   KEY, '$.after', '2').equal(None)
+        expected = dict(initial, before=1, after=2)
+        env.assertEqual(json.loads(env.cmd('JSON.GET', KEY)), expected)
+        if env.useSlaves and not env.isCluster():
+            env.cmd('WAIT', '1', '10000')
+            env.assertEqual(json.loads(env.getSlaveConnection().execute_command('JSON.GET', KEY)), expected)
+
+
 def test_set_replacements_discard_descendant_creations():
     env = _env(True)
     for command in ('JSON.SET', 'JSON.MSET'):

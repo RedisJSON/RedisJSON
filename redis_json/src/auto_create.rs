@@ -146,12 +146,15 @@ pub(crate) struct Addition<O> {
     value: O,
 }
 
+// Historical policy; MSET now skips the entire triplet on preparation failure:
 // MSET preserves existing-target updates even if preparing new branches fails.
 pub(crate) type PreparedAdditions<O> = RedisResult<Vec<Addition<O>>>;
 
 /// Prepare SET writes without mutating the document: existing-target updates
 /// and detached additions remain separate, preserving MSET's partial-success
 /// replies when branch construction fails.
+/// Callers must skip this triplet's existing updates if its additions failed;
+/// MSET can still preserve successful writes from other triplets.
 ///
 /// With auto-creation enabled, allow missing object chains alongside updates
 /// to existing targets; both are captured by one prefix evaluation. Otherwise
@@ -266,6 +269,7 @@ fn prepare_paths<M: Manager>(
     let ResolvedPaths { targets, pending } = resolve_paths(query, root, &suffix)?;
     let additions = group_creations(pending, &targets, &suffix, leaf.borrow(), replace)
         .and_then(|groups| build_additions(manager, groups, leaf));
+    // Historical reason for retaining targets; MSET now skips failed triplets:
     // MSET still needs existing targets when preparing additions fails.
     for target in targets {
         visit(target);

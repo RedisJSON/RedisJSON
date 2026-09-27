@@ -902,6 +902,12 @@ pub fn json_mset_command_impl<M: Manager>(
                         }
                         Err(error) => return Err(error),
                     };
+                // A failed preparation skips this entire triplet, including
+                // existing targets. Successful other triplets still apply.
+                if additions.is_err() {
+                    all_updated = false;
+                    continue;
+                }
                 let creation = attach_creations::<M>(&mut redis_key, additions);
                 // MSET deliberately folds materialization errors into a nil
                 // reply, matching failed updates; earlier triplets may be applied.
