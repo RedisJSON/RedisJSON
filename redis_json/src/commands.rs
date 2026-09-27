@@ -448,7 +448,14 @@ pub fn json_set_command_impl<M: Manager>(
                 let query = compile(path.get_path())?;
                 let (update_info, additions) = prepare_set(&manager, doc, query.clone(), &val, op)?;
                 if update_info.is_empty() && additions.as_ref().is_ok_and(Vec::is_empty) {
-                    if op == SetOptions::AlreadyExists {
+                    // NX omits existing targets from the updates, so an empty
+                    // creation list can mean that every target already exists.
+                    let nx_has_existing_targets =
+                        op == SetOptions::NotExists && auto_create_enabled() && {
+                            let targets = calc_once(query.clone(), doc);
+                            !targets.is_empty()
+                        };
+                    if op == SetOptions::AlreadyExists || nx_has_existing_targets {
                         Ok(RedisValue::Null)
                     } else {
                         nothing_to_write(query, doc)
@@ -639,26 +646,37 @@ pub fn json_merge_command_impl<M: Manager>(
                             ctx,
                             "json.merge",
                         )?;
-                    if update_info.len() == 1 {
-                        res = match update_info.pop().unwrap() {
-                            UpdateInfo::SUI(sui) => redis_key.merge_value(sui.path, val)?,
-                            UpdateInfo::AUI(aui) => redis_key.dict_add(aui.path, &aui.key, val)?,
-                        } || res;
-                    } else {
-                        for ui in update_info {
-                            res = match ui {
-                                UpdateInfo::SUI(sui) => {
-                                    redis_key.merge_value(sui.path, val.clone())?
-                                }
+                    let merge_result: RedisResult<()> = (|| {
+                        if update_info.len() == 1 {
+                            res = match update_info.pop().unwrap() {
+                                UpdateInfo::SUI(sui) => redis_key.merge_value(sui.path, val)?,
                                 UpdateInfo::AUI(aui) => {
-                                    redis_key.dict_add(aui.path, &aui.key, val.clone())?
+                                    redis_key.dict_add(aui.path, &aui.key, val)?
                                 }
-                            } || res; // If any of the updates succeed, return true
+                            } || res;
+                        } else {
+                            for ui in update_info {
+                                res = match ui {
+                                    UpdateInfo::SUI(sui) => {
+                                        redis_key.merge_value(sui.path, val.clone())?
+                                    }
+                                    UpdateInfo::AUI(aui) => {
+                                        redis_key.dict_add(aui.path, &aui.key, val.clone())?
+                                    }
+                                } || res; // If any of the updates succeed, return true
+                            }
                         }
-                    }
+                        Ok(())
+                    })();
+                    // A later merge can fail after attachments or earlier merges
+                    // changed the key. Finalize those writes before returning it.
                     if res {
-                        redis_key.notify_keyspace_event(ctx, "json.merge")?;
+                        let notified = redis_key.notify_keyspace_event(ctx, "json.merge");
                         manager.apply_changes(ctx);
+                        notified?;
+                    }
+                    merge_result?;
+                    if res {
                         REDIS_OK
                     } else {
                         Ok(RedisValue::Null)

@@ -563,6 +563,82 @@ def test_set_disabled_preserves_depth_failure_reply():
     env.expect('JSON.GET', KEY, '$').equal('[{}]')
 
 
+def test_set_nx_dynamic_retry_is_noop():
+    env = _env(True)
+    for path in ('$.*.n', "$['a','b'].n", '$[?(@.enabled==true)].n', '$..n'):
+        env.expect('JSON.SET', KEY, '$',
+                   '{"a":{"enabled":true},"b":{"enabled":true,"n":1}}').ok()
+        env.expect('JSON.SET', KEY, path, '5', 'NX').ok()
+        before = env.cmd('JSON.GET', KEY)
+        env.expect('JSON.SET', KEY, path, '99', 'NX').equal(None)
+        env.expect('JSON.GET', KEY).equal(before)
+
+    # No existing or creatable target still follows the legacy path validation.
+    env.expect('JSON.SET', KEY, '$.missing[*].n', '5', 'NX') \
+       .raiseError().contains('wrong static path')
+
+
+def test_set_nx_disabled_preserves_dynamic_path_error():
+    env = _env(False)
+    env.expect('JSON.SET', KEY, '$', '{"a":{"n":1}}').ok()
+    env.expect('JSON.SET', KEY, '$.*.n', '5', 'NX') \
+       .raiseError().contains('wrong static path')
+    env.expect('JSON.GET', KEY).equal('{"a":{"n":1}}')
+
+
+def test_merge_partial_changes_replicate_on_error():
+    env = _env(True)
+    env.skipOnCluster()
+    env.cmd('CONFIG', 'SET', 'notify-keyspace-events', 'KEA')
+    try:
+        with env.getConnection().pubsub() as pubsub:
+            pubsub.subscribe('__keyevent@0__:json.merge')
+            env.assertEqual(pubsub.get_message(timeout=1)['type'], 'subscribe')
+            env.expect('JSON.SET', KEY, '$', '{"0":{"0":3},"other":{}}').ok()
+            if env.useSlaves:
+                env.cmd('WAIT', '1', '10000')
+
+            # The ancestor merge turns $.0.0 into a typed-array element, which
+            # cannot be merged. The new other.0 branch was already attached.
+            env.expect('JSON.MERGE', KEY, "$..['0']", '[1,2]') \
+               .raiseError().contains('bad object type')
+            expected = '{"0":[1,2],"other":{"0":[1,2]}}'
+            env.expect('JSON.GET', KEY).equal(expected)
+            event = pubsub.get_message(timeout=1)
+            env.assertEqual(None if event is None else event['data'], KEY)
+            if env.useSlaves:
+                env.cmd('WAIT', '1', '10000')
+                env.assertEqual(env.getSlaveConnection().execute_command('JSON.GET', KEY), expected)
+    finally:
+        env.cmd('CONFIG', 'SET', 'notify-keyspace-events', '')
+
+
+def test_set_and_merge_preserve_existing_target_depth_replies():
+    """Existing-target failures keep the legacy nil reply; preparation errors
+    for missing branches are rejected before anything is attached.
+    """
+    env = _env(True)
+    value = json.dumps(_nested(126))
+    for command in ('JSON.SET', 'JSON.MERGE'):
+        env.expect('JSON.SET', KEY, '$', '{"a":0}').ok()
+        env.expect(command, KEY, '$.a', value).equal(None)
+        env.expect('JSON.GET', KEY).equal('{"a":0}')
+        env.expect(command, KEY, '$.missing', value) \
+           .raiseError().contains('recursion limit exceeded')
+        env.expect('JSON.GET', KEY).equal('{"a":0}')
+
+
+def test_creation_failure_preserves_independent_existing_targets():
+    env = _env(True)
+    for command in ('JSON.SET', 'JSON.MERGE'):
+        env.expect('JSON.SET', KEY, '$',
+                   '{"existing":{"a":{"a":1}},"missing":{"a":{}}}').ok()
+        before = env.cmd('JSON.GET', KEY)
+        env.expect(command, KEY, '$..a.a', '5') \
+           .raiseError().contains('bad object type')
+        env.expect('JSON.GET', KEY).equal(before)
+
+
 def test_set_replacements_discard_descendant_creations():
     env = _env(True)
     for command in ('JSON.SET', 'JSON.MSET'):
