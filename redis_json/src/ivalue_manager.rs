@@ -26,7 +26,6 @@ use redis_module::{Context, NotifyEvent, RedisResult, RedisString};
 use serde::de::DeserializeSeed;
 use serde::Serialize;
 use serde_json::Number;
-use std::collections::HashSet;
 use std::io::Cursor;
 use std::marker::PhantomData;
 use std::mem::size_of;
@@ -852,40 +851,31 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     }
 
     fn get_memory(v: &Self::V) -> RedisResult<usize> {
-        fn duplicate_string_bytes(s: &IString, seen: &mut HashSet<*const u8>) -> usize {
-            let bytes = s.as_ref().mem_allocated();
-            if bytes != 0 && !seen.insert(s.as_str().as_ptr()) {
-                bytes
-            } else {
-                0
-            }
+        fn shared_string_discount(s: &IString) -> f64 {
+            s.as_ref().mem_allocated() as f64 - s.memory_share()
         }
 
-        fn duplicate_bytes(v: &IValue, seen: &mut HashSet<*const u8>) -> usize {
+        fn shared_discount(v: &IValue) -> f64 {
             match v.destructure_ref() {
-                ijson::DestructuredRef::String(s) => duplicate_string_bytes(s, seen),
+                ijson::DestructuredRef::String(s) => shared_string_discount(s),
                 ijson::DestructuredRef::Object(object) => object
                     .iter()
-                    .map(|(key, value)| {
-                        duplicate_string_bytes(key, seen) + duplicate_bytes(value, seen)
-                    })
+                    .map(|(key, value)| shared_string_discount(key) + shared_discount(value))
                     .sum(),
-                ijson::DestructuredRef::Array(array) => {
-                    array.as_slice_of::<IValue>().map_or(0, |values| {
-                        values
-                            .iter()
-                            .map(|value| duplicate_bytes(value, seen))
-                            .sum()
-                    })
-                }
-                _ => 0,
+                ijson::DestructuredRef::Array(array) => array
+                    .as_slice_of::<IValue>()
+                    .map_or(0.0, |values| values.iter().map(shared_discount).sum()),
+                _ => 0.0,
             }
         }
 
-        // ijson charges shared heap strings once per reference. Deduplicate only
-        // within this measurement; other keys and later calls are independent.
-        // The global intern table is accounted for by INFO MEMORY, not per key.
-        Ok(v.mem_allocated() + size_of::<IValue>() - duplicate_bytes(v, &mut HashSet::new()))
+        // Divide string allocations among all live owners across keys. Container
+        // capacity remains fully charged; the global intern table is excluded.
+        // Round once per measurement, rather than once per string reference.
+        Ok(
+            (v.mem_allocated() as f64 + size_of::<IValue>() as f64 - shared_discount(v)).round()
+                as usize,
+        )
     }
 
     fn is_json(&self, key: *mut RedisModuleKey) -> RedisResult<bool> {
@@ -902,6 +892,38 @@ mod tests {
     use super::*;
 
     static SINGLE_THREAD_TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn test_shared_memory_across_documents() {
+        let _guard = SINGLE_THREAD_TEST_MUTEX.lock().unwrap();
+        let text = "proportional memory accounting test string";
+        let mut docs: Vec<IValue> = (0..10).map(|_| IValue::from(text)).collect();
+        let allocation = docs[0].mem_allocated();
+        let expected = (allocation as f64 / 10.0 + size_of::<IValue>() as f64).round() as usize;
+        for doc in &docs {
+            assert_eq!(
+                RedisIValueJsonKeyManager::get_memory(doc).unwrap(),
+                expected
+            );
+        }
+        let one = docs.pop().unwrap();
+        drop(docs);
+        assert_eq!(
+            RedisIValueJsonKeyManager::get_memory(&one).unwrap(),
+            one.mem_allocated() + size_of::<IValue>()
+        );
+        drop(one);
+
+        // One allocation shared by an object key and two nested string values.
+        let json = format!(r#"{{"{text}":["{text}","{text}"]}}"#);
+        let doc: IValue = serde_json::from_str(&json).unwrap();
+        let key = doc.as_object().unwrap().iter().next().unwrap().0;
+        let allocation = key.as_ref().mem_allocated();
+        assert_eq!(
+            RedisIValueJsonKeyManager::get_memory(&doc).unwrap(),
+            doc.mem_allocated() + size_of::<IValue>() - 2 * allocation
+        );
+    }
 
     #[test]
     fn test_get_memory() {
