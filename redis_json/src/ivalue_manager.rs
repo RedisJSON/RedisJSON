@@ -26,6 +26,7 @@ use redis_module::{Context, NotifyEvent, RedisResult, RedisString};
 use serde::de::DeserializeSeed;
 use serde::Serialize;
 use serde_json::Number;
+use std::collections::HashSet;
 use std::io::Cursor;
 use std::marker::PhantomData;
 use std::mem::size_of;
@@ -851,7 +852,40 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     }
 
     fn get_memory(v: &Self::V) -> RedisResult<usize> {
-        Ok(v.mem_allocated() + size_of::<IValue>())
+        fn duplicate_string_bytes(s: &IString, seen: &mut HashSet<*const u8>) -> usize {
+            let bytes = s.as_ref().mem_allocated();
+            if bytes != 0 && !seen.insert(s.as_str().as_ptr()) {
+                bytes
+            } else {
+                0
+            }
+        }
+
+        fn duplicate_bytes(v: &IValue, seen: &mut HashSet<*const u8>) -> usize {
+            match v.destructure_ref() {
+                ijson::DestructuredRef::String(s) => duplicate_string_bytes(s, seen),
+                ijson::DestructuredRef::Object(object) => object
+                    .iter()
+                    .map(|(key, value)| {
+                        duplicate_string_bytes(key, seen) + duplicate_bytes(value, seen)
+                    })
+                    .sum(),
+                ijson::DestructuredRef::Array(array) => {
+                    array.as_slice_of::<IValue>().map_or(0, |values| {
+                        values
+                            .iter()
+                            .map(|value| duplicate_bytes(value, seen))
+                            .sum()
+                    })
+                }
+                _ => 0,
+            }
+        }
+
+        // ijson charges shared heap strings once per reference. Deduplicate only
+        // within this measurement; other keys and later calls are independent.
+        // The global intern table is accounted for by INFO MEMORY, not per key.
+        Ok(v.mem_allocated() + size_of::<IValue>() - duplicate_bytes(v, &mut HashSet::new()))
     }
 
     fn is_json(&self, key: *mut RedisModuleKey) -> RedisResult<bool> {
