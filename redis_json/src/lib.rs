@@ -26,6 +26,8 @@ use redis_module::{Context, RedisValue};
 #[cfg(not(feature = "as-library"))]
 use redis_module::key::KeyFlags;
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 #[cfg(not(feature = "as-library"))]
 use crate::c_api::{
     get_llapi_ctx, json_api_alloc_json, json_api_free_iter, json_api_free_json,
@@ -67,6 +69,12 @@ pub const MODULE_NAME: &str = "ReJSON";
 pub const MODULE_TYPE_NAME: &str = "ReJSON-RL";
 
 pub const REDIS_JSON_TYPE_VERSION: i32 = 4;
+
+pub static AUTO_PATH_CREATE: AtomicBool = AtomicBool::new(false);
+
+pub fn auto_path_create_enabled() -> bool {
+    AUTO_PATH_CREATE.load(Ordering::Relaxed)
+}
 
 pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
     MODULE_TYPE_NAME,
@@ -362,6 +370,22 @@ macro_rules! redis_json_module_create {
 
         fn initialize(ctx: &Context, args: &[RedisString]) -> Status {
             $crate::setup_panic_handler();
+
+            redis_module::configuration::register_bool_configuration(
+                ctx,
+                "auto-path-create",
+                &$crate::AUTO_PATH_CREATE,
+                false,
+                redis_module::configuration::ConfigurationFlags::DEFAULT,
+                None,
+            );
+            // SAFETY: RedisModule_LoadConfigs is part of the Modules API and is
+            // safe to call once during OnLoad after configs are registered.
+            unsafe {
+                if let Some(load_config) = redis_module::raw::RedisModule_LoadConfigs {
+                    load_config(ctx.ctx);
+                }
+            }
 
             ctx.log_notice(&format!("version: {} git sha: {} branch: {}",
                 $version,

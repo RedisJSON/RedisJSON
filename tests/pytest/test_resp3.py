@@ -161,8 +161,12 @@ class testResp3():
 
         r.assertOk(r.execute_command('JSON.MSET', 'test_resp3_1{s}', '$', '{"a1":{"b":{"c":1}},"a2":{"b":{"c":2}}}', 'test_resp3_2{s}', '$', '{"a1":{"b":{"c":1}},"a2":{"b":{"c":2}}}'))
 
-        # Test none existing key
+        # Test none existing key (default: error; with auto-path-create: OK)
         r.expect('JSON.MSET', 'test_no_such_key', '$.a1.b', '1').raiseError()
+        r.expect('CONFIG', 'SET', 'ReJSON.auto-path-create', 'yes').equal('OK')
+        r.assertOk(r.execute_command('JSON.MSET', 'test_no_such_key', '$.a1.b', '1'))
+        r.assertEqual(r.execute_command('JSON.GET', 'test_no_such_key', '$'), '[{"a1":{"b":1}}]')
+        r.expect('CONFIG', 'SET', 'ReJSON.auto-path-create', 'no').equal('OK')
 
         # Test not a JSON key
         r.expect('JSON.MSET', 'test_not_JSON', '$.a1.b', '1').raiseError()

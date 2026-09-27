@@ -20,6 +20,37 @@ use crate::{
     redisjson::{normalize_arr_indices, Path, ReplyFormat, SetOptions},
 };
 
+pub fn static_object_path_keys(path: &str) -> RedisResult<Vec<String>> {
+    let mut query = compile(path)?;
+    if query.is_projection() {
+        return Err(err_projection_readonly());
+    }
+    if !query.is_static() || query.size() < 1 {
+        return Err(RedisError::Str(
+            "ERR new objects must be created at the root",
+        ));
+    }
+
+    let mut keys = Vec::with_capacity(query.size());
+    while let Some((key, token)) = query.pop_last() {
+        match token {
+            JsonPathToken::String => keys.push(key),
+            JsonPathToken::Number => {
+                return Err(RedisError::Str(
+                    "ERR new objects must be created at the root",
+                ));
+            }
+        }
+    }
+    if keys.is_empty() {
+        return Err(RedisError::Str(
+            "ERR new objects must be created at the root",
+        ));
+    }
+    keys.reverse();
+    Ok(keys)
+}
+
 pub struct KeyValue<'a, V: SelectValue> {
     val: ValueRef<'a, V>,
 }
@@ -589,3 +620,28 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         FoundIndex::NotFound
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::static_object_path_keys;
+
+    #[test]
+    fn test_static_object_path_keys_dot_and_bracket() {
+        assert_eq!(
+            static_object_path_keys("$.foo.bar").unwrap(),
+            vec!["foo".to_string(), "bar".to_string()]
+        );
+        assert_eq!(
+            static_object_path_keys(r#"$["foo"]["bar.baz"]"#).unwrap(),
+            vec!["foo".to_string(), "bar.baz".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_static_object_path_keys_rejects_array_and_dynamic() {
+        assert!(static_object_path_keys("$.a[0].b").is_err());
+        assert!(static_object_path_keys("$..a").is_err());
+        assert!(static_object_path_keys("$").is_err());
+    }
+}
+
