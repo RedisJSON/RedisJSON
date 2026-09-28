@@ -838,7 +838,8 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     }
 
     fn create_object(&self, fields: Vec<(String, IValue)>) -> RedisResult<IValue> {
-        let mut object = IObject::new();
+        let mut object =
+            IObject::with_capacity(fields.len()).map_err(|e| RedisError::String(e.to_string()))?;
         for (name, value) in fields {
             object
                 .insert(name.as_str(), value)

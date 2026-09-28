@@ -40,3 +40,115 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::manager::{err_not_a_number, err_numeric_overflow};
+    use ijson::IValue;
+    use serde_json::json;
+
+    #[test]
+    fn integer_addition_accepts_boundaries_and_rejects_overflow_and_underflow() {
+        for (value, operand, expected) in
+            [(i64::MAX - 1, 1, i64::MAX), (i64::MIN + 1, -1, i64::MIN)]
+        {
+            let result = number_op_result(
+                &IValue::from(value),
+                &json!(operand),
+                i128::checked_add,
+                |a, b| a + b,
+            )
+            .unwrap();
+            assert_eq!(result.to_i64(), Some(expected));
+        }
+        for (value, operand) in [(i64::MAX, 1), (i64::MIN, -1)] {
+            let error = number_op_result(
+                &IValue::from(value),
+                &json!(operand),
+                i128::checked_add,
+                |a, b| a + b,
+            )
+            .unwrap_err();
+            assert_eq!(error.to_string(), err_numeric_overflow().to_string());
+        }
+        let error = number_op_result(
+            &IValue::from(i64::MAX),
+            &json!(3),
+            |a, b| a.checked_pow(b as u32),
+            f64::powf,
+        )
+        .unwrap_err();
+        assert_eq!(error.to_string(), err_numeric_overflow().to_string());
+    }
+
+    #[test]
+    fn mixed_integer_and_float_addition_uses_float_arithmetic() {
+        for (value, operand) in [("1", json!(1.5)), ("1.5", json!(1)), ("1.0", json!(1.5))] {
+            let value: IValue = serde_json::from_str(value).unwrap();
+            let result =
+                number_op_result(&value, &operand, i128::checked_add, |a, b| a + b).unwrap();
+            assert_eq!(result.to_f64_lossy(), 2.5);
+            assert!(result.has_decimal_point());
+        }
+    }
+
+    #[test]
+    fn non_finite_results_are_rejected_but_finite_underflow_is_allowed() {
+        for value in [1e308, -1e308] {
+            let error = number_op_result(
+                &IValue::from(value),
+                &json!(value),
+                i128::checked_add,
+                |a, b| a + b,
+            )
+            .unwrap_err();
+            assert_eq!(error.to_string(), err_not_a_number().to_string());
+        }
+        let error = number_op_result(
+            &IValue::from(0.0),
+            &json!(0.0),
+            i128::checked_div,
+            |a, b| a / b,
+        )
+        .unwrap_err();
+        assert_eq!(error.to_string(), err_not_a_number().to_string());
+        let result = number_op_result(
+            &IValue::from(f64::from_bits(1)),
+            &json!(2.0),
+            i128::checked_div,
+            |a, b| a / b,
+        )
+        .unwrap();
+        assert_eq!(result.to_f64_lossy(), 0.0);
+    }
+
+    #[test]
+    fn large_unsigned_integers_fall_back_to_float() {
+        for (value, operand) in [
+            (IValue::from(u64::MAX), json!(1)),
+            (IValue::from(1), json!(u64::MAX)),
+        ] {
+            let result = number_op_result(
+                &value,
+                &operand,
+                |_, _| panic!("large unsigned integers require float arithmetic"),
+                |a, b| a + b,
+            )
+            .unwrap();
+            assert_eq!(result.to_f64_lossy(), u64::MAX as f64 + 1.0);
+        }
+    }
+
+    #[test]
+    fn non_numeric_inputs_are_rejected() {
+        for (value, operand) in [
+            (IValue::from("text"), json!(1)),
+            (IValue::from(1), json!("text")),
+        ] {
+            let error =
+                number_op_result(&value, &operand, i128::checked_add, |a, b| a + b).unwrap_err();
+            assert_eq!(error.to_string(), err_not_a_number().to_string());
+        }
+    }
+}

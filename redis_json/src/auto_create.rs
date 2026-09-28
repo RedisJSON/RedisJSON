@@ -64,6 +64,7 @@
 
 use std::borrow::Borrow;
 use std::collections::{HashMap, HashSet};
+use std::ops::ControlFlow;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use json_path::json_path::{CalculationResult, JsonPathToken, PTracker, Query, UserPathTracker};
@@ -78,7 +79,7 @@ use crate::manager::{
     err_invalid_path, err_json, err_projection_readonly, err_recursion_limit_exceeded, Manager,
     SetUpdateInfo, UpdateInfo, WriteHolder,
 };
-use crate::redisjson::{Format, SetOptions};
+use crate::redisjson::{Format, Path, SetOptions, JSON_ROOT_PATH};
 
 /// Backing store for the `json-auto-create-deep-paths` module config,
 /// registered in the `redis_module!` block (see `lib.rs`). The SDK writes here
@@ -150,6 +151,13 @@ pub(crate) struct Addition<O> {
 // MSET preserves existing-target updates even if preparing new branches fails.
 pub(crate) type PreparedAdditions<O> = RedisResult<Vec<Addition<O>>>;
 
+pub(crate) struct PreparedSet<O> {
+    pub updates: Vec<UpdateInfo>,
+    pub additions: PreparedAdditions<O>,
+    /// Recorded by auto-creation traversal, including matches omitted by NX.
+    pub has_existing_targets: bool,
+}
+
 /// Prepare SET writes without mutating the document: existing-target updates
 /// and detached additions remain separate, preserving MSET's partial-success
 /// replies when branch construction fails.
@@ -166,20 +174,24 @@ pub(crate) fn prepare_set<M: Manager>(
     query: Query,
     value: &M::O,
     option: SetOptions,
-) -> RedisResult<(Vec<UpdateInfo>, PreparedAdditions<M::O>)> {
+) -> RedisResult<PreparedSet<M::O>> {
     if !auto_create_enabled() || option == SetOptions::AlreadyExists {
         // Disabled mode skips missing intermediate objects, including over-deep chains.
-        return Ok((
-            KeyValue::new(doc).find_paths(query, option)?,
-            Ok(Vec::new()),
-        ));
+        let updates = KeyValue::new(doc).find_paths(query, option)?;
+        return Ok(PreparedSet {
+            has_existing_targets: false,
+            updates,
+            additions: Ok(Vec::new()),
+        });
     }
     // Non-object patches replace their targets, discarding anything below them.
     let replace = option != SetOptions::NotExists
         && (option != SetOptions::MergeExisting
             || value.borrow().get_type() != SelectValueType::Object);
     let mut updates = Vec::new();
+    let mut has_existing_targets = false;
     let additions = prepare_paths(manager, query, doc, value, replace, |target| {
+        has_existing_targets |= target.value_type.is_some();
         if target.value_type.is_some() && option != SetOptions::NotExists {
             updates.push(target.path);
         }
@@ -187,13 +199,14 @@ pub(crate) fn prepare_set<M: Manager>(
     if option != SetOptions::MergeExisting {
         prepare_paths_for_updating(&mut updates);
     }
-    Ok((
-        updates
+    Ok(PreparedSet {
+        updates: updates
             .into_iter()
             .map(|path| UpdateInfo::SUI(SetUpdateInfo { path }))
             .collect(),
         additions,
-    ))
+        has_existing_targets,
+    })
 }
 
 /// Keep dynamic selectors in the prefix; only plain object fields can be invented.
@@ -283,15 +296,17 @@ fn resolve_paths<V: SelectValue>(
     suffix: &PathSlice,
 ) -> RedisResult<ResolvedPaths> {
     let mut paths = ResolvedPaths::default();
-    let mut resolution = Ok(());
     // Evaluate the prefix on the original document. Re-evaluating a filter
     // after seeding can lose matches or select unrelated new targets.
-    visit_once_with_paths(query, root, |matched| {
-        if resolution.is_ok() {
-            resolution = paths.resolve_match(matched, suffix);
+    let resolution = visit_once_with_paths(query, root, |matched| {
+        match paths.resolve_match(matched, suffix) {
+            Ok(()) => ControlFlow::Continue(()),
+            Err(error) => ControlFlow::Break(error),
         }
     });
-    resolution?;
+    if let ControlFlow::Break(error) = resolution {
+        return Err(error);
+    }
     Ok(paths)
 }
 
@@ -325,6 +340,8 @@ impl ResolvedPaths {
         // keep their replies. MSET handles the depth error explicitly as nil.
         // No target with this suffix can fit. Reject before exposing a
         // target or allocating the remaining creation sites.
+        // Parent-dependent limits stay in group_creations: a later existing
+        // SET target can discard this creation, even when its depth cannot fit.
         if value_type.is_none() && suffix_len >= MAX_DEPTH {
             return Err(err_recursion_limit_exceeded());
         }
@@ -502,20 +519,39 @@ fn build_creation_subtree<M: Manager>(
 
 /// MSET validates against the initial document without constructing branches;
 /// later triplets resolve again after earlier writes on the same key.
-pub(crate) fn can_create<V: SelectValue>(mut query: Query, root: &V) -> RedisResult<bool> {
+/// Stop at the first existing or creatable target; neither needs a second scan.
+pub(crate) fn has_write_target<V: SelectValue>(mut query: Query, root: &V) -> RedisResult<bool> {
     if query.is_projection() {
         return Err(err_projection_readonly());
     }
     let suffix = object_suffix(&mut query);
-    let mut creatable = false;
-    visit_once_with_paths(query, root, |matched| {
-        creatable = creatable || has_missing_suffix(matched.res.as_ref(), &suffix);
-    });
-    Ok(creatable)
+    Ok(visit_once_with_paths(query, root, |matched| {
+        if walk_suffix(matched.res.as_ref(), &suffix, Vec::new()).is_some() {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    })
+    .is_break())
 }
 
-fn has_missing_suffix<V: SelectValue>(node: &V, suffix: &PathSlice) -> bool {
-    walk_suffix(node, suffix, Vec::new()).is_some_and(|target| target.value_type.is_none())
+/// Prepare an absent key's whole document for SET or MERGE, without writing it.
+pub(crate) fn prepare_new_document<M: Manager>(
+    manager: &M,
+    path: &Path,
+    value: M::O,
+) -> RedisResult<M::O> {
+    if *path == JSON_ROOT_PATH {
+        return Ok(value);
+    }
+    if auto_create_enabled() {
+        if let Some(keys) = root_key_chain(compile(path.get_path())?)? {
+            return nest_in_objects(manager, &keys, value);
+        }
+    }
+    Err(RedisError::Str(
+        "ERR new objects must be created at the root",
+    ))
 }
 
 /// The object-key chain a path addresses from the document root, or `None`
@@ -1522,6 +1558,56 @@ mod tests {
     }
 
     #[test]
+    fn replacement_discards_over_depth_descendants_before_depth_validation() {
+        let mut root = doc("{}");
+        for _ in 0..MAX_DEPTH - 2 {
+            let mut object = ijson::IObject::new();
+            object.insert("a", root).unwrap();
+            root = object.into();
+        }
+        let mut updates = Vec::new();
+        let additions = prepare_paths(
+            &manager(),
+            compile("$..a.a").unwrap(),
+            &root,
+            &doc("5"),
+            true,
+            |target| {
+                if target.value_type.is_some() {
+                    updates.push(target.path);
+                }
+            },
+        )
+        .unwrap()
+        .unwrap();
+        prepare_paths_for_updating(&mut updates);
+        assert_eq!(updates, vec![vec!["a", "a"]]);
+        assert!(additions.is_empty());
+    }
+
+    #[test]
+    fn write_target_probe_accepts_existing_and_creatable_paths() {
+        let root = doc(r#"{"a":{"n":1},"b":{},"c":3,"items":[{}]}"#);
+        for (path, expected) in [
+            ("$['a','b'].n", true),
+            ("$['b','a'].n", true),
+            ("$.a.n", true),
+            ("$.b.n", true),
+            ("$.items[0]", true),
+            ("$.items[0].n", true),
+            ("$.items[1]", false),
+            ("$.c.n", false),
+            ("$.absent[*].n", false),
+        ] {
+            assert_eq!(
+                has_write_target(compile(path).unwrap(), &root).unwrap(),
+                expected,
+                "{path}"
+            );
+        }
+    }
+
+    #[test]
     fn incompatible_overlap_prevents_every_attachment() {
         let additions = prepare("$..a.a", &doc(r#"{"a":{}}"#), &doc("5"));
         let result = attach_with(additions, |_| {
@@ -1593,7 +1679,7 @@ mod tests {
                 .to_string(),
             "ERR array index out of range"
         );
-        assert!(can_create(compile("$.*.n").unwrap(), &doc(r#"{"a":{}}"#)).unwrap());
-        assert!(!can_create(compile("$.a[0].n").unwrap(), &doc("{}")).unwrap());
+        assert!(has_write_target(compile("$.*.n").unwrap(), &doc(r#"{"a":{}}"#)).unwrap());
+        assert!(!has_write_target(compile("$.a[0].n").unwrap(), &doc("{}")).unwrap());
     }
 }

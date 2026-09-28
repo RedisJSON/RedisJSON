@@ -21,6 +21,7 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::ops::ControlFlow;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 
@@ -146,6 +147,9 @@ pub enum JsonPathToken {
 }
 
 /* Struct that represent a compiled json path query. */
+/// Cloning preserves the compiled path while write preparation consumes a copy
+/// to peel its object-key suffix. Callers retain the original for validation
+/// when preparation finds no writable targets; the path is not parsed again.
 #[derive(Debug, Clone)]
 pub struct Query<'i> {
     // query: QueryElement<'i>
@@ -1812,7 +1816,7 @@ pub struct CalculationResult<'i, S: SelectValue, UPT: UserPathTracker> {
 
 struct PathCalculatorData<'v, 'i, S: SelectValue, UPT: UserPathTracker> {
     results: Vec<CalculationResult<'i, S, UPT>>,
-    visitor: Option<&'v mut dyn FnMut(CalculationResult<'i, S, UPT>)>,
+    visitor: Option<&'v mut dyn FnMut(CalculationResult<'i, S, UPT>) -> ControlFlow<()>>,
     root: ValueRef<'i, S>,
     /// Per-query compiled-regex cache (see `RegexCache`). Shared (via `Rc<RefCell<_>>`)
     /// with the data of every `@`/`$` subquery so a constant pattern inside a nested
@@ -1828,11 +1832,12 @@ struct PathCalculatorData<'v, 'i, S: SelectValue, UPT: UserPathTracker> {
 }
 
 impl<'v, 'i, S: SelectValue, UPT: UserPathTracker> PathCalculatorData<'v, 'i, S, UPT> {
-    fn emit(&mut self, result: CalculationResult<'i, S, UPT>) {
+    fn emit(&mut self, result: CalculationResult<'i, S, UPT>) -> ControlFlow<()> {
         if let Some(visit) = &mut self.visitor {
-            visit(result);
+            visit(result)
         } else {
             self.results.push(result);
+            ControlFlow::Continue(())
         }
     }
 
@@ -1941,24 +1946,30 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         json: ValueRef<'j, S>,
         path_tracker: Option<PathTracker<'l, 'k>>,
         calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
-    ) {
+    ) -> ControlFlow<()> {
         match json.get_type() {
             SelectValueType::Object => {
                 for (key, val) in value_ref_items!(json) {
                     let path_tracker = path_tracker.as_ref().map(|pt| create_str_tracker(key, pt));
-                    self.calc_internal(pairs.clone(), val.clone(), path_tracker.clone(), calc_data);
-                    self.calc_full_scan(pairs.clone(), val, path_tracker, calc_data);
+                    self.calc_internal(
+                        pairs.clone(),
+                        val.clone(),
+                        path_tracker.clone(),
+                        calc_data,
+                    )?;
+                    self.calc_full_scan(pairs.clone(), val, path_tracker, calc_data)?;
                 }
             }
             SelectValueType::Array => {
                 for (i, v) in value_ref_values!(json).enumerate() {
                     let path_tracker = path_tracker.as_ref().map(|pt| create_index_tracker(i, pt));
-                    self.calc_internal(pairs.clone(), v.clone(), path_tracker.clone(), calc_data);
-                    self.calc_full_scan(pairs.clone(), v, path_tracker, calc_data);
+                    self.calc_internal(pairs.clone(), v.clone(), path_tracker.clone(), calc_data)?;
+                    self.calc_full_scan(pairs.clone(), v, path_tracker, calc_data)?;
                 }
             }
             _ => {}
         }
+        ControlFlow::Continue(())
     }
 
     fn calc_all<'j: 'i, 'k, 'l, S: SelectValue>(
@@ -1967,22 +1978,23 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         json: ValueRef<'j, S>,
         path_tracker: Option<PathTracker<'l, 'k>>,
         calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
-    ) {
+    ) -> ControlFlow<()> {
         match json.get_type() {
             SelectValueType::Object => {
                 for (key, val) in value_ref_items!(json) {
                     let new_tracker = path_tracker.as_ref().map(|pt| create_str_tracker(key, pt));
-                    self.calc_internal(pairs.clone(), val, new_tracker, calc_data);
+                    self.calc_internal(pairs.clone(), val, new_tracker, calc_data)?;
                 }
             }
             SelectValueType::Array => {
                 for (i, v) in value_ref_values!(json).enumerate() {
                     let new_tracker = path_tracker.as_ref().map(|pt| create_index_tracker(i, pt));
-                    self.calc_internal(pairs.clone(), v, new_tracker, calc_data);
+                    self.calc_internal(pairs.clone(), v, new_tracker, calc_data)?;
                 }
             }
             _ => {}
         }
+        ControlFlow::Continue(())
     }
 
     fn calc_literal<'j: 'i, 'k, 'l, S: SelectValue>(
@@ -1992,14 +2004,15 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         json: ValueRef<'j, S>,
         path_tracker: Option<PathTracker<'l, 'k>>,
         calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
-    ) {
+    ) -> ControlFlow<()> {
         let key = curr.as_str();
-        value_ref_get_key!(json, key).map(|val| {
+        if let Some(val) = value_ref_get_key!(json, key) {
             let new_tracker = path_tracker
                 .as_ref()
                 .map(|pt| create_str_tracker(Cow::Borrowed(key), pt));
-            self.calc_internal(pairs, val, new_tracker, calc_data);
-        });
+            self.calc_internal(pairs, val, new_tracker, calc_data)?;
+        }
+        ControlFlow::Continue(())
     }
 
     fn calc_strings<'j: 'i, 'k, 'l, S: SelectValue>(
@@ -2009,16 +2022,17 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         json: ValueRef<'j, S>,
         path_tracker: Option<PathTracker<'l, 'k>>,
         calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
-    ) {
+    ) -> ControlFlow<()> {
         for c in curr.into_inner() {
             let unescaped = unescape_string_value(c);
-            value_ref_get_key!(json, &unescaped).map(|val| {
+            if let Some(val) = value_ref_get_key!(json, &unescaped) {
                 let new_tracker = path_tracker
                     .as_ref()
                     .map(|pt| create_str_tracker(unescaped, pt));
-                self.calc_internal(pairs.clone(), val, new_tracker, calc_data);
-            });
+                self.calc_internal(pairs.clone(), val, new_tracker, calc_data)?;
+            }
         }
+        ControlFlow::Continue(())
     }
 
     fn calc_abs_index(i: i64, n: usize) -> usize {
@@ -2057,20 +2071,21 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         json: ValueRef<'j, S>,
         path_tracker: Option<PathTracker<'l, 'k>>,
         calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
-    ) {
+    ) -> ControlFlow<()> {
         if json.get_type() != SelectValueType::Array {
-            return;
+            return ControlFlow::Continue(());
         }
         let Some(n) = json.len() else {
-            return;
+            return ControlFlow::Continue(());
         };
         for c in curr.into_inner() {
             let i = Self::calc_abs_index(Self::parse_index(c.as_str()), n);
-            value_ref_get_index!(json, i).map(|e| {
+            if let Some(e) = value_ref_get_index!(json, i) {
                 let new_tracker = path_tracker.as_ref().map(|pt| create_index_tracker(i, pt));
-                self.calc_internal(pairs.clone(), e, new_tracker, calc_data);
-            });
+                self.calc_internal(pairs.clone(), e, new_tracker, calc_data)?;
+            }
         }
+        ControlFlow::Continue(())
     }
 
     fn calc_range<'j: 'i, 'k, 'l, S: SelectValue>(
@@ -2080,16 +2095,16 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         json: ValueRef<'j, S>,
         path_tracker: Option<PathTracker<'l, 'k>>,
         calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
-    ) {
+    ) -> ControlFlow<()> {
         if json.get_type() != SelectValueType::Array {
-            return;
+            return ControlFlow::Continue(());
         }
         let Some(n) = json.len() else {
-            return;
+            return ControlFlow::Continue(());
         };
         let Some(range_spec) = curr.into_inner().next() else {
             trace!("calc_range: missing range specification");
-            return;
+            return ControlFlow::Continue(());
         };
         let (start, end, step) = match range_spec.as_rule() {
             Rule::right_range => {
@@ -2097,7 +2112,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 let start = 0;
                 let Some(p) = it.next() else {
                     trace!("calc_range right_range: missing end index");
-                    return;
+                    return ControlFlow::Continue(());
                 };
                 let end = Self::calc_abs_index(Self::parse_index(p.as_str()), n);
                 let step = it.next().map_or(1, |s| Self::parse_step(s.as_str()));
@@ -2112,7 +2127,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 let mut it = range_spec.into_inner();
                 let Some(p) = it.next() else {
                     trace!("calc_range left_range: missing start index");
-                    return;
+                    return ControlFlow::Continue(());
                 };
                 let start = Self::calc_abs_index(Self::parse_index(p.as_str()), n);
                 let end = n;
@@ -2123,11 +2138,11 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 let mut it = range_spec.into_inner();
                 let Some(p1) = it.next() else {
                     trace!("calc_range full_range: missing start");
-                    return;
+                    return ControlFlow::Continue(());
                 };
                 let Some(p2) = it.next() else {
                     trace!("calc_range full_range: missing end");
-                    return;
+                    return ControlFlow::Continue(());
                 };
                 let start = Self::calc_abs_index(Self::parse_index(p1.as_str()), n);
                 let end = Self::calc_abs_index(Self::parse_index(p2.as_str()), n);
@@ -2136,16 +2151,17 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             }
             other => {
                 trace!("calc_range: unexpected inner rule {:?}", other);
-                return;
+                return ControlFlow::Continue(());
             }
         };
 
         for i in (start..end).step_by(step) {
-            value_ref_get_index!(json, i).map(|e| {
+            if let Some(e) = value_ref_get_index!(json, i) {
                 let new_tracker = path_tracker.as_ref().map(|pt| create_index_tracker(i, pt));
-                self.calc_internal(pairs.clone(), e, new_tracker, calc_data);
-            });
+                self.calc_internal(pairs.clone(), e, new_tracker, calc_data)?;
+            }
         }
+        ControlFlow::Continue(())
     }
 
     fn evaluate_single_term<'j: 'i, S: SelectValue>(
@@ -2199,7 +2215,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                         calc_data.regex_cache.clone(),
                         calc_data.literal_cache.clone(),
                     );
-                    self.calc_internal(term.into_inner(), json, None, &mut calc_data);
+                    let _ = self.calc_internal(term.into_inner(), json, None, &mut calc_data);
                     Self::results_to_term(calc_data.results)
                 }
                 None => TermEvaluationResult::Value(json),
@@ -2211,7 +2227,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                         calc_data.regex_cache.clone(),
                         calc_data.literal_cache.clone(),
                     );
-                    self.calc_internal(
+                    let _ = self.calc_internal(
                         term.into_inner(),
                         calc_data.root.clone(),
                         None,
@@ -2518,7 +2534,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         json: ValueRef<'j, S>,
         path_tracker: Option<PathTracker<'l, 'k>>,
         calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
-    ) {
+    ) -> ControlFlow<()> {
         let curr = pairs.next();
         match curr {
             Some(curr) => {
@@ -2530,19 +2546,21 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                             json.clone(),
                             path_tracker.clone(),
                             calc_data,
-                        );
-                        self.calc_full_scan(pairs, json, path_tracker, calc_data);
+                        )?;
+                        self.calc_full_scan(pairs, json, path_tracker, calc_data)?;
                     }
-                    Rule::all => self.calc_all(pairs, json, path_tracker, calc_data),
-                    Rule::literal => self.calc_literal(pairs, curr, json, path_tracker, calc_data),
+                    Rule::all => self.calc_all(pairs, json, path_tracker, calc_data)?,
+                    Rule::literal => {
+                        self.calc_literal(pairs, curr, json, path_tracker, calc_data)?
+                    }
                     Rule::string_list => {
-                        self.calc_strings(pairs, curr, json, path_tracker, calc_data);
+                        self.calc_strings(pairs, curr, json, path_tracker, calc_data)?;
                     }
                     Rule::numbers_list => {
-                        self.calc_indexes(pairs, curr, json, path_tracker, calc_data);
+                        self.calc_indexes(pairs, curr, json, path_tracker, calc_data)?;
                     }
                     Rule::numbers_range => {
-                        self.calc_range(pairs, curr, json, path_tracker, calc_data);
+                        self.calc_range(pairs, curr, json, path_tracker, calc_data)?;
                     }
                     Rule::filter => {
                         let json_type = json.get_type();
@@ -2577,7 +2595,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                                             v,
                                             new_tracker,
                                             calc_data,
-                                        );
+                                        )?;
                                     }
                                 }
                             } else {
@@ -2590,7 +2608,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                                         v.clone(),
                                         calc_data,
                                     ) {
-                                        self.calc_internal(pairs.clone(), v, None, calc_data);
+                                        self.calc_internal(pairs.clone(), v, None, calc_data)?;
                                     }
                                 }
                             }
@@ -2603,7 +2621,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                         calc_data.emit(CalculationResult {
                             res: json,
                             path_tracker: path_tracker.map(|pt| self.generate_path(pt)),
-                        });
+                        })?;
                     }
                     _ => {
                         trace!("calc_internal: unhandled rule {:?}", curr.as_rule());
@@ -2614,9 +2632,10 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 calc_data.emit(CalculationResult {
                     res: json,
                     path_tracker: path_tracker.map(|pt| self.generate_path(pt)),
-                });
+                })?;
             }
         }
+        ControlFlow::Continue(())
     }
 
     /// Evaluate a projection expression (e.g. `$.a + 1`, `$arr.length()`) against the
@@ -2635,20 +2654,30 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
 
     /// Visit matches in query order without retaining them. Filter subqueries
     /// keep their own result buffers and never invoke this visitor.
+    /// `Break` stops the outer traversal and returns the visitor's break value.
     #[allow(dead_code)] // The standalone binary only uses the collecting API.
-    pub fn visit_with_paths_on_root<'j: 'i, S: SelectValue>(
+    pub fn visit_with_paths_on_root<'j: 'i, S: SelectValue, B>(
         &self,
         json: ValueRef<'j, S>,
         root: Pairs<'i, Rule>,
-        visit: &mut impl FnMut(CalculationResult<'j, S, UPTG::PT>),
-    ) {
+        visit: &mut impl FnMut(CalculationResult<'j, S, UPTG::PT>) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         let mut calc_data = PathCalculatorData::new(json.clone());
-        calc_data.visitor = Some(visit);
+        let mut outcome = ControlFlow::Continue(());
+        let mut visitor = |matched| match visit(matched) {
+            ControlFlow::Continue(()) => ControlFlow::Continue(()),
+            ControlFlow::Break(value) => {
+                outcome = ControlFlow::Break(value);
+                ControlFlow::Break(())
+            }
+        };
+        calc_data.visitor = Some(&mut visitor);
         let tracker = self
             .tracker_generator
             .as_ref()
             .map(|_| create_empty_tracker());
-        self.calc_internal(root, json, tracker, &mut calc_data);
+        let _ = self.calc_internal(root, json, tracker, &mut calc_data);
+        outcome
     }
 
     pub fn calc_with_paths_on_root<'j: 'i, S: SelectValue>(
@@ -2658,9 +2687,9 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
     ) -> Vec<CalculationResult<'j, S, UPTG::PT>> {
         let mut calc_data = PathCalculatorData::new(json.clone());
         if self.tracker_generator.is_some() {
-            self.calc_internal(root, json, Some(create_empty_tracker()), &mut calc_data);
+            let _ = self.calc_internal(root, json, Some(create_empty_tracker()), &mut calc_data);
         } else {
-            self.calc_internal(root, json, None, &mut calc_data);
+            let _ = self.calc_internal(root, json, None, &mut calc_data);
         }
         calc_data.results.drain(..).collect()
     }
@@ -2702,6 +2731,34 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
 mod json_path_compiler_tests {
     use crate::json_path::compile;
     use crate::json_path::JsonPathToken;
+
+    #[test]
+    fn breaking_a_visit_skips_later_filter_evaluation() {
+        use super::{ControlFlow, PTrackerGenerator, PathCalculator, PathCalculatorData, ValueRef};
+
+        let doc = serde_json::json!([
+            {"text": "x", "pattern": "x"},
+            {"text": "x", "pattern": "^x$"}
+        ]);
+        let query = compile("$[?(@.text =~ @.pattern)]").unwrap();
+        let calculator = PathCalculator::<PTrackerGenerator>::create(&query);
+        let mut data = PathCalculatorData::new(ValueRef::Borrowed(&doc));
+        let mut visitor = |_| ControlFlow::Break(());
+        data.visitor = Some(&mut visitor);
+        assert!(calculator
+            .calc_internal(
+                query.root.clone(),
+                ValueRef::Borrowed(&doc),
+                None,
+                &mut data
+            )
+            .is_break());
+        assert_eq!(
+            data.regex_cache.borrow().len(),
+            1,
+            "the second candidate must not be evaluated"
+        );
+    }
 
     #[test]
     fn test_compiler_pop_last() {
@@ -2766,11 +2823,18 @@ mod json_path_compiler_tests {
 
     #[test]
     fn test_pop_last_object_key_accepts_bracket_string() {
-        for path in [r#"$["foo"]"#, "$['foo']"] {
+        for (path, expected) in [
+            (r#"$["foo"]"#, "foo"),
+            ("$['foo']", "foo"),
+            (r#"$[""]"#, ""),
+            ("$['']", ""),
+            (r#"$["0"]"#, "0"),
+            ("$['0']", "0"),
+        ] {
             let mut query = compile(path).unwrap();
             assert_eq!(
                 query.pop_last_object_key(),
-                Some("foo".to_string()),
+                Some(expected.to_string()),
                 "path {path}"
             );
         }

@@ -8,8 +8,9 @@
  */
 
 use crate::auto_create::{
-    attach_creations, auto_create_enabled, can_create, nest_in_objects, nothing_to_write,
-    prepare_set, root_key_chain, seed_missing_paths, validate_legacy_creation_path, Seed,
+    attach_creations, auto_create_enabled, has_write_target, nest_in_objects, nothing_to_write,
+    prepare_new_document, prepare_set, root_key_chain, seed_missing_paths,
+    validate_legacy_creation_path, PreparedSet, Seed,
 };
 use crate::defrag::defrag_info;
 use crate::formatter::ReplyFormatOptions;
@@ -27,9 +28,7 @@ use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::str::FromStr;
 
-use json_path::{
-    calc_once, calc_once_with_paths, compile, json_path::Query, json_path::UserPathTracker,
-};
+use json_path::{calc_once_with_paths, compile, json_path::Query, json_path::UserPathTracker};
 
 use serde_json::{Number, Value};
 
@@ -446,15 +445,17 @@ pub fn json_set_command_impl<M: Manager>(
                 }
             } else {
                 let query = compile(path.get_path())?;
-                let (update_info, additions) = prepare_set(&manager, doc, query.clone(), &val, op)?;
+                let PreparedSet {
+                    updates: update_info,
+                    additions,
+                    has_existing_targets,
+                } = prepare_set(&manager, doc, query.clone(), &val, op)?;
                 if update_info.is_empty() && additions.as_ref().is_ok_and(Vec::is_empty) {
                     // NX omits existing targets from the updates, so an empty
                     // creation list can mean that every target already exists.
-                    let nx_has_existing_targets =
-                        op == SetOptions::NotExists && auto_create_enabled() && {
-                            let targets = calc_once(query.clone(), doc);
-                            !targets.is_empty()
-                        };
+                    let nx_has_existing_targets = op == SetOptions::NotExists
+                        && auto_create_enabled()
+                        && has_existing_targets;
                     if op == SetOptions::AlreadyExists || nx_has_existing_targets {
                         Ok(RedisValue::Null)
                     } else {
@@ -489,30 +490,15 @@ pub fn json_set_command_impl<M: Manager>(
         }
         (None, SetOptions::AlreadyExists) => Ok(RedisValue::Null),
         _ => {
-            let new_doc = if path == JSON_ROOT_PATH {
-                Some(val)
-            } else if auto_create_enabled() {
-                // There is no document to walk yet, so the whole thing is built
-                // in one write from the path's object-key chain. `None` means
-                // the path has a segment we cannot invent.
-                match root_key_chain(compile(path.get_path())?)? {
-                    Some(keys) => Some(nest_in_objects(&manager, &keys, val)?),
-                    None => None,
-                }
-            } else {
-                None
-            };
-            match new_doc {
-                Some(doc) => {
-                    redis_key.set_value(Vec::new(), doc)?;
-                    redis_key.notify_keyspace_event(ctx, "json.set")?;
-                    manager.apply_changes(ctx);
-                    REDIS_OK
-                }
-                None => Err(RedisError::Str(
-                    "ERR new objects must be created at the root",
-                )),
-            }
+            // There is no document to walk yet, so the whole thing is built
+            // in one write from the path's object-key chain. `None` means
+            // the path has a segment we cannot invent.
+            // prepare_new_document translates that missing chain into an error.
+            let doc = prepare_new_document(&manager, &path, val)?;
+            redis_key.set_value(Vec::new(), doc)?;
+            redis_key.notify_keyspace_event(ctx, "json.set")?;
+            manager.apply_changes(ctx);
+            REDIS_OK
         }
     }
 }
@@ -627,7 +613,11 @@ pub fn json_merge_command_impl<M: Manager>(
                 let query = compile(path.get_path())?;
                 // Creation runs alongside the updates, not instead of them: a
                 // multi-target path can match some places and miss others.
-                let (mut update_info, additions) = prepare_set(
+                let PreparedSet {
+                    updates: mut update_info,
+                    additions,
+                    ..
+                } = prepare_set(
                     &manager,
                     doc,
                     query.clone(),
@@ -688,27 +678,12 @@ pub fn json_merge_command_impl<M: Manager>(
             // Nothing to merge with: it's a new doc, built in one write from
             // the path's object-key chain. `None` means the path has a segment
             // we cannot invent.
-            let new_doc = if path == JSON_ROOT_PATH {
-                Some(val)
-            } else if auto_create_enabled() {
-                match root_key_chain(compile(path.get_path())?)? {
-                    Some(keys) => Some(nest_in_objects(&manager, &keys, val)?),
-                    None => None,
-                }
-            } else {
-                None
-            };
-            match new_doc {
-                Some(doc) => {
-                    redis_key.set_value(Vec::new(), doc)?;
-                    redis_key.notify_keyspace_event(ctx, "json.merge")?;
-                    manager.apply_changes(ctx);
-                    REDIS_OK
-                }
-                None => Err(RedisError::Str(
-                    "ERR new objects must be created at the root",
-                )),
-            }
+            // prepare_new_document translates that missing chain into an error.
+            let doc = prepare_new_document(&manager, &path, val)?;
+            redis_key.set_value(Vec::new(), doc)?;
+            redis_key.notify_keyspace_event(ctx, "json.merge")?;
+            manager.apply_changes(ctx);
+            REDIS_OK
         }
     }
 }
@@ -787,7 +762,7 @@ fn validate_mset_path<V: SelectValue>(doc: &V, query: Query) -> RedisResult<()> 
     if query.is_projection() {
         return Err(err_projection_readonly());
     }
-    if calc_once(query.clone(), doc).is_empty() && !can_create(query.clone(), doc)? {
+    if !has_write_target(query.clone(), doc)? {
         validate_legacy_creation_path(query, doc)?;
     }
     Ok(())
@@ -891,17 +866,20 @@ pub fn json_mset_command_impl<M: Manager>(
                 // the document as the previous triplets left it, not as the
                 // command found it.
                 let query = compile(path.get_path())?;
-                let (update_info, additions) =
-                    match prepare_set(&manager, doc, query, &value, SetOptions::None) {
-                        Ok(prepared) => prepared,
-                        Err(RedisError::Str(ERR_RECURSION_LIMIT_EXCEEDED)) => {
-                            // Keep MSET's nil reply and continue the other triplets.
-                            // Earlier writes still reach apply_changes below.
-                            all_updated = false;
-                            continue;
-                        }
-                        Err(error) => return Err(error),
-                    };
+                let PreparedSet {
+                    updates: update_info,
+                    additions,
+                    ..
+                } = match prepare_set(&manager, doc, query, &value, SetOptions::None) {
+                    Ok(prepared) => prepared,
+                    Err(RedisError::Str(ERR_RECURSION_LIMIT_EXCEEDED)) => {
+                        // Keep MSET's nil reply and continue the other triplets.
+                        // Earlier writes still reach apply_changes below.
+                        all_updated = false;
+                        continue;
+                    }
+                    Err(error) => return Err(error),
+                };
                 // A failed preparation skips this entire triplet, including
                 // existing targets. Successful other triplets still apply.
                 if additions.is_err() {

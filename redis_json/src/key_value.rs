@@ -380,11 +380,11 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         query: Query,
         option: SetOptions,
     ) -> RedisResult<Vec<UpdateInfo>> {
-        if option == SetOptions::NotExists {
-            return Ok(Vec::new());
-        }
         if query.is_projection() {
             return Err(err_projection_readonly());
+        }
+        if option == SetOptions::NotExists {
+            return Ok(Vec::new());
         }
         let mut res = calc_once_paths(query, self.val.as_ref());
         if option != SetOptions::MergeExisting {
@@ -565,5 +565,27 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
 
         FoundIndex::NotFound
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn existing_targets_reject_projections_for_every_set_option() {
+        let doc = serde_json::json!({"a": 1});
+        for option in [
+            SetOptions::None,
+            SetOptions::NotExists,
+            SetOptions::AlreadyExists,
+            SetOptions::MergeExisting,
+        ] {
+            let error = KeyValue::new(&doc)
+                .find_existing_targets(compile("$.a + 1").unwrap(), option)
+                .err()
+                .expect("projections must be rejected even for NX");
+            assert_eq!(error.to_string(), err_projection_readonly().to_string());
+        }
     }
 }

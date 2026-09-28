@@ -121,16 +121,17 @@ pub fn calc_once_with_paths<'p, S: SelectValue>(
 
 /// Visit each match immediately, preserving query order and duplicate matches.
 /// Unlike `calc_once_with_paths`, this does not collect the matches into a vector.
-pub fn visit_once_with_paths<'p, S: SelectValue>(
+/// Return `ControlFlow::Break(value)` to stop traversal immediately and return `value`.
+pub fn visit_once_with_paths<'p, S: SelectValue, B>(
     q: Query<'_>,
     json: &'p S,
-    mut visit: impl FnMut(CalculationResult<'p, S, PTracker>),
-) {
+    mut visit: impl FnMut(CalculationResult<'p, S, PTracker>) -> std::ops::ControlFlow<B>,
+) -> std::ops::ControlFlow<B> {
     PathCalculator {
         query: None,
         tracker_generator: Some(PTrackerGenerator),
     }
-    .visit_with_paths_on_root(ValueRef::Borrowed(json), q.root, &mut visit);
+    .visit_with_paths_on_root(ValueRef::Borrowed(json), q.root, &mut visit)
 }
 
 /// A version of `calc_once` that returns only paths as Vec<Vec<String>>.
@@ -177,9 +178,12 @@ mod json_path_tests {
         ] {
             let expected = crate::calc_once_with_paths(crate::compile(path).unwrap(), &doc);
             let mut actual = Vec::new();
-            crate::visit_once_with_paths(crate::compile(path).unwrap(), &doc, |matched| {
-                actual.push(matched);
-            });
+            let outcome =
+                crate::visit_once_with_paths(crate::compile(path).unwrap(), &doc, |matched| {
+                    actual.push(matched);
+                    std::ops::ControlFlow::<()>::Continue(())
+                });
+            assert!(outcome.is_continue());
             assert_eq!(actual, expected, "{path}");
         }
     }
@@ -187,6 +191,40 @@ mod json_path_tests {
     #[allow(dead_code)]
     pub fn setup() {
         let _ = env_logger::try_init();
+    }
+
+    #[test]
+    fn streaming_break_returns_its_value_and_stops_every_selector() {
+        use std::ops::ControlFlow;
+
+        let doc = json!({"a": [{"n": 1}, {"n": 2}, {"n": 3}], "b": {"n": 4}});
+        for path in [
+            "$",
+            "$.*",
+            "$..n",
+            "$..*",
+            "$['b','a','b']",
+            "$.a[2,0,1]",
+            "$.a[0:3]",
+            "$.a[?@.n > 0].n",
+            "$.a[?@.n == $.a[0].n].n",
+        ] {
+            let expected = crate::calc_once_with_paths(crate::compile(path).unwrap(), &doc);
+            for limit in 1..=expected.len().min(3) {
+                let mut actual = Vec::new();
+                let outcome =
+                    crate::visit_once_with_paths(crate::compile(path).unwrap(), &doc, |matched| {
+                        actual.push(matched);
+                        if actual.len() == limit {
+                            ControlFlow::Break("stop")
+                        } else {
+                            ControlFlow::Continue(())
+                        }
+                    });
+                assert_eq!(outcome, ControlFlow::Break("stop"), "{path}");
+                assert_eq!(actual, expected[..limit], "{path}");
+            }
+        }
     }
 
     fn perform_search(path: &str, json: &Value) -> Vec<Value> {
