@@ -26,7 +26,7 @@ use redis_module::{Context, RedisValue};
 #[cfg(not(feature = "as-library"))]
 use redis_module::key::KeyFlags;
 
-#[cfg(not(feature = "as-library"))]
+#[cfg(any(not(feature = "as-library"), test))]
 use crate::c_api::{
     json_api_alloc_json, json_api_free_iter, json_api_free_json, json_api_free_key_values_iter,
     json_api_get, json_api_get_array, json_api_get_at, json_api_get_boolean, json_api_get_double,
@@ -101,6 +101,8 @@ pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
 );
 /////////////////////////////////////////////////////
 
+/// Run optional setup before selecting a manager. The setup result is ignored for LLAPI use;
+/// command wrappers check their hook separately and return its error before calling this macro.
 #[macro_export]
 macro_rules! run_on_manager {
     (
@@ -139,6 +141,9 @@ macro_rules! run_on_manager {
 /// The pre-command hook returns `RedisResult<()>`; errors stop JSON commands before dispatch.
 /// Shared C API calls still run the hook for setup but ignore its result.
 /// Omit `pre_command_function` when no setup or command guard is needed.
+/// Consumers requiring per-call setup must supply it.
+/// LLAPI calls pass empty arguments; setup must still complete when returning an error.
+/// This hook guards JSON commands, not access through the shared C API.
 #[macro_export]
 macro_rules! redis_json_module_create {
     (
@@ -542,15 +547,20 @@ mod tests {
     use redis_module::RedisError;
 
     #[cfg(feature = "as-library")]
-    use crate::c_api::*;
+    use crate::c_api::get_llapi_ctx;
     #[cfg(feature = "as-library")]
     use redis_module::{key::KeyFlags, AclCategory, InfoContext, RedisResult, Status};
+
+    #[cfg(feature = "as-library")]
+    thread_local! {
+        static HOOK_FAILS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
 
     // Exercise a consumer's hook without duplicating the OSS module's exported symbols.
     #[cfg(feature = "as-library")]
     redis_json_module_create! {
         data_types: [],
-        pre_command_function: pre_command,
+        pre_command_function: self::pre_command,
         get_manage: {
             _ => None::<crate::ivalue_manager::RedisIValueJsonKeyManager>
         },
@@ -561,7 +571,10 @@ mod tests {
 
     #[cfg(feature = "as-library")]
     fn pre_command(_ctx: &Context, _args: &[RedisString]) -> RedisResult<()> {
-        Err(RedisError::Str("ERR commands disabled"))
+        if HOOK_FAILS.get() {
+            return Err(RedisError::Str("ERR commands disabled"));
+        }
+        Ok(())
     }
 
     #[cfg(feature = "as-library")]
@@ -586,6 +599,7 @@ mod tests {
             panic!("command handler must not run after a pre-command error");
         }
 
+        HOOK_FAILS.set(true);
         let result = json_command!(command_handler)(&Context::dummy(), Vec::new());
 
         assert!(matches!(
@@ -597,21 +611,18 @@ mod tests {
     #[cfg(feature = "as-library")]
     #[test]
     fn pre_command_success_runs_command() {
-        fn pre_command(_ctx: &Context, _args: &[RedisString]) -> RedisResult<()> {
-            Ok(())
-        }
-
         fn command_handler<M>(_manager: M, _ctx: &Context, _args: Vec<RedisString>) -> RedisResult {
             Ok(RedisValue::SimpleStringStatic("executed"))
         }
 
+        HOOK_FAILS.set(false);
         let result = json_command!(command_handler)(&Context::dummy(), Vec::new());
 
         assert_eq!(result.unwrap(), RedisValue::SimpleStringStatic("executed"));
     }
 
     #[test]
-    fn shared_api_pre_command_error_preserves_dispatch() {
+    fn shared_api_ignores_pre_command_error() {
         let hook_called = std::cell::Cell::new(false);
         let result = run_on_manager!(
             pre_command: || {
