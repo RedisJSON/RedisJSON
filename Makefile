@@ -195,6 +195,7 @@ pytest:
 
 cargo_test:
 	$(SHOW)cargo $(CARGO_TOOLCHAIN) test --all
+	$(SHOW)cargo $(CARGO_TOOLCHAIN) test -p redis_json --features as-library
 
 .PHONY: pytest cargo_test
 

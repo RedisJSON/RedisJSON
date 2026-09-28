@@ -24,3 +24,4 @@ jobs:
           rustup target add i686-unknown-freebsd
           cargo build --all --all-targets --verbose --target i686-unknown-freebsd
           cargo test --all --all-targets --verbose
+          cargo test -p redis_json --features as-library --all-targets --verbose
