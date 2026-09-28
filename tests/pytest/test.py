@@ -375,6 +375,15 @@ def testSetBSON(env):
     r.assertOk(r.execute_command('JSON.SET', 'test', '.', bson, 'FORMAT', 'BSON'))
     r.expect('JSON.GET', 'test', *docs['values'].keys()).raiseError()
 
+def testMgetKeySpec(env):
+    for keys in (["k1"], ["k1", "k2"], ["k1", "k2", "k3"], ["k1", "k2", "k3", "k4"]):
+        for path in ("$", "$.nested", "."):
+            env.expect("COMMAND GETKEYS", "JSON.MGET", *keys, path).equal(keys)
+
+    info = env.cmd("COMMAND INFO JSON.MGET")[0]
+    env.assertEqual(info[3:6], [1, -2, 1])
+
+
 def testMgetCommand(env):
     """Test REJSON.MGET command"""
     r = env
@@ -408,9 +417,9 @@ def testMgetCommand(env):
     r.assertEqual(raw[1], None)
 
     # Test that MGET fails on path errors
-    r.cmd('DEL', 'test')
-    r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"bull":4.2}'))
-    raw = r.execute_command('JSON.MGET', '{doc}:0', 'test', '{doc}:1', '.bool')
+    r.cmd('DEL', '{doc}:test')
+    r.assertOk(r.execute_command('JSON.SET', '{doc}:test', '.', '{"bull":4.2}'))
+    raw = r.execute_command('JSON.MGET', '{doc}:0', '{doc}:test', '{doc}:1', '.bool')
     r.assertEqual(len(raw), 3)
     r.assertTrue(json.loads(raw[0]))
     r.assertEqual(raw[1], None)
