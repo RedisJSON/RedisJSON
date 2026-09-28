@@ -1,4 +1,5 @@
 from docs_utils import *
+from docs_utils import _kv_list_to_dict
 
 
 class testCommandDocsAndHelp:
@@ -186,6 +187,26 @@ class testCommandDocsAndHelp:
             since="1.0.0",
             group="module",
         )
+
+    def test_command_json_mget_key_spec(self):
+        env = self.env
+        if server_version_is_less_than("7.0.0"):
+            env.skip()
+
+        for keys in (["k1"], ["k1", "k2"], ["k1", "k2", "k3"], ["k1", "k2", "k3", "k4"]):
+            for path in ("$", "$.nested", "."):
+                env.expect("COMMAND GETKEYS", "JSON.MGET", *keys, path).equal(keys)
+
+        info = env.cmd("COMMAND INFO JSON.MGET")[0]
+        env.assertEqual(info[3:6], [1, -2, 1])
+        env.assertEqual(len(info[8]), 1)
+        key_spec = _kv_list_to_dict(info[8][0])
+        begin_search = _kv_list_to_dict(key_spec["begin_search"])
+        env.assertEqual(begin_search["type"], "index")
+        env.assertEqual(_kv_list_to_dict(begin_search["spec"]), {"index": 1})
+        find_keys = _kv_list_to_dict(key_spec["find_keys"])
+        env.assertEqual(find_keys["type"], "range")
+        env.assertEqual(_kv_list_to_dict(find_keys["spec"]), {"lastkey": -2, "keystep": 1, "limit": 0})
     
     def test_command_docs_json_mset(self):
         env = self.env
