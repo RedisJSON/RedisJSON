@@ -1053,7 +1053,7 @@ macro_rules! json_mget_command {
                         notes: "The key containing the JSON document",
                         flags: [ReadOnly],
                         begin_search: Index({ index: 1 }),
-                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                        find_keys: Range({ last_key: -2, steps: 1, limit: 0 }),
                     }
                 ],
                 args: [

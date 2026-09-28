@@ -414,9 +414,9 @@ def testMgetCommand(env):
     r.assertEqual(raw[1], None)
 
     # Test that MGET fails on path errors
-    r.cmd('DEL', 'test')
-    r.assertOk(r.execute_command('JSON.SET', 'test', '.', '{"bull":4.2}'))
-    raw = r.execute_command('JSON.MGET', '{doc}:0', 'test', '{doc}:1', '.bool')
+    r.cmd('DEL', '{doc}:test')
+    r.assertOk(r.execute_command('JSON.SET', '{doc}:test', '.', '{"bull":4.2}'))
+    raw = r.execute_command('JSON.MGET', '{doc}:0', '{doc}:test', '{doc}:1', '.bool')
     r.assertEqual(len(raw), 3)
     r.assertTrue(json.loads(raw[0]))
     r.assertEqual(raw[1], None)
