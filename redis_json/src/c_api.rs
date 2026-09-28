@@ -531,7 +531,7 @@ macro_rules! redis_json_module_export_shared_api {
             $( $condition:expr => $manager_ident:ident { $($field:ident: $value:expr),* $(,)? } ),* $(,)?
             _ => $default_manager:expr $(,)?
         },
-        pre_command_function: $pre_command_function_expr:expr,
+        $(pre_command_function: $pre_command_function_expr:expr,)?
     ) => {
         use std::ptr::NonNull;
         use $crate::c_api::REDIS_JSONAPI_LATEST_API_VER;
@@ -543,7 +543,7 @@ macro_rules! redis_json_module_export_shared_api {
             key_str: *mut rawmod::RedisModuleString,
         ) -> *mut c_void {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -559,7 +559,7 @@ macro_rules! redis_json_module_export_shared_api {
             flags: c_int,
         ) -> *mut c_void {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -586,7 +586,7 @@ macro_rules! redis_json_module_export_shared_api {
                 Err(_) => return std::ptr::null_mut(),
             };
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -600,7 +600,7 @@ macro_rules! redis_json_module_export_shared_api {
             key: *mut rawmod::RedisModuleKey,
         ) -> *mut c_void {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -612,7 +612,7 @@ macro_rules! redis_json_module_export_shared_api {
         #[no_mangle]
         pub extern "C" fn JSONAPI_get(key: *const c_void, path: *const c_char) -> *const c_void {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -624,7 +624,7 @@ macro_rules! redis_json_module_export_shared_api {
         #[no_mangle]
         pub extern "C" fn JSONAPI_getWithPath(key: *const c_void, json_path: *const c_void) -> *const c_void {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -636,7 +636,7 @@ macro_rules! redis_json_module_export_shared_api {
         #[no_mangle]
         pub extern "C" fn JSONAPI_getAt(json: *const c_void, index: size_t, value: *mut c_void) -> c_int {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -648,7 +648,7 @@ macro_rules! redis_json_module_export_shared_api {
         #[no_mangle]
         pub extern "C" fn JSONAPI_next(iter: *mut c_void) -> *const c_void {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -660,7 +660,7 @@ macro_rules! redis_json_module_export_shared_api {
         #[no_mangle]
         pub extern "C" fn JSONAPI_len(iter: *const c_void) -> size_t {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -672,7 +672,7 @@ macro_rules! redis_json_module_export_shared_api {
         #[no_mangle]
         pub extern "C" fn JSONAPI_freeIter(iter: *mut c_void) {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -684,7 +684,7 @@ macro_rules! redis_json_module_export_shared_api {
         #[no_mangle]
         pub extern "C" fn JSONAPI_getLen(json: *const c_void, count: *mut size_t) -> c_int {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -696,7 +696,7 @@ macro_rules! redis_json_module_export_shared_api {
         #[no_mangle]
         pub extern "C" fn JSONAPI_getType(json: *const c_void) -> c_int {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -708,7 +708,7 @@ macro_rules! redis_json_module_export_shared_api {
         #[no_mangle]
         pub extern "C" fn JSONAPI_getInt(json: *const c_void, val: *mut c_longlong) -> c_int {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -720,7 +720,7 @@ macro_rules! redis_json_module_export_shared_api {
         #[no_mangle]
         pub extern "C" fn JSONAPI_getDouble(json: *const c_void, val: *mut c_double) -> c_int {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -732,7 +732,7 @@ macro_rules! redis_json_module_export_shared_api {
         #[no_mangle]
         pub extern "C" fn JSONAPI_getBoolean(json: *const c_void, val: *mut c_int) -> c_int {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -748,7 +748,7 @@ macro_rules! redis_json_module_export_shared_api {
             len: *mut size_t,
         ) -> c_int {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -764,7 +764,7 @@ macro_rules! redis_json_module_export_shared_api {
             str: *mut *mut rawmod::RedisModuleString,
         ) -> c_int {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -778,7 +778,7 @@ macro_rules! redis_json_module_export_shared_api {
             ctx: *mut rawmod::RedisModuleCtx,
             str: *mut *mut rawmod::RedisModuleString) -> c_int {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -790,7 +790,7 @@ macro_rules! redis_json_module_export_shared_api {
         #[no_mangle]
         pub extern "C" fn JSONAPI_isJSON(key: *mut rawmod::RedisModuleKey) -> c_int {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -845,7 +845,7 @@ macro_rules! redis_json_module_export_shared_api {
         #[no_mangle]
         pub extern "C" fn JSONAPI_resetIter(iter: *mut c_void) {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -857,7 +857,7 @@ macro_rules! redis_json_module_export_shared_api {
         #[no_mangle]
         pub extern "C" fn JSONAPI_getKeyValues(json: *const c_void) -> *const c_void {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -870,7 +870,7 @@ macro_rules! redis_json_module_export_shared_api {
         pub extern "C" fn JSONAPI_nextKeyValue(iter: *mut c_void,
             str: *mut *mut rawmod::RedisModuleString, ptr: *mut c_void) -> c_int {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -882,7 +882,7 @@ macro_rules! redis_json_module_export_shared_api {
         #[no_mangle]
         pub extern "C" fn JSONAPI_freeKeyValuesIter(iter: *mut c_void) {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -894,7 +894,7 @@ macro_rules! redis_json_module_export_shared_api {
         #[no_mangle]
         pub extern "C" fn JSONAPI_allocJson() -> *mut c_void {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -906,7 +906,7 @@ macro_rules! redis_json_module_export_shared_api {
         #[no_mangle]
         pub extern "C" fn JSONAPI_freeJson(json: *mut c_void) {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
@@ -918,7 +918,7 @@ macro_rules! redis_json_module_export_shared_api {
         #[no_mangle]
         pub extern "C" fn JSONAPI_getArray(json: *const c_void, len: *mut size_t, array_type: *mut JSONArrayType) -> *const c_void {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager

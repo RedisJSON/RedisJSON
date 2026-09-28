@@ -28,14 +28,13 @@ use redis_module::key::KeyFlags;
 
 #[cfg(not(feature = "as-library"))]
 use crate::c_api::{
-    get_llapi_ctx, json_api_alloc_json, json_api_free_iter, json_api_free_json,
-    json_api_free_key_values_iter, json_api_get, json_api_get_array, json_api_get_at,
-    json_api_get_boolean, json_api_get_double, json_api_get_int, json_api_get_json,
-    json_api_get_json_from_iter, json_api_get_key_value, json_api_get_len, json_api_get_string,
-    json_api_get_type, json_api_get_value_from_handle_internal, json_api_get_with_path,
-    json_api_is_json, json_api_len, json_api_next, json_api_next_key_value,
-    json_api_open_key_internal, json_api_open_key_with_flags_internal, json_api_reset_iter,
-    LLAPI_CTX,
+    json_api_alloc_json, json_api_free_iter, json_api_free_json, json_api_free_key_values_iter,
+    json_api_get, json_api_get_array, json_api_get_at, json_api_get_boolean, json_api_get_double,
+    json_api_get_int, json_api_get_json, json_api_get_json_from_iter, json_api_get_key_value,
+    json_api_get_len, json_api_get_string, json_api_get_type,
+    json_api_get_value_from_handle_internal, json_api_get_with_path, json_api_is_json,
+    json_api_len, json_api_next, json_api_next_key_value, json_api_open_key_internal,
+    json_api_open_key_with_flags_internal, json_api_reset_iter, LLAPI_CTX,
 };
 
 use crate::commands::{
@@ -139,13 +138,14 @@ macro_rules! run_on_manager {
 
 /// The pre-command hook returns `RedisResult<()>`; errors stop JSON commands before dispatch.
 /// Shared C API calls still run the hook for setup but ignore its result.
+/// Omit `pre_command_function` when no setup or command guard is needed.
 #[macro_export]
 macro_rules! redis_json_module_create {
     (
         data_types: [
             $($data_type:ident),* $(,)*
         ],
-        pre_command_function: $pre_command_function_expr:expr,
+        $(pre_command_function: $pre_command_function_expr:expr,)?
         get_manage: {
             $( $condition:expr => $manager_ident:ident { $($field:ident: $value:expr),* $(,)? } ),* $(,)?
             _ => $default_manager:expr $(,)?
@@ -174,7 +174,7 @@ macro_rules! redis_json_module_create {
         macro_rules! json_command {
             ($cmd:ident) => {
                 |ctx: &Context, args: Vec<RedisString>| -> RedisResult {
-                    $pre_command_function_expr(ctx, &args)?;
+                    $($pre_command_function_expr(ctx, &args)?;)?
                     run_on_manager!(
                         get_manage: {
                             $( $condition => $manager_ident { $($field: $value),* } ),*
@@ -360,7 +360,7 @@ macro_rules! redis_json_module_create {
                 $( $condition => $manager_ident { $($field: $value),* } ),*
                 _ => $default_manager
             },
-            pre_command_function: $pre_command_function_expr,
+            $(pre_command_function: $pre_command_function_expr,)?
         }
 
         fn initialize(ctx: &Context, args: &[RedisString]) -> Status {
@@ -412,11 +412,6 @@ macro_rules! redis_json_module_create {
             info: $info_func,
         }
     }
-}
-
-#[cfg(not(feature = "as-library"))]
-const fn pre_command(_ctx: &Context, _args: &[RedisString]) -> RedisResult<()> {
-    Ok(())
 }
 
 #[cfg(not(feature = "as-library"))]
@@ -531,7 +526,6 @@ const fn version() -> i32 {
 #[cfg(not(feature = "as-library"))]
 redis_json_module_create! {
     data_types: [REDIS_JSON_TYPE],
-    pre_command_function: pre_command,
     get_manage: {
     _ => Some(crate::ivalue_manager::RedisIValueJsonKeyManager {
         phantom: PhantomData,
@@ -542,17 +536,52 @@ redis_json_module_create! {
     info: dummy_info,
 }
 
-#[cfg(all(test, not(feature = "as-library")))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use redis_module::RedisError;
 
+    #[cfg(feature = "as-library")]
+    use crate::c_api::*;
+    #[cfg(feature = "as-library")]
+    use redis_module::{key::KeyFlags, AclCategory, InfoContext, RedisResult, Status};
+
+    // Exercise a consumer's hook without duplicating the OSS module's exported symbols.
+    #[cfg(feature = "as-library")]
+    redis_json_module_create! {
+        data_types: [],
+        pre_command_function: pre_command,
+        get_manage: {
+            _ => None::<crate::ivalue_manager::RedisIValueJsonKeyManager>
+        },
+        version: 1,
+        init: |_, _| Status::Ok,
+        info: info,
+    }
+
+    #[cfg(feature = "as-library")]
+    fn pre_command(_ctx: &Context, _args: &[RedisString]) -> RedisResult<()> {
+        Err(RedisError::Str("ERR commands disabled"))
+    }
+
+    #[cfg(feature = "as-library")]
+    fn info(_ctx: &InfoContext, _for_crash_report: bool) {}
+
+    #[cfg(not(feature = "as-library"))]
     #[test]
-    fn pre_command_error_skips_command() {
-        fn pre_command(_ctx: &Context, _args: &[RedisString]) -> RedisResult<()> {
-            Err(RedisError::Str("ERR commands disabled"))
+    fn command_without_pre_command_runs() {
+        fn command_handler<M>(_manager: M, _ctx: &Context, _args: Vec<RedisString>) -> RedisResult {
+            Ok(RedisValue::SimpleStringStatic("executed"))
         }
 
+        let result = json_command!(command_handler)(&Context::dummy(), Vec::new());
+
+        assert_eq!(result.unwrap(), RedisValue::SimpleStringStatic("executed"));
+    }
+
+    #[cfg(feature = "as-library")]
+    #[test]
+    fn pre_command_error_skips_command() {
         fn command_handler<M>(_manager: M, _ctx: &Context, _args: Vec<RedisString>) -> RedisResult {
             panic!("command handler must not run after a pre-command error");
         }
@@ -565,6 +594,7 @@ mod tests {
         ));
     }
 
+    #[cfg(feature = "as-library")]
     #[test]
     fn pre_command_success_runs_command() {
         fn pre_command(_ctx: &Context, _args: &[RedisString]) -> RedisResult<()> {
