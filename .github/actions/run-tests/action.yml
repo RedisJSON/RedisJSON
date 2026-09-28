@@ -23,6 +23,7 @@ runs:
         echo ::group::Unit tests
           . $HOME/.cargo/env
           cargo test
+          cargo test -p redis_json --features as-library
         echo ::endgroup::
         echo ::group::Flow tests
           MODULE=$(realpath ./target/release/rejson.so) RLTEST_ARGS='--no-progress' ./tests/pytest/tests.sh VG=${{inputs.run_valgrind}}
