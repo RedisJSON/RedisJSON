@@ -26,13 +26,13 @@ use redis_module::key::KeyFlags;
 
 #[cfg(any(not(feature = "as-library"), test))]
 use crate::c_api::{
-    get_llapi_ctx, json_api_alloc_json, json_api_free_iter, json_api_free_json,
-    json_api_free_key_values_iter, json_api_get, json_api_get_array, json_api_get_at,
-    json_api_get_boolean, json_api_get_double, json_api_get_int, json_api_get_json,
-    json_api_get_json_from_iter, json_api_get_key_value, json_api_get_len, json_api_get_string,
-    json_api_get_type, json_api_is_json, json_api_len, json_api_next, json_api_next_key_value,
-    json_api_open_key_internal, json_api_open_key_with_flags_internal, json_api_reset_iter,
-    LLAPI_CTX,
+    json_api_alloc_json, json_api_free_iter, json_api_free_json, json_api_free_key_values_iter,
+    json_api_get, json_api_get_array, json_api_get_at, json_api_get_boolean, json_api_get_double,
+    json_api_get_int, json_api_get_json, json_api_get_json_from_iter, json_api_get_key_value,
+    json_api_get_len, json_api_get_string, json_api_get_type,
+    json_api_get_value_from_handle_internal, json_api_is_json, json_api_len, json_api_next,
+    json_api_next_key_value, json_api_open_key_internal, json_api_open_key_with_flags_internal,
+    json_api_reset_iter, LLAPI_CTX,
 };
 
 use crate::commands::{
@@ -550,6 +550,12 @@ mod tests {
         let result = json_command!(command_handler)(&Context::dummy(), Vec::new());
 
         assert_eq!(result.unwrap(), RedisValue::SimpleStringStatic("executed"));
+    }
+
+    #[cfg(not(feature = "as-library"))]
+    #[test]
+    fn shared_api_get_json_from_handle_without_pre_command() {
+        assert!(JSONAPI_getJsonFromHandle(std::ptr::null_mut()).is_null());
     }
 
     #[cfg(feature = "as-library")]
