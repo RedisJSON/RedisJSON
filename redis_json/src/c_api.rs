@@ -438,7 +438,7 @@ macro_rules! redis_json_module_export_shared_api {
         #[no_mangle]
         pub extern "C" fn JSONAPI_getAt(json: *const c_void, index: size_t) -> *const c_void {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
