@@ -558,7 +558,7 @@ macro_rules! redis_json_module_export_shared_api {
             key: *mut rawmod::RedisModuleKey,
         ) -> *mut c_void {
             run_on_manager!(
-                pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
                 get_manage: {
                     $( $condition => $manager_ident { $($field: $value),* } ),*
                     _ => $default_manager
