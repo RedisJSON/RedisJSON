@@ -116,6 +116,23 @@ without going through the Redis command protocol. It's versioned and exported vi
   resolved an older `RedisJSON_V<n>` name is only guaranteed the fields that existed at
   that version.
 
+### Pre-command hook contract
+
+- `redis_json_module_create!` accepts an optional `pre_command_function` returning
+  `RedisResult<()>`. JSON commands call it before manager selection and return its
+  error without running the command handler.
+- Consumers needing per-call setup, such as HDT's current context, **must provide the
+  hook**. OSS omits it because it has no such setup. Existing hooks returning `()`
+  must return `Ok(())` after setup when updating to this macro contract.
+- LLAPI wrappers that use `run_on_manager!` invoke the hook with an empty argument
+  slice and ignore its result. The hook must tolerate empty arguments and complete
+  required setup even when returning an error. LLAPI reads and cleanup continue;
+  this is a command guard, not an authorization boundary for the shared API.
+- Error reporting is the consumer's responsibility. Logging at every LLAPI call can
+  flood logs while a command guard remains active; consumers can log state changes.
+- Hook tests use `as-library` to avoid duplicate module exports. CI and `make
+  cargo_test` run both default features and `--features as-library`.
+
 ### Steps for adding a new LLAPI function
 
 1. **Bump the version** in `redis_json/src/c_api.rs`:
