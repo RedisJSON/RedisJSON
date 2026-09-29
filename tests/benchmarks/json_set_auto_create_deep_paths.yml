@@ -1,0 +1,19 @@
+version: 0.2
+name: "json_set_auto_create_deep_paths"
+description: "JSON.SET of $.a.b.c.d on mostly new random keys, creating the missing object chain."
+
+dbconfig:
+  - module-configuration-parameters:
+      rejson:
+        json-auto-create-deep-paths: "yes"
+clientconfig:
+  - tool: redis-benchmark
+  - min-tool-version: "6.2.0"
+  - parameters:
+    - clients: 16
+    - requests: 5000000
+    - threads: 2
+    - pipeline: 1
+    # Keep random-key reuse rare so requests mostly create documents.
+    - keyspacelen: 1000000000
+    - command: 'JSON.SET auto-create:__rand_int__ $.a.b.c.d 1'

@@ -50,6 +50,7 @@ use crate::commands::{
 use crate::redisjson::Format;
 
 mod array_index;
+pub mod auto_create;
 mod backward;
 pub mod c_api;
 pub mod commands;
@@ -58,6 +59,7 @@ mod formatter;
 pub mod ivalue_manager;
 mod key_value;
 pub mod manager;
+pub mod number;
 pub mod redisjson;
 
 pub const GIT_SHA: Option<&str> = std::option_env!("GIT_SHA");
@@ -415,6 +417,20 @@ macro_rules! redis_json_module_create {
             init: json_init_config,
             init: initialize,
             info: $info_func,
+            configurations: [
+                i64: [],
+                string: [],
+                bool: [[
+                    "json-auto-create-deep-paths",
+                    &$crate::auto_create::AUTO_CREATE_DEEP_PATHS,
+                    false,
+                    ::redis_module::configuration::ConfigurationFlags::IMMUTABLE
+                        | ::redis_module::configuration::ConfigurationFlags::UNPREFIXED,
+                    None
+                ]],
+                enum: [],
+                module_args_as_configuration: true,
+            ]
         }
     }
 }

@@ -25,7 +25,7 @@ jobs:
     - name: Get Redis
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: ./deps/readies/bin/getredis --with-github-token
+      run: ./deps/readies/bin/getredis --with-github-token --branch "$(.install/get-redis-ref.sh)" --force
     - name: Build and test
       run: make coverage QUICK=1 SHOW=1
     - name: Upload coverage
