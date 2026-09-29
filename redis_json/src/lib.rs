@@ -373,7 +373,9 @@ mod tests {
     #[cfg(feature = "as-library")]
     use crate::c_api::get_llapi_ctx;
     #[cfg(feature = "as-library")]
-    use redis_module::{key::KeyFlags, AclCategory, InfoContext, RedisResult, Status};
+    use crate::commands::*;
+    #[cfg(feature = "as-library")]
+    use redis_module::{key::KeyFlags, AclCategory, Context, InfoContext, RedisResult, Status};
 
     #[cfg(feature = "as-library")]
     thread_local! {
