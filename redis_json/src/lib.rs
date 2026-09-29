@@ -504,12 +504,12 @@ redis_json_module_create! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use redis_module::RedisError;
+    use redis_module::{RedisError, RedisValue};
 
     #[cfg(feature = "as-library")]
     use crate::c_api::get_llapi_ctx;
     #[cfg(feature = "as-library")]
-    use redis_module::{key::KeyFlags, AclCategory, InfoContext, RedisResult, Status};
+    use redis_module::{key::KeyFlags, AclCategory, Context, InfoContext, RedisResult, Status};
 
     #[cfg(feature = "as-library")]
     thread_local! {
