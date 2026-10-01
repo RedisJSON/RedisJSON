@@ -71,41 +71,41 @@ timing, run `cargo test -p json_path --bench path_performance`.
 
 ## CI reports
 
-Non-draft, non-documentation-only PRs benchmark the PR head first. Pushes to
-`master` also run the suite to publish shared baselines. These benchmarks do not
-run in the nightly workflow. Master is checked out and rebuilt only when the
-saved comparison flags a slowdown requiring confirmation.
+Non-draft, non-documentation-only PRs benchmark the current `master` tip and the
+PR head in the same job. Master is pinned to the SHA checked out at job start;
+it is not the PR's merge base. Pushes to `master` compare against the previous
+master tip (`github.event.before`). These benchmarks do not run in the nightly
+workflow.
 
-Only successful pushes to `master` publish baseline caches. Every run selects the
-newest compatible cache explicitly from `refs/heads/master`, then restores its
-exact key. PR measurements remain in artifacts and never replace the baseline.
-The summary identifies the saved master commit and cache key; this is the latest
-available measurement, not necessarily the current master tip or PR's base SHA.
+Measurement caches are neither restored nor published. Results from different
+hosted runners are unsuitable for the 5% gate: two attempts of the same PR used
+Intel Xeon 8573C and AMD EPYC 7763 CPUs, and median candidate timings differed by
+32%. Measuring both revisions on one runner removes that hardware mismatch;
+within-job timing noise can still occur.
 
-Cache selection matches the Ubuntu runner version, architecture, and Criterion
-version. It also accepts existing master caches created with the old suite-hash
-keys. Benchmark additions and workflow/reporting edits no longer discard existing
-measurements. Workloads with matching names are compared; new or renamed workloads
-are marked **No master baseline** until measured on master. Names must change when
-fixtures or measured operations change; see below. Compiler and production
-dependency changes are included in the comparison.
+Each job:
 
-If no master cache exists (including after eviction), or the saved commit equals
-the candidate, CI reports measurements without applying the slowdown gate. PRs
-cannot seed a shared baseline; the next successful master run does that.
-
-Criterion runs with `--save-baseline saved`: it compares against restored
-measurements when present, then saves the current measurements in the job artifact.
-Only successful master runs also publish them as future baselines.
-Confirmation measures the exact saved master commit and the candidate on the same
-runner, using the candidate's benchmark source and toolchain. Cargo build directories
-are separate so artifacts cannot be reused across revisions. Both builds must
-support the shared benchmark harness. Fresh Criterion measurements are kept under
-`confirmation/criterion`, separate from the saved comparison.
+1. Builds both revisions with the candidate's Rust toolchain, using separate Cargo
+   build directories. Each revision retains its own production dependencies.
+2. Lists the original benchmark names in both revisions, then copies the candidate
+   harness into the master checkout. Master measures the shared names; the candidate
+   measures every workload. New or renamed workloads are reported as **No master
+   baseline** until they exist on master. Both revisions must support the shared
+   harness. Empty, invalid, or disjoint workload lists fail the job.
+3. Measures master with `--save-baseline master`, then the candidate with
+   `--baseline-lenient master`, sharing only the job's `CRITERION_HOME`. Criterion
+   compares existing workloads and permits candidate-only workloads without a
+   baseline. No previous workflow run is needed, even for the first PR run.
+4. Remeasures every workload at least 5% slower on both revisions, on the same
+   runner. CI fails only if the same workload is still at least 5% slower in that
+   second comparison. The threshold is inclusive; a slowdown that disappears
+   passes. Build failures, incorrect results, and missing confirmation measurements
+   also fail.
 
 Criterion's default warmup and measurement periods remain unchanged. The job has
-a 60-minute timeout for building, measuring, and any confirmation reruns;
-only flagged workloads are rerun.
+a 90-minute timeout for both builds, both full measurement passes, and any flagged
+workload reruns. Both builds finish before measurements start. The comparison
+action stays report-only; the Python confirmation gate controls failure.
 
 GitHub Actions displays colored bars for the largest time changes and a collapsible
 table of every workload's baseline, candidate, percentage change, first-pass delta,
@@ -114,28 +114,18 @@ Both tables include the exact JSONPath emitted by the benchmark harness to
 `paths.jsonl`, including generated nested filters. Metadata is written outside the
 timed loops. Nanosecond timings are displayed as ns, µs, ms, or s per iteration;
 raw measurements and the 5% comparison remain unchanged.
-The summary is still generated when the regression gate fails; `summary.md` is
-included in the artifact. The workflow retains the
-`jsonpath-performance-*` artifact for 30 days. It contains text output, comparison
-JSON, commit/cache provenance, CPU/compiler details, and Criterion HTML reports
-under `criterion/report/`. New master caches also retain environment details so
-later artifacts can include `baseline-environment.txt` beside `environment.txt`.
-The cache supplies future baselines; the artifact retains reports for inspection.
 
-Any workload at least 5% slower is measured again on both master and the current
-revision, on the same runner. CI fails only when the same workload is still at
-least 5% slower in that fresh comparison. A slowdown that disappears passes.
-The comparison action stays report-only; the confirmation gate enforces the
-inclusive 5% threshold. Failed runs do not publish a new baseline. Build failures,
-incorrect results, and missing confirmation measurements also fail.
+The summary and chart use confirmation timings for remeasured workloads; the
+first-pass column preserves their initial same-runner delta. Other workloads use
+the first pass. The summary is generated even when the regression gate fails.
 
-Initial reports remain intact; confirmation output and HTML reports are retained
-under `confirmation/` in the same artifact, including when the gate fails.
-The summary and chart use fresh timings for remeasured workloads; the first-pass
-column preserves their cached-baseline delta. Other workloads retain the saved
-comparison. Hosted-runner timings can still fluctuate, but confirmation no longer
-compares measurements taken on different machines.
-No PR comments or GitHub Pages publishing are enabled.
+The `jsonpath-performance-*` artifact is retained for 30 days. It contains
+`summary.md`, both revisions' text output, comparison JSON, pinned commit details,
+CPU/compiler details, workload lists, and Criterion HTML reports under
+`criterion/report/`. Initial measurements remain intact; confirmation output and
+HTML reports are retained separately under `confirmation/`. Artifacts are for
+inspection, not baselines for future jobs. No PR comments or GitHub Pages
+publishing are enabled.
 
 Run the gate's boundary, rerun, and data-validation tests with:
 

@@ -1,11 +1,11 @@
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 import jsonpath_benchmark_gate
 from jsonpath_benchmark_gate import (
@@ -100,29 +100,20 @@ class BenchmarkGateTests(unittest.TestCase):
         self.assertEqual(read_comparison(path)[1], {})
         self.assertIn("No matching master baseline", render_summary(path))
 
-    def test_master_cache_selection_ignores_prs_and_suite_hash_changes(self):
-        prefix = "jsonpath-baseline-v1-ubuntu-24.04-X64-"
-        master = prefix + "old-suite-hash-0.8.2-100-1"
-        caches = [
-            {"ref": "refs/pull/1661/merge", "key": prefix + "new-suite-hash-0.8.2-300-1"},
-            {"ref": "refs/heads/master", "key": prefix + "master-0.9.0-200-1"},
-            {"ref": "refs/heads/master", "key": master},
-            {"ref": "refs/heads/master", "key": prefix + "master-0.8.2-90-1"},
-        ]
-        with patch("subprocess.check_output", return_value=json.dumps(caches)) as request:
-            self.assertEqual(
-                jsonpath_benchmark_gate.master_baseline_key("RedisJSON/RedisJSON", prefix, "0.8.2"),
-                master,
-            )
-            command = request.call_args.args[0]
-            self.assertEqual(command[command.index("--ref") + 1], "refs/heads/master")
-            self.assertEqual(command[command.index("--sort") + 1], "created_at")
-            self.assertEqual(command[command.index("--order") + 1], "desc")
-        with patch("subprocess.check_output", return_value=json.dumps(caches[:2])):
-            self.assertEqual(
-                jsonpath_benchmark_gate.master_baseline_key("RedisJSON/RedisJSON", prefix, "0.8.2"),
-                "",
-            )
+    def test_shared_workloads_exclude_new_and_removed_benchmarks(self):
+        baseline = Path(self.directory.name) / "master-list.txt"
+        candidate = Path(self.directory.name) / "candidate-list.txt"
+        baseline.write_text("eval/a+b: benchmark\n\ncompile/old: benchmark\n")
+        candidate.write_text("eval/a+b: benchmark\ncompile/new: benchmark\n")
+        pattern = jsonpath_benchmark_gate.shared_workload_filter(baseline, candidate)
+        self.assertIsNotNone(re.fullmatch(pattern, "eval/a+b"))
+        for name in ["eval/ab", "compile/new", "compile/old", "eval/a+b/extra"]:
+            self.assertIsNone(re.fullmatch(pattern, name))
+        for invalid in ["", "eval/a+b", "eval/a+b: benchmark\neval/a+b: benchmark\n",
+                        "compile/unrelated: benchmark\n"]:
+            candidate.write_text(invalid)
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                jsonpath_benchmark_gate.shared_workload_filter(baseline, candidate)
 
     def test_incompatible_units_and_duplicate_workloads_cannot_pass(self):
         path = self.comparison({"small": 105})
@@ -168,6 +159,8 @@ class BenchmarkGateTests(unittest.TestCase):
         first = self.comparison({"slow": 110, "noise": 106, "fast": 80, "stable": 101})
         pending = render_summary(first)
         self.assertIn("Awaiting confirmation", pending)
+        self.assertIn("measured on this runner", pending)
+        self.assertNotIn("saved master", pending)
         summary = render_summary(first, self.comparison({"slow": 105, "noise": 100}))
         self.assertIn("Confirmed ≥5%", summary)
         self.assertIn("Not reproduced", summary)

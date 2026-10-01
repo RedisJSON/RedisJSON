@@ -4,7 +4,6 @@ import argparse
 import json
 import os
 import re
-import subprocess
 from decimal import Decimal
 from html import escape
 from pathlib import Path
@@ -13,19 +12,22 @@ from pathlib import Path
 THRESHOLD = Decimal("5")
 
 
-def master_baseline_key(repository: str, prefix: str, criterion: str) -> str:
-    """Find the newest master cache, including caches with the old suite-hash keys."""
-    caches = json.loads(subprocess.check_output([
-        "gh", "cache", "list", "--repo", repository, "--ref", "refs/heads/master",
-        "--key", prefix, "--sort", "created_at", "--order", "desc",
-        "--limit", "100", "--json", "key,ref",
-    ], text=True))
-    suffix = re.compile(rf"-{re.escape(criterion)}-\d+-\d+$")
-    return next((
-        cache["key"] for cache in caches
-        if cache["ref"] == "refs/heads/master"
-        and cache["key"].startswith(prefix) and suffix.search(cache["key"])
-    ), "")
+def shared_workload_filter(baseline: Path, candidate: Path) -> str:
+    """Select names registered in both revisions' Criterion --list output."""
+    workloads = []
+    for path in (baseline, candidate):
+        lines = [line for line in path.read_text().splitlines() if line]
+        suffix = ": benchmark"
+        if not lines or any(not line.endswith(suffix) for line in lines):
+            raise ValueError(f"Invalid Criterion workload list: {path}")
+        names = {line[:-len(suffix)] for line in lines}
+        if "" in names or len(names) != len(lines):
+            raise ValueError(f"Expected unique, nonempty benchmark names: {path}")
+        workloads.append(names)
+    shared = workloads[0] & workloads[1]
+    if not shared:
+        raise ValueError("No shared workloads to compare")
+    return "^(" + "|".join(re.escape(name) for name in sorted(shared)) + ")$"
 
 
 def read_comparison(path: Path) -> tuple[tuple[str, str], dict[str, Decimal]]:
@@ -142,15 +144,15 @@ def render_summary(comparison: Path, confirmation=None, paths_file=None) -> str:
     if changes:
         suspects = sum(change >= THRESHOLD for change in initial.values())
         lines += [
-            f"Compared **{len(changes)}** workloads against saved master measurements; "
+            f"Compared **{len(changes)}** workloads against master measured on this runner; "
             f"**{len(candidate) - len(changes)}** without a master baseline.",
             "",
             f"**{len(confirmed)} confirmed regressions**, {suspects} initially flagged. "
             "CI fails only when a flagged workload remains at least 5% slower "
             "against freshly measured master on the same runner.",
             "",
-            "Timings and chart use same-runner measurements where available; "
-            "other workloads use the saved master comparison. First pass retains the original delta.",
+            "All comparisons use measurements from this job. Timings and chart use "
+            "confirmation results for remeasured workloads; First pass retains the original delta.",
             "", "### Largest changes", "",
             "Green = faster; red = slower. Each square represents 5 percentage points, capped at 100%.",
             "", f"| Workload |{path_header} Time change | Visual |",
