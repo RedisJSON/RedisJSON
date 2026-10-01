@@ -129,6 +129,16 @@ jobs:
             benchmark-results/master-build.jsonl benchmark-results/candidate-build.jsonl \
             benchmark-results/diagnostics
 
+      - name: Upload native timing diagnostics
+        uses: actions/upload-artifact@v6
+        with:
+          name: jsonpath-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            benchmark-results/diagnostics/
+            benchmark-results/commits.txt
+            benchmark-results/environment.txt
+          retention-days: 30
+
       - name: Measure master on this runner
         env:
           BENCHMARK_FILTER: ${{ steps.workloads.outputs.filter }}
