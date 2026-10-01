@@ -24,7 +24,6 @@ use redis_module::key::{verify_type, KeyFlags, RedisKey, RedisKeyWritable};
 use redis_module::raw::{self as rawmod, RedisModuleKey, Status};
 use redis_module::RedisError;
 use redis_module::{Context, NotifyEvent, RedisResult, RedisString};
-use serde::de::DeserializeSeed;
 use serde::Serialize;
 use serde_json::Number;
 use std::io::Cursor;
@@ -805,7 +804,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                 }
                 let fpha_config = fpha_type.map(FPHAConfig::new_with_type);
                 let result = IValueDeserSeed::new(fpha_config)
-                    .deserialize(&mut deserializer)
+                    .deserialize_with_object_hints(&mut deserializer, val)
                     .map_err(|e| RedisError::String(e.to_string()))?;
                 deserializer
                     .end()
@@ -919,6 +918,27 @@ mod tests {
         let nested = nest_in_objects(&manager(), &keys(&["a b", "c\"d"]), value).unwrap();
         let expected: IValue = serde_json::from_str(r#"{"a b":{"c\"d":1}}"#).unwrap();
         assert_eq!(nested, expected);
+    }
+
+    #[test]
+    fn test_object_hints_preserve_depth_policy() {
+        let _guard = SINGLE_THREAD_TEST_MUTEX.lock().unwrap();
+        let manager = RedisIValueJsonKeyManager {
+            phantom: PhantomData,
+        };
+        let json = format!(
+            "{{\"a\":1,\"b\":2,\"c\":3,\"d\":4,\"nested\":{}0{}}}",
+            "[".repeat(130),
+            "]".repeat(130),
+        );
+        assert!(manager.from_str(&json, Format::JSON, true, None).is_err());
+        let value = manager.from_str(&json, Format::JSON, false, None).unwrap();
+        // Falling back must preserve both depth policy and ordinary allocation.
+        assert_eq!(value.as_object().unwrap().capacity(), 8);
+        assert_eq!(serde_json::to_string(&value).unwrap(), json);
+        assert!(manager
+            .from_str(&(json + " {}"), Format::JSON, false, None)
+            .is_err());
     }
 
     #[test]
