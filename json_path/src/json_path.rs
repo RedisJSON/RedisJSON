@@ -1154,7 +1154,7 @@ fn classify_query<'i>(expr: &Pair<'i, Rule>, empty: &Pairs<'i, Rule>) -> QueryCl
     if matches!(prim.as_rule(), Rule::neg | Rule::pos) {
         return QueryClass::Projection; // unary +/-
     }
-    if inner.next().is_some() {
+    if !inner.is_empty() {
         return QueryClass::Projection; // postfix method or terminal get-keys operator
     }
     match prim.as_rule() {
@@ -2360,7 +2360,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             first
         };
         // Bare terms also use this grammar rule; skip cloning the value when no method follows.
-        let value = if inner.peek().is_none() {
+        let value = if inner.is_empty() {
             self.evaluate_arith_operand(operand, json, calc_data)
         } else {
             self.evaluate_method_chain(operand, inner, json, calc_data)

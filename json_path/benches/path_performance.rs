@@ -14,14 +14,31 @@
 //! Criterion now controls sampling and reports; compilation, evaluation, and
 //! fixture construction remain separate.
 
+use std::fs::OpenOptions;
 use std::hint::black_box;
+use std::io::Write;
 
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use ijson::IValue;
 use json_path::{calc_once_projection, compile, create};
 use serde_json::{json, Value};
 
+// Record the exact generated path outside the timed closure for CI summaries.
+fn record_path(name: &str, path: &str) {
+    let Some(destination) = std::env::var_os("JSONPATH_BENCHMARK_PATHS") else {
+        return;
+    };
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(destination)
+        .expect("open benchmark path metadata");
+    writeln!(file, "{}", json!({"name": name, "path": path}))
+        .expect("write benchmark path metadata");
+}
+
 fn evaluate(c: &mut Criterion, name: &str, path: &str, document: &Value, expected: &Value) {
+    record_path(name, path);
     let document: IValue = serde_json::from_value(document.clone()).unwrap();
     let query = compile(path).unwrap();
     if query.is_projection() {
@@ -64,6 +81,7 @@ fn compile_and_evaluate(
     document: &Value,
     expected: &Value,
 ) {
+    record_path(&format!("compile/{name}"), path);
     c.bench_function(&format!("compile/{name}"), |b| {
         b.iter(|| black_box(compile(black_box(path)).unwrap()));
     });
@@ -186,6 +204,7 @@ fn path_performance(c: &mut Criterion) {
         ("compile/filter", "$.rows[?@.score > $.threshold]"),
     ] {
         assert!(compile(path).is_ok());
+        record_path(name, path);
         c.bench_function(name, |b| {
             b.iter(|| black_box(compile(black_box(path)).unwrap()));
         });
@@ -197,6 +216,7 @@ fn path_performance(c: &mut Criterion) {
             "]".repeat(depth)
         );
         assert!(compile(&path).is_ok(), "{path}");
+        record_path(&format!("compile/nested-{depth}"), &path);
         c.bench_function(&format!("compile/nested-{depth}"), |b| {
             b.iter(|| black_box(compile(black_box(&path)).unwrap()));
         });
@@ -212,6 +232,7 @@ fn path_performance(c: &mut Criterion) {
         }
         let path = format!("$.a[?{before}{inner}{after}]");
         assert!(compile(&path).is_ok(), "{path}");
+        record_path(name, &path);
         c.bench_function(name, |b| {
             b.iter(|| black_box(compile(black_box(&path)).unwrap()));
         });

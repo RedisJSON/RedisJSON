@@ -82,7 +82,7 @@ def confirmed_regressions(first: Path, confirmation: Path) -> list[str]:
     return sorted(name for name in suspects if repeated[name] >= THRESHOLD)
 
 
-def render_summary(comparison: Path, confirmation=None) -> str:
+def render_summary(comparison: Path, confirmation=None, paths_file=None) -> str:
     data = json.loads(comparison.read_text(), parse_float=Decimal, parse_constant=Decimal)
     if len(data["entries"]) != 1:
         raise ValueError("Expected one benchmark suite")
@@ -94,10 +94,27 @@ def render_summary(comparison: Path, confirmation=None) -> str:
         raise ValueError("Cannot confirm without a baseline")
     confirmed = set(confirmed_regressions(comparison, confirmation)) if confirmation else set()
     repeated = read_comparison(confirmation)[1] if confirmation else {}
+    initial = changes
+    changes = {name: repeated.get(name, change) for name, change in initial.items()}
     baseline = {b["name"]: b for b in entries[0]["benches"]} if changes else {}
     candidate = entries[-1]["benches"]
+    if confirmation:
+        fresh = next(iter(json.loads(confirmation.read_text(), parse_float=Decimal)["entries"].values()))
+        baseline.update({b["name"]: b for b in fresh[0]["benches"]})
+        fresh_candidate = {b["name"]: b for b in fresh[1]["benches"]}
+        candidate = [fresh_candidate.get(b["name"], b) for b in candidate]
     if not candidate or len({b["name"] for b in candidate}) != len(candidate):
         raise ValueError("Expected unique, nonempty candidate workloads")
+    paths = {}
+    if paths_file is not None:
+        for line in paths_file.read_text().splitlines():
+            entry = json.loads(line)
+            name, path = entry["name"], entry["path"]
+            if not isinstance(name, str) or not isinstance(path, str) or name in paths:
+                raise ValueError("Expected unique benchmark names and JSONPath strings")
+            paths[name] = path
+        if any(bench["name"] not in paths for bench in candidate):
+            raise ValueError("Missing JSONPath metadata for a candidate workload")
 
     def label(text):
         return escape(text).replace("|", "&#124;").replace("`", "&#96;").replace("\n", " ")
@@ -106,31 +123,49 @@ def render_summary(comparison: Path, confirmation=None) -> str:
         value = Decimal(bench["value"])
         if not value.is_finite() or value < 0:
             raise ValueError("Invalid candidate timing")
-        return f'{value:,.2f} {label(bench["unit"])}'
+        unit = bench["unit"]
+        if unit == "ns/iter":
+            for scale, scaled_unit in [(10**9, "s/iter"), (10**6, "ms/iter"), (10**3, "µs/iter")]:
+                if value >= scale:
+                    value /= scale
+                    unit = scaled_unit
+                    break
+        return f'{value:,.2f} {label(unit)}'
+
+    def path_cell(name):
+        return f" <code>{label(paths[name])}</code> |" if paths_file is not None else ""
+
+    path_header = " JSONPath |" if paths_file is not None else ""
+    path_separator = " --- |" if paths_file is not None else ""
 
     lines = ["## JSONPath benchmark results", "", f"Measured **{len(candidate)} workloads**.", ""]
     if changes:
-        suspects = sum(change >= THRESHOLD for change in changes.values())
+        suspects = sum(change >= THRESHOLD for change in initial.values())
         lines += [
             f"Compared **{len(changes)}** workloads against saved master measurements; "
             f"**{len(candidate) - len(changes)}** without a master baseline.",
             "",
             f"**{len(confirmed)} confirmed regressions**, {suspects} initially flagged. "
-            "CI fails only when the same workload is at least 5% slower in both runs.",
+            "CI fails only when a flagged workload remains at least 5% slower "
+            "against freshly measured master on the same runner.",
+            "",
+            "Timings and chart use same-runner measurements where available; "
+            "other workloads use the saved master comparison. First pass retains the original delta.",
             "", "### Largest changes", "",
             "Green = faster; red = slower. Each square represents 5 percentage points, capped at 100%.",
-            "", "| Workload | Time change | Visual |", "| --- | ---: | --- |",
+            "", f"| Workload |{path_header} Time change | Visual |",
+            f"| --- |{path_separator} ---: | --- |",
         ]
         for name in sorted(changes, key=lambda n: abs(changes[n]), reverse=True)[:8]:
             change = changes[name]
             bar = ("🟥" if change > 0 else "🟩") * min(20, int(abs(change) / THRESHOLD)) or "·"
-            lines.append(f"| `{label(name)}` | {change:+.2f}% | {bar} |")
+            lines.append(f"| `{label(name)}` |{path_cell(name)} {change:+.2f}% | {bar} |")
     else:
         lines += ["No matching master baseline: measurements only; no regression comparison yet."]
     lines += [
         "", f"<details><summary>All {len(candidate)} workloads</summary>", "",
-        "| Workload | Baseline | Candidate | Time change | Confirmation | Status |",
-        "| --- | ---: | ---: | ---: | ---: | --- |",
+        f"| Workload |{path_header} Baseline | Candidate | Time change | First pass | Status |",
+        f"| --- |{path_separator} ---: | ---: | ---: | ---: | --- |",
     ]
     for bench in sorted(candidate, key=lambda b: b["name"]):
         name = bench["name"]
@@ -139,7 +174,7 @@ def render_summary(comparison: Path, confirmation=None) -> str:
             status = "ℹ️ No master baseline"
         elif name in confirmed:
             status = "❌ Confirmed ≥5%"
-        elif change >= THRESHOLD:
+        elif initial[name] >= THRESHOLD:
             status = "✅ Not reproduced" if confirmation else "⚠️ Awaiting confirmation"
         elif change <= -THRESHOLD:
             status = "🟢 Faster"
@@ -147,8 +182,8 @@ def render_summary(comparison: Path, confirmation=None) -> str:
             status = "⚪ Within 5%"
         before = timing(baseline[name]) if name in baseline else "—"
         delta = f"{change:+.2f}%" if change is not None else "—"
-        repeat = f"{repeated[name]:+.2f}%" if name in repeated else "—"
-        lines.append(f"| `{label(name)}` | {before} | {timing(bench)} | {delta} | {repeat} | {status} |")
+        first = f"{initial[name]:+.2f}%" if name in repeated else "—"
+        lines.append(f"| `{label(name)}` |{path_cell(name)} {before} | {timing(bench)} | {delta} | {first} | {status} |")
     lines += ["", "</details>", "", "Criterion HTML reports and raw measurements are available in the job artifact."]
     return "\n".join(lines) + "\n"
 
@@ -158,9 +193,10 @@ def main() -> int:
     parser.add_argument("comparison", type=Path)
     parser.add_argument("--confirmation", type=Path)
     parser.add_argument("--summary", action="store_true", help="Render a job summary without applying the gate")
+    parser.add_argument("--paths-file", type=Path, help="Benchmark JSONPath metadata in JSON Lines format")
     args = parser.parse_args()
     if args.summary:
-        message = render_summary(args.comparison, args.confirmation)
+        message = render_summary(args.comparison, args.confirmation, args.paths_file)
         status = 0
     elif args.confirmation:
         confirmed = confirmed_regressions(args.comparison, args.confirmation)
