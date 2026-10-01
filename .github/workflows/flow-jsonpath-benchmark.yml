@@ -96,6 +96,8 @@ jobs:
         run: |
           cargo bench -p json_path --bench path_performance --locked -- --list --format terse \
             > benchmark-results/candidate-list.txt
+          cargo bench -p json_path --bench path_performance --locked --no-run --message-format=json \
+            > benchmark-results/candidate-build.jsonl
           (
             cd benchmark-master
             CARGO_TARGET_DIR="$GITHUB_WORKSPACE/benchmark-master-target" \
@@ -118,7 +120,14 @@ jobs:
           cp json_path/benches/path_performance.rs benchmark-master/json_path/benches/path_performance.rs
           cd benchmark-master
           CARGO_TARGET_DIR="$GITHUB_WORKSPACE/benchmark-master-target" \
-            cargo bench -p json_path --bench path_performance --locked --no-run
+            cargo bench -p json_path --bench path_performance --locked --no-run --message-format=json \
+            > ../benchmark-results/master-build.jsonl
+
+      - name: Diagnose native timing drift and run order
+        run: |
+          python3 .github/scripts/jsonpath_benchmark_diagnostics.py \
+            benchmark-results/master-build.jsonl benchmark-results/candidate-build.jsonl \
+            benchmark-results/diagnostics
 
       - name: Measure master on this runner
         env:

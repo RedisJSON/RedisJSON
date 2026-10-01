@@ -107,6 +107,25 @@ a 90-minute timeout for both builds, both full measurement passes, and any flagg
 workload reruns. Both builds finish before measurements start. The comparison
 action stays report-only; the Python confirmation gate controls failure.
 
+### Native timing investigation
+
+The workflow currently runs additional diagnostics before the full measurements
+to investigate platform-dependent regressions in `eval/simple`, `eval/deep-field`,
+`eval/projection-function`, and `eval/filter-and`. At both 100 and 500 samples it
+runs **master, PR, PR, master** twice, using the already-built executables. Warmup
+remains 3 seconds and measurement time 5 seconds. The binary hashes, individual
+logs, raw Criterion samples, and unrounded median estimates are retained under
+`diagnostics/` in the job artifact.
+
+The diagnostic summary separates PR/master comparisons by run order and reports
+changes between successive runs of each identical binary. Same-binary changes
+reveal measurement drift; order-dependent PR/master changes suggest a timing bias.
+Neither establishes that a particular code change is harmless. These diagnostics
+do not change the existing 5% gate or its inputs. They are investigation work and
+add roughly 10 minutes; remove them when native runner behavior is understood.
+
+### Results and artifacts
+
 GitHub Actions displays colored bars for the largest time changes and a collapsible
 table of every workload's baseline, candidate, percentage change, first-pass delta,
 and status. Missing baselines are explicitly reported without claiming a comparison.
