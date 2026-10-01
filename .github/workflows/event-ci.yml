@@ -92,3 +92,9 @@ jobs:
       redis-ref: ${{needs.prepare-values.outputs.redis-ref}}
       os: ubuntu-latest
     secrets: inherit
+
+  memory-comparison:
+    needs: [prepare-values]
+    uses: ./.github/workflows/flow-memory-comparison.yml
+    with:
+      redis-ref: ${{ needs.prepare-values.outputs.redis-ref }}

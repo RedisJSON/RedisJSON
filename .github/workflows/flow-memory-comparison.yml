@@ -1,0 +1,119 @@
+name: Memory and SET comparison against master
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      redis-ref:
+        type: string
+        default: unstable
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          path: current
+
+      - name: Initialize downloadable report
+        run: |
+          mkdir -p report
+          echo '# Comparison incomplete — see build/setup logs in this artifact.' > report/report.md
+
+      - name: Checkout master baseline
+        uses: actions/checkout@v5
+        with:
+          repository: RedisJSON/RedisJSON
+          ref: master
+          submodules: recursive
+          path: baseline
+
+      - name: Checkout shared Redis server
+        uses: actions/checkout@v5
+        with:
+          repository: redis/redis
+          ref: ${{ inputs.redis-ref || 'unstable' }}
+          path: redis
+
+      - name: Install build and test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang libclang-dev pkg-config libssl-dev
+          python3 -m venv venv
+          venv/bin/pip install -r current/tests/pytest/requirements.txt
+
+      - name: Record exact revisions
+        run: |
+          for tree in current baseline redis; do
+            git -C "$tree" rev-parse HEAD > "report/$tree-commit.txt"
+          done
+          rustc --version > report/toolchain.txt
+          cargo --version >> report/toolchain.txt
+          uname -a >> report/toolchain.txt
+          cp current/Cargo.lock report/current-Cargo.lock
+          cp baseline/Cargo.lock report/master-Cargo.lock
+          cp current/Cargo.toml report/current-Cargo.toml
+          cp baseline/Cargo.toml report/master-Cargo.toml
+
+      - name: Build shared Redis server
+        run: make -C redis -j2 > report/redis-build.log 2>&1
+
+      - name: Build master baseline
+        continue-on-error: true
+        run: cargo build --locked --release -p redis_json --manifest-path baseline/Cargo.toml > report/master-build.log 2>&1
+
+      - name: Build current branch
+        continue-on-error: true
+        run: cargo build --locked --release -p redis_json --manifest-path current/Cargo.toml > report/current-build.log 2>&1
+
+      - name: Download pinned City fixture
+        continue-on-error: true
+        run: |
+          curl --fail --location --retry 3 --max-time 300 \
+            https://raw.githubusercontent.com/zemirco/sf-city-lots-json/33c27c137784a96d0fbd7f329dceda6cc7f49fa3/citylots.json \
+            --output citylots.json
+          echo 'https://github.com/zemirco/sf-city-lots-json/tree/33c27c137784a96d0fbd7f329dceda6cc7f49fa3' > report/city-source.txt
+          sha256sum citylots.json > report/city-sha256.txt
+
+      - name: Measure memory and replacement SETs
+        continue-on-error: true
+        run: |
+          venv/bin/python current/tests/pytest/memory_comparison.py \
+            --redis-server "$GITHUB_WORKSPACE/redis/src/redis-server" \
+            --master-module "$GITHUB_WORKSPACE/baseline/target/release/librejson.so" \
+            --current-module "$GITHUB_WORKSPACE/current/target/release/librejson.so" \
+            --city "$GITHUB_WORKSPACE/citylots.json" \
+            --output "$GITHUB_WORKSPACE/report" > report/measurement.log 2>&1
+
+      - name: Upload comparison report
+        id: report-artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: memory-performance-comparison-${{ github.run_id }}
+          path: report/
+          retention-days: 30
+
+      - name: Publish summary
+        if: always()
+        env:
+          ARTIFACT_URL: ${{ steps.report-artifact.outputs.artifact-url }}
+        run: |
+          if [ -f report/report.md ]; then
+            cat report/report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            mkdir -p report
+            echo 'Comparison could not start. See workflow logs.' > report/report.md
+            cat report/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ -n "$ARTIFACT_URL" ]; then
+            printf '\n[Download full report](%s)\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+          fi
