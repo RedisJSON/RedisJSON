@@ -147,7 +147,7 @@ pub fn is_equal<T1: SelectValue, T2: SelectValue>(a: &T1, b: &T2) -> bool {
                 .get_double()
                 .zip(b.get_double())
                 .is_some_and(|(x, y)| x == y),
-            SelectValueType::String => a.get_str().zip(b.get_str()).is_some_and(|(x, y)| x == y),
+            SelectValueType::String => a.as_str().zip(b.as_str()).is_some_and(|(x, y)| x == y),
             SelectValueType::Array => match (a.len(), b.len()) {
                 (Some(alen), Some(blen)) if alen == blen => match (a.values(), b.values()) {
                     (Some(ait), Some(bit)) => {

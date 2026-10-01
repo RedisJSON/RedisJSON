@@ -5,6 +5,7 @@ import json
 import os
 import re
 from decimal import Decimal
+from html import escape
 from pathlib import Path
 
 
@@ -61,12 +62,84 @@ def confirmed_regressions(first: Path, confirmation: Path) -> list[str]:
     return sorted(name for name in suspects if repeated[name] >= THRESHOLD)
 
 
+def render_summary(comparison: Path, confirmation=None) -> str:
+    data = json.loads(comparison.read_text(), parse_float=Decimal, parse_constant=Decimal)
+    if len(data["entries"]) != 1:
+        raise ValueError("Expected one benchmark suite")
+    entries = next(iter(data["entries"].values()))
+    if len(entries) not in (1, 2):
+        raise ValueError("Expected candidate, optionally preceded by baseline")
+    changes = read_comparison(comparison)[1] if len(entries) == 2 else {}
+    if confirmation and not changes:
+        raise ValueError("Cannot confirm without a baseline")
+    confirmed = set(confirmed_regressions(comparison, confirmation)) if confirmation else set()
+    repeated = read_comparison(confirmation)[1] if confirmation else {}
+    baseline = {b["name"]: b for b in entries[0]["benches"]} if changes else {}
+    candidate = entries[-1]["benches"]
+    if not candidate or len({b["name"] for b in candidate}) != len(candidate):
+        raise ValueError("Expected unique, nonempty candidate workloads")
+
+    def label(text):
+        return escape(text).replace("|", "&#124;").replace("`", "&#96;").replace("\n", " ")
+
+    def timing(bench):
+        value = Decimal(bench["value"])
+        if not value.is_finite() or value < 0:
+            raise ValueError("Invalid candidate timing")
+        return f'{value:,.2f} {label(bench["unit"])}'
+
+    lines = ["## JSONPath benchmark results", "", f"Measured **{len(candidate)} workloads**.", ""]
+    if changes:
+        suspects = sum(change >= THRESHOLD for change in changes.values())
+        lines += [
+            f"**{len(confirmed)} confirmed regressions**, {suspects} initially flagged. "
+            "CI fails only when the same workload is at least 5% slower in both runs.",
+            "", "### Largest changes", "",
+            "Green = faster; red = slower. Each square represents 5 percentage points, capped at 100%.",
+            "", "| Workload | Time change | Visual |", "| --- | ---: | --- |",
+        ]
+        for name in sorted(changes, key=lambda n: abs(changes[n]), reverse=True)[:8]:
+            change = changes[name]
+            bar = ("🟥" if change > 0 else "🟩") * min(20, int(abs(change) / THRESHOLD)) or "·"
+            lines.append(f"| `{label(name)}` | {change:+.2f}% | {bar} |")
+    else:
+        lines += ["No compatible baseline: measurements only; no regression comparison yet."]
+    lines += [
+        "", f"<details><summary>All {len(candidate)} workloads</summary>", "",
+        "| Workload | Baseline | Candidate | Time change | Confirmation | Status |",
+        "| --- | ---: | ---: | ---: | ---: | --- |",
+    ]
+    for bench in sorted(candidate, key=lambda b: b["name"]):
+        name = bench["name"]
+        change = changes.get(name)
+        if change is None:
+            status = "ℹ️ Baseline only"
+        elif name in confirmed:
+            status = "❌ Confirmed ≥5%"
+        elif change >= THRESHOLD:
+            status = "✅ Not reproduced" if confirmation else "⚠️ Awaiting confirmation"
+        elif change <= -THRESHOLD:
+            status = "🟢 Faster"
+        else:
+            status = "⚪ Within 5%"
+        before = timing(baseline[name]) if name in baseline else "—"
+        delta = f"{change:+.2f}%" if change is not None else "—"
+        repeat = f"{repeated[name]:+.2f}%" if name in repeated else "—"
+        lines.append(f"| `{label(name)}` | {before} | {timing(bench)} | {delta} | {repeat} | {status} |")
+    lines += ["", "</details>", "", "Criterion HTML reports and raw measurements are available in the job artifact."]
+    return "\n".join(lines) + "\n"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("comparison", type=Path)
     parser.add_argument("--confirmation", type=Path)
+    parser.add_argument("--summary", action="store_true", help="Render a job summary without applying the gate")
     args = parser.parse_args()
-    if args.confirmation:
+    if args.summary:
+        message = render_summary(args.comparison, args.confirmation)
+        status = 0
+    elif args.confirmation:
         confirmed = confirmed_regressions(args.comparison, args.confirmation)
         message = (
             "Confirmed slowdown of at least 5%: " + ", ".join(confirmed)

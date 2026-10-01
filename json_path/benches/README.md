@@ -14,9 +14,9 @@ measured.
 
 ## Coverage
 
-The suite contains 72 benchmarks. Each of the 27 path forms below has separate
+The suite contains 81 benchmarks. Each of the 28 path forms below has separate
 `compile/<name>` and `eval/<name>` measurements with an expected-result assertion.
-The original 18 workloads cover nested-filter compilation, recursive searches,
+The other 25 workloads cover nested-filter compilation, recursive searches,
 existence tests, root-relative comparisons, string membership/equality, and regexes.
 
 | Path form | Examples |
@@ -26,7 +26,7 @@ existence tests, root-relative comparisons, string membership/equality, and rege
 | Wildcards | `$.metrics.*`, `$.numbers[*]` |
 | Negative index and slices | `$.numbers[-1]`, `[8:24]`, `[-8:]`, `[::4]` |
 | Unions, including duplicate results | `$.numbers[3,0,3]`, `$.metrics['c','a','c']` |
-| Logical filters | `&&`, `\|\|`, `!` over 256 rows with matching and nonmatching candidates |
+| Logical filters | `&&`, `\|\|`, `!`, parenthesized groups over 256 rows with matching and nonmatching candidates |
 | Arithmetic/function filters | `(@.score + 1) * 2 >= 510`, `length(@.name) == 5` |
 | Projections | Arithmetic, `length()`, `.first().length()`, `.sum()`, `~`, `.append()`, missing operands |
 
@@ -35,6 +35,21 @@ timed routine via Criterion's batched setup. Path benchmarks use the reusable
 calculator. Both include result cleanup in the measured time. All fixtures use
 `IValue`. Coverage is representative of these forms, not every function, operator,
 or input shape.
+
+The CI job runs the entire target without a workload filter on its first pass.
+These cases cover the syntax affected by the evaluator and grammar optimizations:
+
+| Optimized behavior | Benchmark cases and syntax |
+| --- | --- |
+| Factored nested grammar | `compile/nested-{7,8,9}` for nested existence filters; `compile/nested-{grouped,comparison,arithmetic}-9` for `(@.path)`, `(@.path > 0)`, and `(@.path) > 0` |
+| Grouped filter evaluation | `compile/filter-grouped`, `eval/filter-grouped`: `[?(@.score >= 128 && @.active == true)]` |
+| Lazy object traversal | `eval/recursive-objects`, `eval/recursive-no-match`, `eval/object-wildcard`: `$..uid`, `$..absent`, `$.metrics.*` |
+| Existence early exit | `eval/existence-{early-match,no-match}`: `[?@..flag]`, `[?@..absent]` |
+| Root cache and its boundaries | `eval/root-{scalar,descendant-list,descendant-sum,single-candidate}`: `[?@.score > $.threshold]`, root descendant lists and `.sum()`; `eval/root-existence`, `eval/root-existence-missing`: `[?$.thresholds..limit]`, `[?$.thresholds..absent]` |
+| Single-use projections | `eval/projection-{arithmetic,aggregate,method-chain,nothing}` guard against caching/dispatch overhead outside repeated filters |
+| Regex cache modes | `eval/regex-search-cache`, `eval/regex-search-function`, `eval/regex-match-cache`: `=~`, `search()`, `match()` |
+| Borrowed string comparisons | `eval/string-membership`, `eval/deep-string-equality`: `in`, equality of objects containing strings |
+| Result buffer | `eval/simple`, `eval/array-wildcard`, `eval/recursive-objects` cover small and large selections |
 
 ## Comparing revisions
 
@@ -50,6 +65,7 @@ cargo bench -p json_path --bench path_performance -- --baseline main
 
 Use the same benchmark source, Rust toolchain, and machine for both revisions.
 When using separate worktrees, set `CRITERION_HOME` to the same absolute directory.
+Keep their Cargo build directories separate; only share the Criterion measurements.
 Both revisions need the Criterion harness. For a quick correctness check without
 timing, run `cargo test -p json_path --bench path_performance`.
 
@@ -82,7 +98,11 @@ Criterion's default warmup and measurement periods remain unchanged. The job has
 a 60-minute timeout for building, measuring, and any confirmation reruns;
 only flagged workloads are rerun.
 
-GitHub Actions displays a comparison table in the job summary and retains the
+GitHub Actions displays colored bars for the largest time changes and a collapsible
+table of every workload's baseline, candidate, percentage change, confirmation,
+and status. Missing baselines are explicitly reported without claiming a comparison.
+The summary is still generated when the regression gate fails; `summary.md` is
+included in the artifact. The workflow retains the
 `jsonpath-performance-*` artifact for 30 days. It contains text output, comparison
 JSON, commit/cache provenance, and Criterion HTML reports under `criterion/report/`.
 The cache supplies future baselines; the artifact retains reports for inspection.

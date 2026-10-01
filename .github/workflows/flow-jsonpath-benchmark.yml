@@ -111,6 +111,7 @@ jobs:
             --save-baseline saved --output-format bencher | tee benchmark-results/candidate.txt
 
       - name: Report changes
+        id: measurements
         uses: benchmark-action/github-action-benchmark@52576c92bccf6ac60c8223ec7eb2565637cae9ba # v1.22.1
         with:
           name: JSONPath
@@ -119,7 +120,7 @@ jobs:
           external-data-json-path: benchmark-results/comparison.json
           github-token: ${{ github.token }}
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          summary-always: true
+          summary-always: false
           fail-on-alert: false
 
       - name: Select workloads for confirmation
@@ -155,6 +156,7 @@ jobs:
             | tee benchmark-results/confirmation/candidate.txt
 
       - name: Report confirmation
+        id: confirmation
         if: steps.regressions.outputs.filter != ''
         uses: benchmark-action/github-action-benchmark@52576c92bccf6ac60c8223ec7eb2565637cae9ba # v1.22.1
         with:
@@ -164,7 +166,7 @@ jobs:
           external-data-json-path: benchmark-results/confirmation/comparison.json
           github-token: ${{ github.token }}
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          summary-always: true
+          summary-always: false
           fail-on-alert: false
 
       - name: Fail confirmed regressions
@@ -172,6 +174,18 @@ jobs:
         run: |
           python3 .github/scripts/jsonpath_benchmark_gate.py benchmark-results/comparison.json \
             --confirmation benchmark-results/confirmation/comparison.json
+
+      - name: Write benchmark job summary
+        if: always() && steps.measurements.outcome == 'success'
+        env:
+          CONFIRMATION_AVAILABLE: ${{ steps.confirmation.outcome == 'success' }}
+        run: |
+          confirmation=()
+          if [[ "$CONFIRMATION_AVAILABLE" == 'true' ]]; then
+            confirmation=(--confirmation benchmark-results/confirmation/comparison.json)
+          fi
+          python3 .github/scripts/jsonpath_benchmark_gate.py benchmark-results/comparison.json \
+            --summary "${confirmation[@]}" | tee benchmark-results/summary.md
 
       - name: Prepare measurements for future runs
         run: |

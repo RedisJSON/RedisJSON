@@ -10,6 +10,7 @@ from jsonpath_benchmark_gate import (
     confirmed_regressions,
     read_comparison,
     regression_filter,
+    render_summary,
 )
 
 
@@ -114,6 +115,46 @@ class BenchmarkGateTests(unittest.TestCase):
                     capture_output=True,
                 )
                 self.assertEqual(result.returncode, expected, result.stderr)
+
+    def test_summary_distinguishes_confirmed_unconfirmed_and_faster_results(self):
+        first = self.comparison({"slow": 110, "noise": 106, "fast": 80, "stable": 101})
+        pending = render_summary(first)
+        self.assertIn("Awaiting confirmation", pending)
+        summary = render_summary(first, self.comparison({"slow": 105, "noise": 100}))
+        self.assertIn("Confirmed ≥5%", summary)
+        self.assertIn("Not reproduced", summary)
+        self.assertIn("-20.00%", summary)
+        self.assertIn("🟩🟩🟩🟩", summary)
+        self.assertIn("Within 5%", summary)
+        self.assertIn("All 4 workloads", summary)
+
+    def test_summary_without_baseline_does_not_claim_a_comparison(self):
+        path = self.comparison({"eval/a|b": 123})
+        data = json.loads(path.read_text())
+        data["entries"]["JSONPath"] = data["entries"]["JSONPath"][-1:]
+        path.write_text(json.dumps(data))
+        summary = render_summary(path)
+        self.assertIn("No compatible baseline", summary)
+        self.assertIn("Baseline only", summary)
+        self.assertIn("123.00 ns/iter", summary)
+        self.assertIn("eval/a&#124;b", summary)
+        self.assertNotIn("Confirmed", summary)
+        with self.assertRaises(ValueError):
+            render_summary(path, self.comparison({"eval/a|b": 125}))
+
+    def test_summary_cli_writes_job_summary_without_changing_gate_result(self):
+        script = Path(__file__).with_name("jsonpath_benchmark_gate.py")
+        summary = Path(self.directory.name) / "summary"
+        result = subprocess.run(
+            [sys.executable, str(script), str(self.comparison({"slow": 110})),
+             "--summary", "--confirmation", str(self.comparison({"slow": 111}))],
+            env={**os.environ, "GITHUB_STEP_SUMMARY": str(summary)},
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Confirmed ≥5%", summary.read_text())
+        self.assertEqual(result.stdout.strip(), summary.read_text().strip())
 
 
 if __name__ == "__main__":

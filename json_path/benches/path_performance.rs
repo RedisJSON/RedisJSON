@@ -129,6 +129,11 @@ fn path_forms(c: &mut Criterion) {
             json!([0, 1, 254, 255]),
         ),
         (
+            "filter-grouped",
+            "$.rows[?(@.score >= 128 && @.active == true)].uid",
+            json!((128..256).step_by(2).collect::<Vec<_>>()),
+        ),
+        (
             "filter-not",
             "$.rows[?!(@.active == true)].uid",
             json!((1..256).step_by(2).collect::<Vec<_>>()),
@@ -196,6 +201,21 @@ fn path_performance(c: &mut Criterion) {
             b.iter(|| black_box(compile(black_box(&path)).unwrap()));
         });
     }
+    for (name, before, after) in [
+        ("compile/nested-grouped-9", "(", ")"),
+        ("compile/nested-comparison-9", "(", " > 0)"),
+        ("compile/nested-arithmetic-9", "(", ") > 0"),
+    ] {
+        let mut inner = "@.flag".to_owned();
+        for _ in 0..8 {
+            inner = format!("@.a[?{before}{inner}{after}]");
+        }
+        let path = format!("$.a[?{before}{inner}{after}]");
+        assert!(compile(&path).is_ok(), "{path}");
+        c.bench_function(name, |b| {
+            b.iter(|| black_box(compile(black_box(&path)).unwrap()));
+        });
+    }
 
     let document = tree(4);
     evaluate(
@@ -243,6 +263,27 @@ fn path_performance(c: &mut Criterion) {
         "$.rows[?@.score > $.threshold].uid",
         &document,
         &json!((129..256).collect::<Vec<_>>()),
+    );
+    evaluate(
+        c,
+        "eval/root-single-candidate",
+        "$.rows[?@.score > $.threshold].uid",
+        &json!({"threshold": 128, "rows": [{"score": 129, "uid": 129}]}),
+        &json!([129]),
+    );
+    evaluate(
+        c,
+        "eval/root-existence",
+        "$.rows[?$.thresholds..limit].uid",
+        &document,
+        &json!((0..256).collect::<Vec<_>>()),
+    );
+    evaluate(
+        c,
+        "eval/root-existence-missing",
+        "$.rows[?$.thresholds..absent].uid",
+        &document,
+        &json!([]),
     );
     evaluate(
         c,
@@ -307,6 +348,13 @@ fn path_performance(c: &mut Criterion) {
         c,
         "eval/regex-match-cache",
         r#"$.rows[?match(@.name, "(?:customer|operator)-[0-9]+-active")].uid"#,
+        &document,
+        &expected,
+    );
+    evaluate(
+        c,
+        "eval/regex-search-function",
+        r#"$.rows[?search(@.name, "(?:customer|operator)-[0-9]+-active")].uid"#,
         &document,
         &expected,
     );
