@@ -4,12 +4,28 @@ import argparse
 import json
 import os
 import re
+import subprocess
 from decimal import Decimal
 from html import escape
 from pathlib import Path
 
 
 THRESHOLD = Decimal("5")
+
+
+def master_baseline_key(repository: str, prefix: str, criterion: str) -> str:
+    """Find the newest master cache, including caches with the old suite-hash keys."""
+    caches = json.loads(subprocess.check_output([
+        "gh", "cache", "list", "--repo", repository, "--ref", "refs/heads/master",
+        "--key", prefix, "--sort", "created_at", "--order", "desc",
+        "--limit", "100", "--json", "key,ref",
+    ], text=True))
+    suffix = re.compile(rf"-{re.escape(criterion)}-\d+-\d+$")
+    return next((
+        cache["key"] for cache in caches
+        if cache["ref"] == "refs/heads/master"
+        and cache["key"].startswith(prefix) and suffix.search(cache["key"])
+    ), "")
 
 
 def read_comparison(path: Path) -> tuple[tuple[str, str], dict[str, Decimal]]:
@@ -32,16 +48,20 @@ def read_comparison(path: Path) -> tuple[tuple[str, str], dict[str, Decimal]]:
     ):
         raise ValueError("Duplicate benchmark names")
     baseline, candidate = measurements
-    if not baseline or baseline.keys() != candidate.keys():
-        raise ValueError("Baseline and candidate workloads must match")
+    if not baseline or not candidate:
+        raise ValueError("Baseline and candidate workloads must be nonempty")
+    for values in measurements:
+        for name, bench in values.items():
+            value = Decimal(bench["value"])
+            if not value.is_finite() or value < 0 or (values is baseline and value == 0):
+                raise ValueError(f"Invalid timing for {name}")
     changes = {}
-    for name, before in baseline.items():
+    for name in baseline.keys() & candidate.keys():
+        before = baseline[name]
         after = candidate[name]
         if before["unit"] != after["unit"]:
             raise ValueError(f"Measurement units differ for {name}")
         old, new = Decimal(before["value"]), Decimal(after["value"])
-        if not old.is_finite() or not new.is_finite() or old <= 0 or new < 0:
-            raise ValueError(f"Invalid timing for {name}")
         changes[name] = (new / old - 1) * 100
     return commits, changes
 
@@ -92,6 +112,9 @@ def render_summary(comparison: Path, confirmation=None) -> str:
     if changes:
         suspects = sum(change >= THRESHOLD for change in changes.values())
         lines += [
+            f"Compared **{len(changes)}** workloads against saved master measurements; "
+            f"**{len(candidate) - len(changes)}** without a master baseline.",
+            "",
             f"**{len(confirmed)} confirmed regressions**, {suspects} initially flagged. "
             "CI fails only when the same workload is at least 5% slower in both runs.",
             "", "### Largest changes", "",
@@ -103,7 +126,7 @@ def render_summary(comparison: Path, confirmation=None) -> str:
             bar = ("🟥" if change > 0 else "🟩") * min(20, int(abs(change) / THRESHOLD)) or "·"
             lines.append(f"| `{label(name)}` | {change:+.2f}% | {bar} |")
     else:
-        lines += ["No compatible baseline: measurements only; no regression comparison yet."]
+        lines += ["No matching master baseline: measurements only; no regression comparison yet."]
     lines += [
         "", f"<details><summary>All {len(candidate)} workloads</summary>", "",
         "| Workload | Baseline | Candidate | Time change | Confirmation | Status |",
@@ -113,7 +136,7 @@ def render_summary(comparison: Path, confirmation=None) -> str:
         name = bench["name"]
         change = changes.get(name)
         if change is None:
-            status = "ℹ️ Baseline only"
+            status = "ℹ️ No master baseline"
         elif name in confirmed:
             status = "❌ Confirmed ≥5%"
         elif change >= THRESHOLD:
@@ -156,7 +179,9 @@ def main() -> int:
         message = (
             "Rerunning workloads with slowdowns of at least 5%."
             if pattern
-            else "No workloads reached the 5% slowdown threshold."
+            else "No compared workloads reached the 5% slowdown threshold."
+            if changes
+            else "No matching master workloads; measurements only."
         )
         status = 0
     print(message)

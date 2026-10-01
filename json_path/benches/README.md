@@ -75,23 +75,27 @@ Non-draft, non-documentation-only PRs benchmark only the PR head. Pushes to
 `master` also run the suite to publish shared baselines. These benchmarks do not
 run in the nightly workflow. CI never checks out or rebuilds the base revision.
 
-Each successful run saves Criterion's measurements and a single-run benchmark
-JSON report using GitHub Actions' cache. The next run restores the latest accessible
-compatible cache: a previous run of the same PR, or a cache from its target/default
-branch. PR caches are scoped to that PR and cannot become another PR's baseline.
-The summary identifies the actual saved commit and cache key; this is not
-necessarily the PR's base SHA.
+Only successful pushes to `master` publish baseline caches. Every run selects the
+newest compatible cache explicitly from `refs/heads/master`, then restores its
+exact key. PR measurements remain in artifacts and never replace the baseline.
+The summary identifies the saved master commit and cache key; this is the latest
+available measurement, not necessarily the current master tip or PR's base SHA.
 
-The cache key includes the Ubuntu runner version and architecture, benchmark
-source, Rust toolchain file, Criterion version, and this workflow. Changes to
-production code or dependencies other than Criterion do not reset the baseline.
-When no compatible cache exists, CI measures and saves results without applying
-the slowdown gate. The same happens when the saved commit equals the current
-commit. Adding or changing benchmarks starts a fresh baseline for the suite.
-GitHub may evict caches; a cache miss safely starts a new baseline again.
+Cache selection matches the Ubuntu runner version, architecture, and Criterion
+version. It also accepts existing master caches created with the old suite-hash
+keys. Benchmark additions and workflow/reporting edits no longer discard existing
+measurements. Workloads with matching names are compared; new or renamed workloads
+are marked **No master baseline** until measured on master. Names must change when
+fixtures or measured operations change; see below. Compiler and production
+dependency changes are included in the comparison.
+
+If no master cache exists (including after eviction), or the saved commit equals
+the candidate, CI reports measurements without applying the slowdown gate. PRs
+cannot seed a shared baseline; the next successful master run does that.
 
 Criterion runs with `--save-baseline saved`: it compares against restored
-measurements when present, then saves the current measurements for future runs.
+measurements when present, then saves the current measurements in the job artifact.
+Only successful master runs also publish them as future baselines.
 Confirmation runs use a separate copy of the original saved baseline.
 
 Criterion's default warmup and measurement periods remain unchanged. The job has
@@ -132,8 +136,10 @@ python3 -m unittest discover -s .github/scripts -p 'test_jsonpath_benchmark_gate
 Add an entry to `path_forms` to benchmark both compilation and evaluation, or add
 another `c.bench_function` or `evaluate(c, ...)` call for a focused workload. Use a
 unique, stable name and keep fixtures outside timed closures. Evaluation helpers
-assert expected results before timing. The first CI run with a changed suite saves
-a fresh baseline; subsequent compatible runs compare automatically. Local reports
+assert expected results before timing. Adding a workload preserves comparisons for
+existing names; only the new workload waits for a master baseline. If changing an
+existing fixture or measured operation, rename its benchmark (for example, append
+`-v2`) so CI does not compare different workloads under the same name. Local reports
 and the confirmation gate discover workload names automatically.
 
 For another crate, add Criterion as a dev dependency, create a file under its

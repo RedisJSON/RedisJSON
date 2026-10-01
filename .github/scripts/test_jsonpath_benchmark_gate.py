@@ -5,7 +5,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+import jsonpath_benchmark_gate
 from jsonpath_benchmark_gate import (
     confirmed_regressions,
     read_comparison,
@@ -68,13 +70,59 @@ class BenchmarkGateTests(unittest.TestCase):
 
     def test_incomplete_or_invalid_measurements_cannot_pass(self):
         for path in [
-            self.comparison({"small": 105}, {"other": 100}),
+            self.comparison({}, {"small": 100}),
             self.comparison({"small": 105}, {"small": 0}),
             self.comparison({"small": float("nan")}),
+            self.comparison({"small": 100, "new": float("nan")}, {"small": 100}),
             self.comparison({"small": 105}, commits=("same", "same")),
         ]:
             with self.subTest(path=path), self.assertRaises(ValueError):
                 read_comparison(path)
+
+    def test_added_and_removed_workloads_preserve_existing_comparisons(self):
+        first = self.comparison(
+            {"existing": 110, "new": 500}, {"existing": 100, "removed": 100}
+        )
+        self.assertEqual(read_comparison(first)[1], {"existing": 10})
+        self.assertEqual(
+            confirmed_regressions(first, self.comparison({"existing": 105})),
+            ["existing"],
+        )
+        summary = render_summary(first)
+        self.assertIn("Compared **1**", summary)
+        self.assertIn("1** without a master baseline", summary)
+        self.assertIn("+10.00%", summary)
+        self.assertIn("No master baseline", summary)
+        self.assertNotIn("`removed`", summary)
+
+    def test_disjoint_workloads_do_not_claim_a_comparison(self):
+        path = self.comparison({"new": 100}, {"old": 100})
+        self.assertEqual(read_comparison(path)[1], {})
+        self.assertIn("No matching master baseline", render_summary(path))
+
+    def test_master_cache_selection_ignores_prs_and_suite_hash_changes(self):
+        prefix = "jsonpath-baseline-v1-ubuntu-24.04-X64-"
+        master = prefix + "old-suite-hash-0.8.2-100-1"
+        caches = [
+            {"ref": "refs/pull/1661/merge", "key": prefix + "new-suite-hash-0.8.2-300-1"},
+            {"ref": "refs/heads/master", "key": prefix + "master-0.9.0-200-1"},
+            {"ref": "refs/heads/master", "key": master},
+            {"ref": "refs/heads/master", "key": prefix + "master-0.8.2-90-1"},
+        ]
+        with patch("subprocess.check_output", return_value=json.dumps(caches)) as request:
+            self.assertEqual(
+                jsonpath_benchmark_gate.master_baseline_key("RedisJSON/RedisJSON", prefix, "0.8.2"),
+                master,
+            )
+            command = request.call_args.args[0]
+            self.assertEqual(command[command.index("--ref") + 1], "refs/heads/master")
+            self.assertEqual(command[command.index("--sort") + 1], "created_at")
+            self.assertEqual(command[command.index("--order") + 1], "desc")
+        with patch("subprocess.check_output", return_value=json.dumps(caches[:2])):
+            self.assertEqual(
+                jsonpath_benchmark_gate.master_baseline_key("RedisJSON/RedisJSON", prefix, "0.8.2"),
+                "",
+            )
 
     def test_incompatible_units_and_duplicate_workloads_cannot_pass(self):
         path = self.comparison({"small": 105})
@@ -134,8 +182,8 @@ class BenchmarkGateTests(unittest.TestCase):
         data["entries"]["JSONPath"] = data["entries"]["JSONPath"][-1:]
         path.write_text(json.dumps(data))
         summary = render_summary(path)
-        self.assertIn("No compatible baseline", summary)
-        self.assertIn("Baseline only", summary)
+        self.assertIn("No matching master baseline", summary)
+        self.assertIn("No master baseline", summary)
         self.assertIn("123.00 ns/iter", summary)
         self.assertIn("eval/a&#124;b", summary)
         self.assertNotIn("Confirmed", summary)

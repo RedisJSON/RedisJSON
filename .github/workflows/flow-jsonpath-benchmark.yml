@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   benchmark:
@@ -27,32 +28,37 @@ jobs:
       - name: Select toolchain and cache key
         id: setup
         env:
-          SUITE_HASH: ${{ hashFiles('json_path/benches/**/*.rs', 'rust-toolchain.toml', '.github/workflows/flow-jsonpath-benchmark.yml') }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p benchmark-results
           python3 - <<'PY'
           import os
+          import sys
           import tomllib
           from pathlib import Path
+
+          sys.path.insert(0, '.github/scripts')
+          from jsonpath_benchmark_gate import master_baseline_key
 
           toolchain = tomllib.loads(Path('rust-toolchain.toml').read_text())['toolchain']['channel']
           lock = tomllib.loads(Path('Cargo.lock').read_text())
           criterion = next(package['version'] for package in lock['package'] if package['name'] == 'criterion')
           with open(os.environ['GITHUB_ENV'], 'a') as output:
               output.write(f'RUSTUP_TOOLCHAIN={toolchain}\n')
-          key = f"jsonpath-baseline-v1-ubuntu-24.04-{os.environ['RUNNER_ARCH']}-{os.environ['SUITE_HASH']}-{criterion}"
+          prefix = f"jsonpath-baseline-v1-ubuntu-24.04-{os.environ['RUNNER_ARCH']}-"
+          baseline = master_baseline_key(os.environ['GITHUB_REPOSITORY'], prefix, criterion)
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write(f'cache-prefix={key}\n')
+              output.write(f'cache-prefix={prefix}master-{criterion}\n')
+              output.write(f'baseline-key={baseline}\n')
           PY
 
       - name: Restore saved measurements
         id: baseline
+        if: steps.setup.outputs.baseline-key != ''
         uses: actions/cache/restore@v4
         with:
           path: benchmark-baseline
-          key: ${{ steps.setup.outputs.cache-prefix }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: |
-            ${{ steps.setup.outputs.cache-prefix }}-
+          key: ${{ steps.setup.outputs.baseline-key }}
 
       - name: Prepare comparison
         id: comparison
@@ -80,9 +86,9 @@ jobs:
               # The action otherwise labels the baseline with the PR head, ignoring ref.
               shutil.copyfile(source / 'comparison.json', results / 'comparison.json')
               shutil.copytree(source / 'criterion', results / 'criterion')
-              message = f'Saved baseline: {baseline_sha}\nCache: {os.environ["CACHE_KEY"]}'
+              message = f'Saved master baseline: {baseline_sha}\nCache: {os.environ["CACHE_KEY"]}'
           else:
-              message = 'No compatible baseline from another commit; saving measurements without comparison.'
+              message = 'No saved master baseline from another commit; reporting measurements without comparison.'
           text = f'## JSONPath performance\nCandidate: {os.environ["CANDIDATE_SHA"]}\n{message}\n'
           (results / 'commits.txt').write_text(text)
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as output:
@@ -188,6 +194,7 @@ jobs:
             --summary "${confirmation[@]}" | tee benchmark-results/summary.md
 
       - name: Prepare measurements for future runs
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: |
           python3 - <<'PY'
           import json
@@ -206,10 +213,11 @@ jobs:
           PY
 
       - name: Save measurements for future runs
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: actions/cache/save@v4
         with:
           path: benchmark-baseline
-          key: ${{ steps.baseline.outputs.cache-primary-key }}
+          key: ${{ steps.setup.outputs.cache-prefix }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Upload measurements and HTML reports
         if: always()
