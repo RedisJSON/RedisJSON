@@ -325,7 +325,11 @@ class testResp3():
         r.assertEqual(r.execute_command('JSON.OBJKEYS', 'test_resp3'), ['a'])
         r.assertEqual(r.execute_command('JSON.OBJLEN', 'test_resp3'), 1)
         r.assertEqual(r.execute_command('JSON.TYPE', 'test_resp3'), ['object'])
-        r.assertEqual(r.execute_command('JSON.DEBUG', 'MEMORY', 'test_resp3'), 280)
+        memory = r.execute_command('JSON.DEBUG', 'MEMORY', 'test_resp3')
+        # Check default-path behavior without depending on allocation layout.
+        r.assertTrue(type(memory) is int)
+        r.assertTrue(memory > 0)
+        r.assertEqual([memory], r.execute_command('JSON.DEBUG', 'MEMORY', 'test_resp3', '$'))
         r.assertEqual(r.execute_command('JSON.DEL', 'test_resp3'), 1)
 
         # Test JSON.strX commands on object type when default path is used
