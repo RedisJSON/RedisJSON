@@ -78,12 +78,22 @@ jobs:
 
           
       - name: Run CI benchmarks on aws for envs ${{ inputs.allowed_envs }}
+        id: run_remote
         timeout-minutes: 240 # timeout for the step
         working-directory: tests/benchmarks
-        # No continue-on-error: the `kpis` floors committed in each benchmark yml
-        # are the performance baseline, and run-remote already exits non-zero
-        # when a run comes in below one (results_dict_kpi_check). Swallowing the
-        # exit code here would make the baseline gate decorative.
+        # shell: bash for pipefail. A bare `run:` gets `bash -e {0}` with no
+        # pipefail (checked in the job log), so `| tee run-remote.log` below
+        # would report tee's exit code, this step would always be `success`,
+        # and the --run-outcome guard in the check would never fire.
+        shell: bash
+        # run-remote applies the committed `kpis` floors itself
+        # (results_dict_kpi_check), but its exit code cannot say whether a
+        # benchmark came in under its floor or never ran at all -- telling those
+        # apart meant grepping the log. continue-on-error hands the verdict to
+        # the "Check KPI floors" step below, which names each one, writes the
+        # breaches out for the nightly analysis to file from, and fails the job
+        # on any breach, including a run where nothing measured at all.
+        continue-on-error: true
         env:
           # Hard-coded
           PERF_CALLGRAPH_MODE: dwarf
@@ -98,14 +108,12 @@ jobs:
           BENCHMARK_GLOB: ${{ inputs.benchmark_glob }}
           BENCHMARK_RUNNER_GROUP_M_ID: ${{ inputs.benchmark_runner_group_member_id }}
           BENCHMARK_RUNNER_GROUP_TOTAL: ${{ inputs.benchmark_runner_group_total }}
-        # NOTE: json_nummultby_num_2 fails on every run (MOD-18654, broken since
-        # at least 2026-08-09), so this step is expected to be red until that is
-        # fixed. A KPI floor breach is therefore NOT distinguishable from job
-        # status alone -- classify by log line:
-        #   "Condition on ... is False. Failing test expectations" -> regression
-        #   "Failed to run remote benchmark for test '...'"        -> MOD-18654
-        # All other benchmarks still run and still report; run-remote is not
-        # given --fail_fast.
+        # NOTE: json_nummultby_num_2 produces a result again as of #1643
+        # (MOD-18654) but has no `kpis` floor yet -- update_kpis.py seeds one only
+        # from a run that returned a result, and no run had until now. Until a
+        # floor is seeded it is reported as ungated and does not decide the job.
+        # run-remote is not given --fail_fast, so one benchmark failing does not
+        # stop the others.
         run: redisbench-admin run-remote
               --module_path ../../${{ inputs.module_path }}
               --github_actor ${{ github.triggering_actor }}
@@ -122,6 +130,7 @@ jobs:
               --redistimeseries_host ${{ secrets.PERFORMANCE_RTS_HOST }}
               --redistimeseries_port ${{ secrets.PERFORMANCE_RTS_PORT }}
               --redistimeseries_pass '${{ secrets.PERFORMANCE_RTS_AUTH }}'
+              2>&1 | tee run-remote.log
 
       # Kept so a baseline bump can be proposed off a run's own numbers
       # (tests/benchmarks/update_kpis.py) without re-running the benchmarks.
@@ -137,7 +146,38 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-      # always(): a KPI floor breach fails the step above, and a bare
+      # run-remote's own floor check is left advisory above so that this one
+      # can name what went wrong -- a floor breach and a benchmark that never
+      # ran are different findings, and only the first is a ticket about
+      # RedisJSON. Every breach fails the job; the floors are not touched.
+      - name: Check KPI floors
+        if: always()
+        working-directory: tests/benchmarks
+        # --run-log: with run-remote continuing on error, a benchmark it could
+        # not run would otherwise leave no trace -- its result file is simply
+        # absent, which is indistinguishable from a benchmark this shard was
+        # never given. No --known-broken: json_nummultby_num_2 was the only
+        # exemption and #1643 fixed it, so every benchmark failing to run now
+        # fails the job. --run-outcome catches what the log cannot name: a step
+        # timeout or crash partway through, where the benchmarks that never
+        # started leave no line behind at all.
+        run: |
+          mkdir -p kpi-state
+          python3 check_kpis.py --findings-out kpi-state/findings.json \
+            --run-log run-remote.log --run-outcome '${{ steps.run_remote.outcome }}'
+
+      # Uploaded even when the step above fails -- especially then: this is what
+      # the nightly analysis files the tickets from.
+      - name: Upload KPI findings
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: benchmark-kpi-findings-${{ inputs.triggering_env }}-${{ inputs.benchmark_runner_group_member_id }}
+          path: tests/benchmarks/kpi-state/findings.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      # always(): a KPI floor breach fails an earlier step, and a bare
       # `github.event.number` is implicitly `success() && ...`, which would drop
       # the comparison comment exactly on the runs that need it.
       - name: Generate Pull Request Performance info
