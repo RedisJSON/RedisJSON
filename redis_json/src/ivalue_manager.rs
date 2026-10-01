@@ -849,7 +849,8 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     }
 
     fn get_memory(v: &Self::V) -> RedisResult<usize> {
-        Ok(v.mem_allocated() + size_of::<IValue>())
+        // Preserve fractional string shares until rounding the final byte count.
+        Ok((v.mem_allocated() + size_of::<IValue>() as f64).round() as usize)
     }
 
     fn is_json(&self, key: *mut RedisModuleKey) -> RedisResult<bool> {
@@ -919,6 +920,26 @@ mod tests {
         let nested = nest_in_objects(&manager(), &keys(&["a b", "c\"d"]), value).unwrap();
         let expected: IValue = serde_json::from_str(r#"{"a b":{"c\"d":1}}"#).unwrap();
         assert_eq!(nested, expected);
+    }
+
+    #[test]
+    fn test_shared_string_memory_across_keys() {
+        let _guard = SINGLE_THREAD_TEST_MUTEX.lock().unwrap();
+        let first = IValue::from("abcdefghijklmnopqrstuvwxyz123456789");
+        let allocation = first.mem_allocated();
+        let copies: Vec<_> = (0..9).map(|_| first.clone()).collect();
+        let expected = (allocation / 10.0 + size_of::<IValue>() as f64).round() as usize;
+        for value in std::iter::once(&first).chain(copies.iter()) {
+            assert_eq!(
+                RedisIValueJsonKeyManager::get_memory(value).unwrap(),
+                expected
+            );
+        }
+        drop(copies);
+        assert_eq!(
+            RedisIValueJsonKeyManager::get_memory(&first).unwrap(),
+            (allocation + size_of::<IValue>() as f64).round() as usize
+        );
     }
 
     #[test]
