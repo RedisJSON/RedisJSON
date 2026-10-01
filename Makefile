@@ -184,7 +184,7 @@ build:
 ifneq ($(NIGHTLY),1)
 	$(SHOW)set -e ;\
 	$(if $(RUST_FLAGS),export RUSTFLAGS="$(RUST_FLAGS)" ;,)\
-	cargo build --all --all-targets $(CARGO_FLAGS)
+	cargo build --all --lib --bins --tests $(CARGO_FLAGS)
 else
 	$(SHOW)set -e ;\
 	$(if $(RUST_FLAGS),export RUSTFLAGS="$(RUST_FLAGS)" ;,)\
