@@ -32,13 +32,6 @@ jobs:
           path: benchmark-master
           persist-credentials: false
 
-      - name: Check out unchanged PR for cache experiment
-        uses: actions/checkout@v5
-        with:
-          ref: 1a86095d7fe11b36d4761cb4df70e8934a9ea179
-          path: benchmark-previous-pr
-          persist-credentials: false
-
       - name: Select toolchain and record revisions
         id: comparison
         env:
@@ -103,8 +96,6 @@ jobs:
         run: |
           cargo bench -p json_path --bench path_performance --locked -- --list --format terse \
             > benchmark-results/candidate-list.txt
-          cargo bench -p json_path --bench path_performance --locked --no-run --message-format=json \
-            > benchmark-results/candidate-build.jsonl
           (
             cd benchmark-master
             CARGO_TARGET_DIR="$GITHUB_WORKSPACE/benchmark-master-target" \
@@ -127,34 +118,7 @@ jobs:
           cp json_path/benches/path_performance.rs benchmark-master/json_path/benches/path_performance.rs
           cd benchmark-master
           CARGO_TARGET_DIR="$GITHUB_WORKSPACE/benchmark-master-target" \
-            cargo bench -p json_path --bench path_performance --locked --no-run --message-format=json \
-            > ../benchmark-results/master-build.jsonl
-
-      - name: Build unchanged PR for cache comparison
-        run: |
-          cp json_path/benches/path_performance.rs benchmark-previous-pr/json_path/benches/path_performance.rs
-          git -C benchmark-previous-pr rev-parse HEAD > benchmark-results/diagnostic-reference.txt
-          cd benchmark-previous-pr
-          CARGO_TARGET_DIR="$GITHUB_WORKSPACE/benchmark-previous-pr-target" \
-            cargo bench -p json_path --bench path_performance --locked --no-run --message-format=json \
-            > ../benchmark-results/previous-pr-build.jsonl
-
-      - name: Compare cache storage against unchanged PR
-        run: |
-          python3 .github/scripts/jsonpath_benchmark_diagnostics.py \
-            benchmark-results/previous-pr-build.jsonl benchmark-results/candidate-build.jsonl \
-            benchmark-results/diagnostics --reference-name 'PR before cache compaction'
-
-      - name: Upload native timing diagnostics
-        uses: actions/upload-artifact@v6
-        with:
-          name: jsonpath-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            benchmark-results/diagnostics/
-            benchmark-results/commits.txt
-            benchmark-results/environment.txt
-            benchmark-results/diagnostic-reference.txt
-          retention-days: 30
+            cargo bench -p json_path --bench path_performance --locked --no-run
 
       - name: Measure master on this runner
         env:

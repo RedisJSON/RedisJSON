@@ -83,6 +83,12 @@ Intel Xeon 8573C and AMD EPYC 7763 CPUs, and median candidate timings differed b
 32%. Measuring both revisions on one runner removes that hardware mismatch;
 within-job timing noise can still occur.
 
+For uncertain results, compare repeated runs of the exact same executable and
+alternate the order of the two revisions. Increasing Criterion's sample count
+alone does not eliminate variation between runs. Evaluate an optimization against
+its previous implementation on the same runner before comparing results across
+CPU models.
+
 Each job:
 
 1. Builds both revisions with the candidate's Rust toolchain, using separate Cargo
@@ -106,30 +112,6 @@ Criterion's default warmup and measurement periods remain unchanged. The job has
 a 90-minute timeout for both builds, both full measurement passes, and any flagged
 workload reruns. Both builds finish before measurements start. The comparison
 action stays report-only; the Python confirmation gate controls failure.
-
-### Native timing investigation
-
-The workflow currently runs additional diagnostics before the full measurements
-to investigate platform-dependent regressions in `eval/simple`, `eval/deep-field`,
-`eval/projection-function`, and `eval/filter-and`. At both 100 and 500 samples it
-runs **reference, PR, PR, reference** twice, using the already-built executables. Warmup
-remains 3 seconds and measurement time 5 seconds. The binary hashes, individual
-logs, raw Criterion samples, and unrounded median estimates are retained under
-`diagnostics/` in the job artifact.
-
-For the cache-storage experiment the reference is the unchanged PR at
-`1a86095d7fe11b36d4761cb4df70e8934a9ea179`, built separately on the same runner.
-Its SHA is recorded in `diagnostic-reference.txt`. The full regression gate still
-compares the candidate against master; diagnostic measurements do not replace it.
-
-The diagnostic summary separates candidate/reference comparisons by run order and reports
-changes between successive runs of each identical binary. Same-binary changes
-reveal measurement drift; order-dependent candidate/reference changes suggest a timing bias.
-Neither establishes that a particular code change is harmless. These diagnostics
-do not change the existing 5% gate or its inputs. They are investigation work and
-add roughly 15 minutes plus the extra build; remove them when native runner behavior is understood.
-
-### Results and artifacts
 
 GitHub Actions displays colored bars for the largest time changes and a collapsible
 table of every workload's baseline, candidate, percentage change, first-pass delta,
