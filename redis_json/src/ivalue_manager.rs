@@ -804,7 +804,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                 }
                 let fpha_config = fpha_type.map(FPHAConfig::new_with_type);
                 let result = IValueDeserSeed::new(fpha_config)
-                    .deserialize_with_object_hints(&mut deserializer, val)
+                    .deserialize_compact_objects(&mut deserializer)
                     .map_err(|e| RedisError::String(e.to_string()))?;
                 deserializer
                     .end()
@@ -942,7 +942,7 @@ mod tests {
     }
 
     #[test]
-    fn test_object_hints_preserve_depth_policy() {
+    fn test_compact_objects_preserve_depth_policy() {
         let _guard = SINGLE_THREAD_TEST_MUTEX.lock().unwrap();
         let manager = RedisIValueJsonKeyManager {
             phantom: PhantomData,
@@ -954,8 +954,8 @@ mod tests {
         );
         assert!(manager.from_str(&json, Format::JSON, true, None).is_err());
         let value = manager.from_str(&json, Format::JSON, false, None).unwrap();
-        // Falling back must preserve both depth policy and ordinary allocation.
-        assert_eq!(value.as_object().unwrap().capacity(), 8);
+        // Compact allocation must also work when the caller disables the depth limit.
+        assert_eq!(value.as_object().unwrap().capacity(), 5);
         assert_eq!(serde_json::to_string(&value).unwrap(), json);
         assert!(manager
             .from_str(&(json + " {}"), Format::JSON, false, None)
