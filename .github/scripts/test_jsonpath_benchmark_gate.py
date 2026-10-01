@@ -263,29 +263,29 @@ class BenchmarkGateTests(unittest.TestCase):
         summary = render_summary(comparison)
         self.assertIn("1,000.00 bytes/iter | 2,000.00 bytes/iter | +100.00%", summary)
 
-    def test_diagnostics_keep_candidate_over_master_in_both_orders(self):
+    def test_diagnostics_keep_candidate_over_reference_in_both_orders(self):
         from jsonpath_benchmark_diagnostics import analyze
 
-        order = ["master", "candidate", "candidate", "master"] * 2
+        order = ["reference", "candidate", "candidate", "reference"] * 2
         runs = [{"revision": revision, "medians_ns": {"eval/simple": value}}
                 for revision, value in zip(order, [100, 110, 110, 100] * 2)]
         result = analyze(runs)["eval/simple"]
-        for direction in ("master_first", "candidate_first"):
+        for direction in ("reference_first", "candidate_first"):
             for change in result[direction]:
                 self.assertAlmostEqual(change, 10)
-        self.assertEqual(result["master_repeat"], [0, 0, 0])
+        self.assertEqual(result["reference_repeat"], [0, 0, 0])
         self.assertEqual(result["candidate_repeat"], [0, 0, 0])
 
     def test_diagnostics_expose_same_binary_drift_and_reject_incomplete_runs(self):
         from jsonpath_benchmark_diagnostics import analyze
 
-        order = ["master", "candidate", "candidate", "master"] * 2
+        order = ["reference", "candidate", "candidate", "reference"] * 2
         runs = [{"revision": revision, "medians_ns": {"eval/simple": value}}
                 for revision, value in zip(order, [100, 100, 120, 120, 120, 120, 100, 100])]
         result = analyze(runs)["eval/simple"]
-        self.assertEqual(result["master_first"], [0, 0])
+        self.assertEqual(result["reference_first"], [0, 0])
         self.assertEqual(result["candidate_first"], [0, 0])
-        self.assertAlmostEqual(result["master_repeat"][0], 20)
+        self.assertAlmostEqual(result["reference_repeat"][0], 20)
         self.assertAlmostEqual(result["candidate_repeat"][2], -100 / 6)
         with self.assertRaises(ValueError):
             analyze(runs[:-1])

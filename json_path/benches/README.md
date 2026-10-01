@@ -112,17 +112,22 @@ action stays report-only; the Python confirmation gate controls failure.
 The workflow currently runs additional diagnostics before the full measurements
 to investigate platform-dependent regressions in `eval/simple`, `eval/deep-field`,
 `eval/projection-function`, and `eval/filter-and`. At both 100 and 500 samples it
-runs **master, PR, PR, master** twice, using the already-built executables. Warmup
+runs **reference, PR, PR, reference** twice, using the already-built executables. Warmup
 remains 3 seconds and measurement time 5 seconds. The binary hashes, individual
 logs, raw Criterion samples, and unrounded median estimates are retained under
 `diagnostics/` in the job artifact.
 
-The diagnostic summary separates PR/master comparisons by run order and reports
+For the cache-storage experiment the reference is the unchanged PR at
+`1a86095d7fe11b36d4761cb4df70e8934a9ea179`, built separately on the same runner.
+Its SHA is recorded in `diagnostic-reference.txt`. The full regression gate still
+compares the candidate against master; diagnostic measurements do not replace it.
+
+The diagnostic summary separates candidate/reference comparisons by run order and reports
 changes between successive runs of each identical binary. Same-binary changes
-reveal measurement drift; order-dependent PR/master changes suggest a timing bias.
+reveal measurement drift; order-dependent candidate/reference changes suggest a timing bias.
 Neither establishes that a particular code change is harmless. These diagnostics
 do not change the existing 5% gate or its inputs. They are investigation work and
-add roughly 10 minutes; remove them when native runner behavior is understood.
+add roughly 15 minutes plus the extra build; remove them when native runner behavior is understood.
 
 ### Results and artifacts
 

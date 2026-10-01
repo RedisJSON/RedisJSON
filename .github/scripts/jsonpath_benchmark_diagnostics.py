@@ -12,13 +12,13 @@ from pathlib import Path
 
 
 WORKLOADS = ("eval/simple", "eval/deep-field", "eval/projection-function", "eval/filter-and")
-ORDER = ("master", "candidate", "candidate", "master") * 2
+ORDER = ("reference", "candidate", "candidate", "reference") * 2
 
 
 def analyze(runs):
-    """Keep PR/master ratios directional; compare successive runs of each binary."""
+    """Keep candidate/reference ratios directional; compare successive runs of each binary."""
     if tuple(run["revision"] for run in runs) != ORDER:
-        raise ValueError("Expected two complete master/candidate/candidate/master blocks")
+        raise ValueError("Expected two complete reference/candidate/candidate/reference blocks")
     names = set(runs[0]["medians_ns"])
     if not names or any(set(run["medians_ns"]) != names for run in runs):
         raise ValueError("Diagnostic runs must contain the same workloads")
@@ -33,9 +33,9 @@ def analyze(runs):
             return (values[after] / values[before] - 1) * 100
 
         results[name] = {
-            "master_first": [change(0, 1), change(4, 5)],
+            "reference_first": [change(0, 1), change(4, 5)],
             "candidate_first": [change(3, 2), change(7, 6)],
-            "master_repeat": [change(0, 3), change(3, 4), change(4, 7)],
+            "reference_repeat": [change(0, 3), change(3, 4), change(4, 7)],
             "candidate_repeat": [change(1, 2), change(2, 5), change(5, 6)],
         }
     return results
@@ -53,23 +53,26 @@ def executable(build_log):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("master_build", type=Path)
+    parser.add_argument("reference_build", type=Path)
     parser.add_argument("candidate_build", type=Path)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--reference-name", default="master")
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
-    binaries = {"master": executable(args.master_build), "candidate": executable(args.candidate_build)}
+    binaries = {"reference": executable(args.reference_build), "candidate": executable(args.candidate_build)}
     manifest = {role: {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
                 for role, path in binaries.items()}
+    manifest["reference"]["name"] = args.reference_name
     (output / "binaries.json").write_text(json.dumps(manifest, indent=2))
     pattern = "^(" + "|".join(re.escape(name) for name in WORKLOADS) + ")$"
     runs = []
     summary = ["## Native JSONPath timing diagnostics", "",
+               f"Reference: **{args.reference_name}**; candidate: current PR. "
                "Diagnostic only; the existing 5% confirmation gate is unchanged. "
-               "Each sample setting runs master → PR → PR → master twice, with "
+               "Each sample setting runs reference → PR → PR → reference twice, with "
                "3 s warmup, 5 s measurement and 100,000 resamples. "
-               "Positive PR/master changes mean slower; repeat columns compare "
+               "Positive candidate/reference changes mean slower; repeat columns compare "
                "successive invocations of the exact same binary.", ""]
     for samples in (100, 500):
         block = []
@@ -99,7 +102,7 @@ def main():
         (output / str(samples) / "changes.json").write_text(json.dumps(changes, indent=2))
         lines = [f"### {samples} samples", "",
                  "Ranges across repeated comparisons, using unrounded Criterion median estimates.", "",
-                 "| Workload | PR/master, master first | PR/master, PR first | Master repeat | PR repeat |",
+                 "| Workload | Candidate/reference, reference first | Candidate/reference, candidate first | Reference repeat | Candidate repeat |",
                  "| --- | ---: | ---: | ---: | ---: |"]
         for name, groups in changes.items():
             cells = [f"{min(values):+.2f}% to {max(values):+.2f}%" for values in groups.values()]

@@ -666,8 +666,11 @@ fn term_as_str<'a, 'i, 'j, S: SelectValue>(
     }
 }
 
+// Ordinary paths need no regex maps; initialize them only when a regex is evaluated.
+type RegexCache = Option<Box<RegexPatterns>>;
+
 #[derive(Default)]
-struct RegexCache {
+struct RegexPatterns {
     search: HashMap<String, Option<Regex>>,
     full: HashMap<String, Option<Regex>>,
 }
@@ -679,6 +682,7 @@ struct RegexCache {
 fn regex_matches(cache: &mut RegexCache, pattern: &str, full: bool, s: &str) -> bool {
     // Past the cap we compile uncached; already-cached patterns (the common constant case) still hit.
     const MAX_REGEX_CACHE: usize = 64;
+    let cache = cache.get_or_insert_with(Default::default);
     let can_cache = cache.search.len() + cache.full.len() < MAX_REGEX_CACHE;
     let entries = if full {
         &mut cache.full
@@ -1861,7 +1865,9 @@ struct PathCalculatorData<'v, 'i, S: SelectValue, UPT: UserPathTracker> {
     /// Enabled only for multi-candidate filters; single-use projections cannot reuse it.
     /// For example, `$.rows[?@.score > $.threshold]` with two or more rows reuses
     /// the same `$.threshold` result across candidates.
-    root_cache: Option<HashMap<usize, TermEvaluationResult<'static, 'i, S>>>,
+    /// Boxing keeps uncached subquery contexts small.
+    #[allow(clippy::box_collection, reason = "Shrink uncached subquery contexts")]
+    root_cache: Option<Box<HashMap<usize, TermEvaluationResult<'static, 'i, S>>>>,
 }
 
 impl<'v, 'i, S: SelectValue, UPT: UserPathTracker> PathCalculatorData<'v, 'i, S, UPT> {
@@ -2690,7 +2696,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                             || json_type == SelectValueType::Object
                         {
                             if json.len().is_some_and(|len| len > 1) {
-                                calc_data.root_cache.get_or_insert_with(HashMap::new);
+                                calc_data.root_cache.get_or_insert_with(Default::default);
                             }
                             /* lets expend the array, this is how most json path engines work.
                              * Personally, I think this if should not exists. */
@@ -2913,7 +2919,8 @@ mod json_path_compiler_tests {
                 &mut data
             )
             .is_break());
-        let regex_cache = data.regex_cache.borrow();
+        let cache = data.regex_cache.borrow();
+        let regex_cache = cache.as_ref().unwrap();
         assert_eq!(
             regex_cache.search.len() + regex_cache.full.len(),
             1,
