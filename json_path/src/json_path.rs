@@ -71,12 +71,13 @@ macro_rules! value_ref_items {
             ValueRef::Borrowed(borrowed_val) => {
                 // For borrowed values, convert keys to owned for consistent return type.
                 // Empty when `get_type` and `items()` disagree (defensive).
-                let collected = borrowed_val
-                    .items()
-                    .map(|iter| iter.map(|(k, v)| (Cow::Borrowed(k), v)).collect_vec())
-                    .unwrap_or_default();
-                Box::new(collected.into_iter())
-                    as Box<dyn Iterator<Item = (Cow<'_, str>, ValueRef<'_, S>)>>
+                // This branch now borrows keys and iterates lazily, avoiding a temporary Vec.
+                match borrowed_val.items() {
+                    Some(iter) => Box::new(iter.map(|(k, v)| (Cow::Borrowed(k), v)))
+                        as Box<dyn Iterator<Item = (Cow<'_, str>, ValueRef<'_, S>)>>,
+                    None => Box::new(std::iter::empty())
+                        as Box<dyn Iterator<Item = (Cow<'_, str>, ValueRef<'_, S>)>>,
+                }
             }
             ValueRef::Owned(owned_val) => {
                 // For owned values, collect first to avoid lifetime issues
@@ -665,7 +666,14 @@ fn term_as_str<'a, 'i, 'j, S: SelectValue>(
     }
 }
 
-type RegexCache = HashMap<String, Option<Regex>>;
+// Ordinary paths need no regex maps; initialize them only when a regex is evaluated.
+type RegexCache = Option<Box<RegexPatterns>>;
+
+#[derive(Default)]
+struct RegexPatterns {
+    search: HashMap<String, Option<Regex>>,
+    full: HashMap<String, Option<Regex>>,
+}
 
 /// Compile `pattern` (caching the result in `cache`) and test it against `s`. `full`
 /// anchors the pattern for RFC 9535 `match()`; otherwise it is a substring search
@@ -674,26 +682,28 @@ type RegexCache = HashMap<String, Option<Regex>>;
 fn regex_matches(cache: &mut RegexCache, pattern: &str, full: bool, s: &str) -> bool {
     // Past the cap we compile uncached; already-cached patterns (the common constant case) still hit.
     const MAX_REGEX_CACHE: usize = 64;
-    let key = if full {
-        format!("^(?:{pattern})$")
+    let cache = cache.get_or_insert_with(Default::default);
+    let can_cache = cache.search.len() + cache.full.len() < MAX_REGEX_CACHE;
+    let entries = if full {
+        &mut cache.full
     } else {
-        pattern.to_string()
+        &mut cache.search
     };
-    if cache.len() < MAX_REGEX_CACHE || cache.contains_key(&key) {
-        cache
-            .entry(key)
-            .or_insert_with_key(|k| {
-                #[cfg(test)]
-                REGEX_COMPILE_CALLS.with(|c| c.set(c.get() + 1));
-                Regex::new(k).ok()
-            })
-            .as_ref()
-            .is_some_and(|re| re.is_match(s))
-    } else {
-        #[cfg(test)]
-        REGEX_COMPILE_CALLS.with(|c| c.set(c.get() + 1));
-        Regex::new(&key).is_ok_and(|re| re.is_match(s))
+    if let Some(regex) = entries.get(pattern) {
+        return regex.as_ref().is_some_and(|re| re.is_match(s));
     }
+    #[cfg(test)]
+    REGEX_COMPILE_CALLS.with(|c| c.set(c.get() + 1));
+    let regex = if full {
+        Regex::new(&format!("^(?:{pattern})$")).ok()
+    } else {
+        Regex::new(pattern).ok()
+    };
+    let matched = regex.as_ref().is_some_and(|re| re.is_match(s));
+    if can_cache {
+        entries.insert(pattern.to_owned(), regex);
+    }
+    matched
 }
 
 /// Convert a finite `f64` to `i64`, returning `None` when it falls outside the `i64`
@@ -1104,6 +1114,24 @@ enum QueryClass<'i> {
     Projection,
 }
 
+/// Recognize a bare path without treating arithmetic or computed booleans as existence tests.
+fn existence_path(mut expr: Pair<'_, Rule>) -> Option<Pair<'_, Rule>> {
+    loop {
+        match expr.as_rule() {
+            Rule::from_current | Rule::from_root => return Some(expr),
+            Rule::arith_expr | Rule::arith_term | Rule::arith_factor => {
+                let mut inner = expr.into_inner();
+                let only = inner.next()?;
+                if inner.next().is_some() {
+                    return None;
+                }
+                expr = only;
+            }
+            _ => return None,
+        }
+    }
+}
+
 /// Classify a top-level `arith_expr`. It is a plain *path* iff it is a single bare
 /// `from_root` term: no arithmetic operator, no unary sign, no method call, not a function
 /// call, not parenthesized, and not `@`-rooted. Anything else is a projection. `empty` is a
@@ -1129,6 +1157,9 @@ fn classify_query<'i>(expr: &Pair<'i, Rule>, empty: &Pairs<'i, Rule>) -> QueryCl
     };
     if matches!(prim.as_rule(), Rule::neg | Rule::pos) {
         return QueryClass::Projection; // unary +/-
+    }
+    if !inner.is_empty() {
+        return QueryClass::Projection; // postfix method or terminal get-keys operator
     }
     match prim.as_rule() {
         // A lone `$` / `$.path`: walk its `root` segments (empty for a bare `$`).
@@ -1374,7 +1405,7 @@ const fn create_index_tracker<'i, 'j>(
 }
 
 /* Enum for filter results */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum TermEvaluationResult<'i, 'j, S: SelectValue> {
     Integer(i64),
     Float(f64),
@@ -1829,6 +1860,14 @@ struct PathCalculatorData<'v, 'i, S: SelectValue, UPT: UserPathTracker> {
     /// element. The parse span is stable across the whole query, so the key is unique
     /// query-wide even when the same cache is reused across subqueries.
     literal_cache: Rc<RefCell<HashMap<usize, Rc<Value>>>>,
+    /// Root operands are invariant only within this context; `@` subqueries change the root.
+    /// multi-match cache hits clone the vector; share it if copying becomes a bottleneck.
+    /// Enabled only for multi-candidate filters; single-use projections cannot reuse it.
+    /// For example, `$.rows[?@.score > $.threshold]` with two or more rows reuses
+    /// the same `$.threshold` result across candidates.
+    /// Boxing keeps uncached subquery contexts small.
+    #[allow(clippy::box_collection, reason = "Shrink uncached subquery contexts")]
+    root_cache: Option<Box<HashMap<usize, TermEvaluationResult<'static, 'i, S>>>>,
 }
 
 impl<'v, 'i, S: SelectValue, UPT: UserPathTracker> PathCalculatorData<'v, 'i, S, UPT> {
@@ -1846,8 +1885,9 @@ impl<'v, 'i, S: SelectValue, UPT: UserPathTracker> PathCalculatorData<'v, 'i, S,
             results: Vec::new(),
             visitor: None,
             root,
-            regex_cache: Rc::new(RefCell::new(HashMap::new())),
+            regex_cache: Rc::new(RefCell::new(RegexCache::default())),
             literal_cache: Rc::new(RefCell::new(HashMap::new())),
+            root_cache: None,
         }
     }
 
@@ -1864,6 +1904,7 @@ impl<'v, 'i, S: SelectValue, UPT: UserPathTracker> PathCalculatorData<'v, 'i, S,
             root,
             regex_cache,
             literal_cache,
+            root_cache: None,
         }
     }
 }
@@ -2220,23 +2261,35 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                 }
                 None => TermEvaluationResult::Value(json),
             },
-            Rule::from_root => match term.into_inner().next() {
-                Some(term) => {
-                    let mut new_calc_data = PathCalculatorData::new_sharing(
-                        calc_data.root.clone(),
-                        calc_data.regex_cache.clone(),
-                        calc_data.literal_cache.clone(),
-                    );
-                    let _ = self.calc_internal(
-                        term.into_inner(),
-                        calc_data.root.clone(),
-                        None,
-                        &mut new_calc_data,
-                    );
-                    Self::results_to_term(new_calc_data.results)
+            Rule::from_root => {
+                let key = term.as_span().start();
+                let Some(term) = term.into_inner().next() else {
+                    return TermEvaluationResult::Value(calc_data.root.clone());
+                };
+                if let Some(result) = calc_data
+                    .root_cache
+                    .as_ref()
+                    .and_then(|cache| cache.get(&key))
+                {
+                    return result.clone();
                 }
-                None => TermEvaluationResult::Value(calc_data.root.clone()),
-            },
+                let mut new_calc_data = PathCalculatorData::new_sharing(
+                    calc_data.root.clone(),
+                    calc_data.regex_cache.clone(),
+                    calc_data.literal_cache.clone(),
+                );
+                let _ = self.calc_internal(
+                    term.into_inner(),
+                    calc_data.root.clone(),
+                    None,
+                    &mut new_calc_data,
+                );
+                let result = Self::results_to_term(new_calc_data.results);
+                if let Some(cache) = &mut calc_data.root_cache {
+                    cache.insert(key, result.clone());
+                }
+                result
+            }
             _ => {
                 trace!("evaluate_single_term: unhandled rule {:?}", term.as_rule());
                 TermEvaluationResult::Invalid
@@ -2300,16 +2353,27 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         let Some(first) = inner.next() else {
             return TermEvaluationResult::Invalid;
         };
-        match first.as_rule() {
-            Rule::neg | Rule::pos => {
-                let operator = first.as_rule();
-                let Some(operand) = inner.next() else {
-                    return TermEvaluationResult::Invalid;
-                };
-                let v = self.evaluate_arith_operand(operand, json, calc_data);
-                arith_unary(operator, v)
-            }
-            _ => self.evaluate_arith_operand(first, json, calc_data),
+        let operator = match first.as_rule() {
+            Rule::neg | Rule::pos => Some(first.as_rule()),
+            _ => None,
+        };
+        let operand = if operator.is_some() {
+            let Some(operand) = inner.next() else {
+                return TermEvaluationResult::Invalid;
+            };
+            operand
+        } else {
+            first
+        };
+        // Bare terms also use this grammar rule; skip cloning the value when no method follows.
+        let value = if inner.is_empty() {
+            self.evaluate_arith_operand(operand, json, calc_data)
+        } else {
+            self.evaluate_method_chain(operand, inner, json, calc_data)
+        };
+        match operator {
+            Some(operator) => arith_unary(operator, value),
+            None => value,
         }
     }
 
@@ -2322,7 +2386,6 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
     ) -> TermEvaluationResult<'i, 'j, S> {
         match operand.as_rule() {
             Rule::arith_expr => self.evaluate_arith_expr(operand, json, calc_data),
-            Rule::method_chain => self.evaluate_method_chain(operand, json, calc_data),
             _ => self.evaluate_single_term(operand, json, calc_data),
         }
     }
@@ -2333,16 +2396,13 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
     /// function form via `eval_function`.
     fn evaluate_method_chain<'j: 'i, S: SelectValue>(
         &self,
-        chain: Pair<'i, Rule>,
+        recv: Pair<'i, Rule>,
+        methods: Pairs<'i, Rule>,
         json: ValueRef<'j, S>,
         calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
     ) -> TermEvaluationResult<'i, 'j, S> {
-        let mut it = chain.into_inner();
-        let Some(recv) = it.next() else {
-            return TermEvaluationResult::Invalid;
-        };
         let mut acc = self.evaluate_single_term(recv, json.clone(), calc_data);
-        for method in it {
+        for method in methods {
             // The terminal `~` operator is the alias for `keys()`.
             if method.as_rule() == Rule::get_keys_op {
                 acc = eval_function(FN_KEYS, vec![acc], &mut calc_data.regex_cache.borrow_mut());
@@ -2360,6 +2420,67 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         acc
     }
 
+    /// Test a bare `@`/`$` path used as an existence filter, such as `[?@..flag]`.
+    /// Any selected node counts, including `false`, `null`, and empty containers.
+    /// `@` starts at `json`, `$` at this context's root; a bare `@` or `$` always exists.
+    ///
+    /// A private visitor stops traversal at the first match instead of collecting all
+    /// matches, without invoking the caller's visitor. No match leaves `first` invalid.
+    ///
+    /// For `$` paths, cache the first match or the absence of matches by parse-span
+    /// start. This operand is used only for existence, so one match is sufficient.
+    /// The cache stays local to `calc_data`: nested `@` subqueries can change the root.
+    /// `@` paths depend on the current candidate and must be evaluated each time.
+    /// Single-candidate filters leave the cache disabled.
+    fn path_exists<'j: 'i, S: SelectValue>(
+        &self,
+        path: Pair<'i, Rule>,
+        json: ValueRef<'j, S>,
+        calc_data: &mut PathCalculatorData<'_, 'j, S, UPTG::PT>,
+    ) -> bool {
+        let from_root = path.as_rule() == Rule::from_root;
+        let key = path.as_span().start();
+        let Some(path) = path.into_inner().next() else {
+            return true;
+        };
+        if from_root {
+            if let Some(result) = calc_data
+                .root_cache
+                .as_ref()
+                .and_then(|cache| cache.get(&key))
+            {
+                return !matches!(result, TermEvaluationResult::Invalid);
+            }
+        }
+        let root = if from_root {
+            calc_data.root.clone()
+        } else {
+            json
+        };
+        let mut first = TermEvaluationResult::Invalid;
+        let mut visit = |matched: CalculationResult<'j, S, UPTG::PT>| {
+            first = TermEvaluationResult::Value(matched.res);
+            ControlFlow::Break(())
+        };
+        {
+            let mut data = PathCalculatorData::new_sharing(
+                root.clone(),
+                calc_data.regex_cache.clone(),
+                calc_data.literal_cache.clone(),
+            );
+            data.visitor = Some(&mut visit);
+            let _ = self.calc_internal(path.into_inner(), root, None, &mut data);
+        }
+        let exists = !matches!(first, TermEvaluationResult::Invalid);
+        if from_root {
+            // This parse span is used only as an existence test, so its first match suffices.
+            if let Some(cache) = &mut calc_data.root_cache {
+                cache.insert(key, first);
+            }
+        }
+        exists
+    }
+
     fn evaluate_single_filter<'j: 'i, S: SelectValue>(
         &self,
         curr: Pair<'i, Rule>,
@@ -2372,9 +2493,16 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
             return false;
         };
         trace_user_data!("evaluate_single_filter term1 {:?}", &term1);
+        let op = curr.next();
+        // Existence filters need only the first match, avoiding evaluation of the full result set.
+        if op.is_none() {
+            if let Some(path) = existence_path(term1.clone()) {
+                return self.path_exists(path, json, calc_data);
+            }
+        }
         let term1_val = self.evaluate_arith_expr(term1, json.clone(), calc_data);
         trace_user_data!("evaluate_single_filter term1_val {:?}", &term1_val);
-        if let Some(op) = curr.next() {
+        if let Some(op) = op {
             trace!("evaluate_single_filter op {:?}", &op);
             let Some(term2) = curr.next() else {
                 trace!("evaluate_single_filter: missing second term");
@@ -2567,6 +2695,9 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                         if json_type == SelectValueType::Array
                             || json_type == SelectValueType::Object
                         {
+                            if json.len().is_some_and(|len| len > 1) {
+                                calc_data.root_cache.get_or_insert_with(Default::default);
+                            }
                             /* lets expend the array, this is how most json path engines work.
                              * Personally, I think this if should not exists. */
                             let unified_iter = if json_type == SelectValueType::Object {
@@ -2691,7 +2822,8 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         } else {
             let _ = self.calc_internal(root, json, None, &mut calc_data);
         }
-        calc_data.results.drain(..).collect()
+        // Return the existing buffer instead of allocating another Vec and moving every result.
+        calc_data.results
     }
 
     pub fn calc_with_paths<'j: 'i, S: SelectValue>(
@@ -2733,6 +2865,40 @@ mod json_path_compiler_tests {
     use crate::json_path::JsonPathToken;
 
     #[test]
+    fn root_operand_cache_is_reserved_for_repeated_filters() {
+        use super::{PTrackerGenerator, PathCalculator, PathCalculatorData, ValueRef};
+
+        let doc: ijson::IValue = serde_json::from_value(serde_json::json!({
+            "threshold": 2,
+            "rows": [{"n": 1}, {"n": 3}],
+            "single": [{"n": 3}]
+        }))
+        .unwrap();
+        for (path, cached) in [
+            ("$.threshold + 1", false),
+            ("$.missing.length()", false),
+            ("$.single[?@.n > $.threshold]", false),
+            ("$.rows[?@.n > $.threshold]", true),
+            ("$.rows[?$.missing]", true),
+        ] {
+            let query = compile(path).unwrap();
+            let calculator = PathCalculator::<PTrackerGenerator>::create(&query);
+            let mut data = PathCalculatorData::new(ValueRef::Borrowed(&doc));
+            if let Some(expr) = query.projection_expr() {
+                calculator.evaluate_arith_expr(expr.clone(), ValueRef::Borrowed(&doc), &mut data);
+            } else {
+                let _ = calculator.calc_internal(
+                    query.root.clone(),
+                    ValueRef::Borrowed(&doc),
+                    None,
+                    &mut data,
+                );
+            }
+            assert_eq!(data.root_cache.iter().count() != 0, cached, "{path}");
+        }
+    }
+
+    #[test]
     fn breaking_a_visit_skips_later_filter_evaluation() {
         use super::{ControlFlow, PTrackerGenerator, PathCalculator, PathCalculatorData, ValueRef};
 
@@ -2753,8 +2919,10 @@ mod json_path_compiler_tests {
                 &mut data
             )
             .is_break());
+        let cache = data.regex_cache.borrow();
+        let regex_cache = cache.as_ref().unwrap();
         assert_eq!(
-            data.regex_cache.borrow().len(),
+            regex_cache.search.len() + regex_cache.full.len(),
             1,
             "the second candidate must not be evaluated"
         );

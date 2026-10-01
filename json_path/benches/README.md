@@ -14,9 +14,9 @@ measured.
 
 ## Coverage
 
-The suite contains 72 benchmarks. Each of the 27 path forms below has separate
+The suite contains 81 benchmarks. Each of the 28 path forms below has separate
 `compile/<name>` and `eval/<name>` measurements with an expected-result assertion.
-The original 18 workloads cover nested-filter compilation, recursive searches,
+The other 25 workloads cover nested-filter compilation, recursive searches,
 existence tests, root-relative comparisons, string membership/equality, and regexes.
 
 | Path form | Examples |
@@ -26,7 +26,7 @@ existence tests, root-relative comparisons, string membership/equality, and rege
 | Wildcards | `$.metrics.*`, `$.numbers[*]` |
 | Negative index and slices | `$.numbers[-1]`, `[8:24]`, `[-8:]`, `[::4]` |
 | Unions, including duplicate results | `$.numbers[3,0,3]`, `$.metrics['c','a','c']` |
-| Logical filters | `&&`, `\|\|`, `!` over 256 rows with matching and nonmatching candidates |
+| Logical filters | `&&`, `\|\|`, `!`, parenthesized groups over 256 rows with matching and nonmatching candidates |
 | Arithmetic/function filters | `(@.score + 1) * 2 >= 510`, `length(@.name) == 5` |
 | Projections | Arithmetic, `length()`, `.first().length()`, `.sum()`, `~`, `.append()`, missing operands |
 
@@ -35,6 +35,21 @@ timed routine via Criterion's batched setup. Path benchmarks use the reusable
 calculator. Both include result cleanup in the measured time. All fixtures use
 `IValue`. Coverage is representative of these forms, not every function, operator,
 or input shape.
+
+The CI job runs the entire target without a workload filter on its first pass.
+These cases cover the syntax affected by the evaluator and grammar optimizations:
+
+| Optimized behavior | Benchmark cases and syntax |
+| --- | --- |
+| Factored nested grammar | `compile/nested-{7,8,9}` for nested existence filters; `compile/nested-{grouped,comparison,arithmetic}-9` for `(@.path)`, `(@.path > 0)`, and `(@.path) > 0` |
+| Grouped filter evaluation | `compile/filter-grouped`, `eval/filter-grouped`: `[?(@.score >= 128 && @.active == true)]` |
+| Lazy object traversal | `eval/recursive-objects`, `eval/recursive-no-match`, `eval/object-wildcard`: `$..uid`, `$..absent`, `$.metrics.*` |
+| Existence early exit | `eval/existence-{early-match,no-match}`: `[?@..flag]`, `[?@..absent]` |
+| Root cache and its boundaries | `eval/root-{scalar,descendant-list,descendant-sum,single-candidate}`: `[?@.score > $.threshold]`, root descendant lists and `.sum()`; `eval/root-existence`, `eval/root-existence-missing`: `[?$.thresholds..limit]`, `[?$.thresholds..absent]` |
+| Single-use projections | `eval/projection-{arithmetic,aggregate,method-chain,nothing}` guard against caching/dispatch overhead outside repeated filters |
+| Regex cache modes | `eval/regex-search-cache`, `eval/regex-search-function`, `eval/regex-match-cache`: `=~`, `search()`, `match()` |
+| Borrowed string comparisons | `eval/string-membership`, `eval/deep-string-equality`: `in`, equality of objects containing strings |
+| Result buffer | `eval/simple`, `eval/array-wildcard`, `eval/recursive-objects` cover small and large selections |
 
 ## Comparing revisions
 
@@ -50,56 +65,73 @@ cargo bench -p json_path --bench path_performance -- --baseline main
 
 Use the same benchmark source, Rust toolchain, and machine for both revisions.
 When using separate worktrees, set `CRITERION_HOME` to the same absolute directory.
+Keep their Cargo build directories separate; only share the Criterion measurements.
 Both revisions need the Criterion harness. For a quick correctness check without
 timing, run `cargo test -p json_path --bench path_performance`.
 
 ## CI reports
 
-Non-draft, non-documentation-only PRs benchmark only the PR head. Pushes to
-`master` also run the suite to publish shared baselines. These benchmarks do not
-run in the nightly workflow. CI never checks out or rebuilds the base revision.
+Non-draft, non-documentation-only PRs benchmark the current `master` tip and the
+PR head in the same job. Master is pinned to the SHA checked out at job start;
+it is not the PR's merge base. Pushes to `master` compare against the previous
+master tip (`github.event.before`). These benchmarks do not run in the nightly
+workflow.
 
-Each successful run saves Criterion's measurements and a single-run benchmark
-JSON report using GitHub Actions' cache. The next run restores the latest accessible
-compatible cache: a previous run of the same PR, or a cache from its target/default
-branch. PR caches are scoped to that PR and cannot become another PR's baseline.
-The summary identifies the actual saved commit and cache key; this is not
-necessarily the PR's base SHA.
+Measurement caches are neither restored nor published. Results from different
+hosted runners are unsuitable for the 5% gate: two attempts of the same PR used
+Intel Xeon 8573C and AMD EPYC 7763 CPUs, and median candidate timings differed by
+32%. Measuring both revisions on one runner removes that hardware mismatch;
+within-job timing noise can still occur.
 
-The cache key includes the Ubuntu runner version and architecture, benchmark
-source, Rust toolchain file, Criterion version, and this workflow. Changes to
-production code or dependencies other than Criterion do not reset the baseline.
-When no compatible cache exists, CI measures and saves results without applying
-the slowdown gate. The same happens when the saved commit equals the current
-commit. Adding or changing benchmarks starts a fresh baseline for the suite.
-GitHub may evict caches; a cache miss safely starts a new baseline again.
+For uncertain results, compare repeated runs of the exact same executable and
+alternate the order of the two revisions. Increasing Criterion's sample count
+alone does not eliminate variation between runs. Evaluate an optimization against
+its previous implementation on the same runner before comparing results across
+CPU models.
 
-Criterion runs with `--save-baseline saved`: it compares against restored
-measurements when present, then saves the current measurements for future runs.
-Confirmation runs use a separate copy of the original saved baseline.
+Each job:
+
+1. Builds both revisions with the candidate's Rust toolchain, using separate Cargo
+   build directories. Each revision retains its own production dependencies.
+2. Lists the original benchmark names in both revisions, then copies the candidate
+   harness into the master checkout. Master measures the shared names; the candidate
+   measures every workload. New or renamed workloads are reported as **No master
+   baseline** until they exist on master. Both revisions must support the shared
+   harness. Empty, invalid, or disjoint workload lists fail the job.
+3. Measures master with `--save-baseline master`, then the candidate with
+   `--baseline-lenient master`, sharing only the job's `CRITERION_HOME`. Criterion
+   compares existing workloads and permits candidate-only workloads without a
+   baseline. No previous workflow run is needed, even for the first PR run.
+4. Remeasures every workload at least 5% slower on both revisions, on the same
+   runner. CI fails only if the same workload is still at least 5% slower in that
+   second comparison. The threshold is inclusive; a slowdown that disappears
+   passes. Build failures, incorrect results, and missing confirmation measurements
+   also fail.
 
 Criterion's default warmup and measurement periods remain unchanged. The job has
-a 60-minute timeout for building, measuring, and any confirmation reruns;
-only flagged workloads are rerun.
+a 90-minute timeout for both builds, both full measurement passes, and any flagged
+workload reruns. Both builds finish before measurements start. The comparison
+action stays report-only; the Python confirmation gate controls failure.
 
-GitHub Actions displays a comparison table in the job summary and retains the
-`jsonpath-performance-*` artifact for 30 days. It contains text output, comparison
-JSON, commit/cache provenance, and Criterion HTML reports under `criterion/report/`.
-The cache supplies future baselines; the artifact retains reports for inspection.
+GitHub Actions displays colored bars for the largest time changes and a collapsible
+table of every workload's baseline, candidate, percentage change, first-pass delta,
+and status. Missing baselines are explicitly reported without claiming a comparison.
+Both tables include the exact JSONPath emitted by the benchmark harness to
+`paths.jsonl`, including generated nested filters. Metadata is written outside the
+timed loops. Nanosecond timings are displayed as ns, µs, ms, or s per iteration;
+raw measurements and the 5% comparison remain unchanged.
 
-Any workload at least 5% slower is rerun on the current revision against the same
-saved measurements. CI fails only when the same workload is still at least 5%
-slower in that second comparison. A slowdown that disappears on rerun passes.
-The comparison action stays report-only; the confirmation gate enforces the
-inclusive 5% threshold. Failed runs do not publish a new baseline. Build failures,
-incorrect results, and missing confirmation measurements also fail.
+The summary and chart use confirmation timings for remeasured workloads; the
+first-pass column preserves their initial same-runner delta. Other workloads use
+the first pass. The summary is generated even when the regression gate fails.
 
-Initial reports remain intact; confirmation output and HTML reports are retained
-under `confirmation/` in the same artifact, including when the gate fails.
-Hosted-runner timings can vary between machines and runs. Repeating the candidate
-does not eliminate differences from the saved baseline's machine, so inspect
-reports when investigating a failure.
-No PR comments or GitHub Pages publishing are enabled.
+The `jsonpath-performance-*` artifact is retained for 30 days. It contains
+`summary.md`, both revisions' text output, comparison JSON, pinned commit details,
+CPU/compiler details, workload lists, and Criterion HTML reports under
+`criterion/report/`. Initial measurements remain intact; confirmation output and
+HTML reports are retained separately under `confirmation/`. Artifacts are for
+inspection, not baselines for future jobs. No PR comments or GitHub Pages
+publishing are enabled.
 
 Run the gate's boundary, rerun, and data-validation tests with:
 
@@ -112,8 +144,10 @@ python3 -m unittest discover -s .github/scripts -p 'test_jsonpath_benchmark_gate
 Add an entry to `path_forms` to benchmark both compilation and evaluation, or add
 another `c.bench_function` or `evaluate(c, ...)` call for a focused workload. Use a
 unique, stable name and keep fixtures outside timed closures. Evaluation helpers
-assert expected results before timing. The first CI run with a changed suite saves
-a fresh baseline; subsequent compatible runs compare automatically. Local reports
+assert expected results before timing. Adding a workload preserves comparisons for
+existing names; only the new workload waits for a master baseline. If changing an
+existing fixture or measured operation, rename its benchmark (for example, append
+`-v2`) so CI does not compare different workloads under the same name. Local reports
 and the confirmation gate discover workload names automatically.
 
 For another crate, add Criterion as a dev dependency, create a file under its

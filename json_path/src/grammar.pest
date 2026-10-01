@@ -93,13 +93,17 @@ get_keys_op = {"~"}
 // `$.obj~.length()`, `$.obj~~` and `$.obj~.x` are all parse errors (use `keys()` to compose).
 // Both alternatives require the `~` or a postfix, keeping a bare term out so existing
 // (non-method) parse trees are unchanged.
-method_chain = {term ~ get_keys_op | term ~ postfix_method+}
-arith_primary = _{"(" ~ arith_expr ~ ")" | method_chain | term}
+// The factored form now also wraps bare terms: parsing the shared receiver once avoids
+// retrying an entire nested filter when no method follows. Classification unwraps it.
+// Making this rule silent removes that wrapper from emitted trees: the factor handles
+// receiver and suffixes directly, keeping bare-operand evaluation as cheap as before.
+method_chain = _{term ~ (get_keys_op | postfix_method+)?}
+arith_primary = _{"(" ~ arith_expr ~ ")" | method_chain}
 arith_factor = {unary_op? ~ arith_primary}
 arith_term = {arith_factor ~ (mul_op ~ arith_factor)*}
 arith_expr = {arith_term ~ (add_op ~ arith_term)*}
 
-single_filter = {arith_expr ~ op ~ arith_expr | arith_expr}
+single_filter = {arith_expr ~ (op ~ arith_expr)?}
 
 filter_relation = _{and | or}
     and = {"&&"}
@@ -108,7 +112,11 @@ filter_relation = _{and | or}
 // Logical negation: `!` applies to a test or parenthesized filter, binding tighter than && / ||
 negation = {"!" ~ inner_filter}
 
-inner_filter = _{negation | single_filter | "(" ~ filter ~ ")"}
+// A following arithmetic/comparison operator makes `(expr)` an arithmetic operand;
+// otherwise parse its contents as a filter once, including plain existence tests.
+filter_parentheses = _{"(" ~ (string | filter_parentheses | !("(" | ")" | "'" | "\"") ~ ANY)* ~ ")"}
+grouped_filter = _{&(filter_parentheses ~ !(op | add_op | mul_op)) ~ "(" ~ filter ~ ")"}
+inner_filter = _{negation | grouped_filter | single_filter}
 
 filter = {inner_filter ~ (filter_relation ~ inner_filter)*}
 
