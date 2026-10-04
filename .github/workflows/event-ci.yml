@@ -81,6 +81,9 @@ jobs:
     uses: ./.github/workflows/flow-clippy.yml
     secrets: inherit
   jsonpath-benchmark:
+    permissions:
+      contents: read
+      actions: read
     needs: [docs-only]
     if: ${{ needs.docs-only.outputs.only-docs-changed == 'false' && !github.event.pull_request.draft }}
     uses: ./.github/workflows/flow-jsonpath-benchmark.yml

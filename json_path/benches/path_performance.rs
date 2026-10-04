@@ -14,14 +14,31 @@
 //! Criterion now controls sampling and reports; compilation, evaluation, and
 //! fixture construction remain separate.
 
+use std::fs::OpenOptions;
 use std::hint::black_box;
+use std::io::Write;
 
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use ijson::IValue;
 use json_path::{calc_once_projection, compile, create};
 use serde_json::{json, Value};
 
+// Record the exact generated path outside the timed closure for CI summaries.
+fn record_path(name: &str, path: &str) {
+    let Some(destination) = std::env::var_os("JSONPATH_BENCHMARK_PATHS") else {
+        return;
+    };
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(destination)
+        .expect("open benchmark path metadata");
+    writeln!(file, "{}", json!({"name": name, "path": path}))
+        .expect("write benchmark path metadata");
+}
+
 fn evaluate(c: &mut Criterion, name: &str, path: &str, document: &Value, expected: &Value) {
+    record_path(name, path);
     let document: IValue = serde_json::from_value(document.clone()).unwrap();
     let query = compile(path).unwrap();
     if query.is_projection() {
@@ -64,6 +81,7 @@ fn compile_and_evaluate(
     document: &Value,
     expected: &Value,
 ) {
+    record_path(&format!("compile/{name}"), path);
     c.bench_function(&format!("compile/{name}"), |b| {
         b.iter(|| black_box(compile(black_box(path)).unwrap()));
     });
@@ -129,6 +147,11 @@ fn path_forms(c: &mut Criterion) {
             json!([0, 1, 254, 255]),
         ),
         (
+            "filter-grouped",
+            "$.rows[?(@.score >= 128 && @.active == true)].uid",
+            json!((128..256).step_by(2).collect::<Vec<_>>()),
+        ),
+        (
             "filter-not",
             "$.rows[?!(@.active == true)].uid",
             json!((1..256).step_by(2).collect::<Vec<_>>()),
@@ -181,6 +204,7 @@ fn path_performance(c: &mut Criterion) {
         ("compile/filter", "$.rows[?@.score > $.threshold]"),
     ] {
         assert!(compile(path).is_ok());
+        record_path(name, path);
         c.bench_function(name, |b| {
             b.iter(|| black_box(compile(black_box(path)).unwrap()));
         });
@@ -192,7 +216,24 @@ fn path_performance(c: &mut Criterion) {
             "]".repeat(depth)
         );
         assert!(compile(&path).is_ok(), "{path}");
+        record_path(&format!("compile/nested-{depth}"), &path);
         c.bench_function(&format!("compile/nested-{depth}"), |b| {
+            b.iter(|| black_box(compile(black_box(&path)).unwrap()));
+        });
+    }
+    for (name, before, after) in [
+        ("compile/nested-grouped-9", "(", ")"),
+        ("compile/nested-comparison-9", "(", " > 0)"),
+        ("compile/nested-arithmetic-9", "(", ") > 0"),
+    ] {
+        let mut inner = "@.flag".to_owned();
+        for _ in 0..8 {
+            inner = format!("@.a[?{before}{inner}{after}]");
+        }
+        let path = format!("$.a[?{before}{inner}{after}]");
+        assert!(compile(&path).is_ok(), "{path}");
+        record_path(name, &path);
+        c.bench_function(name, |b| {
             b.iter(|| black_box(compile(black_box(&path)).unwrap()));
         });
     }
@@ -246,6 +287,27 @@ fn path_performance(c: &mut Criterion) {
     );
     evaluate(
         c,
+        "eval/root-single-candidate",
+        "$.rows[?@.score > $.threshold].uid",
+        &json!({"threshold": 128, "rows": [{"score": 129, "uid": 129}]}),
+        &json!([129]),
+    );
+    evaluate(
+        c,
+        "eval/root-existence",
+        "$.rows[?$.thresholds..limit].uid",
+        &document,
+        &json!((0..256).collect::<Vec<_>>()),
+    );
+    evaluate(
+        c,
+        "eval/root-existence-missing",
+        "$.rows[?$.thresholds..absent].uid",
+        &document,
+        &json!([]),
+    );
+    evaluate(
+        c,
         "eval/root-descendant-list",
         "$.rows[?@.score > $.thresholds..limit].uid",
         &document,
@@ -257,6 +319,20 @@ fn path_performance(c: &mut Criterion) {
         "$.rows[?@.score > $.thresholds..limit.sum()].uid",
         &document,
         &json!([]),
+    );
+    evaluate(
+        c,
+        "eval/root-descendant-list-large",
+        "$.rows[?@.score > $.thresholds..limit].uid",
+        &json!({"rows": rows, "thresholds": vec![json!({"limit": 1000}); 2048]}),
+        &json!([]),
+    );
+    evaluate(
+        c,
+        "eval/root-many-operands",
+        &format!("$.rows[?{}].uid", ["$.threshold"; 65].join(" && ")),
+        &document,
+        &json!((0..256).collect::<Vec<_>>()),
     );
     evaluate(c, "eval/simple", "$.rows[0].score", &document, &json!([0]));
     evaluate(
@@ -307,6 +383,13 @@ fn path_performance(c: &mut Criterion) {
         c,
         "eval/regex-match-cache",
         r#"$.rows[?match(@.name, "(?:customer|operator)-[0-9]+-active")].uid"#,
+        &document,
+        &expected,
+    );
+    evaluate(
+        c,
+        "eval/regex-search-function",
+        r#"$.rows[?search(@.name, "(?:customer|operator)-[0-9]+-active")].uid"#,
         &document,
         &expected,
     );
