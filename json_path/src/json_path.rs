@@ -1871,6 +1871,18 @@ struct PathCalculatorData<'v, 'i, S: SelectValue, UPT: UserPathTracker> {
 }
 
 impl<'v, 'i, S: SelectValue, UPT: UserPathTracker> PathCalculatorData<'v, 'i, S, UPT> {
+    fn cache_root_result(&mut self, key: usize, result: &TermEvaluationResult<'static, 'i, S>) {
+        const MAX_ENTRIES: usize = 64;
+        const MAX_NODES: usize = 1024;
+        if let Some(cache) = &mut self.root_cache {
+            if cache.len() < MAX_ENTRIES
+                && !matches!(result, TermEvaluationResult::NodeList(nodes) if nodes.len() > MAX_NODES)
+            {
+                cache.insert(key, result.clone());
+            }
+        }
+    }
+
     fn emit(&mut self, result: CalculationResult<'i, S, UPT>) -> ControlFlow<()> {
         if let Some(visit) = &mut self.visitor {
             visit(result)
@@ -2285,9 +2297,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
                     &mut new_calc_data,
                 );
                 let result = Self::results_to_term(new_calc_data.results);
-                if let Some(cache) = &mut calc_data.root_cache {
-                    cache.insert(key, result.clone());
-                }
+                calc_data.cache_root_result(key, &result);
                 result
             }
             _ => {
@@ -2474,9 +2484,7 @@ impl<'i, UPTG: UserPathTrackerGenerator> PathCalculator<'i, UPTG> {
         let exists = !matches!(first, TermEvaluationResult::Invalid);
         if from_root {
             // This parse span is used only as an existence test, so its first match suffices.
-            if let Some(cache) = &mut calc_data.root_cache {
-                cache.insert(key, first);
-            }
+            calc_data.cache_root_result(key, &first);
         }
         exists
     }
@@ -2895,6 +2903,74 @@ mod json_path_compiler_tests {
                 );
             }
             assert_eq!(data.root_cache.iter().count() != 0, cached, "{path}");
+        }
+    }
+
+    #[test]
+    fn root_operand_cache_skips_oversized_lists_without_truncating_results() {
+        use super::{
+            PTrackerGenerator, PathCalculator, PathCalculatorData, TermEvaluationResult, ValueRef,
+        };
+
+        for size in [1024, 1025] {
+            let mut limits = vec![1000; size];
+            limits[size - 1] = 1;
+            let doc: ijson::IValue = serde_json::from_value(serde_json::json!({
+                "rows": [{"n": 0}, {"n": 2}],
+                "limits": limits,
+                "threshold": 1
+            }))
+            .unwrap();
+            let query = compile("$.rows[?@.n > $.limits[*] && $.threshold].n").unwrap();
+            let calculator = PathCalculator::<PTrackerGenerator>::create(&query);
+            let mut data = PathCalculatorData::new(ValueRef::Borrowed(&doc));
+            let _ = calculator.calc_internal(
+                query.root.clone(),
+                ValueRef::Borrowed(&doc),
+                None,
+                &mut data,
+            );
+            let actual: Vec<_> = data.results.iter().map(|r| r.res.inner_cloned()).collect();
+            assert_eq!(actual, vec![ijson::IValue::from(2)], "size={size}");
+            let cache = data.root_cache.as_ref().unwrap();
+            assert_eq!(cache.len(), if size == 1024 { 2 } else { 1 }, "size={size}");
+            assert!(cache.values().all(|value| {
+                !matches!(value, TermEvaluationResult::NodeList(nodes) if nodes.len() > 1024)
+            }));
+        }
+    }
+
+    #[test]
+    fn root_operand_cache_limits_value_and_existence_entries() {
+        use super::{PTrackerGenerator, PathCalculator, PathCalculatorData, ValueRef};
+
+        let doc: ijson::IValue = serde_json::from_value(serde_json::json!({
+            "rows": [{"n": 2}, {"n": 3}],
+            "threshold": 1
+        }))
+        .unwrap();
+        for count in [64, 65] {
+            for (operand, operator, tail, expected) in [
+                ("@.n > $.threshold", " && ", "", vec![2, 3]),
+                ("$.threshold", " && ", "", vec![2, 3]),
+                ("$.absent", " || ", " || @.n == 3", vec![3]),
+            ] {
+                let filter = vec![operand; count].join(operator);
+                let path = format!("$.rows[?{filter}{tail}].n");
+                let query = compile(&path).unwrap();
+                let calculator = PathCalculator::<PTrackerGenerator>::create(&query);
+                let mut data = PathCalculatorData::new(ValueRef::Borrowed(&doc));
+                let _ = calculator.calc_internal(
+                    query.root.clone(),
+                    ValueRef::Borrowed(&doc),
+                    None,
+                    &mut data,
+                );
+                let actual: Vec<_> = data.results.iter().map(|r| r.res.inner_cloned()).collect();
+                let expected: Vec<_> = expected.into_iter().map(ijson::IValue::from).collect();
+                assert_eq!(actual, expected, "{path}");
+                assert_eq!(data.root_cache.as_ref().unwrap().len(), 64, "{path}");
+            }
         }
     }
 

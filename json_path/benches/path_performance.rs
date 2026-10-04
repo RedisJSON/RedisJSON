@@ -320,6 +320,20 @@ fn path_performance(c: &mut Criterion) {
         &document,
         &json!([]),
     );
+    evaluate(
+        c,
+        "eval/root-descendant-list-large",
+        "$.rows[?@.score > $.thresholds..limit].uid",
+        &json!({"rows": rows, "thresholds": vec![json!({"limit": 1000}); 2048]}),
+        &json!([]),
+    );
+    evaluate(
+        c,
+        "eval/root-many-operands",
+        &format!("$.rows[?{}].uid", ["$.threshold"; 65].join(" && ")),
+        &document,
+        &json!((0..256).collect::<Vec<_>>()),
+    );
     evaluate(c, "eval/simple", "$.rows[0].score", &document, &json!([0]));
     evaluate(
         c,
