@@ -177,7 +177,7 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ contains(github.event.pull_request.labels.*.name, 'docker-image-changes') }}" = "true" ]; then
             force_rebuild=true
           fi
-          if [ "${{ github.event_name }}" = "schedule" ] && [ "$image_tag" = "unstable" ]; then
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$image_tag" = "8.12" ]; then
             force_rebuild=true
           fi
 
