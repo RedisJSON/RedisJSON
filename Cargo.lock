@@ -661,7 +661,7 @@ checksum = "3d3067d79b975e8844ca9eb072e16b31c3c1c36928edf9c6789548c524d0d954"
 [[package]]
 name = "ijson"
 version = "0.1.3"
-source = "git+https://github.com/RedisJSON/ijson?rev=5c2016ccff8f078400c4877c7954aa4f1bd380ec#5c2016ccff8f078400c4877c7954aa4f1bd380ec"
+source = "git+https://github.com/RedisJSON/ijson?rev=1ba5244afbed80a76336cd5b0b5009c9f5a92c53#1ba5244afbed80a76336cd5b0b5009c9f5a92c53"
 dependencies = [
  "bytemuck",
  "ciborium 0.2.2 (git+https://github.com/RedisJSON/ciborium?branch=main)",
