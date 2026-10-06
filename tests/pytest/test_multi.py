@@ -855,7 +855,10 @@ def testDebugCommand(env):
 
     # Test missing path (defaults to root)
     res = r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1')
-    r.assertEqual(res, 656)
+    # Check default-path behavior without depending on allocation layout.
+    r.assertTrue(type(res) is int)
+    r.assertTrue(res > 0)
+    r.assertEqual([res], r.execute_command('JSON.DEBUG', 'MEMORY', 'doc1', '$'))
 
     # Test missing subcommand
     r.expect('JSON.DEBUG', 'non_existing_doc', '$..a').raiseError()
