@@ -47,7 +47,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential clang libclang-dev pkg-config libssl-dev
           python3 -m venv venv
+          venv/bin/pip install --upgrade pip wheel "setuptools<81"
+          venv/bin/pip install -r current/.install/build_package_requirements.txt
           venv/bin/pip install -r current/tests/pytest/requirements.txt
+          venv/bin/python current/tests/pytest/memory_comparison.py --help
 
       - name: Record exact revisions
         run: |

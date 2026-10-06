@@ -100,15 +100,17 @@ def write_report(output, report):
         'Informational only: no performance or memory thresholds. Negative change is better.',
         'Medians of alternating runs. SET times are server commandstats microseconds; '
         'throughput in JSON includes client/transport time. These are replacement SETs.',
-        'Process bytes = INFO MEMORY used_memory minus empty-process baseline after loading; '
-        'not RSS. Key bytes = sum of MEMORY USAGE, using each revision\'s accounting policy; '
+        'Dataset RAM = INFO MEMORY used_memory minus empty-process baseline after loading; '
+        'not RSS. Total key memory = sum of MEMORY USAGE, using each revision\'s accounting policy; '
         'with proportional accounting, shared strings are divided among live references. '
         'Both include unused capacity; no debug discounts.',
         'Fixtures: existing nightly small/medium/large; large_repetition adds the historical '
         '19-byte string 400 times. City uses one full citylots document. '
         'Raw readback hashes must agree across both versions and all trials.', '',
-        '| Scenario | Keys / SETs per run | Master process B | Current process B | Change | '
-        'Master key B | Current key B | Change | Master SET µs | Current SET µs | Change | Status |',
+        '| Scenario | Keys / measured JSON.SET commands per run | '
+        'Master dataset RAM (bytes) | Current dataset RAM (bytes) | Dataset RAM change (%) | '
+        'Master total key memory (bytes) | Current total key memory (bytes) | Key memory change (%) | '
+        'Master time per JSON.SET (µs) | Current time per JSON.SET (µs) | SET time change (%) | Status |',
         '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|',
     ]
     for name, case in report['cases'].items():
