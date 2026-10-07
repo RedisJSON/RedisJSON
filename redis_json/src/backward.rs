@@ -34,6 +34,10 @@ enum NodeType {
 
 pub static LEGACY_RDB_DEPTH_LIMIT: AtomicBool = AtomicBool::new(false);
 
+pub fn legacy_rdb_depth_limit_enabled() -> bool {
+    LEGACY_RDB_DEPTH_LIMIT.load(Ordering::Relaxed)
+}
+
 impl TryFrom<u64> for NodeType {
     type Error = RedisError;
 
@@ -53,12 +57,12 @@ impl TryFrom<u64> for NodeType {
 }
 
 pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> RedisResult<Value> {
-    json_rdb_load_inner(rdb, 0)
+    json_rdb_load_inner(rdb, 1)
 }
 
 fn json_rdb_load_inner(rdb: *mut raw::RedisModuleIO, depth: usize) -> RedisResult<Value> {
     let node_type = NodeType::try_from(raw::load_unsigned(rdb)?)?;
-    if LEGACY_RDB_DEPTH_LIMIT.load(Ordering::Relaxed)
+    if legacy_rdb_depth_limit_enabled()
         && depth >= MAX_DEPTH
         && matches!(node_type, NodeType::Dict | NodeType::Array)
     {

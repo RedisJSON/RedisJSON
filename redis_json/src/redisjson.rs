@@ -259,9 +259,14 @@ pub mod type_methods {
                 let m = RedisIValueJsonKeyManager {
                     phantom: PhantomData,
                 };
-                m.from_str(&json_string, Format::JSON, true, None)
-                    .ok()
-                    .map(|data| RedisJSON { data })
+                m.from_str(
+                    &json_string,
+                    Format::JSON,
+                    backward::legacy_rdb_depth_limit_enabled(),
+                    None,
+                )
+                .ok()
+                .map(|data| RedisJSON { data })
             }
             _ => None,
         }
