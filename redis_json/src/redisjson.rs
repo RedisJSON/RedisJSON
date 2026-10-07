@@ -248,10 +248,11 @@ pub mod type_methods {
         rdb: *mut raw::RedisModuleIO,
         encver: c_int,
     ) -> Option<RedisJSON<ijson::IValue>> {
+        let limit_depth = backward::legacy_rdb_depth_limit_enabled();
         match encver {
             4 => {
                 let buf = raw::load_string_buffer(rdb).ok()?;
-                let data = ijson::decode(buf.as_ref()).ok()?;
+                let data = ijson::decode_with_depth_limit(buf.as_ref(), limit_depth).ok()?;
                 Some(RedisJSON { data })
             }
             0 | 2 | 3 => {
@@ -259,14 +260,9 @@ pub mod type_methods {
                 let m = RedisIValueJsonKeyManager {
                     phantom: PhantomData,
                 };
-                m.from_str(
-                    &json_string,
-                    Format::JSON,
-                    backward::legacy_rdb_depth_limit_enabled(),
-                    None,
-                )
-                .ok()
-                .map(|data| RedisJSON { data })
+                m.from_str(&json_string, Format::JSON, limit_depth, None)
+                    .ok()
+                    .map(|data| RedisJSON { data })
             }
             _ => None,
         }
@@ -300,8 +296,11 @@ pub mod type_methods {
             4 => {
                 let buf =
                     raw::load_string_buffer(rdb).map_err(|e| RedisError::String(e.to_string()))?;
-                let value =
-                    ijson::decode(buf.as_ref()).map_err(|e| RedisError::String(e.to_string()))?;
+                let value = ijson::decode_with_depth_limit(
+                    buf.as_ref(),
+                    backward::legacy_rdb_depth_limit_enabled(),
+                )
+                .map_err(|e| RedisError::String(e.to_string()))?;
                 let mut out = serde_json::Serializer::new(Vec::new());
                 value.serialize(&mut out)?;
                 String::from_utf8(out.into_inner())?

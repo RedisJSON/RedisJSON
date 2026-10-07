@@ -571,7 +571,7 @@ def testRestoreDepthLimitForAllEncodingVersions(env):
     conn.execute_command('JSON.SET', 'tmp', '$', '[0]')
     genuine_dump = conn.execute_command('DUMP', 'tmp', NEVER_DECODE=True)
 
-    depth = 130
+    depth = 300
     encver0 = _build_nested_legacy_array_payload(genuine_dump, depth)
     json_text = (b'[' * depth) + b'null' + (b']' * depth)
     encver2 = _build_json_text_restore_payload(genuine_dump, 2, json_text)
@@ -588,21 +588,15 @@ def testRestoreDepthLimitForAllEncodingVersions(env):
     for encver, payload in payloads.items():
         try:
             conn.execute_command('RESTORE', 'depth-on-{}'.format(encver), '0', payload)
-            env.assertTrue(False, message="encver {} should reject depth 130 when enabled".format(encver))
+            env.assertTrue(False, message="encver {} should reject depth {} when enabled".format(encver, depth))
         except redis.exceptions.ResponseError:
             pass
 
     conn.execute_command('CONFIG', 'SET', 'json-legacy-rdb-depth-limit', 'no')
-    for encver in (0, 2, 3):
+    for encver, payload in payloads.items():
         env.assertEqual(
-            conn.execute_command('RESTORE', 'depth-off-{}'.format(encver), '0', payloads[encver]),
+            conn.execute_command('RESTORE', 'depth-off-{}'.format(encver), '0', payload),
             'OK')
-
-    try:
-        conn.execute_command('RESTORE', 'depth-off-4', '0', encver4)
-        env.assertTrue(False, message="encver 4 should always reject depth 130")
-    except redis.exceptions.ResponseError:
-        pass
 
     env.assertEqual(conn.execute_command('PING'), True)
 
