@@ -26,3 +26,7 @@ license = "Redis Source Available License 2.0 (RSALv2) or the Server Side Public
 
 [profile.release]
 debug = 1
+
+# Use the sibling codec implementation until its string stream API is published.
+[patch."https://github.com/RedisJSON/ijson"]
+ijson = { path = "../ijson" }

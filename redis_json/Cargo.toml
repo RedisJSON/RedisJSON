@@ -36,6 +36,9 @@ json_path = { path = "../json_path" }
 linkme = "0.3"
 lazy_static = "1"
 
+[dev-dependencies]
+ctor = "0.1.26"
+
 [features]
 as-library = []
 thread_safe = ["ijson/thread_safe"]
