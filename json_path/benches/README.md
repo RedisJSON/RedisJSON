@@ -1,22 +1,72 @@
-# JSONPath performance benchmarks
+# JSONPath instruction benchmarks
 
-Run the Criterion suite with optimized code:
+The complete `path_performance` suite uses [Gungraun](https://github.com/gungraun/gungraun)
+and Valgrind Callgrind. It measures JSONPath compilation
+and evaluation against `IValue`, without Redis commands or network overhead.
+
+## Run
+
+Use Linux with Valgrind, the repository's Rust toolchain, and a runner matching
+the exact Gungraun version in `json_path/Cargo.toml`:
 
 ```sh
-cargo bench -p json_path --bench path_performance
+cargo install --locked --version 0.20.0 gungraun-runner
+bash json_path/benches/run_instructions.sh --test
+bash json_path/benches/run_instructions.sh --save-baseline=initial
 ```
 
-Open `target/criterion/report/index.html` for timings, distributions, and changes
-against the previous run. `compile/*` measures JSONPath compilation; `eval/*`
-measures evaluation of precompiled paths against `IValue`. Fixtures and result
-checks are outside the timed loops. Redis commands and network overhead are not
-measured.
+`--test` runs every fixture and expected-result assertion without Valgrind.
+The measurement run saves an instruction baseline. To compare another revision,
+run the same harness in that checkout with the same absolute `GUNGRAUN_HOME`:
+
+```sh
+bash json_path/benches/run_instructions.sh --baseline=initial --callgrind-limits='ir=5%'
+```
+
+Gungraun fails with exit code 3 when a workload executes more than 5% additional
+instructions. Exactly 5% passes. Comparisons use matching workload IDs; keep
+fixture inputs and measured operations identical across revisions.
+
+The helper builds `path_performance` and copies Cargo's reported executable to a
+stable path under `target/gungraun-instructions/bin/`. Reports are stored alongside
+it. Keeping the executable path fixed avoids allocator-state differences caused
+by different build paths.
+
+For a direct run, `cargo bench -p json_path --bench path_performance` also works,
+but does not stabilize the executable path. If Docker blocks `setarch` with
+`Operation not permitted`, add `--allow-aslr=true` to measurement commands.
+ASLR can affect simulated cache metrics.
+
+## Measurement boundaries
+
+- `compile/*` counts parsing and destruction of the compiled query. Path creation,
+  validation, warmup, and input-string destruction are excluded.
+- `eval/*` counts one evaluation and result destruction. Fixture creation, parsing,
+  expected-result assertions, and one warmup evaluation are excluded.
+- Path evaluation uses `create().calc()` and retains its query until collection
+  ends. Projection evaluation uses `calc_once_projection`, which consumes its
+  prepared query; cloning for validation and warmup happens outside collection.
+  Document destruction is excluded in both cases.
+
+Gungraun's setup functions prepare the inputs before collection starts. A compiled
+query borrows its path, so setup retains one generated path string for the
+benchmark process's lifetime. Each measured case runs in a separate short-lived
+process. Returning the query/document from the benchmark keeps fixture destruction
+outside collection. The projection/path dispatch is included in evaluation counts.
+
+`Ir` counts executed instructions. Reads (`Dr`) and writes (`Dw`) count data
+accesses. Estimated cycles and cache metrics come from Callgrind's simulation;
+they are not elapsed time or hardware measurements. Instruction counts avoid
+hosted-runner timing noise, but randomized maps and allocator state can still
+change the work performed. Keep the toolchain, target, dependencies, fixtures,
+and Valgrind version fixed when interpreting changes.
 
 ## Coverage
 
-The suite contains 81 benchmarks. Each of the 28 path forms below has separate
-`compile/<name>` and `eval/<name>` measurements with an expected-result assertion.
-The other 25 workloads cover nested-filter compilation, recursive searches,
+The suite contains 83 workloads: 36 compilation and 47 evaluation
+cases. Each of the 28 path forms below has separate `compile/<name>` and
+`eval/<name>` measurements. Every evaluation validates its expected result.
+The other 27 workloads cover nested-filter compilation, recursive searches,
 existence tests, root-relative comparisons, string membership/equality, and regexes.
 
 | Path form | Examples |
@@ -30,15 +80,6 @@ existence tests, root-relative comparisons, string membership/equality, and rege
 | Arithmetic/function filters | `(@.score + 1) * 2 >= 510`, `length(@.name) == 5` |
 | Projections | Arithmetic, `length()`, `.first().length()`, `.sum()`, `~`, `.append()`, missing operands |
 
-Projection benchmarks use `calc_once_projection`, with query cloning outside the
-timed routine via Criterion's batched setup. Path benchmarks use the reusable
-calculator. Both include result cleanup in the measured time. All fixtures use
-`IValue`. Coverage is representative of these forms, not every function, operator,
-or input shape.
-
-The CI job runs the entire target without a workload filter on its first pass.
-These cases cover the syntax affected by the evaluator and grammar optimizations:
-
 | Optimized behavior | Benchmark cases and syntax |
 | --- | --- |
 | Factored nested grammar | `compile/nested-{7,8,9}` for nested existence filters; `compile/nested-{grouped,comparison,arithmetic}-9` for `(@.path)`, `(@.path > 0)`, and `(@.path) > 0` |
@@ -51,116 +92,78 @@ These cases cover the syntax affected by the evaluator and grammar optimizations
 | Borrowed string comparisons | `eval/string-membership`, `eval/deep-string-equality`: `in`, equality of objects containing strings |
 | Result buffer | `eval/simple`, `eval/array-wildcard`, `eval/recursive-objects` cover small and large selections |
 
-## Comparing revisions
-
-To compare two revisions, save a named baseline, switch revisions, and compare
-without deleting the benchmark data:
-
-```sh
-# On the base revision:
-cargo bench -p json_path --bench path_performance -- --save-baseline main
-# On the candidate revision:
-cargo bench -p json_path --bench path_performance -- --baseline main
-```
-
-Use the same benchmark source, Rust toolchain, and machine for both revisions.
-When using separate worktrees, set `CRITERION_HOME` to the same absolute directory.
-Keep their Cargo build directories separate; only share the Criterion measurements.
-Both revisions need the Criterion harness. For a quick correctness check without
-timing, run `cargo test -p json_path --bench path_performance`.
-
 ## CI reports
 
-Non-draft, non-documentation-only PRs benchmark the current `master` tip and the
-PR head in the same job. Master is pinned to the SHA checked out at job start;
-it is not the PR's merge base. Pushes to `master` compare against the previous
-master tip (`github.event.before`). These benchmarks do not run in the nightly
-workflow.
-
-Measurement caches are neither restored nor published. Results from different
-hosted runners are unsuitable for the 5% gate: two attempts of the same PR used
-Intel Xeon 8573C and AMD EPYC 7763 CPUs, and median candidate timings differed by
-32%. Measuring both revisions on one runner removes that hardware mismatch;
-within-job timing noise can still occur.
-
-For uncertain results, compare repeated runs of the exact same executable and
-alternate the order of the two revisions. Increasing Criterion's sample count
-alone does not eliminate variation between runs. Evaluate an optimization against
-its previous implementation on the same runner before comparing results across
-CPU models.
+`.github/workflows/flow-jsonpath-benchmark.yml` compares the PR head against the
+`master` tip pinned at checkout. Pushes to `master` compare against the preceding
+master commit (`github.event.before`). Both revisions run on the same runner.
 
 Each job:
 
-1. Builds both revisions with the candidate's Rust toolchain, using separate Cargo
-   build directories. Each revision retains its own production dependencies.
-2. Lists the original benchmark names in both revisions, then copies the candidate
-   harness into the master checkout. Master measures the shared names; the candidate
-   measures every workload. New or renamed workloads are reported as **No master
-   baseline** until they exist on master. Both revisions must support the shared
-   harness. Empty, invalid, or disjoint workload lists fail the job.
-3. Measures master with `--save-baseline master`, then the candidate with
-   `--baseline-lenient master`, sharing only the job's `CRITERION_HOME`. Criterion
-   compares existing workloads and permits candidate-only workloads without a
-   baseline. No previous workflow run is needed, even for the first PR run.
-4. Remeasures every workload at least 5% slower on both revisions, on the same
-   runner. CI fails only if the same workload is still at least 5% slower in that
-   second comparison. The threshold is inclusive; a slowdown that disappears
-   passes. Build failures, incorrect results, and missing confirmation measurements
-   also fail.
+1. Copies the candidate benchmark harness, runner helper, and dev dependencies
+   into the baseline checkout. Production sources and dependency requirements
+   remain those of each revision. `cargo update --workspace` resolves the harness
+   dependencies in the baseline lockfile; subsequent builds use `--locked`.
+2. Builds and validates both suites using the candidate Rust toolchain and pinned
+   Gungraun runner. Cargo build directories stay separate. Both checkouts must
+   support the shared harness and its expected-result assertions.
+3. Measures master with `--save-baseline=master`, then the candidate with
+   `--baseline=master --save-baseline=candidate --callgrind-limits='ir=5%'`.
+   Both use the same `GUNGRAUN_HOME`, executable path, and metadata path.
+4. Publishes the comparison summary, then fails CI if Gungraun reported an
+   instruction-count increase over 5%. Every workload finishes before gating;
+   regression failures retain the summary and profiles.
 
-Criterion's default warmup and measurement periods remain unchanged. The job has
-a 90-minute timeout for both builds, both full measurement passes, and any flagged
-workload reruns. Both builds finish before measurements start. The comparison
-action stays report-only; the Python confirmation gate controls failure.
+The GitHub job summary shows both commit SHAs, colored bars for the largest
+instruction-count changes, and a collapsible table of every workload's exact
+JSONPath, master count, candidate count, percentage change, and regression status.
+A second table shows data reads/writes and simulated cycle costs for both runs.
+The report uses Gungraun's regression verdicts, without a separate Python gate.
 
-GitHub Actions displays colored bars for the largest time changes and a collapsible
-table of every workload's baseline, candidate, percentage change, first-pass delta,
-and status. Missing baselines are explicitly reported without claiming a comparison.
-Both tables include the exact JSONPath emitted by the benchmark harness to
-`paths.jsonl`, including generated nested filters. Metadata is written outside the
-timed loops. Nanosecond timings are displayed as ns, µs, ms, or s per iteration;
-raw measurements and the 5% comparison remain unchanged.
+The report requires matching workload names and JSONPaths, and checks that each
+candidate result's native baseline counts match the master measurements from this
+job. Missing baselines cannot silently pass. Build failures, fixture assertions,
+measurement errors, and incomplete or invalid reports also fail CI.
 
-The summary and chart use confirmation timings for remeasured workloads; the
-first-pass column preserves their initial same-runner delta. Other workloads use
-the first pass. The summary is generated even when the regression gate fails.
+The `jsonpath-performance-*` artifact is retained for 30 days and contains:
 
-The `jsonpath-performance-*` artifact is retained for 30 days. It contains
-`summary.md`, both revisions' text output, comparison JSON, pinned commit details,
-CPU/compiler details, workload lists, and Criterion HTML reports under
-`criterion/report/`. Initial measurements remain intact; confirmation output and
-HTML reports are retained separately under `confirmation/`. Artifacts are for
-inspection, not baselines for future jobs. No PR comments or GitHub Pages
-publishing are enabled.
+- `summary.md`, `master.jsonl`, `results.jsonl`, and both sets of JSONPath metadata.
+- Both commit SHAs, resolved lockfiles, and CPU/compiler/Valgrind/Gungraun versions.
+- Gungraun summaries and raw Callgrind profiles for both named baselines under
+  `gungraun/`.
 
-Run the gate's boundary, rerun, and data-validation tests with:
+Every job measures a fresh master baseline. No measurements from earlier jobs are
+restored. Results appear in the GitHub Actions summary linked from the PR check;
+no PR comments or GitHub Pages publishing are enabled.
+
+To render a downloaded comparison locally:
 
 ```sh
-python3 -m unittest discover -s .github/scripts -p 'test_jsonpath_benchmark_gate.py'
+python3 .github/scripts/jsonpath_benchmark_report.py benchmark-results/results.jsonl \
+  --paths-file benchmark-results/paths.jsonl \
+  --baseline-file benchmark-results/master.jsonl \
+  --baseline-paths-file benchmark-results/master-paths.jsonl > benchmark-results/summary.md
+```
+
+The metadata file must be empty before each measurement run. It is written during
+setup, outside collection. Save master's metadata before emptying the same file
+for the candidate. Keep measurements sequential when sharing `GUNGRAUN_HOME` or
+a metadata file.
+
+Run comparison, baseline-validation, formatting, escaping, and CLI tests with:
+
+```sh
+python3 -m unittest discover -s .github/scripts -p 'test_jsonpath_benchmark_report.py'
 ```
 
 ## Adding workloads
 
-Add an entry to `path_forms` to benchmark both compilation and evaluation, or add
-another `c.bench_function` or `evaluate(c, ...)` call for a focused workload. Use a
-unique, stable name and keep fixtures outside timed closures. Evaluation helpers
-assert expected results before timing. Adding a workload preserves comparisons for
-existing names; only the new workload waits for a master baseline. If changing an
-existing fixture or measured operation, rename its benchmark (for example, append
-`-v2`) so CI does not compare different workloads under the same name. Local reports
-and the confirmation gate discover workload names automatically.
+Add fixtures to `path_form` or `eval_case`, then register named `#[bench::...]`
+cases on `compile_path` and/or `eval_path`. Every name must be unique within its
+phase. Gungraun IDs use underscores; report names replace them with hyphens.
+Supply the same hyphenated name to the setup helper so metadata matches the ID.
+Keep expected-result assertions in setup and measured work in the benchmark body.
 
-For another crate, add Criterion as a dev dependency, create a file under its
-`benches/` directory, and register a `[[bench]]` target with `harness = false`.
-For example, a future `redis_json` target named `value_performance` would run as:
-
-```sh
-cargo bench -p redis_json --features as-library --bench value_performance
-```
-
-`redis_json` already exposes an `rlib` named `rejson`. Pure Rust operations can be
-benchmarked directly; operations that call Redis APIs need the appropriate Redis
-environment. The current workflow is specific to `json_path/path_performance`;
-adding another suite requires CI wiring for its package, target, and features.
-The 5% gate accepts any single-suite benchmark-action comparison file and does
-not need new workload names hardcoded into it.
+Rename a workload when its inputs or measured operation change. Run `--test` and
+one full Callgrind pass; the report rejects missing metadata and zero instruction
+counts.
