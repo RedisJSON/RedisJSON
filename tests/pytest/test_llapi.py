@@ -178,6 +178,15 @@ def testLLAPIOpenGetWithPath():
                     [10, 20, 30, 40])
 
 
+def testLLAPIPathParseNoErrorMsg():
+    env = _env_with_doc()
+    for path in ('$', '$.int', '$.object', '$.num_array[*]', '$.does_not_exist'):
+        env.expect('LLAPI.PATHPARSE_NO_ERROR_MSG', path).equal(
+            env.cmd('LLAPI.PATHPARSE', path))
+        env.expect('LLAPI.OPEN_GET_WITH_PATH_NO_ERROR_MSG', 'doc', path).equal(
+            env.cmd('LLAPI.OPEN_GET', 'doc', path))
+
+
 def testLLAPIIsJson():
     env = _env_with_doc()
     env.cmd('SET', 'plain', 'notjson')
@@ -199,6 +208,8 @@ def testLLAPIErrorsMissingOrWrongKey():
     # getJsonFromHandle must reject a missing key (NULL handle) and a wrong-type key.
     env.expect('LLAPI.GETJSONFROMHANDLE', 'missing', '$').raiseError()
     env.expect('LLAPI.GETJSONFROMHANDLE', 'plain', '$').raiseError()
+    env.expect('LLAPI.OPEN_GET_WITH_PATH_NO_ERROR_MSG', 'missing', '$').raiseError()
+    env.expect('LLAPI.OPEN_GET_WITH_PATH_NO_ERROR_MSG', 'plain', '$').raiseError()
 
 
 def testLLAPIErrorsTypeMismatch():

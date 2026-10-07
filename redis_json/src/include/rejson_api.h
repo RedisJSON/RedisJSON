@@ -111,7 +111,7 @@ typedef struct RedisJSONAPI {
   // V2 entries //
   ////////////////
 
-  // Return a parsed JSONPath
+  // Return a parsed JSONPath. Keep the input bytes alive and unchanged until pathFree.
   // Return NULL if failed to parse, and the error message in `err_msg`
   // The caller gains ownership of `err_msg`
   JSONPath (*pathParse)(const char *path, RedisModuleCtx *ctx, RedisModuleString **err_msg);
@@ -181,12 +181,23 @@ typedef struct RedisJSONAPI {
   ////////////////
   // V9 entries //
   ////////////////
-  // Like `get`, but takes a compiled path handle (from `pathParse`) instead of a path string.
+  // Like `get`, but takes a compiled path handle (from either path parser) instead of a path string.
   JSONResultsIterator (*getWithPath)(RedisJSON json, JSONPath path);
+
+  /////////////////
+  // V10 entries //
+  /////////////////
+  // Like pathParse, but requires no Redis context and creates no Redis error message.
+  // `path` must be a valid, non-NULL, null-terminated string. Return NULL for invalid
+  // UTF-8, malformed paths, or unsupported computed/projection expressions.
+  // The caller owns the handle and frees it with pathFree. Keep the input bytes
+  // alive and unchanged until then. The handle supports pathIsSingle,
+  // pathHasDefinedOrder, and getWithPath, with their existing threading restrictions.
+  JSONPath (*pathParseNoErrorMsg)(const char *path);
 
 } RedisJSONAPI;
 
-#define RedisJSONAPI_LATEST_API_VER 9
+#define RedisJSONAPI_LATEST_API_VER 10
 #ifdef __cplusplus
 }
 #endif

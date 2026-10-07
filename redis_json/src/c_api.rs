@@ -25,7 +25,7 @@ use redis_module::{key::KeyFlags, Context, RedisString, Status};
 
 use crate::manager::{Manager, ReadHolder};
 
-pub const REDIS_JSONAPI_LATEST_API_VER: usize = 9;
+pub const REDIS_JSONAPI_LATEST_API_VER: usize = 10;
 
 //
 // structs
@@ -370,8 +370,8 @@ pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -
     .cast::<c_void>()
 }
 
-/// Like [`json_api_get`], but takes a compiled path handle (from `JSONAPI_pathParse`) instead of a
-/// path string.
+/// Like [`json_api_get`], but takes a compiled path handle from `JSONAPI_pathParse` or
+/// `JSONAPI_pathParseNoErrorMsg` instead of a path string.
 ///
 /// Unlike `json_api_get`, which compiles a private [`Query`], this borrows the caller's handle, so
 /// it must not be evaluated concurrently from multiple threads ([`Query`] is not `Sync`).
@@ -387,7 +387,7 @@ pub fn json_api_get_with_path<M: Manager>(
         return null();
     }
     // SAFETY: caller guarantees `val` is a live `M::V` and `json_path` a `Query` from
-    // `JSONAPI_pathParse`, both owned for this call; we only borrow them immutably.
+    // either path parser, both live for this call; we only borrow them immutably.
     let (v, query) = unsafe {
         (
             &*(val.cast::<M::V>()),
@@ -405,6 +405,22 @@ pub fn json_api_get_with_path<M: Manager>(
         pos: 0,
     }))
     .cast::<c_void>()
+}
+
+/// Compile a JSONPath without a Redis context or Redis error-message allocation.
+/// Returns null for invalid UTF-8, malformed paths, or unsupported projections.
+/// The caller must supply a valid, non-null, null-terminated string and keep its bytes
+/// alive and unchanged until freeing the returned handle with `pathFree`.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub fn json_api_path_parse_no_error_msg(path: *const c_char) -> *const c_void {
+    // SAFETY: the caller guarantees a valid null-terminated string whose bytes outlive the handle.
+    let Ok(path) = (unsafe { CStr::from_ptr(path) }).to_str() else {
+        return null();
+    };
+    match compile(path) {
+        Ok(query) if !query.is_projection() => Box::into_raw(Box::new(query)).cast::<c_void>(),
+        _ => null(),
+    }
 }
 
 pub fn json_api_is_json<M: Manager>(m: M, key: *mut rawmod::RedisModuleKey) -> c_int {
@@ -826,6 +842,11 @@ macro_rules! redis_json_module_export_shared_api {
         }
 
         #[no_mangle]
+        pub extern "C" fn JSONAPI_pathParseNoErrorMsg(path: *const c_char) -> *const c_void {
+            $crate::c_api::json_api_path_parse_no_error_msg(path)
+        }
+
+        #[no_mangle]
         pub extern "C" fn JSONAPI_pathFree(json_path: *mut c_void) {
             unsafe { drop(Box::from_raw(json_path.cast::<json_path::json_path::Query>())) };
         }
@@ -989,6 +1010,8 @@ macro_rules! redis_json_module_export_shared_api {
             getJsonFromHandle: JSONAPI_getJsonFromHandle,
             // V9 entries
             getWithPath: JSONAPI_getWithPath,
+            // V10 entries
+            pathParseNoErrorMsg: JSONAPI_pathParseNoErrorMsg,
         };
 
         #[repr(C)]
@@ -1058,6 +1081,8 @@ macro_rules! redis_json_module_export_shared_api {
             pub getJsonFromHandle: extern "C" fn(key: *mut rawmod::RedisModuleKey) -> *mut c_void,
             // V9 entries
             pub getWithPath: extern "C" fn(val: *const c_void, path: *const c_void) -> *const c_void,
+            // V10 entries
+            pub pathParseNoErrorMsg: extern "C" fn(path: *const c_char) -> *const c_void,
         }
     };
 }
@@ -1148,18 +1173,23 @@ mod tests {
         }
     }
 
-    /// `getWithPath` (evaluate a pre-compiled `Query`) must return exactly the same results as the
-    /// string-based `get` (compile-then-evaluate) for every kind of path.
+    /// Handles from the context-free parser preserve path properties and can be reused
+    /// across documents, with the same results as string-based `get`.
     #[test]
-    fn test_json_api_get_with_path_matches_get() {
-        use std::ffi::CString;
-        let doc: IValue = serde_json::from_str(
-            r#"{"entityName":"Alpha","event":{"id":42,"type":"A","tags":[7,8,9]},"n":null}"#,
-        )
-        .unwrap();
-        let doc_ptr = &doc as *const IValue as *const c_void;
+    fn test_json_api_path_parse_no_error_msg_matches_get() {
+        let docs: [IValue; 2] = [
+            serde_json::from_str(
+                r#"{"entityName":"Alpha","event":{"id":42,"tags":[7,8,9]},"n":null}"#,
+            )
+            .unwrap(),
+            serde_json::from_str(
+                r#"{"entityName":"Beta","event":{"id":43,"tags":[10,11]},"n":null}"#,
+            )
+            .unwrap(),
+        ];
 
         for p in [
+            "$",               // document root
             "$.entityName",    // single scalar
             "$.event.id",      // nested scalar
             "$.event",         // object node
@@ -1168,31 +1198,49 @@ mod tests {
             "$.n",             // null value
         ] {
             let cpath = CString::new(p).unwrap();
-            let it_str = json_api_get(ivalue_mngr(), doc_ptr, cpath.as_ptr());
-
-            let query = json_path::compile(p).unwrap();
-            let qptr = &query as *const json_path::json_path::Query as *const c_void;
-            let it_cmp = json_api_get_with_path(ivalue_mngr(), doc_ptr, qptr);
-
+            let qptr = json_api_path_parse_no_error_msg(cpath.as_ptr());
+            assert!(!qptr.is_null(), "valid path {p} must compile");
+            // SAFETY: qptr is a fresh boxed Query from the parser. cpath outlives it;
+            // taking ownership here frees the handle exactly once when this scope ends.
+            let mut query =
+                unsafe { Box::from_raw(qptr.cast_mut().cast::<json_path::json_path::Query>()) };
+            let mut expected = compile(p).unwrap();
             assert_eq!(
-                it_str.is_null(),
-                it_cmp.is_null(),
-                "null-ness parity for path {p}"
+                query.is_static(),
+                expected.is_static(),
+                "properties for {p}"
             );
-            if it_str.is_null() {
-                continue;
+            let qptr = (&*query as *const json_path::json_path::Query).cast::<c_void>();
+
+            for doc in &docs {
+                let doc_ptr = doc as *const IValue as *const c_void;
+                let it_str = json_api_get(ivalue_mngr(), doc_ptr, cpath.as_ptr());
+                let it_cmp = json_api_get_with_path(ivalue_mngr(), doc_ptr, qptr);
+                assert!(!it_str.is_null(), "valid path {p} must yield an iterator");
+                assert!(
+                    !it_cmp.is_null(),
+                    "compiled path {p} must yield an iterator"
+                );
+                let n = json_api_len(ivalue_mngr(), it_str);
+                assert_eq!(n, json_api_len(ivalue_mngr(), it_cmp), "len parity for {p}");
+                for _ in 0..n {
+                    let a = json_api_next(ivalue_mngr(), it_str.cast_mut());
+                    let b = json_api_next(ivalue_mngr(), it_cmp.cast_mut());
+                    // SAFETY: both iterators have n results borrowing the live document.
+                    let (av, bv) = unsafe { (&*a.cast::<IValue>(), &*b.cast::<IValue>()) };
+                    assert_eq!(av, bv, "value parity for {p}");
+                }
+                json_api_free_iter(ivalue_mngr(), it_str.cast_mut());
+                json_api_free_iter(ivalue_mngr(), it_cmp.cast_mut());
             }
-            let n = json_api_len(ivalue_mngr(), it_str);
-            assert_eq!(n, json_api_len(ivalue_mngr(), it_cmp), "len parity for {p}");
-            for _ in 0..n {
-                let a = json_api_next(ivalue_mngr(), it_str as *mut c_void);
-                let b = json_api_next(ivalue_mngr(), it_cmp as *mut c_void);
-                let av = unsafe { &*(a as *const IValue) };
-                let bv = unsafe { &*(b as *const IValue) };
-                assert_eq!(av, bv, "value parity for {p}");
-            }
-            json_api_free_iter(ivalue_mngr(), it_str as *mut c_void);
-            json_api_free_iter(ivalue_mngr(), it_cmp as *mut c_void);
+        }
+    }
+
+    #[test]
+    fn test_json_api_path_parse_no_error_msg_rejects_invalid_paths() {
+        for bytes in [b"$[\0".as_slice(), b"\xff\0", b"$.a + 1\0"] {
+            let path = CStr::from_bytes_with_nul(bytes).unwrap();
+            assert!(json_api_path_parse_no_error_msg(path.as_ptr()).is_null());
         }
     }
 
