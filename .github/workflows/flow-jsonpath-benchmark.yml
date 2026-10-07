@@ -12,18 +12,20 @@ permissions:
 jobs:
   benchmark:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 30
     defaults:
       run:
         shell: bash
+    env:
+      GUNGRAUN_HOME: ${{ github.workspace }}/benchmark-results/gungraun
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
-      - name: Test regression gate
-        run: python3 -m unittest discover -s .github/scripts -p 'test_jsonpath_benchmark_gate.py'
+      - name: Test Gungraun report
+        run: python3 -m unittest discover -s .github/scripts -p 'test_jsonpath_benchmark_report.py'
 
       - name: Check out master baseline
         uses: actions/checkout@v5
@@ -32,53 +34,58 @@ jobs:
           path: benchmark-master
           persist-credentials: false
 
-      - name: Select toolchain and record revisions
-        id: comparison
-        env:
-          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Select pinned tool versions and record revisions
         run: |
           mkdir -p benchmark-results
           python3 - <<'PYTHON'
-          import json
           import os
           import subprocess
           import tomllib
           from pathlib import Path
 
           toolchain = tomllib.loads(Path('rust-toolchain.toml').read_text())['toolchain']['channel']
+          version = tomllib.loads(Path('json_path/Cargo.toml').read_text())['dev-dependencies']['gungraun']
+          if not version.startswith('='):
+              raise ValueError('Pin Gungraun exactly so the library and runner versions match')
           with open(os.environ['GITHUB_ENV'], 'a') as output:
-              output.write(f'RUSTUP_TOOLCHAIN={toolchain}\n')
-          def master_field(format):
-              return subprocess.check_output(
-                  ['git', '-C', 'benchmark-master', 'show', '-s', f'--format={format}', 'HEAD'],
-                  text=True,
-              ).strip()
-          sha = master_field('%H')
-          if sha == os.environ['CANDIDATE_SHA']:
-              raise ValueError('Master baseline and candidate commits must differ')
-          commit = {
-              'id': sha,
-              'message': master_field('%B'),
-              'timestamp': master_field('%cI'),
-              'url': f'{os.environ["GITHUB_SERVER_URL"]}/{os.environ["GITHUB_REPOSITORY"]}/commit/{sha}',
-              'author': {'name': master_field('%an'), 'email': master_field('%ae')},
-          }
-          results = Path('benchmark-results')
-          (results / 'master-commit.json').write_text(json.dumps(commit))
-          text = (f'## JSONPath performance\nCandidate: {os.environ["CANDIDATE_SHA"]}\n'
-                  f'Master baseline: {sha}\nBoth revisions measured in this job; no cached timings.\n')
-          (results / 'commits.txt').write_text(text)
+              output.write(f'RUSTUP_TOOLCHAIN={toolchain}\nGUNGRAUN_VERSION={version[1:]}\n')
+          candidate = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          baseline = subprocess.check_output(['git', '-C', 'benchmark-master', 'rev-parse', 'HEAD'], text=True).strip()
+          revisions = f'Master baseline: {baseline}\n\nCandidate: {candidate}\n\n'
+          Path('benchmark-results/commits.txt').write_text(revisions)
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as output:
-              output.write(text)
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write(f'baseline-sha={sha}\n')
+              output.write(revisions)
           PYTHON
 
-      - name: Install build dependencies
+      - name: Install build and benchmark dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential clang libclang-dev libssl-dev pkg-config
+          sudo apt-get install -y build-essential clang libclang-dev libssl-dev pkg-config valgrind
           rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+          cargo install --locked --version "$GUNGRAUN_VERSION" gungraun-runner
+
+      - name: Prepare identical benchmark harnesses
+        run: |
+          python3 - <<'PYTHON'
+          import re
+          import shutil
+          from pathlib import Path
+
+          section = re.compile(r'(?ms)^\[dev-dependencies\]\n.*?(?=^\[|\Z)')
+          candidate = Path('json_path/Cargo.toml').read_text()
+          baseline = Path('benchmark-master/json_path/Cargo.toml')
+          development = section.search(candidate).group()
+          manifest, count = section.subn(lambda _: development, baseline.read_text())
+          if count != 1:
+              raise ValueError('Expected one baseline dev-dependencies section')
+          baseline.write_text(manifest)
+          for name in ('path_performance.rs', 'run_instructions.sh'):
+              source = Path('json_path/benches') / name
+              shutil.copy2(source, Path('benchmark-master') / source)
+          PYTHON
+          cargo update --workspace --manifest-path benchmark-master/Cargo.toml
+          cp benchmark-master/Cargo.lock benchmark-results/master-Cargo.lock
+          cp Cargo.lock benchmark-results/candidate-Cargo.lock
 
       - name: Record benchmark environment
         run: |
@@ -86,195 +93,65 @@ jobs:
             uname -a
             lscpu
             rustc -Vv
+            valgrind --version
+            gungraun-runner --version
           } | tee benchmark-results/environment.txt
 
-      - name: Build benchmarks and select shared workloads
-        id: workloads
-        # This replaces the previous baseline rebuild, whose constraint was:
-        # Only the benchmark harness and its dev dependency change on the baseline.
-        # Both measurements now use the candidate harness with each revision's dependencies.
+      - name: Build and validate both benchmark suites
         run: |
-          cargo bench -p json_path --bench path_performance --locked -- --list --format terse \
-            > benchmark-results/candidate-list.txt
-          (
-            cd benchmark-master
-            CARGO_TARGET_DIR="$GITHUB_WORKSPACE/benchmark-master-target" \
-              cargo bench -p json_path --bench path_performance --locked -- --list --format terse \
-              > ../benchmark-results/master-list.txt
-          )
-          python3 - <<'PYTHON'
-          import os
-          import sys
-          from pathlib import Path
-
-          sys.path.insert(0, '.github/scripts')
-          from jsonpath_benchmark_gate import shared_workload_filter
-
-          results = Path('benchmark-results')
-          pattern = shared_workload_filter(results / 'master-list.txt', results / 'candidate-list.txt')
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write(f'filter={pattern}\n')
-          PYTHON
-          cp json_path/benches/path_performance.rs benchmark-master/json_path/benches/path_performance.rs
-          cd benchmark-master
           CARGO_TARGET_DIR="$GITHUB_WORKSPACE/benchmark-master-target" \
-            cargo bench -p json_path --bench path_performance --locked --no-run
+            bash benchmark-master/json_path/benches/run_instructions.sh --test
+          bash json_path/benches/run_instructions.sh --test
 
-      - name: Measure master on this runner
+      - name: Measure master instruction baseline
+        id: baseline
         env:
-          BENCHMARK_FILTER: ${{ steps.workloads.outputs.filter }}
-          CRITERION_HOME: ${{ github.workspace }}/benchmark-results/criterion
           CARGO_TARGET_DIR: ${{ github.workspace }}/benchmark-master-target
-        run: |
-          cd benchmark-master
-          cargo bench -p json_path --bench path_performance --locked -- \
-            --save-baseline master --output-format bencher "$BENCHMARK_FILTER" \
-            | tee ../benchmark-results/master.txt
-
-      - name: Record master measurements
-        uses: benchmark-action/github-action-benchmark@52576c92bccf6ac60c8223ec7eb2565637cae9ba # v1.22.1
-        with:
-          name: JSONPath
-          tool: cargo
-          output-file-path: benchmark-results/master.txt
-          external-data-json-path: benchmark-results/comparison.json
-          github-token: ${{ github.token }}
-          ref: ${{ steps.comparison.outputs.baseline-sha }}
-          summary-always: false
-          fail-on-alert: false
-
-      - name: Label baseline with master commit
-        run: |
-          python3 - <<'PYTHON'
-          import json
-          from pathlib import Path
-
-          target = Path('benchmark-results/comparison.json')
-          data = json.loads(target.read_text())
-          entries = data['entries']['JSONPath']
-          if len(entries) != 1:
-              raise ValueError('Expected one master measurement run')
-          # The action otherwise labels the baseline with the PR head, ignoring ref.
-          entries[0]['commit'] = json.loads(Path('benchmark-results/master-commit.json').read_text())
-          target.write_text(json.dumps(data))
-          PYTHON
-
-      - name: Measure candidate against fresh master baseline
-        env:
-          CRITERION_HOME: ${{ github.workspace }}/benchmark-results/criterion
           JSONPATH_BENCHMARK_PATHS: ${{ github.workspace }}/benchmark-results/paths.jsonl
         run: |
           : > "$JSONPATH_BENCHMARK_PATHS"
-          cargo bench -p json_path --bench path_performance --locked -- \
-            --baseline-lenient master --output-format bencher | tee benchmark-results/candidate.txt
+          bash benchmark-master/json_path/benches/run_instructions.sh \
+            --save-baseline=master --save-summary=json --output-format=json \
+            | tee benchmark-results/master.jsonl
+          cp "$JSONPATH_BENCHMARK_PATHS" benchmark-results/master-paths.jsonl
 
-      - name: Report changes
+      - name: Compare candidate against master
         id: measurements
-        uses: benchmark-action/github-action-benchmark@52576c92bccf6ac60c8223ec7eb2565637cae9ba # v1.22.1
-        with:
-          name: JSONPath
-          tool: cargo
-          output-file-path: benchmark-results/candidate.txt
-          external-data-json-path: benchmark-results/comparison.json
-          github-token: ${{ github.token }}
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          summary-always: false
-          fail-on-alert: false
-
-      - name: Select workloads for confirmation
-        id: regressions
-        run: python3 .github/scripts/jsonpath_benchmark_gate.py benchmark-results/comparison.json
-
-      - name: Measure flagged master workloads on this runner
-        if: steps.regressions.outputs.filter != ''
         env:
-          BENCHMARK_FILTER: ${{ steps.regressions.outputs.filter }}
-          CRITERION_HOME: ${{ github.workspace }}/benchmark-results/confirmation/criterion
-          CARGO_TARGET_DIR: ${{ github.workspace }}/benchmark-master-target
+          JSONPATH_BENCHMARK_PATHS: ${{ github.workspace }}/benchmark-results/paths.jsonl
         run: |
-          mkdir -p benchmark-results/confirmation
-          cd benchmark-master
-          cargo bench -p json_path --bench path_performance --locked -- \
-            --save-baseline master --output-format bencher "$BENCHMARK_FILTER" \
-            | tee ../benchmark-results/confirmation/master.txt
-
-      - name: Record fresh master measurements
-        if: steps.regressions.outputs.filter != ''
-        uses: benchmark-action/github-action-benchmark@52576c92bccf6ac60c8223ec7eb2565637cae9ba # v1.22.1
-        with:
-          name: JSONPath
-          tool: cargo
-          output-file-path: benchmark-results/confirmation/master.txt
-          external-data-json-path: benchmark-results/confirmation/comparison.json
-          github-token: ${{ github.token }}
-          ref: ${{ steps.comparison.outputs.baseline-sha }}
-          summary-always: false
-          fail-on-alert: false
-
-      - name: Label confirmation baseline with master commit
-        if: steps.regressions.outputs.filter != ''
-        run: |
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          source = json.loads(Path('benchmark-results/comparison.json').read_text())
-          target = Path('benchmark-results/confirmation/comparison.json')
-          data = json.loads(target.read_text())
-          entries = data['entries']['JSONPath']
-          if len(entries) != 1:
-              raise ValueError('Expected one fresh master measurement run')
-          entries[0]['commit'] = source['entries']['JSONPath'][0]['commit']
-          target.write_text(json.dumps(data))
-          PY
-
-      - name: Rerun flagged candidate workloads on this runner
-        if: steps.regressions.outputs.filter != ''
-        env:
-          BENCHMARK_FILTER: ${{ steps.regressions.outputs.filter }}
-          CRITERION_HOME: ${{ github.workspace }}/benchmark-results/confirmation/criterion
-        run: |
-          cargo bench -p json_path --bench path_performance --locked -- \
-            --baseline master --output-format bencher "$BENCHMARK_FILTER" \
-            | tee benchmark-results/confirmation/candidate.txt
-
-      - name: Report confirmation
-        id: confirmation
-        if: steps.regressions.outputs.filter != ''
-        uses: benchmark-action/github-action-benchmark@52576c92bccf6ac60c8223ec7eb2565637cae9ba # v1.22.1
-        with:
-          name: JSONPath
-          tool: cargo
-          output-file-path: benchmark-results/confirmation/candidate.txt
-          external-data-json-path: benchmark-results/confirmation/comparison.json
-          github-token: ${{ github.token }}
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          summary-always: false
-          fail-on-alert: false
-
-      - name: Fail confirmed regressions
-        if: steps.regressions.outputs.filter != ''
-        run: |
-          python3 .github/scripts/jsonpath_benchmark_gate.py benchmark-results/comparison.json \
-            --confirmation benchmark-results/confirmation/comparison.json
+          : > "$JSONPATH_BENCHMARK_PATHS"
+          set +e
+          bash json_path/benches/run_instructions.sh \
+            --baseline=master --save-baseline=candidate --callgrind-limits='ir=5%' \
+            --regression-fail-fast=false --save-summary=json --output-format=json \
+            | tee benchmark-results/results.jsonl
+          benchmark_exit=$?
+          set -e
+          echo "exit-code=$benchmark_exit" >> "$GITHUB_OUTPUT"
+          if [[ "$benchmark_exit" != 0 && "$benchmark_exit" != 3 ]]; then
+            exit "$benchmark_exit"
+          fi
 
       - name: Write benchmark job summary
-        if: always() && steps.measurements.outcome == 'success'
-        env:
-          CONFIRMATION_AVAILABLE: ${{ steps.confirmation.outcome == 'success' }}
+        if: always() && steps.baseline.outcome == 'success' && steps.measurements.outcome == 'success'
         run: |
-          confirmation=()
-          if [[ "$CONFIRMATION_AVAILABLE" == 'true' ]]; then
-            confirmation=(--confirmation benchmark-results/confirmation/comparison.json)
-          fi
-          python3 .github/scripts/jsonpath_benchmark_gate.py benchmark-results/comparison.json \
-            --summary --paths-file benchmark-results/paths.jsonl "${confirmation[@]}" \
+          python3 .github/scripts/jsonpath_benchmark_report.py benchmark-results/results.jsonl \
+            --paths-file benchmark-results/paths.jsonl \
+            --baseline-file benchmark-results/master.jsonl \
+            --baseline-paths-file benchmark-results/master-paths.jsonl \
             | tee benchmark-results/summary.md
 
-      - name: Upload measurements and HTML reports
+      - name: Enforce Gungraun regression result
+        if: always() && steps.measurements.outputs.exit-code == '3'
+        run: exit 3
+
+      - name: Upload Gungraun measurements and profiles
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: jsonpath-performance-${{ github.run_id }}-${{ github.run_attempt }}
-          path: benchmark-results/
+          path: |
+            benchmark-results/
+            !benchmark-results/gungraun/bin/
           retention-days: 30
