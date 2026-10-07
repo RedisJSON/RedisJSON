@@ -24,7 +24,6 @@ use redis_module::key::{verify_type, KeyFlags, RedisKey, RedisKeyWritable};
 use redis_module::raw::{self as rawmod, RedisModuleKey, Status};
 use redis_module::RedisError;
 use redis_module::{Context, NotifyEvent, RedisResult, RedisString};
-use serde::de::DeserializeSeed;
 use serde::Serialize;
 use serde_json::Number;
 use std::io::Cursor;
@@ -805,7 +804,7 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
                 }
                 let fpha_config = fpha_type.map(FPHAConfig::new_with_type);
                 let result = IValueDeserSeed::new(fpha_config)
-                    .deserialize(&mut deserializer)
+                    .deserialize_compact_objects(&mut deserializer)
                     .map_err(|e| RedisError::String(e.to_string()))?;
                 deserializer
                     .end()
@@ -849,7 +848,8 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
     }
 
     fn get_memory(v: &Self::V) -> RedisResult<usize> {
-        Ok(v.mem_allocated() + size_of::<IValue>())
+        // Preserve fractional string shares until rounding the final byte count.
+        Ok((v.mem_allocated() + size_of::<IValue>() as f64).round() as usize)
     }
 
     fn is_json(&self, key: *mut RedisModuleKey) -> RedisResult<bool> {
@@ -922,6 +922,47 @@ mod tests {
     }
 
     #[test]
+    fn test_shared_string_memory_across_keys() {
+        let _guard = SINGLE_THREAD_TEST_MUTEX.lock().unwrap();
+        let first = IValue::from("abcdefghijklmnopqrstuvwxyz123456789");
+        let allocation = first.mem_allocated();
+        let copies: Vec<_> = (0..9).map(|_| first.clone()).collect();
+        let expected = (allocation / 10.0 + size_of::<IValue>() as f64).round() as usize;
+        for value in std::iter::once(&first).chain(copies.iter()) {
+            assert_eq!(
+                RedisIValueJsonKeyManager::get_memory(value).unwrap(),
+                expected
+            );
+        }
+        drop(copies);
+        assert_eq!(
+            RedisIValueJsonKeyManager::get_memory(&first).unwrap(),
+            (allocation + size_of::<IValue>() as f64).round() as usize
+        );
+    }
+
+    #[test]
+    fn test_compact_objects_preserve_depth_policy() {
+        let _guard = SINGLE_THREAD_TEST_MUTEX.lock().unwrap();
+        let manager = RedisIValueJsonKeyManager {
+            phantom: PhantomData,
+        };
+        let json = format!(
+            "{{\"a\":1,\"b\":2,\"c\":3,\"d\":4,\"nested\":{}0{}}}",
+            "[".repeat(130),
+            "]".repeat(130),
+        );
+        assert!(manager.from_str(&json, Format::JSON, true, None).is_err());
+        let value = manager.from_str(&json, Format::JSON, false, None).unwrap();
+        // Compact allocation must also work when the caller disables the depth limit.
+        assert_eq!(value.as_object().unwrap().capacity(), 5);
+        assert_eq!(serde_json::to_string(&value).unwrap(), json);
+        assert!(manager
+            .from_str(&(json + " {}"), Format::JSON, false, None)
+            .is_err());
+    }
+
+    #[test]
     fn test_get_memory() {
         let _guard = SINGLE_THREAD_TEST_MUTEX.lock();
 
@@ -942,7 +983,7 @@ mod tests {
                         }"#;
         let value = serde_json::from_str(json).unwrap();
         let res = RedisIValueJsonKeyManager::get_memory(&value).unwrap();
-        assert_eq!(res, 544);
+        assert_eq!(res, 480);
     }
 
     /// Tests the deserialiser of IValue for a string with unicode
