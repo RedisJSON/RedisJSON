@@ -36,6 +36,12 @@ RedisJSON is a [Redis](https://redis.io/) module that implements [ECMA-404 The J
 
 Read the docs at <https://redis.io/docs/latest/develop/data-types/json/>
 
+For the RDB shared-string stream, which writes a string shared by several documents
+once, where a save first reaches it, and refers to it afterwards, see the
+[implementation guide](docs/docs/use-share-string-in-rdb.md). It covers the
+RedisJSON and sibling ijson changes, the save and load flow, the wire format,
+settings, logs, limits and rollout gates, and uses existing Redis module APIs only.
+
 ## License
 
 Starting with Redis 8, RedisJSON is licensed under your choice of: (i) Redis Source Available License 2.0 (RSALv2); (ii) the Server Side Public License v1 (SSPLv1); or (iii) the GNU Affero General Public License version 3 (AGPLv3). Please review the license folder for the full license terms and conditions. Prior versions remain subject to (i) and (ii).

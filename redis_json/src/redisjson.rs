@@ -238,6 +238,7 @@ pub mod type_methods {
     use std::ptr::null_mut;
 
     pub extern "C" fn rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
+        crate::rdb_persistence::note_decode();
         let result = load_rdb_value(rdb, encver);
         result.map_or(null_mut(), |v| {
             Box::into_raw(Box::new(v)).cast::<libc::c_void>()
@@ -250,6 +251,7 @@ pub mod type_methods {
     ) -> Option<RedisJSON<ijson::IValue>> {
         let limit_depth = backward::legacy_rdb_depth_limit_enabled();
         match encver {
+            5 => crate::rdb_persistence::load_value(rdb).map(|data| RedisJSON { data }),
             4 => {
                 let buf = raw::load_string_buffer(rdb).ok()?;
                 let data = ijson::decode_with_depth_limit(buf.as_ref(), limit_depth).ok()?;
@@ -305,6 +307,14 @@ pub mod type_methods {
                 value.serialize(&mut out)?;
                 String::from_utf8(out.into_inner())?
             }
+            5 => {
+                let value = crate::rdb_persistence::load_value(rdb).ok_or(RedisError::Str(
+                    "invalid JSON RDB value or missing string stream",
+                ))?;
+                let mut out = serde_json::Serializer::new(Vec::new());
+                value.serialize(&mut out)?;
+                String::from_utf8(out.into_inner())?
+            }
             _ => return Err(RedisError::String(format!("unsupported encver {encver}"))),
         })
     }
@@ -324,9 +334,9 @@ pub mod type_methods {
     /// # Safety
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
+        // SAFETY: Redis passes the live value registered under REDIS_JSON_TYPE.
         let v = unsafe { &*value.cast::<RedisJSON<ijson::IValue>>() };
-        let binary = ijson::encode(&v.data);
-        raw::save_slice(rdb, &binary);
+        crate::rdb_persistence::save_value(rdb, &v.data);
     }
 
     /// # Safety

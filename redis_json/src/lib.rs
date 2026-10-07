@@ -60,6 +60,12 @@ pub mod ivalue_manager;
 mod key_value;
 pub mod manager;
 pub mod number;
+mod rdb_persistence;
+#[doc(hidden)]
+pub use rdb_persistence::{
+    DEFAULT_RDB_DICTIONARY_MAX_BYTES, DEFAULT_RDB_DICTIONARY_MAX_DEF_BYTES,
+    RDB_DICTIONARY_MAX_BYTES, RDB_DICTIONARY_MAX_BYTES_CEILING, RDB_DICTIONARY_MAX_DEF_BYTES,
+};
 pub mod redisjson;
 
 #[doc(hidden)]
@@ -70,7 +76,7 @@ pub const GIT_BRANCH: Option<&str> = std::option_env!("GIT_BRANCH");
 pub const MODULE_NAME: &str = "ReJSON";
 pub const MODULE_TYPE_NAME: &str = "ReJSON-RL";
 
-pub const REDIS_JSON_TYPE_VERSION: i32 = 4;
+pub const REDIS_JSON_TYPE_VERSION: i32 = 5;
 
 pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
     MODULE_TYPE_NAME,
@@ -391,6 +397,9 @@ macro_rules! redis_json_module_create {
                 return Status::Err;
             }
             ctx.log_notice("Initialized shared string cache, thread safe: true.");
+            if $crate::init_rdb_persistence(ctx) != Status::Ok {
+                return Status::Err;
+            }
             // Mirror Redis core's `hide-user-data-from-log` so our trace logs
             // redact user data whenever the server is configured to hide it.
             $crate::sync_hide_user_data_from_log(ctx);
@@ -421,7 +430,25 @@ macro_rules! redis_json_module_create {
             init: initialize,
             info: $info_func,
             configurations: [
-                i64: [],
+                i64: [[
+                    "json-rdb-dictionary-max-bytes",
+                    &$crate::RDB_DICTIONARY_MAX_BYTES,
+                    $crate::DEFAULT_RDB_DICTIONARY_MAX_BYTES,
+                    0,
+                    $crate::RDB_DICTIONARY_MAX_BYTES_CEILING,
+                    ::redis_module::configuration::ConfigurationFlags::UNPREFIXED
+                        | ::redis_module::configuration::ConfigurationFlags::MEMORY,
+                    None
+                ], [
+                    "json-rdb-dictionary-max-def-bytes",
+                    &$crate::RDB_DICTIONARY_MAX_DEF_BYTES,
+                    $crate::DEFAULT_RDB_DICTIONARY_MAX_DEF_BYTES,
+                    0,
+                    $crate::RDB_DICTIONARY_MAX_BYTES_CEILING,
+                    ::redis_module::configuration::ConfigurationFlags::UNPREFIXED
+                        | ::redis_module::configuration::ConfigurationFlags::MEMORY,
+                    None
+                ]],
                 string: [],
                 bool: [[
                     "json-auto-create-deep-paths",
@@ -447,6 +474,11 @@ macro_rules! redis_json_module_create {
 #[cfg(not(feature = "as-library"))]
 const fn dummy_init(_ctx: &Context, _args: &[RedisString]) -> Status {
     Status::Ok
+}
+
+#[doc(hidden)]
+pub fn init_rdb_persistence(ctx: &Context) -> redis_module::Status {
+    rdb_persistence::init(ctx)
 }
 
 pub fn init_ijson_shared_string_cache(is_bigredis: bool) -> Result<(), String> {
@@ -487,13 +519,8 @@ pub fn setup_panic_handler() {
     }));
 }
 
-/// Read Redis' `hide-user-data-from-log` server config via `CONFIG GET`.
-/// Returns `false` (the server's own default) when the config cannot be read
-/// or parsed.
-fn read_hide_user_data_from_log(ctx: &Context) -> bool {
-    let Ok(reply) = ctx.call("CONFIG", &["GET", "hide-user-data-from-log"]) else {
-        return false;
-    };
+/// Whether a `CONFIG GET` reply says `yes`.
+fn config_is_yes(reply: RedisValue) -> bool {
     // RESP2 replies with a flat `[name, value]` array, RESP3 with a `{name: value}` map.
     let value = match reply {
         RedisValue::Array(mut items) if items.len() == 2 => items.pop(),
@@ -506,11 +533,18 @@ fn read_hide_user_data_from_log(ctx: &Context) -> bool {
     )
 }
 
+/// Read a yes/no Redis server config, such as `hide-user-data-from-log`, via `CONFIG GET`.
+/// Returns `false` (the server's own default for that one) when the config cannot be read
+/// or parsed, as on a core that lacks it.
+pub(crate) fn read_yes_no_config(ctx: &Context, name: &str) -> bool {
+    ctx.call("CONFIG", &["GET", name]).is_ok_and(config_is_yes)
+}
+
 /// Refresh the json path engine's cached copy of Redis' `hide-user-data-from-log`
 /// server config, so its trace logs redact user data exactly when Redis core
 /// does. Called once at module load and again on every relevant `CONFIG SET`.
 pub fn sync_hide_user_data_from_log(ctx: &Context) {
-    json_path::set_hide_user_data_from_log(read_hide_user_data_from_log(ctx));
+    json_path::set_hide_user_data_from_log(read_yes_no_config(ctx, "hide-user-data-from-log"));
 }
 
 /// Keep the cached `hide-user-data-from-log` value in sync when it is changed at
@@ -569,7 +603,42 @@ redis_json_module_create! {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use redis_module::redisvalue::RedisValueKey;
     use redis_module::RedisError;
+
+    // Unit tests run concurrently without invoking the Redis module initializer.
+    #[ctor::ctor]
+    fn initialize_test_string_cache() {
+        ijson::init_shared_string_cache(true).expect("initialize test string cache");
+    }
+
+    #[test]
+    fn a_config_reply_is_yes_only_when_it_holds_the_value_yes() {
+        let name = || RedisValue::SimpleString("a-config".to_owned());
+        let value = |text: &str| RedisValue::SimpleString(text.to_owned());
+        let pair = |value: RedisValue| RedisValue::Array(vec![name(), value]);
+        let map = |value: RedisValue| {
+            RedisValue::Map(std::collections::HashMap::from([(
+                RedisValueKey::String("a-config".to_owned()),
+                value,
+            )]))
+        };
+        for (said, expected) in [("yes", true), ("no", false)] {
+            assert_eq!(config_is_yes(pair(value(said))), expected);
+            assert_eq!(config_is_yes(map(value(said))), expected);
+        }
+        // A core without the config has no such reply, and nothing else is an answer either.
+        for reply in [
+            RedisValue::Array(Vec::new()),
+            RedisValue::Map(std::collections::HashMap::new()),
+            RedisValue::Array(vec![name()]),
+            pair(RedisValue::Integer(1)),
+            RedisValue::Null,
+            RedisValue::StringBuffer(b"ERR unknown command".to_vec()),
+        ] {
+            assert!(!config_is_yes(reply.clone()), "{reply:?}");
+        }
+    }
 
     #[cfg(feature = "as-library")]
     use crate::c_api::get_llapi_ctx;
