@@ -376,8 +376,10 @@ def testBackwardRDB(env):
     r.assertEqual(json.loads(res), {"a":{"b":[{"c":{"d":[1,'2'],"e":None}},True],"a":'a'},"b":1,"c":True,"d":None})
 
 RDB_TYPE_MODULE_2 = 7
+RDB_MODULE_OPCODE_EOF = 0
 RDB_MODULE_OPCODE_UINT = 2
 # NodeType discriminant from redis_json/src/backward.rs
+NODETYPE_NULL = 0x1
 NODETYPE_ARRAY = 0x40
 
 
@@ -457,6 +459,24 @@ def _build_legacy_restore_payload(genuine_dump, node_discriminant, length):
     return payload + struct.pack('<Q', _crc64_jones(payload))
 
 
+def _build_nested_legacy_array_payload(genuine_dump, depth):
+    """Forge a valid encver=0 payload containing `depth` single-item arrays."""
+    assert genuine_dump[0] == RDB_TYPE_MODULE_2, \
+        "expected RDB_TYPE_MODULE_2, got 0x%02x" % genuine_dump[0]
+    module_id, _ = _rdb_load_len(genuine_dump, 1)
+    module_id_encver0 = module_id & 0xFFFFFFFFFFFFFC00
+    rdb_version = genuine_dump[-10:-8]
+
+    array = (_rdb_save_len(RDB_MODULE_OPCODE_UINT) + _rdb_save_len(NODETYPE_ARRAY) +
+             _rdb_save_len(RDB_MODULE_OPCODE_UINT) + _rdb_save_len(1))
+    leaf = _rdb_save_len(RDB_MODULE_OPCODE_UINT) + _rdb_save_len(NODETYPE_NULL)
+    body = (array * depth) + leaf + _rdb_save_len(RDB_MODULE_OPCODE_EOF)
+    payload = (bytes([RDB_TYPE_MODULE_2]) +
+               bytes([0x81]) + struct.pack('>Q', module_id_encver0) +
+               body + rdb_version)
+    return payload + struct.pack('<Q', _crc64_jones(payload))
+
+
 def _assert_legacy_restore_rejected(env, node_discriminant, length):
     """Craft an encver=0 RESTORE payload, assert it errors (not abort) and the server lives."""
     env.skipOnCluster()
@@ -486,6 +506,34 @@ def testRestoreLegacyRdbHugeArrayDoesNotCrash(env):
     # 2^62 overflows isize::MAX: try_reserve_exact must turn the abort into a recoverable
     # error rather than SIGABRT (VDP-4660 / MOD-15901).
     _assert_legacy_restore_rejected(env, NODETYPE_ARRAY, 2 ** 62)
+
+
+def testRestoreLegacyRdbDepthLimit(env):
+    env.skipOnCluster()
+    if env.useAof:
+        env.skip()
+
+    conn = env.getConnection()
+    env.assertEqual(
+        conn.execute_command('CONFIG', 'GET', 'json-legacy-rdb-depth-limit'),
+        ['json-legacy-rdb-depth-limit', 'no'])
+
+    conn.execute_command('JSON.SET', 'tmp', '$', '[0]')
+    genuine_dump = conn.execute_command('DUMP', 'tmp', NEVER_DECODE=True)
+    conn.execute_command('CONFIG', 'SET', 'json-legacy-rdb-depth-limit', 'yes')
+
+    depth_128 = _build_nested_legacy_array_payload(genuine_dump, 128)
+    env.assertEqual(conn.execute_command('RESTORE', 'legacy-depth-128', '0', depth_128), True)
+
+    depth_129 = _build_nested_legacy_array_payload(genuine_dump, 129)
+    try:
+        conn.execute_command('RESTORE', 'legacy-depth-129', '0', depth_129)
+        env.assertTrue(False, message="legacy RDB depth 129 should have been rejected")
+    except redis.exceptions.ResponseError:
+        pass
+
+    env.assertEqual(conn.execute_command('PING'), True)
+    conn.execute_command('CONFIG', 'SET', 'json-legacy-rdb-depth-limit', 'no')
 
 
 def testSetBSON(env):
