@@ -7,8 +7,10 @@
  * GNU Affero General Public License v3 (AGPLv3).
  */
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::vec::Vec;
 
+use json_path::select_value::MAX_DEPTH;
 use redis_module::raw;
 use redis_module::{RedisError, RedisResult};
 use serde_json::map::Map;
@@ -30,6 +32,12 @@ enum NodeType {
     // N_BINARY = 0x200
 }
 
+pub static LEGACY_RDB_DEPTH_LIMIT: AtomicBool = AtomicBool::new(false);
+
+pub fn legacy_rdb_depth_limit_enabled() -> bool {
+    LEGACY_RDB_DEPTH_LIMIT.load(Ordering::Relaxed)
+}
+
 impl TryFrom<u64> for NodeType {
     type Error = RedisError;
 
@@ -49,7 +57,17 @@ impl TryFrom<u64> for NodeType {
 }
 
 pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> RedisResult<Value> {
+    json_rdb_load_inner(rdb, 1)
+}
+
+fn json_rdb_load_inner(rdb: *mut raw::RedisModuleIO, depth: usize) -> RedisResult<Value> {
     let node_type = NodeType::try_from(raw::load_unsigned(rdb)?)?;
+    if legacy_rdb_depth_limit_enabled()
+        && depth >= MAX_DEPTH
+        && matches!(node_type, NodeType::Dict | NodeType::Array)
+    {
+        return Err(crate::manager::err_recursion_limit_exceeded());
+    }
     match node_type {
         NodeType::Null => Ok(Value::Null),
         NodeType::Boolean => {
@@ -79,7 +97,7 @@ pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> RedisResult<Value> {
                     return Err(RedisError::Str("Can't load old RedisJSON RDB"));
                 }
                 let buffer = raw::load_string_buffer(rdb)?;
-                m.insert(buffer.to_string()?, json_rdb_load(rdb)?);
+                m.insert(buffer.to_string()?, json_rdb_load_inner(rdb, depth + 1)?);
             }
             Ok(Value::Object(m))
         }
@@ -88,7 +106,7 @@ pub fn json_rdb_load(rdb: *mut raw::RedisModuleIO) -> RedisResult<Value> {
             let mut v = Vec::new();
             v.try_reserve_exact(len as usize)?;
             for _ in 0..len {
-                let nested = json_rdb_load(rdb)?;
+                let nested = json_rdb_load_inner(rdb, depth + 1)?;
                 v.push(nested);
             }
             Ok(Value::Array(v))
