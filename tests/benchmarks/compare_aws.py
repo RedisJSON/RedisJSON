@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import subprocess
 import time
@@ -56,16 +57,34 @@ def destroy(state):
         raise RuntimeError(f'AWS teardown failed: {stdout}\n{stderr}')
 
 
-def remote_commands(inventory, key, commands):
+def remote_commands(inventory, key, commands, host='server_public_ip'):
     from redisbench_admin.utils.remote import execute_remote_commands
 
     results = execute_remote_commands(
-        inventory['server_public_ip'], inventory['user'], str(key), commands, 22, timeout=30,
+        inventory[host], inventory['user'], str(key), commands, 22, timeout=30,
     )
     for code, stdout, stderr in results:
         if code:
             raise RuntimeError(f'Remote command failed: {stderr}')
     return [''.join(stdout) for _, stdout, _ in results]
+
+
+def collect_diagnostics(directory, inventory, key, phase):
+    destination = directory / 'diagnostics'
+    destination.mkdir(exist_ok=True)
+    script = Path(__file__).with_name('diagnose_host.py').read_text()
+    for host in ('server', 'client'):
+        command = 'python3 -c ' + shlex.quote(script)
+        if host == 'server' and phase == 'after':
+            command += ' ' + str(int(inventory['port']))
+        try:
+            output, = remote_commands(inventory, key, [command], host + '_public_ip')
+            data = json.loads(output)
+        except Exception as error:
+            # Missing telemetry must not discard a completed benchmark result.
+            data = {'error': str(error)}
+            print(f'WARNING: {host} {phase} diagnostics: {error}', flush=True)
+        (destination / f'{host}-{phase}.json').write_text(json.dumps(data, indent=2) + '\n')
 
 
 def run_one(spec, module, directory, datasets, inventory, key, remote_config):
@@ -90,6 +109,7 @@ def run_one(spec, module, directory, datasets, inventory, key, remote_config):
                PROFILE='0', SKIP_DB_SETUP='0', SKIP_REDIS_SPIN='0')
     cli = f"redis-cli -p {int(inventory['port'])}"
     try:
+        collect_diagnostics(directory, inventory, key, 'before')
         with (directory / 'runner.log').open('w') as log:
             try:
                 completed = subprocess.run(command, cwd=directory, env=env, stdout=log,
@@ -107,15 +127,17 @@ def run_one(spec, module, directory, datasets, inventory, key, remote_config):
         measurements['redis_version'] = parse_info(server)['redis_version']
         return measurements
     finally:
-        # Dedicated topology owned by this job; failure to reset must stop the run.
-        # The shell tolerates an already-stopped server, but never a live server
-        # that failed to shut down. No other workload may inherit its dataset.
         try:
-            remote_commands(inventory, key, [
-                f'if {cli} ping >/dev/null 2>&1; then {cli} shutdown nosave; fi'
-            ])
-        except Exception as error:
-            raise RemoteResetError(f'Cannot reset AWS Redis: {error}') from error
+            collect_diagnostics(directory, inventory, key, 'after')
+        finally:
+            # Reset even if a diagnostic file cannot be written.
+            # Dedicated topology owned by this job; failure to reset must stop the run.
+            try:
+                remote_commands(inventory, key, [
+                    f'if {cli} ping >/dev/null 2>&1; then {cli} shutdown nosave; fi'
+                ])
+            except Exception as error:
+                raise RemoteResetError(f'Cannot reset AWS Redis: {error}') from error
 
 
 def compare(args):
