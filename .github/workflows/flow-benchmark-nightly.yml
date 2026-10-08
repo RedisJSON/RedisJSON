@@ -4,6 +4,7 @@ on:
   workflow_call:
     inputs:
       baseline-ref:
+        description: 'Temporarily ignored: debug comparison uses one master build for both sides'
         type: string
         default: master
 
@@ -27,18 +28,6 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
-      - name: Resolve master once
-        id: master
-        run: echo "sha=$(git -C benchmark-master rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Check out baseline (same master commit by default)
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ inputs.baseline-ref == 'master' && steps.master.outputs.sha || inputs.baseline-ref }}
-          path: benchmark-baseline
-          submodules: recursive
-          persist-credentials: false
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -52,23 +41,25 @@ jobs:
           rustup toolchain install "$toolchain" --profile minimal
           echo "RUSTUP_TOOLCHAIN=$toolchain" >> "$GITHUB_ENV"
 
-      - name: Build both revisions with the same toolchain
+      - name: Build master once for same-binary debugging
         run: |
           (cd benchmark-master && cargo build --locked --release -p redis_json)
-          (cd benchmark-baseline && cargo build --locked --release -p redis_json)
           python -m unittest discover -s tests/benchmarks -p 'test_*.py'
 
       - name: Package shared builds and distribute all workloads
         run: |
           mkdir -p nightly-bundle/{master,baseline}/target/release nightly-bundle/master/tests
           cp benchmark-master/target/release/librejson.so nightly-bundle/master/target/release/
-          cp benchmark-baseline/target/release/librejson.so nightly-bundle/baseline/target/release/
+          # Temporary debug: both comparison roles use the exact same compiled module.
+          cp benchmark-master/target/release/librejson.so nightly-bundle/baseline/target/release/
+          cmp nightly-bundle/{baseline,master}/target/release/librejson.so
+          sha256sum nightly-bundle/{baseline,master}/target/release/librejson.so
           cp -R benchmark-master/tests/benchmarks nightly-bundle/master/tests/
           python - <<'PYTHON'
           import json, subprocess
           from pathlib import Path
-          revisions = {label: subprocess.check_output(['git', '-C', 'benchmark-' + label, 'rev-parse', 'HEAD'], text=True).strip()
-                       for label in ('baseline', 'master')}
+          sha = subprocess.check_output(['git', '-C', 'benchmark-master', 'rev-parse', 'HEAD'], text=True).strip()
+          revisions = dict.fromkeys(('baseline', 'master'), sha)
           Path('nightly-bundle/revisions.json').write_text(json.dumps(revisions))
           PYTHON
           python tests/benchmarks/benchmark_jobs.py plan --aws --bundle nightly-bundle --shards 5
@@ -192,6 +183,7 @@ jobs:
       - name: Publish comparison summary
         if: always()
         run: |
+          echo 'Debug comparison: baseline and master use the exact same master module binary (built once).' >> "$GITHUB_STEP_SUMMARY"
           if [ -f nightly-benchmark-results/summary.md ]; then
             cat nightly-benchmark-results/summary.md >> "$GITHUB_STEP_SUMMARY"
           fi
