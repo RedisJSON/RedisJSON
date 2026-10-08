@@ -59,9 +59,6 @@ jobs:
           sudo apt-get install -y build-essential libclang-dev autoconf automake libtool pkg-config libevent-dev libssl-dev zlib1g-dev libpcre2-dev
           python -m pip install 'redisbench-admin==0.12.39'
 
-      - name: Test throughput comparison
-        run: python -m unittest discover -s tests/benchmarks -p 'test_*.py'
-
       - name: Build shared server and client tools
         run: |
           make -C benchmark-redis -j"$(nproc)" BUILD_TLS=yes

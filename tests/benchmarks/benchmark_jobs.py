@@ -32,21 +32,13 @@ def estimated_seconds(spec):
     return 2 * float(parameters['requests']) / rate
 
 
-def make_plan(source, count, timings=None):
+def make_plan(source, count):
     if count < 1:
         raise ValueError('Shard count must be positive')
     specs = sorted(path for path in source.glob('*.yml') if path.name != 'defaults.yml')
     if len(specs) < count:
         raise ValueError('Each shard must have at least one test')
-    weights = {}
-    for spec in specs:
-        pair = (timings or {}).get('benchmarks', {}).get(spec.stem, {})
-        measured = [pair.get(label, {}).get('run_seconds', 0) for label in ('master', 'pr')]
-        valid = all(isinstance(value, (int, float)) and math.isfinite(value) and value > 0
-                    for value in measured)
-        weights[spec.name] = (sum(measured) if valid and not any(
-            'error' in pair.get(label, {}) for label in ('master', 'pr')
-        ) else estimated_seconds(spec))
+    weights = {spec.name: estimated_seconds(spec) for spec in specs}
     shards = [[] for _ in range(count)]
     totals = [0.0] * count
     for name in sorted(weights, key=lambda name: (-weights[name], name)):
@@ -117,7 +109,6 @@ def main():
     plan_parser.add_argument('--bundle', type=Path, required=True)
     plan_parser.add_argument('--aws', action='store_true', help='Plan the nightly AWS bundle')
     plan_parser.add_argument('--shards', type=int, default=5)
-    plan_parser.add_argument('--timings', type=Path, help='Previous combined comparison.json')
     run_parser = commands.add_parser('run')
     run_parser.add_argument('--bundle', type=Path, required=True)
     run_parser.add_argument('--shard', type=int, required=True)
@@ -129,9 +120,8 @@ def main():
     args = parser.parse_args()
     if args.command == 'plan':
         bundle = args.bundle.resolve()
-        timings = json.loads(args.timings.read_text()) if args.timings else None
         source = bundle / 'master/tests/benchmarks' if args.aws else bundle / 'suite'
-        plan = make_plan(source, args.shards, timings)
+        plan = make_plan(source, args.shards)
         if args.aws:
             plan['labels'] = ['baseline', 'master']
             plan['revisions'] = json.loads((bundle / 'revisions.json').read_text())

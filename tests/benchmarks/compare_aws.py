@@ -13,7 +13,7 @@ import time
 from redis.client import parse_info
 import yaml
 
-from compare_local import escape_dataset_unicode, summary, throughput
+from compare_local import escape_dataset_unicode, record_attempt, summary, throughput
 
 
 class RemoteResetError(RuntimeError):
@@ -84,24 +84,6 @@ def configure_affinity(output, inventory, key):
     inventory['server_cpulist'] = settings['server']['cpulist']
 
 
-def collect_diagnostics(directory, inventory, key, phase):
-    destination = directory / 'diagnostics'
-    destination.mkdir(exist_ok=True)
-    script = Path(__file__).with_name('diagnose_host.py').read_text()
-    for host in ('server', 'client'):
-        command = 'python3 -c ' + shlex.quote(script)
-        if host == 'server' and phase == 'after':
-            command += ' ' + str(int(inventory['port']))
-        try:
-            output, = remote_commands(inventory, key, [command], host + '_public_ip')
-            data = json.loads(output)
-        except Exception as error:
-            # Missing telemetry must not discard a completed benchmark result.
-            data = {'error': str(error)}
-            print(f'WARNING: {host} {phase} diagnostics: {error}', flush=True)
-        (destination / f'{host}-{phase}.json').write_text(json.dumps(data, indent=2) + '\n')
-
-
 def run_one(spec, module, directory, datasets, inventory, key, remote_config):
     directory.mkdir(parents=True)
     (directory / 'datasets').symlink_to(datasets, target_is_directory=True)
@@ -129,7 +111,6 @@ def run_one(spec, module, directory, datasets, inventory, key, remote_config):
                PROFILE='0', SKIP_DB_SETUP='0', SKIP_REDIS_SPIN='0')
     cli = f"redis-cli -p {int(inventory['port'])}"
     try:
-        collect_diagnostics(directory, inventory, key, 'before')
         with (directory / 'runner.log').open('w') as log:
             try:
                 completed = subprocess.run(command, cwd=directory, env=env, stdout=log,
@@ -147,17 +128,13 @@ def run_one(spec, module, directory, datasets, inventory, key, remote_config):
         measurements['redis_version'] = parse_info(server)['redis_version']
         return measurements
     finally:
+        # Dedicated topology owned by this job; reset failure must stop the run.
         try:
-            collect_diagnostics(directory, inventory, key, 'after')
-        finally:
-            # Reset even if a diagnostic file cannot be written.
-            # Dedicated topology owned by this job; failure to reset must stop the run.
-            try:
-                remote_commands(inventory, key, [
-                    f'if {cli} ping >/dev/null 2>&1; then {cli} shutdown nosave; fi'
-                ])
-            except Exception as error:
-                raise RemoteResetError(f'Cannot reset AWS Redis: {error}') from error
+            remote_commands(inventory, key, [
+                f'if {cli} ping >/dev/null 2>&1; then {cli} shutdown nosave; fi'
+            ])
+        except Exception as error:
+            raise RemoteResetError(f'Cannot reset AWS Redis: {error}') from error
 
 
 def compare(args):
@@ -194,8 +171,6 @@ def compare(args):
     failed = False
     aborted = False
     for spec in specs:
-        history = output / spec.stem / 'attempts'
-        history.mkdir(parents=True)
         for attempt in range(getattr(args, 'max_retries', 3) + 1):
             pair = results['benchmarks'][spec.stem] = {}
             for label, module in modules.items():
@@ -218,21 +193,8 @@ def compare(args):
                 pair[label]['attempt_count'] = attempt + 1
                 pair[label]['run_seconds'] = round(time.monotonic() - started, 3)
                 (output / 'comparison.json').write_text(json.dumps(results, indent=2) + '\n')
-            (history / f'attempt-{attempt + 1}.json').write_text(json.dumps(pair, indent=2) + '\n')
-            if any('error' in value for value in pair.values()):
+            if not record_attempt(pair, output / spec.stem, attempt, getattr(args, 'max_retries', 3)):
                 break
-            before, after = pair['baseline']['ops_per_sec'], pair['master']['ops_per_sec']
-            if abs(after - before) * 100 <= before * 5 or attempt == getattr(args, 'max_retries', 3):
-                break
-            print(f'Retrying both runs for {spec.name}: change={(after / before - 1) * 100:+.2f}%, '
-                  f'retry {attempt + 1}/3', flush=True)
-            # Keep final raw results at the existing paths; archive earlier pairs.
-            archive = history / f'attempt-{attempt + 1}'
-            archive.mkdir()
-            for label in modules:
-                directory = output / spec.stem / label
-                if directory.exists():
-                    directory.rename(archive / label)
         revisions = '\n'.join(f'- {label}: `{sha}`' for label, sha in results['revisions'].items())
         (output / 'summary.md').write_text(revisions + '\n\n' + summary(results, 'baseline', 'master'))
     if not results['benchmarks']:

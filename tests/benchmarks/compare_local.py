@@ -18,7 +18,6 @@ import redis
 import yaml
 
 
-
 def escape_dataset_unicode(text):
     # redisbench-admin 0.12.39 decodes redis-benchmark's echoed command as ASCII.
     # Escape only non-ASCII JSON characters; retain formatting, numbers and values.
@@ -161,6 +160,26 @@ def summary(results, baseline="master", candidate="pr"):
     return "\n".join(lines) + "\n"
 
 
+def record_attempt(pair, directory, attempt, max_retries=3):
+    history = directory / "attempts"
+    history.mkdir(parents=True, exist_ok=True)
+    (history / f"attempt-{attempt + 1}.json").write_text(json.dumps(pair, indent=2) + "\n")
+    if any("error" in value for value in pair.values()):
+        return False
+    before, after = (value["ops_per_sec"] for value in pair.values())
+    if abs(after - before) * 100 <= before * 5 or attempt == max_retries:
+        return False
+    print(f"Retrying both runs for {directory.name}: change={(after / before - 1) * 100:+.2f}%, "
+          f"retry {attempt + 1}/{max_retries}", flush=True)
+    archive = history / f"attempt-{attempt + 1}"
+    archive.mkdir()
+    for label in pair:
+        source = directory / label
+        if source.exists():
+            source.rename(archive / label)
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline-module", type=Path, required=True)
@@ -200,8 +219,6 @@ def main():
     }
     failed = False
     for spec in specs:
-        history = output / spec.stem / "attempts"
-        history.mkdir(parents=True)
         for attempt in range(4):  # Initial pair plus at most three retries.
             pair = results["benchmarks"][spec.stem] = {}
             for label, module in modules.items():
@@ -219,20 +236,8 @@ def main():
                         pair[label]["attempt_count"] = attempt + 1
                         pair[label]["run_seconds"] = round(time.monotonic() - started, 3)
                     (output / "comparison.json").write_text(json.dumps(results, indent=2) + "\n")
-            (history / f"attempt-{attempt + 1}.json").write_text(json.dumps(pair, indent=2) + "\n")
-            if any("error" in value for value in pair.values()):
+            if not record_attempt(pair, output / spec.stem, attempt):
                 break
-            before, after = pair["master"]["ops_per_sec"], pair["pr"]["ops_per_sec"]
-            if abs(after - before) * 100 <= before * 5 or attempt == 3:
-                break
-            print(f"Retrying both runs for {spec.name}: change={(after / before - 1) * 100:+.2f}%, "
-                  f"retry {attempt + 1}/3", flush=True)
-            archive = history / f"attempt-{attempt + 1}"
-            archive.mkdir()
-            for label in modules:
-                directory = output / spec.stem / label
-                if directory.exists():
-                    directory.rename(archive / label)
         (output / "summary.md").write_text(summary(results))
     print(summary(results))
     return int(failed)
