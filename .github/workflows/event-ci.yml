@@ -96,6 +96,14 @@ jobs:
       os: ubuntu-latest
     secrets: inherit
 
+  command-benchmark:
+    permissions:
+      contents: read
+    needs: [prepare-values]
+    uses: ./.github/workflows/flow-command-benchmark.yml
+    with:
+      redis-ref: ${{ needs.prepare-values.outputs.redis-ref }}
+
   memory-comparison:
     needs: [prepare-values]
     uses: ./.github/workflows/flow-memory-comparison.yml

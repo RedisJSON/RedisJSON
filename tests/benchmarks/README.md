@@ -12,6 +12,59 @@ pip3 install redisbench_admin>=0.1.74
 - Local benchmarks: `make benchmark`
 - Remote benchmarks:  `make benchmark REMOTE=1`
 
+## Local master/PR performance and memory comparison
+
+Event CI calls `flow-command-benchmark.yml` on each PR run. It builds master and
+the PR head with one Rust toolchain, then runs master's YAML
+workloads against both modules sequentially on the same runner and Redis binary.
+New PR-only workloads enter this comparison once merged into master.
+The YAML request counts and durations are unchanged. Each test/revision gets a
+fresh Redis instance and the same starting dataset; random-key workloads can
+still end with slightly different key counts, which the report includes.
+
+For a local comparison, build both modules in release mode, install
+`redisbench-admin==0.12.39`, and put a compatible `redis-server`,
+`redis-benchmark`, and `memtier_benchmark` on PATH. Then run:
+
+```sh
+python tests/benchmarks/compare_local.py \
+  --baseline-module /path/to/master/target/release/librejson.so \
+  --candidate-module /path/to/pr/target/release/librejson.so \
+  --output /path/to/new-results-directory
+```
+
+Use `.dylib` on macOS. Add `--benchmark <filename.yml>` to select a workload;
+repeat it to select several. Passing the same module twice provides a master vs
+master check of measurement noise. No AWS credentials or results database are
+needed. Dataset URLs are downloaded and cached within the output directory.
+
+The report contains throughput and these `INFO MEMORY` counters in bytes:
+
+| Counter | Meaning |
+| --- | --- |
+| `used_memory` | Redis allocator-tracked memory after the clients finish |
+| `used_memory_dataset` | Redis's dataset-memory estimate at that point |
+| `used_memory_peak` | Redis's peak for this fresh process, **including dataset loading** |
+| `used_memory_rss` | Resident memory; informational because of allocator/OS effects |
+
+These are whole-server counters, not per-document `JSON.DEBUG MEMORY` values.
+Redis tracks the peak itself, so there is no extra memory-polling loop competing
+with the timed clients. A read-only workload still measures its loaded dataset
+and the process peak. A write workload also measures the resulting dataset.
+
+Changes are initially **report-only**, pending master-vs-master calibration.
+Benchmark errors and missing results still fail the job and appear in the
+report. AWS `kpis` floors are removed only from temporary workload copies.
+The full suite can be expensive; this change does not shorten its workloads or
+silently skip the known `json_nummultby_num_2` failure described below.
+
+Results are saved as `comparison.json`, `summary.md`, and per-run raw client
+JSON/logs, and uploaded as CI artifacts. The summary appears in the Actions job.
+
+```sh
+python -m unittest discover -s tests/benchmarks -p 'test_compare_local.py'
+```
+
 
 ## Included benchmarks
 
@@ -73,4 +126,3 @@ To seed or re-seed floors from a local run's results:
 python3 update_kpis.py --margin 0.05
 python3 update_kpis.py --self-test   # checks raise/never-lower behaviour
 ```
-

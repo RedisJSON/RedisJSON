@@ -1,0 +1,207 @@
+"""Compare two RedisJSON modules using the same command benchmarks and datasets."""
+
+import argparse
+import hashlib
+import json
+import math
+import os
+from pathlib import Path
+import shutil
+import signal
+import socket
+import subprocess
+
+import redis
+import yaml
+
+
+MEMORY_METRICS = (
+    "used_memory",
+    "used_memory_dataset",
+    "used_memory_peak",
+    "used_memory_rss",
+)
+
+
+def throughput(result):
+    if "Tests" in result:
+        value = float(result["Tests"]["Overall"]["rps"])
+    else:
+        totals = result["ALL STATS"]["Totals"]
+        if totals.get("Connection Errors", 0):
+            raise ValueError("memtier reported connection errors")
+        value = float(totals["Ops/sec"])
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError("Missing or invalid throughput measurement")
+    return value
+
+
+def memory_snapshot(connection):
+    info = connection.info("memory")
+    result = {name: int(info[name]) for name in MEMORY_METRICS}
+    if any(value < 0 for value in result.values()):
+        raise ValueError("Invalid memory measurement")
+    result["keys"] = connection.dbsize()
+    return result
+
+
+def owns_server(connection, db_root):
+    """Never stop a Redis instance belonging to another local process."""
+    try:
+        directory = connection.config_get("dir")["dir"]
+        return Path(directory).resolve().is_relative_to(db_root.resolve())
+    except redis.ConnectionError:
+        return False
+
+
+def run_one(spec, module, directory, datasets, redis_binary, runner, timeout):
+    directory.mkdir(parents=True)
+    (directory / "datasets").symlink_to(datasets, target_is_directory=True)
+    config = yaml.safe_load(spec.read_text())
+    # AWS's absolute throughput floors do not apply to this runner.
+    config.pop("kpis", None)
+    # Each invocation is one fresh standalone instance, with no remote exporters.
+    config.pop("remote", None)
+    dbconfig = config.get("dbconfig", {})
+    entries = dbconfig if isinstance(dbconfig, list) else [dbconfig]
+    if any("post_commands" in entry for entry in entries):
+        raise ValueError("Memory must be captured before post_commands mutate the data")
+    (directory / "test.yml").write_text(yaml.safe_dump(config, sort_keys=False))
+    db_root = directory / "db"
+    db_root.mkdir()
+    with socket.socket() as reservation:
+        reservation.bind(("127.0.0.1", 0))
+        port = reservation.getsockname()[1]
+    connection = redis.Redis(
+        host="127.0.0.1", port=port, decode_responses=True,
+        socket_connect_timeout=2, socket_timeout=5,
+    )
+    command = [
+        runner, "run-local", "--test", "test.yml",
+        "--module_path", str(module), "--required-module", "ReJSON",
+        "--redis-binary", redis_binary, "--port", str(port),
+        "--host", "127.0.0.1", "--db-dirname", str(db_root),
+        "--keep_env_and_topo", "--allowed-envs", "oss-standalone",
+        "--allowed-setups", "oss-standalone",
+        "--github_org", "RedisJSON", "--github_repo", "RedisJSON",
+        "--github_branch", directory.name,
+    ]
+    env = dict(os.environ, BENCHMARK_REPETITIONS="1", BENCHMARK_RUNNER_GROUP_M_ID="1",
+               BENCHMARK_RUNNER_GROUP_TOTAL="1", PUSH_RTS="0", PUSH_S3="",
+               PROFILE="0", SKIP_DB_SETUP="0", SKIP_REDIS_SPIN="0")
+    try:
+        with (directory / "runner.log").open("w") as log:
+            with subprocess.Popen(command, cwd=directory, env=env, stdout=log,
+                                  stderr=subprocess.STDOUT, start_new_session=True) as process:
+                try:
+                    code = process.wait(timeout=timeout)
+                except BaseException:
+                    os.killpg(process.pid, signal.SIGKILL)
+                    process.wait()
+                    raise
+        if code:
+            raise RuntimeError(f"Benchmark exited {code}; see {directory / 'runner.log'}")
+        if not owns_server(connection, db_root):
+            raise RuntimeError("Benchmark did not leave its own Redis instance running")
+        # Redis maintains used_memory_peak during execution. No polling is needed
+        # in the timed workload; this is the peak INCLUDING dataset loading.
+        measurements = memory_snapshot(connection)
+        raw_results = list(directory.glob("*.json"))
+        if len(raw_results) != 1:
+            raise ValueError(f"Expected one benchmark result, found {len(raw_results)}")
+        measurements["ops_per_sec"] = throughput(json.loads(raw_results[0].read_text()))
+        return measurements
+    finally:
+        try:
+            if owns_server(connection, db_root):
+                connection.shutdown(nosave=True)
+        finally:
+            connection.close()
+
+
+def change(before, after):
+    if before == 0:
+        return "0.00%" if after == 0 else "n/a (zero baseline)"
+    return f"{100 * (after / before - 1):+.2f}%"
+
+
+def summary(results):
+    # ponytail: report random-key counts; require deterministic seeds before tight gates.
+    lines = [
+        "# RedisJSON command benchmarks: performance and memory", "",
+        "Same workloads, sequential runs, fresh Redis per revision and test.",
+        "Memory is measured in bytes after the clients finish. Peak includes dataset loading.",
+        "RSS is informational; it includes allocator/OS effects. Changes are report-only.",
+        "Random-key workloads may finish with different key counts; check the keys rows.", "",
+        f"Master module SHA256: `{results['modules']['master']}`",
+        f"PR module SHA256: `{results['modules']['pr']}`", "",
+        "| Benchmark | Metric | Master | PR | Change |",
+        "| --- | --- | ---: | ---: | ---: |",
+    ]
+    for name, pair in results["benchmarks"].items():
+        label = name.replace("|", "\\|").replace("\n", " ")
+        errors = [f"{revision}: {value['error']}" for revision, value in pair.items()
+                  if "error" in value]
+        if errors:
+            message = "; ".join(errors).replace("|", "\\|").replace("\n", " ")
+            lines.append(f"| {label} | **ERROR**: {message} | — | — | — |")
+            continue
+        for metric in ("ops_per_sec", *MEMORY_METRICS, "keys"):
+            before, after = pair["master"][metric], pair["pr"][metric]
+            lines.append(f"| {label} | {metric} | {before:,.2f} | {after:,.2f} | {change(before, after)} |")
+    return "\n".join(lines) + "\n"
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--baseline-module", type=Path, required=True)
+    parser.add_argument("--candidate-module", type=Path, required=True)
+    parser.add_argument("--benchmarks-dir", type=Path, default=Path(__file__).resolve().parent)
+    parser.add_argument("--benchmark", action="append", help="YAML filename; repeat to select tests")
+    parser.add_argument("--output", type=Path, required=True, help="New output directory")
+    parser.add_argument("--redis-binary", default="redis-server")
+    parser.add_argument("--timeout", type=int, default=1800, help="Seconds per revision per test")
+    args = parser.parse_args()
+    source = args.benchmarks_dir.resolve()
+    specs = [source / name for name in args.benchmark] if args.benchmark else sorted(source.glob("*.yml"))
+    specs = [spec for spec in specs if spec.name != "defaults.yml"]
+    if not specs or any(not spec.is_file() for spec in specs):
+        parser.error("Expected at least one existing benchmark YAML")
+    modules = {"master": args.baseline_module.resolve(), "pr": args.candidate_module.resolve()}
+    if any(not module.is_file() for module in modules.values()):
+        parser.error("Build both modules before running this comparison")
+    runner = shutil.which("redisbench-admin")
+    redis_binary = shutil.which(args.redis_binary)
+    if not runner or not redis_binary:
+        parser.error("redisbench-admin and redis-server must be available")
+    output = args.output.resolve()
+    output.mkdir(parents=True, exist_ok=False)
+    datasets = output / "datasets"
+    shutil.copytree(source / "datasets", datasets)
+    results = {
+        "modules": {label: hashlib.sha256(module.read_bytes()).hexdigest()
+                    for label, module in modules.items()},
+        "redis": subprocess.check_output([redis_binary, "--version"], text=True).strip(),
+        "benchmarks": {},
+    }
+    failed = False
+    for spec in specs:
+        pair = results["benchmarks"][spec.stem] = {}
+        for label, module in modules.items():
+            print(f"Running {spec.name}: {label}", flush=True)
+            try:
+                pair[label] = run_one(spec, module, output / spec.stem / label,
+                                      datasets, redis_binary, runner, args.timeout)
+            except Exception as error:
+                failed = True
+                pair[label] = {"error": str(error)}
+                print(f"ERROR: {error}", flush=True)
+            finally:
+                (output / "comparison.json").write_text(json.dumps(results, indent=2) + "\n")
+        (output / "summary.md").write_text(summary(results))
+    print(summary(results))
+    return int(failed)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
