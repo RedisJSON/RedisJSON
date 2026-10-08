@@ -185,6 +185,8 @@ def testLLAPIPathParseNoErrorMsg():
             env.cmd('LLAPI.PATHPARSE', path))
         env.expect('LLAPI.OPEN_GET_WITH_PATH_NO_ERROR_MSG', 'doc', path).equal(
             env.cmd('LLAPI.OPEN_GET', 'doc', path))
+    for path in ('$[', b'\xff', '$.a + 1'):
+        env.expect('LLAPI.PATHPARSE_NO_ERROR_MSG', path).equal(None)
 
 
 def testLLAPIIsJson():
