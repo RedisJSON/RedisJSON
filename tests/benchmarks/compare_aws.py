@@ -69,6 +69,21 @@ def remote_commands(inventory, key, commands, host='server_public_ip'):
     return [''.join(stdout) for _, stdout, _ in results]
 
 
+def configure_affinity(output, inventory, key):
+    script = Path(__file__).with_name('configure_affinity.py').read_text()
+    settings = {}
+    for host in ('server', 'client'):
+        command = 'sudo -n python3 -c ' + shlex.quote(script) + ' ' + host
+        if host == 'client':
+            # Resolve in the SSH user's PATH before sudo changes it.
+            command += ' "$(command -v redis-benchmark)" "$(command -v memtier_benchmark)"'
+        result, = remote_commands(inventory, key, [command], host + '_public_ip')
+        settings[host] = json.loads(result)
+        (output / 'affinity.json').write_text(json.dumps(settings, indent=2) + '\n')
+        print(f"{host} benchmark CPUs: {settings[host]['cpulist']}", flush=True)
+    inventory['server_cpulist'] = settings['server']['cpulist']
+
+
 def collect_diagnostics(directory, inventory, key, phase):
     destination = directory / 'diagnostics'
     destination.mkdir(exist_ok=True)
@@ -93,6 +108,11 @@ def run_one(spec, module, directory, datasets, inventory, key, remote_config):
     config = yaml.safe_load(spec.read_text())
     config.pop('kpis', None)  # Relative comparison, not the historical AWS floors.
     config['remote'] = remote_config
+    dbconfig = config.setdefault('dbconfig', [])
+    if isinstance(dbconfig, list):
+        dbconfig.append({'configuration-parameters': [{'server-cpulist': inventory['server_cpulist']}]})
+    else:
+        dbconfig.setdefault('configuration-parameters', {})['server-cpulist'] = inventory['server_cpulist']
     (directory / 'test.yml').write_text(yaml.safe_dump(config, sort_keys=False))
     hosts = ','.join(f'{name}={inventory[name]}' for name in
                      ('server_private_ip', 'server_public_ip', 'client_public_ip'))
@@ -170,6 +190,7 @@ def compare(args):
     }
     if plan and results['modules'] != plan['modules']:
         raise ValueError('Binaries differ from the shared build')
+    configure_affinity(output, inventory, args.private_key.resolve())
     failed = False
     aborted = False
     for spec in specs:

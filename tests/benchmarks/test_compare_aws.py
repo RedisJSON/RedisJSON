@@ -8,10 +8,64 @@ from unittest.mock import patch
 
 import yaml
 
+from configure_affinity import configure, cpus, select_cores, wrap_client
+
 from compare_aws import RemoteResetError, collect_diagnostics, compare, destroy, provision, run_one
 
 
 class AWSComparisonTest(unittest.TestCase):
+    def test_affinity_reserves_smt_siblings_and_preserves_client_arguments(self):
+        siblings = {cpu: {cpu % 4, cpu % 4 + 4} for cpu in range(8)}
+        self.assertEqual(cpus('0-2,5,7-8'), {0, 1, 2, 5, 7, 8})
+        self.assertEqual(select_cores(set(range(8)), siblings, 2), ([1, 2], {1, 2, 5, 6}))
+        with self.assertRaisesRegex(RuntimeError, 'Not enough physical cores'):
+            select_cores({0, 4}, siblings, 1)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            # A stand-in taskset checks its arguments and runs the real client.
+            taskset = root / 'taskset'
+            taskset.write_text('#!/bin/sh\n[ "$1" = "-c" ] && [ "$2" = "1,2" ] || exit 1\nshift 2\nexec "$@"\n')
+            taskset.chmod(0o755)
+            client = root / 'client with spaces'
+            client.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+            client.chmod(0o755)
+            with patch('configure_affinity.shutil.which', return_value=str(taskset)):
+                wrap_client(client, [1, 2])
+            self.assertEqual(subprocess.check_output([str(client), 'JSON.GET', 'a b', '$'], text=True),
+                             'JSON.GET\na b\n$\n')
+            with self.assertRaisesRegex(RuntimeError, 'already wrapped'):
+                wrap_client(client, [1, 2])
+
+    def test_nic_isolation_rejects_irqs_still_on_reserved_core(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            def fake_path(path):
+                return root / str(path).lstrip('/')
+            for cpu in range(8):
+                path = fake_path(f'/sys/devices/system/cpu/cpu{cpu}/topology/thread_siblings_list')
+                path.parent.mkdir(parents=True)
+                path.write_text(f'{cpu % 4},{cpu % 4 + 4}')
+            fake_path('/sys/class/net/eth0/device/msi_irqs/40').mkdir(parents=True)
+            irq = fake_path('/proc/irq/40')
+            irq.mkdir(parents=True)
+            (irq / 'effective_affinity_list').write_text('0')
+            rps = fake_path('/sys/class/net/eth0/queues/rx-0/rps_cpus')
+            rps.parent.mkdir(parents=True)
+            rps.write_text('ff')
+            fake_path('/tmp').mkdir()
+            with patch('configure_affinity.Path', side_effect=fake_path), patch(
+                'configure_affinity.os.sched_getaffinity', return_value=set(range(8)), create=True
+            ), patch('configure_affinity.subprocess.run', return_value=subprocess.CompletedProcess([], 0)) as run:
+                data = configure('server', [])
+                self.assertEqual(data['cpulist'], '1')
+                self.assertEqual(data['reserved_cpus'], [1, 5])
+                self.assertEqual(rps.read_text(), '0')
+                self.assertEqual((irq / 'smp_affinity_list').read_text(), '0')
+                self.assertEqual(run.call_args.args[0], ['systemctl', 'stop', 'irqbalance'])
+                (irq / 'effective_affinity_list').write_text('5')
+                with self.assertRaisesRegex(RuntimeError, 'still uses reserved CPUs'):
+                    configure('server', [])
+
     def test_partial_provision_retains_state_for_cleanup_and_cleanup_errors_fail(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -44,7 +98,7 @@ class AWSComparisonTest(unittest.TestCase):
         spec = Path(__file__).parent / 'json_set_fulldoc_api_replies_q3_gmaps_passiveassist.yml'
         config = yaml.safe_load(spec.read_text())
         inventory = dict(server_private_ip='10.0.0.1', server_public_ip='192.0.2.1',
-                         client_public_ip='192.0.2.2', user='ubuntu', port=6379)
+                         client_public_ip='192.0.2.2', user='ubuntu', port=6379, server_cpulist='2')
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             datasets = root / 'datasets'
@@ -57,6 +111,8 @@ class AWSComparisonTest(unittest.TestCase):
                 copied = yaml.safe_load((kwargs['cwd'] / 'test.yml').read_text())
                 self.assertEqual(copied['clientconfig'], config['clientconfig'])
                 self.assertNotIn('kpis', copied)
+                self.assertEqual(copied['dbconfig'][:-1], config.get('dbconfig', []))
+                self.assertEqual(copied['dbconfig'][-1], {'configuration-parameters': [{'server-cpulist': '2'}]})
                 (kwargs['cwd'] / 'result.json').write_text(json.dumps({'Tests': {'Overall': {'rps': 100}}}))
                 return subprocess.CompletedProcess(command, 0)
 
@@ -93,7 +149,8 @@ class AWSComparisonTest(unittest.TestCase):
             self.assertTrue(remote.call_args_list[0].args[2][0].endswith(' 6379'))
             self.assertFalse(remote.call_args_list[1].args[2][0].endswith(' 6379'))
 
-    def test_all_pairs_run_sequentially_and_reset_failure_marks_remaining_workloads(self):
+    @patch('compare_aws.configure_affinity')
+    def test_all_pairs_run_sequentially_and_reset_failure_marks_remaining_workloads(self, affinity):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = root / 'master/tests/benchmarks'

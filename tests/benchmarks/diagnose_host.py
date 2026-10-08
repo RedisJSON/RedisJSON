@@ -17,6 +17,8 @@ def read(path):
 
 def snapshot(port=None):
     data = {'timestamp': time.time(), 'host': {}, 'processes': {}}
+    data['affinity'] = read('/tmp/redisjson-affinity.json')
+    data['nic_irq_affinity'] = {path.parent.name: read(path) for path in Path('/proc/irq').glob('*/effective_affinity_list')}
     # Before/after deltas expose CPU steal, interrupts, and network retransmits.
     for name in ('stat', 'uptime', 'loadavg', 'pressure/cpu', 'softirqs',
                  'net/snmp', 'net/netstat', 'cpuinfo'):

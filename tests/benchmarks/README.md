@@ -93,6 +93,16 @@ results and checks module hashes, commit hashes, and Redis versions across jobs.
 Stable artifact names allow failed jobs to be rerun using the same shared build
 and the successful shards from the previous attempt.
 
+For the same-binary debugging experiment, each AWS pair configures CPU affinity
+once before measuring: Redis uses one fixed CPU (`server-cpulist`), and both
+client tools use the same two physical cores via `taskset`. NIC interrupts are
+moved off these cores and their SMT siblings, irqbalance is stopped if active,
+and software receive steering (RPS) is disabled. Setup fails if NIC isolation
+cannot be applied. These settings affect only the disposable nightly hosts;
+PR CI is unchanged. Each shard saves `affinity.json`, and diagnostics capture
+the effective IRQ affinity and Redis process affinity. This controls CPU placement,
+but does not guarantee identical timing or eliminate other OS/hypervisor noise.
+
 Each measurement also saves `diagnostics/server-{before,after}.json` and
 `diagnostics/client-{before,after}.json` alongside its raw results. These Linux
 snapshots run outside the measured interval and record CPU/network counters and
