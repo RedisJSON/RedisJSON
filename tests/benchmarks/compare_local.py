@@ -11,6 +11,7 @@ import re
 import shutil
 import signal
 import socket
+from statistics import median
 import subprocess
 import time
 
@@ -112,21 +113,16 @@ def run_one(spec, module, directory, datasets, redis_binary, runner, timeout):
             module_alias.unlink(missing_ok=True)
 
 
-def change(before, after):
-    if before == 0:
-        return "0.00%" if after == 0 else "n/a (zero baseline)"
-    return f"{100 * (after / before - 1):+.2f}%"
-
-
 def summary(results, baseline="master", candidate="pr"):
     before_label = "PR" if baseline == "pr" else baseline.title()
     after_label = "PR" if candidate == "pr" else candidate.title()
     lines = [
         "# RedisJSON command benchmarks: throughput", "",
         "Same workloads, sequential runs, fresh Redis per revision and test.",
-        "🟠 Benchmark name: retried because a previous pair differed by more than 5%; showing the last pair.",
+        "🟠 Benchmark name: retried because a previous pair differed by more than 5%; showing medians across all attempts.",
         "Change %: 🟢 improvement; 🟡 degradation below 5%; 🔴 degradation of 5% or more. Unchanged values are unmarked.",
         f"Each metric has {before_label}, {after_label}, and Change % columns. Higher throughput is better.",
+        "For retried tests, throughput columns show each revision’s median; Change % is the median of paired changes, not the change between those columns.",
         f"{before_label} module SHA256: `{results['modules'][baseline]}`",
         f"{after_label} module SHA256: `{results['modules'][candidate]}`", "",
         '<table>',
@@ -139,7 +135,8 @@ def summary(results, baseline="master", candidate="pr"):
         label = escape(name)
         attempts = max(value.get("attempt_count", 1) for value in pair.values())
         if attempts > 1:
-            label = "🟠 " + label + f"<br><small>Attempt {attempts}/4 (last pair)</small>"
+            aggregation = " (median)" if "change_percent" in pair[candidate] else ""
+            label = "🟠 " + label + f"<br><small>{attempts} attempts{aggregation}</small>"
         errors = [f"{revision}: {value['error']}" for revision, value in pair.items()
                   if "error" in value]
         if errors:
@@ -147,13 +144,14 @@ def summary(results, baseline="master", candidate="pr"):
             lines.append(f'<tr><td>🔴 {label}</td><td colspan="3"><strong>ERROR</strong>: {message}</td></tr>')
             continue
         before, after = pair[baseline]["ops_per_sec"], pair[candidate]["ops_per_sec"]
-        degradation = before - after
+        percent = pair[candidate].get("change_percent", 100 * (after - before) / before)
+        degradation = -percent
         marker = ""
         if degradation < 0:
             marker = "🟢 "
         elif degradation > 0:
-            marker = "🔴 " if degradation * 100 >= before * 5 else "🟡 "
-        cells = (f"{before:,.2f}", f"{after:,.2f}", f"{marker}{change(before, after)}")
+            marker = "🔴 " if degradation >= 5 else "🟡 "
+        cells = (f"{before:,.2f}", f"{after:,.2f}", f"{marker}{percent:+.2f}%")
         lines.append(f"<tr><td>{label}</td>" +
                      "".join(f'<td align="right">{escape(cell)}</td>' for cell in cells) + "</tr>")
     lines.extend(["</tbody>", "</table>"])
@@ -167,7 +165,7 @@ def record_attempt(pair, directory, attempt, max_retries=3):
     if any("error" in value for value in pair.values()):
         return False
     before, after = (value["ops_per_sec"] for value in pair.values())
-    if abs(after - before) * 100 <= before * 5 or attempt == max_retries:
+    if attempt == max_retries or (attempt == 0 and abs(after - before) * 100 <= before * 5):
         return False
     print(f"Retrying both runs for {directory.name}: change={(after / before - 1) * 100:+.2f}%, "
           f"retry {attempt + 1}/{max_retries}", flush=True)
@@ -183,10 +181,15 @@ def record_attempt(pair, directory, attempt, max_retries=3):
 def run_pairs(specs, modules, output, run_fn, results, max_retries=3, abort_on=()):
     failed = False
     aborted = False
+    baseline, candidate = modules
     for spec in specs:
+        attempts = []
         for attempt in range(max_retries + 1):
-            pair = results["benchmarks"][spec.stem] = {}
-            for label, module in modules.items():
+            # Keep result keys in baseline/candidate order even when execution is reversed.
+            pair = results["benchmarks"][spec.stem] = {label: {} for label in modules}
+            order = list(modules) if attempt % 2 == 0 else list(reversed(modules))
+            for label in order:
+                module = modules[label]
                 print(f"Running {spec.name}: {label}", flush=True)
                 started = time.monotonic()
                 try:
@@ -203,8 +206,17 @@ def run_pairs(specs, modules, output, run_fn, results, max_retries=3, abort_on=(
                         pair[label]["attempt_count"] = attempt + 1
                         pair[label]["run_seconds"] = round(time.monotonic() - started, 3)
                     (output / "comparison.json").write_text(json.dumps(results, indent=2) + "\n")
+            attempts.append(pair)
             if not record_attempt(pair, output / spec.stem, attempt, max_retries):
                 break
+        if len(attempts) > 1 and not any("error" in value for value in pair.values()):
+            percent = median(100 * (item[candidate]["ops_per_sec"] - item[baseline]["ops_per_sec"])
+                             / item[baseline]["ops_per_sec"] for item in attempts)
+            pair = {label: dict(value, ops_per_sec=median(item[label]["ops_per_sec"] for item in attempts))
+                    for label, value in pair.items()}
+            pair[candidate]["change_percent"] = percent
+            results["benchmarks"][spec.stem] = pair
+            (output / "comparison.json").write_text(json.dumps(results, indent=2) + "\n")
         revisions = "\n".join(f"- {label}: `{sha}`" for label, sha in results.get("revisions", {}).items())
         report = (revisions + "\n\n" if revisions else "") + summary(results, *modules)
         (output / "summary.md").write_text(report)

@@ -47,9 +47,12 @@ def evaluate(results):
         ):
             return False, f'Invalid or failed measurement: {name}; baseline retained.'
         before, after = rates
-        if (before - after) * 100 >= before * 5:
+        percent = values[1].get('change_percent', 100 * (after - before) / before)
+        if type(percent) not in (int, float) or not math.isfinite(percent) or percent <= -100:
+            return False, f'Invalid paired change: {name}; baseline retained.'
+        if percent <= -5:
             return False, f'{name} degraded by at least 5%; baseline retained.'
-        ratios.append(math.log(after) - math.log(before))
+        ratios.append(math.log1p(percent / 100))
     gain = math.expm1(sum(ratios) / len(ratios)) * 100
     eligible = gain > 5 + 1e-9  # Ignore floating-point rounding at exactly 5%.
     return eligible, (f'Geometric mean throughput change: {gain:+.2f}%. ' +
