@@ -30,8 +30,8 @@ class ComparisonTest(unittest.TestCase):
         candidate = dict(baseline, used_memory_dataset=600, used_memory_peak=1800)
         report = summary({"modules": {"master": "aaa", "pr": "bbb"},
                           "benchmarks": {"JSON.SET": {"master": baseline, "pr": candidate}}})
-        self.assertIn("used_memory_dataset | 500.00 | 600.00 | +20.00%", report)
-        self.assertIn("used_memory_peak | 1,200.00 | 1,800.00 | +50.00%", report)
+        self.assertIn("500 → 600<br>🔴 +20.00%", report)
+        self.assertIn("1,200 → 1,800<br>🔴 +50.00%", report)
 
     def test_red_markers_follow_metric_direction_and_ignore_key_counts(self):
         baseline = dict(used_memory=100, used_memory_dataset=0, used_memory_peak=100,
@@ -40,12 +40,13 @@ class ComparisonTest(unittest.TestCase):
                          used_memory_peak=110, keys=20, ops_per_sec=90)
         report = summary({"modules": {"master": "a", "pr": "b"},
                           "benchmarks": {"test": {"master": baseline, "pr": candidate}}})
-        rows = [line for line in report.splitlines() if line.startswith('| 🔴')]
-        self.assertEqual(len(rows), 3)
-        for metric in ('ops_per_sec', 'used_memory_dataset', 'used_memory_peak'):
-            self.assertTrue(any(f'| {metric} |' in row for row in rows))
-        self.assertIn('| test | keys |', report)
-        self.assertIn('| test | used_memory |', report)
+        rows = [line for line in report.splitlines() if line.startswith('| test |')]
+        self.assertEqual(len(rows), 1)
+        cells = [cell.strip() for cell in rows[0].split('|')[1:-1]]
+        self.assertEqual(len(cells), 7)
+        self.assertEqual([index for index, cell in enumerate(cells) if '🔴' in cell], [1, 3, 4])
+        self.assertEqual(cells[2], '100 → 90<br>-10.00%')
+        self.assertEqual(cells[6], '10 → 20')
 
     def test_missing_memory_is_not_reported_as_zero(self):
         connection = Mock()
