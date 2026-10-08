@@ -86,6 +86,11 @@ def configure_affinity(output, inventory, key):
 def run_one(spec, module, directory, datasets, inventory, key, remote_config):
     directory.mkdir(parents=True)
     (directory / 'datasets').symlink_to(datasets, target_is_directory=True)
+    # redisbench-admin caches uploads by remote basename, not file contents.
+    module_sha = hashlib.sha256(module.read_bytes()).hexdigest()
+    module_alias = directory / f'rejson-{module_sha}{module.suffix}'
+    module_alias.symlink_to(module.resolve())
+    remote_module = '/tmp/' + module_alias.name
     config = yaml.safe_load(spec.read_text())
     config.pop('kpis', None)  # Relative comparison, not the historical AWS floors.
     config['remote'] = remote_config
@@ -99,7 +104,7 @@ def run_one(spec, module, directory, datasets, inventory, key, remote_config):
                      ('server_private_ip', 'server_public_ip', 'client_public_ip'))
     command = [
         'redisbench-admin', 'run-remote', '--test', 'test.yml',
-        '--module_path', str(module), '--required-module', 'ReJSON',
+        '--module_path', str(module_alias), '--required-module', 'ReJSON',
         '--inventory', hosts, '--user', inventory['user'], '--private_key', str(key),
         '--db_port', str(inventory['port']), '--keep_env_and_topo',
         '--allowed-envs', 'oss-standalone', '--github_org', 'RedisJSON',
@@ -118,13 +123,24 @@ def run_one(spec, module, directory, datasets, inventory, key, remote_config):
                 raise RemoteResetError('Remote client timed out; stopping before another workload') from error
         if completed.returncode:
             raise RuntimeError(f'Benchmark exited {completed.returncode}; see {directory / "runner.log"}')
-        server, = remote_commands(inventory, key, [f'{cli} --raw INFO server'])
+        server, loaded, checksum = remote_commands(inventory, key, [
+            f'{cli} --raw INFO server', f'{cli} --json MODULE LIST',
+            'sha256sum -- ' + shlex.quote(remote_module),
+        ])
+        loaded_modules = [entry if isinstance(entry, dict) else dict(zip(entry[::2], entry[1::2]))
+                          for entry in json.loads(loaded)]
+        if not any(entry.get('name') == 'ReJSON' and entry.get('path') == remote_module
+                   for entry in loaded_modules):
+            raise ValueError(f'Redis did not load the expected module: {remote_module}')
+        if not checksum.split() or checksum.split()[0] != module_sha:
+            raise ValueError(f'Remote module SHA256 does not match local build: {remote_module}')
         measurements = {}
         raw = list(directory.glob('*.json'))
         if len(raw) != 1:
             raise ValueError(f'Expected one benchmark result, found {len(raw)}')
         measurements['ops_per_sec'] = throughput(json.loads(raw[0].read_text()))
         measurements['redis_version'] = parse_info(server)['redis_version']
+        measurements['module_sha256'] = module_sha
         return measurements
     finally:
         # Dedicated topology owned by this job; reset failure must stop the run.
@@ -134,6 +150,8 @@ def run_one(spec, module, directory, datasets, inventory, key, remote_config):
             ])
         except Exception as error:
             raise RemoteResetError(f'Cannot reset AWS Redis: {error}') from error
+        finally:
+            module_alias.unlink(missing_ok=True)
 
 
 def compare(args):
