@@ -33,6 +33,20 @@ class ComparisonTest(unittest.TestCase):
         self.assertIn("used_memory_dataset | 500.00 | 600.00 | +20.00%", report)
         self.assertIn("used_memory_peak | 1,200.00 | 1,800.00 | +50.00%", report)
 
+    def test_red_markers_follow_metric_direction_and_ignore_key_counts(self):
+        baseline = dict(used_memory=100, used_memory_dataset=0, used_memory_peak=100,
+                        used_memory_rss=100, keys=10, ops_per_sec=100)
+        candidate = dict(baseline, used_memory=90, used_memory_dataset=10,
+                         used_memory_peak=110, keys=20, ops_per_sec=90)
+        report = summary({"modules": {"master": "a", "pr": "b"},
+                          "benchmarks": {"test": {"master": baseline, "pr": candidate}}})
+        rows = [line for line in report.splitlines() if line.startswith('| 🔴')]
+        self.assertEqual(len(rows), 3)
+        for metric in ('ops_per_sec', 'used_memory_dataset', 'used_memory_peak'):
+            self.assertTrue(any(f'| {metric} |' in row for row in rows))
+        self.assertIn('| test | keys |', report)
+        self.assertIn('| test | used_memory |', report)
+
     def test_missing_memory_is_not_reported_as_zero(self):
         connection = Mock()
         connection.info.return_value = {"used_memory": 100}
@@ -45,8 +59,9 @@ class ComparisonTest(unittest.TestCase):
         for value in (0, -1, "nan", "inf"):
             with self.assertRaises(ValueError):
                 throughput({"Tests": {"Overall": {"rps": value}}})
-        with self.assertRaises(KeyError):
-            throughput({"Tests": {}})
+        for result in ({"Tests": {}}, {"Tests": {"Overall": {}}}):
+            with self.assertRaisesRegex(ValueError, "check runner.log"):
+                throughput(result)
         with self.assertRaises(ValueError):
             throughput({"ALL STATS": {"Totals": {"Ops/sec": 100, "Connection Errors": 1}}})
 
