@@ -182,6 +182,11 @@ macro_rules! redis_json_module_create {
             ($cmd:ident) => {
                 |ctx: &Context, args: Vec<RedisString>| -> RedisResult {
                     $($pre_command_function_expr(ctx, &args)?;)?
+                    // DEBUG ONLY: intentional regression to validate benchmark comparisons; revert after testing.
+                    let debug_started = std::time::Instant::now();
+                    while debug_started.elapsed() < std::time::Duration::from_micros(25) {
+                        std::hint::spin_loop();
+                    }
                     run_on_manager!(
                         get_manage: {
                             $( $condition => $manager_ident { $($field: $value),* } ),*
