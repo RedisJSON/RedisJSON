@@ -1,4 +1,4 @@
-name: Command Performance and Memory Comparison
+name: Command Throughput Comparison
 
 on:
   workflow_call:
@@ -59,7 +59,7 @@ jobs:
           sudo apt-get install -y build-essential libclang-dev autoconf automake libtool pkg-config libevent-dev libssl-dev zlib1g-dev libpcre2-dev
           python -m pip install 'redisbench-admin==0.12.39'
 
-      - name: Test comparison and memory collection
+      - name: Test throughput comparison
         run: python -m unittest discover -s tests/benchmarks -p 'test_*.py'
 
       - name: Build shared server and client tools
@@ -207,7 +207,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: command-performance-memory-${{ github.run_id }}-${{ github.run_attempt }}
+          name: command-performance-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             command-benchmark-results/
             shard-results/

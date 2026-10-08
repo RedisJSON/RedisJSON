@@ -12,7 +12,7 @@ pip3 install redisbench_admin>=0.1.74
 - Local benchmarks: `make benchmark`
 - Remote benchmarks:  `make benchmark REMOTE=1`
 
-## Local master/PR performance and memory comparison
+## Local master/PR throughput comparison
 
 Event CI calls `flow-command-benchmark.yml` on each PR run. It builds master and
 the PR head with one Rust toolchain in a shared build job. Five parallel jobs
@@ -20,8 +20,7 @@ then run master's YAML workloads. Each workload runs against both modules
 sequentially on the same runner, using the shared binaries.
 New PR-only workloads enter this comparison once merged into master.
 The YAML request counts and durations are unchanged. Each test/revision gets a
-fresh Redis instance and the same starting dataset; random-key workloads can
-still end with slightly different key counts, which the report includes.
+fresh Redis instance and the same starting dataset.
 
 For a local comparison, build both modules in release mode, install
 `redisbench-admin==0.12.39`, and put a compatible `redis-server`,
@@ -45,30 +44,13 @@ parsing to fail after the benchmark. Temporary JSON dataset copies therefore
 escape non-ASCII characters using JSON `\u` escapes; the parsed documents and
 numeric spellings are unchanged. The source fixtures are never modified.
 
-The report contains throughput and these `INFO MEMORY` counters in bytes:
+The report contains throughput only, with one row per benchmark and Master,
+PR, and Change % columns (Baseline and Master for nightly). Memory counters
+are not collected or compared by this harness.
 
-| Counter | Meaning |
-| --- | --- |
-| `used_memory` | Redis allocator-tracked memory after the clients finish |
-| `used_memory_dataset` | Redis's dataset-memory estimate at that point |
-| `used_memory_peak` | Redis's peak for this fresh process, **including dataset loading** |
-| `used_memory_rss` | Resident memory; informational because of allocator/OS effects |
-
-These are whole-server counters, not per-document `JSON.DEBUG MEMORY` values.
-Redis tracks the peak itself, so there is no extra memory-polling loop competing
-with the timed clients. A read-only workload still measures its loaded dataset
-and the process peak. A write workload also measures the resulting dataset.
-
-Each benchmark occupies one row, with columns for throughput, used memory,
-dataset memory, peak memory, RSS, and keys. Each metric is grouped into Master, PR, and Change % subcolumns; memory
-values are bytes. The report uses an HTML table for grouped headers in GitHub.
-
-Only Change % cells receive performance markers: 🟢 for improvement, 🟡 for
-degradation below 5%, and 🔴 for degradation of 5% or more, using unrounded
-measurements. Higher throughput and lower memory are improvements. Unchanged
-values and key-count changes are unmarked. RSS remains informational. Memory
-growth from a zero baseline is red with an undefined percentage. Error rows
-are also marked 🔴.
+Only Change % cells receive markers: 🟢 for improvement, 🟡 for degradation
+below 5%, and 🔴 for degradation of 5% or more, using unrounded measurements.
+Higher throughput is better. Unchanged values are unmarked; errors remain red.
 
 Changes are initially **report-only**, pending master-vs-master calibration.
 Benchmark errors and missing results still fail the job and appear in the
@@ -85,7 +67,7 @@ are scheduling estimates, not runtime guarantees. Each result records
 `run_seconds`; `benchmark_jobs.py plan --timings <previous-comparison.json>` can
 use measured durations for subsequent plans. CI currently uses the estimates.
 
-A final job combines all groups into one performance/memory report and checks
+A final job combines all groups into one throughput report and checks
 coverage and binary identities. Failed or missing measurements fail the job and
 appear in the report; other groups continue running. Raw logs remain available
 in artifacts. Rerunning failed jobs reuses the shared build and successful groups.
@@ -102,7 +84,7 @@ Scheduled and manually dispatched Event Nightly runs call
 `defaults.yml` AWS server/client topology once, then runs every master YAML
 workload against the baseline and current master sequentially. Request counts
 and durations are unchanged. Every revision/test gets a fresh Redis instance;
-the report includes the same throughput and memory counters as the PR comparison.
+the report includes the same throughput metric as the PR comparison.
 The AWS resources are destroyed in an `always()` step, including after failures.
 
 The baseline defaults to `master`, resolved to the exact same commit as the

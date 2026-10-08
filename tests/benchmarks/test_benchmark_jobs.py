@@ -33,8 +33,7 @@ class BenchmarkJobsTest(unittest.TestCase):
     def test_merge_detects_missing_partial_failed_duplicate_and_mismatched_results(self):
         plan = {'shards': [[f'test-{index}.yml'] for index in range(5)],
                 'modules': {'master': 'aaa', 'pr': 'bbb'}, 'redis': 'same-server'}
-        measurement = dict(ops_per_sec=100, used_memory=10, used_memory_dataset=5,
-                           used_memory_peak=20, used_memory_rss=30, keys=1)
+        measurement = dict(ops_per_sec=100)
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             paths = []
