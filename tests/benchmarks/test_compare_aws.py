@@ -22,6 +22,7 @@ class AWSComparisonTest(unittest.TestCase):
 
             def failed_apply(*args):
                 self.assertEqual(json.loads(state.read_text())['terraform_dir'], str(root))
+                self.assertEqual(args[3], 'redisjson-nightly-1-1-3')
                 raise RuntimeError('partial apply')
 
             with patch.dict('os.environ', environment), patch(
@@ -29,7 +30,7 @@ class AWSComparisonTest(unittest.TestCase):
                 return_value=(str(root), 'oss-standalone', 'test')
             ), patch('redisbench_admin.utils.remote.setup_remote_environment', side_effect=failed_apply):
                 with self.assertRaisesRegex(RuntimeError, 'partial apply'):
-                    provision(state, root)
+                    provision(state, root, shard=3)
             with patch('python_terraform.Terraform') as terraform:
                 terraform.return_value.destroy.return_value = (0, '', '')
                 destroy(state)
@@ -90,7 +91,7 @@ class AWSComparisonTest(unittest.TestCase):
             state = root / 'state.json'
             state.write_text('{}')
             args = argparse.Namespace(master_dir=root / 'master', baseline_dir=root / 'baseline',
-                                      state=state, private_key=root / 'key', output=root / 'results')
+                                      state=state, private_key=root / 'key', output=root / 'results', plan=None, shard=0)
             value = dict(ops_per_sec=100, redis_version='8.2.0')
             with patch('compare_aws.subprocess.check_output', return_value='same-sha\n'), patch(
                 'compare_aws.run_one', return_value=value
@@ -105,6 +106,18 @@ class AWSComparisonTest(unittest.TestCase):
                 self.assertEqual(report.count('<th>Baseline</th><th>Master</th><th>Change %</th>'), 1)
                 self.assertIn('Baseline module SHA256:', report)
                 self.assertNotIn('<th>PR</th>', report)
+
+            args.plan = root / 'plan.json'
+            args.plan.write_text(json.dumps(dict(shards=[['second.yml']], modules=results['modules'],
+                                                  revisions=results['revisions'])))
+            args.output = root / 'shard-results'
+            with patch('compare_aws.subprocess.check_output', side_effect=AssertionError('No git checkout needed')), patch(
+                'compare_aws.run_one', return_value=value
+            ) as run:
+                self.assertEqual(compare(args), 0)
+                self.assertEqual([(c.args[0].stem, c.args[2].name) for c in run.call_args_list],
+                                 [('second', 'baseline'), ('second', 'master')])
+            args.plan = None
 
             args.output = root / 'reset-failure'
             with patch('compare_aws.subprocess.check_output', return_value='same-sha\n'), patch(
