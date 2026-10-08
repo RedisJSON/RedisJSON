@@ -115,13 +115,25 @@ Redis command execution times and the remote module hash. Use them to investigat
 same-binary throughput differences; snapshot errors are recorded without failing
 the benchmark. The throughput report and workload settings are unchanged.
 
-The baseline defaults to `master`, resolved to the exact same commit as the
-current-master checkout, so initially this measures master-versus-master noise.
-Set the repository variable `BENCHMARK_BASELINE_REF` to a fixed commit SHA to
-pin the scheduled baseline. The manual `benchmark-baseline-ref` input overrides
-that variable. Both resolved commit hashes appear in the report.
+The baseline is the dedicated `benchmark-baseline` branch. Scheduled runs compare
+its pinned commit against current `master`; manual runs compare it against the
+selected dispatch branch's commit. Equal commits skip builds and AWS provisioning.
+Initialize the baseline branch at the desired reference commit before using this flow.
+The former `BENCHMARK_BASELINE_REF` variable and manual override are no longer used.
 
-Results and logs are uploaded as `nightly-aws-benchmarks-<run>-<attempt>` and the
+Only scheduled runs may promote the baseline. All workloads must succeed, no
+workload may degrade by 5% or more, and the geometric mean of candidate/baseline
+throughput ratios must improve by more than 5%. An eligible initial round triggers
+a complete confirmation round using the same build bundle, with no retries.
+Confirmation must pass the same criteria and match revisions, module hashes,
+Redis version and workload coverage. A lease-protected push then advances the
+baseline to the exact tested candidate; a concurrent baseline change is not overwritten.
+Only the promotion job has repository write permission. Branch protection must
+permit this update; a rejected update is reported as a failed promotion.
+The reusable workflow keeps the internal `master` label for the candidate, including
+manual runs, and reports its actual commit SHA.
+
+Results and logs are uploaded as `nightly-<initial|confirmation>-benchmarks-<run>-<attempt>` and the
 comparison appears in the job summary. Relative changes are report-only;
 benchmark errors fail the job. This comparison uses its own per-run artifacts,
 not historical RedisTimeSeries samples or the old absolute KPI floors.

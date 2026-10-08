@@ -225,8 +225,10 @@ class AWSComparisonTest(unittest.TestCase):
                 ('boundary-up', [100, 105], 1),
                 ('boundary-down', [100, 95], 1),
                 ('limit', [100, 110] * 4, 4),
+                ('confirmation', [100, 110], 1),
             ]:
                 with self.subTest(scenario=scenario):
+                    args.max_retries = 0 if scenario == 'confirmation' else 3
                     args.output = root / scenario
                     remaining = iter(rates)
                     def measured(spec, module, directory, *unused):

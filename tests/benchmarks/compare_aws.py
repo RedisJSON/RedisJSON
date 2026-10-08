@@ -196,7 +196,7 @@ def compare(args):
     for spec in specs:
         history = output / spec.stem / 'attempts'
         history.mkdir(parents=True)
-        for attempt in range(4):  # Initial pair plus at most three retries.
+        for attempt in range(getattr(args, 'max_retries', 3) + 1):
             pair = results['benchmarks'][spec.stem] = {}
             for label, module in modules.items():
                 print(f'Running {spec.name}: {label}', flush=True)
@@ -222,7 +222,7 @@ def compare(args):
             if any('error' in value for value in pair.values()):
                 break
             before, after = pair['baseline']['ops_per_sec'], pair['master']['ops_per_sec']
-            if abs(after - before) * 100 <= before * 5 or attempt == 3:
+            if abs(after - before) * 100 <= before * 5 or attempt == getattr(args, 'max_retries', 3):
                 break
             print(f'Retrying both runs for {spec.name}: change={(after / before - 1) * 100:+.2f}%, '
                   f'retry {attempt + 1}/3', flush=True)
@@ -250,6 +250,7 @@ def main():
     parser.add_argument('--master-dir', type=Path)
     parser.add_argument('--output', type=Path)
     parser.add_argument('--plan', type=Path)
+    parser.add_argument('--max-retries', type=int, choices=range(4), default=3)
     parser.add_argument('--shard', type=int, default=0)
     args = parser.parse_args()
     required = {'provision': ['benchmarks_dir'], 'run': ['private_key', 'baseline_dir', 'master_dir', 'output'],
