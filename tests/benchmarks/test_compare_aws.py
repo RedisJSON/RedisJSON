@@ -219,6 +219,33 @@ class AWSComparisonTest(unittest.TestCase):
                 self.assertEqual(compare(args), 0)
                 self.assertEqual([(c.args[0].stem, c.args[2].name) for c in run.call_args_list],
                                  [('second', 'baseline'), ('second', 'master')])
+            for scenario, rates, expected_attempts in [
+                ('improvement', [100, 110, 100, 102], 2),
+                ('degradation', [100, 90, 100, 99], 2),
+                ('boundary-up', [100, 105], 1),
+                ('boundary-down', [100, 95], 1),
+                ('limit', [100, 110] * 4, 4),
+            ]:
+                with self.subTest(scenario=scenario):
+                    args.output = root / scenario
+                    remaining = iter(rates)
+                    def measured(spec, module, directory, *unused):
+                        directory.mkdir(parents=True)
+                        rate = next(remaining)
+                        (directory / 'raw.json').write_text(str(rate))
+                        return dict(ops_per_sec=rate, redis_version='8.2.0')
+                    with patch('compare_aws.run_one', side_effect=measured) as run:
+                        self.assertEqual(compare(args), 0)
+                    self.assertEqual([c.args[2].name for c in run.call_args_list],
+                                     ['baseline', 'master'] * expected_attempts)
+                    pair = json.loads((args.output / 'comparison.json').read_text())['benchmarks']['second']
+                    self.assertEqual(pair['master']['ops_per_sec'], rates[-1])
+                    self.assertEqual(pair['master']['attempt_count'], expected_attempts)
+                    history = args.output / 'second/attempts'
+                    self.assertEqual(len(list(history.glob('*.json'))), expected_attempts)
+                    if expected_attempts > 1:
+                        self.assertEqual((history / 'attempt-1/master/raw.json').read_text(), str(rates[1]))
+                        self.assertIn(f'Attempt {expected_attempts}/4', (args.output / 'summary.md').read_text())
             args.plan = None
 
             args.output = root / 'reset-failure'

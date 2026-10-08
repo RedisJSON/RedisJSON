@@ -194,26 +194,45 @@ def compare(args):
     failed = False
     aborted = False
     for spec in specs:
-        pair = results['benchmarks'][spec.stem] = {}
-        for label, module in modules.items():
-            print(f'Running {spec.name}: {label}', flush=True)
-            started = time.monotonic()
-            try:
-                if aborted:
-                    raise RemoteResetError('Not run: the AWS environment could not be reset')
-                value = run_one(spec, module, output / spec.stem / label, datasets,
-                                inventory, args.private_key.resolve(), remote_config)
-                version = value['redis_version']
-                if results.setdefault('redis', version) != version:
-                    raise ValueError('Redis version changed during comparison')
-                pair[label] = value
-            except Exception as error:
-                failed = True
-                aborted = aborted or isinstance(error, RemoteResetError)
-                pair[label] = {'error': str(error)}
-                print(f'ERROR: {error}', flush=True)
-            pair[label]['run_seconds'] = round(time.monotonic() - started, 3)
-            (output / 'comparison.json').write_text(json.dumps(results, indent=2) + '\n')
+        history = output / spec.stem / 'attempts'
+        history.mkdir(parents=True)
+        for attempt in range(4):  # Initial pair plus at most three retries.
+            pair = results['benchmarks'][spec.stem] = {}
+            for label, module in modules.items():
+                print(f'Running {spec.name}: {label}', flush=True)
+                started = time.monotonic()
+                try:
+                    if aborted:
+                        raise RemoteResetError('Not run: the AWS environment could not be reset')
+                    value = run_one(spec, module, output / spec.stem / label, datasets,
+                                    inventory, args.private_key.resolve(), remote_config)
+                    version = value['redis_version']
+                    if results.setdefault('redis', version) != version:
+                        raise ValueError('Redis version changed during comparison')
+                    pair[label] = dict(value)
+                except Exception as error:
+                    failed = True
+                    aborted = aborted or isinstance(error, RemoteResetError)
+                    pair[label] = {'error': str(error)}
+                    print(f'ERROR: {error}', flush=True)
+                pair[label]['attempt_count'] = attempt + 1
+                pair[label]['run_seconds'] = round(time.monotonic() - started, 3)
+                (output / 'comparison.json').write_text(json.dumps(results, indent=2) + '\n')
+            (history / f'attempt-{attempt + 1}.json').write_text(json.dumps(pair, indent=2) + '\n')
+            if any('error' in value for value in pair.values()):
+                break
+            before, after = pair['baseline']['ops_per_sec'], pair['master']['ops_per_sec']
+            if abs(after - before) * 100 <= before * 5 or attempt == 3:
+                break
+            print(f'Retrying both runs for {spec.name}: change={(after / before - 1) * 100:+.2f}%, '
+                  f'retry {attempt + 1}/3', flush=True)
+            # Keep final raw results at the existing paths; archive earlier pairs.
+            archive = history / f'attempt-{attempt + 1}'
+            archive.mkdir()
+            for label in modules:
+                directory = output / spec.stem / label
+                if directory.exists():
+                    directory.rename(archive / label)
         revisions = '\n'.join(f'- {label}: `{sha}`' for label, sha in results['revisions'].items())
         (output / 'summary.md').write_text(revisions + '\n\n' + summary(results, 'baseline', 'master'))
     if not results['benchmarks']:
