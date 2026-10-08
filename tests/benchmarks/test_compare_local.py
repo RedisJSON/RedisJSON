@@ -1,13 +1,28 @@
 """Validation failures must not become apparent memory/performance improvements."""
 
 import unittest
+import json
 from pathlib import Path
 from unittest.mock import Mock
 
-from compare_local import change, memory_snapshot, owns_server, summary, throughput
+from compare_local import (change, escape_dataset_unicode, memory_snapshot,
+                           owns_server, summary, throughput)
 
 
 class ComparisonTest(unittest.TestCase):
+    def test_unicode_payloads_keep_exact_json_values(self):
+        text = '{ "temperature": "10°", "name": "שלום😀", "number": 1.2300e-2 }'
+        escaped = escape_dataset_unicode(text)
+        self.assertTrue(escaped.isascii())
+        self.assertEqual(json.loads(escaped), json.loads(text))
+        self.assertIn('1.2300e-2', escaped)
+        self.assertEqual(escape_dataset_unicode(escaped), escaped)
+        for name in ('api_replies_q3_gmaps_passiveassist.json', 'api_replies_q5_gmaps_place.json'):
+            original = (Path(__file__).parent / 'datasets' / name).read_text(encoding='utf-8')
+            escaped = escape_dataset_unicode(original)
+            self.assertTrue(escaped.isascii())
+            self.assertEqual(json.loads(original), json.loads(escaped))
+
     def test_memory_growth_and_peak_are_visible_in_report(self):
         baseline = dict(used_memory=1000, used_memory_dataset=500,
                         used_memory_peak=1200, used_memory_rss=4096,

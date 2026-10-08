@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  compare:
+  build:
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     defaults:
@@ -60,7 +60,7 @@ jobs:
           python -m pip install 'redisbench-admin==0.12.39'
 
       - name: Test comparison and memory collection
-        run: python -m unittest discover -s tests/benchmarks -p 'test_compare_local.py'
+        run: python -m unittest discover -s tests/benchmarks -p 'test_*.py'
 
       - name: Build shared server and client tools
         run: |
@@ -92,14 +92,108 @@ jobs:
           Path('benchmark-revisions.json').write_text(json.dumps(revisions, indent=2) + '\n')
           PY
 
-      # Initially report relative changes; benchmark/setup failures still fail CI.
-      # Calibrate thresholds with master-vs-master runs before adding a gate.
-      - name: Compare performance and memory on the same workloads
+      - name: Package shared binaries and assign all workloads
         run: |
-          python tests/benchmarks/compare_local.py \
-            --baseline-module benchmark-master/target/release/librejson.so \
-            --candidate-module target/release/librejson.so \
-            --benchmarks-dir benchmark-master/tests/benchmarks \
+          mkdir -p benchmark-bundle/bin
+          cp benchmark-master/target/release/librejson.so benchmark-bundle/master.so
+          cp target/release/librejson.so benchmark-bundle/pr.so
+          cp benchmark-redis/src/redis-server benchmark-redis/src/redis-benchmark benchmark-memtier/memtier_benchmark benchmark-bundle/bin/
+          cp -R benchmark-master/tests/benchmarks benchmark-bundle/suite
+          cp benchmark-revisions.json benchmark-bundle/
+          python tests/benchmarks/benchmark_jobs.py plan --bundle benchmark-bundle --shards 5
+          tar -czf benchmark-bundle.tar.gz benchmark-bundle
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: command-benchmark-build-${{ github.run_id }}
+          path: benchmark-bundle.tar.gz
+          compression-level: 0
+          overwrite: true
+          retention-days: 14
+
+  compare:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libevent-dev libssl-dev
+          python -m pip install 'redisbench-admin==0.12.39'
+      - uses: actions/download-artifact@v5
+        with:
+          name: command-benchmark-build-${{ github.run_id }}
+      - name: Unpack shared build
+        run: |
+          tar -xzf benchmark-bundle.tar.gz
+          echo "$GITHUB_WORKSPACE/benchmark-bundle/bin" >> "$GITHUB_PATH"
+      # Each full workload runs on both modules sequentially on this same runner.
+      - name: Compare assigned workloads
+        run: |
+          python tests/benchmarks/benchmark_jobs.py run \
+            --bundle benchmark-bundle --shard ${{ matrix.shard }} \
+            --output benchmark-results/shard-${{ matrix.shard }}
+      - name: Package partial results even on failure
+        if: always()
+        run: |
+          mkdir -p benchmark-results/shard-${{ matrix.shard }}
+          tar --exclude='*/datasets' --exclude='*/dump.rdb' \
+            -czf shard-${{ matrix.shard }}.tar.gz -C benchmark-results shard-${{ matrix.shard }}
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: command-benchmark-shard-${{ matrix.shard }}-${{ github.run_id }}
+          path: shard-${{ matrix.shard }}.tar.gz
+          compression-level: 0
+          overwrite: true
+          retention-days: 14
+
+  report:
+    needs: [build, compare]
+    if: always() && needs.build.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install 'redis==4.6.0' 'PyYAML==6.0.3'
+      - uses: actions/download-artifact@v5
+        with:
+          name: command-benchmark-build-${{ github.run_id }}
+      - name: Download available shard reports
+        uses: actions/download-artifact@v5
+        continue-on-error: true # The merge below fails explicitly for missing shards.
+        with:
+          pattern: command-benchmark-shard-*-${{ github.run_id }}
+          path: shard-downloads
+          merge-multiple: true
+      - name: Merge and verify complete coverage
+        run: |
+          tar -xzf benchmark-bundle.tar.gz benchmark-bundle/plan.json benchmark-bundle/benchmark-revisions.json
+          mkdir -p shard-results command-benchmark-results
+          shopt -s nullglob
+          for archive in shard-downloads/*.tar.gz; do
+            tar -xzf "$archive" -C shard-results
+          done
+          cp benchmark-bundle/plan.json benchmark-bundle/benchmark-revisions.json command-benchmark-results/
+          python tests/benchmarks/benchmark_jobs.py merge \
+            --plan benchmark-bundle/plan.json --results shard-results \
             --output command-benchmark-results
 
       - name: Write comparison summary
@@ -115,11 +209,6 @@ jobs:
         with:
           name: command-performance-memory-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            benchmark-revisions.json
-            command-benchmark-results/comparison.json
-            command-benchmark-results/summary.md
-            command-benchmark-results/*/master/*.json
-            command-benchmark-results/*/master/*.log
-            command-benchmark-results/*/pr/*.json
-            command-benchmark-results/*/pr/*.log
+            command-benchmark-results/
+            shard-results/
           retention-days: 14
