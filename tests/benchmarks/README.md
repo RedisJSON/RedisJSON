@@ -92,9 +92,9 @@ can reuse the initial report. Rerunning a report replaces its round artifact.
 
 Each benchmark requires a benchmark definition yaml file to present on the current directory. The benchmark spec file is fully explained on the following link: https://github.com/RedisLabsModules/redisbench-admin/tree/master/docs
 
-## Performance baselines
+## Legacy absolute KPI floors
 
-Each benchmark carries its own baseline as a `kpis` floor at the end of its yaml:
+Some benchmark YAML files contain an absolute throughput floor:
 
 ```yaml
 kpis:
@@ -102,49 +102,28 @@ kpis:
       "$.Tests.Overall.rps": 194750.47
 ```
 
-`redisbench-admin run-remote` checks those floors itself and exits non-zero when
-a run comes in below one, so any lane that runs the benchmarks also gates on
-them — the `run-benchmark` PR label, every push to `master` / `feature-*` /
-`X.Y`, and the nightly.
+`redisbench-admin run-remote` checks these floors when they are present in the
+input configuration. The local/Event CI and nightly comparison scripts remove
+`kpis` from their temporary configurations; they do not enforce these floors or
+modify the source YAML files. Their relative comparisons and nightly promotion
+criteria are described above.
 
-These YAML floors are never written by CI. Raising one is proposed out of band, from the
-nightly analysis:
+The nightly comparison uploads merged reports as
+`nightly-initial-benchmarks-<run_id>` and, when a confirmation round runs,
+`nightly-confirmation-benchmarks-<run_id>`, with 30-day retention. It does not run
+`update_kpis.py` or automatically open PRs to update YAML floors. The
+`benchmark-baseline` branch and the YAML floors are separate mechanisms.
 
-1. The nightly benchmark run uploads its result json files as
-   `benchmark-results-<group>` artifacts (30 day retention).
-2. When a run comes in faster than the committed floors, the nightly analysis
-   proposes a bump — `update_kpis.py` applied to those results, opened as a PR.
-3. A human merges it, accepting the higher bar. Leaving it unmerged keeps the
-   current baselines.
+For manual maintenance of the legacy floors, `update_kpis.py` uses raw benchmark
+result JSON files in the current directory. It can raise a floor to
+`measured * (1 - margin)` (default margin: 5%), but never lowers an existing floor.
+This guarantee applies only to those YAML values, not to the moving
+`benchmark-baseline` branch. Review and commit any proposed YAML changes manually.
 
-One benchmark, `json_nummultby_num_2`, fails on every run — `redis-benchmark`
-exits 1 with an empty result set, and has since at least 2026-08-09
-(MOD-18654). It still runs, and it has no floor of its own.
+Run from `tests/benchmarks` after placing the raw result files there; merged
+`comparison.json` reports are not the input format:
 
-That means **the benchmark job is red on every run until MOD-18654 is fixed**,
-so job status alone does not tell you whether a baseline was breached. Read the
-log instead:
-
-| Log line | Meaning |
-|---|---|
-| `Condition on <metric> <measured> ge <floor> is False` | performance regression |
-| `Failed to run remote benchmark for test '<name>'` | the benchmark itself errored (MOD-18654) |
-
-The other 42 benchmarks run and report regardless — `run-remote` is not given
-`--fail_fast`, so one failing test does not stop the rest.
-
-`update_kpis.py` can only **raise** a floor, to `measured * (1 - margin)`
-(margin 5% by default), so a baseline cannot drift downwards even by accident —
-a slower run proposes nothing, and lowering a floor is always a hand edit in a
-reviewed PR.
-
-The 5% margin is a starting point taken from `redisbench-admin compare`'s own
-regression waterline; revisit it against the run-to-run spread visible in the
-[CI benchmarks dashboard](https://benchmarksrediscom.grafana.net/d/UErSC0jGk/redisjson-ci-benchmarks).
-
-To seed or re-seed floors from a local run's results:
-
-```
+```bash
 python3 update_kpis.py --margin 0.05
 python3 update_kpis.py --self-test   # checks raise/never-lower behaviour
 ```

@@ -15,7 +15,6 @@ from statistics import median
 import subprocess
 import time
 
-import psutil
 import redis
 import yaml
 
@@ -55,6 +54,8 @@ def owns_server(connection, db_root):
 
 
 def stop_server(connection, db_root, pidfile, redis_binary):
+    import psutil
+
     try:
         process = psutil.Process(int(pidfile.read_text().strip()))
         if (Path(process.exe()).resolve() != Path(redis_binary).resolve()
@@ -263,6 +264,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline-module", type=Path, required=True)
     parser.add_argument("--candidate-module", type=Path, required=True)
+    parser.add_argument("--revisions", type=Path, help="JSON file containing build commit SHAs")
     parser.add_argument("--benchmarks-dir", type=Path, default=Path(__file__).resolve().parent)
     parser.add_argument("--benchmark", action="append", help="YAML filename; repeat to select tests")
     parser.add_argument("--output", type=Path, required=True, help="New output directory")
@@ -296,6 +298,8 @@ def main():
         "redis": subprocess.check_output([redis_binary, "--version"], text=True).strip(),
         "benchmarks": {},
     }
+    if args.revisions:
+        results["revisions"] = json.loads(args.revisions.read_text())
     def run(spec, module, directory):
         return run_one(spec, module, directory, datasets, redis_binary, runner, args.timeout)
 

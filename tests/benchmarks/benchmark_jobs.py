@@ -127,6 +127,7 @@ def main():
             plan['revisions'] = json.loads((bundle / 'revisions.json').read_text())
             modules = {label: bundle / label / 'target/release/librejson.so' for label in plan['labels']}
         else:
+            plan['revisions'] = json.loads((bundle / 'benchmark-revisions.json').read_text())
             modules = {label: bundle / f'{label}.so' for label in ('master', 'pr')}
             plan['redis'] = subprocess.check_output([str(bundle / 'bin/redis-server'), '--version'], text=True).strip()
         plan['modules'] = {label: hashlib.sha256(path.read_bytes()).hexdigest() for label, path in modules.items()}
@@ -144,6 +145,7 @@ def main():
                    '--baseline-module', str(bundle / 'master.so'),
                    '--candidate-module', str(bundle / 'pr.so'),
                    '--redis-binary', str(bundle / 'bin/redis-server'),
+                   '--revisions', str(bundle / 'benchmark-revisions.json'),
                    '--benchmarks-dir', str(bundle / 'suite'), '--output', str(args.output)]
         for name in names:
             command.extend(['--benchmark', name])
