@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import yaml
 
-from configure_affinity import configure, cpus, select_cores, wait_for_irq_affinity, wrap_client
+from configure_affinity import configure, cpus, select_cores, select_isolated_cores, wrap_client
 
 from compare_aws import RemoteResetError, collect_diagnostics, compare, destroy, provision, run_one
 
@@ -36,7 +36,7 @@ class AWSComparisonTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'already wrapped'):
                 wrap_client(client, [1, 2])
 
-    def test_nic_isolation_rejects_irqs_still_on_reserved_core(self):
+    def test_nic_isolation_selects_cores_around_pending_irqs(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             def fake_path(path):
@@ -63,27 +63,36 @@ class AWSComparisonTest(unittest.TestCase):
                 self.assertEqual((irq / 'smp_affinity_list').read_text(), '0')
                 self.assertEqual(run.call_args.args[0], ['systemctl', 'stop', 'irqbalance'])
                 (irq / 'effective_affinity_list').write_text('5')
-                with patch('configure_affinity.time.monotonic', side_effect=[0, 11]), self.assertRaisesRegex(
-                    RuntimeError, 'IRQ affinity did not settle within 10s'
-                ):
-                    configure('server', [])
+                data = configure('server', [])
+                self.assertEqual(data['cpulist'], '2')
+                self.assertEqual(data['reserved_cpus'], [2, 6])
+                self.assertEqual(data['nic_irqs'], {'40': '5'})
+                self.assertEqual(data['requested_nic_irqs'], {'40': 0})
 
-    def test_irq_affinity_waits_for_migration_without_reapplying_settings(self):
-        with patch('configure_affinity.Path') as path, patch(
-            'configure_affinity.time.sleep'
-        ) as sleep, patch('configure_affinity.time.monotonic', return_value=0):
-            effective = path.return_value.__truediv__.return_value.__truediv__.return_value
-            effective.read_text.side_effect = ['1', '0']
-            self.assertEqual(wait_for_irq_affinity({'31': 0}, {1, 5}), {'31': '0'})
-            sleep.assert_called_once_with(0.1)
-            effective.write_text.assert_not_called()
-
-    def test_pending_move_between_housekeeping_cpus_does_not_block_benchmarks(self):
+    def test_idle_irq_on_cpu9_does_not_block_selection_or_enter_benchmark_cores(self):
+        siblings = {cpu: {cpu % 8, cpu % 8 + 8} for cpu in range(16)}
         with patch('configure_affinity.Path') as path, patch('configure_affinity.time.sleep') as sleep:
             effective = path.return_value.__truediv__.return_value.__truediv__.return_value
-            effective.read_text.return_value = '7'
-            self.assertEqual(wait_for_irq_affinity({'30': 5}, {1, 2, 9, 10}), {'30': '7'})
+            effective.read_text.return_value = '9'
+            selected, reserved, irqs = select_isolated_cores({'29': 4}, set(range(16)), siblings, 2)
+            self.assertEqual(selected, [2, 3])
+            self.assertFalse(reserved & {1, 9, 4, 12})
+            self.assertEqual(irqs, {'29': '9'})
             sleep.assert_not_called()
+
+    def test_isolation_waits_only_when_insufficient_cores_and_fails_if_none_become_available(self):
+        siblings = {cpu: {cpu} for cpu in range(4)}
+        with patch('configure_affinity.Path') as path, patch('configure_affinity.time.sleep') as sleep:
+            effective = path.return_value.__truediv__.return_value.__truediv__.return_value
+            effective.read_text.side_effect = ['1-3', '0']
+            selected, _, _ = select_isolated_cores({'29': 0}, set(range(4)), siblings, 2)
+            self.assertEqual(selected, [1, 2])
+            sleep.assert_called_once_with(0.1)
+            effective.read_text.side_effect = None
+            effective.read_text.return_value = '1-3'
+            with patch('configure_affinity.time.monotonic', side_effect=[0, 11]):
+                with self.assertRaisesRegex(RuntimeError, 'Not enough IRQ-free physical cores'):
+                    select_isolated_cores({'29': 0}, set(range(4)), siblings, 2)
 
     def test_partial_provision_retains_state_for_cleanup_and_cleanup_errors_fail(self):
         with tempfile.TemporaryDirectory() as temporary:
