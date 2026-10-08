@@ -95,6 +95,31 @@ python -m unittest discover -s tests/benchmarks -p 'test_*.py'
 ```
 
 
+## Nightly AWS comparison
+
+Scheduled and manually dispatched Event Nightly runs call
+`flow-benchmark-nightly.yml`: one job, no matrix. It provisions the existing
+`defaults.yml` AWS server/client topology once, then runs every master YAML
+workload against the baseline and current master sequentially. Request counts
+and durations are unchanged. Every revision/test gets a fresh Redis instance;
+the report includes the same throughput and memory counters as the PR comparison.
+The AWS resources are destroyed in an `always()` step, including after failures.
+
+The baseline defaults to `master`, resolved to the exact same commit as the
+current-master checkout, so initially this measures master-versus-master noise.
+Set the repository variable `BENCHMARK_BASELINE_REF` to a fixed commit SHA to
+pin the scheduled baseline. The manual `benchmark-baseline-ref` input overrides
+that variable. Both resolved commit hashes appear in the report.
+
+Results and logs are uploaded as `nightly-aws-benchmarks-<run>-<attempt>` and the
+comparison appears in the job summary. Relative changes are report-only;
+benchmark errors fail the job. This comparison uses its own per-run artifacts,
+not historical RedisTimeSeries samples or the old absolute KPI floors.
+The PR comparison retains its five parallel jobs. Push-triggered Event Nightly
+runs skip the AWS comparison, as the existing integration-push workflow already
+has its own AWS benchmark lane.
+
+
 ## Included benchmarks
 
 Each benchmark requires a benchmark definition yaml file to present on the current directory. The benchmark spec file is fully explained on the following link: https://github.com/RedisLabsModules/redisbench-admin/tree/master/docs
@@ -110,15 +135,16 @@ kpis:
 ```
 
 `redisbench-admin run-remote` checks those floors itself and exits non-zero when
-a run comes in below one, so any lane that runs the benchmarks also gates on
-them — the `run-benchmark` PR label, every push to `master` / `feature-*` /
-`X.Y`, and the nightly.
+a run comes in below one. The legacy AWS lanes (`run-benchmark` PR label and
+integration pushes) retain that gate. The nightly and five-job PR comparisons
+remove floors from temporary specs and report relative changes instead.
 
 Baselines are never written by CI. Raising one is proposed out of band, from the
 nightly analysis:
 
-1. The nightly benchmark run uploads its result json files as
-   `benchmark-results-<group>` artifacts (30 day retention).
+1. Legacy AWS runs upload raw results as
+   `benchmark-results-<environment>-<group>` artifacts (30 day retention).
+   The nightly comparison includes raw results in its per-test artifact folders.
 2. When a run comes in faster than the committed floors, the nightly analysis
    proposes a bump — `update_kpis.py` applied to those results, opened as a PR.
 3. A human merges it, accepting the higher bar. Leaving it unmerged keeps the
@@ -128,7 +154,7 @@ One benchmark, `json_nummultby_num_2`, fails on every run — `redis-benchmark`
 exits 1 with an empty result set, and has since at least 2026-08-09
 (MOD-18654). It still runs, and it has no floor of its own.
 
-That means **the benchmark job is red on every run until MOD-18654 is fixed**,
+That means **affected benchmark jobs fail until MOD-18654 is fixed**,
 so job status alone does not tell you whether a baseline was breached. Read the
 log instead:
 
