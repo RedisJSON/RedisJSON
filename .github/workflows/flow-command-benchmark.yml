@@ -57,7 +57,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libclang-dev autoconf automake libtool pkg-config libevent-dev libssl-dev zlib1g-dev libpcre2-dev
-          python -m pip install 'redisbench-admin==0.12.39'
+          python -m pip install -r tests/benchmarks/requirements.txt
 
       - name: Build shared server and client tools
         run: |
@@ -128,7 +128,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libevent-dev libssl-dev
-          python -m pip install 'redisbench-admin==0.12.39'
+          python -m pip install -r tests/benchmarks/requirements.txt
       - uses: actions/download-artifact@v5
         with:
           name: command-benchmark-build-${{ github.run_id }}

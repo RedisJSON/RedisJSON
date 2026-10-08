@@ -28,7 +28,7 @@ jobs:
           python-version: '3.11'
       - name: Install benchmark tools
         run: |
-          python -m pip install 'redisbench-admin==0.12.39'
+          python -m pip install -r tests/benchmarks/requirements.txt
           VERSION=0.14.8 ./deps/readies/bin/getterraform
       - uses: actions/download-artifact@v5
         with:
