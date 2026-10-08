@@ -427,6 +427,12 @@ macro_rules! redis_json_module_create {
                     ::redis_module::configuration::ConfigurationFlags::IMMUTABLE
                         | ::redis_module::configuration::ConfigurationFlags::UNPREFIXED,
                     None
+                ], [
+                    "json-legacy-rdb-depth-limit",
+                    &$crate::backward::LEGACY_RDB_DEPTH_LIMIT,
+                    false,
+                    ::redis_module::configuration::ConfigurationFlags::UNPREFIXED,
+                    None
                 ]],
                 enum: [],
                 module_args_as_configuration: true,
