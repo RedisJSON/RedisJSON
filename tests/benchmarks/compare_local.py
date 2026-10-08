@@ -2,6 +2,7 @@
 
 import argparse
 import hashlib
+from html import escape
 import json
 import math
 import os
@@ -148,20 +149,25 @@ def summary(results):
         "Memory is measured in bytes after the clients finish. Peak includes dataset loading.",
         "RSS is informational; it includes allocator/OS effects. Changes are report-only.",
         "🔴 marks lower throughput or higher memory (any increase, including informational RSS).",
-        "Each cell shows Master → PR, with the percentage change below. Memory values are bytes.",
+        "Each metric has Master, PR, and Change % columns. ↑ higher is better; ↓ lower is better.",
         "Random-key workloads may finish with different key counts; check the Keys column.", "",
         f"Master module SHA256: `{results['modules']['master']}`",
         f"PR module SHA256: `{results['modules']['pr']}`", "",
-        "| Benchmark | Throughput (ops/s) ↑ | Used memory ↓ | Dataset memory ↓ | Peak memory ↓ | RSS (informational) ↓ | Keys |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        '<table>',
+        '<thead><tr><th rowspan="2">Benchmark</th>',
+        '<th colspan="3">Throughput (ops/s) ↑</th><th colspan="3">Used memory (bytes) ↓</th>',
+        '<th colspan="3">Dataset memory (bytes) ↓</th><th colspan="3">Peak memory (bytes) ↓</th>',
+        '<th colspan="3">RSS (bytes, informational) ↓</th><th colspan="3">Keys</th></tr>',
+        '<tr>' + '<th>Master</th><th>PR</th><th>Change %</th>' * 6 + '</tr></thead>',
+        '<tbody>',
     ]
     for name, pair in results["benchmarks"].items():
-        label = name.replace("|", "\\|").replace("\n", " ")
+        label = escape(name)
         errors = [f"{revision}: {value['error']}" for revision, value in pair.items()
                   if "error" in value]
         if errors:
-            message = "; ".join(errors).replace("|", "\\|").replace("\n", " ")
-            lines.append(f"| 🔴 {label}<br>**ERROR**: {message} | — | — | — | — | — | — |")
+            message = escape("; ".join(errors))
+            lines.append(f'<tr><td>🔴 {label}</td><td colspan="18"><strong>ERROR</strong>: {message}</td></tr>')
             continue
         cells = []
         for metric in ("ops_per_sec", *MEMORY_METRICS, "keys"):
@@ -169,11 +175,11 @@ def summary(results):
             degraded = after < before if metric == "ops_per_sec" else metric in MEMORY_METRICS and after > before
             marker = "🔴 " if degraded else ""
             precision = 2 if metric == "ops_per_sec" else 0
-            cell = f"{before:,.{precision}f} → {after:,.{precision}f}"
-            if metric != "keys":
-                cell += f"<br>{marker}{change(before, after)}"
-            cells.append(cell)
-        lines.append(f"| {label} | " + " | ".join(cells) + " |")
+            cells.extend((f"{before:,.{precision}f}", f"{after:,.{precision}f}",
+                          f"{marker}{change(before, after)}"))
+        lines.append(f"<tr><td>{label}</td>" +
+                     "".join(f'<td align="right">{escape(cell)}</td>' for cell in cells) + "</tr>")
+    lines.extend(["</tbody>", "</table>"])
     return "\n".join(lines) + "\n"
 
 
