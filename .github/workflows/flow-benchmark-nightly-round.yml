@@ -30,7 +30,7 @@ jobs:
         run: |
           python -m pip install -r tests/benchmarks/requirements.txt
           VERSION=0.14.8 ./deps/readies/bin/getterraform
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v7
         with:
           name: nightly-benchmark-build-${{ github.run_id }}
       - name: Unpack shared builds
@@ -101,10 +101,10 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m pip install 'redis==4.6.0' 'PyYAML==6.0.3'
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v7
         with:
           name: nightly-benchmark-build-${{ github.run_id }}
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v7
         continue-on-error: true # Merge reports missing shards as failures.
         with:
           pattern: nightly-${{ inputs.phase }}-shard-*-${{ github.run_id }}
@@ -123,7 +123,7 @@ jobs:
             --plan nightly-bundle/plan.json --results nightly-shards --output nightly-benchmark-results
       - name: Download initial round for confirmation validation
         if: inputs.phase == 'confirmation'
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         with:
           name: nightly-initial-benchmarks-${{ github.run_id }}
           path: initial-round
