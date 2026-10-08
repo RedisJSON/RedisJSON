@@ -8,12 +8,11 @@ from pathlib import Path
 import shlex
 import shutil
 import subprocess
-import time
 
 from redis.client import parse_info
 import yaml
 
-from compare_local import escape_dataset_unicode, record_attempt, summary, throughput
+from compare_local import escape_dataset_unicode, run_pairs, throughput
 
 
 class RemoteResetError(RuntimeError):
@@ -168,38 +167,15 @@ def compare(args):
     if plan and results['modules'] != plan['modules']:
         raise ValueError('Binaries differ from the shared build')
     configure_affinity(output, inventory, args.private_key.resolve())
-    failed = False
-    aborted = False
-    for spec in specs:
-        for attempt in range(getattr(args, 'max_retries', 3) + 1):
-            pair = results['benchmarks'][spec.stem] = {}
-            for label, module in modules.items():
-                print(f'Running {spec.name}: {label}', flush=True)
-                started = time.monotonic()
-                try:
-                    if aborted:
-                        raise RemoteResetError('Not run: the AWS environment could not be reset')
-                    value = run_one(spec, module, output / spec.stem / label, datasets,
-                                    inventory, args.private_key.resolve(), remote_config)
-                    version = value['redis_version']
-                    if results.setdefault('redis', version) != version:
-                        raise ValueError('Redis version changed during comparison')
-                    pair[label] = dict(value)
-                except Exception as error:
-                    failed = True
-                    aborted = aborted or isinstance(error, RemoteResetError)
-                    pair[label] = {'error': str(error)}
-                    print(f'ERROR: {error}', flush=True)
-                pair[label]['attempt_count'] = attempt + 1
-                pair[label]['run_seconds'] = round(time.monotonic() - started, 3)
-                (output / 'comparison.json').write_text(json.dumps(results, indent=2) + '\n')
-            if not record_attempt(pair, output / spec.stem, attempt, getattr(args, 'max_retries', 3)):
-                break
-        revisions = '\n'.join(f'- {label}: `{sha}`' for label, sha in results['revisions'].items())
-        (output / 'summary.md').write_text(revisions + '\n\n' + summary(results, 'baseline', 'master'))
-    if not results['benchmarks']:
-        raise ValueError('No benchmark workloads found')
-    return int(failed)
+    def run(spec, module, directory):
+        value = run_one(spec, module, directory, datasets,
+                        inventory, args.private_key.resolve(), remote_config)
+        if results.setdefault('redis', value['redis_version']) != value['redis_version']:
+            raise ValueError('Redis version changed during comparison')
+        return value
+
+    return run_pairs(specs, modules, output, run, results,
+                     max_retries=args.max_retries, abort_on=(RemoteResetError,))
 
 
 def main():
