@@ -63,9 +63,12 @@ Each benchmark occupies one row, with columns for throughput, used memory,
 dataset memory, peak memory, RSS, and keys. Each metric is grouped into Master, PR, and Change % subcolumns; memory
 values are bytes. The report uses an HTML table for grouped headers in GitHub.
 
-Cells with lower throughput or higher memory are marked 🔴 (any change, without
-a threshold). RSS increases are marked but remain informational. Key-count
-changes are not classified as regressions. Error rows are also marked 🔴.
+Only Change % cells receive performance markers: 🟢 for improvement, 🟡 for
+degradation below 5%, and 🔴 for degradation of 5% or more, using unrounded
+measurements. Higher throughput and lower memory are improvements. Unchanged
+values and key-count changes are unmarked. RSS remains informational. Memory
+growth from a zero baseline is red with an undefined percentage. Error rows
+are also marked 🔴.
 
 Changes are initially **report-only**, pending master-vs-master calibration.
 Benchmark errors and missing results still fail the job and appear in the

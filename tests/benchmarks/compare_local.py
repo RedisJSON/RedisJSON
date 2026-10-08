@@ -148,7 +148,7 @@ def summary(results):
         "Same workloads, sequential runs, fresh Redis per revision and test.",
         "Memory is measured in bytes after the clients finish. Peak includes dataset loading.",
         "RSS is informational; it includes allocator/OS effects. Changes are report-only.",
-        "🔴 marks lower throughput or higher memory (any increase, including informational RSS).",
+        "Change %: 🟢 improvement; 🟡 degradation below 5%; 🔴 degradation of 5% or more. Unchanged values are unmarked.",
         "Each metric has Master, PR, and Change % columns. ↑ higher is better; ↓ lower is better.",
         "Random-key workloads may finish with different key counts; check the Keys column.", "",
         f"Master module SHA256: `{results['modules']['master']}`",
@@ -172,8 +172,13 @@ def summary(results):
         cells = []
         for metric in ("ops_per_sec", *MEMORY_METRICS, "keys"):
             before, after = pair["master"][metric], pair["pr"][metric]
-            degraded = after < before if metric == "ops_per_sec" else metric in MEMORY_METRICS and after > before
-            marker = "🔴 " if degraded else ""
+            marker = ""
+            if metric == "ops_per_sec" or metric in MEMORY_METRICS:
+                degradation = before - after if metric == "ops_per_sec" else after - before
+                if degradation < 0:
+                    marker = "🟢 "
+                elif degradation > 0:
+                    marker = "🔴 " if degradation * 100 >= before * 5 else "🟡 "
             precision = 2 if metric == "ops_per_sec" else 0
             cells.extend((f"{before:,.{precision}f}", f"{after:,.{precision}f}",
                           f"{marker}{change(before, after)}"))

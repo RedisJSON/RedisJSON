@@ -49,11 +49,28 @@ class ComparisonTest(unittest.TestCase):
         cells = [cell.text for cell in rows[0]]
         self.assertEqual(len(cells), 19)
         self.assertEqual([index for index, cell in enumerate(cells) if '🔴' in cell], [3, 9, 12])
-        self.assertEqual(cells[4:7], ['100', '90', '-10.00%'])
+        self.assertEqual(cells[4:7], ['100', '90', '🟢 -10.00%'])
         self.assertEqual(cells[16:19], ['10', '20', '+100.00%'])
         headers = table.findall('thead/tr')
         self.assertEqual([cell.get('colspan') for cell in headers[0]][1:], ['3'] * 6)
         self.assertEqual([cell.text for cell in headers[1]], ['Master', 'PR', 'Change %'] * 6)
+
+    def test_percentage_marker_thresholds_for_throughput_and_memory(self):
+        for delta, expected in ((-10, '🟢'), (0, ''), (0.1, '🟡'), (4.99, '🟡'),
+                                (5, '🔴'), (5.01, '🔴'), (10, '🔴')):
+            with self.subTest(degradation=delta):
+                baseline = dict(used_memory=10000, used_memory_dataset=10000,
+                                used_memory_peak=10000, used_memory_rss=10000,
+                                keys=10, ops_per_sec=10000)
+                candidate = {key: value + delta * 100 for key, value in baseline.items()}
+                candidate['ops_per_sec'] = 10000 - delta * 100
+                report = summary({'modules': {'master': 'a', 'pr': 'b'},
+                                  'benchmarks': {'test': {'master': baseline, 'pr': candidate}}})
+                table = ElementTree.fromstring(report[report.index('<table>'):])
+                cells = [cell.text for cell in table.find('tbody/tr')]
+                for index, cell in enumerate(cells):
+                    markers = ''.join(c for c in cell if c in '🟢🟡🔴')
+                    self.assertEqual(markers, expected if index in (3, 6, 9, 12, 15) else '')
 
     def test_missing_memory_is_not_reported_as_zero(self):
         connection = Mock()
