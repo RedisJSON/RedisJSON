@@ -1,0 +1,212 @@
+name: Command Throughput Comparison
+
+on:
+  workflow_call:
+    inputs:
+      redis-ref:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: benchmark-pr
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Check out master
+        uses: actions/checkout@v5
+        with:
+          ref: master
+          path: benchmark-master
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Check out the shared Redis server
+        uses: actions/checkout@v5
+        with:
+          repository: redis/redis
+          ref: ${{ inputs.redis-ref }}
+          path: benchmark-redis
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Check out memtier
+        uses: actions/checkout@v5
+        with:
+          repository: RedisLabs/memtier_benchmark
+          ref: 5f634d171b83efca9640c5a87606c47b34d3d330 # 2.5.1
+          path: benchmark-memtier
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install benchmark dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libclang-dev autoconf automake libtool pkg-config libevent-dev libssl-dev zlib1g-dev libpcre2-dev
+          python -m pip install -r benchmark-pr/tests/benchmarks/requirements.txt
+
+      - name: Build shared server and client tools
+        run: |
+          make -C benchmark-redis -j"$(nproc)" BUILD_TLS=yes
+          echo "$GITHUB_WORKSPACE/benchmark-redis/src" >> "$GITHUB_PATH"
+          cd benchmark-memtier
+          autoreconf -ivf
+          ./configure
+          make -j"$(nproc)"
+          echo "$GITHUB_WORKSPACE/benchmark-memtier" >> "$GITHUB_PATH"
+
+      - name: Select one Rust toolchain for both modules
+        run: |
+          toolchain=$(python -c 'import tomllib; print(tomllib.load(open("benchmark-pr/rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+          rustup toolchain install "$toolchain" --profile minimal
+          echo "RUSTUP_TOOLCHAIN=$toolchain" >> "$GITHUB_ENV"
+
+      - name: Build both modules before measuring
+        run: |
+          (cd benchmark-pr && cargo build --locked --release -p redis_json)
+          (cd benchmark-master && cargo build --locked --release -p redis_json)
+          python - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          revisions = {
+              name: subprocess.check_output(['git', '-C', path, 'rev-parse', 'HEAD'], text=True).strip()
+              for name, path in [('pr', 'benchmark-pr'), ('master', 'benchmark-master'), ('redis', 'benchmark-redis')]
+          }
+          Path('benchmark-revisions.json').write_text(json.dumps(revisions, indent=2) + '\n')
+          PY
+
+      - name: Package shared binaries and assign all workloads
+        run: |
+          mkdir -p benchmark-bundle/bin
+          cp benchmark-master/target/release/librejson.so benchmark-bundle/master.so
+          cp benchmark-pr/target/release/librejson.so benchmark-bundle/pr.so
+          cp benchmark-redis/src/redis-server benchmark-redis/src/redis-benchmark benchmark-memtier/memtier_benchmark benchmark-bundle/bin/
+          cp -R benchmark-master/tests/benchmarks benchmark-bundle/suite
+          cp benchmark-revisions.json benchmark-bundle/
+          python benchmark-pr/tests/benchmarks/benchmark_jobs.py plan --bundle benchmark-bundle --shards 5
+          tar -czf benchmark-bundle.tar.gz benchmark-bundle
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: command-benchmark-build-${{ github.run_id }}
+          path: benchmark-bundle.tar.gz
+          compression-level: 0
+          overwrite: true
+          retention-days: 14
+
+  compare:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libevent-dev libssl-dev
+          python -m pip install -r tests/benchmarks/requirements.txt
+      - uses: actions/download-artifact@v7
+        with:
+          name: command-benchmark-build-${{ github.run_id }}
+      - name: Unpack shared build
+        run: |
+          tar -xzf benchmark-bundle.tar.gz
+          echo "$GITHUB_WORKSPACE/benchmark-bundle/bin" >> "$GITHUB_PATH"
+      # Each full workload runs on both modules sequentially on this same runner.
+      - name: Compare assigned workloads
+        run: |
+          python tests/benchmarks/benchmark_jobs.py run \
+            --bundle benchmark-bundle --shard ${{ matrix.shard }} \
+            --output benchmark-results/shard-${{ matrix.shard }}
+      - name: Package partial results even on failure
+        if: always()
+        run: |
+          mkdir -p benchmark-results/shard-${{ matrix.shard }}
+          tar --exclude='*/datasets' --exclude='*/dump.rdb' \
+            -czf shard-${{ matrix.shard }}.tar.gz -C benchmark-results shard-${{ matrix.shard }}
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: command-benchmark-shard-${{ matrix.shard }}-${{ github.run_id }}
+          path: shard-${{ matrix.shard }}.tar.gz
+          compression-level: 0
+          overwrite: true
+          retention-days: 14
+
+  report:
+    needs: [build, compare]
+    if: always() && needs.build.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install 'redis==4.6.0' 'PyYAML==6.0.3'
+      - uses: actions/download-artifact@v7
+        with:
+          name: command-benchmark-build-${{ github.run_id }}
+      - name: Download available shard reports
+        uses: actions/download-artifact@v7
+        continue-on-error: true # The merge below fails explicitly for missing shards.
+        with:
+          pattern: command-benchmark-shard-*-${{ github.run_id }}
+          path: shard-downloads
+          merge-multiple: true
+      - name: Merge and verify complete coverage
+        run: |
+          tar -xzf benchmark-bundle.tar.gz benchmark-bundle/plan.json benchmark-bundle/benchmark-revisions.json
+          mkdir -p shard-results command-benchmark-results
+          shopt -s nullglob
+          for archive in shard-downloads/*.tar.gz; do
+            tar -xzf "$archive" -C shard-results
+          done
+          cp benchmark-bundle/plan.json benchmark-bundle/benchmark-revisions.json command-benchmark-results/
+          python tests/benchmarks/benchmark_jobs.py merge \
+            --plan benchmark-bundle/plan.json --results shard-results \
+            --output command-benchmark-results
+
+      - name: Write comparison summary
+        if: always()
+        run: |
+          if [ -f command-benchmark-results/summary.md ]; then
+            cat command-benchmark-results/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload results and logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: command-performance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            command-benchmark-results/
+            shard-results/
+          retention-days: 14

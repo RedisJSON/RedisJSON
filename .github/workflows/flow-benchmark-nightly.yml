@@ -1,0 +1,127 @@
+name: Nightly AWS Benchmark Comparison
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    outputs:
+      baseline: ${{ steps.refs.outputs.baseline }}
+      candidate: ${{ steps.refs.outputs.candidate }}
+      skip: ${{ steps.refs.outputs.skip }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Resolve immutable comparison commits
+        id: refs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python tests/benchmarks/nightly_baseline.py resolve
+
+  build:
+    needs: resolve
+    if: needs.resolve.outputs.skip != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: benchmark-driver
+          persist-credentials: false
+
+      - name: Check out pinned candidate
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.resolve.outputs.candidate }}
+          path: benchmark-master
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Check out pinned baseline
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.resolve.outputs.baseline }}
+          path: benchmark-baseline
+          submodules: recursive
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build and benchmark tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libclang-dev
+          python -m pip install -r benchmark-driver/tests/benchmarks/requirements.txt
+          toolchain=$(python -c 'import tomllib; print(tomllib.load(open("benchmark-master/rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+          rustup toolchain install "$toolchain" --profile minimal
+          echo "RUSTUP_TOOLCHAIN=$toolchain" >> "$GITHUB_ENV"
+
+      - name: Build both pinned revisions
+        run: |
+          (cd benchmark-master && cargo build --locked --release -p redis_json)
+          (cd benchmark-baseline && cargo build --locked --release -p redis_json)
+
+      - name: Package shared builds and distribute all workloads
+        run: |
+          mkdir -p nightly-bundle/{master,baseline}/target/release nightly-bundle/master/tests
+          cp benchmark-master/target/release/librejson.so nightly-bundle/master/target/release/
+          cp benchmark-baseline/target/release/librejson.so nightly-bundle/baseline/target/release/
+          sha256sum nightly-bundle/{baseline,master}/target/release/librejson.so
+          cp -R benchmark-master/tests/benchmarks nightly-bundle/master/tests/
+          python - <<'PYTHON'
+          import json, subprocess
+          from pathlib import Path
+          revisions = {label: subprocess.check_output(['git', '-C', path, 'rev-parse', 'HEAD'], text=True).strip()
+                       for label, path in [('baseline', 'benchmark-baseline'), ('master', 'benchmark-master')]}
+          Path('nightly-bundle/revisions.json').write_text(json.dumps(revisions))
+          PYTHON
+          python benchmark-driver/tests/benchmarks/benchmark_jobs.py plan --aws --bundle nightly-bundle --shards 5
+          tar -czf nightly-bundle.tar.gz nightly-bundle
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: nightly-benchmark-build-${{ github.run_id }}
+          path: nightly-bundle.tar.gz
+          compression-level: 0
+          overwrite: true
+          retention-days: 30
+
+  initial:
+    needs: build
+    uses: ./.github/workflows/flow-benchmark-nightly-round.yml
+    with:
+      phase: initial
+    secrets: inherit
+
+  confirmation:
+    needs: initial
+    if: github.event_name == 'schedule' && needs.initial.outputs.eligible == 'true'
+    uses: ./.github/workflows/flow-benchmark-nightly-round.yml
+    with:
+      phase: confirmation
+    secrets: inherit
+
+  promote:
+    needs: [resolve, initial, confirmation]
+    if: github.event_name == 'schedule' && needs.initial.outputs.eligible == 'true' && needs.confirmation.outputs.eligible == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Advance baseline only if it has not changed
+        env:
+          BASELINE_SHA: ${{ needs.resolve.outputs.baseline }}
+          CANDIDATE_SHA: ${{ needs.resolve.outputs.candidate }}
+        run: |
+          git fetch origin "$CANDIDATE_SHA"
+          if git push --force-with-lease="refs/heads/benchmark-baseline:$BASELINE_SHA" origin "$CANDIDATE_SHA:refs/heads/benchmark-baseline"; then
+            echo "Promoted benchmark-baseline from $BASELINE_SHA to tested commit $CANDIDATE_SHA." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Baseline was not promoted: it changed concurrently or the update was rejected.' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
