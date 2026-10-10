@@ -148,6 +148,13 @@ def run_one(spec, module, directory, datasets, redis_binary, runner, timeout):
             module_alias.unlink(missing_ok=True)
 
 
+def comparison_failed(pair, baseline, candidate):
+    if any("error" in value for value in pair.values()):
+        return True
+    before, after = pair[baseline]["ops_per_sec"], pair[candidate]["ops_per_sec"]
+    return pair[candidate].get("change_percent", 100 * (after - before) / before) <= -5
+
+
 def summary(results, baseline="master", candidate="pr"):
     before_label = "PR" if baseline == "pr" else baseline.title()
     after_label = "PR" if candidate == "pr" else candidate.title()
@@ -252,6 +259,10 @@ def run_pairs(specs, modules, output, run_fn, results, max_retries=3, abort_on=(
             pair[candidate]["change_percent"] = percent
             results["benchmarks"][spec.stem] = pair
             (output / "comparison.json").write_text(json.dumps(results, indent=2) + "\n")
+        if comparison_failed(pair, baseline, candidate):
+            failed = True
+            if not any("error" in value for value in pair.values()):
+                print(f"FAIL: {spec.name} degraded by at least 5% after {len(attempts)} attempt(s)", flush=True)
         revisions = "\n".join(f"- {label}: `{sha}`" for label, sha in results.get("revisions", {}).items())
         report = (revisions + "\n\n" if revisions else "") + summary(results, *modules)
         (output / "summary.md").write_text(report)
