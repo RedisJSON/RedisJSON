@@ -2876,6 +2876,7 @@ mod json_path_compiler_tests {
     fn root_operand_cache_is_reserved_for_repeated_filters() {
         use super::{PTrackerGenerator, PathCalculator, PathCalculatorData, ValueRef};
 
+        crate::json_node::setup_ijson_tests();
         let doc: ijson::IValue = serde_json::from_value(serde_json::json!({
             "threshold": 2,
             "rows": [{"n": 1}, {"n": 3}],
@@ -2912,6 +2913,7 @@ mod json_path_compiler_tests {
             PTrackerGenerator, PathCalculator, PathCalculatorData, TermEvaluationResult, ValueRef,
         };
 
+        crate::json_node::setup_ijson_tests();
         for size in [1024, 1025] {
             let mut limits = vec![1000; size];
             limits[size - 1] = 1;
@@ -2944,6 +2946,7 @@ mod json_path_compiler_tests {
     fn root_operand_cache_limits_value_and_existence_entries() {
         use super::{PTrackerGenerator, PathCalculator, PathCalculatorData, ValueRef};
 
+        crate::json_node::setup_ijson_tests();
         let doc: ijson::IValue = serde_json::from_value(serde_json::json!({
             "rows": [{"n": 2}, {"n": 3}],
             "threshold": 1

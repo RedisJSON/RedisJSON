@@ -341,11 +341,22 @@ impl SelectValue for IValue {
 }
 
 #[cfg(test)]
+pub(crate) fn setup_ijson_tests() {
+    static INIT: std::sync::Once = std::sync::Once::new();
+    INIT.call_once(|| {
+        // Tests run concurrently, while ijson's string cache defaults to no locking.
+        // Initialize it before any test constructs an IValue.
+        ijson::init_shared_string_cache(true).expect("initialize thread-safe test string cache");
+    });
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn get_index_on_typed_and_heterogeneous_arrays() {
+        setup_ijson_tests();
         let heterogeneous = IValue::from(vec![IValue::from(1), IValue::from("two")]);
         assert_eq!(
             heterogeneous.get_array_type(),
