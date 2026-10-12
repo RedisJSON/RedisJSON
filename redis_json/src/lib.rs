@@ -62,6 +62,9 @@ pub mod manager;
 pub mod number;
 pub mod redisjson;
 
+#[doc(hidden)]
+pub use backward::LEGACY_RDB_DEPTH_LIMIT;
+
 pub const GIT_SHA: Option<&str> = std::option_env!("GIT_SHA");
 pub const GIT_BRANCH: Option<&str> = std::option_env!("GIT_BRANCH");
 pub const MODULE_NAME: &str = "ReJSON";
@@ -429,7 +432,7 @@ macro_rules! redis_json_module_create {
                     None
                 ], [
                     "json-legacy-rdb-depth-limit",
-                    &$crate::backward::LEGACY_RDB_DEPTH_LIMIT,
+                    &$crate::LEGACY_RDB_DEPTH_LIMIT,
                     false,
                     ::redis_module::configuration::ConfigurationFlags::UNPREFIXED,
                     None
