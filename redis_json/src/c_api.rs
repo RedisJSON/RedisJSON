@@ -25,7 +25,7 @@ use redis_module::{key::KeyFlags, Context, RedisString, Status};
 
 use crate::manager::{Manager, ReadHolder};
 
-pub const REDIS_JSONAPI_LATEST_API_VER: usize = 9;
+pub const REDIS_JSONAPI_LATEST_API_VER: usize = 10;
 
 //
 // structs
@@ -370,8 +370,8 @@ pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -
     .cast::<c_void>()
 }
 
-/// Like [`json_api_get`], but takes a compiled path handle (from `JSONAPI_pathParse`) instead of a
-/// path string.
+/// Like [`json_api_get`], but takes a compiled path handle from `JSONAPI_pathParse` or
+/// `JSONAPI_pathParseNoErrorMsg` instead of a path string.
 ///
 /// Unlike `json_api_get`, which compiles a private [`Query`], this borrows the caller's handle, so
 /// it must not be evaluated concurrently from multiple threads ([`Query`] is not `Sync`).
@@ -387,7 +387,7 @@ pub fn json_api_get_with_path<M: Manager>(
         return null();
     }
     // SAFETY: caller guarantees `val` is a live `M::V` and `json_path` a `Query` from
-    // `JSONAPI_pathParse`, both owned for this call; we only borrow them immutably.
+    // either path parser, both live for this call; we only borrow them immutably.
     let (v, query) = unsafe {
         (
             &*(val.cast::<M::V>()),
@@ -405,6 +405,19 @@ pub fn json_api_get_with_path<M: Manager>(
         pos: 0,
     }))
     .cast::<c_void>()
+}
+
+/// Compile a JSONPath and return an owned handle.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub fn json_api_path_parse_no_error_msg(path: *const c_char) -> *const c_void {
+    // SAFETY: the caller guarantees a valid null-terminated string whose bytes outlive the handle.
+    let Ok(path) = (unsafe { CStr::from_ptr(path) }).to_str() else {
+        return null();
+    };
+    match compile(path) {
+        Ok(query) if !query.is_projection() => Box::into_raw(Box::new(query)).cast::<c_void>(),
+        _ => null(),
+    }
 }
 
 pub fn json_api_is_json<M: Manager>(m: M, key: *mut rawmod::RedisModuleKey) -> c_int {
@@ -826,6 +839,11 @@ macro_rules! redis_json_module_export_shared_api {
         }
 
         #[no_mangle]
+        pub extern "C" fn JSONAPI_pathParseNoErrorMsg(path: *const c_char) -> *const c_void {
+            $crate::c_api::json_api_path_parse_no_error_msg(path)
+        }
+
+        #[no_mangle]
         pub extern "C" fn JSONAPI_pathFree(json_path: *mut c_void) {
             unsafe { drop(Box::from_raw(json_path.cast::<json_path::json_path::Query>())) };
         }
@@ -989,6 +1007,8 @@ macro_rules! redis_json_module_export_shared_api {
             getJsonFromHandle: JSONAPI_getJsonFromHandle,
             // V9 entries
             getWithPath: JSONAPI_getWithPath,
+            // V10 entries
+            pathParseNoErrorMsg: JSONAPI_pathParseNoErrorMsg,
         };
 
         #[repr(C)]
@@ -1058,6 +1078,8 @@ macro_rules! redis_json_module_export_shared_api {
             pub getJsonFromHandle: extern "C" fn(key: *mut rawmod::RedisModuleKey) -> *mut c_void,
             // V9 entries
             pub getWithPath: extern "C" fn(val: *const c_void, path: *const c_void) -> *const c_void,
+            // V10 entries
+            pub pathParseNoErrorMsg: extern "C" fn(path: *const c_char) -> *const c_void,
         }
     };
 }
@@ -1193,6 +1215,14 @@ mod tests {
             }
             json_api_free_iter(ivalue_mngr(), it_str as *mut c_void);
             json_api_free_iter(ivalue_mngr(), it_cmp as *mut c_void);
+        }
+    }
+
+    #[test]
+    fn test_json_api_path_parse_no_error_msg_rejects_invalid_paths() {
+        for bytes in [b"$[\0".as_slice(), b"\xff\0", b"$.a + 1\0"] {
+            let path = CStr::from_bytes_with_nul(bytes).unwrap();
+            assert!(json_api_path_parse_no_error_msg(path.as_ptr()).is_null());
         }
     }
 

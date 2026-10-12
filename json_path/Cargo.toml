@@ -19,7 +19,7 @@ itertools = "0.13"
 
 [dev-dependencies]
 env_logger = "0.10" # do not change this version without running a full ci cycle
-criterion = { version = "0.8.2", features = ["html_reports"] }
+gungraun = "=0.20.0"
 
 [[bin]]
 name = "jsonpath"

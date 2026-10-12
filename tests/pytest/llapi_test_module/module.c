@@ -509,8 +509,23 @@ static int OpenGetWithPathCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int
     return REDISMODULE_OK;
 }
 
+/* LLAPI.PATHPARSE_NO_ERROR_MSG path -> path properties, or null on parse failure. */
+static int PathParseNoErrorMsgCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if (argc != 2) return RedisModule_WrongArity(ctx);
+    JSONPath p = japi->pathParseNoErrorMsg(RedisModule_StringPtrLen(argv[1], NULL));
+    if (!p) {
+        RedisModule_ReplyWithNull(ctx);
+        return REDISMODULE_OK;
+    }
+    RedisModule_ReplyWithArray(ctx, 2);
+    RedisModule_ReplyWithLongLong(ctx, japi->pathIsSingle(p));
+    RedisModule_ReplyWithLongLong(ctx, japi->pathHasDefinedOrder(p));
+    japi->pathFree(p);
+    return REDISMODULE_OK;
+}
+
 /* Bind the latest shared-API version. This module exercises functions across
- * all API versions (V1..V9), so it requires a provider exporting the full,
+ * all API versions (V1..V10), so it requires a provider exporting the full,
  * current struct; binding an older version could leave later fields undefined
  * and dereferencing them would read past the provider's struct. */
 static int fetch_japi(RedisModuleCtx *ctx) {
@@ -563,6 +578,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     REGISTER("LLAPI.ISJSON", IsJsonCmd);
     REGISTER("LLAPI.PATHPARSE", PathParseCmd);
     REGISTER("LLAPI.OPEN_GET_WITH_PATH", OpenGetWithPathCmd);
+    REGISTER("LLAPI.PATHPARSE_NO_ERROR_MSG", PathParseNoErrorMsgCmd);
 
     return REDISMODULE_OK;
 }
