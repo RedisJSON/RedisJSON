@@ -178,6 +178,16 @@ def testLLAPIOpenGetWithPath():
                     [10, 20, 30, 40])
 
 
+def testLLAPIPathParseNoErrorMsg():
+    env = _env_with_doc()
+    for path in ('$', '$.num_array[*]'):
+        env.expect('LLAPI.PATHPARSE_NO_ERROR_MSG', path).equal(
+            env.cmd('LLAPI.PATHPARSE', path))
+    for path in ('$[', b'\xff', '$.a + 1'):
+        env.expect('LLAPI.PATHPARSE', path).raiseError()
+        env.expect('LLAPI.PATHPARSE_NO_ERROR_MSG', path).equal(None)
+
+
 def testLLAPIIsJson():
     env = _env_with_doc()
     env.cmd('SET', 'plain', 'notjson')

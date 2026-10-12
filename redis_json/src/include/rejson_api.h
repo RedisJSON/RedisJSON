@@ -181,12 +181,18 @@ typedef struct RedisJSONAPI {
   ////////////////
   // V9 entries //
   ////////////////
-  // Like `get`, but takes a compiled path handle (from `pathParse`) instead of a path string.
+  // Like `get`, but takes a compiled path handle (from either path parser) instead of a path string.
   JSONResultsIterator (*getWithPath)(RedisJSON json, JSONPath path);
+
+  /////////////////
+  // V10 entries //
+  /////////////////
+  // Like pathParse, but without a Redis context or error-message output
+  JSONPath (*pathParseNoErrorMsg)(const char *path);
 
 } RedisJSONAPI;
 
-#define RedisJSONAPI_LATEST_API_VER 9
+#define RedisJSONAPI_LATEST_API_VER 10
 #ifdef __cplusplus
 }
 #endif
