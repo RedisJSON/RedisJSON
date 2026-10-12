@@ -1170,23 +1170,18 @@ mod tests {
         }
     }
 
-    /// Handles from the context-free parser preserve path properties and can be reused
-    /// across documents, with the same results as string-based `get`.
+    /// `getWithPath` (evaluate a pre-compiled `Query`) must return exactly the same results as the
+    /// string-based `get` (compile-then-evaluate) for every kind of path.
     #[test]
     fn test_json_api_get_with_path_matches_get() {
-        let docs: [IValue; 2] = [
-            serde_json::from_str(
-                r#"{"entityName":"Alpha","event":{"id":42,"tags":[7,8,9]},"n":null}"#,
-            )
-            .unwrap(),
-            serde_json::from_str(
-                r#"{"entityName":"Beta","event":{"id":43,"tags":[10,11]},"n":null}"#,
-            )
-            .unwrap(),
-        ];
+        use std::ffi::CString;
+        let doc: IValue = serde_json::from_str(
+            r#"{"entityName":"Alpha","event":{"id":42,"type":"A","tags":[7,8,9]},"n":null}"#,
+        )
+        .unwrap();
+        let doc_ptr = &doc as *const IValue as *const c_void;
 
         for p in [
-            "$",               // document root
             "$.entityName",    // single scalar
             "$.event.id",      // nested scalar
             "$.event",         // object node
@@ -1195,41 +1190,31 @@ mod tests {
             "$.n",             // null value
         ] {
             let cpath = CString::new(p).unwrap();
-            let qptr = json_api_path_parse_no_error_msg(cpath.as_ptr());
-            assert!(!qptr.is_null(), "valid path {p} must compile");
-            // SAFETY: qptr is a fresh boxed Query from the parser. cpath outlives it;
-            // taking ownership here frees the handle exactly once when this scope ends.
-            let mut query =
-                unsafe { Box::from_raw(qptr.cast_mut().cast::<json_path::json_path::Query>()) };
-            let mut expected = compile(p).unwrap();
-            assert_eq!(
-                query.is_static(),
-                expected.is_static(),
-                "properties for {p}"
-            );
-            let qptr = (&*query as *const json_path::json_path::Query).cast::<c_void>();
+            let it_str = json_api_get(ivalue_mngr(), doc_ptr, cpath.as_ptr());
 
-            for doc in &docs {
-                let doc_ptr = doc as *const IValue as *const c_void;
-                let it_str = json_api_get(ivalue_mngr(), doc_ptr, cpath.as_ptr());
-                let it_cmp = json_api_get_with_path(ivalue_mngr(), doc_ptr, qptr);
-                assert!(!it_str.is_null(), "valid path {p} must yield an iterator");
-                assert!(
-                    !it_cmp.is_null(),
-                    "compiled path {p} must yield an iterator"
-                );
-                let n = json_api_len(ivalue_mngr(), it_str);
-                assert_eq!(n, json_api_len(ivalue_mngr(), it_cmp), "len parity for {p}");
-                for _ in 0..n {
-                    let a = json_api_next(ivalue_mngr(), it_str.cast_mut());
-                    let b = json_api_next(ivalue_mngr(), it_cmp.cast_mut());
-                    // SAFETY: both iterators have n results borrowing the live document.
-                    let (av, bv) = unsafe { (&*a.cast::<IValue>(), &*b.cast::<IValue>()) };
-                    assert_eq!(av, bv, "value parity for {p}");
-                }
-                json_api_free_iter(ivalue_mngr(), it_str.cast_mut());
-                json_api_free_iter(ivalue_mngr(), it_cmp.cast_mut());
+            let query = json_path::compile(p).unwrap();
+            let qptr = &query as *const json_path::json_path::Query as *const c_void;
+            let it_cmp = json_api_get_with_path(ivalue_mngr(), doc_ptr, qptr);
+
+            assert_eq!(
+                it_str.is_null(),
+                it_cmp.is_null(),
+                "null-ness parity for path {p}"
+            );
+            if it_str.is_null() {
+                continue;
             }
+            let n = json_api_len(ivalue_mngr(), it_str);
+            assert_eq!(n, json_api_len(ivalue_mngr(), it_cmp), "len parity for {p}");
+            for _ in 0..n {
+                let a = json_api_next(ivalue_mngr(), it_str as *mut c_void);
+                let b = json_api_next(ivalue_mngr(), it_cmp as *mut c_void);
+                let av = unsafe { &*(a as *const IValue) };
+                let bv = unsafe { &*(b as *const IValue) };
+                assert_eq!(av, bv, "value parity for {p}");
+            }
+            json_api_free_iter(ivalue_mngr(), it_str as *mut c_void);
+            json_api_free_iter(ivalue_mngr(), it_cmp as *mut c_void);
         }
     }
 

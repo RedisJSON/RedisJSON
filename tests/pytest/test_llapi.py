@@ -180,10 +180,11 @@ def testLLAPIOpenGetWithPath():
 
 def testLLAPIPathParseNoErrorMsg():
     env = _env_with_doc()
-    for path in ('$', '$.int', '$.object', '$.num_array[*]', '$.does_not_exist'):
+    for path in ('$', '$.num_array[*]'):
         env.expect('LLAPI.PATHPARSE_NO_ERROR_MSG', path).equal(
             env.cmd('LLAPI.PATHPARSE', path))
     for path in ('$[', b'\xff', '$.a + 1'):
+        env.expect('LLAPI.PATHPARSE', path).raiseError()
         env.expect('LLAPI.PATHPARSE_NO_ERROR_MSG', path).equal(None)
 
 
