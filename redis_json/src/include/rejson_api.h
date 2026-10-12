@@ -111,7 +111,7 @@ typedef struct RedisJSONAPI {
   // V2 entries //
   ////////////////
 
-  // Return a parsed JSONPath. Keep the input bytes alive and unchanged until pathFree.
+  // Return a parsed JSONPath
   // Return NULL if failed to parse, and the error message in `err_msg`
   // The caller gains ownership of `err_msg`
   JSONPath (*pathParse)(const char *path, RedisModuleCtx *ctx, RedisModuleString **err_msg);
@@ -187,12 +187,7 @@ typedef struct RedisJSONAPI {
   /////////////////
   // V10 entries //
   /////////////////
-  // Like pathParse, but requires no Redis context and creates no Redis error message.
-  // `path` must be a valid, non-NULL, null-terminated string. Return NULL for invalid
-  // UTF-8, malformed paths, or unsupported computed/projection expressions.
-  // The caller owns the handle and frees it with pathFree. Keep the input bytes
-  // alive and unchanged until then. The handle supports pathIsSingle,
-  // pathHasDefinedOrder, and getWithPath, with their existing threading restrictions.
+  // Like pathParse, but without a Redis context or error-message output
   JSONPath (*pathParseNoErrorMsg)(const char *path);
 
 } RedisJSONAPI;

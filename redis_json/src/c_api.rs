@@ -407,10 +407,7 @@ pub fn json_api_get_with_path<M: Manager>(
     .cast::<c_void>()
 }
 
-/// Compile a JSONPath without a Redis context or Redis error-message allocation.
-/// Returns null for invalid UTF-8, malformed paths, or unsupported projections.
-/// The caller must supply a valid, non-null, null-terminated string and keep its bytes
-/// alive and unchanged until freeing the returned handle with `pathFree`.
+/// Compile a JSONPath and return an owned handle.
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn json_api_path_parse_no_error_msg(path: *const c_char) -> *const c_void {
     // SAFETY: the caller guarantees a valid null-terminated string whose bytes outlive the handle.
@@ -1176,7 +1173,7 @@ mod tests {
     /// Handles from the context-free parser preserve path properties and can be reused
     /// across documents, with the same results as string-based `get`.
     #[test]
-    fn test_json_api_path_parse_no_error_msg_matches_get() {
+    fn test_json_api_get_with_path_matches_get() {
         let docs: [IValue; 2] = [
             serde_json::from_str(
                 r#"{"entityName":"Alpha","event":{"id":42,"tags":[7,8,9]},"n":null}"#,

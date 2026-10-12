@@ -524,30 +524,6 @@ static int PathParseNoErrorMsgCmd(RedisModuleCtx *ctx, RedisModuleString **argv,
     return REDISMODULE_OK;
 }
 
-/* Evaluate a handle from the context-free parser. Parse failure returns null. */
-static int OpenGetWithPathNoErrorMsgCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    if (argc != 3) return RedisModule_WrongArity(ctx);
-    RedisJSON json = japi->openKey(ctx, argv[1]);
-    if (!json) {
-        RedisModule_ReplyWithError(ctx, "ERR key does not exist or is not JSON");
-        return REDISMODULE_OK;
-    }
-    JSONPath p = japi->pathParseNoErrorMsg(RedisModule_StringPtrLen(argv[2], NULL));
-    if (!p) {
-        RedisModule_ReplyWithNull(ctx);
-        return REDISMODULE_OK;
-    }
-    JSONResultsIterator it = japi->getWithPath(json, p);
-    japi->pathFree(p);
-    if (!it) {
-        RedisModule_ReplyWithError(ctx, "ERR path could not be evaluated");
-        return REDISMODULE_OK;
-    }
-    reply_nodes_as_json(ctx, it);
-    japi->freeIter(it);
-    return REDISMODULE_OK;
-}
-
 /* Bind the latest shared-API version. This module exercises functions across
  * all API versions (V1..V10), so it requires a provider exporting the full,
  * current struct; binding an older version could leave later fields undefined
@@ -603,7 +579,6 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     REGISTER("LLAPI.PATHPARSE", PathParseCmd);
     REGISTER("LLAPI.OPEN_GET_WITH_PATH", OpenGetWithPathCmd);
     REGISTER("LLAPI.PATHPARSE_NO_ERROR_MSG", PathParseNoErrorMsgCmd);
-    REGISTER("LLAPI.OPEN_GET_WITH_PATH_NO_ERROR_MSG", OpenGetWithPathNoErrorMsgCmd);
 
     return REDISMODULE_OK;
 }
