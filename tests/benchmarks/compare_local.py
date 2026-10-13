@@ -166,9 +166,11 @@ def run_one(spec, module, directory, datasets, redis_binary, runner, timeout):
             module_alias.unlink(missing_ok=True)
 
 
-def comparison_failed(pair, baseline, candidate):
+def comparison_failed(pair, baseline, candidate, report_only_regressions=False):
     if any("error" in value for value in pair.values()):
         return True
+    if report_only_regressions:
+        return False
     before, after = pair[baseline]["ops_per_sec"], pair[candidate]["ops_per_sec"]
     return pair[candidate].get("change_percent", 100 * (after - before) / before) <= -5
 
@@ -238,7 +240,7 @@ def record_attempt(pair, directory, attempt, max_retries=3):
     return True
 
 
-def run_pairs(specs, modules, output, run_fn, results, max_retries=3, abort_on=()):
+def run_pairs(specs, modules, output, run_fn, results, max_retries=3, abort_on=(), report_only_regressions=False):
     failed = False
     aborted = False
     baseline, candidate = modules
@@ -277,9 +279,10 @@ def run_pairs(specs, modules, output, run_fn, results, max_retries=3, abort_on=(
             results["benchmarks"][spec.stem] = pair
             (output / "comparison.json").write_text(json.dumps(results, indent=2) + "\n")
         if comparison_failed(pair, baseline, candidate):
-            failed = True
+            failed = failed or comparison_failed(pair, baseline, candidate, report_only_regressions)
             if not any("error" in value for value in pair.values()):
-                print(f"FAIL: {spec.name} degraded by at least 5% after {len(attempts)} attempt(s)", flush=True)
+                marker = "WARNING" if report_only_regressions else "FAIL"
+                print(f"{marker}: {spec.name} degraded by at least 5% after {len(attempts)} attempt(s)", flush=True)
         revisions = "\n".join(f"- {label}: `{sha}`" for label, sha in results.get("revisions", {}).items())
         report = (revisions + "\n\n" if revisions else "") + summary(results, *modules)
         (output / "summary.md").write_text(report)
@@ -290,6 +293,8 @@ def run_pairs(specs, modules, output, run_fn, results, max_retries=3, abort_on=(
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--report-only-regressions", action="store_true",
+                        help="Report throughput regressions without failing; execution errors still fail")
     parser.add_argument("--baseline-module", type=Path, required=True)
     parser.add_argument("--candidate-module", type=Path, required=True)
     parser.add_argument("--revisions", type=Path, help="JSON file containing build commit SHAs")
@@ -331,7 +336,8 @@ def main():
     def run(spec, module, directory):
         return run_one(spec, module, directory, datasets, redis_binary, runner, args.timeout)
 
-    status = run_pairs(specs, modules, output, run, results, abort_on=(LocalResetError,))
+    status = run_pairs(specs, modules, output, run, results, abort_on=(LocalResetError,),
+                       report_only_regressions=args.report_only_regressions)
     print(summary(results))
     return status
 

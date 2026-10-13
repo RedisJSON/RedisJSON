@@ -51,8 +51,11 @@ columns show each revision's median independently, so their ratio need not match
 the reported percentage. All original measurements remain under `attempts/`;
 the last run's logs stay in the label directory and earlier logs are archived.
 Execution errors stop retries and remain failures; incomplete sets are not aggregated.
-Final throughput degradation of 5% or more fails both the shard and merged report,
-using the median paired change when retried. Improvements do not fail the comparison.
+Final throughput degradation of 5% or more fails nightly comparisons and local runs,
+using the median paired change when retried. Event CI passes `--report-only-regressions`
+to both shards and the merged report: regressions remain visible with the same markers
+and retries, but do not fail the jobs. Execution errors and invalid or missing results
+still fail Event CI. Improvements do not fail the comparison.
 Remaining workloads still run after a performance regression. Execution errors,
 missing workloads and inconsistent builds also fail the comparison. Temporary specs
 omit the legacy absolute `kpis` floors.

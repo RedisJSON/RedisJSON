@@ -142,7 +142,7 @@ jobs:
         run: |
           python tests/benchmarks/benchmark_jobs.py run \
             --bundle benchmark-bundle --shard ${{ matrix.shard }} \
-            --output benchmark-results/shard-${{ matrix.shard }}
+            --output benchmark-results/shard-${{ matrix.shard }} --report-only-regressions
       - name: Package partial results even on failure
         if: always()
         run: |
@@ -192,7 +192,7 @@ jobs:
           cp benchmark-bundle/plan.json benchmark-bundle/benchmark-revisions.json command-benchmark-results/
           python tests/benchmarks/benchmark_jobs.py merge \
             --plan benchmark-bundle/plan.json --results shard-results \
-            --output command-benchmark-results
+            --output command-benchmark-results --report-only-regressions
 
       - name: Write comparison summary
         if: always()

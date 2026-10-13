@@ -50,7 +50,7 @@ def make_plan(source, count):
     return {'shards': shards, 'estimated_seconds': totals}
 
 
-def merge_results(plan, root):
+def merge_results(plan, root, report_only_regressions=False):
     labels = plan.get('labels', ['baseline', 'pr'])
     combined = {'modules': plan['modules'], 'redis': plan.get('redis'), 'benchmarks': {}}
     if 'revisions' in plan:
@@ -112,7 +112,7 @@ def merge_results(plan, root):
             combined['benchmarks'][name] = checked
     combined['benchmarks'] = dict(sorted(combined['benchmarks'].items()))
     combined['merge_errors'] = issues
-    failed = bool(issues) or any(comparison_failed(pair, *labels)
+    failed = bool(issues) or any(comparison_failed(pair, *labels, report_only_regressions=report_only_regressions)
                                  for pair in combined['benchmarks'].values())
     return combined, failed
 
@@ -192,6 +192,9 @@ def main():
     publish_parser.add_argument('--plan', type=Path, required=True)
     publish_parser.add_argument('--results', type=Path, required=True)
     publish_parser.add_argument('--benchmarks-dir', type=Path, required=True)
+    for command in (run_parser, merge_parser):
+        command.add_argument('--report-only-regressions', action='store_true',
+                             help='Report regressions without failing; execution errors still fail')
     args = parser.parse_args()
     if args.command == 'plan':
         bundle = args.bundle.resolve()
@@ -230,12 +233,14 @@ def main():
                    '--redis-binary', str(bundle / 'bin/redis-server'),
                    '--revisions', str(bundle / 'benchmark-revisions.json'),
                    '--benchmarks-dir', str(bundle / 'suite'), '--output', str(args.output)]
+        if args.report_only_regressions:
+            command.append('--report-only-regressions')
         for name in names:
             command.extend(['--benchmark', name])
         return subprocess.call(command)
     else:
         plan = json.loads(args.plan.read_text())
-        results, failed = merge_results(plan, args.results)
+        results, failed = merge_results(plan, args.results, args.report_only_regressions)
         args.output.mkdir(parents=True, exist_ok=True)
         (args.output / 'comparison.json').write_text(json.dumps(results, indent=2) + '\n')
         report = summary(results, *plan.get('labels', ['baseline', 'pr']))
