@@ -98,10 +98,10 @@ jobs:
     secrets: inherit
 
   command-benchmark:
-    if: ${{ !github.event.pull_request.draft }}
+    if: ${{ needs.docs-only.outputs.only-docs-changed == 'false' && !github.event.pull_request.draft }}
     permissions:
       contents: read
-    needs: [prepare-values]
+    needs: [prepare-values, docs-only]
     uses: ./.github/workflows/flow-command-benchmark.yml
     with:
       redis-ref: ${{ needs.prepare-values.outputs.redis-ref }}
