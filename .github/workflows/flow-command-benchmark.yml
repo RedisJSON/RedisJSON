@@ -21,6 +21,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: benchmark-pr
           submodules: recursive
           persist-credentials: false
 
@@ -57,7 +58,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libclang-dev autoconf automake libtool pkg-config libevent-dev libssl-dev zlib1g-dev libpcre2-dev
-          python -m pip install -r tests/benchmarks/requirements.txt
+          python -m pip install -r benchmark-pr/tests/benchmarks/requirements.txt
 
       - name: Build shared server and client tools
         run: |
@@ -71,20 +72,20 @@ jobs:
 
       - name: Select one Rust toolchain for both modules
         run: |
-          toolchain=$(python -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+          toolchain=$(python -c 'import tomllib; print(tomllib.load(open("benchmark-pr/rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
           rustup toolchain install "$toolchain" --profile minimal
           echo "RUSTUP_TOOLCHAIN=$toolchain" >> "$GITHUB_ENV"
 
       - name: Build both modules before measuring
         run: |
-          cargo build --locked --release -p redis_json
+          (cd benchmark-pr && cargo build --locked --release -p redis_json)
           (cd benchmark-master && cargo build --locked --release -p redis_json)
           python - <<'PY'
           import json, subprocess
           from pathlib import Path
           revisions = {
               name: subprocess.check_output(['git', '-C', path, 'rev-parse', 'HEAD'], text=True).strip()
-              for name, path in [('pr', '.'), ('master', 'benchmark-master'), ('redis', 'benchmark-redis')]
+              for name, path in [('pr', 'benchmark-pr'), ('master', 'benchmark-master'), ('redis', 'benchmark-redis')]
           }
           Path('benchmark-revisions.json').write_text(json.dumps(revisions, indent=2) + '\n')
           PY
@@ -93,11 +94,11 @@ jobs:
         run: |
           mkdir -p benchmark-bundle/bin
           cp benchmark-master/target/release/librejson.so benchmark-bundle/master.so
-          cp target/release/librejson.so benchmark-bundle/pr.so
+          cp benchmark-pr/target/release/librejson.so benchmark-bundle/pr.so
           cp benchmark-redis/src/redis-server benchmark-redis/src/redis-benchmark benchmark-memtier/memtier_benchmark benchmark-bundle/bin/
           cp -R benchmark-master/tests/benchmarks benchmark-bundle/suite
           cp benchmark-revisions.json benchmark-bundle/
-          python tests/benchmarks/benchmark_jobs.py plan --bundle benchmark-bundle --shards 5
+          python benchmark-pr/tests/benchmarks/benchmark_jobs.py plan --bundle benchmark-bundle --shards 5
           tar -czf benchmark-bundle.tar.gz benchmark-bundle
 
       - uses: actions/upload-artifact@v6

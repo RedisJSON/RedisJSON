@@ -28,6 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          path: benchmark-driver
           persist-credentials: false
 
       - name: Check out pinned candidate
@@ -54,7 +55,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libclang-dev
-          python -m pip install -r tests/benchmarks/requirements.txt
+          python -m pip install -r benchmark-driver/tests/benchmarks/requirements.txt
           toolchain=$(python -c 'import tomllib; print(tomllib.load(open("benchmark-master/rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
           rustup toolchain install "$toolchain" --profile minimal
           echo "RUSTUP_TOOLCHAIN=$toolchain" >> "$GITHUB_ENV"
@@ -78,7 +79,7 @@ jobs:
                        for label, path in [('baseline', 'benchmark-baseline'), ('master', 'benchmark-master')]}
           Path('nightly-bundle/revisions.json').write_text(json.dumps(revisions))
           PYTHON
-          python tests/benchmarks/benchmark_jobs.py plan --aws --bundle nightly-bundle --shards 5
+          python benchmark-driver/tests/benchmarks/benchmark_jobs.py plan --aws --bundle nightly-bundle --shards 5
           tar -czf nightly-bundle.tar.gz nightly-bundle
 
       - uses: actions/upload-artifact@v6
