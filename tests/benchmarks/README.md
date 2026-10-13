@@ -98,7 +98,8 @@ once before measuring: Redis uses one fixed CPU (`server-cpulist`), and both
 client tools use the same two physical cores via `taskset`. NIC interrupts are
 moved off these cores and their SMT siblings, irqbalance is stopped if active,
 and software receive steering (RPS) is disabled. Setup verifies the requested IRQ masks, then waits up to 10 seconds for all
-effective IRQ affinities to settle. It fails with requested/effective CPU details
+effective IRQ affinities to leave the reserved cores and their SMT siblings.
+A pending move between housekeeping CPUs does not block the benchmark. It fails with requested/effective CPU details
 if isolation cannot be verified. These settings affect only the disposable nightly hosts;
 PR CI is unchanged. Each shard saves `affinity.json`, and diagnostics capture
 the effective IRQ affinity and Redis process affinity. This controls CPU placement,

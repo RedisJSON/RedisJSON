@@ -46,19 +46,20 @@ def wrap_client(path, selected):
     return str(path)
 
 
-def wait_for_irq_affinity(targets):
+def wait_for_irq_affinity(targets, reserved):
     # IRQ migration can be deferred until a subsequent interrupt. Writing the
     # requested mask does not guarantee effective_affinity changes immediately.
+    # A pending move between housekeeping CPUs already satisfies isolation.
     deadline = time.monotonic() + 10
     while True:
         effective = {irq: (Path('/proc/irq') / irq / 'effective_affinity_list').read_text().strip()
                      for irq in targets}
         pending = {irq: {'requested': target, 'effective': effective[irq]}
-                   for irq, target in targets.items() if cpus(effective[irq]) != {target}}
+                   for irq, target in targets.items() if cpus(effective[irq]) & reserved}
         if not pending:
             return effective
         if time.monotonic() >= deadline:
-            raise RuntimeError(f'IRQ affinity did not settle within 10s: {pending}')
+            raise RuntimeError(f'IRQ affinity did not settle within 10s; reserved CPUs={sorted(reserved)}: {pending}')
         time.sleep(0.1)
 
 
@@ -90,7 +91,7 @@ def configure(role, clients):
             rps.write_text('0')
             if int(rps.read_text().strip().replace(',', ''), 16):
                 raise RuntimeError(f'RPS still enabled: {rps}')
-    irqs = wait_for_irq_affinity(irqs)
+    irqs = wait_for_irq_affinity(irqs, reserved)
     data = dict(role=role, cpulist=','.join(map(str, selected)),
                 reserved_cpus=sorted(reserved), nic_irqs=irqs, irqbalance_stopped=active,
                 clients=[wrap_client(path, selected) for path in clients])

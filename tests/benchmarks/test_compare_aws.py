@@ -74,9 +74,16 @@ class AWSComparisonTest(unittest.TestCase):
         ) as sleep, patch('configure_affinity.time.monotonic', return_value=0):
             effective = path.return_value.__truediv__.return_value.__truediv__.return_value
             effective.read_text.side_effect = ['1', '0']
-            self.assertEqual(wait_for_irq_affinity({'31': 0}), {'31': '0'})
+            self.assertEqual(wait_for_irq_affinity({'31': 0}, {1, 5}), {'31': '0'})
             sleep.assert_called_once_with(0.1)
             effective.write_text.assert_not_called()
+
+    def test_pending_move_between_housekeeping_cpus_does_not_block_benchmarks(self):
+        with patch('configure_affinity.Path') as path, patch('configure_affinity.time.sleep') as sleep:
+            effective = path.return_value.__truediv__.return_value.__truediv__.return_value
+            effective.read_text.return_value = '7'
+            self.assertEqual(wait_for_irq_affinity({'30': 5}, {1, 2, 9, 10}), {'30': '7'})
+            sleep.assert_not_called()
 
     def test_partial_provision_retains_state_for_cleanup_and_cleanup_errors_fail(self):
         with tempfile.TemporaryDirectory() as temporary:
