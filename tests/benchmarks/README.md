@@ -192,11 +192,12 @@ python3 update_kpis.py --margin 0.05
 python3 update_kpis.py --self-test   # checks raise/never-lower behaviour
 ```
 
-Nightly comparisons retry both baseline and master when the absolute throughput
+Nightly and Event CI comparisons retry both revisions when the absolute throughput
 change exceeds 5%, with at most three retries (four pairs total). Exactly 5%
 does not trigger a retry. The report uses the last pair and shows its attempt
 number, even if the final difference still exceeds 5%. Earlier raw results and
 all pair measurements are retained under each benchmark's `attempts/` directory.
 Execution errors are not retried by this policy. Selecting results this way can
 bias comparisons toward smaller differences; retain the history when assessing
-stability. PR CI is unchanged.
+stability. A 🟠 marker beside the benchmark name identifies retried tests in both
+reports; percentage colors continue to describe the final result.
