@@ -57,14 +57,25 @@ def make_plan(source, count, timings=None):
 
 
 def merge_results(plan, root):
-    combined = {'modules': plan['modules'], 'redis': plan['redis'], 'benchmarks': {}}
+    labels = plan.get('labels', ['master', 'pr'])
+    combined = {'modules': plan['modules'], 'redis': plan.get('redis'), 'benchmarks': {}}
+    if 'revisions' in plan:
+        combined['revisions'] = plan['revisions']
     issues = []
     for index, names in enumerate(plan['shards']):
         path = root / f'shard-{index}' / 'comparison.json'
         try:
             data = json.loads(path.read_text())
-            if data['modules'] != plan['modules'] or data['redis'] != plan['redis']:
-                raise ValueError('Binaries or Redis version differ from the build job')
+            if data['modules'] != plan['modules']:
+                raise ValueError('Binaries differ from the build job')
+            if 'revisions' in plan and data.get('revisions') != plan['revisions']:
+                raise ValueError('Revisions differ from the build job')
+            version = data.get('redis')
+            if not isinstance(version, str) or not version:
+                raise ValueError('Missing Redis version')
+            if combined['redis'] is not None and version != combined['redis']:
+                raise ValueError('Redis versions differ between jobs')
+            combined['redis'] = version
             if not isinstance(data['benchmarks'], dict):
                 raise ValueError('Invalid benchmarks object')
             expected = {Path(name).stem for name in names}
@@ -82,7 +93,7 @@ def merge_results(plan, root):
             if not isinstance(pair, dict):
                 pair = {}
             checked = {}
-            for label in ('master', 'pr'):
+            for label in labels:
                 value = pair.get(label)
                 if not isinstance(value, dict):
                     value = {'error': f'Missing {label} result in shard {index}'}
@@ -104,6 +115,7 @@ def main():
     commands = parser.add_subparsers(dest='command', required=True)
     plan_parser = commands.add_parser('plan')
     plan_parser.add_argument('--bundle', type=Path, required=True)
+    plan_parser.add_argument('--aws', action='store_true', help='Plan the nightly AWS bundle')
     plan_parser.add_argument('--shards', type=int, default=5)
     plan_parser.add_argument('--timings', type=Path, help='Previous combined comparison.json')
     run_parser = commands.add_parser('run')
@@ -118,10 +130,16 @@ def main():
     if args.command == 'plan':
         bundle = args.bundle.resolve()
         timings = json.loads(args.timings.read_text()) if args.timings else None
-        plan = make_plan(bundle / 'suite', args.shards, timings)
-        plan['modules'] = {label: hashlib.sha256((bundle / f'{label}.so').read_bytes()).hexdigest()
-                           for label in ('master', 'pr')}
-        plan['redis'] = subprocess.check_output([str(bundle / 'bin/redis-server'), '--version'], text=True).strip()
+        source = bundle / 'master/tests/benchmarks' if args.aws else bundle / 'suite'
+        plan = make_plan(source, args.shards, timings)
+        if args.aws:
+            plan['labels'] = ['baseline', 'master']
+            plan['revisions'] = json.loads((bundle / 'revisions.json').read_text())
+            modules = {label: bundle / label / 'target/release/librejson.so' for label in plan['labels']}
+        else:
+            modules = {label: bundle / f'{label}.so' for label in ('master', 'pr')}
+            plan['redis'] = subprocess.check_output([str(bundle / 'bin/redis-server'), '--version'], text=True).strip()
+        plan['modules'] = {label: hashlib.sha256(path.read_bytes()).hexdigest() for label, path in modules.items()}
         (bundle / 'plan.json').write_text(json.dumps(plan, indent=2) + '\n')
         print(json.dumps(plan, indent=2))
     elif args.command == 'run':
@@ -145,7 +163,9 @@ def main():
         results, failed = merge_results(plan, args.results)
         args.output.mkdir(parents=True, exist_ok=True)
         (args.output / 'comparison.json').write_text(json.dumps(results, indent=2) + '\n')
-        report = summary(results)
+        report = summary(results, *plan.get('labels', ['master', 'pr']))
+        if 'revisions' in results:
+            report += '\n' + '\n'.join(f'- {label}: `{sha}`' for label, sha in results['revisions'].items()) + '\n'
         if results['merge_errors']:
             report += '\nMerge errors:\n\n' + '\n'.join(results['merge_errors']) + '\n'
         (args.output / 'summary.md').write_text(report)

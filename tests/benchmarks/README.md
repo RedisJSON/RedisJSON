@@ -80,12 +80,18 @@ python -m unittest discover -s tests/benchmarks -p 'test_*.py'
 ## Nightly AWS comparison
 
 Scheduled and manually dispatched Event Nightly runs call
-`flow-benchmark-nightly.yml`: one job, no matrix. It provisions the existing
-`defaults.yml` AWS server/client topology once, then runs every master YAML
-workload against the baseline and current master sequentially. Request counts
+`flow-benchmark-nightly.yml`: one shared build, five parallel benchmark jobs,
+and one combined report. The same planner used by Event CI assigns every master
+YAML workload exactly once. Each shard provisions its own `defaults.yml` AWS
+server/client pair, then runs baseline and current master sequentially for each
+assigned workload. Up to five AWS pairs are active at once. Request counts
 and durations are unchanged. Every revision/test gets a fresh Redis instance;
 the report includes the same throughput metric as the PR comparison.
-The AWS resources are destroyed in an `always()` step, including after failures.
+Each shard destroys its own AWS resources in an `always()` step, including after
+failures. Other shards continue when one fails. The final merge reports missing
+results and checks module hashes, commit hashes, and Redis versions across jobs.
+Stable artifact names allow failed jobs to be rerun using the same shared build
+and the successful shards from the previous attempt.
 
 The baseline defaults to `master`, resolved to the exact same commit as the
 current-master checkout, so initially this measures master-versus-master noise.

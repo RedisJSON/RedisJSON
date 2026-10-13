@@ -30,6 +30,32 @@ class BenchmarkJobsTest(unittest.TestCase):
         heavy = {spec.name for spec in specs[:5]}
         self.assertTrue(all(len(set(shard) & heavy) == 1 for shard in plan['shards']))
 
+    def test_nightly_merge_preserves_labels_and_checks_versions_and_revisions(self):
+        plan = dict(shards=[[f'test-{i}.yml'] for i in range(5)],
+                    labels=['baseline', 'master'], modules=dict(baseline='a', master='b'),
+                    revisions=dict(baseline='old-sha', master='new-sha'))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for i in range(5):
+                path = root / f'shard-{i}' / 'comparison.json'
+                path.parent.mkdir()
+                data = dict(modules=plan['modules'], revisions=plan['revisions'], redis='8.2.0',
+                            benchmarks={f'test-{i}': {label: dict(ops_per_sec=100) for label in plan['labels']}})
+                path.write_text(json.dumps(data))
+            merged, failed = merge_results(plan, root)
+            self.assertFalse(failed)
+            self.assertEqual(merged['revisions'], plan['revisions'])
+            self.assertEqual(merged['redis'], '8.2.0')
+            self.assertEqual(len(merged['benchmarks']), 5)
+            for field, wrong in [('redis', 'different-version'), ('revisions', {})]:
+                with self.subTest(field=field):
+                    corrupted = dict(data, **{field: wrong})
+                    path.write_text(json.dumps(corrupted))
+                    merged, failed = merge_results(plan, root)
+                    self.assertTrue(failed)
+                    self.assertIn('error', merged['benchmarks']['test-4']['baseline'])
+                    path.write_text(json.dumps(data))
+
     def test_merge_detects_missing_partial_failed_duplicate_and_mismatched_results(self):
         plan = {'shards': [[f'test-{index}.yml'] for index in range(5)],
                 'modules': {'master': 'aaa', 'pr': 'bbb'}, 'redis': 'same-server'}

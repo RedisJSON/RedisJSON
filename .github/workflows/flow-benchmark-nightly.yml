@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  compare:
+  build:
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     steps:
@@ -48,7 +48,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential libclang-dev
           python -m pip install 'redisbench-admin==0.12.39'
-          VERSION=0.14.8 benchmark-master/deps/readies/bin/getterraform
           toolchain=$(python -c 'import tomllib; print(tomllib.load(open("benchmark-master/rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
           rustup toolchain install "$toolchain" --profile minimal
           echo "RUSTUP_TOOLCHAIN=$toolchain" >> "$GITHUB_ENV"
@@ -58,6 +57,56 @@ jobs:
           (cd benchmark-master && cargo build --locked --release -p redis_json)
           (cd benchmark-baseline && cargo build --locked --release -p redis_json)
           python -m unittest discover -s tests/benchmarks -p 'test_*.py'
+
+      - name: Package shared builds and distribute all workloads
+        run: |
+          mkdir -p nightly-bundle/{master,baseline}/target/release nightly-bundle/master/tests
+          cp benchmark-master/target/release/librejson.so nightly-bundle/master/target/release/
+          cp benchmark-baseline/target/release/librejson.so nightly-bundle/baseline/target/release/
+          cp -R benchmark-master/tests/benchmarks nightly-bundle/master/tests/
+          python - <<'PYTHON'
+          import json, subprocess
+          from pathlib import Path
+          revisions = {label: subprocess.check_output(['git', '-C', 'benchmark-' + label, 'rev-parse', 'HEAD'], text=True).strip()
+                       for label in ('baseline', 'master')}
+          Path('nightly-bundle/revisions.json').write_text(json.dumps(revisions))
+          PYTHON
+          python tests/benchmarks/benchmark_jobs.py plan --aws --bundle nightly-bundle --shards 5
+          tar -czf nightly-bundle.tar.gz nightly-bundle
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: nightly-benchmark-build-${{ github.run_id }}
+          path: nightly-bundle.tar.gz
+          compression-level: 0
+          overwrite: true
+          retention-days: 30
+
+  compare:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install benchmark tools
+        run: |
+          python -m pip install 'redisbench-admin==0.12.39'
+          VERSION=0.14.8 ./deps/readies/bin/getterraform
+      - uses: actions/download-artifact@v5
+        with:
+          name: nightly-benchmark-build-${{ github.run_id }}
+      - name: Unpack shared builds
+        run: tar -xzf nightly-bundle.tar.gz
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -72,39 +121,85 @@ jobs:
           aws secretsmanager get-secret-value --secret-id perf-cto-us-east-2 \
             --query SecretString --output text > "$RUNNER_TEMP/benchmark.pem"
 
-      - name: Provision the existing AWS benchmark topology once
+      - name: Provision a dedicated AWS topology for this shard
         run: |
           python tests/benchmarks/compare_aws.py provision \
             --state "$RUNNER_TEMP/benchmark-aws.json" \
-            --benchmarks-dir benchmark-master/tests/benchmarks
+            --benchmarks-dir nightly-bundle/master/tests/benchmarks --shard ${{ matrix.shard }}
 
-      - name: Compare every full workload sequentially on AWS
+      - name: Compare assigned full workloads on AWS
         timeout-minutes: 300
         run: |
           python tests/benchmarks/compare_aws.py run \
             --state "$RUNNER_TEMP/benchmark-aws.json" \
             --private-key "$RUNNER_TEMP/benchmark.pem" \
-            --baseline-dir benchmark-baseline --master-dir benchmark-master \
-            --output nightly-benchmark-results
+            --baseline-dir nightly-bundle/baseline --master-dir nightly-bundle/master \
+            --plan nightly-bundle/plan.json --shard ${{ matrix.shard }} \
+            --output nightly-results/shard-${{ matrix.shard }}
 
       - name: Tear down AWS resources even after benchmark failures
         if: always()
         run: |
           python tests/benchmarks/compare_aws.py destroy --state "$RUNNER_TEMP/benchmark-aws.json"
 
+      - name: Package partial results even on failure
+        if: always()
+        run: |
+          mkdir -p nightly-results/shard-${{ matrix.shard }}
+          tar --exclude='*/datasets' --exclude='*/dump.rdb' \
+            -czf shard-${{ matrix.shard }}.tar.gz -C nightly-results shard-${{ matrix.shard }}
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: nightly-benchmark-shard-${{ matrix.shard }}-${{ github.run_id }}
+          path: shard-${{ matrix.shard }}.tar.gz
+          compression-level: 0
+          overwrite: true
+          retention-days: 30
+
+  report:
+    needs: [build, compare]
+    if: always() && needs.build.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install 'redis==4.6.0' 'PyYAML==6.0.3'
+      - uses: actions/download-artifact@v5
+        with:
+          name: nightly-benchmark-build-${{ github.run_id }}
+      - uses: actions/download-artifact@v5
+        continue-on-error: true # Merge reports missing shards as failures.
+        with:
+          pattern: nightly-benchmark-shard-*-${{ github.run_id }}
+          path: nightly-downloads
+          merge-multiple: true
+      - name: Merge and verify complete coverage
+        run: |
+          tar -xzf nightly-bundle.tar.gz nightly-bundle/plan.json
+          mkdir -p nightly-shards nightly-benchmark-results
+          shopt -s nullglob
+          for archive in nightly-downloads/*.tar.gz; do
+            tar -xzf "$archive" -C nightly-shards
+          done
+          cp nightly-bundle/plan.json nightly-benchmark-results/
+          python tests/benchmarks/benchmark_jobs.py merge \
+            --plan nightly-bundle/plan.json --results nightly-shards --output nightly-benchmark-results
       - name: Publish comparison summary
         if: always()
         run: |
           if [ -f nightly-benchmark-results/summary.md ]; then
             cat nightly-benchmark-results/summary.md >> "$GITHUB_STEP_SUMMARY"
           fi
-
       - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: nightly-aws-benchmarks-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             nightly-benchmark-results/
-            !nightly-benchmark-results/datasets/
-            !nightly-benchmark-results/**/datasets
+            nightly-shards/
           retention-days: 30
