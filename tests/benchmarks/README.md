@@ -73,8 +73,10 @@ The nightly report's Master column denotes the candidate, including manual branc
 Merged reports verify workload coverage and binary identities. Logs, hashes,
 commit IDs and attempt histories are retained in Actions artifacts:
 `command-performance-<run>-<attempt>` for Event CI and
-`nightly-<initial|confirmation>-benchmarks-<run>-<attempt>` for nightly.
+`nightly-<initial|confirmation>-benchmarks-<run>` for nightly.
 Failed jobs can reuse the shared build and successful shards when rerun.
+Nightly round artifacts use stable names across attempts, so confirmation reruns
+can reuse the initial report. Rerunning a report replaces its round artifact.
 
 ## Included benchmarks
 
