@@ -76,6 +76,8 @@ jobs:
           done
 
       - name: Package shared builds and distribute all workloads
+        env:
+          BASELINE_BRANCH: ${{ inputs.baseline_branch }}
         run: |
           mkdir -p nightly-bundle/{master,baseline}/target/release nightly-bundle/master/tests
           cp benchmark-master/target/release/librejson.so nightly-bundle/master/target/release/

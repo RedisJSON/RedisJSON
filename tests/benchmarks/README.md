@@ -115,6 +115,17 @@ input configuration. The local/Event CI and nightly comparison scripts remove
 modify the source YAML files. Their relative comparisons and nightly promotion
 criteria are described above.
 
+The initial nightly round also publishes final throughput for both branches to
+the existing Grafana RedisTimeSeries data source, using the legacy `circleci`
+environment, metric paths, and branch/commit series. After retries, the published
+throughput is each side's median. Confirmation rounds do not publish again.
+The build plan preserves the branch names and timestamp so report reruns replace
+the same samples. Execution-error pairs are skipped; invalid or missing shards
+block publication. Valid regressions are published even when the comparison fails.
+Only throughput is published; latency and memory are not aggregated by this comparison.
+The report job uses the existing `PERFORMANCE_RTS_HOST`, `PERFORMANCE_RTS_PORT`,
+and `PERFORMANCE_RTS_AUTH` secrets.
+
 The nightly comparison uploads merged reports as
 `nightly-initial-benchmarks-<run_id>` and, when a confirmation round runs,
 `nightly-confirmation-benchmarks-<run_id>`, with 30-day retention. It does not run

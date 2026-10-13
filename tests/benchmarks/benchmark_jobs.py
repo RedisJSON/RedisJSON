@@ -4,6 +4,8 @@ import argparse
 import hashlib
 import json
 import math
+import os
+import time
 from pathlib import Path
 import shlex
 import subprocess
@@ -115,6 +117,62 @@ def merge_results(plan, root):
     return combined, failed
 
 
+
+def publish_results(plan, results, source):
+    """Publish final AWS throughput using the legacy Grafana series and indexes."""
+    import redis
+    from redisbench_admin.run.redistimeseries import prepare_timeseries_dict, update_secondary_result_keys
+    from redisbench_admin.utils.remote import push_data_to_redistimeseries
+
+    if results.get('merge_errors'):
+        raise ValueError('Refusing to publish results with invalid or missing shards')
+    if results['modules'] != plan['modules'] or results['revisions'] != plan['revisions']:
+        raise ValueError('Publication results do not match the build plan')
+    publication = plan['publication']
+    timestamp = publication['timestamp_ms']
+    with redis.Redis(host=os.environ['PERFORMANCE_RTS_HOST'],
+                     port=int(os.environ['PERFORMANCE_RTS_PORT']),
+                     password=os.environ['PERFORMANCE_RTS_AUTH'],
+                     socket_connect_timeout=10, socket_timeout=30) as connection:
+        connection.ping()
+        for name, pair in results['benchmarks'].items():
+            if any('error' in value for value in pair.values()):
+                print(f'Skipping publication of failed benchmark: {name}', flush=True)
+                continue
+            config = yaml.safe_load((source / f'{name}.yml').read_text())
+            client = config['clientconfig']
+            if isinstance(client, list):
+                client = {key: value for entry in client for key, value in entry.items()}
+            for label in plan['labels']:
+                value = pair[label]
+                rate = value['ops_per_sec']
+                if not math.isfinite(rate) or rate <= 0:
+                    raise ValueError(f'Invalid throughput for {name}: {label}')
+                # Preserve the old metric paths, but publish the final median, not an individual retry.
+                if client['tool'] == 'memtier_benchmark':
+                    raw = {'ALL STATS': {'Totals': {'Ops/sec': rate}}}
+                    metric = '$."ALL STATS".*."Ops/sec"'
+                else:
+                    raw = {'Tests': {'Overall': {'rps': rate}}}
+                    metric = '$.Tests.Overall.rps'
+                identity = dict(deployment_name='oss-standalone', deployment_type='oss-standalone',
+                                test_name=config['name'], tf_github_branch=publication['branches'][label],
+                                tf_github_org='RedisJSON', tf_github_repo='RedisJSON',
+                                tf_triggering_env='circleci', artifact_version=None)
+                series, contexts, _, _, _ = prepare_timeseries_dict(
+                    **identity, benchmark_config={}, default_metrics=[metric],
+                    exporter_timemetric_path=None, results_dict=raw, datapoints_timestamp=timestamp,
+                    tf_github_sha=plan['revisions'][label])
+                errors, inserted = push_data_to_redistimeseries(connection, series)
+                if errors or not inserted:
+                    raise RuntimeError(f'Failed to publish {name}: {label} ({errors} errors)')
+                update_secondary_result_keys(
+                    **identity, benchmark_duration_seconds=None, dataset_load_duration_seconds=None,
+                    build_variant_name=None, metadata_tags={}, rts=connection, running_platform=None,
+                    start_time_ms=timestamp, testcase_metric_context_paths=contexts)
+                print(f'Published {name}: {label} ({rate} ops/s)', flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
@@ -130,6 +188,10 @@ def main():
     merge_parser.add_argument('--plan', type=Path, required=True)
     merge_parser.add_argument('--results', type=Path, required=True)
     merge_parser.add_argument('--output', type=Path, required=True)
+    publish_parser = commands.add_parser('publish')
+    publish_parser.add_argument('--plan', type=Path, required=True)
+    publish_parser.add_argument('--results', type=Path, required=True)
+    publish_parser.add_argument('--benchmarks-dir', type=Path, required=True)
     args = parser.parse_args()
     if args.command == 'plan':
         bundle = args.bundle.resolve()
@@ -137,6 +199,11 @@ def main():
         plan = make_plan(source, args.shards)
         if args.aws:
             plan['labels'] = ['baseline', 'master']
+            plan['publication'] = {
+                'timestamp_ms': int(time.time() * 1000),
+                'branches': {'baseline': os.environ.get('BASELINE_BRANCH') or 'benchmark-baseline',
+                             'master': os.environ['GITHUB_REF_NAME']},
+            }
             plan['revisions'] = json.loads((bundle / 'revisions.json').read_text())
             modules = {label: bundle / label / 'target/release/librejson.so' for label in plan['labels']}
         else:
@@ -146,6 +213,9 @@ def main():
         plan['modules'] = {label: hashlib.sha256(path.read_bytes()).hexdigest() for label, path in modules.items()}
         (bundle / 'plan.json').write_text(json.dumps(plan, indent=2) + '\n')
         print(json.dumps(plan, indent=2))
+    elif args.command == 'publish':
+        publish_results(json.loads(args.plan.read_text()), json.loads(args.results.read_text()),
+                        args.benchmarks_dir)
     elif args.command == 'run':
         bundle = args.bundle.resolve()
         plan = json.loads((bundle / 'plan.json').read_text())
