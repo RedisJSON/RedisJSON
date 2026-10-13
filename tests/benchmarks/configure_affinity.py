@@ -107,7 +107,7 @@ def configure(role, clients):
             if int(rps.read_text().strip().replace(',', ''), 16):
                 raise RuntimeError(f'RPS still enabled: {rps}')
     selected, reserved, effective = select_isolated_cores(
-        irqs, allowed, siblings, 1 if role == 'server' else 2)
+        irqs, allowed, siblings, 2)
     data = dict(role=role, cpulist=','.join(map(str, selected)),
                 reserved_cpus=sorted(reserved), nic_irqs=effective, requested_nic_irqs=irqs,
                 irqbalance_stopped=active,

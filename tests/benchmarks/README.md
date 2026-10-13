@@ -71,7 +71,7 @@ skip builds and AWS provisioning. Five shards each own an AWS server/client pair
 run both revisions sequentially, and destroy their resources even on failure.
 The candidate's YAML suite supplies the workloads for both sides.
 
-Each pair pins Redis to one CPU and clients to two physical cores. NIC interrupts
+Each pair pins Redis and clients to two physical cores on their respective hosts. NIC interrupts
 are assigned to housekeeping cores, irqbalance is stopped, and RPS is disabled.
 Benchmark cores exclude current and requested IRQ destinations and SMT siblings.
 Chosen cores stay fixed across revisions and retries; `affinity.json` records the
