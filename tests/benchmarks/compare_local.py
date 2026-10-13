@@ -6,10 +6,12 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import shutil
 import signal
 import socket
 import subprocess
+import time
 
 import redis
 import yaml
@@ -21,6 +23,12 @@ MEMORY_METRICS = (
     "used_memory_peak",
     "used_memory_rss",
 )
+
+
+def escape_dataset_unicode(text):
+    # redisbench-admin 0.12.39 decodes redis-benchmark's echoed command as ASCII.
+    # Escape only non-ASCII JSON characters; retain formatting, numbers and values.
+    return re.sub(r"[^\x00-\x7f]", lambda match: json.dumps(match[0])[1:-1], text)
 
 
 def throughput(result):
@@ -178,6 +186,11 @@ def main():
     output.mkdir(parents=True, exist_ok=False)
     datasets = output / "datasets"
     shutil.copytree(source / "datasets", datasets)
+    for dataset in datasets.rglob("*.json"):
+        original = dataset.read_text(encoding="utf-8")
+        escaped = escape_dataset_unicode(original)
+        if escaped != original:
+            dataset.write_text(escaped, encoding="utf-8")
     results = {
         "modules": {label: hashlib.sha256(module.read_bytes()).hexdigest()
                     for label, module in modules.items()},
@@ -189,6 +202,7 @@ def main():
         pair = results["benchmarks"][spec.stem] = {}
         for label, module in modules.items():
             print(f"Running {spec.name}: {label}", flush=True)
+            started = time.monotonic()
             try:
                 pair[label] = run_one(spec, module, output / spec.stem / label,
                                       datasets, redis_binary, runner, args.timeout)
@@ -197,6 +211,8 @@ def main():
                 pair[label] = {"error": str(error)}
                 print(f"ERROR: {error}", flush=True)
             finally:
+                if label in pair:
+                    pair[label]["run_seconds"] = round(time.monotonic() - started, 3)
                 (output / "comparison.json").write_text(json.dumps(results, indent=2) + "\n")
         (output / "summary.md").write_text(summary(results))
     print(summary(results))

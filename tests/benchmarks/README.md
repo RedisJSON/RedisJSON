@@ -15,8 +15,9 @@ pip3 install redisbench_admin>=0.1.74
 ## Local master/PR performance and memory comparison
 
 Event CI calls `flow-command-benchmark.yml` on each PR run. It builds master and
-the PR head with one Rust toolchain, then runs master's YAML
-workloads against both modules sequentially on the same runner and Redis binary.
+the PR head with one Rust toolchain in a shared build job. Five parallel jobs
+then run master's YAML workloads. Each workload runs against both modules
+sequentially on the same runner, using the shared binaries.
 New PR-only workloads enter this comparison once merged into master.
 The YAML request counts and durations are unchanged. Each test/revision gets a
 fresh Redis instance and the same starting dataset; random-key workloads can
@@ -37,6 +38,12 @@ Use `.dylib` on macOS. Add `--benchmark <filename.yml>` to select a workload;
 repeat it to select several. Passing the same module twice provides a master vs
 master check of measurement noise. No AWS credentials or results database are
 needed. Dataset URLs are downloaded and cached within the output directory.
+
+The pinned `redisbench-admin` version decodes redis-benchmark output as ASCII.
+The Google Maps q3/q5 fixtures contain Unicode, which otherwise causes result
+parsing to fail after the benchmark. Temporary JSON dataset copies therefore
+escape non-ASCII characters using JSON `\u` escapes; the parsed documents and
+numeric spellings are unchanged. The source fixtures are never modified.
 
 The report contains throughput and these `INFO MEMORY` counters in bytes:
 
@@ -61,8 +68,19 @@ silently skip the known `json_nummultby_num_2` failure described below.
 Results are saved as `comparison.json`, `summary.md`, and per-run raw client
 JSON/logs, and uploaded as CI artifacts. The summary appears in the Actions job.
 
+The five groups cover every workload exactly once. Initial grouping balances
+request counts against existing throughput floors and memtier durations; these
+are scheduling estimates, not runtime guarantees. Each result records
+`run_seconds`; `benchmark_jobs.py plan --timings <previous-comparison.json>` can
+use measured durations for subsequent plans. CI currently uses the estimates.
+
+A final job combines all groups into one performance/memory report and checks
+coverage and binary identities. Failed or missing measurements fail the job and
+appear in the report; other groups continue running. Raw logs remain available
+in artifacts. Rerunning failed jobs reuses the shared build and successful groups.
+
 ```sh
-python -m unittest discover -s tests/benchmarks -p 'test_compare_local.py'
+python -m unittest discover -s tests/benchmarks -p 'test_*.py'
 ```
 
 
