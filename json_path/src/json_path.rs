@@ -992,6 +992,7 @@ const FN_LAST: &str = "last";
 const FN_INDEX: &str = "index";
 const FN_MATCH: &str = "match";
 const FN_SEARCH: &str = "search";
+const FN_SUBSETOF: &str = "subsetof";
 
 fn eval_function<'i, 'j, S: SelectValue>(
     name: &str,
@@ -1004,7 +1005,7 @@ fn eval_function<'i, 'j, S: SelectValue>(
     let arity_ok = match name {
         FN_CONCAT => !args.is_empty(),
         // `index`/`append` take the receiver plus one explicit argument.
-        FN_INDEX | FN_APPEND => args.len() == 2,
+        FN_INDEX | FN_APPEND | FN_SUBSETOF => args.len() == 2,
         FN_LENGTH | FN_COUNT | FN_CEILING | FN_FLOOR | FN_ABS | FN_SUM | FN_MIN | FN_MAX
         | FN_AVG | FN_STDDEV | FN_FIRST | FN_LAST | FN_KEYS => args.len() == 1,
         _ => true,
@@ -1013,6 +1014,7 @@ fn eval_function<'i, 'j, S: SelectValue>(
         return TermEvaluationResult::Invalid;
     }
     match name {
+        FN_SUBSETOF => TermEvaluationResult::Bool(args[0].subset_of(&args[1])),
         FN_LENGTH => args
             .first()
             .map_or(TermEvaluationResult::Invalid, function_length),

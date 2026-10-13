@@ -940,6 +940,21 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_function_subsetof() {
+        setup();
+        verify_json!(path:"$.a[?subsetof(@, [1,2,3])]", json:{"a":[[1,2],[1,5],[]]}, results:[[1,2],[]]);
+        verify_json!(path:"$.a[?@.subsetof([1,2,3])]", json:{"a":[[1,2],[1,5],[]]}, results:[[1,2],[]]);
+        let doc = json!({"a": [1,2]});
+        assert_eq!(
+            perform_projection("subsetof($.a, [1,2,3])", &doc),
+            Some(json!(true))
+        );
+        for path in ["subsetof()", "subsetof($.a)", "subsetof($.a, [1,2,3], [])"] {
+            assert_eq!(perform_projection(path, &doc), None);
+        }
+    }
+
+    #[test]
     fn test_set_subsetof_path() {
         setup();
         verify_json!(path:"$.items[?@.val subsetof @.vals]",
