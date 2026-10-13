@@ -12,7 +12,7 @@ import time
 from redis.client import parse_info
 import yaml
 
-from compare_local import MEMORY_METRICS, escape_dataset_unicode, summary, throughput
+from compare_local import escape_dataset_unicode, summary, throughput
 
 
 class RemoteResetError(RuntimeError):
@@ -74,10 +74,6 @@ def run_one(spec, module, directory, datasets, inventory, key, remote_config):
     config = yaml.safe_load(spec.read_text())
     config.pop('kpis', None)  # Relative comparison, not the historical AWS floors.
     config['remote'] = remote_config
-    dbconfig = config.get('dbconfig', {})
-    entries = dbconfig if isinstance(dbconfig, list) else [dbconfig]
-    if any('post_commands' in entry for entry in entries):
-        raise ValueError('Memory must be captured before post_commands mutate the data')
     (directory / 'test.yml').write_text(yaml.safe_dump(config, sort_keys=False))
     hosts = ','.join(f'{name}={inventory[name]}' for name in
                      ('server_private_ip', 'server_public_ip', 'client_public_ip'))
@@ -102,14 +98,8 @@ def run_one(spec, module, directory, datasets, inventory, key, remote_config):
                 raise RemoteResetError('Remote client timed out; stopping before another workload') from error
         if completed.returncode:
             raise RuntimeError(f'Benchmark exited {completed.returncode}; see {directory / "runner.log"}')
-        memory, keys, server = remote_commands(
-            inventory, key, [f'{cli} --raw INFO memory', f'{cli} DBSIZE', f'{cli} --raw INFO server'],
-        )
-        info = parse_info(memory)
-        measurements = {metric: int(info[metric]) for metric in MEMORY_METRICS}
-        measurements['keys'] = int(keys.strip())
-        if any(value < 0 for value in measurements.values()):
-            raise ValueError('Invalid memory/key measurements')
+        server, = remote_commands(inventory, key, [f'{cli} --raw INFO server'])
+        measurements = {}
         raw = list(directory.glob('*.json'))
         if len(raw) != 1:
             raise ValueError(f'Expected one benchmark result, found {len(raw)}')

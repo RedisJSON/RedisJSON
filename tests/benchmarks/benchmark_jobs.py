@@ -11,7 +11,7 @@ import sys
 
 import yaml
 
-from compare_local import MEMORY_METRICS, summary
+from compare_local import summary
 
 
 def estimated_seconds(spec):
@@ -87,11 +87,8 @@ def merge_results(plan, root):
                 if not isinstance(value, dict):
                     value = {'error': f'Missing {label} result in shard {index}'}
                 elif 'error' not in value:
-                    metrics = ('ops_per_sec', *MEMORY_METRICS, 'keys')
-                    if any(type(value.get(metric)) not in (int, float)
-                           or not math.isfinite(value[metric]) or value[metric] < 0
-                           or (metric == 'ops_per_sec' and value[metric] == 0)
-                           for metric in metrics):
+                    rate = value.get('ops_per_sec')
+                    if type(rate) not in (int, float) or not math.isfinite(rate) or rate <= 0:
                         value = {'error': f'Invalid measurements in shard {index}'}
                 checked[label] = value
             combined['benchmarks'][name] = checked

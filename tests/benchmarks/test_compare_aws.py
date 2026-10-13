@@ -9,7 +9,6 @@ from unittest.mock import patch
 import yaml
 
 from compare_aws import RemoteResetError, compare, destroy, provision, run_one
-from compare_local import MEMORY_METRICS
 
 
 class AWSComparisonTest(unittest.TestCase):
@@ -39,7 +38,7 @@ class AWSComparisonTest(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, 'AWS teardown failed'):
                     destroy(state)
 
-    def test_remote_run_preserves_workload_collects_memory_and_resets_after_failure(self):
+    def test_remote_run_preserves_workload_collects_throughput_and_resets_after_failure(self):
         spec = Path(__file__).parent / 'json_set_fulldoc_api_replies_q3_gmaps_passiveassist.yml'
         config = yaml.safe_load(spec.read_text())
         inventory = dict(server_private_ip='10.0.0.1', server_public_ip='192.0.2.1',
@@ -59,14 +58,12 @@ class AWSComparisonTest(unittest.TestCase):
                 (kwargs['cwd'] / 'result.json').write_text(json.dumps({'Tests': {'Overall': {'rps': 100}}}))
                 return subprocess.CompletedProcess(command, 0)
 
-            memory = '\r\n'.join(f'{metric}:100' for metric in MEMORY_METRICS)
             with patch('compare_aws.subprocess.run', side_effect=runner), patch(
-                'compare_aws.remote_commands', side_effect=[[memory, '5\n', 'redis_version:8.2.0\r\n'], ['']]
+                'compare_aws.remote_commands', side_effect=[['redis_version:8.2.0\r\n'], ['']]
             ) as remote:
                 value = run_one(spec, root / 'module.so', root / 'success', datasets,
                                 inventory, root / 'key.pem', [{'type': 'oss-standalone'}])
                 self.assertEqual(value['ops_per_sec'], 100)
-                self.assertEqual(value['keys'], 5)
                 self.assertEqual(value['redis_version'], '8.2.0')
                 self.assertIn('shutdown nosave', remote.call_args.args[2][0])
 
@@ -94,8 +91,7 @@ class AWSComparisonTest(unittest.TestCase):
             state.write_text('{}')
             args = argparse.Namespace(master_dir=root / 'master', baseline_dir=root / 'baseline',
                                       state=state, private_key=root / 'key', output=root / 'results')
-            value = dict.fromkeys(MEMORY_METRICS, 100)
-            value.update(ops_per_sec=100, keys=1, redis_version='8.2.0')
+            value = dict(ops_per_sec=100, redis_version='8.2.0')
             with patch('compare_aws.subprocess.check_output', return_value='same-sha\n'), patch(
                 'compare_aws.run_one', return_value=value
             ) as run:
@@ -106,7 +102,7 @@ class AWSComparisonTest(unittest.TestCase):
                 results = json.loads((args.output / 'comparison.json').read_text())
                 self.assertEqual(results['revisions'], dict(baseline='same-sha', master='same-sha'))
                 report = (args.output / 'summary.md').read_text()
-                self.assertEqual(report.count('<th>Baseline</th><th>Master</th><th>Change %</th>'), 6)
+                self.assertEqual(report.count('<th>Baseline</th><th>Master</th><th>Change %</th>'), 1)
                 self.assertIn('Baseline module SHA256:', report)
                 self.assertNotIn('<th>PR</th>', report)
 

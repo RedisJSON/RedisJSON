@@ -18,13 +18,6 @@ import redis
 import yaml
 
 
-MEMORY_METRICS = (
-    "used_memory",
-    "used_memory_dataset",
-    "used_memory_peak",
-    "used_memory_rss",
-)
-
 
 def escape_dataset_unicode(text):
     # redisbench-admin 0.12.39 decodes redis-benchmark's echoed command as ASCII.
@@ -45,15 +38,6 @@ def throughput(result):
     if not math.isfinite(value) or value <= 0:
         raise ValueError("Missing or invalid throughput measurement")
     return value
-
-
-def memory_snapshot(connection):
-    info = connection.info("memory")
-    result = {name: int(info[name]) for name in MEMORY_METRICS}
-    if any(value < 0 for value in result.values()):
-        raise ValueError("Invalid memory measurement")
-    result["keys"] = connection.dbsize()
-    return result
 
 
 def owns_server(connection, db_root):
@@ -77,10 +61,6 @@ def run_one(spec, module, directory, datasets, redis_binary, runner, timeout):
     config.pop("kpis", None)
     # Each invocation is one fresh standalone instance, with no remote exporters.
     config.pop("remote", None)
-    dbconfig = config.get("dbconfig", {})
-    entries = dbconfig if isinstance(dbconfig, list) else [dbconfig]
-    if any("post_commands" in entry for entry in entries):
-        raise ValueError("Memory must be captured before post_commands mutate the data")
     (directory / "test.yml").write_text(yaml.safe_dump(config, sort_keys=False))
     db_root = directory / "db"
     db_root.mkdir()
@@ -118,9 +98,7 @@ def run_one(spec, module, directory, datasets, redis_binary, runner, timeout):
             raise RuntimeError(f"Benchmark exited {code}; see {directory / 'runner.log'}")
         if not owns_server(connection, db_root):
             raise RuntimeError("Benchmark did not leave its own Redis instance running")
-        # Redis maintains used_memory_peak during execution. No polling is needed
-        # in the timed workload; this is the peak INCLUDING dataset loading.
-        measurements = memory_snapshot(connection)
+        measurements = {}
         raw_results = list(directory.glob("*.json"))
         if len(raw_results) != 1:
             raise ValueError(f"Expected one benchmark result, found {len(raw_results)}")
@@ -142,25 +120,19 @@ def change(before, after):
 
 
 def summary(results, baseline="master", candidate="pr"):
-    # ponytail: report random-key counts; require deterministic seeds before tight gates.
     before_label = "PR" if baseline == "pr" else baseline.title()
     after_label = "PR" if candidate == "pr" else candidate.title()
     lines = [
-        "# RedisJSON command benchmarks: performance and memory", "",
+        "# RedisJSON command benchmarks: throughput", "",
         "Same workloads, sequential runs, fresh Redis per revision and test.",
-        "Memory is measured in bytes after the clients finish. Peak includes dataset loading.",
-        "RSS is informational; it includes allocator/OS effects. Changes are report-only.",
         "Change %: 🟢 improvement; 🟡 degradation below 5%; 🔴 degradation of 5% or more. Unchanged values are unmarked.",
-        f"Each metric has {before_label}, {after_label}, and Change % columns. ↑ higher is better; ↓ lower is better.",
-        "Random-key workloads may finish with different key counts; check the Keys column.", "",
+        f"Each metric has {before_label}, {after_label}, and Change % columns. Higher throughput is better.",
         f"{before_label} module SHA256: `{results['modules'][baseline]}`",
         f"{after_label} module SHA256: `{results['modules'][candidate]}`", "",
         '<table>',
         '<thead><tr><th rowspan="2">Benchmark</th>',
-        '<th colspan="3">Throughput (ops/s) ↑</th><th colspan="3">Used memory (bytes) ↓</th>',
-        '<th colspan="3">Dataset memory (bytes) ↓</th><th colspan="3">Peak memory (bytes) ↓</th>',
-        '<th colspan="3">RSS (bytes, informational) ↓</th><th colspan="3">Keys</th></tr>',
-        '<tr>' + f'<th>{escape(before_label)}</th><th>{escape(after_label)}</th><th>Change %</th>' * 6 + '</tr></thead>',
+        '<th colspan="3">Throughput (ops/s) ↑</th></tr>',
+        '<tr>' + f'<th>{escape(before_label)}</th><th>{escape(after_label)}</th><th>Change %</th>' + '</tr></thead>',
         '<tbody>',
     ]
     for name, pair in results["benchmarks"].items():
@@ -169,21 +141,16 @@ def summary(results, baseline="master", candidate="pr"):
                   if "error" in value]
         if errors:
             message = escape("; ".join(errors))
-            lines.append(f'<tr><td>🔴 {label}</td><td colspan="18"><strong>ERROR</strong>: {message}</td></tr>')
+            lines.append(f'<tr><td>🔴 {label}</td><td colspan="3"><strong>ERROR</strong>: {message}</td></tr>')
             continue
-        cells = []
-        for metric in ("ops_per_sec", *MEMORY_METRICS, "keys"):
-            before, after = pair[baseline][metric], pair[candidate][metric]
-            marker = ""
-            if metric == "ops_per_sec" or metric in MEMORY_METRICS:
-                degradation = before - after if metric == "ops_per_sec" else after - before
-                if degradation < 0:
-                    marker = "🟢 "
-                elif degradation > 0:
-                    marker = "🔴 " if degradation * 100 >= before * 5 else "🟡 "
-            precision = 2 if metric == "ops_per_sec" else 0
-            cells.extend((f"{before:,.{precision}f}", f"{after:,.{precision}f}",
-                          f"{marker}{change(before, after)}"))
+        before, after = pair[baseline]["ops_per_sec"], pair[candidate]["ops_per_sec"]
+        degradation = before - after
+        marker = ""
+        if degradation < 0:
+            marker = "🟢 "
+        elif degradation > 0:
+            marker = "🔴 " if degradation * 100 >= before * 5 else "🟡 "
+        cells = (f"{before:,.2f}", f"{after:,.2f}", f"{marker}{change(before, after)}")
         lines.append(f"<tr><td>{label}</td>" +
                      "".join(f'<td align="right">{escape(cell)}</td>' for cell in cells) + "</tr>")
     lines.extend(["</tbody>", "</table>"])
