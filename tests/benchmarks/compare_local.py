@@ -180,6 +180,39 @@ def record_attempt(pair, directory, attempt, max_retries=3):
     return True
 
 
+def run_pairs(specs, modules, output, run_fn, results, max_retries=3, abort_on=()):
+    failed = False
+    aborted = False
+    for spec in specs:
+        for attempt in range(max_retries + 1):
+            pair = results["benchmarks"][spec.stem] = {}
+            for label, module in modules.items():
+                print(f"Running {spec.name}: {label}", flush=True)
+                started = time.monotonic()
+                try:
+                    if aborted:
+                        raise RuntimeError("Not run: the benchmark environment could not be reset")
+                    pair[label] = dict(run_fn(spec, module, output / spec.stem / label))
+                except Exception as error:
+                    failed = True
+                    aborted = aborted or isinstance(error, abort_on)
+                    pair[label] = {"error": str(error)}
+                    print(f"ERROR: {error}", flush=True)
+                finally:
+                    if label in pair:
+                        pair[label]["attempt_count"] = attempt + 1
+                        pair[label]["run_seconds"] = round(time.monotonic() - started, 3)
+                    (output / "comparison.json").write_text(json.dumps(results, indent=2) + "\n")
+            if not record_attempt(pair, output / spec.stem, attempt, max_retries):
+                break
+        revisions = "\n".join(f"- {label}: `{sha}`" for label, sha in results.get("revisions", {}).items())
+        report = (revisions + "\n\n" if revisions else "") + summary(results, *modules)
+        (output / "summary.md").write_text(report)
+    if not results["benchmarks"]:
+        raise ValueError("No benchmark workloads found")
+    return int(failed)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline-module", type=Path, required=True)
@@ -217,30 +250,12 @@ def main():
         "redis": subprocess.check_output([redis_binary, "--version"], text=True).strip(),
         "benchmarks": {},
     }
-    failed = False
-    for spec in specs:
-        for attempt in range(4):  # Initial pair plus at most three retries.
-            pair = results["benchmarks"][spec.stem] = {}
-            for label, module in modules.items():
-                print(f"Running {spec.name}: {label}", flush=True)
-                started = time.monotonic()
-                try:
-                    pair[label] = run_one(spec, module, output / spec.stem / label,
-                                          datasets, redis_binary, runner, args.timeout)
-                except Exception as error:
-                    failed = True
-                    pair[label] = {"error": str(error)}
-                    print(f"ERROR: {error}", flush=True)
-                finally:
-                    if label in pair:
-                        pair[label]["attempt_count"] = attempt + 1
-                        pair[label]["run_seconds"] = round(time.monotonic() - started, 3)
-                    (output / "comparison.json").write_text(json.dumps(results, indent=2) + "\n")
-            if not record_attempt(pair, output / spec.stem, attempt):
-                break
-        (output / "summary.md").write_text(summary(results))
+    def run(spec, module, directory):
+        return run_one(spec, module, directory, datasets, redis_binary, runner, args.timeout)
+
+    status = run_pairs(specs, modules, output, run, results)
     print(summary(results))
-    return int(failed)
+    return status
 
 
 if __name__ == "__main__":
