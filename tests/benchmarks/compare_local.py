@@ -33,6 +33,8 @@ def escape_dataset_unicode(text):
 
 def throughput(result):
     if "Tests" in result:
+        if "rps" not in result["Tests"].get("Overall", {}):
+            raise ValueError("Missing throughput result; check runner.log for benchmark errors")
         value = float(result["Tests"]["Overall"]["rps"])
     else:
         totals = result["ALL STATS"]["Totals"]
@@ -65,6 +67,10 @@ def owns_server(connection, db_root):
 def run_one(spec, module, directory, datasets, redis_binary, runner, timeout):
     directory.mkdir(parents=True)
     (directory / "datasets").symlink_to(datasets, target_is_directory=True)
+    # redisbench-admin matches module options against the module path ("rejson").
+    # Bundle labels such as master.so/pr.so must not disable those options.
+    module_alias = directory / ("rejson" + module.suffix)
+    module_alias.symlink_to(module)
     config = yaml.safe_load(spec.read_text())
     # AWS's absolute throughput floors do not apply to this runner.
     config.pop("kpis", None)
@@ -86,7 +92,7 @@ def run_one(spec, module, directory, datasets, redis_binary, runner, timeout):
     )
     command = [
         runner, "run-local", "--test", "test.yml",
-        "--module_path", str(module), "--required-module", "ReJSON",
+        "--module_path", str(module_alias), "--required-module", "ReJSON",
         "--redis-binary", redis_binary, "--port", str(port),
         "--host", "127.0.0.1", "--db-dirname", str(db_root),
         "--keep_env_and_topo", "--allowed-envs", "oss-standalone",
@@ -125,6 +131,7 @@ def run_one(spec, module, directory, datasets, redis_binary, runner, timeout):
                 connection.shutdown(nosave=True)
         finally:
             connection.close()
+            module_alias.unlink(missing_ok=True)
 
 
 def change(before, after):
@@ -140,6 +147,7 @@ def summary(results):
         "Same workloads, sequential runs, fresh Redis per revision and test.",
         "Memory is measured in bytes after the clients finish. Peak includes dataset loading.",
         "RSS is informational; it includes allocator/OS effects. Changes are report-only.",
+        "🔴 marks lower throughput or higher memory (any increase, including informational RSS).",
         "Random-key workloads may finish with different key counts; check the keys rows.", "",
         f"Master module SHA256: `{results['modules']['master']}`",
         f"PR module SHA256: `{results['modules']['pr']}`", "",
@@ -152,11 +160,13 @@ def summary(results):
                   if "error" in value]
         if errors:
             message = "; ".join(errors).replace("|", "\\|").replace("\n", " ")
-            lines.append(f"| {label} | **ERROR**: {message} | — | — | — |")
+            lines.append(f"| 🔴 {label} | **ERROR**: {message} | — | — | — |")
             continue
         for metric in ("ops_per_sec", *MEMORY_METRICS, "keys"):
             before, after = pair["master"][metric], pair["pr"][metric]
-            lines.append(f"| {label} | {metric} | {before:,.2f} | {after:,.2f} | {change(before, after)} |")
+            degraded = after < before if metric == "ops_per_sec" else metric in MEMORY_METRICS and after > before
+            marker = "🔴 " if degraded else ""
+            lines.append(f"| {marker}{label} | {metric} | {before:,.2f} | {after:,.2f} | {change(before, after)} |")
     return "\n".join(lines) + "\n"
 
 

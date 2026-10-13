@@ -59,6 +59,10 @@ Redis tracks the peak itself, so there is no extra memory-polling loop competing
 with the timed clients. A read-only workload still measures its loaded dataset
 and the process peak. A write workload also measures the resulting dataset.
 
+Rows with lower throughput or higher memory are marked 🔴 (any change, without
+a threshold). RSS increases are marked but remain informational. Key-count
+changes are not classified as regressions. Error rows are also marked 🔴.
+
 Changes are initially **report-only**, pending master-vs-master calibration.
 Benchmark errors and missing results still fail the job and appear in the
 report. AWS `kpis` floors are removed only from temporary workload copies.
