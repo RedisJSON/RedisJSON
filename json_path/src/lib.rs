@@ -981,6 +981,44 @@ mod json_path_tests {
     }
 
     #[test]
+    fn test_function_anyof() {
+        setup();
+        verify_json!(path:"$.a[?anyof(@, [1,2,3])]", json:{"a":[[1,9],[8,9],[]]}, results:[[1,9]]);
+        verify_json!(path:"$.a[?@.anyof([1,2,3])]", json:{"a":[[1,9],[8,9],[]]}, results:[[1,9]]);
+        let doc = json!({"a": [1,9]});
+        assert_eq!(
+            perform_projection("anyof($.a, [1,2,3])", &doc),
+            Some(json!(true))
+        );
+        assert_eq!(
+            perform_projection("anyof($.a, [4,5])", &doc),
+            Some(json!(false))
+        );
+        for path in ["anyof()", "anyof($.a)", "anyof($.a, [1,2,3], [])"] {
+            assert_eq!(perform_projection(path, &doc), None);
+        }
+    }
+
+    #[test]
+    fn test_function_noneof() {
+        setup();
+        verify_json!(path:"$.a[?noneof(@, [1,2,3])]", json:{"a":[[4,5],[1,9],[]]}, results:[[4,5],[]]);
+        verify_json!(path:"$.a[?@.noneof([1,2,3])]", json:{"a":[[4,5],[1,9],[]]}, results:[[4,5],[]]);
+        let doc = json!({"a": [4,5]});
+        assert_eq!(
+            perform_projection("noneof($.a, [1,2,3])", &doc),
+            Some(json!(true))
+        );
+        assert_eq!(
+            perform_projection("noneof($.a, [4])", &doc),
+            Some(json!(false))
+        );
+        for path in ["noneof()", "noneof($.a)", "noneof($.a, [1,2,3], [])"] {
+            assert_eq!(perform_projection(path, &doc), None);
+        }
+    }
+
+    #[test]
     fn test_set_noneof() {
         setup();
         // empty intersection; empty array trivially matches (no shared element)
