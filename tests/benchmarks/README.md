@@ -52,6 +52,9 @@ Execution errors stop retries and remain failures; incomplete sets are not aggre
 Relative differences are report-only; execution errors,
 missing workloads and inconsistent builds fail the comparison. Temporary specs
 omit the legacy absolute `kpis` floors.
+Local comparisons (including Event CI) use a per-run Redis PID file to clean up
+unresponsive servers after verifying their executable and working directory.
+If cleanup cannot be verified, remaining measurements in that shard are skipped.
 
 ## Nightly AWS comparison
 

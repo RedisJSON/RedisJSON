@@ -15,6 +15,7 @@ from statistics import median
 import subprocess
 import time
 
+import psutil
 import redis
 import yaml
 
@@ -40,13 +41,41 @@ def throughput(result):
     return value
 
 
+class LocalResetError(RuntimeError):
+    """Stop measurements when the local benchmark server cannot be cleaned up."""
+
+
 def owns_server(connection, db_root):
     """Never stop a Redis instance belonging to another local process."""
     try:
         directory = connection.config_get("dir")["dir"]
         return Path(directory).resolve().is_relative_to(db_root.resolve())
-    except redis.ConnectionError:
+    except (redis.ConnectionError, redis.TimeoutError):
         return False
+
+
+def stop_server(connection, db_root, pidfile, redis_binary):
+    try:
+        process = psutil.Process(int(pidfile.read_text().strip()))
+        if (Path(process.exe()).resolve() != Path(redis_binary).resolve()
+                or not Path(process.cwd()).resolve().is_relative_to(db_root.resolve())):
+            raise LocalResetError('Redis PID does not belong to this benchmark; refusing to stop it')
+        try:
+            if owns_server(connection, db_root):
+                connection.shutdown(nosave=True)
+        except redis.RedisError:
+            pass  # The verified process can still be stopped without a Redis response.
+        if process.is_running() and process.status() != psutil.STATUS_ZOMBIE:
+            process.kill()
+            try:
+                process.wait(timeout=5)
+            except psutil.TimeoutExpired:
+                if process.is_running() and process.status() != psutil.STATUS_ZOMBIE:
+                    raise
+    except psutil.NoSuchProcess:
+        return
+    except (OSError, ValueError, psutil.Error) as error:
+        raise LocalResetError(f'Cannot verify Redis cleanup: {error}') from error
 
 
 def run_one(spec, module, directory, datasets, redis_binary, runner, timeout):
@@ -61,9 +90,15 @@ def run_one(spec, module, directory, datasets, redis_binary, runner, timeout):
     config.pop("kpis", None)
     # Each invocation is one fresh standalone instance, with no remote exporters.
     config.pop("remote", None)
-    (directory / "test.yml").write_text(yaml.safe_dump(config, sort_keys=False))
     db_root = directory / "db"
     db_root.mkdir()
+    pidfile = directory / "redis.pid"
+    dbconfig = config.setdefault("dbconfig", [])
+    if isinstance(dbconfig, list):
+        dbconfig.append({"configuration-parameters": [{"pidfile": str(pidfile)}]})
+    else:
+        dbconfig.setdefault("configuration-parameters", {})["pidfile"] = str(pidfile)
+    (directory / "test.yml").write_text(yaml.safe_dump(config, sort_keys=False))
     with socket.socket() as reservation:
         reservation.bind(("127.0.0.1", 0))
         port = reservation.getsockname()[1]
@@ -106,8 +141,7 @@ def run_one(spec, module, directory, datasets, redis_binary, runner, timeout):
         return measurements
     finally:
         try:
-            if owns_server(connection, db_root):
-                connection.shutdown(nosave=True)
+            stop_server(connection, db_root, pidfile, redis_binary)
         finally:
             connection.close()
             module_alias.unlink(missing_ok=True)
@@ -265,7 +299,7 @@ def main():
     def run(spec, module, directory):
         return run_one(spec, module, directory, datasets, redis_binary, runner, args.timeout)
 
-    status = run_pairs(specs, modules, output, run, results)
+    status = run_pairs(specs, modules, output, run, results, abort_on=(LocalResetError,))
     print(summary(results))
     return status
 
