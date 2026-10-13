@@ -28,8 +28,7 @@ def resolve():
         note('Skipped: benchmark comparisons require a schedule on master or a manual run.')
         return
     branch = 'benchmark-baseline' if scheduled_master else os.environ.get('BASELINE_BRANCH', '').strip()
-    if not branch:
-        raise ValueError('Manual comparisons require baseline_branch')
+    branch = branch or 'benchmark-baseline'
     if subprocess.run(['git', 'check-ref-format', f'refs/heads/{branch}'],
                       capture_output=True).returncode:
         raise ValueError(f'Invalid baseline branch name: {branch!r}')

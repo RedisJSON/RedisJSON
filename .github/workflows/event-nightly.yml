@@ -18,9 +18,10 @@ on:
   workflow_dispatch:
     inputs:
       baseline_branch:
-        description: 'Baseline branch for the AWS benchmark comparison (e.g. master or 8.8)'
+        description: 'Baseline branch for AWS benchmarks (e.g. master or 8.8); leave empty to use benchmark-baseline'
         type: string
-        required: true
+        required: false
+        default: ''
       redis-ref:
         description: 'Redis ref to checkout (leave empty to use redis_ref from pack/ramp.yml)'
         type: string

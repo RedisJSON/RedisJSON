@@ -3,7 +3,7 @@ on:
   workflow_call:
     inputs:
       baseline_branch:
-        description: 'Required for manual benchmark comparisons'
+        description: 'Baseline branch for manual comparisons; leave empty to use benchmark-baseline'
         type: string
         required: false
         default: ''

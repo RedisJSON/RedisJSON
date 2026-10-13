@@ -201,7 +201,7 @@ def main():
             plan['labels'] = ['baseline', 'master']
             plan['publication'] = {
                 'timestamp_ms': int(time.time() * 1000),
-                'branches': {'baseline': os.environ.get('BASELINE_BRANCH') or 'benchmark-baseline',
+                'branches': {'baseline': os.environ.get('BASELINE_BRANCH', '').strip() or 'benchmark-baseline',
                              'master': os.environ['GITHUB_REF_NAME']},
             }
             plan['revisions'] = json.loads((bundle / 'revisions.json').read_text())
