@@ -56,8 +56,11 @@ def merge_results(plan, root):
     issues = []
     for index, names in enumerate(plan['shards']):
         path = root / f'shard-{index}' / 'comparison.json'
+        data = {}
         try:
             data = json.loads(path.read_text())
+            if not isinstance(data, dict):
+                raise ValueError('Invalid shard object')
             if data['modules'] != plan['modules']:
                 raise ValueError('Binaries differ from the build job')
             if 'revisions' in plan and data.get('revisions') != plan['revisions']:
@@ -67,16 +70,26 @@ def merge_results(plan, root):
                 raise ValueError('Missing Redis version')
             if combined['redis'] is not None and version != combined['redis']:
                 raise ValueError('Redis versions differ between jobs')
-            combined['redis'] = version
             if not isinstance(data['benchmarks'], dict):
                 raise ValueError('Invalid benchmarks object')
             expected = {Path(name).stem for name in names}
             unexpected = set(data['benchmarks']) - expected
             if unexpected:
                 raise ValueError(f'Unexpected benchmarks: {sorted(unexpected)}')
+            combined['redis'] = version
         except (OSError, ValueError, KeyError, TypeError) as error:
             issues.append(f'Shard {index}: {error}')
-            data = {'benchmarks': {}}
+            benchmarks = data.get('benchmarks', {}) if isinstance(data, dict) else {}
+            # Preserve diagnostics, but never accept measurements from an invalid shard.
+            data = {'benchmarks': {
+                name: {
+                    label: {'error': value['error']} if isinstance(value, dict) and 'error' in value
+                    else {'error': f'Unverified result in shard {index}: {error}'}
+                    for label, value in pair.items()
+                }
+                for name, pair in (benchmarks.items() if isinstance(benchmarks, dict) else [])
+                if isinstance(pair, dict)
+            }}
         for name in names:
             name = Path(name).stem
             if name in combined['benchmarks']:
