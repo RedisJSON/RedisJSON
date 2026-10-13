@@ -1,6 +1,7 @@
 """Validation failures must not become apparent memory/performance improvements."""
 
 import unittest
+from xml.etree import ElementTree
 import json
 from pathlib import Path
 from unittest.mock import Mock
@@ -30,8 +31,10 @@ class ComparisonTest(unittest.TestCase):
         candidate = dict(baseline, used_memory_dataset=600, used_memory_peak=1800)
         report = summary({"modules": {"master": "aaa", "pr": "bbb"},
                           "benchmarks": {"JSON.SET": {"master": baseline, "pr": candidate}}})
-        self.assertIn("500 → 600<br>🔴 +20.00%", report)
-        self.assertIn("1,200 → 1,800<br>🔴 +50.00%", report)
+        table = ElementTree.fromstring(report[report.index('<table>'):])
+        cells = [cell.text for cell in table.find('tbody/tr')]
+        self.assertEqual(cells[7:10], ['500', '600', '🔴 +20.00%'])
+        self.assertEqual(cells[10:13], ['1,200', '1,800', '🔴 +50.00%'])
 
     def test_red_markers_follow_metric_direction_and_ignore_key_counts(self):
         baseline = dict(used_memory=100, used_memory_dataset=0, used_memory_peak=100,
@@ -40,13 +43,17 @@ class ComparisonTest(unittest.TestCase):
                          used_memory_peak=110, keys=20, ops_per_sec=90)
         report = summary({"modules": {"master": "a", "pr": "b"},
                           "benchmarks": {"test": {"master": baseline, "pr": candidate}}})
-        rows = [line for line in report.splitlines() if line.startswith('| test |')]
+        table = ElementTree.fromstring(report[report.index('<table>'):])
+        rows = table.findall('tbody/tr')
         self.assertEqual(len(rows), 1)
-        cells = [cell.strip() for cell in rows[0].split('|')[1:-1]]
-        self.assertEqual(len(cells), 7)
-        self.assertEqual([index for index, cell in enumerate(cells) if '🔴' in cell], [1, 3, 4])
-        self.assertEqual(cells[2], '100 → 90<br>-10.00%')
-        self.assertEqual(cells[6], '10 → 20')
+        cells = [cell.text for cell in rows[0]]
+        self.assertEqual(len(cells), 19)
+        self.assertEqual([index for index, cell in enumerate(cells) if '🔴' in cell], [3, 9, 12])
+        self.assertEqual(cells[4:7], ['100', '90', '-10.00%'])
+        self.assertEqual(cells[16:19], ['10', '20', '+100.00%'])
+        headers = table.findall('thead/tr')
+        self.assertEqual([cell.get('colspan') for cell in headers[0]][1:], ['3'] * 6)
+        self.assertEqual([cell.text for cell in headers[1]], ['Master', 'PR', 'Change %'] * 6)
 
     def test_missing_memory_is_not_reported_as_zero(self):
         connection = Mock()
@@ -68,10 +75,15 @@ class ComparisonTest(unittest.TestCase):
 
     def test_error_cannot_look_like_a_successful_comparison(self):
         report = summary({"modules": {"master": "a", "pr": "b"},
-                          "benchmarks": {"test": {"master": {"error": "missing result"},
+                          "benchmarks": {"test <unsafe>": {"master": {"error": "missing <result>"},
                                                    "pr": {"error": "failed"}}}})
-        self.assertIn("**ERROR**", report)
+        self.assertIn("<strong>ERROR</strong>", report)
         self.assertNotIn("+0.00%", report)
+        table = ElementTree.fromstring(report[report.index("<table>"):])
+        row = table.find("tbody/tr")
+        self.assertEqual(row[0].text, "🔴 test <unsafe>")
+        self.assertEqual(row[1].get("colspan"), "18")
+        self.assertIn("missing &lt;result&gt;", report)
 
     def test_zero_baseline(self):
         self.assertEqual(change(0, 0), "0.00%")

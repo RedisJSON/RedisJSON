@@ -60,8 +60,8 @@ with the timed clients. A read-only workload still measures its loaded dataset
 and the process peak. A write workload also measures the resulting dataset.
 
 Each benchmark occupies one row, with columns for throughput, used memory,
-dataset memory, peak memory, RSS, and keys. Cells show Master → PR and the
-percentage change underneath; memory values are bytes.
+dataset memory, peak memory, RSS, and keys. Each metric is grouped into Master, PR, and Change % subcolumns; memory
+values are bytes. The report uses an HTML table for grouped headers in GitHub.
 
 Cells with lower throughput or higher memory are marked 🔴 (any change, without
 a threshold). RSS increases are marked but remain informational. Key-count
