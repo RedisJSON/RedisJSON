@@ -49,8 +49,10 @@ columns show each revision's median independently, so their ratio need not match
 the reported percentage. All original measurements remain under `attempts/`;
 the last run's logs stay in the label directory and earlier logs are archived.
 Execution errors stop retries and remain failures; incomplete sets are not aggregated.
-Relative differences are report-only; execution errors,
-missing workloads and inconsistent builds fail the comparison. Temporary specs
+Final throughput degradation of 5% or more fails both the shard and merged report,
+using the median paired change when retried. Improvements do not fail the comparison.
+Remaining workloads still run after a performance regression. Execution errors,
+missing workloads and inconsistent builds also fail the comparison. Temporary specs
 omit the legacy absolute `kpis` floors.
 Local comparisons (including Event CI) use a per-run Redis PID file to clean up
 unresponsive servers after verifying their executable and working directory.

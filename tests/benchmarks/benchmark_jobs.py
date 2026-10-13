@@ -11,7 +11,7 @@ import sys
 
 import yaml
 
-from compare_local import summary
+from compare_local import comparison_failed, summary
 
 
 def estimated_seconds(spec):
@@ -110,8 +110,8 @@ def merge_results(plan, root):
             combined['benchmarks'][name] = checked
     combined['benchmarks'] = dict(sorted(combined['benchmarks'].items()))
     combined['merge_errors'] = issues
-    failed = bool(issues) or any('error' in value for pair in combined['benchmarks'].values()
-                                 for value in pair.values())
+    failed = bool(issues) or any(comparison_failed(pair, *labels)
+                                 for pair in combined['benchmarks'].values())
     return combined, failed
 
 
