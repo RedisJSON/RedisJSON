@@ -29,8 +29,17 @@ def select_cores(allowed, siblings, count, excluded=()):
     return selected, reserved
 
 
-def wrap_client(path, selected):
+def validate_client(path):
+    if not path:
+        raise RuntimeError('Benchmark client not found in PATH; install the client tools before configuring affinity')
     path = Path(path).resolve(strict=True)
+    if not path.is_file() or not os.access(path, os.X_OK):
+        raise RuntimeError(f'Benchmark client must be an executable file: {path}')
+    return path
+
+
+def wrap_client(path, selected):
+    path = validate_client(path)
     original = path.with_name(path.name + '.redisjson-original')
     if original.exists():
         raise RuntimeError(f'Client already wrapped: {path}')
@@ -66,6 +75,8 @@ def select_isolated_cores(targets, allowed, siblings, count):
 
 
 def configure(role, clients):
+    # Validate every client before changing IRQ settings or wrapping either tool.
+    clients = [validate_client(path) for path in clients]
     allowed = set(os.sched_getaffinity(0))
     siblings = {cpu: cpus(Path(f'/sys/devices/system/cpu/cpu{cpu}/topology/thread_siblings_list').read_text())
                 for cpu in allowed}
