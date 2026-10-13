@@ -18,11 +18,13 @@ python3 -m pip install -r tests/benchmarks/requirements.txt
 
 ## Branch throughput comparisons
 
-Event CI builds master and the PR head separately, then distributes master's
-YAML workloads across five GitHub runners. Each workload runs both modules
+Event CI builds the PR target branch at `pull_request.base.sha` and the PR head
+separately, then distributes the target branch's YAML workloads across five GitHub
+runners. PRs targeting master compare against master; PRs targeting a release
+branch such as 8.6 compare against that branch. Each workload runs both modules
 sequentially on the same runner with a fresh Redis instance and the same dataset.
 Request counts, durations and module options come from the original workloads.
-New PR-only workloads enter this comparison after merging into master.
+New PR-only workloads enter this comparison after merging into the target branch.
 
 For a local comparison, build both modules in release mode, install the runner
 using the requirements file above, and put `redis-server`, `redis-benchmark` and
@@ -30,7 +32,7 @@ using the requirements file above, and put `redis-server`, `redis-benchmark` and
 
 ```sh
 python tests/benchmarks/compare_local.py \
-  --baseline-module /path/to/master/target/release/librejson.so \
+  --baseline-module /path/to/baseline/target/release/librejson.so \
   --candidate-module /path/to/pr/target/release/librejson.so \
   --output /path/to/new-results-directory
 ```

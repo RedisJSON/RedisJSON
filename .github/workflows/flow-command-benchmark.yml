@@ -25,11 +25,11 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
-      - name: Check out master
+      - name: Check out PR target baseline
         uses: actions/checkout@v5
         with:
-          ref: master
-          path: benchmark-master
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: benchmark-baseline
           submodules: recursive
           persist-credentials: false
 
@@ -79,13 +79,13 @@ jobs:
       - name: Build both modules before measuring
         run: |
           (cd benchmark-pr && cargo build --locked --release -p redis_json)
-          (cd benchmark-master && cargo build --locked --release -p redis_json)
+          (cd benchmark-baseline && cargo build --locked --release -p redis_json)
           python - <<'PY'
           import json, subprocess
           from pathlib import Path
           revisions = {
               name: subprocess.check_output(['git', '-C', path, 'rev-parse', 'HEAD'], text=True).strip()
-              for name, path in [('pr', 'benchmark-pr'), ('master', 'benchmark-master'), ('redis', 'benchmark-redis')]
+              for name, path in [('pr', 'benchmark-pr'), ('baseline', 'benchmark-baseline'), ('redis', 'benchmark-redis')]
           }
           Path('benchmark-revisions.json').write_text(json.dumps(revisions, indent=2) + '\n')
           PY
@@ -93,10 +93,10 @@ jobs:
       - name: Package shared binaries and assign all workloads
         run: |
           mkdir -p benchmark-bundle/bin
-          cp benchmark-master/target/release/librejson.so benchmark-bundle/master.so
+          cp benchmark-baseline/target/release/librejson.so benchmark-bundle/baseline.so
           cp benchmark-pr/target/release/librejson.so benchmark-bundle/pr.so
           cp benchmark-redis/src/redis-server benchmark-redis/src/redis-benchmark benchmark-memtier/memtier_benchmark benchmark-bundle/bin/
-          cp -R benchmark-master/tests/benchmarks benchmark-bundle/suite
+          cp -R benchmark-baseline/tests/benchmarks benchmark-bundle/suite
           cp benchmark-revisions.json benchmark-bundle/
           python benchmark-pr/tests/benchmarks/benchmark_jobs.py plan --bundle benchmark-bundle --shards 5
           tar -czf benchmark-bundle.tar.gz benchmark-bundle

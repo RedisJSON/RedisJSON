@@ -49,7 +49,7 @@ def make_plan(source, count):
 
 
 def merge_results(plan, root):
-    labels = plan.get('labels', ['master', 'pr'])
+    labels = plan.get('labels', ['baseline', 'pr'])
     combined = {'modules': plan['modules'], 'redis': plan.get('redis'), 'benchmarks': {}}
     if 'revisions' in plan:
         combined['revisions'] = plan['revisions']
@@ -141,7 +141,7 @@ def main():
             modules = {label: bundle / label / 'target/release/librejson.so' for label in plan['labels']}
         else:
             plan['revisions'] = json.loads((bundle / 'benchmark-revisions.json').read_text())
-            modules = {label: bundle / f'{label}.so' for label in ('master', 'pr')}
+            modules = {label: bundle / f'{label}.so' for label in ('baseline', 'pr')}
             plan['redis'] = subprocess.check_output([str(bundle / 'bin/redis-server'), '--version'], text=True).strip()
         plan['modules'] = {label: hashlib.sha256(path.read_bytes()).hexdigest() for label, path in modules.items()}
         (bundle / 'plan.json').write_text(json.dumps(plan, indent=2) + '\n')
@@ -155,7 +155,7 @@ def main():
         if not names:
             parser.error('Empty shard')
         command = [sys.executable, str(Path(__file__).with_name('compare_local.py')),
-                   '--baseline-module', str(bundle / 'master.so'),
+                   '--baseline-module', str(bundle / 'baseline.so'),
                    '--candidate-module', str(bundle / 'pr.so'),
                    '--redis-binary', str(bundle / 'bin/redis-server'),
                    '--revisions', str(bundle / 'benchmark-revisions.json'),
@@ -168,7 +168,7 @@ def main():
         results, failed = merge_results(plan, args.results)
         args.output.mkdir(parents=True, exist_ok=True)
         (args.output / 'comparison.json').write_text(json.dumps(results, indent=2) + '\n')
-        report = summary(results, *plan.get('labels', ['master', 'pr']))
+        report = summary(results, *plan.get('labels', ['baseline', 'pr']))
         if 'revisions' in results:
             report += '\n' + '\n'.join(f'- {label}: `{sha}`' for label, sha in results['revisions'].items()) + '\n'
         if results['merge_errors']:

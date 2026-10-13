@@ -83,7 +83,7 @@ def run_one(spec, module, directory, datasets, redis_binary, runner, timeout):
     directory.mkdir(parents=True)
     (directory / "datasets").symlink_to(datasets, target_is_directory=True)
     # redisbench-admin matches module options against the module path ("rejson").
-    # Bundle labels such as master.so/pr.so must not disable those options.
+    # Bundle labels such as baseline.so/pr.so must not disable those options.
     module_alias = directory / ("rejson" + module.suffix)
     module_alias.symlink_to(module)
     config = yaml.safe_load(spec.read_text())
@@ -155,7 +155,7 @@ def comparison_failed(pair, baseline, candidate):
     return pair[candidate].get("change_percent", 100 * (after - before) / before) <= -5
 
 
-def summary(results, baseline="master", candidate="pr"):
+def summary(results, baseline="baseline", candidate="pr"):
     before_label = "PR" if baseline == "pr" else baseline.title()
     after_label = "PR" if candidate == "pr" else candidate.title()
     lines = [
@@ -287,7 +287,7 @@ def main():
     specs = [spec for spec in specs if spec.name != "defaults.yml"]
     if not specs or any(not spec.is_file() for spec in specs):
         parser.error("Expected at least one existing benchmark YAML")
-    modules = {"master": args.baseline_module.resolve(), "pr": args.candidate_module.resolve()}
+    modules = {"baseline": args.baseline_module.resolve(), "pr": args.candidate_module.resolve()}
     if any(not module.is_file() for module in modules.values()):
         parser.error("Build both modules before running this comparison")
     runner = shutil.which("redisbench-admin")
