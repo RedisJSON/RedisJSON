@@ -1,18 +1,28 @@
 name: Nightly AWS Benchmark Comparison
-
 on:
   workflow_call:
-    inputs:
-      baseline-ref:
-        description: 'Temporarily ignored: debug comparison uses one master build for both sides'
-        type: string
-        default: master
-
 permissions:
   contents: read
-
 jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    outputs:
+      baseline: ${{ steps.refs.outputs.baseline }}
+      candidate: ${{ steps.refs.outputs.candidate }}
+      skip: ${{ steps.refs.outputs.skip }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Resolve immutable comparison commits
+        id: refs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python tests/benchmarks/nightly_baseline.py resolve
+
   build:
+    needs: resolve
+    if: needs.resolve.outputs.skip != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     steps:
@@ -20,11 +30,19 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check out current master
+      - name: Check out pinned candidate
         uses: actions/checkout@v5
         with:
-          ref: master
+          ref: ${{ needs.resolve.outputs.candidate }}
           path: benchmark-master
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Check out pinned baseline
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.resolve.outputs.baseline }}
+          path: benchmark-baseline
           submodules: recursive
           persist-credentials: false
 
@@ -41,25 +59,24 @@ jobs:
           rustup toolchain install "$toolchain" --profile minimal
           echo "RUSTUP_TOOLCHAIN=$toolchain" >> "$GITHUB_ENV"
 
-      - name: Build master once for same-binary debugging
+      - name: Build both pinned revisions
         run: |
           (cd benchmark-master && cargo build --locked --release -p redis_json)
+          (cd benchmark-baseline && cargo build --locked --release -p redis_json)
           python -m unittest discover -s tests/benchmarks -p 'test_*.py'
 
       - name: Package shared builds and distribute all workloads
         run: |
           mkdir -p nightly-bundle/{master,baseline}/target/release nightly-bundle/master/tests
           cp benchmark-master/target/release/librejson.so nightly-bundle/master/target/release/
-          # Temporary debug: both comparison roles use the exact same compiled module.
-          cp benchmark-master/target/release/librejson.so nightly-bundle/baseline/target/release/
-          cmp nightly-bundle/{baseline,master}/target/release/librejson.so
+          cp benchmark-baseline/target/release/librejson.so nightly-bundle/baseline/target/release/
           sha256sum nightly-bundle/{baseline,master}/target/release/librejson.so
           cp -R benchmark-master/tests/benchmarks nightly-bundle/master/tests/
           python - <<'PYTHON'
           import json, subprocess
           from pathlib import Path
-          sha = subprocess.check_output(['git', '-C', 'benchmark-master', 'rev-parse', 'HEAD'], text=True).strip()
-          revisions = dict.fromkeys(('baseline', 'master'), sha)
+          revisions = {label: subprocess.check_output(['git', '-C', path, 'rev-parse', 'HEAD'], text=True).strip()
+                       for label, path in [('baseline', 'benchmark-baseline'), ('master', 'benchmark-master')]}
           Path('nightly-bundle/revisions.json').write_text(json.dumps(revisions))
           PYTHON
           python tests/benchmarks/benchmark_jobs.py plan --aws --bundle nightly-bundle --shards 5
@@ -73,125 +90,38 @@ jobs:
           overwrite: true
           retention-days: 30
 
-  compare:
+  initial:
     needs: build
+    uses: ./.github/workflows/flow-benchmark-nightly-round.yml
+    with:
+      phase: initial
+    secrets: inherit
+
+  confirmation:
+    needs: initial
+    if: github.event_name == 'schedule' && needs.initial.outputs.eligible == 'true'
+    uses: ./.github/workflows/flow-benchmark-nightly-round.yml
+    with:
+      phase: confirmation
+    secrets: inherit
+
+  promote:
+    needs: [resolve, initial, confirmation]
+    if: github.event_name == 'schedule' && needs.initial.outputs.eligible == 'true' && needs.confirmation.outputs.eligible == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 360
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [0, 1, 2, 3, 4]
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v5
-        with:
-          submodules: recursive
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install benchmark tools
+      - name: Advance baseline only if it has not changed
+        env:
+          BASELINE_SHA: ${{ needs.resolve.outputs.baseline }}
+          CANDIDATE_SHA: ${{ needs.resolve.outputs.candidate }}
         run: |
-          python -m pip install 'redisbench-admin==0.12.39'
-          VERSION=0.14.8 ./deps/readies/bin/getterraform
-      - uses: actions/download-artifact@v5
-        with:
-          name: nightly-benchmark-build-${{ github.run_id }}
-      - name: Unpack shared builds
-        run: tar -xzf nightly-bundle.tar.gz
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          aws-access-key-id: ${{ secrets.PERFORMANCE_EC2_ACCESS_KEY }}
-          aws-secret-access-key: ${{ secrets.PERFORMANCE_EC2_SECRET_KEY }}
-          aws-region: ${{ secrets.PERFORMANCE_EC2_REGION }}
-
-      - name: Retrieve benchmark SSH key
-        run: |
-          umask 077
-          aws secretsmanager get-secret-value --secret-id perf-cto-us-east-2 \
-            --query SecretString --output text > "$RUNNER_TEMP/benchmark.pem"
-
-      - name: Provision a dedicated AWS topology for this shard
-        run: |
-          python tests/benchmarks/compare_aws.py provision \
-            --state "$RUNNER_TEMP/benchmark-aws.json" \
-            --benchmarks-dir nightly-bundle/master/tests/benchmarks --shard ${{ matrix.shard }}
-
-      - name: Compare assigned full workloads on AWS
-        timeout-minutes: 300
-        run: |
-          python tests/benchmarks/compare_aws.py run \
-            --state "$RUNNER_TEMP/benchmark-aws.json" \
-            --private-key "$RUNNER_TEMP/benchmark.pem" \
-            --baseline-dir nightly-bundle/baseline --master-dir nightly-bundle/master \
-            --plan nightly-bundle/plan.json --shard ${{ matrix.shard }} \
-            --output nightly-results/shard-${{ matrix.shard }}
-
-      - name: Tear down AWS resources even after benchmark failures
-        if: always()
-        run: |
-          python tests/benchmarks/compare_aws.py destroy --state "$RUNNER_TEMP/benchmark-aws.json"
-
-      - name: Package partial results even on failure
-        if: always()
-        run: |
-          mkdir -p nightly-results/shard-${{ matrix.shard }}
-          tar --exclude='*/datasets' --exclude='*/dump.rdb' \
-            -czf shard-${{ matrix.shard }}.tar.gz -C nightly-results shard-${{ matrix.shard }}
-      - uses: actions/upload-artifact@v6
-        if: always()
-        with:
-          name: nightly-benchmark-shard-${{ matrix.shard }}-${{ github.run_id }}
-          path: shard-${{ matrix.shard }}.tar.gz
-          compression-level: 0
-          overwrite: true
-          retention-days: 30
-
-  report:
-    needs: [build, compare]
-    if: always() && needs.build.result == 'success'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - run: python -m pip install 'redis==4.6.0' 'PyYAML==6.0.3'
-      - uses: actions/download-artifact@v5
-        with:
-          name: nightly-benchmark-build-${{ github.run_id }}
-      - uses: actions/download-artifact@v5
-        continue-on-error: true # Merge reports missing shards as failures.
-        with:
-          pattern: nightly-benchmark-shard-*-${{ github.run_id }}
-          path: nightly-downloads
-          merge-multiple: true
-      - name: Merge and verify complete coverage
-        run: |
-          tar -xzf nightly-bundle.tar.gz nightly-bundle/plan.json
-          mkdir -p nightly-shards nightly-benchmark-results
-          shopt -s nullglob
-          for archive in nightly-downloads/*.tar.gz; do
-            tar -xzf "$archive" -C nightly-shards
-          done
-          cp nightly-bundle/plan.json nightly-benchmark-results/
-          python tests/benchmarks/benchmark_jobs.py merge \
-            --plan nightly-bundle/plan.json --results nightly-shards --output nightly-benchmark-results
-      - name: Publish comparison summary
-        if: always()
-        run: |
-          echo 'Debug comparison: baseline and master use the exact same master module binary (built once).' >> "$GITHUB_STEP_SUMMARY"
-          if [ -f nightly-benchmark-results/summary.md ]; then
-            cat nightly-benchmark-results/summary.md >> "$GITHUB_STEP_SUMMARY"
+          git fetch origin "$CANDIDATE_SHA"
+          if git push --force-with-lease="refs/heads/benchmark-baseline:$BASELINE_SHA" origin "$CANDIDATE_SHA:refs/heads/benchmark-baseline"; then
+            echo "Promoted benchmark-baseline from $BASELINE_SHA to tested commit $CANDIDATE_SHA." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Baseline was not promoted: it changed concurrently or the update was rejected.' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
-      - uses: actions/upload-artifact@v6
-        if: always()
-        with:
-          name: nightly-aws-benchmarks-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            nightly-benchmark-results/
-            nightly-shards/
-          retention-days: 30

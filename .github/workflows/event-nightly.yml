@@ -22,11 +22,6 @@ on:
         type: string
         required: false
         default: ''
-      benchmark-baseline-ref:
-        description: 'Benchmark baseline commit/ref (empty uses repository variable or master)'
-        type: string
-        required: false
-        default: ''
       send-slack-message:
         description: 'Send summary message to Slack channel'
         required: false
@@ -168,8 +163,8 @@ jobs:
   benchmark:
     if: github.event_name != 'push'
     uses: ./.github/workflows/flow-benchmark-nightly.yml
-    with:
-      baseline-ref: ${{ inputs.benchmark-baseline-ref || vars.BENCHMARK_BASELINE_REF || 'master' }}
+    permissions:
+      contents: write
     secrets: inherit
   test-summary:
     uses: ./.github/workflows/test-summary.yml
