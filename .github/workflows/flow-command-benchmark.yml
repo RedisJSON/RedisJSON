@@ -1,0 +1,125 @@
+name: Command Performance and Memory Comparison
+
+on:
+  workflow_call:
+    inputs:
+      redis-ref:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Check out master
+        uses: actions/checkout@v5
+        with:
+          ref: master
+          path: benchmark-master
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Check out the shared Redis server
+        uses: actions/checkout@v5
+        with:
+          repository: redis/redis
+          ref: ${{ inputs.redis-ref }}
+          path: benchmark-redis
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Check out memtier
+        uses: actions/checkout@v5
+        with:
+          repository: RedisLabs/memtier_benchmark
+          ref: 5f634d171b83efca9640c5a87606c47b34d3d330 # 2.5.1
+          path: benchmark-memtier
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install benchmark dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libclang-dev autoconf automake libtool pkg-config libevent-dev libssl-dev zlib1g-dev libpcre2-dev
+          python -m pip install 'redisbench-admin==0.12.39'
+
+      - name: Test comparison and memory collection
+        run: python -m unittest discover -s tests/benchmarks -p 'test_compare_local.py'
+
+      - name: Build shared server and client tools
+        run: |
+          make -C benchmark-redis -j"$(nproc)" BUILD_TLS=yes
+          echo "$GITHUB_WORKSPACE/benchmark-redis/src" >> "$GITHUB_PATH"
+          cd benchmark-memtier
+          autoreconf -ivf
+          ./configure
+          make -j"$(nproc)"
+          echo "$GITHUB_WORKSPACE/benchmark-memtier" >> "$GITHUB_PATH"
+
+      - name: Select one Rust toolchain for both modules
+        run: |
+          toolchain=$(python -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+          rustup toolchain install "$toolchain" --profile minimal
+          echo "RUSTUP_TOOLCHAIN=$toolchain" >> "$GITHUB_ENV"
+
+      - name: Build both modules before measuring
+        run: |
+          cargo build --locked --release -p redis_json
+          (cd benchmark-master && cargo build --locked --release -p redis_json)
+          python - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          revisions = {
+              name: subprocess.check_output(['git', '-C', path, 'rev-parse', 'HEAD'], text=True).strip()
+              for name, path in [('pr', '.'), ('master', 'benchmark-master'), ('redis', 'benchmark-redis')]
+          }
+          Path('benchmark-revisions.json').write_text(json.dumps(revisions, indent=2) + '\n')
+          PY
+
+      # Initially report relative changes; benchmark/setup failures still fail CI.
+      # Calibrate thresholds with master-vs-master runs before adding a gate.
+      - name: Compare performance and memory on the same workloads
+        run: |
+          python tests/benchmarks/compare_local.py \
+            --baseline-module benchmark-master/target/release/librejson.so \
+            --candidate-module target/release/librejson.so \
+            --benchmarks-dir benchmark-master/tests/benchmarks \
+            --output command-benchmark-results
+
+      - name: Write comparison summary
+        if: always()
+        run: |
+          if [ -f command-benchmark-results/summary.md ]; then
+            cat command-benchmark-results/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload results and logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: command-performance-memory-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            benchmark-revisions.json
+            command-benchmark-results/comparison.json
+            command-benchmark-results/summary.md
+            command-benchmark-results/*/master/*.json
+            command-benchmark-results/*/master/*.log
+            command-benchmark-results/*/pr/*.json
+            command-benchmark-results/*/pr/*.log
+          retention-days: 14
