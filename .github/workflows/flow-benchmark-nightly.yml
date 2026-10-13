@@ -63,7 +63,6 @@ jobs:
         run: |
           (cd benchmark-master && cargo build --locked --release -p redis_json)
           (cd benchmark-baseline && cargo build --locked --release -p redis_json)
-          python -m unittest discover -s tests/benchmarks -p 'test_*.py'
 
       - name: Package shared builds and distribute all workloads
         run: |

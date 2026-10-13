@@ -12,19 +12,18 @@ pip3 install redisbench_admin>=0.1.74
 - Local benchmarks: `make benchmark`
 - Remote benchmarks:  `make benchmark REMOTE=1`
 
-## Local master/PR throughput comparison
 
-Event CI calls `flow-command-benchmark.yml` on each PR run. It builds master and
-the PR head with one Rust toolchain in a shared build job. Five parallel jobs
-then run master's YAML workloads. Each workload runs against both modules
-sequentially on the same runner, using the shared binaries.
-New PR-only workloads enter this comparison once merged into master.
-The YAML request counts and durations are unchanged. Each test/revision gets a
-fresh Redis instance and the same starting dataset.
+## Branch throughput comparisons
+
+Event CI builds master and the PR head separately, then distributes master's
+YAML workloads across five GitHub runners. Each workload runs both modules
+sequentially on the same runner with a fresh Redis instance and the same dataset.
+Request counts, durations and module options come from the original workloads.
+New PR-only workloads enter this comparison after merging into master.
 
 For a local comparison, build both modules in release mode, install
-`redisbench-admin==0.12.39`, and put a compatible `redis-server`,
-`redis-benchmark`, and `memtier_benchmark` on PATH. Then run:
+`redisbench-admin==0.12.39`, and put `redis-server`, `redis-benchmark` and
+`memtier_benchmark` on PATH:
 
 ```sh
 python tests/benchmarks/compare_local.py \
@@ -33,114 +32,49 @@ python tests/benchmarks/compare_local.py \
   --output /path/to/new-results-directory
 ```
 
-Use `.dylib` on macOS. Add `--benchmark <filename.yml>` to select a workload;
-repeat it to select several. Passing the same module twice provides a master vs
-master check of measurement noise. No AWS credentials or results database are
-needed. Dataset URLs are downloaded and cached within the output directory.
+Use `.dylib` on macOS. Repeat `--benchmark <filename.yml>` to select workloads.
+Temporary dataset copies escape non-ASCII JSON characters to work around the
+pinned runner's ASCII output parser; source fixtures and JSON values are unchanged.
 
-The pinned `redisbench-admin` version decodes redis-benchmark output as ASCII.
-The Google Maps q3/q5 fixtures contain Unicode, which otherwise causes result
-parsing to fail after the benchmark. Temporary JSON dataset copies therefore
-escape non-ASCII characters using JSON `\u` escapes; the parsed documents and
-numeric spellings are unchanged. The source fixtures are never modified.
-
-The report contains throughput only, with one row per benchmark and Master,
-PR, and Change % columns (Baseline and Master for nightly). Memory counters
-are not collected or compared by this harness.
-
-Only Change % cells receive markers: 🟢 for improvement, 🟡 for degradation
-below 5%, and 🔴 for degradation of 5% or more, using unrounded measurements.
-Higher throughput is better. Unchanged values are unmarked; errors remain red.
-
-Changes are initially **report-only**, pending master-vs-master calibration.
-Benchmark errors and missing results still fail the job and appear in the
-report. AWS `kpis` floors are removed only from temporary workload copies.
-The full suite can be expensive; this change does not shorten its workloads or
-silently skip the known `json_nummultby_num_2` failure described below.
-
-Results are saved as `comparison.json`, `summary.md`, and per-run raw client
-JSON/logs, and uploaded as CI artifacts. The summary appears in the Actions job.
-
-The five groups cover every workload exactly once. Initial grouping balances
-request counts against existing throughput floors and memtier durations; these
-are scheduling estimates, not runtime guarantees. Each result records
-`run_seconds`; `benchmark_jobs.py plan --timings <previous-comparison.json>` can
-use measured durations for subsequent plans. CI currently uses the estimates.
-
-A final job combines all groups into one throughput report and checks
-coverage and binary identities. Failed or missing measurements fail the job and
-appear in the report; other groups continue running. Raw logs remain available
-in artifacts. Rerunning failed jobs reuses the shared build and successful groups.
-
-```sh
-python -m unittest discover -s tests/benchmarks -p 'test_*.py'
-```
-
+Reports contain throughput only. Percentage markers are 🟢 improvement,
+🟡 degradation below 5%, and 🔴 degradation of 5% or more. A difference strictly
+greater than 5% in either direction reruns both revisions, up to three retries.
+🟠 beside a test name indicates a retry. The report uses the last pair; previous
+logs and measurements remain under `attempts/`. Execution errors are not retried.
+This stopping rule can favor smaller differences, so retain the history when
+assessing stability. Relative differences are report-only; execution errors,
+missing workloads and inconsistent builds fail the comparison. Temporary specs
+omit the legacy absolute `kpis` floors.
 
 ## Nightly AWS comparison
 
-Scheduled and manually dispatched Event Nightly runs call
-`flow-benchmark-nightly.yml`: one shared build, five parallel benchmark jobs,
-and one combined report. The same planner used by Event CI assigns every master
-YAML workload exactly once. Each shard provisions its own `defaults.yml` AWS
-server/client pair, then runs baseline and current master sequentially for each
-assigned workload. Up to five AWS pairs are active at once. Request counts
-and durations are unchanged. Every revision/test gets a fresh Redis instance;
-the report includes the same throughput metric as the PR comparison.
-Each shard destroys its own AWS resources in an `always()` step, including after
-failures. Other shards continue when one fails. The final merge reports missing
-results and checks module hashes, commit hashes, and Redis versions across jobs.
-Stable artifact names allow failed jobs to be rerun using the same shared build
-and the successful shards from the previous attempt.
+Scheduled runs compare the pinned `benchmark-baseline` commit against master;
+manual runs compare it against the selected dispatch commit. Identical commits
+skip builds and AWS provisioning. Five shards each own an AWS server/client pair,
+run both revisions sequentially, and destroy their resources even on failure.
+The candidate's YAML suite supplies the workloads for both sides.
 
-For the same-binary debugging experiment, each AWS pair configures CPU affinity
-once before measuring: Redis uses one fixed CPU (`server-cpulist`), and both
-client tools use the same two physical cores via `taskset`. NIC interrupts are
-assigned to two housekeeping cores, irqbalance is stopped if active, and software
-receive steering (RPS) is disabled. Benchmark cores are then chosen to exclude
-both current and requested IRQ destinations, including SMT siblings. This allows
-idle IRQs to migrate later without entering the benchmark cores. Setup waits up
-to 10 seconds only if too few isolated cores are available, then fails with CPU
-and IRQ details. The chosen cores remain fixed for both comparison runs.
-These settings affect only the disposable nightly hosts;
-PR CI is unchanged. Each shard saves `affinity.json`, and diagnostics capture
-the effective IRQ affinity and Redis process affinity. This controls CPU placement,
-but does not guarantee identical timing or eliminate other OS/hypervisor noise.
+Each pair pins Redis to one CPU and clients to two physical cores. NIC interrupts
+are assigned to housekeeping cores, irqbalance is stopped, and RPS is disabled.
+Benchmark cores exclude current and requested IRQ destinations and SMT siblings.
+Chosen cores stay fixed across revisions and retries; `affinity.json` records the
+setup. This reduces interference without guaranteeing identical timings. Event CI
+does not apply the AWS affinity configuration.
 
-Each measurement also saves `diagnostics/server-{before,after}.json` and
-`diagnostics/client-{before,after}.json` alongside its raw results. These Linux
-snapshots run outside the measured interval and record CPU/network counters and
-Redis process/thread scheduler counters. The server's final snapshot includes
-Redis command execution times and the remote module hash. Use them to investigate
-same-binary throughput differences; snapshot errors are recorded without failing
-the benchmark. The throughput report and workload settings are unchanged.
+Only scheduled runs may advance `benchmark-baseline`. Every workload must pass,
+none may degrade by 5% or more, and the geometric mean throughput improvement
+must exceed 5%. A complete confirmation round uses the same binaries without
+retries and must satisfy the same criteria, with matching revisions, server
+version and coverage. The promotion job updates only `benchmark-baseline` to the
+tested commit using a lease-protected push; concurrent changes are not overwritten.
+Branch protection must permit this update. Manual runs never promote the baseline.
+The nightly report's Master column denotes the candidate, including manual branches.
 
-The baseline is the dedicated `benchmark-baseline` branch. Scheduled runs compare
-its pinned commit against current `master`; manual runs compare it against the
-selected dispatch branch's commit. Equal commits skip builds and AWS provisioning.
-Initialize the baseline branch at the desired reference commit before using this flow.
-The former `BENCHMARK_BASELINE_REF` variable and manual override are no longer used.
-
-Only scheduled runs may promote the baseline. All workloads must succeed, no
-workload may degrade by 5% or more, and the geometric mean of candidate/baseline
-throughput ratios must improve by more than 5%. An eligible initial round triggers
-a complete confirmation round using the same build bundle, with no retries.
-Confirmation must pass the same criteria and match revisions, module hashes,
-Redis version and workload coverage. A lease-protected push then advances the
-baseline to the exact tested candidate; a concurrent baseline change is not overwritten.
-Only the promotion job has repository write permission. Branch protection must
-permit this update; a rejected update is reported as a failed promotion.
-The reusable workflow keeps the internal `master` label for the candidate, including
-manual runs, and reports its actual commit SHA.
-
-Results and logs are uploaded as `nightly-<initial|confirmation>-benchmarks-<run>-<attempt>` and the
-comparison appears in the job summary. Relative changes are report-only;
-benchmark errors fail the job. This comparison uses its own per-run artifacts,
-not historical RedisTimeSeries samples or the old absolute KPI floors.
-The PR comparison retains its five parallel jobs. Push-triggered Event Nightly
-runs skip the AWS comparison, as the existing integration-push workflow already
-has its own AWS benchmark lane.
-
+Merged reports verify workload coverage and binary identities. Logs, hashes,
+commit IDs and attempt histories are retained in Actions artifacts:
+`command-performance-<run>-<attempt>` for Event CI and
+`nightly-<initial|confirmation>-benchmarks-<run>-<attempt>` for nightly.
+Failed jobs can reuse the shared build and successful shards when rerun.
 
 ## Included benchmarks
 
@@ -157,16 +91,15 @@ kpis:
 ```
 
 `redisbench-admin run-remote` checks those floors itself and exits non-zero when
-a run comes in below one. The legacy AWS lanes (`run-benchmark` PR label and
-integration pushes) retain that gate. The nightly and five-job PR comparisons
-remove floors from temporary specs and report relative changes instead.
+a run comes in below one, so any lane that runs the benchmarks also gates on
+them — the `run-benchmark` PR label, every push to `master` / `feature-*` /
+`X.Y`, and the nightly.
 
-Baselines are never written by CI. Raising one is proposed out of band, from the
+These YAML floors are never written by CI. Raising one is proposed out of band, from the
 nightly analysis:
 
-1. Legacy AWS runs upload raw results as
-   `benchmark-results-<environment>-<group>` artifacts (30 day retention).
-   The nightly comparison includes raw results in its per-test artifact folders.
+1. The nightly benchmark run uploads its result json files as
+   `benchmark-results-<group>` artifacts (30 day retention).
 2. When a run comes in faster than the committed floors, the nightly analysis
    proposes a bump — `update_kpis.py` applied to those results, opened as a PR.
 3. A human merges it, accepting the higher bar. Leaving it unmerged keeps the
@@ -176,7 +109,7 @@ One benchmark, `json_nummultby_num_2`, fails on every run — `redis-benchmark`
 exits 1 with an empty result set, and has since at least 2026-08-09
 (MOD-18654). It still runs, and it has no floor of its own.
 
-That means **affected benchmark jobs fail until MOD-18654 is fixed**,
+That means **the benchmark job is red on every run until MOD-18654 is fixed**,
 so job status alone does not tell you whether a baseline was breached. Read the
 log instead:
 
@@ -203,13 +136,3 @@ To seed or re-seed floors from a local run's results:
 python3 update_kpis.py --margin 0.05
 python3 update_kpis.py --self-test   # checks raise/never-lower behaviour
 ```
-
-Nightly and Event CI comparisons retry both revisions when the absolute throughput
-change exceeds 5%, with at most three retries (four pairs total). Exactly 5%
-does not trigger a retry. The report uses the last pair and shows its attempt
-number, even if the final difference still exceeds 5%. Earlier raw results and
-all pair measurements are retained under each benchmark's `attempts/` directory.
-Execution errors are not retried by this policy. Selecting results this way can
-bias comparisons toward smaller differences; retain the history when assessing
-stability. A 🟠 marker beside the benchmark name identifies retried tests in both
-reports; percentage colors continue to describe the final result.
