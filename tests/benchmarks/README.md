@@ -93,6 +93,14 @@ results and checks module hashes, commit hashes, and Redis versions across jobs.
 Stable artifact names allow failed jobs to be rerun using the same shared build
 and the successful shards from the previous attempt.
 
+Each measurement also saves `diagnostics/server-{before,after}.json` and
+`diagnostics/client-{before,after}.json` alongside its raw results. These Linux
+snapshots run outside the measured interval and record CPU/network counters and
+Redis process/thread scheduler counters. The server's final snapshot includes
+Redis command execution times and the remote module hash. Use them to investigate
+same-binary throughput differences; snapshot errors are recorded without failing
+the benchmark. The throughput report and workload settings are unchanged.
+
 The baseline defaults to `master`, resolved to the exact same commit as the
 current-master checkout, so initially this measures master-versus-master noise.
 Set the repository variable `BENCHMARK_BASELINE_REF` to a fixed commit SHA to

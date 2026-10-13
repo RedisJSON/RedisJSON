@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import yaml
 
-from compare_aws import RemoteResetError, compare, destroy, provision, run_one
+from compare_aws import RemoteResetError, collect_diagnostics, compare, destroy, provision, run_one
 
 
 class AWSComparisonTest(unittest.TestCase):
@@ -39,7 +39,8 @@ class AWSComparisonTest(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, 'AWS teardown failed'):
                     destroy(state)
 
-    def test_remote_run_preserves_workload_collects_throughput_and_resets_after_failure(self):
+    @patch('compare_aws.collect_diagnostics')
+    def test_remote_run_preserves_workload_collects_throughput_and_resets_after_failure(self, diagnostics):
         spec = Path(__file__).parent / 'json_set_fulldoc_api_replies_q3_gmaps_passiveassist.yml'
         config = yaml.safe_load(spec.read_text())
         inventory = dict(server_private_ip='10.0.0.1', server_public_ip='192.0.2.1',
@@ -66,6 +67,7 @@ class AWSComparisonTest(unittest.TestCase):
                                 inventory, root / 'key.pem', [{'type': 'oss-standalone'}])
                 self.assertEqual(value['ops_per_sec'], 100)
                 self.assertEqual(value['redis_version'], '8.2.0')
+                self.assertEqual([call.args[-1] for call in diagnostics.call_args_list], ['before', 'after'])
                 self.assertIn('shutdown nosave', remote.call_args.args[2][0])
 
             with patch('compare_aws.subprocess.run', return_value=subprocess.CompletedProcess([], 1)), patch(
@@ -75,6 +77,21 @@ class AWSComparisonTest(unittest.TestCase):
                     run_one(spec, root / 'module.so', root / 'failure', datasets,
                             inventory, root / 'key.pem', [])
                 self.assertIn('shutdown nosave', remote.call_args.args[2][0])
+
+    def test_diagnostics_preserve_missing_telemetry_without_hiding_other_host(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with patch('compare_aws.remote_commands', side_effect=[
+                RuntimeError('server snapshot unavailable'), ['{"timestamp": 123, "host": {}}']
+            ]) as remote:
+                collect_diagnostics(root, {'port': 6379}, root / 'key.pem', 'after')
+            self.assertEqual(json.loads((root / 'diagnostics/server-after.json').read_text()),
+                             {'error': 'server snapshot unavailable'})
+            self.assertEqual(json.loads((root / 'diagnostics/client-after.json').read_text())['timestamp'], 123)
+            self.assertEqual([call.args[-1] for call in remote.call_args_list],
+                             ['server_public_ip', 'client_public_ip'])
+            self.assertTrue(remote.call_args_list[0].args[2][0].endswith(' 6379'))
+            self.assertFalse(remote.call_args_list[1].args[2][0].endswith(' 6379'))
 
     def test_all_pairs_run_sequentially_and_reset_failure_marks_remaining_workloads(self):
         with tempfile.TemporaryDirectory() as temporary:
