@@ -67,12 +67,16 @@ jobs:
       - name: Build both pinned revisions
         run: |
           for source in benchmark-master benchmark-baseline; do
+            # Keep embedded source paths identical without reusing build artifacts.
+            mv "$source" benchmark-build
+            rm -rf benchmark-build/target
             (
-              cd "$source"
+              cd benchmark-build
               toolchain=$(python -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
               rustup toolchain install "$toolchain" --profile minimal
-              cargo +"$toolchain" build --locked --release -p redis_json
+              cargo +"$toolchain" build --locked --release -p redis_json --target-dir target
             )
+            mv benchmark-build "$source"
           done
 
       - name: Package shared builds and distribute all workloads
