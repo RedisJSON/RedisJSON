@@ -57,7 +57,25 @@ def stop_server(connection, db_root, pidfile, redis_binary):
     import psutil
 
     try:
-        process = psutil.Process(int(pidfile.read_text().strip()))
+        try:
+            process = psutil.Process(int(pidfile.read_text().strip()))
+        except FileNotFoundError:
+            # Setup may fail before Redis starts; do not infer absence from a ping timeout.
+            matches = []
+            for candidate in psutil.process_iter():
+                try:
+                    if candidate.name() != Path(redis_binary).name:
+                        continue
+                    if (Path(candidate.exe()).resolve() == Path(redis_binary).resolve()
+                            and Path(candidate.cwd()).resolve().is_relative_to(db_root.resolve())):
+                        matches.append(candidate)
+                except psutil.NoSuchProcess:
+                    continue
+            if not matches:
+                return
+            if len(matches) != 1:
+                raise LocalResetError('Multiple Redis processes belong to this benchmark')
+            process = matches[0]
         if (Path(process.exe()).resolve() != Path(redis_binary).resolve()
                 or not Path(process.cwd()).resolve().is_relative_to(db_root.resolve())):
             raise LocalResetError('Redis PID does not belong to this benchmark; refusing to stop it')
