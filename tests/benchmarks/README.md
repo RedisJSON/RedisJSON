@@ -62,8 +62,11 @@ If cleanup cannot be verified, remaining measurements in that shard are skipped.
 
 ## Nightly AWS comparison
 
-Scheduled runs compare the pinned `benchmark-baseline` commit against master;
-manual runs compare it against the selected dispatch commit. Identical commits
+Scheduled runs on master compare the pinned `benchmark-baseline` commit against
+master. Schedules on other branches and other non-manual events skip this benchmark
+comparison. Manual runs require `baseline_branch` (an existing branch name, e.g.
+master or 8.8) and compare it against the selected dispatch commit. Both revisions
+are pinned before building; manual runs never promote any branch. Identical commits
 skip builds and AWS provisioning. Five shards each own an AWS server/client pair,
 run both revisions sequentially, and destroy their resources even on failure.
 The candidate's YAML suite supplies the workloads for both sides.

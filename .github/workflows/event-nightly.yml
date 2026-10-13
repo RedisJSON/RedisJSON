@@ -17,6 +17,10 @@ on:
     - cron: '20 20 * * *' # 20:20 UTC every day
   workflow_dispatch:
     inputs:
+      baseline_branch:
+        description: 'Baseline branch for the AWS benchmark comparison (e.g. master or 8.8)'
+        type: string
+        required: true
       redis-ref:
         description: 'Redis ref to checkout (leave empty to use redis_ref from pack/ramp.yml)'
         type: string
@@ -161,8 +165,10 @@ jobs:
       beta-version: ${{needs.prepare-values.outputs.beta-version}}
     secrets: inherit
   benchmark:
-    if: github.event_name != 'push'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.ref == 'refs/heads/master')
     uses: ./.github/workflows/flow-benchmark-nightly.yml
+    with:
+      baseline_branch: ${{ inputs.baseline_branch || '' }}
     permissions:
       contents: write
     secrets: inherit

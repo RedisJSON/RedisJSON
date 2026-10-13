@@ -6,6 +6,7 @@ import math
 import os
 from pathlib import Path
 import subprocess
+from urllib.parse import quote
 
 
 def emit(name, value):
@@ -20,17 +21,29 @@ def note(message):
 
 
 def resolve():
+    event = os.environ['GITHUB_EVENT_NAME']
+    scheduled_master = event == 'schedule' and os.environ['GITHUB_REF'] == 'refs/heads/master'
+    if not scheduled_master and event != 'workflow_dispatch':
+        emit('skip', 'true')
+        note('Skipped: benchmark comparisons require a schedule on master or a manual run.')
+        return
+    branch = 'benchmark-baseline' if scheduled_master else os.environ.get('BASELINE_BRANCH', '').strip()
+    if not branch:
+        raise ValueError('Manual comparisons require baseline_branch')
+    if subprocess.run(['git', 'check-ref-format', f'refs/heads/{branch}'],
+                      capture_output=True).returncode:
+        raise ValueError(f'Invalid baseline branch name: {branch!r}')
     repository = os.environ['GITHUB_REPOSITORY']
     def branch_sha(branch):
         data = json.loads(subprocess.check_output(
-            ['gh', 'api', f'repos/{repository}/git/ref/heads/{branch}'], text=True))
+            ['gh', 'api', f'repos/{repository}/git/ref/heads/{quote(branch, safe="/")}'], text=True))
         return data['object']['sha']
-    baseline = branch_sha('benchmark-baseline')
-    candidate = branch_sha('master') if os.environ['GITHUB_EVENT_NAME'] == 'schedule' else os.environ['GITHUB_SHA']
+    baseline = branch_sha(branch)
+    candidate = branch_sha('master') if scheduled_master else os.environ['GITHUB_SHA']
     emit('baseline', baseline)
     emit('candidate', candidate)
     emit('skip', str(baseline == candidate).lower())
-    note(f'Baseline: `{baseline}`; candidate: `{candidate}`. ' +
+    note(f'Baseline branch: `{branch}` (`{baseline}`); candidate: `{candidate}`. ' +
          ('Skipped: identical commits, no builds or AWS resources required.' if baseline == candidate else
           'Both commits are pinned for this comparison. Manual runs never promote the baseline.'))
 

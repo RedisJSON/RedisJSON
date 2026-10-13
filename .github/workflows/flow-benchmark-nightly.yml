@@ -1,6 +1,12 @@
 name: Nightly AWS Benchmark Comparison
 on:
   workflow_call:
+    inputs:
+      baseline_branch:
+        description: 'Required for manual benchmark comparisons'
+        type: string
+        required: false
+        default: ''
 permissions:
   contents: read
 jobs:
@@ -18,6 +24,7 @@ jobs:
         id: refs
         env:
           GH_TOKEN: ${{ github.token }}
+          BASELINE_BRANCH: ${{ inputs.baseline_branch }}
         run: python tests/benchmarks/nightly_baseline.py resolve
 
   build:
@@ -99,7 +106,7 @@ jobs:
 
   confirmation:
     needs: initial
-    if: github.event_name == 'schedule' && needs.initial.outputs.eligible == 'true'
+    if: github.event_name == 'schedule' && github.ref == 'refs/heads/master' && needs.initial.outputs.eligible == 'true'
     uses: ./.github/workflows/flow-benchmark-nightly-round.yml
     with:
       phase: confirmation
@@ -107,7 +114,7 @@ jobs:
 
   promote:
     needs: [resolve, initial, confirmation]
-    if: github.event_name == 'schedule' && needs.initial.outputs.eligible == 'true' && needs.confirmation.outputs.eligible == 'true'
+    if: github.event_name == 'schedule' && github.ref == 'refs/heads/master' && needs.initial.outputs.eligible == 'true' && needs.confirmation.outputs.eligible == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
