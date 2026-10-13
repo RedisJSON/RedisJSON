@@ -7,6 +7,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 
 
 def cpus(value):
@@ -45,6 +46,22 @@ def wrap_client(path, selected):
     return str(path)
 
 
+def wait_for_irq_affinity(targets):
+    # IRQ migration can be deferred until a subsequent interrupt. Writing the
+    # requested mask does not guarantee effective_affinity changes immediately.
+    deadline = time.monotonic() + 10
+    while True:
+        effective = {irq: (Path('/proc/irq') / irq / 'effective_affinity_list').read_text().strip()
+                     for irq in targets}
+        pending = {irq: {'requested': target, 'effective': effective[irq]}
+                   for irq, target in targets.items() if cpus(effective[irq]) != {target}}
+        if not pending:
+            return effective
+        if time.monotonic() >= deadline:
+            raise RuntimeError(f'IRQ affinity did not settle within 10s: {pending}')
+        time.sleep(0.1)
+
+
 def configure(role, clients):
     allowed = set(os.sched_getaffinity(0))
     siblings = {cpu: cpus(Path(f'/sys/devices/system/cpu/cpu{cpu}/topology/thread_siblings_list').read_text())
@@ -62,16 +79,18 @@ def configure(role, clients):
     for interface in interfaces:
         for index, irq in enumerate(sorted((interface / 'device/msi_irqs').iterdir())):
             directory = Path('/proc/irq') / irq.name
-            (directory / 'smp_affinity_list').write_text(str(housekeeping[index % len(housekeeping)]))
-            effective = (directory / 'effective_affinity_list').read_text().strip()
-            if cpus(effective) & reserved:
-                raise RuntimeError(f'IRQ {irq.name} still uses reserved CPUs: {effective}')
-            irqs[irq.name] = effective
+            target = housekeeping[index % len(housekeeping)]
+            (directory / 'smp_affinity_list').write_text(str(target))
+            requested = (directory / 'smp_affinity_list').read_text().strip()
+            if cpus(requested) != {target}:
+                raise RuntimeError(f'IRQ {irq.name} rejected CPU {target}: requested={requested}')
+            irqs[irq.name] = target
         # Disable software packet steering, which can otherwise bypass IRQ affinity.
         for rps in (interface / 'queues').glob('rx-*/rps_cpus'):
             rps.write_text('0')
             if int(rps.read_text().strip().replace(',', ''), 16):
                 raise RuntimeError(f'RPS still enabled: {rps}')
+    irqs = wait_for_irq_affinity(irqs)
     data = dict(role=role, cpulist=','.join(map(str, selected)),
                 reserved_cpus=sorted(reserved), nic_irqs=irqs, irqbalance_stopped=active,
                 clients=[wrap_client(path, selected) for path in clients])

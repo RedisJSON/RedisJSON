@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import yaml
 
-from configure_affinity import configure, cpus, select_cores, wrap_client
+from configure_affinity import configure, cpus, select_cores, wait_for_irq_affinity, wrap_client
 
 from compare_aws import RemoteResetError, collect_diagnostics, compare, destroy, provision, run_one
 
@@ -63,8 +63,20 @@ class AWSComparisonTest(unittest.TestCase):
                 self.assertEqual((irq / 'smp_affinity_list').read_text(), '0')
                 self.assertEqual(run.call_args.args[0], ['systemctl', 'stop', 'irqbalance'])
                 (irq / 'effective_affinity_list').write_text('5')
-                with self.assertRaisesRegex(RuntimeError, 'still uses reserved CPUs'):
+                with patch('configure_affinity.time.monotonic', side_effect=[0, 11]), self.assertRaisesRegex(
+                    RuntimeError, 'IRQ affinity did not settle within 10s'
+                ):
                     configure('server', [])
+
+    def test_irq_affinity_waits_for_migration_without_reapplying_settings(self):
+        with patch('configure_affinity.Path') as path, patch(
+            'configure_affinity.time.sleep'
+        ) as sleep, patch('configure_affinity.time.monotonic', return_value=0):
+            effective = path.return_value.__truediv__.return_value.__truediv__.return_value
+            effective.read_text.side_effect = ['1', '0']
+            self.assertEqual(wait_for_irq_affinity({'31': 0}), {'31': '0'})
+            sleep.assert_called_once_with(0.1)
+            effective.write_text.assert_not_called()
 
     def test_partial_provision_retains_state_for_cleanup_and_cleanup_errors_fail(self):
         with tempfile.TemporaryDirectory() as temporary:
