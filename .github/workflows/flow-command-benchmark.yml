@@ -160,7 +160,7 @@ jobs:
 
   report:
     needs: [build, compare]
-    if: always() && needs.build.result == 'success'
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5

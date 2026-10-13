@@ -91,7 +91,7 @@ jobs:
     outputs:
       eligible: ${{ steps.decision.outputs.eligible }}
     needs: compare
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
