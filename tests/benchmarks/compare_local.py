@@ -137,6 +137,9 @@ def summary(results, baseline="master", candidate="pr"):
     ]
     for name, pair in results["benchmarks"].items():
         label = escape(name)
+        attempts = max(value.get("attempt_count", 1) for value in pair.values())
+        if attempts > 1:
+            label += f"<br><small>Attempt {attempts}/4 (last pair)</small>"
         errors = [f"{revision}: {value['error']}" for revision, value in pair.items()
                   if "error" in value]
         if errors:
