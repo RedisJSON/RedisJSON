@@ -41,11 +41,15 @@ pinned runner's ASCII output parser; source fixtures and JSON values are unchang
 
 Reports contain throughput only. Percentage markers are 🟢 improvement,
 🟡 degradation below 5%, and 🔴 degradation of 5% or more. A difference strictly
-greater than 5% in either direction reruns both revisions, up to three retries.
-🟠 beside a test name indicates a retry. The report uses the last pair; previous
-logs and measurements remain under `attempts/`. Execution errors are not retried.
-This stopping rule can favor smaller differences, so retain the history when
-assessing stability. Relative differences are report-only; execution errors,
+greater than 5% in either direction triggers three retries of both revisions,
+without stopping early if a later pair falls within 5%. Execution order alternates
+between baseline-first and candidate-first. 🟠 beside a test name indicates a retry.
+The report and promotion use the median of all paired percentage changes. Throughput
+columns show each revision's median independently, so their ratio need not match
+the reported percentage. All original measurements remain under `attempts/`;
+the last run's logs stay in the label directory and earlier logs are archived.
+Execution errors stop retries and remain failures; incomplete sets are not aggregated.
+Relative differences are report-only; execution errors,
 missing workloads and inconsistent builds fail the comparison. Temporary specs
 omit the legacy absolute `kpis` floors.
 
