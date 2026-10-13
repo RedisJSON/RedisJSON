@@ -262,9 +262,8 @@ def run_pairs(specs, modules, output, run_fn, results, max_retries=3, abort_on=(
                     pair[label] = {"error": str(error)}
                     print(f"ERROR: {error}", flush=True)
                 finally:
-                    if label in pair:
-                        pair[label]["attempt_count"] = attempt + 1
-                        pair[label]["run_seconds"] = round(time.monotonic() - started, 3)
+                    pair[label]["attempt_count"] = attempt + 1
+                    pair[label]["run_seconds"] = round(time.monotonic() - started, 3)
                     (output / "comparison.json").write_text(json.dumps(results, indent=2) + "\n")
             attempts.append(pair)
             if not record_attempt(pair, output / spec.stem, attempt, max_retries):
