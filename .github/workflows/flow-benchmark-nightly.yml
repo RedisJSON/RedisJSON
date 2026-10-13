@@ -63,14 +63,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential libclang-dev
           python -m pip install -r benchmark-driver/tests/benchmarks/requirements.txt
-          toolchain=$(python -c 'import tomllib; print(tomllib.load(open("benchmark-master/rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
-          rustup toolchain install "$toolchain" --profile minimal
-          echo "RUSTUP_TOOLCHAIN=$toolchain" >> "$GITHUB_ENV"
 
       - name: Build both pinned revisions
         run: |
-          (cd benchmark-master && cargo build --locked --release -p redis_json)
-          (cd benchmark-baseline && cargo build --locked --release -p redis_json)
+          for source in benchmark-master benchmark-baseline; do
+            (
+              cd "$source"
+              toolchain=$(python -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+              rustup toolchain install "$toolchain" --profile minimal
+              cargo +"$toolchain" build --locked --release -p redis_json
+            )
+          done
 
       - name: Package shared builds and distribute all workloads
         run: |

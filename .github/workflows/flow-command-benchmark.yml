@@ -70,16 +70,16 @@ jobs:
           make -j"$(nproc)"
           echo "$GITHUB_WORKSPACE/benchmark-memtier" >> "$GITHUB_PATH"
 
-      - name: Select one Rust toolchain for both modules
-        run: |
-          toolchain=$(python -c 'import tomllib; print(tomllib.load(open("benchmark-pr/rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
-          rustup toolchain install "$toolchain" --profile minimal
-          echo "RUSTUP_TOOLCHAIN=$toolchain" >> "$GITHUB_ENV"
-
       - name: Build both modules before measuring
         run: |
-          (cd benchmark-pr && cargo build --locked --release -p redis_json)
-          (cd benchmark-baseline && cargo build --locked --release -p redis_json)
+          for source in benchmark-pr benchmark-baseline; do
+            (
+              cd "$source"
+              toolchain=$(python -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+              rustup toolchain install "$toolchain" --profile minimal
+              cargo +"$toolchain" build --locked --release -p redis_json
+            )
+          done
           python - <<'PY'
           import json, subprocess
           from pathlib import Path
