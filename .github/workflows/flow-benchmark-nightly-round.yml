@@ -151,7 +151,7 @@ jobs:
       - name: Publish comparison summary
         if: always()
         run: |
-          echo 'Baseline versus candidate (the Master column denotes the selected candidate, including manual branches).' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Baseline versus current branch.' >> "$GITHUB_STEP_SUMMARY"
           if [ -f nightly-benchmark-results/summary.md ]; then
             cat nightly-benchmark-results/summary.md >> "$GITHUB_STEP_SUMMARY"
           fi

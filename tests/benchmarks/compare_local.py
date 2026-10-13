@@ -175,7 +175,7 @@ def comparison_failed(pair, baseline, candidate):
 
 def summary(results, baseline="baseline", candidate="pr"):
     before_label = "PR" if baseline == "pr" else baseline.title()
-    after_label = "PR" if candidate == "pr" else candidate.title()
+    after_label = {"pr": "PR", "master": "Current branch"}.get(candidate, candidate.title())
     lines = [
         "# RedisJSON command benchmarks: throughput", "",
         "Same workloads, sequential runs, fresh Redis per revision and test.",
