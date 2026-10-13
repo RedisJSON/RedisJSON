@@ -18,10 +18,10 @@ def cpus(value):
     return result
 
 
-def select_cores(allowed, siblings, count):
+def select_cores(allowed, siblings, count, excluded=()):
     groups = sorted({tuple(sorted(siblings[cpu])) for cpu in allowed})
     # Leave the first physical core for housekeeping; reserve SMT siblings too.
-    chosen = groups[1:count + 1]
+    chosen = [group for group in groups[1:] if not set(group).intersection(excluded)][:count]
     if len(chosen) != count:
         raise RuntimeError('Not enough physical cores for benchmark and housekeeping')
     selected = [min(set(group) & allowed) for group in chosen]
@@ -46,20 +46,22 @@ def wrap_client(path, selected):
     return str(path)
 
 
-def wait_for_irq_affinity(targets, reserved):
-    # IRQ migration can be deferred until a subsequent interrupt. Writing the
-    # requested mask does not guarantee effective_affinity changes immediately.
-    # A pending move between housekeeping CPUs already satisfies isolation.
+def select_isolated_cores(targets, allowed, siblings, count):
+    # An idle IRQ can retain its old effective CPU until its next interrupt.
+    # Exclude BOTH current and requested CPUs, including their SMT siblings,
+    # so a later migration cannot enter the selected benchmark cores.
     deadline = time.monotonic() + 10
     while True:
         effective = {irq: (Path('/proc/irq') / irq / 'effective_affinity_list').read_text().strip()
                      for irq in targets}
-        pending = {irq: {'requested': target, 'effective': effective[irq]}
-                   for irq, target in targets.items() if cpus(effective[irq]) & reserved}
-        if not pending:
-            return effective
-        if time.monotonic() >= deadline:
-            raise RuntimeError(f'IRQ affinity did not settle within 10s; reserved CPUs={sorted(reserved)}: {pending}')
+        excluded = set(targets.values()).union(*(cpus(value) for value in effective.values()))
+        try:
+            selected, reserved = select_cores(allowed, siblings, count, excluded)
+            return selected, reserved, effective
+        except RuntimeError:
+            if time.monotonic() >= deadline:
+                raise RuntimeError(f'Not enough IRQ-free physical cores; requested={targets}, '
+                                   f'effective={effective}, allowed={sorted(allowed)}') from None
         time.sleep(0.1)
 
 
@@ -67,8 +69,10 @@ def configure(role, clients):
     allowed = set(os.sched_getaffinity(0))
     siblings = {cpu: cpus(Path(f'/sys/devices/system/cpu/cpu{cpu}/topology/thread_siblings_list').read_text())
                 for cpu in allowed}
-    selected, reserved = select_cores(allowed, siblings, 1 if role == 'server' else 2)
-    housekeeping = sorted(allowed - reserved)
+    groups = sorted({tuple(sorted(siblings[cpu])) for cpu in allowed})
+    # Keep IRQ destinations on two physical cores, leaving room to choose
+    # benchmark cores around any interrupt migrations that remain pending.
+    housekeeping = [min(set(group) & allowed) for group in groups[:2]]
     interfaces = [path for path in Path('/sys/class/net').iterdir()
                   if (path / 'device/msi_irqs').is_dir()]
     if not interfaces:
@@ -91,9 +95,11 @@ def configure(role, clients):
             rps.write_text('0')
             if int(rps.read_text().strip().replace(',', ''), 16):
                 raise RuntimeError(f'RPS still enabled: {rps}')
-    irqs = wait_for_irq_affinity(irqs, reserved)
+    selected, reserved, effective = select_isolated_cores(
+        irqs, allowed, siblings, 1 if role == 'server' else 2)
     data = dict(role=role, cpulist=','.join(map(str, selected)),
-                reserved_cpus=sorted(reserved), nic_irqs=irqs, irqbalance_stopped=active,
+                reserved_cpus=sorted(reserved), nic_irqs=effective, requested_nic_irqs=irqs,
+                irqbalance_stopped=active,
                 clients=[wrap_client(path, selected) for path in clients])
     Path('/tmp/redisjson-affinity.json').write_text(json.dumps(data))
     return data
