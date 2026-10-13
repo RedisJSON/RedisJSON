@@ -7,6 +7,7 @@ permissions:
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -97,6 +98,7 @@ jobs:
     secrets: inherit
 
   command-benchmark:
+    if: ${{ !github.event.pull_request.draft }}
     permissions:
       contents: read
     needs: [prepare-values]
