@@ -1,0 +1,110 @@
+name: Nightly AWS Benchmark Comparison
+
+on:
+  workflow_call:
+    inputs:
+      baseline-ref:
+        type: string
+        default: master
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Check out current master
+        uses: actions/checkout@v5
+        with:
+          ref: master
+          path: benchmark-master
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Resolve master once
+        id: master
+        run: echo "sha=$(git -C benchmark-master rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out baseline (same master commit by default)
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.baseline-ref == 'master' && steps.master.outputs.sha || inputs.baseline-ref }}
+          path: benchmark-baseline
+          submodules: recursive
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build and benchmark tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libclang-dev
+          python -m pip install 'redisbench-admin==0.12.39'
+          VERSION=0.14.8 benchmark-master/deps/readies/bin/getterraform
+          toolchain=$(python -c 'import tomllib; print(tomllib.load(open("benchmark-master/rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+          rustup toolchain install "$toolchain" --profile minimal
+          echo "RUSTUP_TOOLCHAIN=$toolchain" >> "$GITHUB_ENV"
+
+      - name: Build both revisions with the same toolchain
+        run: |
+          (cd benchmark-master && cargo build --locked --release -p redis_json)
+          (cd benchmark-baseline && cargo build --locked --release -p redis_json)
+          python -m unittest discover -s tests/benchmarks -p 'test_*.py'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.PERFORMANCE_EC2_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.PERFORMANCE_EC2_SECRET_KEY }}
+          aws-region: ${{ secrets.PERFORMANCE_EC2_REGION }}
+
+      - name: Retrieve benchmark SSH key
+        run: |
+          umask 077
+          aws secretsmanager get-secret-value --secret-id perf-cto-us-east-2 \
+            --query SecretString --output text > "$RUNNER_TEMP/benchmark.pem"
+
+      - name: Provision the existing AWS benchmark topology once
+        run: |
+          python tests/benchmarks/compare_aws.py provision \
+            --state "$RUNNER_TEMP/benchmark-aws.json" \
+            --benchmarks-dir benchmark-master/tests/benchmarks
+
+      - name: Compare every full workload sequentially on AWS
+        timeout-minutes: 300
+        run: |
+          python tests/benchmarks/compare_aws.py run \
+            --state "$RUNNER_TEMP/benchmark-aws.json" \
+            --private-key "$RUNNER_TEMP/benchmark.pem" \
+            --baseline-dir benchmark-baseline --master-dir benchmark-master \
+            --output nightly-benchmark-results
+
+      - name: Tear down AWS resources even after benchmark failures
+        if: always()
+        run: |
+          python tests/benchmarks/compare_aws.py destroy --state "$RUNNER_TEMP/benchmark-aws.json"
+
+      - name: Publish comparison summary
+        if: always()
+        run: |
+          if [ -f nightly-benchmark-results/summary.md ]; then
+            cat nightly-benchmark-results/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: nightly-aws-benchmarks-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            nightly-benchmark-results/
+            !nightly-benchmark-results/datasets/
+            !nightly-benchmark-results/**/datasets
+          retention-days: 30

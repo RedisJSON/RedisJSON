@@ -141,24 +141,26 @@ def change(before, after):
     return f"{100 * (after / before - 1):+.2f}%"
 
 
-def summary(results):
+def summary(results, baseline="master", candidate="pr"):
     # ponytail: report random-key counts; require deterministic seeds before tight gates.
+    before_label = "PR" if baseline == "pr" else baseline.title()
+    after_label = "PR" if candidate == "pr" else candidate.title()
     lines = [
         "# RedisJSON command benchmarks: performance and memory", "",
         "Same workloads, sequential runs, fresh Redis per revision and test.",
         "Memory is measured in bytes after the clients finish. Peak includes dataset loading.",
         "RSS is informational; it includes allocator/OS effects. Changes are report-only.",
         "Change %: 🟢 improvement; 🟡 degradation below 5%; 🔴 degradation of 5% or more. Unchanged values are unmarked.",
-        "Each metric has Master, PR, and Change % columns. ↑ higher is better; ↓ lower is better.",
+        f"Each metric has {before_label}, {after_label}, and Change % columns. ↑ higher is better; ↓ lower is better.",
         "Random-key workloads may finish with different key counts; check the Keys column.", "",
-        f"Master module SHA256: `{results['modules']['master']}`",
-        f"PR module SHA256: `{results['modules']['pr']}`", "",
+        f"{before_label} module SHA256: `{results['modules'][baseline]}`",
+        f"{after_label} module SHA256: `{results['modules'][candidate]}`", "",
         '<table>',
         '<thead><tr><th rowspan="2">Benchmark</th>',
         '<th colspan="3">Throughput (ops/s) ↑</th><th colspan="3">Used memory (bytes) ↓</th>',
         '<th colspan="3">Dataset memory (bytes) ↓</th><th colspan="3">Peak memory (bytes) ↓</th>',
         '<th colspan="3">RSS (bytes, informational) ↓</th><th colspan="3">Keys</th></tr>',
-        '<tr>' + '<th>Master</th><th>PR</th><th>Change %</th>' * 6 + '</tr></thead>',
+        '<tr>' + f'<th>{escape(before_label)}</th><th>{escape(after_label)}</th><th>Change %</th>' * 6 + '</tr></thead>',
         '<tbody>',
     ]
     for name, pair in results["benchmarks"].items():
@@ -171,7 +173,7 @@ def summary(results):
             continue
         cells = []
         for metric in ("ops_per_sec", *MEMORY_METRICS, "keys"):
-            before, after = pair["master"][metric], pair["pr"][metric]
+            before, after = pair[baseline][metric], pair[candidate][metric]
             marker = ""
             if metric == "ops_per_sec" or metric in MEMORY_METRICS:
                 degradation = before - after if metric == "ops_per_sec" else after - before
