@@ -54,7 +54,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libclang-dev
-          python -m pip install 'redisbench-admin==0.12.39'
+          python -m pip install -r tests/benchmarks/requirements.txt
           toolchain=$(python -c 'import tomllib; print(tomllib.load(open("benchmark-master/rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
           rustup toolchain install "$toolchain" --profile minimal
           echo "RUSTUP_TOOLCHAIN=$toolchain" >> "$GITHUB_ENV"

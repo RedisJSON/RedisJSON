@@ -2,9 +2,12 @@
 
 The automated benchmark definitions included within `tests/benchmarks` folder, provides a framework for evaluating and comparing feature branches and catching regressions prior to letting them into the master branch.
 
-To be able to run local benchmarks you need `redisbench_admin>=0.1.74` [[tool repo for full details](https://github.com/RedisLabsModules/redisbench-admin)] and the benchmark tool specified on each configuration file. You can install `redisbench-admin` via PyPi as any other package.
+Local benchmarks require the runner pinned in `tests/benchmarks/requirements.txt`
+and the benchmark tool specified in each workload. See the
+[runner documentation](https://github.com/RedisLabsModules/redisbench-admin) for details.
+Install the runner from the repository root:
 ```
-pip3 install redisbench_admin>=0.1.74
+python3 -m pip install -r tests/benchmarks/requirements.txt
 ```
 
 ## Usage
@@ -21,8 +24,8 @@ sequentially on the same runner with a fresh Redis instance and the same dataset
 Request counts, durations and module options come from the original workloads.
 New PR-only workloads enter this comparison after merging into master.
 
-For a local comparison, build both modules in release mode, install
-`redisbench-admin==0.12.39`, and put `redis-server`, `redis-benchmark` and
+For a local comparison, build both modules in release mode, install the runner
+using the requirements file above, and put `redis-server`, `redis-benchmark` and
 `memtier_benchmark` on PATH:
 
 ```sh
