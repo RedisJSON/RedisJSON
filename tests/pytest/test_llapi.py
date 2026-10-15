@@ -57,7 +57,7 @@ def _env_with_doc():
 def testLLAPIVersion():
     env = _new_env()
     ver = env.cmd('LLAPI.VERSION')
-    # RedisJSON exports up to V9; other modules may export a lower version.
+    # The consumer binds to the latest version declared in rejson_api.h.
     env.assertTrue(isinstance(ver, int) and ver >= 1)
 
 
@@ -234,7 +234,7 @@ def testLLAPIErrorsBadPath():
     # Malformed path fails to compile.
     env.expect('LLAPI.ITER_LEN', 'doc', '$[').raiseError()
     env.expect('LLAPI.PATHPARSE', '$[').raiseError()
-    # Projection / computed paths are not exposed by the LLAPI.
+    # Existing node-only entry points continue to reject projections.
     env.expect('LLAPI.OPEN_GET', 'doc', '$.int + 1').raiseError()
     env.expect('LLAPI.PATHPARSE', '$.int + 1').raiseError()
 
@@ -248,3 +248,38 @@ def testLLAPIOpenGetWithPathErrors():
     # Malformed path and projection are rejected at pathParse (before evaluation).
     env.expect('LLAPI.OPEN_GET_WITH_PATH', 'doc', '$[').raiseError()
     env.expect('LLAPI.OPEN_GET_WITH_PATH', 'doc', '$.int + 1').raiseError()
+
+
+def testLLAPIEvaluate():
+    env = _env_with_doc()
+    env.expect('JSON.SET', 'computed', '$', json.dumps({
+        'n': 2, 'values': [1, 2, 3], 'empty': [], 'null': None, 'nulls': [None],
+        'items': [{'n': 1}, {'n': 2}, {'n': 3}],
+        'obj': {'a': 1, 'b': 2}, 'nested': [{'x': [True, None, 'hello']}],
+    })).ok()
+    cases = [
+        ('$.n + 1', [3]),
+        ('sum($.values)', [6]),
+        ('length($.values)', [3]),
+        ('$.obj.keys()', ['a', 'b']),
+        ('$.nested.first()', [{'x': [True, None, 'hello']}]),
+        ('$.empty.length()', [0]),
+        ('$.nulls.first()', [None]),
+        ('sum($.empty)', []),
+        ('$.missing + 1', []),
+        ('$.n', [2]),
+        ('$.null', [None]),
+        ('$.missing', []),
+        ('$.items[?@.n + 1 == 3]', [{'n': 2}]),
+    ]
+    for path, expected in cases:
+        actual = [json.loads(v) for v in env.cmd('LLAPI.EVALUATE', 'computed', path)]
+        env.assertEqual(actual, expected, message=path)
+        env.assertEqual(json.loads(env.cmd('LLAPI.EVALUATE', 'computed', path, 'ITER')), expected)
+        env.assertEqual(json.loads(env.cmd('JSON.GET', 'computed', path)), expected)
+    # The opt-in API must not change existing node-only consumers.
+    env.expect('LLAPI.OPEN_GET', 'computed', '$.n + 1').raiseError()
+    env.expect('LLAPI.PATHPARSE', '$.n + 1').raiseError()
+    for path in ('$.n +', '$[', ''):
+        env.expect('LLAPI.EVALUATE', 'computed', path).raiseError()
+    env.expect('LLAPI.EVALUATE', 'absent', '$.n + 1').raiseError()

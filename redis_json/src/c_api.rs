@@ -8,6 +8,7 @@
  */
 
 use libc::size_t;
+use std::borrow::Borrow;
 use std::ffi::CString;
 use std::os::raw::{c_double, c_int, c_longlong};
 use std::ptr::{null, null_mut};
@@ -19,13 +20,14 @@ use std::{
 use crate::formatter::ReplyFormatOptions;
 use crate::key_value::KeyValue;
 use json_path::select_value::{JSONArrayType, SelectValue, SelectValueType, ValueRef};
-use json_path::{compile, create};
+use json_path::{calc_once_projection, compile, create};
 use redis_module::raw as rawmod;
 use redis_module::{key::KeyFlags, Context, RedisString, Status};
+use serde::{Serialize, Serializer};
 
 use crate::manager::{Manager, ReadHolder};
 
-pub const REDIS_JSONAPI_LATEST_API_VER: usize = 10;
+pub const REDIS_JSONAPI_LATEST_API_VER: usize = 11;
 
 //
 // structs
@@ -42,8 +44,40 @@ pub enum JSONType {
     Null = 6,
 }
 
-struct ResultsIterator<'a, V: SelectValue> {
-    results: Vec<ValueRef<'a, V>>,
+enum Results<'a, M: Manager> {
+    Nodes(Vec<ValueRef<'a, M::V>>),
+    Computed(Vec<M::O>),
+}
+
+impl<M: Manager> Results<'_, M> {
+    fn len(&self) -> usize {
+        match self {
+            Self::Nodes(values) => values.len(),
+            Self::Computed(values) => values.len(),
+        }
+    }
+
+    fn get(&self, index: usize) -> &M::V {
+        match self {
+            Self::Nodes(values) => values[index].as_ref(),
+            Self::Computed(values) => values[index].borrow(),
+        }
+    }
+}
+
+impl<M: Manager> Serialize for Results<'_, M> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Nodes(values) => values.serialize(serializer),
+            Self::Computed(values) => {
+                serializer.collect_seq(values.iter().map(<M::O as Borrow<M::V>>::borrow))
+            }
+        }
+    }
+}
+
+struct ResultsIterator<'a, M: Manager> {
+    results: Results<'a, M>,
     pos: usize,
 }
 
@@ -220,7 +254,8 @@ pub fn json_api_get_json_from_iter<M: Manager>(
     ctx: *mut rawmod::RedisModuleCtx,
     str: *mut *mut rawmod::RedisModuleString,
 ) -> c_int {
-    let iter = unsafe { &*(iter.cast::<ResultsIterator<M::V>>()) };
+    // SAFETY: the caller supplies a live iterator created with the same manager type.
+    let iter = unsafe { &*(iter.cast::<ResultsIterator<M>>()) };
     if iter.pos >= iter.results.len() {
         Status::Err as c_int
     } else {
@@ -317,29 +352,33 @@ fn json_api_get_type_internal<V: SelectValue>(v: &V) -> JSONType {
 }
 
 pub fn json_api_next<M: Manager>(_: M, iter: *mut c_void) -> *const c_void {
-    let iter = unsafe { &mut *(iter.cast::<ResultsIterator<M::V>>()) };
+    // SAFETY: the caller supplies exclusive access to a live iterator of this manager type.
+    let iter = unsafe { &mut *(iter.cast::<ResultsIterator<M>>()) };
     if iter.pos >= iter.results.len() {
         null_mut()
     } else {
-        let res = (iter.results[iter.pos].as_ref() as *const M::V).cast::<c_void>();
+        let res = (iter.results.get(iter.pos) as *const M::V).cast::<c_void>();
         iter.pos += 1;
         res
     }
 }
 
 pub fn json_api_len<M: Manager>(_: M, iter: *const c_void) -> size_t {
-    let iter = unsafe { &*(iter.cast::<ResultsIterator<M::V>>()) };
+    // SAFETY: the caller supplies a live iterator created with the same manager type.
+    let iter = unsafe { &*(iter.cast::<ResultsIterator<M>>()) };
     iter.results.len() as size_t
 }
 
 pub fn json_api_free_iter<M: Manager>(_: M, iter: *mut c_void) {
+    // SAFETY: this iterator was allocated by Box::into_raw for M and is freed exactly once.
     unsafe {
-        drop(Box::from_raw(iter.cast::<ResultsIterator<M::V>>()));
+        drop(Box::from_raw(iter.cast::<ResultsIterator<M>>()));
     }
 }
 
 pub fn json_api_reset_iter<M: Manager>(_: M, iter: *mut c_void) {
-    let iter = unsafe { &mut *(iter.cast::<ResultsIterator<M::V>>()) };
+    // SAFETY: the caller supplies exclusive access to a live iterator of this manager type.
+    let iter = unsafe { &mut *(iter.cast::<ResultsIterator<M>>()) };
     iter.pos = 0;
 }
 
@@ -364,10 +403,51 @@ pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -
     let path_calculator = create(&query);
     let res = path_calculator.calc(v);
     Box::into_raw(Box::new(ResultsIterator {
-        results: res,
+        results: Results::<M>::Nodes(res),
         pos: 0,
     }))
     .cast::<c_void>()
+}
+
+/// Evaluate a JSONPath, including computed projections. The iterator owns computed
+/// values; ordinary selections borrow the document, just like `get`.
+/// The caller owns every non-NULL iterator returned, including empty iterators, and must
+/// call `freeIter` exactly once on every exit path after use. Do not pass NULL to `freeIter`.
+/// Use the existing iterator/value accessors; never free individual results or use their
+/// pointers after `freeIter`. Keep the source document alive and unchanged while using
+/// an iterator over ordinary selections.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub fn json_api_evaluate<M: Manager>(
+    manager: M,
+    val: *const c_void,
+    path: *const c_char,
+) -> *const c_void {
+    if val.is_null() || path.is_null() {
+        return null();
+    }
+    // SAFETY: the caller supplies a live document and a NUL-terminated path.
+    let (v, path) = unsafe {
+        let Ok(path) = CStr::from_ptr(path).to_str() else {
+            return null();
+        };
+        (&*val.cast::<M::V>(), path)
+    };
+    let Ok(query) = compile(path) else {
+        return null();
+    };
+    let results = if query.is_projection() {
+        let values = calc_once_projection(query, v)
+            .into_iter()
+            .map(|value| manager.import_value(value))
+            .collect::<Result<Vec<_>, _>>();
+        let Ok(values) = values else {
+            return null();
+        };
+        Results::<M>::Computed(values)
+    } else {
+        Results::<M>::Nodes(create(&query).calc(v))
+    };
+    Box::into_raw(Box::new(ResultsIterator::<M> { results, pos: 0 })).cast()
 }
 
 /// Like [`json_api_get`], but takes a compiled path handle from `JSONAPI_pathParse` or
@@ -401,7 +481,7 @@ pub fn json_api_get_with_path<M: Manager>(
     let path_calculator = create(query);
     let res = path_calculator.calc(v);
     Box::into_raw(Box::new(ResultsIterator {
-        results: res,
+        results: Results::<M>::Nodes(res),
         pos: 0,
     }))
     .cast::<c_void>()
@@ -631,6 +711,18 @@ macro_rules! redis_json_module_export_shared_api {
                     _ => $default_manager
                 },
                 run: |mngr|{json_api_get(mngr, key, path)},
+            )
+        }
+
+        #[no_mangle]
+        pub extern "C" fn JSONAPI_evaluate(key: *const c_void, path: *const c_char) -> *const c_void {
+            run_on_manager!(
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
+                run: |mngr|{$crate::c_api::json_api_evaluate(mngr, key, path)},
             )
         }
 
@@ -1009,6 +1101,8 @@ macro_rules! redis_json_module_export_shared_api {
             getWithPath: JSONAPI_getWithPath,
             // V10 entries
             pathParseNoErrorMsg: JSONAPI_pathParseNoErrorMsg,
+            // V11 entries
+            evaluate: JSONAPI_evaluate,
         };
 
         #[repr(C)]
@@ -1080,6 +1174,8 @@ macro_rules! redis_json_module_export_shared_api {
             pub getWithPath: extern "C" fn(val: *const c_void, path: *const c_void) -> *const c_void,
             // V10 entries
             pub pathParseNoErrorMsg: extern "C" fn(path: *const c_char) -> *const c_void,
+            // V11 entries
+            pub evaluate: extern "C" fn(val: *const c_void, path: *const c_char) -> *const c_void,
         }
     };
 }
@@ -1146,7 +1242,7 @@ mod tests {
     fn test_json_api_get_rejects_projection() {
         use std::ffi::CString;
         // A projection synthesizes a value with no document node, so the LLAPI does not
-        // expose it: json_api_get returns null (JSONAPI_pathParse rejects it up front too,
+        // expose it through the node-only API: json_api_get returns null (JSONAPI_pathParse rejects it up front too,
         // so pathIsSingle / pathHasDefinedOrder never see a projection's empty root).
         let doc: IValue = serde_json::from_str(r#"{"a":2}"#).unwrap();
         let path = CString::new("$.a + 1").unwrap();
@@ -1157,17 +1253,117 @@ mod tests {
             &doc as *const IValue as *const c_void,
             path.as_ptr(),
         );
-        assert_eq!(
-            res,
-            null(),
-            "a projection path must not be exposed via the LLAPI"
-        );
+        assert_eq!(res, null(), "a projection path must not be exposed via get");
     }
 
     fn ivalue_mngr() -> RedisIValueJsonKeyManager<'static> {
         RedisIValueJsonKeyManager {
             phantom: PhantomData,
         }
+    }
+
+    #[test]
+    fn test_evaluate_values_and_iterator_lifetime() {
+        use serde_json::json;
+        let cases = [
+            ("$.n + 1", json!([3])),
+            ("sum($.values)", json!([6.0])),
+            ("length($.values)", json!([3])),
+            ("$.obj.keys()", json!(["a", "b"])),
+            ("$.nested.first()", json!([{"x": [true, null, "hello"]}])),
+            ("$.empty.length()", json!([0])),
+            ("$.nulls.first()", json!([null])),
+            ("sum($.empty)", json!([])),
+            ("$.missing + 1", json!([])),
+        ];
+        for (path, expected) in cases {
+            let doc: IValue = serde_json::from_value(json!({
+                "n": 2, "values": [1, 2, 3], "empty": [], "nulls": [null],
+                "obj": {"a": 1, "b": 2}, "nested": [{"x": [true, null, "hello"]}]
+            }))
+            .unwrap();
+            let expression = CString::new(path).unwrap();
+            let iter = json_api_evaluate(
+                ivalue_mngr(),
+                (&doc as *const IValue).cast(),
+                expression.as_ptr(),
+            );
+            assert!(!iter.is_null(), "{path}");
+            // Computed values must remain readable after both inputs are released.
+            drop(expression);
+            drop(doc);
+            assert_eq!(
+                json_api_len(ivalue_mngr(), iter),
+                expected.as_array().unwrap().len()
+            );
+            for _ in 0..2 {
+                let mut actual = Vec::new();
+                loop {
+                    let value = json_api_next(ivalue_mngr(), iter.cast_mut());
+                    if value.is_null() {
+                        break;
+                    }
+                    // SAFETY: this value belongs to the live iterator, using the IValue manager.
+                    actual.push(serde_json::to_value(unsafe { &*value.cast::<IValue>() }).unwrap());
+                }
+                assert_eq!(json!(actual), expected, "{path}");
+                json_api_reset_iter(ivalue_mngr(), iter.cast_mut());
+            }
+            json_api_free_iter(ivalue_mngr(), iter.cast_mut());
+        }
+    }
+
+    #[test]
+    fn test_evaluate_selection_and_typed_accessors() {
+        let doc: IValue =
+            serde_json::from_str(r#"{"n":2,"null":null,"items":[{"n":1},{"n":2},{"n":3}]}"#)
+                .unwrap();
+        let root = (&doc as *const IValue).cast();
+        for path in ["$.n", "$.null", "$.missing", "$.items[?@.n + 1 == 3]"] {
+            let path = CString::new(path).unwrap();
+            let selected = json_api_get(ivalue_mngr(), root, path.as_ptr());
+            let evaluated = json_api_evaluate(ivalue_mngr(), root, path.as_ptr());
+            assert!(!evaluated.is_null(), "{path:?}");
+            assert_eq!(
+                json_api_len(ivalue_mngr(), selected),
+                json_api_len(ivalue_mngr(), evaluated)
+            );
+            loop {
+                let a = json_api_next(ivalue_mngr(), selected.cast_mut());
+                let b = json_api_next(ivalue_mngr(), evaluated.cast_mut());
+                assert_eq!(a.is_null(), b.is_null());
+                if a.is_null() {
+                    break;
+                }
+                // SAFETY: both iterators and their source document are still alive.
+                unsafe {
+                    assert_eq!(&*a.cast::<IValue>(), &*b.cast::<IValue>());
+                }
+            }
+            json_api_free_iter(ivalue_mngr(), selected.cast_mut());
+            json_api_free_iter(ivalue_mngr(), evaluated.cast_mut());
+        }
+        let iter = json_api_evaluate(ivalue_mngr(), root, c"$.n + 1".as_ptr());
+        let value = json_api_next(ivalue_mngr(), iter.cast_mut());
+        let mut number = 0;
+        assert_eq!(
+            json_api_get_int(ivalue_mngr(), value, &mut number),
+            Status::Ok as c_int
+        );
+        assert_eq!(number, 3);
+        json_api_free_iter(ivalue_mngr(), iter.cast_mut());
+    }
+
+    #[test]
+    fn test_evaluate_invalid_inputs() {
+        let doc = IValue::NULL;
+        let root = (&doc as *const IValue).cast();
+        for path in [c"$.n +".as_ptr(), c"$[".as_ptr(), c"".as_ptr(), null()] {
+            assert!(json_api_evaluate(ivalue_mngr(), root, path).is_null());
+        }
+        let invalid_utf8 = [0xff_u8, 0];
+        assert!(json_api_evaluate(ivalue_mngr(), root, invalid_utf8.as_ptr().cast()).is_null());
+        assert!(json_api_evaluate(ivalue_mngr(), null(), c"$".as_ptr()).is_null());
     }
 
     /// `getWithPath` (evaluate a pre-compiled `Query`) must return exactly the same results as the
