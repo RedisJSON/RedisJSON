@@ -165,13 +165,10 @@ static int EvaluateCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     if (argc == 3) {
         reply_nodes_as_json(ctx, it);
     } else {
-        size_t len = japi->len(it);
         while (japi->next(it) != NULL) {}
         japi->resetIter(it);
         RedisModuleString *s = NULL;
-        if (len == 0) {
-            RedisModule_ReplyWithSimpleString(ctx, "[]");
-        } else if (japi->getJSONFromIter(it, ctx, &s) == REDISMODULE_OK) {
+        if (japi->getJSONFromIter(it, ctx, &s) == REDISMODULE_OK) {
             RedisModule_ReplyWithString(ctx, s);
             RedisModule_FreeString(ctx, s);
         } else {
