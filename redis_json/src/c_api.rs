@@ -382,31 +382,12 @@ pub fn json_api_reset_iter<M: Manager>(_: M, iter: *mut c_void) {
     iter.pos = 0;
 }
 
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -> *const c_void {
-    let (v, path) = unsafe {
-        let v = &*(val.cast::<M::V>());
-        let Ok(path) = CStr::from_ptr(path).to_str() else {
-            return null();
-        };
-        (v, path)
-    };
-
-    let Ok(query) = compile(path) else {
-        return null();
-    };
-    // The LLAPI returns pointers to document nodes; a projection yields a synthesized value
-    // with no node, so it is not exposed here.
-    if query.is_projection() {
-        return null();
-    }
-    let path_calculator = create(&query);
-    let res = path_calculator.calc(v);
-    Box::into_raw(Box::new(ResultsIterator {
-        results: Results::<M>::Nodes(res),
-        pos: 0,
-    }))
-    .cast::<c_void>()
+pub fn json_api_get<M: Manager>(
+    manager: M,
+    val: *const c_void,
+    path: *const c_char,
+) -> *const c_void {
+    json_api_evaluate_internal(manager, val, path, false)
 }
 
 /// Evaluate a JSONPath, including computed projections. The iterator owns computed
@@ -416,11 +397,19 @@ pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -
 /// Use the existing iterator/value accessors; never free individual results or use their
 /// pointers after `freeIter`. Keep the source document alive and unchanged while using
 /// an iterator over ordinary selections.
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn json_api_evaluate<M: Manager>(
     manager: M,
     val: *const c_void,
     path: *const c_char,
+) -> *const c_void {
+    json_api_evaluate_internal(manager, val, path, true)
+}
+
+fn json_api_evaluate_internal<M: Manager>(
+    manager: M,
+    val: *const c_void,
+    path: *const c_char,
+    allow_projections: bool,
 ) -> *const c_void {
     if val.is_null() || path.is_null() {
         return null();
@@ -436,6 +425,9 @@ pub fn json_api_evaluate<M: Manager>(
         return null();
     };
     let results = if query.is_projection() {
+        if !allow_projections {
+            return null();
+        }
         let values = calc_once_projection(query, v)
             .into_iter()
             .map(|value| manager.import_value(value))
@@ -1360,10 +1352,13 @@ mod tests {
         let root = (&doc as *const IValue).cast();
         for path in [c"$.n +".as_ptr(), c"$[".as_ptr(), c"".as_ptr(), null()] {
             assert!(json_api_evaluate(ivalue_mngr(), root, path).is_null());
+            assert!(json_api_get(ivalue_mngr(), root, path).is_null());
         }
         let invalid_utf8 = [0xff_u8, 0];
         assert!(json_api_evaluate(ivalue_mngr(), root, invalid_utf8.as_ptr().cast()).is_null());
         assert!(json_api_evaluate(ivalue_mngr(), null(), c"$".as_ptr()).is_null());
+        assert!(json_api_get(ivalue_mngr(), null(), c"$".as_ptr()).is_null());
+        assert!(json_api_get(ivalue_mngr(), root, invalid_utf8.as_ptr().cast()).is_null());
     }
 
     /// `getWithPath` (evaluate a pre-compiled `Query`) must return exactly the same results as the
