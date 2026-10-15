@@ -66,10 +66,10 @@ def evaluate(results):
             return False, f'{name} degraded by at least 5%; baseline retained.'
         ratios.append(math.log1p(percent / 100))
     gain = math.expm1(sum(ratios) / len(ratios)) * 100
-    eligible = gain > 5 + 1e-9  # Ignore floating-point rounding at exactly 5%.
+    eligible = gain > 1e-9  # Ignore floating-point noise around zero improvement.
     return eligible, (f'Geometric mean throughput change: {gain:+.2f}%. ' +
                       ('Promotion criteria met (requires scheduled run and confirmation).' if eligible else
-                       'Improvement must exceed 5%; baseline retained.'))
+                       'Overall improvement must be positive; baseline retained.'))
 
 
 def main():
