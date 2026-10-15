@@ -276,11 +276,11 @@ def testLLAPIEvaluate():
         actual = [json.loads(v) for v in env.cmd('LLAPI.EVALUATE', 'computed', path)]
         env.assertEqual(actual, expected, message=path)
         if expected:
-            env.assertEqual(json.loads(env.cmd('LLAPI.EVALUATE', 'computed', path, 'ITER')), expected)
+            env.assertEqual(json.loads(env.cmd('LLAPI.EVALUATE', 'computed', path, 'ITER')), expected, message=path)
         else:
             # evaluate returns a valid empty iterator, but the existing serializer rejects it.
             env.expect('LLAPI.EVALUATE', 'computed', path, 'ITER').raiseError().contains('getJSONFromIter failed')
-        env.assertEqual(json.loads(env.cmd('JSON.GET', 'computed', path)), expected)
+        env.assertEqual(json.loads(env.cmd('JSON.GET', 'computed', path)), expected, message=path)
     # The opt-in API must not change existing node-only consumers.
     env.expect('LLAPI.OPEN_GET', 'computed', '$.n + 1').raiseError()
     env.expect('LLAPI.PATHPARSE', '$.n + 1').raiseError()
