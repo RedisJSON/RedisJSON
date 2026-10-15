@@ -96,6 +96,12 @@ pub trait Manager {
     /// Copy a JSON value into detached storage, preserving its value representation.
     fn clone_value(&self, value: &Self::V) -> Self::O;
 
+    /// Import a computed JSON value into detached storage. Backends may override this
+    /// to avoid a text round trip. The returned owner must keep its borrowed view alive.
+    fn import_value(&self, value: serde_json::Value) -> RedisResult<Self::O> {
+        self.from_str(&serde_json::to_string(&value)?, Format::JSON, false, None)
+    }
+
     /// Construct an object from unique fields, in the supplied order, taking ownership
     /// of their values. On failure, release any values already consumed.
     /// Implementations must not mutate stored documents or emit replication effects.

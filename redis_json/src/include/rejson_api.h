@@ -190,9 +190,31 @@ typedef struct RedisJSONAPI {
   // Like pathParse, but without a Redis context or error-message output
   JSONPath (*pathParseNoErrorMsg)(const char *path);
 
+  /////////////////
+  // V11 entries //
+  /////////////////
+  // Evaluate a JSONPath, including the computed projections supported by JSON.GET.
+  // Projections preserve JSON content, not necessarily the source storage format
+  // (e.g. FPHA/F32). This also applies to expressions such as first() selecting an
+  // existing array. Inspect the returned array type; do not assume the source type.
+  // Ordinary node selections retain the stored representation, as with get().
+  // Returns NULL for a NULL input, invalid UTF-8/path, or value-conversion failure.
+  // Missing/Nothing results return a non-NULL iterator with len() == 0;
+  // an explicit JSON null is a result of type JSONType_Null.
+  // Use next/len/resetIter/getJSONFromIter and the existing value accessors.
+  // getJSONFromIter retains its existing error for empty/exhausted iterators.
+  // The caller owns every non-NULL iterator, including empty ones, and MUST call
+  // freeIter() exactly once on every exit path after use (including error paths).
+  // Do not pass NULL to freeIter(), or release the iterator with free().
+  // The iterator owns computed values until freeIter(); do not free them separately.
+  // Ordinary selections borrow the document: keep it alive and unchanged until freeIter().
+  // In either case, all returned value pointers must be discarded before freeIter().
+  // The path string is only borrowed for this call. Existing parsers/get remain node-only.
+  JSONResultsIterator (*evaluate)(RedisJSON json, const char *path);
+
 } RedisJSONAPI;
 
-#define RedisJSONAPI_LATEST_API_VER 10
+#define RedisJSONAPI_LATEST_API_VER 11
 #ifdef __cplusplus
 }
 #endif
