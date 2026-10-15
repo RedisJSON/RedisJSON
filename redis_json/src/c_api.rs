@@ -392,6 +392,10 @@ pub fn json_api_get<M: Manager>(
 
 /// Evaluate a JSONPath, including computed projections. The iterator owns computed
 /// values; ordinary selections borrow the document, just like `get`.
+/// Projections return JSON values without guaranteeing the source storage format
+/// (e.g. FPHA/F32), even when an expression such as `first()` selects an existing array.
+/// Consumers must inspect the returned array type rather than assume the source type.
+/// Ordinary node selections retain the stored representation, as with `get`.
 /// The caller owns every non-NULL iterator returned, including empty iterators, and must
 /// call `freeIter` exactly once on every exit path after use. Do not pass NULL to `freeIter`.
 /// Use the existing iterator/value accessors; never free individual results or use their

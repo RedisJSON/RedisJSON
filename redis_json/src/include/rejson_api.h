@@ -194,6 +194,10 @@ typedef struct RedisJSONAPI {
   // V11 entries //
   /////////////////
   // Evaluate a JSONPath, including the computed projections supported by JSON.GET.
+  // Projections preserve JSON content, not necessarily the source storage format
+  // (e.g. FPHA/F32). This also applies to expressions such as first() selecting an
+  // existing array. Inspect the returned array type; do not assume the source type.
+  // Ordinary node selections retain the stored representation, as with get().
   // Returns NULL for a NULL input, invalid UTF-8/path, or value-conversion failure.
   // Missing/Nothing results return a non-NULL iterator with len() == 0;
   // an explicit JSON null is a result of type JSONType_Null.
