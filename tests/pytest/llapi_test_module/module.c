@@ -551,7 +551,7 @@ static int PathParseNoErrorMsgCmd(RedisModuleCtx *ctx, RedisModuleString **argv,
 }
 
 /* Bind the latest shared-API version. This module exercises functions across
- * all API versions (V1..V10), so it requires a provider exporting the full,
+ * all API versions through RedisJSONAPI_LATEST_API_VER, so it requires the full,
  * current struct; binding an older version could leave later fields undefined
  * and dereferencing them would read past the provider's struct. */
 static int fetch_japi(RedisModuleCtx *ctx) {
