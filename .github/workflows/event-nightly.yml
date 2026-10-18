@@ -176,7 +176,7 @@ jobs:
   test-summary:
     uses: ./.github/workflows/test-summary.yml
     needs: [prepare-values, build-linux-x64, build-linux-arm64, macos, linux-valgrind, linux-sanitizer, random-traffic, benchmark, linux-coverage]
-    if: always() && (github.event_name == 'schedule' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.send-slack-message == true))
+    if: always() && (github.event_name == 'schedule' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch')
     with:
       coverage-status: ${{ needs.linux-coverage.result }}
       redis-ref: ${{ needs.prepare-values.outputs.redis-ref }}
