@@ -12,6 +12,11 @@ on:
         required: false
         type: boolean
         default: false
+      coverage-status:
+        description: 'Result of the coverage job'
+        required: false
+        type: string
+        default: 'unknown'
       job-failures:
         description: 'Space-separated list of failed upstream job names'
         required: false
@@ -36,6 +41,13 @@ jobs:
         uses: actions/download-artifact@v7
         continue-on-error: true
       
+      - name: Summarize coverage
+        if: always()
+        env:
+          COVERAGE_STATUS: ${{ inputs.coverage-status }}
+          COVERAGE_SCOPE: 'Unit + general flow tests (QUICK=1)'
+        run: python3 .github/scripts/coverage-summary.py
+
       - name: Get commit information
         id: commit
         run: |
@@ -258,6 +270,10 @@ jobs:
             "$FAILED_OS_SUMMARY_ESC" \
             "$WORKFLOW_URL")
           
+          # Add coverage collected by this run to the existing notification.
+          PAYLOAD=$(jq --slurpfile coverage coverage-summary-block.json \
+            '.blocks = (.blocks[:-1] + $coverage + .blocks[-1:])' <<< "$PAYLOAD")
+
           # Send to Slack
           WEBHOOK_URL="${{ secrets.DATATYPES_SLACK_WEBHOOK_URL }}"
           echo "Checking webhook URL..."

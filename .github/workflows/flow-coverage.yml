@@ -34,3 +34,10 @@ jobs:
         files: bin/linux-x64-debug-cov/cov.info
         fail_ci_if_error: true # Fail on upload errors
         token: ${{ secrets.CODECOV_TOKEN }}
+    - name: Upload coverage artifact
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: coverage-report
+        path: bin/linux-x64-debug-cov/cov.info
+        if-no-files-found: warn
