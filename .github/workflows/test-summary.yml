@@ -152,6 +152,11 @@ jobs:
       
       - name: Format and send Slack message
         if: always() && inputs.send-slack-message == true
+        env:
+          COMMIT_MSG: ${{ steps.commit.outputs.message }}
+          JOB_FAILURES: ${{ inputs.job-failures }}
+          REDIS_VERSION: ${{ inputs.redis-ref }}
+          WEBHOOK_URL: ${{ secrets.DATATYPES_SLACK_WEBHOOK_URL }}
         run: |
           echo "=== Starting Slack message step ==="
           echo "Summary file output: ${{ steps.aggregate.outputs.summary_file }}"
@@ -172,9 +177,7 @@ jobs:
           # Build message
           NIGHTLY_NAME="Event Nightly"
           REPO_NAME="${{ github.repository }}"
-          REDIS_VERSION="${{ inputs.redis-ref }}"
           COMMIT_SHA="${{ steps.commit.outputs.sha }}"
-          COMMIT_MSG="${{ steps.commit.outputs.message }}"
           WORKFLOW_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           
           # Title format: repo name, nightly name, Redis version, commit number and message
@@ -216,8 +219,7 @@ jobs:
           fi
           
           # Include upstream job failures in the report
-          JOB_FAILURES=$(echo "${{ inputs.job-failures }}" | xargs)
-          if [ -n "$JOB_FAILURES" ]; then
+          if [[ "$JOB_FAILURES" =~ [^[:space:]] ]]; then
             JOB_FAIL_LIST=""
             for job in $JOB_FAILURES; do
               JOB_FAIL_LIST+="• *${job}* — ❌ job failed"$'\n'
@@ -246,7 +248,7 @@ jobs:
           FULL_OS_SUMMARY_ESC=$(echo "$FULL_OS_SUMMARY" | jq -Rs . | sed 's/^"//;s/"$//')
           
           # Build JSON payload using printf to avoid heredoc YAML parsing issues
-          PAYLOAD=$(printf '{"text":"Event Nightly Test Results","blocks":[{"type":"header","text":{"type":"plain_text","text":"%s - Event Nightly"}},{"type":"section","fields":[{"type":"mrkdwn","text":"*Redis Version:*\n%s"},{"type":"mrkdwn","text":"*Build:*\n%s"}]},{"type":"section","text":{"type":"mrkdwn","text":"*Commit:* %s"}},{"type":"divider"},{"type":"section","text":{"type":"mrkdwn","text":"*Overall Summary*\n✅ Passed: %s | ❌ Failed: %s | ⏭️ Skipped: %s"}},{"type":"section","text":{"type":"mrkdwn","text":"<%s|View Workflow Run>"}},{"type":"divider"},{"type":"section","text":{"type":"mrkdwn","text":"*Failed OSs:*\n%s"}},{"type":"actions","elements":[{"type":"button","text":{"type":"plain_text","text":"Show Full Summary","emoji":true},"url":"%s","style":"primary"}]}]}' \
+          PAYLOAD=$(printf '{"text":"Event Nightly Test Results","blocks":[{"type":"header","text":{"type":"plain_text","text":"%s - Event Nightly"}},{"type":"section","fields":[{"type":"mrkdwn","text":"*Redis Version:*\\n%s"},{"type":"mrkdwn","text":"*Build:*\\n%s"}]},{"type":"section","text":{"type":"mrkdwn","text":"*Commit:* %s"}},{"type":"divider"},{"type":"section","text":{"type":"mrkdwn","text":"*Overall Summary*\\n✅ Passed: %s | ❌ Failed: %s | ⏭️ Skipped: %s"}},{"type":"section","text":{"type":"mrkdwn","text":"<%s|View Workflow Run>"}},{"type":"divider"},{"type":"section","text":{"type":"mrkdwn","text":"*Failed OSs:*\\n%s"}},{"type":"actions","elements":[{"type":"button","text":{"type":"plain_text","text":"Show Full Summary","emoji":true},"url":"%s","style":"primary"}]}]}' \
             "$REPO_NAME" \
             "$REDIS_VERSION" \
             "$COMMIT_SHA" \
@@ -259,7 +261,6 @@ jobs:
             "$WORKFLOW_URL")
           
           # Send to Slack
-          WEBHOOK_URL="${{ secrets.DATATYPES_SLACK_WEBHOOK_URL }}"
           echo "Checking webhook URL..."
           if [ -z "$WEBHOOK_URL" ] || [ "$WEBHOOK_URL" = "" ]; then
             echo "ERROR: DATATYPES_SLACK_WEBHOOK_URL secret not set or empty"
