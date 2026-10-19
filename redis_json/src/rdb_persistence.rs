@@ -8,7 +8,7 @@
  */
 
 use std::cell::RefCell;
-use std::ffi::c_void;
+use std::ffi::{c_int, c_void};
 use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 
@@ -70,9 +70,9 @@ thread_local! {
 /// record of the stream is self-contained.
 struct SaveSession {
     encoder: StreamEncoder,
-    /// A temporary decode can recycle addresses after its value is freed. From the first one until
-    /// the save ends, every value may reference existing definitions but may introduce none.
-    definitions_disabled: bool,
+    /// A context with its own client/database, used only by the saving thread. GetContextFromIO
+    /// has no client, so it cannot be used for SelectDb or IsKeyInRam.
+    flex_ctx: Option<*mut raw::RedisModuleCtx>,
     stream_docs: u64,
     inline_docs: u64,
     lookup_only_docs: u64,
@@ -82,20 +82,40 @@ impl SaveSession {
     fn new(config: StreamEncoderConfig) -> Self {
         Self {
             encoder: StreamEncoder::new(config),
-            definitions_disabled: false,
+            flex_ctx: None,
             stream_docs: 0,
             inline_docs: 0,
             lookup_only_docs: 0,
         }
     }
 
+    /// Whether this value may add string addresses to the stream's dictionary.
+    fn allow_definitions(&self, rdb: *mut raw::RedisModuleIO) -> bool {
+        let Some(ctx) = self.flex_ctx else {
+            return true;
+        };
+        // SAFETY: the SDK resolves this optional Flex API during module initialization.
+        let Some(is_key_in_ram) = (unsafe { raw::RedisModule_IsKeyInRam }) else {
+            return false;
+        };
+        // SAFETY: Redis supplies rdb and its borrowed key. Persistence runs with the main thread
+        // blocked or in its fork child, so no extra GIL lock is needed.
+        unsafe {
+            let key = raw::RedisModule_GetKeyNameFromIO.unwrap()(rdb);
+            let dbid = raw::RedisModule_GetDbIdFromIO.unwrap()(rdb);
+            !key.is_null()
+                && dbid >= 0
+                && raw::RedisModule_SelectDb.unwrap()(ctx, dbid) == raw::REDISMODULE_OK as c_int
+                && is_key_in_ram(ctx, key.cast_mut()) == 1
+        }
+    }
+
     /// Encodes a value of this stream as `bytes[start..]`. The encoder appends after the header
     /// bytes, so a document that uses no string of the stream skips the first four of them and
-    /// keeps the marker 0 that fills the last. A value that the core decoded only to save it
-    /// (`definitions_disabled`) may reference strings that the stream defined but defines none:
-    /// its strings die with it, and the address of one would go to another string.
-    fn encode(&mut self, value: &IValue) -> (Vec<u8>, usize) {
-        let allow_define = !self.definitions_disabled;
+    /// keeps the marker 0 that fills the last. With `allow_define=false`, a value may reference
+    /// existing definitions but adds no string addresses: temporary strings die with the value,
+    /// and their addresses can be reused.
+    fn encode(&mut self, value: &IValue, allow_define: bool) -> (Vec<u8>, usize) {
         let base_id = self.encoder.next_id();
         let mut bytes = vec![MARKER_INLINE; STREAM_HEADER_LEN];
         self.lookup_only_docs += u64::from(!allow_define);
@@ -112,12 +132,19 @@ impl SaveSession {
     fn summary(&self, phase: &str) -> String {
         let stats = self.encoder.stats();
         format!(
-            "JSON RDB dictionary phase={phase} defs={} def_bytes={} refs={} stream_docs={} inline_docs={} lookup_only_docs={} skipped_short={} skipped_single_owner={} skipped_full={} table_entries={} table_bytes={} stale_hits={} poisoned={}",
+            "JSON RDB dictionary phase={phase} defs={} def_bytes={} refs={} stream_docs={} inline_docs={} lookup_only_docs={} poisoned={}",
             stats.defs, stats.def_bytes, stats.refs, self.stream_docs, self.inline_docs,
-            self.lookup_only_docs, stats.skipped_short, stats.skipped_single_owner,
-            stats.skipped_full, stats.table_entries, stats.table_bytes, stats.stale_hits,
-            self.encoder.is_poisoned(),
+            self.lookup_only_docs, self.encoder.is_poisoned(),
         )
+    }
+}
+
+impl Drop for SaveSession {
+    fn drop(&mut self) {
+        if let Some(ctx) = self.flex_ctx {
+            // SAFETY: this session owns the detached context and no callback retains it.
+            unsafe { raw::RedisModule_FreeThreadSafeContext.unwrap()(ctx) };
+        }
     }
 }
 
@@ -144,16 +171,6 @@ impl LoadSession {
     }
 }
 
-/// A temporary decode can recycle addresses after its value is freed. From this point until
-/// the save ends, every value may reference existing definitions but may introduce none.
-pub(crate) fn note_decode() {
-    SAVE_SESSION.with_borrow_mut(|session| {
-        if let Some(session) = session {
-            session.definitions_disabled = true;
-        }
-    });
-}
-
 /// Whether this thread's load session holds strings, for active defrag, which must not reset the
 /// string cache under a decoder that holds strings interned in it.
 pub(crate) fn load_session_is_live() -> bool {
@@ -167,8 +184,13 @@ pub(crate) fn load_session_is_live() -> bool {
 // A module argument skips the range check of CONFIG SET, so a value outside the range of its
 // setting counts as the nearest bound: a negative budget switches the writer off instead of
 // lifting its ceiling.
-fn config_value(setting: &AtomicI64, max: i64) -> usize {
-    usize::try_from(setting.load(Ordering::Relaxed).clamp(0, max)).unwrap_or(usize::MAX)
+fn config_value(setting: &AtomicI64) -> usize {
+    usize::try_from(
+        setting
+            .load(Ordering::Relaxed)
+            .clamp(0, RDB_DICTIONARY_MAX_BYTES_CEILING),
+    )
+    .unwrap_or(usize::MAX)
 }
 
 // The module API that logs does not exist under cargo test, where the message is only checked:
@@ -242,11 +264,13 @@ fn encode_value(value: &IValue) -> Vec<u8> {
 
 /// Encodes a value as `bytes[start..]`. A keyed value is encoded by the session of the save, when
 /// it has one. Saves without a session (the writer is off), keyless values, and poisoned
-/// encoders stay self-contained. After the first decode during a save, no later value defines a
-/// string.
-fn encode_for_save(value: &IValue, keyed: bool) -> (Vec<u8>, usize) {
+/// encoders stay self-contained. `allow_define` controls whether this value may add definitions.
+fn encode_for_save(value: &IValue, keyed: bool, allow_define: bool) -> (Vec<u8>, usize) {
     keyed
-        .then(|| SAVE_SESSION.with_borrow_mut(|session| session.as_mut().map(|s| s.encode(value))))
+        .then(|| {
+            SAVE_SESSION
+                .with_borrow_mut(|session| session.as_mut().map(|s| s.encode(value, allow_define)))
+        })
         .flatten()
         .unwrap_or_else(|| (encode_value(value), 0))
 }
@@ -255,7 +279,13 @@ pub(crate) fn save_value(rdb: *mut raw::RedisModuleIO, value: &IValue) {
     // SaveDataTypeToString/Serialize have no key and always remain self-contained.
     // DUMP, MIGRATE and the ASM slot snapshot do carry a key: the command filter ends the session
     // before any command runs, and the ASM child has none.
-    let (bytes, start) = encode_for_save(value, has_key(rdb));
+    // Flex never inserts its temporary save objects into the keyspace.
+    let allow_define = SAVE_SESSION.with_borrow(|session| {
+        session
+            .as_ref()
+            .is_none_or(|session| session.allow_definitions(rdb))
+    });
+    let (bytes, start) = encode_for_save(value, has_key(rdb), allow_define);
     // A failed write fails the whole save, so a record that was encoded but not written is never
     // followed by one that refers to the strings it defined.
     raw::save_slice(rdb, &bytes[start..]);
@@ -374,7 +404,7 @@ fn decode_stream_document(
 }
 
 unsafe extern "C" fn command_filter(_ctx: *mut raw::RedisModuleCommandFilterCtx) {
-    SAVE_SESSION.with_borrow_mut(|session| *session = None);
+    SAVE_SESSION.set(None);
 }
 
 unsafe extern "C" fn persistence_event(
@@ -389,17 +419,22 @@ unsafe extern "C" fn persistence_event(
         | raw::REDISMODULE_SUBEVENT_PERSISTENCE_AOF_START
         | raw::REDISMODULE_SUBEVENT_PERSISTENCE_SYNC_RDB_START
         | raw::REDISMODULE_SUBEVENT_PERSISTENCE_SYNC_AOF_START => {
-            let budget = config_value(&RDB_DICTIONARY_MAX_BYTES, RDB_DICTIONARY_MAX_BYTES_CEILING);
-            let max_def_bytes = config_value(
-                &RDB_DICTIONARY_MAX_DEF_BYTES,
-                RDB_DICTIONARY_MAX_BYTES_CEILING,
-            );
+            let budget = config_value(&RDB_DICTIONARY_MAX_BYTES);
+            let max_def_bytes = config_value(&RDB_DICTIONARY_MAX_DEF_BYTES);
             // A budget of 0 turns the writer off: no session, so every value is self-contained.
             SAVE_SESSION.set((budget > 0).then(|| {
-                SaveSession::new(StreamEncoderConfig {
+                let mut session = SaveSession::new(StreamEncoderConfig {
                     table_budget_bytes: budget,
                     max_def_bytes,
-                })
+                });
+                if BIGREDIS_ENABLED.load(Ordering::Relaxed) {
+                    // SAFETY: ctx belongs to the persistence callback. The detached context is owned
+                    // by this save session and is released by Drop.
+                    session.flex_ctx = Some(unsafe {
+                        raw::RedisModule_GetDetachedThreadSafeContext.unwrap()(ctx)
+                    });
+                }
+                session
             }));
             log_event(ctx, &format!(
                 "JSON RDB dictionary phase=persistence_start status=armed flex={} budget_bytes={budget} max_def_bytes={max_def_bytes}",

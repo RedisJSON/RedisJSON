@@ -61,7 +61,7 @@ pub(super) fn document(text: &IString) -> IValue {
 }
 
 fn record(value: &IValue, keyed: bool) -> Vec<u8> {
-    let (bytes, start) = encode_for_save(value, keyed);
+    let (bytes, start) = encode_for_save(value, keyed, true);
     bytes[start..].to_vec()
 }
 
@@ -187,7 +187,6 @@ fn a_small_budget_degrades_gradually_and_every_record_still_loads() {
     // stay inline in both uses, byte for byte what an unframed save writes.
     let stats = SAVE_SESSION.with_borrow(|s| s.as_ref().unwrap().encoder.stats());
     assert!(stats.defs > 0 && stats.defs < 64, "{stats:?}");
-    assert!(stats.skipped_full > 0, "{stats:?}");
     assert_eq!(stats.refs, stats.defs);
     for (doc, record) in docs.iter().zip(&records) {
         if record[0] == MARKER_INLINE {

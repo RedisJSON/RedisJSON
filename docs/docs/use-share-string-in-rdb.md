@@ -18,8 +18,8 @@ the intern cache before the first key and capped them at 65,536 entries.
 ```text
 save    persistence START       creates the encoder (none when the budget is 0)
         each keyed value        writes marker 1 or 0
-        first temporary decode  disables new definitions for the rest of this save
-        ENDED / FAILED          logs counters and drops the encoder
+        each Flex value         queries residency; only resident values may define strings
+        ENDED / FAILED          logs counters, drops encoder and residency context
 load    loading START           creates the decoder
         each marker 1           checks base_id (0 for the first), then decodes using the table
         failed marker 1         drops the decoder; later marker 1 records are refused
@@ -125,16 +125,20 @@ commands can create standalone payloads, including commands invoked by other mod
   a stream is being written.
   The Flex flash pass does free values: for a value that is not in memory the core
   decodes the record (`rdb_load`), saves the value (`rdb_save`) and frees it, one at a
-  time on the thread of the save. On entry to `rdb_load`, the encoder of the save gets one
-  `definitions_disabled` flag. Every subsequent value, including resident values and
-  values in later databases, uses `allow_define=false`: existing references remain
-  usable, but no new address is registered. Freeing a value does not clear it; the flag
-  goes with the encoder, which persistence end, failure, the command filter or a fresh
-  START drops. Without
+  time on the thread of the save. Each `rdb_save` queries `RedisModule_IsKeyInRam`
+  using the key and database from its IO handle. Temporary decoded objects never enter
+  the keyspace, so this returns false even while the callback holds their decoded value.
+  Metadata-only keys also return false. These values use `allow_define=false`: existing
+  references remain usable, but no new address is registered. Later resident values may
+  still define strings.
+  The session owns a detached context with its own client for database selection;
+  `GetContextFromIO` alone has no client. Persistence end, failure, the command filter
+  or a fresh START releases that context. A missing residency API, unknown database,
+  or failed database selection disables definitions for that value. Without
   the guard, on Flex, a BGSAVE of 300 values on flash that repeat one string of one length
   wrote 598 references to two definitions, and 298 of the 299 values read back with another
-  string, with `stale_hits=0` and no error. With it, the same save defines nothing for them
-  and every value reads back exactly (the Flex test for strings of one length). A test
+  string, without poisoning the encoder or reporting an error. With it, the same save defines
+  nothing for them and every value reads back exactly (the Flex test for strings of one length). A test
   that makes the pages of the strings read-only in a forked child checks that encoding
   writes to none of them.
   Both save modes rely on the core decoding, saving and freeing temporary values on
@@ -162,7 +166,7 @@ commands can create standalone payloads, including commands invoked by other mod
 | Setting | Default | Meaning |
 |---|---|---|
 | `json-rdb-dictionary-max-bytes` | 256 MiB | Ceiling on the writer's address-table heap in either save mode. The old and the new allocation count while the table grows. 0 turns the writer off; the reader always accepts. Range 0 to 2^40. |
-| `json-rdb-dictionary-max-def-bytes` | 0 | Most bytes of strings that one stream defines; 0 sets no bound. A reader keeps every defined string in RAM until the stream ends, even when Flex spills the values that hold them, so this is the most that the strings of a stream pin in a reader. Past it a string stays inline and the defined ones keep being referenced (counted in `skipped_full`). Range 0 to 2^40; a negative module argument counts as 0. |
+| `json-rdb-dictionary-max-def-bytes` | 0 | Most bytes of strings that one stream defines; 0 sets no bound. A reader keeps every defined string in RAM until the stream ends, even when Flex spills the values that hold them, so this is the most that the strings of a stream pin in a reader. Past it a string stays inline and the defined ones keep being referenced. Range 0 to 2^40; a negative module argument counts as 0. |
 
 Both change at runtime with `CONFIG SET` (units such as `128mb` work); a BGSAVE child
 keeps the value it inherited at fork. A module argument skips the range check of
@@ -181,15 +185,15 @@ Children have no INFO channel, so each save and load logs lines that start with
 | Line | Fields |
 |---|---|
 | `persistence_start` | `status=armed flex budget_bytes max_def_bytes` |
-| `persistence_ended` / `persistence_failed` | `defs def_bytes refs stream_docs inline_docs lookup_only_docs skipped_short skipped_single_owner skipped_full table_entries table_bytes stale_hits poisoned`; emitted if the save wrote a JSON value. `lookup_only_docs` counts all values encoded after definitions were disabled, including later resident values. |
+| `persistence_ended` / `persistence_failed` | `defs def_bytes refs stream_docs inline_docs lookup_only_docs poisoned`; emitted if the save wrote a JSON value. `lookup_only_docs` counts values whose residency did not permit definitions; later resident values do not contribute to this count. |
 | `loading_ended` / `loading_failed` | `defs def_bytes refs stream_docs`, when the load read a stream record |
 | `load` | `status=refused reason=...` with `marker_N`, `no_stream`, `base_id_mismatch` or `cbor_...`; warning level while loading |
 
 Persistence summaries follow the core completion or failure event. A refused record while a file loads stops the server,
 and its exit status can be 0 because the RDB checker it runs skips module values; the
-warning line is the only sign of the cause. Operator rule: `skipped_full / refs` above 5
-percent means the budget is too small, so double it. `rdb_last_cow_size` now includes the
-table and is no longer dataset copy-on-write.
+warning line is the only sign of the cause. `poisoned=true` means the encoder stopped writing
+definitions and references. `rdb_last_cow_size` now includes the table and is no longer
+dataset copy-on-write.
 
 ## Limits
 
@@ -221,9 +225,8 @@ table and is no longer dataset copy-on-write.
   also need regeneration. Staying on version 4 and marking stream records
   with a root CBOR tag would keep inline records readable by them; the framing is in one
   function pair (`encode_for_save`, `decode_for_load`), so that choice stays reversible.
-- Flex: the writer deduplicates resident values until the first temporary decode.
-  After that, later resident values cannot introduce definitions either; this can reduce
-  deduplication, especially across databases. A value that Flex keeps on flash holds its own copy of
+- Flex: the writer deduplicates resident values throughout the save, using one keyspace
+  lookup per module save callback. A value that Flex keeps on flash holds its own copy of
   every string, so the writer only lets it reference strings that values in RAM
   defined; strings that are shared among flash values alone are written in full, and a
   database with most of its values on flash shrinks little. That is the difference
@@ -267,6 +270,17 @@ Implementation does not wait for these; turning the writer on by default does.
   sizes and multiplicity are still modelled. A customer on 8.6.5 stores JSON text
   (encoding version 3), so delivering there needs a CBOR release or a separate design.
 - Rollout order: readers first, then writers.
+
+### Future core improvement
+
+Expose whether the current save value is temporary directly on `RedisModuleIO`, with an
+explicit allocation-lifetime guarantee for resident values until the save ends. Core
+already distinguishes RAM and disk-origin values. Such an API would remove the extra
+residency lookup and detached context; the current implementation needs no core change.
+
+The SDK and macros are pinned together to `cca53606a1b8bfaa78f96399cb10bb9d3a1f1099`,
+whose generated bindings expose the optional `RedisModule_IsKeyInRam` function. This is
+the SDK master line (package version 2.0.8), not a newer 2.1 release tag.
 
 ## Source and verification
 
@@ -337,3 +351,26 @@ under a 24 MiB RAM limit; even the inline control failed in a repeat. At 32 and 
 inline and capped files loaded exactly while the 48 MiB unbounded stream failed. The
 regression now requires all three outcomes at 40 MiB and checks the writer emitted
 exactly 6 MiB of definitions. These fixture limits are not production sizing guidance.
+
+### Residency query and SDK validation (2026-10-19)
+
+The resident-after-temporary-decode regression passes with the residency query.
+All 33 persistence unit tests pass, including context
+cleanup, unknown database/API fallback, and exact reads after temporary address reuse.
+The complete Rust workspace passes with default features (429 tests) and `as-library`
+(430 tests). Clippy passes for all targets with default features and warnings denied.
+
+Docker validation uses Linux ARM64 and unstable core `40db9347`, in RAM and Flex modes.
+The SDK validation ran the complete standalone pytest suite: 306 passed, 22 skipped,
+including the rebuilt LLAPI consumer, defrag, and every legacy RDB truncation point.
+The final persistence implementation passed the dedicated RDB matrix below. Skips are
+excluded from the passed counts; RLTest's summary includes them.
+
+| Storage | Mode | Passed | Skipped | Failed |
+|---|---|---:|---:|---:|
+| RAM | Standalone | 14 | 9 | 0 |
+| RAM | Replica | 15 | 8 | 0 |
+| RAM | AOF | 1 | 22 | 0 |
+| Flex | Standalone | 18 | 5 | 0 |
+| Flex | Replica | 20 | 3 | 0 |
+| Flex | AOF | 1 | 22 | 0 |
