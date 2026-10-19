@@ -26,6 +26,11 @@ thread_local! {
     static RDB: RefCell<VecDeque<Vec<u8>>> = const { RefCell::new(VecDeque::new()) };
     static KEYED: Cell<bool> = const { Cell::new(true) };
     static SHORT_READ: Cell<bool> = const { Cell::new(false) };
+    static DBID: Cell<c_int> = const { Cell::new(0) };
+    static IN_RAM: Cell<bool> = const { Cell::new(true) };
+    static RESIDENCY_QUERIES: Cell<usize> = const { Cell::new(0) };
+    static CONTEXTS_CREATED: Cell<usize> = const { Cell::new(0) };
+    static CONTEXTS_FREED: Cell<usize> = const { Cell::new(0) };
 }
 
 fn io() -> *mut raw::RedisModuleIO {
@@ -80,6 +85,40 @@ unsafe extern "C" fn free(ptr: *mut c_void) {
     unsafe { libc::free(ptr) };
 }
 
+unsafe extern "C" fn db_id_from_io(_io: *mut raw::RedisModuleIO) -> c_int {
+    DBID.get()
+}
+
+unsafe extern "C" fn detached_context(_ctx: *mut raw::RedisModuleCtx) -> *mut raw::RedisModuleCtx {
+    CONTEXTS_CREATED.set(CONTEXTS_CREATED.get() + 1);
+    Box::into_raw(Box::new(0 as c_int)).cast()
+}
+
+unsafe extern "C" fn free_context(ctx: *mut raw::RedisModuleCtx) {
+    CONTEXTS_FREED.set(CONTEXTS_FREED.get() + 1);
+    // SAFETY: detached_context allocated this fake context's selected database.
+    unsafe { drop(Box::from_raw(ctx.cast::<c_int>())) };
+}
+
+unsafe extern "C" fn select_db(ctx: *mut raw::RedisModuleCtx, dbid: c_int) -> c_int {
+    if !(0..16).contains(&dbid) {
+        return raw::REDISMODULE_ERR as c_int;
+    }
+    // SAFETY: ctx is the live allocation returned by detached_context.
+    unsafe { *ctx.cast::<c_int>() = dbid };
+    raw::REDISMODULE_OK as c_int
+}
+
+unsafe extern "C" fn is_key_in_ram(
+    ctx: *mut raw::RedisModuleCtx,
+    _key: *mut raw::RedisModuleString,
+) -> c_int {
+    RESIDENCY_QUERIES.set(RESIDENCY_QUERIES.get() + 1);
+    // SAFETY: ctx is the live allocation returned by detached_context. A different database
+    // has no matching key, exposing queries that forgot to select the IO database.
+    c_int::from(unsafe { *ctx.cast::<c_int>() } == DBID.get() && IN_RAM.get())
+}
+
 fn feed(records: Vec<Vec<u8>>) {
     SHORT_READ.set(false);
     RDB.set(records.into());
@@ -122,6 +161,11 @@ impl Server {
                 raw::RedisModule_IsIOError = Some(is_io_error);
                 raw::RedisModule_GetKeyNameFromIO = Some(key_name_from_io);
                 raw::RedisModule_Free = Some(free);
+                raw::RedisModule_GetDbIdFromIO = Some(db_id_from_io);
+                raw::RedisModule_GetDetachedThreadSafeContext = Some(detached_context);
+                raw::RedisModule_FreeThreadSafeContext = Some(free_context);
+                raw::RedisModule_SelectDb = Some(select_db);
+                raw::RedisModule_IsKeyInRam = Some(is_key_in_ram);
             }
         });
         let server = Self { _serial: serial };
@@ -134,6 +178,11 @@ impl Server {
         reset();
         feed(Vec::new());
         KEYED.set(true);
+        DBID.set(0);
+        IN_RAM.set(true);
+        RESIDENCY_QUERIES.set(0);
+        CONTEXTS_CREATED.set(0);
+        CONTEXTS_FREED.set(0);
         RDB_DICTIONARY_MAX_BYTES.store(DEFAULT_RDB_DICTIONARY_MAX_BYTES, Ordering::Relaxed);
         RDB_DICTIONARY_MAX_DEF_BYTES.store(DEFAULT_RDB_DICTIONARY_MAX_DEF_BYTES, Ordering::Relaxed);
         BIGREDIS_ENABLED.store(false, Ordering::Relaxed);
@@ -142,6 +191,11 @@ impl Server {
 
     fn start_save(&self) {
         persistence(raw::REDISMODULE_SUBEVENT_PERSISTENCE_SYNC_RDB_START);
+    }
+
+    fn start_flex_save(&self) {
+        BIGREDIS_ENABLED.store(true, Ordering::Relaxed);
+        self.start_save();
     }
 
     fn end_save(&self) {
@@ -184,10 +238,6 @@ impl Drop for Server {
     fn drop(&mut self) {
         self.forget();
     }
-}
-
-fn definitions_disabled() -> bool {
-    SAVE_SESSION.with_borrow(|session| session.as_ref().unwrap().definitions_disabled)
 }
 
 fn shared_documents(text: &str, count: usize) -> (IString, Vec<IValue>) {
@@ -322,10 +372,12 @@ fn save_a_decoded_record(record: &[u8]) -> Vec<u8> {
     feed(vec![record.to_vec()]);
     let value = crate::redisjson::type_methods::rdb_load(io(), 5);
     assert!(!value.is_null());
+    let was_in_ram = IN_RAM.replace(false);
     // SAFETY: the value is the one rdb_load returned, and it stays alive until the free below.
     unsafe { crate::redisjson::type_methods::rdb_save(io(), value) };
     // SAFETY: the value is not used again.
     unsafe { crate::redisjson::type_methods::free(value) };
+    IN_RAM.set(was_in_ram);
     let [saved] = <[Vec<u8>; 1]>::try_from(drain_records()).expect("one record per key");
     saved
 }
@@ -336,7 +388,7 @@ fn a_value_decoded_during_a_save_defines_no_string_but_may_reference_one() {
     // The writer owns no strings, so a string that was freed and whose address another string of
     // the same length took over would go unnoticed.
     let (owner, resident) = shared_documents("a string that the values in memory share", 1);
-    server.start_save();
+    server.start_flex_save();
     let defining = server.save_record(&resident[0]);
     assert_eq!(defining[0], MARKER_STREAM);
 
@@ -410,7 +462,7 @@ fn cold_records(count: usize) -> (Vec<Vec<u8>>, Vec<String>) {
 fn values_that_the_core_freed_during_a_save_read_back_with_their_own_text() {
     let server = Server::start();
     let (_owner, resident) = shared_documents("a string that the values in memory share", 1);
-    server.start_save();
+    server.start_flex_save();
     let mut saved = vec![server.save_record(&resident[0])];
     let (records, texts) = cold_records(64);
     saved.extend(records.iter().map(|record| save_a_decoded_record(record)));
@@ -456,7 +508,7 @@ fn random_flash_pass(ops: usize, seed: u64) -> usize {
         .iter()
         .map(|text| IString::from(text.as_str()))
         .collect();
-    server.start_save();
+    server.start_flex_save();
     let mut records = Vec::new();
     let mut expected: Vec<Vec<String>> = Vec::new();
     let mut alive = Vec::new();
@@ -574,52 +626,91 @@ fn a_short_io_read_prevents_decoder_restart_until_a_new_loading_event() {
 }
 
 #[test]
-fn first_decode_disables_definitions_for_later_resident_values() {
+fn resident_values_after_a_temporary_decode_still_define_strings() {
     let server = Server::start();
-    server.start_save();
-    let (_owner, existing) = shared_documents("an existing definition stays usable", 2);
-    assert_eq!(server.save_record(&existing[0])[0], MARKER_STREAM);
-    save_a_decoded_record(&inline_record(&IValue::from(17)));
-    let (_later_owner, later) = shared_documents("a later resident string stays inline", 2);
-    assert_eq!(server.save_record(&later[0]), inline_record(&later[0]));
-    assert_eq!(server.save_record(&existing[1])[0], MARKER_STREAM);
-    server.end_save();
-    server.start_save();
+    server.start_flex_save();
+    let (_first_owner, first) = shared_documents("a resident definition before a cold value", 2);
+    let (_later_owner, later) = shared_documents("a resident definition after a cold value", 2);
+    assert_eq!(server.save_record(&first[0])[0], MARKER_STREAM);
+    assert_eq!(
+        save_a_decoded_record(&inline_record(&IValue::from(17)))[0],
+        MARKER_INLINE
+    );
     assert_eq!(server.save_record(&later[0])[0], MARKER_STREAM);
+    assert_eq!(server.save_record(&first[1])[0], MARKER_STREAM);
+    assert_eq!(server.save_record(&later[1])[0], MARKER_STREAM);
 }
 
 #[test]
-fn a_decode_disables_all_definitions_until_save_restart() {
+fn flex_residency_uses_the_io_database_and_skips_unknown_keys() {
     let server = Server::start();
-    let (_owner, docs) = shared_documents("a resident value reached after a temporary decode", 2);
+    server.start_flex_save();
+    let (_owner, docs) = shared_documents("a string available only in the selected database", 2);
+    for dbid in [3, 0, 15] {
+        DBID.set(dbid);
+        assert_eq!(server.save_record(&docs[0])[0], MARKER_STREAM);
+    }
+    assert_eq!(RESIDENCY_QUERIES.get(), 3);
+    let (_owner, unknown) = shared_documents("a string whose residency is unknown", 2);
+    for dbid in [-1, 16] {
+        DBID.set(dbid);
+        assert_eq!(server.save_record(&unknown[0]), inline_record(&unknown[0]));
+    }
+    DBID.set(0);
+    KEYED.set(false);
+    assert_eq!(server.save_record(&docs[0]), inline_record(&docs[0]));
+    assert_eq!(RESIDENCY_QUERIES.get(), 3);
+}
+
+#[test]
+fn flex_without_the_residency_api_writes_inline_values() {
+    let server = Server::start();
+    server.start_flex_save();
+    let (_owner, docs) = shared_documents("a string that needs a residency guarantee", 2);
+    // SAFETY: Server serializes the tests that use these module API mocks.
+    unsafe { raw::RedisModule_IsKeyInRam = None };
+    let records: Vec<_> = docs.iter().map(|doc| server.save_record(doc)).collect();
+    // SAFETY: restore the shared mock before checking the output.
+    unsafe { raw::RedisModule_IsKeyInRam = Some(is_key_in_ram) };
+    for (doc, record) in docs.iter().zip(records) {
+        assert_eq!(record, inline_record(doc));
+    }
+    assert_eq!(RESIDENCY_QUERIES.get(), 0);
+}
+
+#[test]
+fn flex_save_context_is_released_at_every_session_boundary() {
+    let server = Server::start();
     for end in [
         raw::REDISMODULE_SUBEVENT_PERSISTENCE_ENDED,
         raw::REDISMODULE_SUBEVENT_PERSISTENCE_FAILED,
     ] {
-        server.start_save();
-        assert!(!definitions_disabled());
-        let temporary = save_a_decoded_record(&inline_record(&IValue::from(3)));
-        assert_eq!(temporary[0], MARKER_INLINE);
-        assert!(definitions_disabled());
-        assert_eq!(server.save_record(&docs[0]), inline_record(&docs[0]));
-        assert_eq!(server.save_record(&docs[1]), inline_record(&docs[1]));
+        server.start_flex_save();
+        assert_eq!(CONTEXTS_CREATED.get(), CONTEXTS_FREED.get() + 1);
         persistence(end);
         assert!(!save_session_exists());
-        server.start_save();
-        assert_eq!(server.save_record(&docs[0])[0], MARKER_STREAM);
-        server.end_save();
+        assert_eq!(CONTEXTS_CREATED.get(), CONTEXTS_FREED.get());
     }
+    server.start_save();
+    server.start_save();
+    assert_eq!(CONTEXTS_CREATED.get(), CONTEXTS_FREED.get() + 1);
+    // SAFETY: the filter ignores its argument and only drops this thread's save session.
+    unsafe { command_filter(std::ptr::null_mut()) };
+    assert_eq!(CONTEXTS_CREATED.get(), CONTEXTS_FREED.get());
+    let created = CONTEXTS_CREATED.get();
+    RDB_DICTIONARY_MAX_BYTES.store(0, Ordering::Relaxed);
+    server.start_save();
+    assert_eq!(CONTEXTS_CREATED.get(), created);
 }
 
 #[test]
-fn a_failed_legacy_decode_also_disables_definitions() {
+fn a_failed_legacy_decode_does_not_disable_resident_definitions() {
     let server = Server::start();
     let (_owner, docs) = shared_documents("resident strings after a legacy decoding attempt", 2);
-    server.start_save();
+    server.start_flex_save();
     feed(Vec::new());
     assert!(crate::redisjson::type_methods::rdb_load(io(), 4).is_null());
-    assert!(definitions_disabled());
-    assert_eq!(server.save_record(&docs[0]), inline_record(&docs[0]));
+    assert_eq!(server.save_record(&docs[0])[0], MARKER_STREAM);
 }
 
 #[test]

@@ -183,21 +183,14 @@ def _last_summary(env, lines, pid=None):
 
 def _expect_stream_logs(env, watch, min_refs=1, min_defs=1):
     """A save wrote a stream that defined and referenced strings, the log says."""
-    lines = watch.lines()
-    started = [line for line in lines
-               if 'phase=persistence_start status=armed' in line]
-    env.assertTrue(started, message=f'no stream started: {lines}')
-    if not started:
-        return
     # A save that a replica's synchronization starts can log in the same window. Only the lines of
     # the process that ran the last save count.
-    summary = _last_summary(env, lines, _log_pid(started[-1]))
+    summary = _summary_of_last_save(env, watch)
     if summary is None:
         return
     env.assertGreaterEqual(_field(summary, 'defs'), min_defs)
     env.assertGreaterEqual(_field(summary, 'refs'), min_refs)
-    env.assertEqual(_field(summary, 'stale_hits'), 0)
-    env.assertEqual(_field(summary, 'skipped_full'), 0)
+    env.assertContains('poisoned=false', summary)
 
 
 def _rdb_save_len(n):
@@ -449,7 +442,8 @@ def test_dictionary_writer_budget_does_not_limit_reads(env):
         summary = _last_summary(env, watch.lines())
         if summary is not None:
             env.assertEqual(_field(summary, 'defs'), 0, message=summary)
-            env.assertGreater(_field(summary, 'skipped_full'), 0, message=summary)
+            env.assertEqual(_field(summary, 'refs'), 0, message=summary)
+            env.assertEqual(_field(summary, 'inline_docs'), len(documents), message=summary)
 
         env.expect('CONFIG', 'SET', config, '0').ok()
         env.expect('DEBUG', 'RELOAD', 'NOSAVE').ok()
@@ -939,13 +933,21 @@ def test_flex_values_on_flash_define_no_string_and_reference_the_ones_in_ram(env
     # With a few values in RAM, which define the string, the values on flash reference it.
     for command in ('SAVE', 'BGSAVE'):
         _put_values_on_flash(env, documents, keep_in_ram=4)
+        # EXISTS materializes only metadata; the residency query must still classify this as cold.
+        metadata_key = list(documents)[4]
+        env.expect('EXISTS', metadata_key).equal(1)
+        metadata = env.cmd('DEBUG', 'BIGREDIS-KEY', metadata_key)
+        env.assertContains('meta-in-ram:yes', metadata)
+        env.assertContains('data-in-ram:no', metadata)
         summary = _save_and_read_summary(env, command)
         if summary is not None:
             env.assertGreaterEqual(_field(summary, 'defs'), 1, message=summary)
             env.assertGreaterEqual(_field(summary, 'refs'), len(documents) - 1, message=summary)
             env.assertGreaterEqual(_field(summary, 'lookup_only_docs'), len(documents) - 4, message=summary)
-            env.assertEqual(_field(summary, 'stale_hits'), 0, message=summary)
+            env.assertContains('poisoned=false', summary)
         env.assertLess(_rdb_size(env), len(shared) * 4, message=command)
+        for key in list(documents)[4:]:
+            env.assertContains('data-in-ram:no', env.cmd('DEBUG', 'BIGREDIS-KEY', key))
         check_reload()
 
 
@@ -973,7 +975,7 @@ def test_flex_values_on_flash_whose_strings_share_a_length_survive_a_save(env):
         if summary is not None:
             env.assertEqual(_field(summary, 'lookup_only_docs'), len(documents) - 1, message=summary)
             env.assertEqual(_field(summary, 'defs'), 1, message=summary)
-            env.assertEqual(_field(summary, 'stale_hits'), 0, message=summary)
+            env.assertContains('poisoned=false', summary)
         env.expect('DEBUG', 'RELOAD', 'NOSAVE').ok()
         replies = _pipelined(connection, [('JSON.GET', key) for key in documents])
         wrong = [key for key, reply in zip(documents, replies) if json.loads(reply) != documents[key]]
@@ -1241,7 +1243,7 @@ def test_a_stream_defines_no_more_bytes_than_the_cap_allows(env):
         if summary is not None:
             env.assertLessEqual(_field(summary, 'def_bytes'), cap, message=summary)
             env.assertEqual(_field(summary, 'defs'), 5, message=summary)
-            env.assertGreater(_field(summary, 'skipped_full'), 0, message=summary)
+            env.assertEqual(_field(summary, 'inline_docs'), 22, message=summary)
             env.assertGreater(_field(summary, 'refs'), 0, message=summary)
         # Between the stream with no bound and the one without a stream, and every value loads.
         env.assertLess(unbounded_size, capped_size)

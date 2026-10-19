@@ -4,10 +4,11 @@ resolver = "2"
 members = ["json_path", "redis_json"]
 
 [workspace.dependencies]
-redis-module = { git = "https://github.com/RedisLabsModules/redismodule-rs", tag = "v2.1.3", default-features = false, features = [
+redis-module = { git = "https://github.com/RedisLabsModules/redismodule-rs", rev = "cca53606a1b8bfaa78f96399cb10bb9d3a1f1099", default-features = false, features = [
     "min-redis-compatibility-version-7-4",
+    "bindgen-runtime",
 ] }
-redis-module-macros = { git = "https://github.com/RedisLabsModules/redismodule-rs", tag = "v2.1.3" }
+redis-module-macros = { git = "https://github.com/RedisLabsModules/redismodule-rs", rev = "cca53606a1b8bfaa78f96399cb10bb9d3a1f1099" }
 ijson = { git = "https://github.com/RedisJSON/ijson", rev = "edef94dd7f18ec898a75cec95f55b2631d8ec73c", default-features = false }
 # Pin serde_json below the version range that switched float formatting (ryu -> zmij),
 # to keep exponent formatting stable (e.g. `e308` vs `e+308`) and avoid test churn on `cargo update`.

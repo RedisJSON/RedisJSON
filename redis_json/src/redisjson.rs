@@ -20,7 +20,6 @@ use std::os::raw::{c_int, c_void};
 use crate::backward;
 use crate::ivalue_manager::RedisIValueJsonKeyManager;
 use crate::manager::Manager;
-use serde::Serialize;
 use std::fmt;
 use std::fmt::Display;
 use std::marker::PhantomData;
@@ -238,7 +237,6 @@ pub mod type_methods {
     use std::ptr::null_mut;
 
     pub extern "C" fn rdb_load(rdb: *mut raw::RedisModuleIO, encver: c_int) -> *mut c_void {
-        crate::rdb_persistence::note_decode();
         let result = load_rdb_value(rdb, encver);
         result.map_or(null_mut(), |v| {
             Box::into_raw(Box::new(v)).cast::<libc::c_void>()
@@ -276,9 +274,7 @@ pub mod type_methods {
             0 => {
                 let v = backward::json_rdb_load(rdb)?;
 
-                let mut out = serde_json::Serializer::new(Vec::new());
-                v.serialize(&mut out)?;
-                String::from_utf8(out.into_inner())?
+                serde_json::to_string(&v)?
             }
             2 => {
                 let data = raw::load_string(rdb)?;
@@ -303,17 +299,13 @@ pub mod type_methods {
                     backward::legacy_rdb_depth_limit_enabled(),
                 )
                 .map_err(|e| RedisError::String(e.to_string()))?;
-                let mut out = serde_json::Serializer::new(Vec::new());
-                value.serialize(&mut out)?;
-                String::from_utf8(out.into_inner())?
+                serde_json::to_string(&value)?
             }
             5 => {
                 let value = crate::rdb_persistence::load_value(rdb).ok_or(RedisError::Str(
                     "invalid JSON RDB value or missing string stream",
                 ))?;
-                let mut out = serde_json::Serializer::new(Vec::new());
-                value.serialize(&mut out)?;
-                String::from_utf8(out.into_inner())?
+                serde_json::to_string(&value)?
             }
             _ => return Err(RedisError::String(format!("unsupported encver {encver}"))),
         })
