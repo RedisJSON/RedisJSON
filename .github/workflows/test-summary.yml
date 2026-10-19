@@ -42,6 +42,7 @@ jobs:
         continue-on-error: true
       
       - name: Summarize coverage
+        continue-on-error: true
         if: always()
         env:
           COVERAGE_STATUS: ${{ inputs.coverage-status }}
@@ -273,8 +274,14 @@ jobs:
             "$WORKFLOW_URL")
           
           # Add coverage collected by this run to the existing notification.
-          PAYLOAD=$(jq --slurpfile coverage coverage-summary-block.json \
-            '.blocks = (.blocks[:-1] + $coverage + .blocks[-1:])' <<< "$PAYLOAD")
+          # Preserve the test notification if coverage rendering failed or wrote invalid JSON.
+          if [ -f coverage-summary-block.json ] && \
+             COVERAGE_PAYLOAD=$(jq --slurpfile coverage coverage-summary-block.json \
+               '.blocks = (.blocks[:-1] + $coverage + .blocks[-1:])' <<< "$PAYLOAD"); then
+            PAYLOAD="$COVERAGE_PAYLOAD"
+          else
+            echo "::warning::Coverage summary unavailable; sending the test summary without it."
+          fi
 
           # Send to Slack
           echo "Checking webhook URL..."
