@@ -61,6 +61,62 @@ load    loading START           creates the decoder
   stream order before it decides to drop it, so a definition on an expired or
   slot-trimmed key is still read, and its string stays pinned until then.
 
+## Other value managers
+
+The address-only behavior above remains the OSS default. Managers with different
+string storage select an optional factory in `redis_json_module_create!`:
+
+```rust
+rdb_dictionary: Some(|| Box::new(ijson::ContentDictionary::default())),
+```
+
+Omitting it, or supplying `None`, uses the address dictionary. The selected factory
+creates one fresh dictionary at each save's start. It cannot change during the
+save. Value callbacks use the same helper regardless of dictionary implementation:
+
+```rust
+rejson::rdb_persistence::save_with(
+    rdb,
+    |strings, out| ciborium::into_writer(&strings.string(text), out),
+)?;
+```
+
+Any `ijson::StringDictionary` implementation is accepted; RedisJSON does not maintain
+a list of supported implementations. All managers share that save's dictionary,
+including the built-in `IValue` writer. Dictionary inputs carry text and, for
+interned `IString` values, an optional allocation identity and owner count.
+
+The serializer wraps participating object keys and string values with
+`strings.string(...)`, writing one complete CBOR document directly in wire order.
+Other fields keep their normal serialization. Wrappers register definitions only
+when serialized. Serialization errors write no record and disable subsequent
+references; the manager must propagate the error so Redis aborts the save. The
+callback must not run Redis commands or recursively invoke a save helper.
+
+`ContentDictionary` owns copies, including strings from temporary Flex values.
+It needs no intern cache and no residency query. Its writer budget includes copied
+bytes, hash-table storage and simultaneous growth allocations. Unlike the default
+address policy, it admits every string of at least 8 bytes, so unique strings also
+consume space. Custom borrowing dictionaries return `true` from `borrows_strings()`,
+must preserve source storage throughout the stream, and receive the same Flex
+residency guard as OSS.
+
+RedisJSON still owns lifecycle, markers, cumulative positions and limits.
+Budget resets work as before; there are no dictionary-type switches or type-ID
+checks. The factory returns a boxed dictionary, accessed through its trait.
+The default OSS encoder keeps static string lookups; encoder dispatch happens at
+the document boundary.
+Unkeyed saves and saves outside a session remain marker 0.
+
+All policies produce the existing v5 format. Assuming both modules implement
+the complete v5 framing and loading lifecycle, OSS JSON RDBs can be loaded by HDT
+and HDT standard JSON-compatible RDBs can be loaded by OSS JSON. Dictionary policy
+does not need to match: the reader still builds its own
+`IString` table from DEF records and resolves REF records in order. A future HDT
+adapter must use this helper for standard JSON-compatible exports and preserve
+the shared loading lifecycle for imports. Native HDT/CRDT persistence is separate;
+this infrastructure does not change that format or implement the HDT adapter.
+
 ## Wire format
 
 Encoding version 5 keeps its marker byte.

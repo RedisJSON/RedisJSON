@@ -1089,6 +1089,7 @@ version = "99.99.99"
 dependencies = [
  "bitflags 2.11.0",
  "bson",
+ "ciborium",
  "ctor",
  "half",
  "ijson",

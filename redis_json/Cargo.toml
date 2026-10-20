@@ -38,6 +38,7 @@ lazy_static = "1"
 
 [dev-dependencies]
 ctor = "0.1.26"
+ciborium = { git = "https://github.com/RedisJSON/ciborium", branch = "main" }
 
 [features]
 as-library = []

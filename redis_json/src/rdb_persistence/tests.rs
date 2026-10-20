@@ -24,6 +24,7 @@ fn config() -> StreamEncoderConfig {
 pub(super) fn reset() {
     SAVE_SESSION.set(None);
     LOAD_SESSION.set(None);
+    DICTIONARY_FACTORY.set(None);
 }
 
 fn start_saving() {
