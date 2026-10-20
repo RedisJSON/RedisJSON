@@ -121,6 +121,107 @@ fn first_use_defines_a_string_and_later_uses_reference_it() {
 }
 
 #[test]
+fn full_dictionary_restarts_before_later_definitions_and_preserves_record_order() {
+    reset();
+    SAVE_SESSION.set(Some(SaveSession::new(StreamEncoderConfig {
+        table_budget_bytes: 84,
+        ..config()
+    })));
+    let owners: Vec<IString> = (0..8)
+        .map(|i| IString::from(format!("reset string {i:04}")))
+        .collect();
+    let docs: Vec<IValue> = [0, 1, 2, 3, 3, 4, 5, 6, 6, 7, 7]
+        .iter()
+        .map(|&i| document(&owners[i]))
+        .collect();
+    let records: Vec<_> = docs.iter().map(|doc| record(doc, true)).collect();
+    assert_eq!(
+        records.iter().map(|bytes| bytes[0]).collect::<Vec<_>>(),
+        [1, 1, 1, 0, 2, 1, 1, 0, 2, 1, 1]
+    );
+    assert_eq!(
+        SAVE_SESSION.with_borrow(|s| s.as_ref().unwrap().encoder.stats().defs),
+        8
+    );
+    start_loading();
+    let mut loaded = Vec::new();
+    for (doc, bytes) in docs.iter().zip(&records) {
+        loaded.push(decode_for_load(bytes, true).unwrap());
+        assert_eq!(loaded.last(), Some(doc));
+        assert!(LOAD_SESSION.with_borrow(|s| s.as_ref().unwrap().decoder.len()) <= 3);
+    }
+    assert_eq!(loaded, docs);
+    for order in [&[0, 1, 2, 5][..], &[0, 1, 2, 4, 4], &[8]] {
+        start_loading();
+        assert!(order
+            .iter()
+            .any(|&i| decode_for_load(&records[i], true).is_err()));
+        assert!(!load_session_exists());
+    }
+}
+
+#[test]
+fn pending_reset_waits_through_cold_and_inline_values_and_releases_reader_handles() {
+    reset();
+    SAVE_SESSION.set(Some(SaveSession::new(StreamEncoderConfig {
+        table_budget_bytes: 84,
+        ..config()
+    })));
+    let owners: Vec<IString> = (0..4)
+        .map(|i| IString::from(format!("pending reset string {i:04}")))
+        .collect();
+    let docs: Vec<_> = owners.iter().map(document).collect();
+    let probe = IValue::from(owners[0].clone());
+    let unpinned = probe.mem_allocated();
+    let mut records: Vec<_> = docs.iter().map(|doc| record(doc, true)).collect();
+    let (cold, start) = encode_for_save(&docs[0], true, false);
+    records.push(cold[start..].to_vec());
+    assert_eq!(records.last().unwrap()[0], MARKER_STREAM);
+    let inline = IValue::from(42);
+    records.push(record(&inline, true));
+    assert_eq!(records.last().unwrap(), &inline_record(&inline));
+    let (cold, start) = encode_for_save(&docs[0], true, false);
+    records.push(cold[start..].to_vec());
+    assert_eq!(records.last().unwrap(), &inline_record(&docs[0]));
+    records.push(record(&docs[3], true));
+    assert_eq!(records.last().unwrap()[0], 2);
+    start_loading();
+    for bytes in &records[..records.len() - 1] {
+        decode_for_load(bytes, true).unwrap();
+    }
+    assert!(probe.mem_allocated() < unpinned);
+    assert_eq!(
+        decode_for_load(records.last().unwrap(), true),
+        Ok(docs[3].clone())
+    );
+    assert_eq!(probe.mem_allocated(), unpinned);
+    reset();
+    assert_eq!(
+        decode_for_load(records.last().unwrap(), true),
+        Err(LoadError::NoStream)
+    );
+}
+
+#[test]
+fn dictionary_resets_do_not_restart_the_definition_byte_allowance() {
+    reset();
+    SAVE_SESSION.set(Some(SaveSession::new(StreamEncoderConfig {
+        table_budget_bytes: 84,
+        max_def_bytes: 80,
+    })));
+    let owners: Vec<IString> = (0..12).map(|i| IString::from(format!("{i:016}"))).collect();
+    let docs: Vec<_> = owners.iter().map(document).collect();
+    let records: Vec<_> = docs.iter().map(|doc| record(doc, true)).collect();
+    let stats = SAVE_SESSION.with_borrow(|s| s.as_ref().unwrap().encoder.stats());
+    assert_eq!((stats.defs, stats.def_bytes), (5, 80));
+    assert!(records.iter().any(|bytes| bytes[0] == 2));
+    start_loading();
+    for (doc, bytes) in docs.iter().zip(&records) {
+        assert_eq!(decode_for_load(bytes, true).as_ref(), Ok(doc));
+    }
+}
+
+#[test]
 fn keys_values_nesting_and_typed_arrays_survive_the_stream() {
     start_saving();
     let json = r#"{"a repeated object key, long enough to be shared":
@@ -185,9 +286,19 @@ fn a_small_budget_degrades_gradually_and_every_record_still_loads() {
 
     // The table froze with room for some strings: those keep being referenced, the others
     // stay inline in both uses, byte for byte what an unframed save writes.
-    let stats = SAVE_SESSION.with_borrow(|s| s.as_ref().unwrap().encoder.stats());
+    let mut frozen = StreamEncoder::new(StreamEncoderConfig {
+        table_budget_bytes: 1500,
+        ..config()
+    });
+    for doc in &docs {
+        frozen.encode_into(&mut Vec::new(), doc, true);
+    }
+    let stats = frozen.stats();
     assert!(stats.defs > 0 && stats.defs < 64, "{stats:?}");
     assert_eq!(stats.refs, stats.defs);
+    let rolling = SAVE_SESSION.with_borrow(|s| s.as_ref().unwrap().encoder.stats());
+    assert!(rolling.defs > 64, "{rolling:?}");
+    assert!(records.iter().any(|bytes| bytes[0] == MARKER_RESET));
     for (doc, record) in docs.iter().zip(&records) {
         if record[0] == MARKER_INLINE {
             assert_eq!(*record, inline_record(doc));
@@ -215,11 +326,11 @@ fn save_sessions_never_change_string_owner_counts() {
 }
 
 #[test]
-fn markers_two_three_and_unknown_are_refused() {
+fn markers_three_and_unknown_are_refused() {
     start_loading();
     let value: IValue = serde_json::from_str(r#"{"inline":true}"#).unwrap();
     let cbor = ijson::encode(&value);
-    for marker in [2u8, 3, 4, 255] {
+    for marker in [3u8, 4, 255] {
         let mut bytes = vec![marker];
         bytes.extend_from_slice(&cbor);
         assert_eq!(
@@ -231,6 +342,23 @@ fn markers_two_three_and_unknown_are_refused() {
     assert!(decode_for_load(&[], true).is_err());
     assert!(decode_for_load(&[MARKER_STREAM, 0, 0], true).is_err());
     assert_eq!(decode_for_load(&inline_record(&value), true), Ok(value));
+}
+
+#[test]
+fn reset_records_without_definitions_or_with_invalid_references_are_refused() {
+    for payload in [&[0xf6][..], &[0xc7, 0], &[]] {
+        start_loading();
+        let mut bytes = vec![MARKER_RESET, 0, 0, 0, 0];
+        bytes.extend_from_slice(payload);
+        assert!(matches!(
+            decode_for_load(&bytes, true),
+            Err(LoadError::Cbor(_))
+        ));
+        assert!(!load_session_exists());
+    }
+    start_loading();
+    assert!(decode_for_load(&[MARKER_RESET, 0], true).is_err());
+    assert!(!load_session_exists());
 }
 
 #[test]

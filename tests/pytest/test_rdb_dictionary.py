@@ -36,6 +36,7 @@ RDB_MODULE_OPCODE_EOF = 0
 RDB_MODULE_OPCODE_STRING = 5
 # The first byte of a value record that belongs to a stream. A self-contained one starts with 0.
 MARKER_STREAM = 1
+MARKER_RESET = 2
 
 
 def _binary_connection(env):
@@ -403,6 +404,125 @@ def _load_rdb_in_new_server(env, rdb, inspect=None, binary=None, extra_args=()):
 def _shared_text(seed=217194, size=4096):
     rng = random.Random(seed)
     return ''.join(rng.choices(string.ascii_letters + string.digits, k=size))
+
+
+@_values_in_ram
+def test_dictionary_resets_with_tiny_table_round_trip(env):
+    env.skipOnCluster()
+    env.expect('FLUSHALL').equal(True)
+    connection = env.getConnection()
+    settings = (WRITER_BUDGET, 'rdbcompression', 'aof-use-rdb-preamble',
+                'repl-diskless-sync', 'repl-diskless-sync-delay')
+    original = {name: connection.config_get(name)[name] for name in settings}
+    documents = {}
+    for i in range(120):
+        text = hashlib.sha256(f'reset:{i}'.encode()).hexdigest()
+        documents[f'reset:{i}'] = {'a': text, 'b': text}
+    try:
+        connection.config_set(WRITER_BUDGET, 84)
+        connection.config_set('rdbcompression', 'no')
+        for key, document in documents.items():
+            env.expect('JSON.SET', key, '$', json.dumps(document)).ok()
+        if env.useAof:
+            connection.config_set('aof-use-rdb-preamble', 'yes')
+            with TimeLimit(30):
+                while connection.info('persistence')['aof_rewrite_in_progress']:
+                    time.sleep(0.01)
+            connection.bgrewriteaof()
+            with TimeLimit(30):
+                while connection.info('persistence')['aof_rewrite_in_progress']:
+                    time.sleep(0.01)
+            env.assertEqual(connection.info('persistence')['aof_last_bgrewrite_status'], 'ok')
+            env.expect('DEBUG', 'LOADAOF').ok()
+        else:
+            for command in ('SAVE', 'BGSAVE'):
+                summary = _save_and_read_summary(env, command)
+                if summary is not None:
+                    env.assertGreater(_field(summary, 'defs'), 3, message=summary)
+                if not _is_flex(env):
+                    rdb = _rdb_bytes(env)
+                    env.assertTrue(any(rdb[value['record'][0]] == MARKER_RESET
+                                       for value in _parse_rdb(rdb)))
+                env.expect('DEBUG', 'RELOAD', 'NOSAVE').ok()
+                for key, document in documents.items():
+                    env.assertEqual(json.loads(env.cmd('JSON.GET', key)), document)
+            if _is_flex(env):
+                # Different compression settings force cold values through the module callbacks.
+                connection.config_set('rdbcompression', 'yes')
+                for command in ('SAVE', 'BGSAVE'):
+                    _put_values_on_flash(env, documents, keep_in_ram=20)
+                    summary = _save_and_read_summary(env, command)
+                    if summary is not None:
+                        env.assertGreater(_field(summary, 'defs'), 3, message=summary)
+                        env.assertEqual(_field(summary, 'lookup_only_docs'), 100, message=summary)
+                    env.expect('DEBUG', 'RELOAD', 'NOSAVE').ok()
+                    for key, document in documents.items():
+                        env.assertEqual(json.loads(env.cmd('JSON.GET', key)), document)
+        for key, document in documents.items():
+            env.assertEqual(json.loads(env.cmd('JSON.GET', key)), document)
+        if env.useSlaves:
+            replica = env.getSlaveConnection()
+            load_mode = replica.config_get('repl-diskless-load')['repl-diskless-load']
+            try:
+                for diskless, loading in (('no', 'disabled'), ('yes', 'on-empty-db')):
+                    connection.config_set('repl-diskless-sync', diskless)
+                    connection.config_set('repl-diskless-sync-delay', 0)
+                    replica.config_set('repl-diskless-load', loading)
+                    replica.execute_command('REPLICAOF', 'NO', 'ONE')
+                    replica.flushall()
+                    env.expect('DEBUG', 'CHANGE-REPL-ID').ok()
+                    previous = connection.info('stats')['sync_full']
+                    replica.execute_command('REPLICAOF', '127.0.0.1',
+                                            connection.info('server')['tcp_port'])
+                    with TimeLimit(60):
+                        while (connection.info('stats')['sync_full'] <= previous or
+                               replica.info('replication')['master_link_status'] != 'up'):
+                            time.sleep(0.01)
+                    for key, document in documents.items():
+                        env.assertEqual(json.loads(replica.execute_command('JSON.GET', key)), document)
+            finally:
+                replica.config_set('repl-diskless-load', load_mode)
+    finally:
+        for name, value in original.items():
+            connection.config_set(name, value)
+
+
+def test_dictionary_reset_boundaries_are_checked_when_loading(env):
+    env.skipOnCluster()
+    if (env.useAof or _is_flex(env) or VALGRIND or env.useTLS or
+            not hasattr(env.envRunner, 'masterCmdArgs')):
+        env.skip()
+    connection = env.getConnection()
+    original = {name: connection.config_get(name)[name]
+                for name in (WRITER_BUDGET, 'rdbcompression')}
+    env.expect('FLUSHALL').equal(True)
+    try:
+        connection.config_set(WRITER_BUDGET, 84)
+        connection.config_set('rdbcompression', 'no')
+        for i in range(16):
+            text = f'string that is repeated within key {i:04}'
+            env.expect('JSON.SET', f'reset:{i}', '$', json.dumps([text, text])).ok()
+        env.assertEqual(_save(env), True)
+        rdb = _rdb_bytes(env)
+    finally:
+        for name, value in original.items():
+            connection.config_set(name, value)
+    outcome, lines = _load_rdb_in_new_server(env, rdb)
+    env.assertEqual(outcome, 'up', message=str(lines))
+    boundary = next(value for value in _parse_rdb(rdb)
+                    if rdb[value['record'][0]] == MARKER_RESET)
+    start, end = boundary['span']
+    record = rdb[slice(*boundary['record'])]
+    cases = [
+        (_without(rdb, boundary['span']), 'base_id_mismatch'),
+        (rdb[:end] + rdb[start:end] + rdb[end:], 'base_id_mismatch'),
+        (_with_record(rdb, boundary, record[:5] + b'\xc7\x00'), 'cbor_InvalidStringReference'),
+        (_with_record(rdb, boundary, record[:5] + b'\xf6'), 'cbor_InvalidValue'),
+    ]
+    for damaged, reason in cases:
+        outcome, lines = _load_rdb_in_new_server(env, damaged)
+        env.assertEqual(outcome, 'exited', message=str(lines))
+        env.assertTrue(any(f'reason={reason}' in line for line in lines), message=str(lines))
 
 
 @_values_in_ram
