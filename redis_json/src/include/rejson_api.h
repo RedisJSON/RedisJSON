@@ -60,6 +60,12 @@ typedef RedisJSON* RedisJSONPtr;
 typedef const void* JSONResultsIterator;
 typedef const void* JSONPath;
 typedef const void* JSONKeyValuesIterator;
+typedef const void* JSONExpression;
+
+typedef enum JSONExpressionMode {
+  JSONExpressionMode_NodeSelectionOnly = 0,
+  JSONExpressionMode_AllowProjections = 1,
+} JSONExpressionMode;
 
 typedef struct RedisJSONAPI {
 
@@ -190,9 +196,34 @@ typedef struct RedisJSONAPI {
   // Like pathParse, but without a Redis context or error-message output
   JSONPath (*pathParseNoErrorMsg)(const char *path);
 
+  /////////////////
+  // V11 entries //
+  /////////////////
+  // Compile once for repeated evaluation. The handle owns a copy of text.
+  // NodeSelectionOnly rejects top-level projections but permits expressions in predicates.
+  // AllowProjections accepts both node selections and computed expressions.
+  // NULL signals failure; optional err_msg receives a caller-owned error string.
+  // On success, *err_msg is NULL. With err_msg == NULL, compilation makes no Redis API
+  // calls and needs no Redis lock; ctx may also be NULL.
+  JSONExpression (*compileExpression)(const char *text, JSONExpressionMode mode,
+                                     RedisModuleCtx *ctx, RedisModuleString **err_msg);
+
+  // Evaluate with the mode enforced at compilation, using the JSON.GET projection semantics.
+  // Scalar/array/object results are individual values; multi-result projections stay flat.
+  JSONResultsIterator (*evaluateCompiled)(RedisJSON json, JSONExpression expression,
+                                         RedisModuleCtx *ctx, RedisModuleString **err_msg);
+
+  // Free a handle after its last use; NULL is accepted.
+  void (*freeExpression)(JSONExpression expression);
+
+  // One-off compile/evaluate/free with the same modes, errors and result ownership.
+  // Existing get/pathParse/getWithPath APIs retain their node-selection-only behavior.
+  JSONResultsIterator (*evaluate)(RedisJSON json, const char *text, JSONExpressionMode mode,
+                                 RedisModuleCtx *ctx, RedisModuleString **err_msg);
+
 } RedisJSONAPI;
 
-#define RedisJSONAPI_LATEST_API_VER 10
+#define RedisJSONAPI_LATEST_API_VER 11
 #ifdef __cplusplus
 }
 #endif

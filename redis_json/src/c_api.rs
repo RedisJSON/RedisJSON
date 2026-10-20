@@ -8,6 +8,7 @@
  */
 
 use libc::size_t;
+use std::borrow::Borrow;
 use std::ffi::CString;
 use std::os::raw::{c_double, c_int, c_longlong};
 use std::ptr::{null, null_mut};
@@ -25,7 +26,7 @@ use redis_module::{key::KeyFlags, Context, RedisString, Status};
 
 use crate::manager::{Manager, ReadHolder};
 
-pub const REDIS_JSONAPI_LATEST_API_VER: usize = 10;
+pub const REDIS_JSONAPI_LATEST_API_VER: usize = 11;
 
 //
 // structs
@@ -42,9 +43,47 @@ pub enum JSONType {
     Null = 6,
 }
 
-struct ResultsIterator<'a, V: SelectValue> {
+struct ResultsIterator<'a, V: SelectValue, O: Borrow<V>> {
     results: Vec<ValueRef<'a, V>>,
+    owned_values: Vec<O>,
     pos: usize,
+}
+
+impl<V: SelectValue, O: Borrow<V>> ResultsIterator<'_, V, O> {
+    fn len(&self) -> usize {
+        self.results.len() + self.owned_values.len()
+    }
+
+    fn get(&self, index: usize) -> &V {
+        if index < self.results.len() {
+            self.results[index].as_ref()
+        } else {
+            self.owned_values[index - self.results.len()].borrow()
+        }
+    }
+}
+
+impl<V: SelectValue, O: Borrow<V>> serde::Serialize for ResultsIterator<'_, V, O> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(
+            self.results
+                .iter()
+                .map(AsRef::as_ref)
+                .chain(self.owned_values.iter().map(Borrow::borrow)),
+        )
+    }
+}
+
+#[repr(C)]
+pub enum JSONExpressionMode {
+    NodeSelectionOnly = 0,
+    AllowProjections = 1,
+}
+
+struct CompiledExpression {
+    // The query borrows _text's allocation, which stays fixed and is dropped after the query.
+    query: json_path::json_path::Query<'static>,
+    _text: Box<str>,
 }
 
 #[repr(C)]
@@ -220,12 +259,11 @@ pub fn json_api_get_json_from_iter<M: Manager>(
     ctx: *mut rawmod::RedisModuleCtx,
     str: *mut *mut rawmod::RedisModuleString,
 ) -> c_int {
-    let iter = unsafe { &*(iter.cast::<ResultsIterator<M::V>>()) };
-    if iter.pos >= iter.results.len() {
+    let iter = unsafe { &*(iter.cast::<ResultsIterator<M::V, M::O>>()) };
+    if iter.pos >= iter.len() {
         Status::Err as c_int
     } else {
-        let Ok(res) =
-            KeyValue::<M::V>::serialize_object(&iter.results, &ReplyFormatOptions::default())
+        let Ok(res) = KeyValue::<M::V>::serialize_object(iter, &ReplyFormatOptions::default())
         else {
             return Status::Err as c_int;
         };
@@ -317,29 +355,29 @@ fn json_api_get_type_internal<V: SelectValue>(v: &V) -> JSONType {
 }
 
 pub fn json_api_next<M: Manager>(_: M, iter: *mut c_void) -> *const c_void {
-    let iter = unsafe { &mut *(iter.cast::<ResultsIterator<M::V>>()) };
-    if iter.pos >= iter.results.len() {
+    let iter = unsafe { &mut *(iter.cast::<ResultsIterator<M::V, M::O>>()) };
+    if iter.pos >= iter.len() {
         null_mut()
     } else {
-        let res = (iter.results[iter.pos].as_ref() as *const M::V).cast::<c_void>();
+        let res = (iter.get(iter.pos) as *const M::V).cast::<c_void>();
         iter.pos += 1;
         res
     }
 }
 
 pub fn json_api_len<M: Manager>(_: M, iter: *const c_void) -> size_t {
-    let iter = unsafe { &*(iter.cast::<ResultsIterator<M::V>>()) };
-    iter.results.len() as size_t
+    let iter = unsafe { &*(iter.cast::<ResultsIterator<M::V, M::O>>()) };
+    iter.len() as size_t
 }
 
 pub fn json_api_free_iter<M: Manager>(_: M, iter: *mut c_void) {
     unsafe {
-        drop(Box::from_raw(iter.cast::<ResultsIterator<M::V>>()));
+        drop(Box::from_raw(iter.cast::<ResultsIterator<M::V, M::O>>()));
     }
 }
 
 pub fn json_api_reset_iter<M: Manager>(_: M, iter: *mut c_void) {
-    let iter = unsafe { &mut *(iter.cast::<ResultsIterator<M::V>>()) };
+    let iter = unsafe { &mut *(iter.cast::<ResultsIterator<M::V, M::O>>()) };
     iter.pos = 0;
 }
 
@@ -363,8 +401,9 @@ pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -
     }
     let path_calculator = create(&query);
     let res = path_calculator.calc(v);
-    Box::into_raw(Box::new(ResultsIterator {
+    Box::into_raw(Box::new(ResultsIterator::<M::V, M::O> {
         results: res,
+        owned_values: Vec::new(),
         pos: 0,
     }))
     .cast::<c_void>()
@@ -400,11 +439,139 @@ pub fn json_api_get_with_path<M: Manager>(
     }
     let path_calculator = create(query);
     let res = path_calculator.calc(v);
-    Box::into_raw(Box::new(ResultsIterator {
+    Box::into_raw(Box::new(ResultsIterator::<M::V, M::O> {
         results: res,
+        owned_values: Vec::new(),
         pos: 0,
     }))
     .cast::<c_void>()
+}
+
+fn expression_error(
+    ctx: *mut rawmod::RedisModuleCtx,
+    err_msg: *mut *mut rawmod::RedisModuleString,
+    message: &str,
+) -> *const c_void {
+    if !err_msg.is_null() {
+        create_rmstring(ctx, message, err_msg);
+    }
+    null()
+}
+
+/// Compile an expression into an owned handle. Passing no error output avoids Redis API calls.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub fn json_api_compile_expression(
+    text: *const c_char,
+    mode: c_int,
+    ctx: *mut rawmod::RedisModuleCtx,
+    err_msg: *mut *mut rawmod::RedisModuleString,
+) -> *const c_void {
+    if !err_msg.is_null() {
+        // SAFETY: the caller supplies writable storage for the optional error pointer.
+        unsafe { *err_msg = null_mut() };
+    }
+    if text.is_null() {
+        return expression_error(ctx, err_msg, "expression must not be NULL");
+    }
+    let allow_projections = match mode {
+        x if x == JSONExpressionMode::NodeSelectionOnly as c_int => false,
+        x if x == JSONExpressionMode::AllowProjections as c_int => true,
+        _ => return expression_error(ctx, err_msg, "invalid JSON expression mode"),
+    };
+    // SAFETY: the caller supplies a NUL-terminated string valid for this call.
+    let text: Box<str> = match unsafe { CStr::from_ptr(text) }.to_str() {
+        Ok(text) => text.into(),
+        Err(_) => return expression_error(ctx, err_msg, "expression must be valid UTF-8"),
+    };
+    let query = match compile(&text) {
+        Ok(query) if query.is_projection() && !allow_projections => {
+            return expression_error(
+                ctx,
+                err_msg,
+                "computed/projection expressions are not supported in node-selection mode",
+            );
+        }
+        Err(err) => return expression_error(ctx, err_msg, &err.to_string()),
+        Ok(query) => query,
+    };
+    // SAFETY: the boxed text never moves or changes; CompiledExpression owns it and drops
+    // the query first. The extended lifetime stays private to the handle.
+    let query = unsafe {
+        std::mem::transmute::<json_path::json_path::Query<'_>, json_path::json_path::Query<'static>>(
+            query,
+        )
+    };
+    Box::into_raw(Box::new(CompiledExpression { query, _text: text })).cast()
+}
+
+/// Evaluate a compiled expression; returned iterators are independent of its handle.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub fn json_api_evaluate_compiled<M: Manager>(
+    manager: M,
+    val: *const c_void,
+    expression: *const c_void,
+    ctx: *mut rawmod::RedisModuleCtx,
+    err_msg: *mut *mut rawmod::RedisModuleString,
+) -> *const c_void {
+    if !err_msg.is_null() {
+        // SAFETY: the caller supplies writable storage for the optional error pointer.
+        unsafe { *err_msg = null_mut() };
+    }
+    if val.is_null() || expression.is_null() {
+        return expression_error(ctx, err_msg, "document and expression must not be NULL");
+    }
+    // SAFETY: the caller supplies a live backend value and a handle from compileExpression.
+    let (value, expression) = unsafe {
+        (
+            &*val.cast::<M::V>(),
+            &*expression.cast::<CompiledExpression>(),
+        )
+    };
+    let mut iter = ResultsIterator::<M::V, M::O> {
+        results: Vec::new(),
+        owned_values: Vec::new(),
+        pos: 0,
+    };
+    if expression.query.is_projection() {
+        let values = json_path::calc_once_projection(expression.query.clone(), value);
+        iter.owned_values.reserve_exact(values.len());
+        for value in values {
+            // Reuse backend parsing so each synthesized value retains its actual owner.
+            match manager.from_str(&value.to_string(), crate::Format::JSON, false, None) {
+                Ok(value) => iter.owned_values.push(value),
+                Err(err) => return expression_error(ctx, err_msg, &err.to_string()),
+            }
+        }
+    } else {
+        iter.results = create(&expression.query).calc(value);
+    }
+    Box::into_raw(Box::new(iter)).cast()
+}
+
+/// Free a compiled expression without invoking Redis APIs. NULL is accepted.
+pub fn json_api_free_expression(expression: *mut c_void) {
+    if !expression.is_null() {
+        // SAFETY: the caller transfers a live handle from compileExpression exactly once.
+        unsafe { drop(Box::from_raw(expression.cast::<CompiledExpression>())) };
+    }
+}
+
+/// Compile, evaluate and release a temporary expression handle.
+pub fn json_api_evaluate<M: Manager>(
+    manager: M,
+    val: *const c_void,
+    text: *const c_char,
+    mode: c_int,
+    ctx: *mut rawmod::RedisModuleCtx,
+    err_msg: *mut *mut rawmod::RedisModuleString,
+) -> *const c_void {
+    let expression = json_api_compile_expression(text, mode, ctx, err_msg);
+    if expression.is_null() {
+        return null();
+    }
+    let iter = json_api_evaluate_compiled(manager, val, expression, ctx, err_msg);
+    json_api_free_expression(expression.cast_mut());
+    iter
 }
 
 /// Compile a JSONPath and return an owned handle.
@@ -844,6 +1011,56 @@ macro_rules! redis_json_module_export_shared_api {
         }
 
         #[no_mangle]
+        pub extern "C" fn JSONAPI_compileExpression(
+            text: *const c_char,
+            mode: c_int,
+            ctx: *mut rawmod::RedisModuleCtx,
+            err_msg: *mut *mut rawmod::RedisModuleString,
+        ) -> *const c_void {
+            $crate::c_api::json_api_compile_expression(text, mode, ctx, err_msg)
+        }
+
+        #[no_mangle]
+        pub extern "C" fn JSONAPI_evaluateCompiled(
+            json: *const c_void,
+            expression: *const c_void,
+            ctx: *mut rawmod::RedisModuleCtx,
+            err_msg: *mut *mut rawmod::RedisModuleString,
+        ) -> *const c_void {
+            run_on_manager!(
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
+                run: |mngr|{$crate::c_api::json_api_evaluate_compiled(mngr, json, expression, ctx, err_msg)},
+            )
+        }
+
+        #[no_mangle]
+        pub extern "C" fn JSONAPI_freeExpression(expression: *mut c_void) {
+            $crate::c_api::json_api_free_expression(expression)
+        }
+
+        #[no_mangle]
+        pub extern "C" fn JSONAPI_evaluate(
+            json: *const c_void,
+            text: *const c_char,
+            mode: c_int,
+            ctx: *mut rawmod::RedisModuleCtx,
+            err_msg: *mut *mut rawmod::RedisModuleString,
+        ) -> *const c_void {
+            run_on_manager!(
+                $(pre_command: ||$pre_command_function_expr(&get_llapi_ctx(), &Vec::new()),)?
+                get_manage: {
+                    $( $condition => $manager_ident { $($field: $value),* } ),*
+                    _ => $default_manager
+                },
+                run: |mngr|{$crate::c_api::json_api_evaluate(mngr, json, text, mode, ctx, err_msg)},
+            )
+        }
+
+        #[no_mangle]
         pub extern "C" fn JSONAPI_pathFree(json_path: *mut c_void) {
             unsafe { drop(Box::from_raw(json_path.cast::<json_path::json_path::Query>())) };
         }
@@ -1009,6 +1226,11 @@ macro_rules! redis_json_module_export_shared_api {
             getWithPath: JSONAPI_getWithPath,
             // V10 entries
             pathParseNoErrorMsg: JSONAPI_pathParseNoErrorMsg,
+            // V11 entries
+            compileExpression: JSONAPI_compileExpression,
+            evaluateCompiled: JSONAPI_evaluateCompiled,
+            freeExpression: JSONAPI_freeExpression,
+            evaluate: JSONAPI_evaluate,
         };
 
         #[repr(C)]
@@ -1080,6 +1302,11 @@ macro_rules! redis_json_module_export_shared_api {
             pub getWithPath: extern "C" fn(val: *const c_void, path: *const c_void) -> *const c_void,
             // V10 entries
             pub pathParseNoErrorMsg: extern "C" fn(path: *const c_char) -> *const c_void,
+            // V11 entries
+            pub compileExpression: extern "C" fn(text: *const c_char, mode: c_int, ctx: *mut rawmod::RedisModuleCtx, err_msg: *mut *mut rawmod::RedisModuleString) -> *const c_void,
+            pub evaluateCompiled: extern "C" fn(json: *const c_void, expression: *const c_void, ctx: *mut rawmod::RedisModuleCtx, err_msg: *mut *mut rawmod::RedisModuleString) -> *const c_void,
+            pub freeExpression: extern "C" fn(expression: *mut c_void),
+            pub evaluate: extern "C" fn(json: *const c_void, text: *const c_char, mode: c_int, ctx: *mut rawmod::RedisModuleCtx, err_msg: *mut *mut rawmod::RedisModuleString) -> *const c_void,
         }
     };
 }
@@ -1237,6 +1464,214 @@ mod tests {
             &query as *const json_path::json_path::Query as *const c_void,
         );
         assert_eq!(res, null(), "a projection handle must not be evaluated");
+    }
+
+    #[test]
+    fn test_json_api_evaluate_projections() {
+        let doc: IValue = serde_json::from_str(
+            r#"{"n":2,"values":[1,2,3],"empty":[],"nulls":[null],"strings":["long \"quoted\" text","\u0000","é"]}"#,
+        )
+        .unwrap();
+        let doc_ptr = (&doc as *const IValue).cast();
+        for (text, expected) in [
+            ("$.n + 1", serde_json::json!([3])),
+            ("sum($.values)", serde_json::json!([6.0])),
+            ("length($.values)", serde_json::json!([3])),
+            ("$.values.append(4)", serde_json::json!([1, 2, 3, 4])),
+            (
+                "$.strings.append('')",
+                serde_json::json!(["long \"quoted\" text", "\0", "é", ""]),
+            ),
+            ("$.values.first()", serde_json::json!([1])),
+            ("$.nulls.first()", serde_json::json!([null])),
+            ("value($.values)", serde_json::json!([[1, 2, 3]])),
+            ("$.missing + 1", serde_json::json!([])),
+            ("$.empty.first()", serde_json::json!([])),
+            ("$.n / 0", serde_json::json!([])),
+        ] {
+            let text = CString::new(text).unwrap();
+            let iter = json_api_evaluate(
+                ivalue_mngr(),
+                doc_ptr,
+                text.as_ptr(),
+                JSONExpressionMode::AllowProjections as c_int,
+                null_mut(),
+                null_mut(),
+            )
+            .cast_mut();
+            assert!(!iter.is_null(), "{text:?}");
+            let expected = expected.as_array().unwrap();
+            assert_eq!(json_api_len(ivalue_mngr(), iter), expected.len());
+            for _ in 0..2 {
+                for value in expected {
+                    let ptr = json_api_next(ivalue_mngr(), iter);
+                    assert!(!ptr.is_null());
+                    // SAFETY: the iterator owns or borrows each IValue until it is freed below.
+                    assert_eq!(
+                        serde_json::to_value(unsafe { &*ptr.cast::<IValue>() }).unwrap(),
+                        *value
+                    );
+                }
+                assert!(json_api_next(ivalue_mngr(), iter).is_null());
+                json_api_reset_iter(ivalue_mngr(), iter);
+            }
+            json_api_free_iter(ivalue_mngr(), iter);
+        }
+    }
+
+    #[test]
+    fn test_json_api_compiled_expression_lifetime() {
+        let text = CString::new("$.n + 1").unwrap();
+        let expression = json_api_compile_expression(
+            text.as_ptr(),
+            JSONExpressionMode::AllowProjections as c_int,
+            null_mut(),
+            null_mut(),
+        );
+        assert!(!expression.is_null());
+        drop(text);
+        let mut iters = Vec::new();
+        for n in [2, 7] {
+            let doc: IValue = serde_json::from_value(serde_json::json!({"n": n})).unwrap();
+            let iter = json_api_evaluate_compiled(
+                ivalue_mngr(),
+                (&doc as *const IValue).cast(),
+                expression,
+                null_mut(),
+                null_mut(),
+            )
+            .cast_mut();
+            assert!(!iter.is_null());
+            iters.push(iter);
+        }
+        json_api_free_expression(expression.cast_mut());
+        for (iter, expected) in iters.into_iter().zip([3, 8]) {
+            let mut value = 0;
+            assert_eq!(
+                json_api_get_int(
+                    ivalue_mngr(),
+                    json_api_next(ivalue_mngr(), iter),
+                    &mut value
+                ),
+                Status::Ok as c_int
+            );
+            assert_eq!(value, expected);
+            json_api_free_iter(ivalue_mngr(), iter);
+        }
+    }
+
+    #[test]
+    fn test_json_api_expression_modes_and_legacy_compatibility() {
+        let doc: IValue = serde_json::from_str(r#"{"values":[{"n":1},{"n":2},{"n":3}]}"#).unwrap();
+        let doc_ptr = (&doc as *const IValue).cast();
+        let projection = CString::new("sum($.values)").unwrap();
+        assert!(json_api_get(ivalue_mngr(), doc_ptr, projection.as_ptr()).is_null());
+        assert!(json_api_path_parse_no_error_msg(projection.as_ptr()).is_null());
+        assert!(json_api_compile_expression(
+            projection.as_ptr(),
+            JSONExpressionMode::NodeSelectionOnly as c_int,
+            null_mut(),
+            null_mut(),
+        )
+        .is_null());
+
+        let path = CString::new("$.values[?(@.n) + 1 > 2]").unwrap();
+        for mode in [
+            JSONExpressionMode::NodeSelectionOnly,
+            JSONExpressionMode::AllowProjections,
+        ] {
+            let expression =
+                json_api_compile_expression(path.as_ptr(), mode as c_int, null_mut(), null_mut());
+            assert!(!expression.is_null());
+            let iter = json_api_evaluate_compiled(
+                ivalue_mngr(),
+                doc_ptr,
+                expression,
+                null_mut(),
+                null_mut(),
+            )
+            .cast_mut();
+            json_api_free_expression(expression.cast_mut());
+            assert!(!iter.is_null());
+            assert_eq!(json_api_len(ivalue_mngr(), iter), 2);
+            json_api_free_iter(ivalue_mngr(), iter);
+        }
+        assert_eq!(
+            serde_json::to_value(&doc).unwrap(),
+            serde_json::json!({"values":[{"n":1},{"n":2},{"n":3}]})
+        );
+    }
+
+    #[test]
+    fn test_results_iterator_retains_backend_owners() {
+        use std::{cell::Cell, rc::Rc};
+
+        struct Owner {
+            value: Box<IValue>,
+            drops: Rc<Cell<usize>>,
+        }
+        impl Borrow<IValue> for Owner {
+            fn borrow(&self) -> &IValue {
+                &self.value
+            }
+        }
+        impl Drop for Owner {
+            fn drop(&mut self) {
+                self.drops.set(self.drops.get() + 1);
+            }
+        }
+
+        let doc = IValue::from(1);
+        let drops = Rc::new(Cell::new(0));
+        let iter = ResultsIterator {
+            results: vec![ValueRef::Borrowed(&doc), ValueRef::Owned(IValue::from(2))],
+            owned_values: vec![Owner {
+                value: Box::new(IValue::from(3)),
+                drops: drops.clone(),
+            }],
+            pos: 0,
+        };
+        assert_eq!(iter.len(), 3);
+        assert!(std::ptr::eq(iter.get(0), &doc));
+        assert_eq!(
+            serde_json::to_value(&iter).unwrap(),
+            serde_json::json!([1, 2, 3])
+        );
+        assert_eq!(drops.get(), 0);
+        drop(iter);
+        assert_eq!(drops.get(), 1);
+        assert_eq!(doc, IValue::from(1));
+    }
+
+    #[test]
+    fn test_json_api_expression_invalid_inputs_without_errors() {
+        let text = CString::new("$.n + 1").unwrap();
+        let mode = JSONExpressionMode::AllowProjections as c_int;
+        assert!(json_api_compile_expression(null(), mode, null_mut(), null_mut()).is_null());
+        assert!(json_api_compile_expression(text.as_ptr(), 99, null_mut(), null_mut()).is_null());
+        for invalid in [b"$[\0".as_slice(), b"\xff\0".as_slice()] {
+            assert!(json_api_compile_expression(
+                invalid.as_ptr().cast(),
+                mode,
+                null_mut(),
+                null_mut(),
+            )
+            .is_null());
+        }
+        assert!(json_api_evaluate(
+            ivalue_mngr(),
+            null(),
+            text.as_ptr(),
+            mode,
+            null_mut(),
+            null_mut(),
+        )
+        .is_null());
+        assert!(
+            json_api_evaluate_compiled(ivalue_mngr(), null(), null(), null_mut(), null_mut(),)
+                .is_null()
+        );
+        json_api_free_expression(null_mut());
     }
 
     #[test]

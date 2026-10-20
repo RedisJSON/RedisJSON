@@ -524,6 +524,83 @@ static int PathParseNoErrorMsgCmd(RedisModuleCtx *ctx, RedisModuleString **argv,
     return REDISMODULE_OK;
 }
 
+static void reply_expression_results(RedisModuleCtx *ctx, JSONResultsIterator it) {
+    RedisModule_ReplyWithArray(ctx, 5);
+    RedisModule_ReplyWithLongLong(ctx, (long long)japi->len(it));
+    RedisModuleString *json = NULL;
+    if (japi->getJSONFromIter(it, ctx, &json) == REDISMODULE_OK) {
+        RedisModule_ReplyWithString(ctx, json);
+        RedisModule_FreeString(ctx, json);
+    } else {
+        RedisModule_ReplyWithNull(ctx);
+    }
+    reply_nodes_as_json(ctx, it);
+    json = NULL;
+    RedisModule_ReplyWithLongLong(ctx, japi->getJSONFromIter(it, ctx, &json));
+    if (json) RedisModule_FreeString(ctx, json);
+    japi->resetIter(it);
+    reply_nodes_as_json(ctx, it);
+    japi->freeIter(it);
+}
+
+/* LLAPI.EVALUATE key expression mode -> exercise the existing iterator APIs. */
+static int EvaluateCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if (argc != 4) return RedisModule_WrongArity(ctx);
+    long long mode;
+    if (RedisModule_StringToLongLong(argv[3], &mode) != REDISMODULE_OK) {
+        return RedisModule_ReplyWithError(ctx, "ERR invalid mode");
+    }
+    RedisModuleString *err = NULL;
+    JSONResultsIterator it = japi->evaluate(
+        japi->openKey(ctx, argv[1]), RedisModule_StringPtrLen(argv[2], NULL),
+        (JSONExpressionMode)mode, ctx, &err);
+    if (!it) {
+        RedisModule_ReplyWithError(ctx, err ? RedisModule_StringPtrLen(err, NULL) : "ERR evaluate failed");
+        if (err) RedisModule_FreeString(ctx, err);
+        return REDISMODULE_OK;
+    }
+    reply_expression_results(ctx, it);
+    return REDISMODULE_OK;
+}
+
+/* LLAPI.EVALUATE_COMPILED expression mode key [key ...] -> reuse one owned handle. */
+static int EvaluateCompiledCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if (argc < 4) return RedisModule_WrongArity(ctx);
+    long long mode;
+    if (RedisModule_StringToLongLong(argv[2], &mode) != REDISMODULE_OK) {
+        return RedisModule_ReplyWithError(ctx, "ERR invalid mode");
+    }
+    char *text = strdup(RedisModule_StringPtrLen(argv[1], NULL));
+    if (!text) return RedisModule_ReplyWithError(ctx, "ERR allocation failed");
+    RedisModuleString *err = NULL;
+    JSONExpression expression = japi->compileExpression(text, (JSONExpressionMode)mode, ctx, &err);
+    free(text);
+    if (!expression) {
+        RedisModule_ReplyWithError(ctx, err ? RedisModule_StringPtrLen(err, NULL) : "ERR compile failed");
+        if (err) RedisModule_FreeString(ctx, err);
+        return REDISMODULE_OK;
+    }
+    JSONResultsIterator *iters = RedisModule_Calloc(argc - 3, sizeof(*iters));
+    int count = 0;
+    for (int i = 3; i < argc; ++i) {
+        iters[count] = japi->evaluateCompiled(japi->openKey(ctx, argv[i]), expression, ctx, &err);
+        if (!iters[count]) break;
+        ++count;
+    }
+    japi->freeExpression(expression);
+    if (count != argc - 3) {
+        for (int i = 0; i < count; ++i) japi->freeIter(iters[i]);
+        RedisModule_ReplyWithError(ctx, err ? RedisModule_StringPtrLen(err, NULL) : "ERR evaluate failed");
+        if (err) RedisModule_FreeString(ctx, err);
+    } else {
+        RedisModule_ReplyWithArray(ctx, count);
+        for (int i = 0; i < count; ++i) reply_expression_results(ctx, iters[i]);
+    }
+    RedisModule_Free(iters);
+    return REDISMODULE_OK;
+}
+
+/* V11 additionally exercises owned expression handles and computed results. */
 /* Bind the latest shared-API version. This module exercises functions across
  * all API versions (V1..V10), so it requires a provider exporting the full,
  * current struct; binding an older version could leave later fields undefined
@@ -579,6 +656,8 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     REGISTER("LLAPI.PATHPARSE", PathParseCmd);
     REGISTER("LLAPI.OPEN_GET_WITH_PATH", OpenGetWithPathCmd);
     REGISTER("LLAPI.PATHPARSE_NO_ERROR_MSG", PathParseNoErrorMsgCmd);
+    REGISTER("LLAPI.EVALUATE", EvaluateCmd);
+    REGISTER("LLAPI.EVALUATE_COMPILED", EvaluateCompiledCmd);
 
     return REDISMODULE_OK;
 }
