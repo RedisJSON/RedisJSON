@@ -3,8 +3,9 @@
 RAM holds one copy of each long string: ijson interns strings, and documents that
 share one hold the same allocation. The RDB used to write every occurrence, so it
 could be many times larger than RAM. The module now writes a shared string inline
-once, where a save reaches it first (a definition), and every later occurrence as a
-small id (a reference). Ids are implicit and sequential; the loader rebuilds them by
+once per dictionary, where a save reaches it first (a definition), and later occurrences as
+small ids (references). A full table can be cleared and reused between documents.
+Ids are implicit and sequential within each dictionary; the loader rebuilds them by
 reading the records in the order they were written. The writer keeps no snapshot,
 owns no string handles and writes no owner count in either save mode. Its memory grows with the
 number of distinct shared strings, not with their size, the number of documents or the
@@ -17,12 +18,15 @@ the intern cache before the first key and capped them at 65,536 entries.
 
 ```text
 save    persistence START       creates the encoder (none when the budget is 0)
-        each keyed value        writes marker 1 or 0
+        each keyed value        writes marker 1, 2 or 0
         each Flex value         queries residency; only resident values may define strings
+        table-budget miss       schedules a reset before the next resident document
+        first new definition    writes marker 2 so the reader resets too
         ENDED / FAILED          logs counters, drops encoder and residency context
 load    loading START           creates the decoder
         each marker 1           checks base_id (0 for the first), then decodes using the table
-        failed marker 1         drops the decoder; later marker 1 records are refused
+        each marker 2           checks cumulative base_id, clears the table, then decodes
+        failed stream record    drops the decoder; later stream records are refused
         ENDED / FAILED          logs counters and drops the decoder
 ```
 
@@ -52,7 +56,7 @@ load    loading START           creates the decoder
   self-contained is the command filter, which ends the session before any command runs,
   and the absence of a session in the ASM child. RESTORE and `RESTOREMODAUX` cannot arm
   a load session, so RESTORE of a stream record is an error.
-- The loader pins the string of every definition until the end or failure
+- The loader pins the string of every definition until the next reset, end or failure
   of the load, or the start of another load. The core decodes every module value in
   stream order before it decides to drop it, so a definition on an expired or
   slot-trimmed key is still read, and its string stays pinned until then.
@@ -64,18 +68,28 @@ Encoding version 5 keeps its marker byte.
 | Marker | Record | Notes |
 |---|---|---|
 | 0 | `[0][CBOR]` | Self-contained: the only form for DUMP, RESTORE, Flex IO threads and sessionless saves. |
-| 1 | `[1][base id: u32 LE][CBOR]` | `base id` is the writer's next id when the record starts. A document that defines and references nothing is written as marker 0. |
+| 1 | `[1][base id: u32 LE][CBOR]` | `base id` is the cumulative number of definitions before this record, including previous dictionaries. A document that defines and references nothing is written as marker 0. |
+| 2 | `[2][base id: u32 LE][CBOR]` | Checks the same cumulative position, then clears the reader dictionary. This record must introduce at least one definition. Dictionary IDs restart at 0. |
 | other | | Refused. |
 
 In the CBOR, a definition is tag 6 around the text and takes the next id; a reference
-is tag 7 around an unsigned integer smaller than the number of definitions read so far.
+is tag 7 around an unsigned integer smaller than the number of definitions in the current dictionary.
 Typed arrays, numbers and the nesting limit are unchanged, and the legacy depth limit
 setting applies to stream records as to inline ones.
 
 ```text
 {"k": S}, S 40 bytes, first use   01 00000000 A1 61 6B C6 78 28 <S>
 {"k": S}, next record             01 01000000 A1 61 6B C7 00
+{"k": T}, after a reset           02 01000000 A1 61 6B C6 78 28 <T>
+{"k": T}, next record             01 02000000 A1 61 6B C7 00
 ```
+
+Reset headers stay five bytes. Cumulative positions detect a missing, repeated or
+reordered definition-bearing record even when dictionary IDs are reused. A reset with
+no definition is rejected: it would not advance that position. The writer defers its
+reset marker across inline documents until it can introduce a definition.
+After `u32::MAX` cumulative definitions, new strings stay inline; existing references
+remain usable.
 
 A reference costs 2, 3, 4 or 6 bytes for ids below 24, 256, 65,536 and 2^32. A stream
 record has a 5-byte header against the 1-byte marker of an inline one and a definition
@@ -83,8 +97,11 @@ adds one byte (the tag), so the RDB exceeds the inline one by at most 4 bytes pe
 record and 1 byte per definition, before any reference saves anything.
 
 There are no module AUX records, format capability records, or module footer counters.
-Existing experimental AUX-format RDBs must be regenerated; no compatibility reader is
-provided. A value record the module refuses (NULL from its loader) stops startup, AOF,
+Existing first-use files without resets remain readable because their cumulative
+positions equal their dictionary lengths. Earlier first-use builds reject marker 2;
+upgrade readers before writers. Version 5 remains experimental. Existing experimental
+AUX-format RDBs must be regenerated; no compatibility reader is provided.
+A value record the module refuses (NULL from its loader) stops startup, AOF,
 or replica loading. Base-ID and reference validation remain; the normal RDB checksum
 protects the file when enabled. Without a footer, removing a final record is not detected
 by the module when no later base-ID check exposes it.
@@ -94,11 +111,13 @@ by the module when no later base-ID check exposes it.
 | Event | Save session | Load session |
 |---|---|---|
 | persistence START (RDB or AOF, sync or child) | old encoder dropped; new encoder created, none when the budget is 0 | |
-| `rdb_load` during a save | definitions disabled for the rest of the save | |
+| temporary Flex value saved | existing references allowed; no new definition from this value | |
+| eligible definition misses the table budget | table cleared before the next resident document; allocation reused | |
 | persistence ENDED or FAILED | counters logged; encoder dropped | |
 | command filter | encoder dropped | |
 | loading START (RDB, AOF, replication) | | old decoder dropped; new decoder created |
-| stream record | | base ID must equal the number of definitions read |
+| stream record | | base ID must equal the cumulative number of definitions read |
+| marker 2 | | old dictionary handles released before decoding new definitions |
 | failed stream record or IO failure | | decoder dropped; later stream records are refused |
 | loading ENDED or FAILED | | counters logged; decoder dropped |
 
@@ -163,19 +182,35 @@ commands can create standalone payloads, including commands invoked by other mod
 
 ## Configuration
 
+The [reset experiment and comparison](rdb-dictionary/reset-results.md) documents
+table reuse, memory behavior, validation and measured compression tradeoffs.
+
 | Setting | Default | Meaning |
 |---|---|---|
-| `json-rdb-dictionary-max-bytes` | 256 MiB | Ceiling on the writer's address-table heap in either save mode. The old and the new allocation count while the table grows. 0 turns the writer off; the reader always accepts. Range 0 to 2^40. |
-| `json-rdb-dictionary-max-def-bytes` | 0 | Most bytes of strings that one stream defines; 0 sets no bound. A reader keeps every defined string in RAM until the stream ends, even when Flex spills the values that hold them, so this is the most that the strings of a stream pin in a reader. Past it a string stays inline and the defined ones keep being referenced. Range 0 to 2^40; a negative module argument counts as 0. |
+| `json-rdb-dictionary-max-bytes` | 256 MiB | Ceiling on the writer's address-table heap in either save mode. The old and the new allocation count while the table grows. After an eligible definition misses this budget, the table is cleared and reused between resident documents. 0 turns the writer off; the reader always accepts. Range 0 to 2^40. |
+| `json-rdb-dictionary-max-def-bytes` | 0 | Maximum cumulative UTF-8 definition bytes across the whole RDB; 0 sets no bound. Resets do not replenish it, and redefining a string counts its bytes again. Past it a string stays inline and existing definitions remain usable. It bounds definition payload retained by the reader, not total reader RAM. Range 0 to 2^40; a negative module argument counts as 0. |
 
 Both change at runtime with `CONFIG SET` (units such as `128mb` work); a BGSAVE child
 keeps the value it inherited at fork. A module argument skips the range check of
 `CONFIG SET`, so a value outside the range counts as its nearest bound, and a negative
 budget switches the writer off. The names are those of the earlier design.
 
-When one more definition would not fit, the table freezes: strings already defined keep
-being referenced and new ones are written inline. The RDB degrades gradually, stays
-within the worst case above, and the save never fails.
+When an otherwise eligible definition does not fit the table budget, existing entries
+keep being referenced for the rest of that document and new strings stay inline.
+Before the next resident document, the writer clears the table while retaining its
+allocation. New definitions can then fill it again. A full table with only hits is
+left alone. Cold values, unshared strings and definition-payload limit misses do not
+schedule resets. A budget too small for one allocation stays inline without futile resets.
+
+The reader releases old dictionary handles at the reset marker; already loaded values
+keep their own handles. This bounds retained dictionary entries by the largest window,
+but does not cap string payload or process memory. One window can still define large strings.
+There is no reset inside a single document, so an oversized value still writes its
+remainder inline after the table fills.
+
+Resets trade old references for opportunities to define later strings. They help when
+later documents repeat different strings; they can hurt when old, frequently used
+strings must be defined again. Redis hash iteration is not a locality guarantee.
 
 ## Logs
 
@@ -200,11 +235,13 @@ dataset copy-on-write.
 - Not memory-free: a single pass that dedups across keys must remember each repeated
   string between its first and last use, and Redis saves in hash order. The table costs
   about 22 to 36 bytes per distinct shared string, and the loader keeps 8 bytes per
-  definition. Past the budget the savings shrink; they do not stop.
+  definition in the current dictionary. Resets retain table capacity and release its
+  previous string handles on the reader; their compression benefit depends on reuse.
 - Strings from 8 bytes up are shared, object keys included, but a reference replaces only
   9 to 64 bytes with 2 to 6, and every distinct string costs a table entry: 2 million
   distinct strings of 8 to 30 bytes, each held by two documents, need a 71 MB table, and
-  the budget freezes it near 1.8 million entries in the server process. Measured against a
+  the pre-reset implementation froze it near 1.8 million entries in the server process.
+  The following measurements predate dictionary resets. Measured against a
   minimum of 64 on 100,000 documents (SAVE in the server process, `rdbcompression no`):
   the RDB is 52 to 72 percent smaller where keys, enumerated values or ids repeat, and SAVE
   is 26 to 47 percent faster for it, because the file is smaller. Loading is slower: 3 to
@@ -234,8 +271,9 @@ dataset copy-on-write.
   full as well. A save could define the strings of cold values and pin them until it ends,
   and later cold values would then match them by address, but that spends RAM that only
   `json-rdb-dictionary-max-def-bytes` bounds, and the module does not do it. The reader
-  accepts streams on Flex with no bound on the memory it pins: every defined string
-  stays resident until loading ends, even when Flex spills its keys, so a stream with more
+  accepts streams on Flex with no configured reader memory bound: every defined string
+  stays resident until its dictionary resets or loading ends, even when Flex spills its keys,
+  so a dictionary with more
   distinct shared strings than a Flex
   node holds in RAM can exhaust it; a stream that Flex wrote holds the strings of its RAM
   values only. Measured on a stream that defines 48 MiB of strings, with the RAM limit in
@@ -248,7 +286,7 @@ dataset copy-on-write.
   `REQUIRE_LOADED_KEYS_IN_RAM` at init. That affects all RDB loads and RESTOREs.
   Replicas that ask for an uncompressed RDB (diskless load) copy the bytes of values on
   flash without decoding them, so such a transfer carries them in full.
-- A stream with many expired keys holds their strings until it ends, as the core decodes
+- A stream with many expired keys holds their strings until a reset or its end, as the core decodes
   every value before it can drop it.
 
 ## Rollout gates

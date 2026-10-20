@@ -36,11 +36,15 @@ const REQUIRE_LOADED_KEYS_IN_RAM: ModuleOptions = ModuleOptions::from_bits_retai
 // then CBOR that defines and references the strings of one RDB stream (ijson's StreamEncoder).
 const MARKER_INLINE: u8 = 0;
 const MARKER_STREAM: u8 = 1;
+// Marker 2 clears the reader dictionary before new definitions; base IDs stay cumulative.
+const MARKER_RESET: u8 = 2;
 // The encoder appends after these bytes: the marker 1 header, or four unused bytes and marker 0.
+// Marker 2 uses the same header as marker 1.
 const STREAM_HEADER_LEN: usize = 5;
 
 // Ceiling on the table the writer builds in the saving process; 0 turns the writer off.
 // When it is reached the strings defined so far keep being referenced and new ones go inline.
+// After a budget miss, the next definition-capable document reuses the cleared table.
 pub const DEFAULT_RDB_DICTIONARY_MAX_BYTES: i64 = 256 * 1024 * 1024;
 pub const RDB_DICTIONARY_MAX_BYTES_CEILING: i64 = 1 << 40;
 pub static RDB_DICTIONARY_MAX_BYTES: AtomicI64 = AtomicI64::new(DEFAULT_RDB_DICTIONARY_MAX_BYTES);
@@ -48,6 +52,7 @@ pub static RDB_DICTIONARY_MAX_BYTES: AtomicI64 = AtomicI64::new(DEFAULT_RDB_DICT
 // defined string until the end of the stream, even when Flex spills the values that hold them, so
 // this is also the most memory that the strings of a stream pin in a reader. Past it a string
 // stays inline, and the strings defined so far keep being referenced.
+// Dictionary resets release earlier handles; this allowance still counts the entire stream.
 pub const DEFAULT_RDB_DICTIONARY_MAX_DEF_BYTES: i64 = 0;
 pub static RDB_DICTIONARY_MAX_DEF_BYTES: AtomicI64 =
     AtomicI64::new(DEFAULT_RDB_DICTIONARY_MAX_DEF_BYTES);
@@ -70,6 +75,7 @@ thread_local! {
 /// record of the stream is self-contained.
 struct SaveSession {
     encoder: StreamEncoder,
+    reset_pending: bool,
     /// A context with its own client/database, used only by the saving thread. GetContextFromIO
     /// has no client, so it cannot be used for SelectDb or IsKeyInRam.
     flex_ctx: Option<*mut raw::RedisModuleCtx>,
@@ -82,6 +88,7 @@ impl SaveSession {
     fn new(config: StreamEncoderConfig) -> Self {
         Self {
             encoder: StreamEncoder::new(config),
+            reset_pending: false,
             flex_ctx: None,
             stream_docs: 0,
             inline_docs: 0,
@@ -116,14 +123,19 @@ impl SaveSession {
     /// existing definitions but adds no string addresses: temporary strings die with the value,
     /// and their addresses can be reused.
     fn encode(&mut self, value: &IValue, allow_define: bool) -> (Vec<u8>, usize) {
-        let base_id = self.encoder.next_id();
+        let base_id = self.encoder.stats().defs as u32;
+        self.reset_pending |= allow_define && self.encoder.reset_if_needed();
         let mut bytes = vec![MARKER_INLINE; STREAM_HEADER_LEN];
         self.lookup_only_docs += u64::from(!allow_define);
         if self.encoder.encode_into(&mut bytes, value, allow_define) == DocUse::default() {
             self.inline_docs += 1;
             return (bytes, STREAM_HEADER_LEN - 1);
         }
-        bytes[0] = MARKER_STREAM;
+        bytes[0] = if std::mem::take(&mut self.reset_pending) {
+            MARKER_RESET
+        } else {
+            MARKER_STREAM
+        };
         bytes[1..STREAM_HEADER_LEN].copy_from_slice(&base_id.to_le_bytes());
         self.stream_docs += 1;
         (bytes, 0)
@@ -362,7 +374,9 @@ fn decode_for_load(bytes: &[u8], keyed: bool) -> Result<IValue, LoadError> {
         Some((&MARKER_INLINE, cbor)) => {
             ijson::decode_with_depth_limit(cbor, limit_depth).map_err(LoadError::from)
         }
-        Some((&MARKER_STREAM, record)) => decode_stream_record(record, keyed, limit_depth),
+        Some((&marker @ (MARKER_STREAM | MARKER_RESET), record)) => {
+            decode_stream_record(record, keyed, limit_depth, marker == MARKER_RESET)
+        }
         Some((&marker, _)) => Err(LoadError::Marker(marker)),
         None => Err(CborDecodeError::DecodeError.into()),
     }
@@ -372,12 +386,14 @@ fn decode_stream_record(
     record: &[u8],
     keyed: bool,
     limit_depth: bool,
+    reset_dictionary: bool,
 ) -> Result<IValue, LoadError> {
     LOAD_SESSION.with_borrow_mut(|slot| {
         // Only a loading START event can arm a stream, so RESTORE and reads
         // without a key can never resolve one.
         let session = slot.as_mut().filter(|_| keyed).ok_or(LoadError::NoStream)?;
-        let result = decode_stream_document(&mut session.decoder, record, limit_depth);
+        let result =
+            decode_stream_document(&mut session.decoder, record, limit_depth, reset_dictionary);
         match &result {
             Ok(_) => session.stream_docs += 1,
             // The decoder refuses every record after a failure, so its table is released now.
@@ -391,16 +407,25 @@ fn decode_stream_document(
     decoder: &mut StreamDecoder,
     record: &[u8],
     limit_depth: bool,
+    reset_dictionary: bool,
 ) -> Result<IValue, LoadError> {
     let (base_id, document) = record
         .split_first_chunk()
         .ok_or(CborDecodeError::DecodeError)?;
     let found = u32::from_le_bytes(*base_id);
-    let expected = decoder.len();
+    let expected = decoder.stats().defs as usize;
     if found as usize != expected {
         return Err(LoadError::BaseId { expected, found });
     }
-    Ok(decoder.decode(document, limit_depth)?)
+    if reset_dictionary {
+        decoder.reset();
+    }
+    let value = decoder.decode(document, limit_depth)?;
+    // A reset must advance the cumulative position so dropping its record is detectable.
+    if reset_dictionary && decoder.stats().defs as usize == expected {
+        return Err(CborDecodeError::InvalidValue.into());
+    }
+    Ok(value)
 }
 
 unsafe extern "C" fn command_filter(_ctx: *mut raw::RedisModuleCommandFilterCtx) {
