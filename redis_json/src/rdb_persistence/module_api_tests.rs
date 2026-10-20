@@ -246,6 +246,214 @@ fn shared_documents(text: &str, count: usize) -> (IString, Vec<IValue>) {
     (owner, docs)
 }
 
+fn save_external(text: &str) -> Vec<u8> {
+    crate::rdb_persistence::save_with(io(), |strings, out| {
+        ciborium::into_writer(&strings.string(text), out)
+    })
+    .unwrap();
+    let [record] = <[Vec<u8>; 1]>::try_from(drain_records()).unwrap();
+    record
+}
+
+#[test]
+fn external_manager_records_share_strings_and_standalone_values_stay_inline() {
+    let server = Server::start();
+    DICTIONARY_FACTORY.set(Some(|| Box::new(ijson::ContentDictionary::default())));
+    server.start_flex_save();
+    IN_RAM.set(false);
+    let first = save_external(&String::from("a string owned by an external manager"));
+    KEYED.set(false);
+    let standalone = save_external("another external string");
+    KEYED.set(true);
+    let second = save_external(&String::from("a string owned by an external manager"));
+    assert_eq!((first[0], standalone[0], second[0]), (1, 0, 1));
+    assert_eq!(&second[5..], &[0xc7, 0]);
+    assert_eq!(RESIDENCY_QUERIES.get(), 0);
+    server.end_save();
+    assert_eq!(save_external("a string owned by an external manager")[0], 0);
+
+    let loaded = server.load(&Rdb {
+        records: vec![first, standalone, second],
+    });
+    let expected = [
+        "a string owned by an external manager",
+        "another external string",
+        "a string owned by an external manager",
+    ];
+    for (value, text) in loaded.values.iter().zip(expected) {
+        assert_eq!(value.as_ref().unwrap().as_string().unwrap().as_str(), text);
+    }
+}
+
+#[test]
+fn configured_dictionary_is_shared_by_all_managers() {
+    let server = Server::start();
+    DICTIONARY_FACTORY.set(Some(|| Box::new(ijson::ContentDictionary::default())));
+    let owner = IString::from("a shared resident string");
+    let value = document(&owner);
+    server.start_save();
+    let first = server.save_record(&value);
+    let external = save_external(owner.as_str());
+    let repeated = save_external(owner.as_str());
+    let last = server.save_record(&value);
+    server.end_save();
+    assert_eq!([first[0], external[0], repeated[0], last[0]], [1, 1, 1, 1]);
+    assert_eq!(&external[1..5], &1_u32.to_le_bytes());
+    assert_eq!(&last[1..5], &1_u32.to_le_bytes());
+    assert_eq!(&external[5..], &[0xc7, 0]);
+    let loaded = server.load(&Rdb {
+        records: vec![first, external, repeated, last],
+    });
+    assert_eq!(loaded.values[0], Some(value.clone()));
+    assert_eq!(loaded.values[1], loaded.values[2]);
+    assert_eq!(
+        loaded.values[1]
+            .as_ref()
+            .unwrap()
+            .as_string()
+            .unwrap()
+            .as_str(),
+        owner.as_str()
+    );
+    assert_eq!(loaded.values[3], Some(value));
+}
+
+#[test]
+fn external_serializer_failure_writes_nothing_and_prevents_dangling_references() {
+    let server = Server::start();
+    DICTIONARY_FACTORY.set(Some(|| Box::new(ijson::ContentDictionary::default())));
+    server.start_save();
+    let result = crate::rdb_persistence::save_with(io(), |strings, out| {
+        ciborium::into_writer(&strings.string("a definition that was not saved"), out).unwrap();
+        Err::<(), _>("external serialization failed")
+    });
+    assert_eq!(result, Err("external serialization failed"));
+    assert!(drain_records().is_empty());
+    let later = save_external("a definition that was not saved");
+    assert_eq!(later[0], 0);
+    assert!(server.load_record(&later).is_some());
+    let owner = IString::from("a string from the resident manager");
+    assert_eq!(server.save_record(&document(&owner))[0], 0);
+}
+
+#[test]
+fn managers_configure_their_dictionary_once_and_each_save_gets_a_fresh_instance() {
+    #[derive(Default)]
+    struct ManagerDictionary(ijson::ContentDictionary);
+
+    impl ijson::StringDictionary for ManagerDictionary {
+        fn borrows_strings(&self) -> bool {
+            false
+        }
+
+        fn len(&self) -> usize {
+            self.0.len()
+        }
+        fn clear(&mut self) {
+            self.0.clear();
+        }
+        fn get(&self, text: &ijson::StreamString<'_>) -> Option<(u32, usize)> {
+            self.0.get(text)
+        }
+        fn can_define(&self, text: &ijson::StreamString<'_>) -> bool {
+            text.as_str().starts_with("share:")
+        }
+        fn insert(&mut self, text: &ijson::StreamString<'_>, id: u32, budget: usize) -> bool {
+            self.0.insert(text, id, budget)
+        }
+    }
+
+    let server = Server::start();
+    thread_local! { static CREATED: Cell<usize> = const { Cell::new(0) }; }
+    CREATED.set(0);
+    DICTIONARY_FACTORY.set(Some(|| {
+        CREATED.set(CREATED.get() + 1);
+        Box::new(ManagerDictionary::default())
+    }));
+    server.start_save();
+    for text in [
+        "share: manager string",
+        "share: manager string",
+        "inline manager string",
+    ] {
+        save_with(io(), |strings, out| {
+            ciborium::into_writer(&strings.string(text), out)
+        })
+        .unwrap();
+    }
+    let records = drain_records();
+    assert_eq!(CREATED.get(), 1);
+    assert_eq!(
+        records.iter().map(|record| record[0]).collect::<Vec<_>>(),
+        [1, 1, 0]
+    );
+    assert_eq!(&records[1][5..], &[0xc7, 0]);
+    server.end_save();
+    let values = server.load(&Rdb { records }).values;
+    assert_eq!(values[0], values[1]);
+    assert_eq!(
+        values[2].as_ref().unwrap().as_string().unwrap().as_str(),
+        "inline manager string"
+    );
+    server.start_save();
+    assert_eq!(CREATED.get(), 2);
+    let fresh = save_external("share: manager string");
+    assert_eq!(fresh[0], MARKER_STREAM);
+    assert_eq!(&fresh[1..5], &0_u32.to_le_bytes());
+}
+
+#[test]
+fn external_borrowing_dictionary_obeys_flex_residency() {
+    let server = Server::start();
+    server.start_flex_save();
+    let owner = IString::from("a stable string supplied by a resident manager");
+    let shared = owner.clone();
+    for in_ram in [false, true, false] {
+        IN_RAM.set(in_ram);
+        save_with(io(), |strings, out| {
+            ciborium::into_writer(&strings.string(&shared), out)
+        })
+        .unwrap();
+    }
+    let records = drain_records();
+    assert_eq!(
+        records.iter().map(|record| record[0]).collect::<Vec<_>>(),
+        [0, 1, 1]
+    );
+    assert_eq!(&records[2][5..], &[0xc7, 0]);
+    assert_eq!(RESIDENCY_QUERIES.get(), 3);
+    server.end_save();
+    assert!(server
+        .load(&Rdb { records })
+        .values
+        .iter()
+        .all(|value| { value.as_ref().unwrap().as_string().unwrap() == &owner }));
+}
+
+#[test]
+fn external_manager_resets_and_definition_limits_use_the_shared_framing() {
+    let server = Server::start();
+    DICTIONARY_FACTORY.set(Some(|| Box::new(ijson::ContentDictionary::default())));
+    RDB_DICTIONARY_MAX_BYTES.store(256, Ordering::Relaxed);
+    RDB_DICTIONARY_MAX_DEF_BYTES.store(300, Ordering::Relaxed);
+    server.start_save();
+    let texts: Vec<_> = (0..10)
+        .map(|i| format!("{i:04}{}", "x".repeat(96)))
+        .collect();
+    let records: Vec<_> = texts.iter().map(|text| save_external(text)).collect();
+    assert!(records.iter().any(|record| record[0] == MARKER_RESET));
+    assert!(records
+        .iter()
+        .rev()
+        .take(3)
+        .all(|record| record[0] == MARKER_INLINE));
+    server.end_save();
+    let values = server.load(&Rdb { records }).values;
+    for (value, text) in values.iter().zip(texts) {
+        assert_eq!(value.as_ref().unwrap().as_string().unwrap().as_str(), text);
+    }
+}
+
 #[test]
 fn lifecycle_events_bracket_stream_records_and_repeated_loads() {
     let server = Server::start();
