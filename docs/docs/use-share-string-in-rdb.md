@@ -64,15 +64,21 @@ load    loading START           creates the decoder
 ## Other value managers
 
 The address-only behavior above remains the OSS default. Managers with different
-string storage select an optional factory in `redis_json_module_create!`:
+string storage register a factory from their module's `init` callback, after
+selecting and successfully initializing their backend:
 
 ```rust
-rdb_dictionary: Some(|| Box::new(ijson::ContentDictionary::default())),
+rejson::rdb_persistence::set_dictionary_factory(|| {
+    Box::new(ijson::ContentDictionary::default())
+});
 ```
 
-Omitting it, or supplying `None`, uses the address dictionary. The selected factory
-creates one fresh dictionary at each save's start. It cannot change during the
-save. Value callbacks use the same helper regardless of dictionary implementation:
+Omitting this call uses the address dictionary. Registration belongs on the Redis main thread during module
+initialization, not in value callbacks.
+
+The selected factory creates one fresh dictionary at each save's start. It cannot
+change during the save. Value callbacks use the same helper regardless of
+dictionary implementation:
 
 ```rust
 rejson::rdb_persistence::save_with(

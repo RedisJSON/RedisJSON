@@ -155,8 +155,8 @@ macro_rules! run_on_manager {
 /// Consumers requiring per-call setup must supply it.
 /// LLAPI calls pass empty arguments; setup must still complete when returning an error.
 /// This hook guards JSON commands, not access through the shared C API.
-/// The optional `rdb_dictionary` factory selects one string dictionary implementation
-/// for all managers at initialization; `None` or omission uses the address dictionary.
+/// The `init` callback may select one string dictionary implementation for all managers
+/// through [`rdb_persistence::set_dictionary_factory`]; omission uses the address dictionary.
 #[macro_export]
 macro_rules! redis_json_module_create {
     (
@@ -164,7 +164,6 @@ macro_rules! redis_json_module_create {
             $($data_type:ident),* $(,)*
         ],
         $(pre_command_function: $pre_command_function_expr:expr,)?
-        $(rdb_dictionary: $rdb_dictionary_expr:expr,)?
         get_manage: {
             $( $condition:expr => $manager_ident:ident { $($field:ident: $value:expr),* $(,)? } ),* $(,)?
             _ => $default_manager:expr $(,)?
@@ -400,7 +399,7 @@ macro_rules! redis_json_module_create {
                 return Status::Err;
             }
             ctx.log_notice("Initialized shared string cache, thread safe: true.");
-            if $crate::init_rdb_persistence(ctx, None$(.or($rdb_dictionary_expr))?) != Status::Ok {
+            if $crate::init_rdb_persistence(ctx) != Status::Ok {
                 return Status::Err;
             }
             // Mirror Redis core's `hide-user-data-from-log` so our trace logs
@@ -480,11 +479,8 @@ const fn dummy_init(_ctx: &Context, _args: &[RedisString]) -> Status {
 }
 
 #[doc(hidden)]
-pub fn init_rdb_persistence(
-    ctx: &Context,
-    dictionary: Option<rdb_persistence::DictionaryFactory>,
-) -> redis_module::Status {
-    rdb_persistence::init(ctx, dictionary)
+pub fn init_rdb_persistence(ctx: &Context) -> redis_module::Status {
+    rdb_persistence::init(ctx)
 }
 
 pub fn init_ijson_shared_string_cache(is_bigredis: bool) -> Result<(), String> {
@@ -661,12 +657,16 @@ mod tests {
     redis_json_module_create! {
         data_types: [],
         pre_command_function: self::pre_command,
-        rdb_dictionary: Some(|| Box::new(ijson::ContentDictionary::default())),
         get_manage: {
             _ => None::<crate::ivalue_manager::RedisIValueJsonKeyManager>
         },
         version: 1,
-        init: |_, _| Status::Ok,
+        init: |_, _| {
+            crate::rdb_persistence::set_dictionary_factory(|| {
+                Box::new(ijson::ContentDictionary::default())
+            });
+            Status::Ok
+        },
         info: info,
     }
 
