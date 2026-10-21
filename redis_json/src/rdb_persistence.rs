@@ -71,10 +71,18 @@ pub static RDB_DICTIONARY_MAX_DEF_BYTES: AtomicI64 =
 // Whether the server runs Flex, for the log; set once by init().
 static BIGREDIS_ENABLED: AtomicBool = AtomicBool::new(false);
 
-/// Creates a fresh dictionary for each save. `None` at initialization selects
+/// Creates a fresh dictionary for each save. Without a custom factory, saves use
 /// [`ijson::AddressDictionary`]; custom factories may supply any [`StringDictionary`].
 /// Factories must return empty dictionaries whose entry allocations fit the configured budget.
 pub type DictionaryFactory = fn() -> Box<dyn StringDictionary>;
+
+/// Selects a custom dictionary after the consumer has initialized its backend.
+/// Call only from the module's `init` callback, on the Redis main thread.
+/// Omitting this call keeps [`ijson::AddressDictionary`]. Each save creates a fresh
+/// dictionary from this factory and uses it for the entire stream.
+pub fn set_dictionary_factory(factory: DictionaryFactory) {
+    DICTIONARY_FACTORY.set(Some(factory));
+}
 
 thread_local! {
     // Initialization and persistence callbacks run on the main thread, including its fork child.
@@ -335,8 +343,7 @@ fn log_event(ctx: *mut raw::RedisModuleCtx, message: &str) {
     }
 }
 
-pub(crate) fn init(ctx: &Context, dictionary: Option<DictionaryFactory>) -> Status {
-    DICTIONARY_FACTORY.set(dictionary);
+pub(crate) fn init(ctx: &Context) -> Status {
     // bigredis-enabled is immutable; missing config on OSS means RAM-only Redis.
     let flex = crate::read_yes_no_config(ctx, "bigredis-enabled");
     BIGREDIS_ENABLED.store(flex, Ordering::Relaxed);
@@ -424,7 +431,7 @@ pub type RdbStringEncoder<'a> = StreamStrings<'a>;
 /// values with [`RdbStringEncoder::string`]. It must not run Redis commands or
 /// recursively call a save helper. Plain non-string values use normal Serde encoding.
 ///
-/// The optional `rdb_dictionary` factory in `redis_json_module_create!` selects
+/// The optional call to [`set_dictionary_factory`] from the module's `init` callback selects
 /// the dictionary once at initialization; omitting it uses [`ijson::AddressDictionary`].
 /// Every manager in a save shares that dictionary.
 ///

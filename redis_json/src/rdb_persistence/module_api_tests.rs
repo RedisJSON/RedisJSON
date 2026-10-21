@@ -256,9 +256,40 @@ fn save_external(text: &str) -> Vec<u8> {
 }
 
 #[test]
+fn manager_init_can_keep_the_address_dictionary_or_register_its_own() {
+    let server = Server::start();
+    for backend_initialized in [false, true] {
+        server.forget();
+        if backend_initialized {
+            crate::rdb_persistence::set_dictionary_factory(|| {
+                Box::new(ijson::ContentDictionary::default())
+            });
+        }
+        let owner = IString::from("a string shared by the selected backend");
+        let value = document(&owner);
+        server.start_save();
+        let resident = server.save_record(&value);
+        let external = save_external(owner.as_str());
+        server.end_save();
+        assert_eq!(resident[0], MARKER_STREAM);
+        if backend_initialized {
+            assert_eq!(external[0], MARKER_STREAM);
+            assert_eq!(&external[5..], &[0xc7, 0]);
+        } else {
+            assert_eq!(external, inline_record(&IValue::from(owner.as_str())));
+        }
+        let loaded = server.load(&Rdb {
+            records: vec![resident, external],
+        });
+        assert_eq!(loaded.values[0], Some(value));
+        assert_eq!(loaded.values[1], Some(IValue::from(owner.as_str())));
+    }
+}
+
+#[test]
 fn external_manager_records_share_strings_and_standalone_values_stay_inline() {
     let server = Server::start();
-    DICTIONARY_FACTORY.set(Some(|| Box::new(ijson::ContentDictionary::default())));
+    set_dictionary_factory(|| Box::new(ijson::ContentDictionary::default()));
     server.start_flex_save();
     IN_RAM.set(false);
     let first = save_external(&String::from("a string owned by an external manager"));
@@ -288,7 +319,7 @@ fn external_manager_records_share_strings_and_standalone_values_stay_inline() {
 #[test]
 fn configured_dictionary_is_shared_by_all_managers() {
     let server = Server::start();
-    DICTIONARY_FACTORY.set(Some(|| Box::new(ijson::ContentDictionary::default())));
+    set_dictionary_factory(|| Box::new(ijson::ContentDictionary::default()));
     let owner = IString::from("a shared resident string");
     let value = document(&owner);
     server.start_save();
@@ -321,7 +352,7 @@ fn configured_dictionary_is_shared_by_all_managers() {
 #[test]
 fn external_serializer_failure_writes_nothing_and_prevents_dangling_references() {
     let server = Server::start();
-    DICTIONARY_FACTORY.set(Some(|| Box::new(ijson::ContentDictionary::default())));
+    set_dictionary_factory(|| Box::new(ijson::ContentDictionary::default()));
     server.start_save();
     let result = crate::rdb_persistence::save_with(io(), |strings, out| {
         ciborium::into_writer(&strings.string("a definition that was not saved"), out).unwrap();
@@ -366,10 +397,10 @@ fn managers_configure_their_dictionary_once_and_each_save_gets_a_fresh_instance(
     let server = Server::start();
     thread_local! { static CREATED: Cell<usize> = const { Cell::new(0) }; }
     CREATED.set(0);
-    DICTIONARY_FACTORY.set(Some(|| {
+    set_dictionary_factory(|| {
         CREATED.set(CREATED.get() + 1);
         Box::new(ManagerDictionary::default())
-    }));
+    });
     server.start_save();
     for text in [
         "share: manager string",
@@ -433,7 +464,7 @@ fn external_borrowing_dictionary_obeys_flex_residency() {
 #[test]
 fn external_manager_resets_and_definition_limits_use_the_shared_framing() {
     let server = Server::start();
-    DICTIONARY_FACTORY.set(Some(|| Box::new(ijson::ContentDictionary::default())));
+    set_dictionary_factory(|| Box::new(ijson::ContentDictionary::default()));
     RDB_DICTIONARY_MAX_BYTES.store(256, Ordering::Relaxed);
     RDB_DICTIONARY_MAX_DEF_BYTES.store(300, Ordering::Relaxed);
     server.start_save();
