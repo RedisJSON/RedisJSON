@@ -3,9 +3,36 @@
 Tests for FPHA (Floating Point Hint for Arrays) feature.
 """
 
+from contextlib import contextmanager
+import time
+
 from RLTest import Defaults
 
 Defaults.decode_responses = True
+
+
+@contextmanager
+def _without_automatic_rdb_saves(env):
+    # These tests exercise explicit SAVE/reload, not scheduled snapshots.
+    connections = [env.getConnection()]
+    if env.useSlaves:
+        connections.append(env.getSlaveConnection())
+    original_schedules = []
+    try:
+        for conn in connections:
+            original_schedules.append((conn, conn.config_get("save")["save"]))
+            conn.config_set("save", "")
+        # Disabling the schedule does not stop an already-running snapshot.
+        deadline = time.monotonic() + 30
+        for conn in connections:
+            while conn.info("persistence")["rdb_bgsave_in_progress"]:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("BGSAVE did not finish before the FPHA reload test")
+                time.sleep(0.05)
+        yield
+    finally:
+        for conn, schedule in original_schedules:
+            conn.config_set("save", schedule)
 
 
 def test_fpha_basic_fp32(env):
@@ -61,12 +88,13 @@ def test_fpha_rdb_save_load(env):
     if env.useAof:
         env.skip()
 
-    env.expect("JSON.SET", "fp32_rdb", "$", "[1.5, 2.5, 3.5]", "FPHA", "FP32").ok()
-    env.expect("JSON.GET", "fp32_rdb", "$").equal("[[1.5,2.5,3.5]]")
-
-    for _ in env.retry_with_rdb_reload():
-        env.assertExists("fp32_rdb")
+    with _without_automatic_rdb_saves(env):
+        env.expect("JSON.SET", "fp32_rdb", "$", "[1.5, 2.5, 3.5]", "FPHA", "FP32").ok()
         env.expect("JSON.GET", "fp32_rdb", "$").equal("[[1.5,2.5,3.5]]")
+
+        for _ in env.retry_with_rdb_reload():
+            env.assertExists("fp32_rdb")
+            env.expect("JSON.GET", "fp32_rdb", "$").equal("[[1.5,2.5,3.5]]")
 
 
 def test_fpha_rdb_save_load_after_type_change(env):
@@ -75,13 +103,14 @@ def test_fpha_rdb_save_load_after_type_change(env):
     if env.useAof:
         env.skip()
 
-    env.expect("JSON.SET", "fp16_rdb", "$", "[10.0, 20.0, 30.0]", "FPHA", "FP16").ok()
+    with _without_automatic_rdb_saves(env):
+        env.expect("JSON.SET", "fp16_rdb", "$", "[10.0, 20.0, 30.0]", "FPHA", "FP16").ok()
 
-    env.expect("JSON.ARRAPPEND", "fp16_rdb", "$", "1e10").noError()
+        env.expect("JSON.ARRAPPEND", "fp16_rdb", "$", "1e10").noError()
 
-    for _ in env.retry_with_rdb_reload():
-        env.assertExists("fp16_rdb")
-        env.expect("JSON.GET", "fp16_rdb", "$[0]").noError()
+        for _ in env.retry_with_rdb_reload():
+            env.assertExists("fp16_rdb")
+            env.expect("JSON.GET", "fp16_rdb", "$[0]").noError()
 
 
 def test_fpha_json_get_short_float_serialization(env):
