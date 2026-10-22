@@ -200,6 +200,10 @@ setup_rltest() {
 	fi
 	RLTEST_ARGS+=" --test-timeout $TEST_TIMEOUT"
 	RLTEST_ARGS+=" --enable-debug-command --enable-protected-configs"
+	if [[ $RLEC != 1 ]]; then
+		# Explicit SAVE/BGSAVE still work; scheduled-snapshot tests must opt in.
+		RLTEST_ARGS="--redis-config-file '$HERE/redis.conf' $RLTEST_ARGS"
+	fi
 }
 
 #----------------------------------------------------------------------------------------------
