@@ -205,11 +205,17 @@ typedef struct RedisJSONAPI {
   // NULL signals failure; optional err_msg receives a caller-owned error string.
   // On success, *err_msg is NULL. With err_msg == NULL, compilation makes no Redis API
   // calls and needs no Redis lock; ctx may also be NULL.
+  // If err_msg != NULL, *err_msg is cleared on entry; ctx must be valid and the Redis
+  // lock must be held. Free any returned error with RedisModule_FreeString.
   JSONExpression (*compileExpression)(const char *text, JSONExpressionMode mode,
                                      RedisModuleCtx *ctx, RedisModuleString **err_msg);
 
   // Evaluate with the mode enforced at compilation, using the JSON.GET projection semantics.
   // Scalar/array/object results are individual values; multi-result projections stay flat.
+  // NULL signals failure, including NULL json/expression or projection conversion failure.
+  // If err_msg != NULL, *err_msg is cleared on entry and receives a caller-owned error
+  // string on failure (NULL on success); ctx must be valid. Free errors with RedisModule_FreeString.
+  // With err_msg == NULL, ctx may also be NULL. Evaluation requires the Redis lock in either case.
   JSONResultsIterator (*evaluateCompiled)(RedisJSON json, JSONExpression expression,
                                          RedisModuleCtx *ctx, RedisModuleString **err_msg);
 
@@ -218,6 +224,10 @@ typedef struct RedisJSONAPI {
 
   // One-off compile/evaluate/free with the same modes, errors and result ownership.
   // Existing get/pathParse/getWithPath APIs retain their node-selection-only behavior.
+  // NULL signals failure, including invalid text/mode, NULL json or projection conversion failure.
+  // If err_msg != NULL, *err_msg is cleared on entry and receives a caller-owned error
+  // string on failure (NULL on success); ctx must be valid. Free errors with RedisModule_FreeString.
+  // With err_msg == NULL, ctx may also be NULL. Evaluation requires the Redis lock in either case.
   JSONResultsIterator (*evaluate)(RedisJSON json, const char *text, JSONExpressionMode mode,
                                  RedisModuleCtx *ctx, RedisModuleString **err_msg);
 

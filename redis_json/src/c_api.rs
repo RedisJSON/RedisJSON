@@ -43,34 +43,38 @@ pub enum JSONType {
     Null = 6,
 }
 
+enum Results<'a, V: SelectValue, O: Borrow<V>> {
+    Nodes(Vec<ValueRef<'a, V>>),
+    Computed(Vec<O>),
+}
+
 struct ResultsIterator<'a, V: SelectValue, O: Borrow<V>> {
-    results: Vec<ValueRef<'a, V>>,
-    owned_values: Vec<O>,
+    results: Results<'a, V, O>,
     pos: usize,
 }
 
 impl<V: SelectValue, O: Borrow<V>> ResultsIterator<'_, V, O> {
     fn len(&self) -> usize {
-        self.results.len() + self.owned_values.len()
+        match &self.results {
+            Results::Nodes(values) => values.len(),
+            Results::Computed(values) => values.len(),
+        }
     }
 
     fn get(&self, index: usize) -> &V {
-        if index < self.results.len() {
-            self.results[index].as_ref()
-        } else {
-            self.owned_values[index - self.results.len()].borrow()
+        match &self.results {
+            Results::Nodes(values) => values[index].as_ref(),
+            Results::Computed(values) => values[index].borrow(),
         }
     }
 }
 
 impl<V: SelectValue, O: Borrow<V>> serde::Serialize for ResultsIterator<'_, V, O> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.collect_seq(
-            self.results
-                .iter()
-                .map(AsRef::as_ref)
-                .chain(self.owned_values.iter().map(Borrow::borrow)),
-        )
+        match &self.results {
+            Results::Nodes(values) => serializer.collect_seq(values.iter().map(AsRef::as_ref)),
+            Results::Computed(values) => serializer.collect_seq(values.iter().map(Borrow::borrow)),
+        }
     }
 }
 
@@ -78,6 +82,18 @@ impl<V: SelectValue, O: Borrow<V>> serde::Serialize for ResultsIterator<'_, V, O
 pub enum JSONExpressionMode {
     NodeSelectionOnly = 0,
     AllowProjections = 1,
+}
+
+impl TryFrom<c_int> for JSONExpressionMode {
+    type Error = &'static str;
+
+    fn try_from(mode: c_int) -> Result<Self, Self::Error> {
+        match mode {
+            x if x == Self::NodeSelectionOnly as c_int => Ok(Self::NodeSelectionOnly),
+            x if x == Self::AllowProjections as c_int => Ok(Self::AllowProjections),
+            _ => Err("invalid JSON expression mode"),
+        }
+    }
 }
 
 struct CompiledExpression {
@@ -402,8 +418,7 @@ pub fn json_api_get<M: Manager>(_: M, val: *const c_void, path: *const c_char) -
     let path_calculator = create(&query);
     let res = path_calculator.calc(v);
     Box::into_raw(Box::new(ResultsIterator::<M::V, M::O> {
-        results: res,
-        owned_values: Vec::new(),
+        results: Results::Nodes(res),
         pos: 0,
     }))
     .cast::<c_void>()
@@ -440,8 +455,7 @@ pub fn json_api_get_with_path<M: Manager>(
     let path_calculator = create(query);
     let res = path_calculator.calc(v);
     Box::into_raw(Box::new(ResultsIterator::<M::V, M::O> {
-        results: res,
-        owned_values: Vec::new(),
+        results: Results::Nodes(res),
         pos: 0,
     }))
     .cast::<c_void>()
@@ -473,10 +487,10 @@ pub fn json_api_compile_expression(
     if text.is_null() {
         return expression_error(ctx, err_msg, "expression must not be NULL");
     }
-    let allow_projections = match mode {
-        x if x == JSONExpressionMode::NodeSelectionOnly as c_int => false,
-        x if x == JSONExpressionMode::AllowProjections as c_int => true,
-        _ => return expression_error(ctx, err_msg, "invalid JSON expression mode"),
+    let allow_projections = match JSONExpressionMode::try_from(mode) {
+        Ok(JSONExpressionMode::NodeSelectionOnly) => false,
+        Ok(JSONExpressionMode::AllowProjections) => true,
+        Err(err) => return expression_error(ctx, err_msg, err),
     };
     // SAFETY: the caller supplies a NUL-terminated string valid for this call.
     let text: Box<str> = match unsafe { CStr::from_ptr(text) }.to_str() {
@@ -494,8 +508,9 @@ pub fn json_api_compile_expression(
         Err(err) => return expression_error(ctx, err_msg, &err.to_string()),
         Ok(query) => query,
     };
-    // SAFETY: the boxed text never moves or changes; CompiledExpression owns it and drops
-    // the query first. The extended lifetime stays private to the handle.
+    // SAFETY: the heap bytes are never moved or mutated. CompiledExpression owns them and
+    // drops query before _text (field order matters). The extended lifetime stays private
+    // to the handle.
     let query = unsafe {
         std::mem::transmute::<json_path::json_path::Query<'_>, json_path::json_path::Query<'static>>(
             query,
@@ -527,25 +542,21 @@ pub fn json_api_evaluate_compiled<M: Manager>(
             &*expression.cast::<CompiledExpression>(),
         )
     };
-    let mut iter = ResultsIterator::<M::V, M::O> {
-        results: Vec::new(),
-        owned_values: Vec::new(),
-        pos: 0,
-    };
-    if expression.query.is_projection() {
+    let results = if expression.query.is_projection() {
         let values = json_path::calc_once_projection(expression.query.clone(), value);
-        iter.owned_values.reserve_exact(values.len());
+        let mut owned_values = Vec::with_capacity(values.len());
         for value in values {
             // Reuse backend parsing so each synthesized value retains its actual owner.
             match manager.from_str(&value.to_string(), crate::Format::JSON, false, None) {
-                Ok(value) => iter.owned_values.push(value),
+                Ok(value) => owned_values.push(value),
                 Err(err) => return expression_error(ctx, err_msg, &err.to_string()),
             }
         }
+        Results::Computed(owned_values)
     } else {
-        iter.results = create(&expression.query).calc(value);
-    }
-    Box::into_raw(Box::new(iter)).cast()
+        Results::Nodes(create(&expression.query).calc(value))
+    };
+    Box::into_raw(Box::new(ResultsIterator { results, pos: 0 })).cast()
 }
 
 /// Free a compiled expression without invoking Redis APIs. NULL is accepted.
@@ -1623,20 +1634,33 @@ mod tests {
 
         let doc = IValue::from(1);
         let drops = Rc::new(Cell::new(0));
-        let iter = ResultsIterator {
-            results: vec![ValueRef::Borrowed(&doc), ValueRef::Owned(IValue::from(2))],
-            owned_values: vec![Owner {
-                value: Box::new(IValue::from(3)),
-                drops: drops.clone(),
-            }],
+        let nodes = ResultsIterator::<IValue, Owner> {
+            results: Results::Nodes(vec![
+                ValueRef::Borrowed(&doc),
+                ValueRef::Owned(IValue::from(2)),
+            ]),
             pos: 0,
         };
-        assert_eq!(iter.len(), 3);
-        assert!(std::ptr::eq(iter.get(0), &doc));
+        assert_eq!(nodes.len(), 2);
+        assert!(std::ptr::eq(nodes.get(0), &doc));
+        assert_eq!(nodes.get(1), &IValue::from(2));
         assert_eq!(
-            serde_json::to_value(&iter).unwrap(),
-            serde_json::json!([1, 2, 3])
+            serde_json::to_value(&nodes).unwrap(),
+            serde_json::json!([1, 2])
         );
+        drop(nodes);
+        assert_eq!(doc, IValue::from(1));
+
+        let iter = ResultsIterator::<IValue, Owner> {
+            results: Results::Computed(vec![Owner {
+                value: Box::new(IValue::from(3)),
+                drops: drops.clone(),
+            }]),
+            pos: 0,
+        };
+        assert_eq!(iter.len(), 1);
+        assert_eq!(iter.get(0), &IValue::from(3));
+        assert_eq!(serde_json::to_value(&iter).unwrap(), serde_json::json!([3]));
         assert_eq!(drops.get(), 0);
         drop(iter);
         assert_eq!(drops.get(), 1);
