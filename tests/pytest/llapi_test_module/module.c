@@ -153,6 +153,32 @@ static int OpenGetCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     return REDISMODULE_OK;
 }
 
+/* LLAPI.EVALUATE key expression [ITER] -> computed or selected JSON results.
+ * ITER also exercises reset and whole-result serialization through the C ABI. */
+static int EvaluateCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if (argc != 3 && argc != 4) return RedisModule_WrongArity(ctx);
+    RedisJSON json = japi->openKey(ctx, argv[1]);
+    JSONResultsIterator it = json ? japi->evaluate(json, RedisModule_StringPtrLen(argv[2], NULL)) : NULL;
+    if (!it) {
+        return RedisModule_ReplyWithError(ctx, "ERR expression could not be evaluated");
+    }
+    if (argc == 3) {
+        reply_nodes_as_json(ctx, it);
+    } else {
+        while (japi->next(it) != NULL) {}
+        japi->resetIter(it);
+        RedisModuleString *s = NULL;
+        if (japi->getJSONFromIter(it, ctx, &s) == REDISMODULE_OK) {
+            RedisModule_ReplyWithString(ctx, s);
+            RedisModule_FreeString(ctx, s);
+        } else {
+            RedisModule_ReplyWithError(ctx, "ERR getJSONFromIter failed");
+        }
+    }
+    japi->freeIter(it);
+    return REDISMODULE_OK;
+}
+
 /* LLAPI.ITER_JSON key path -> getJSONFromIter (whole result set as one JSON string). */
 static int IterJsonCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 3) return RedisModule_WrongArity(ctx);
@@ -525,7 +551,7 @@ static int PathParseNoErrorMsgCmd(RedisModuleCtx *ctx, RedisModuleString **argv,
 }
 
 /* Bind the latest shared-API version. This module exercises functions across
- * all API versions (V1..V10), so it requires a provider exporting the full,
+ * all API versions through RedisJSONAPI_LATEST_API_VER, so it requires the full,
  * current struct; binding an older version could leave later fields undefined
  * and dereferencing them would read past the provider's struct. */
 static int fetch_japi(RedisModuleCtx *ctx) {
@@ -562,6 +588,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
 
     REGISTER("LLAPI.VERSION", VersionCmd);
     REGISTER("LLAPI.OPEN_GET", OpenGetCmd);
+    REGISTER("LLAPI.EVALUATE", EvaluateCmd);
     REGISTER("LLAPI.ITER_JSON", IterJsonCmd);
     REGISTER("LLAPI.ITER_LEN", IterLenCmd);
     REGISTER("LLAPI.RESET", ResetCmd);

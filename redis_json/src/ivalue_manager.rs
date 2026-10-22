@@ -836,6 +836,12 @@ impl<'a> Manager for RedisIValueJsonKeyManager<'a> {
         value.clone()
     }
 
+    fn import_value(&self, value: serde_json::Value) -> RedisResult<IValue> {
+        IValueDeserSeed::new(None)
+            .deserialize_compact_objects(value)
+            .map_err(|e| RedisError::String(e.to_string()))
+    }
+
     fn create_object(&self, fields: Vec<(String, IValue)>) -> RedisResult<IValue> {
         let mut object =
             IObject::with_capacity(fields.len()).map_err(|e| RedisError::String(e.to_string()))?;
