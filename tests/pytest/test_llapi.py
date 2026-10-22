@@ -126,6 +126,65 @@ def testLLAPIReset():
     env.assertEqual(env.cmd('LLAPI.RESET', 'doc', '$.num_array[*]'), [4, 4])
 
 
+def _assert_expression_results(env, result, expected):
+    count, serialized, values, exhausted_status, reset_values = result
+    env.assertEqual(count, len(expected))
+    if expected:
+        env.assertEqual(json.loads(serialized), expected)
+    else:
+        env.assertEqual(serialized, None)
+    env.assertEqual([json.loads(value) for value in values], expected)
+    env.assertEqual(exhausted_status, 1)
+    env.assertEqual([json.loads(value) for value in reset_values], expected)
+
+
+def testLLAPIEvaluate():
+    env = _env_with_doc()
+    original = env.cmd('JSON.GET', 'doc')
+    expressions = [
+        '$.int + 1', 'sum($.num_array)', 'length($.num_array)',
+        '$.num_array.append(50)', '$.object.keys()', '$.het_array.first()',
+        'value($.object)', 'value($.num_array)', 'value($.string)',
+        'value($.bool_true)', 'value($.null_val)',
+        '$.empty_array.first()', 'sum($.empty_array)', 'length($.empty_array)',
+        '$.missing + 1', '$.int / 0', '$.num_array[*]', '$.missing',
+    ]
+    for expression in expressions:
+        expected = json.loads(env.cmd('JSON.GET', 'doc', expression))
+        result = env.cmd('LLAPI.EVALUATE', 'doc', expression, 1)
+        _assert_expression_results(env, result, expected)
+    env.expect('JSON.GET', 'doc').equal(original)
+
+
+def testLLAPIEvaluateCompiled():
+    env = _env_with_doc()
+    env.expect('JSON.SET', 'other', '$', '{"int":7,"num_array":[5,6]}').ok()
+    for expression in ['$.int + 1', 'sum($.num_array)', '$.num_array[*]', '$.missing']:
+        results = env.cmd('LLAPI.EVALUATE_COMPILED', expression, 1, 'doc', 'other')
+        env.assertEqual(len(results), 2)
+        for key, result in zip(['doc', 'other'], results):
+            _assert_expression_results(env, result, json.loads(env.cmd('JSON.GET', key, expression)))
+    env.expect('JSON.SET', 'rows', '$', '[{"n":1},{"n":2},{"n":3}]').ok()
+    for mode in [0, 1]:
+        expression = '$[?(@.n) + 1 > 2]'
+        expected = [{'n': 2}, {'n': 3}]
+        result = env.cmd('LLAPI.EVALUATE_COMPILED', expression, mode, 'rows')[0]
+        _assert_expression_results(env, result, expected)
+
+
+def testLLAPIExpressionErrors():
+    env = _env_with_doc()
+    for expression, mode, message in [
+        ('$.int + 1', 0, 'node-selection mode'),
+        ('$.int', 99, 'invalid JSON expression mode'),
+        ('$[', 1, 'at position'),
+    ]:
+        env.expect('LLAPI.EVALUATE', 'doc', expression, mode).raiseError().contains(message)
+        env.expect('LLAPI.EVALUATE_COMPILED', expression, mode, 'doc').raiseError().contains(message)
+    env.expect('LLAPI.EVALUATE', 'missing', '$', 1).raiseError().contains('must not be NULL')
+    env.expect('LLAPI.EVALUATE_COMPILED', '$', 1, 'doc', 'missing').raiseError().contains('must not be NULL')
+
+
 def testLLAPIOpenFromStrAndFlags():
     env = _env_with_doc()
     env.assertEqual(env.cmd('LLAPI.OPENFROMSTR', 'doc', '$.int'), 1)
