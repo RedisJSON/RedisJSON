@@ -10,13 +10,20 @@
 use super::*;
 use ijson::array::ArraySliceRef;
 use ijson::{IArray, IObject, IString};
+use std::sync::{Mutex, MutexGuard, PoisonError};
+
+// The writer settings and the Flex flag are process-wide, so the tests that change them or depend
+// on them take turns.
+pub(super) fn serial() -> MutexGuard<'static, ()> {
+    static LOCK: Mutex<()> = Mutex::new(());
+    LOCK.lock().unwrap_or_else(PoisonError::into_inner)
+}
 
 const EVENT: raw::RedisModuleEvent = raw::RedisModuleEvent { id: 0, dataver: 1 };
 
 fn config() -> StreamEncoderConfig {
     StreamEncoderConfig {
         table_budget_bytes: 1 << 20,
-        max_def_bytes: 0,
     }
 }
 
@@ -62,12 +69,13 @@ pub(super) fn document(text: &IString) -> IValue {
 }
 
 fn record(value: &IValue, keyed: bool) -> Vec<u8> {
-    let (bytes, start) = encode_for_save(value, keyed, true);
+    let (bytes, start) = encode_for_save(value, keyed);
     bytes[start..].to_vec()
 }
 
 #[test]
 fn loading_start_creates_a_reader() {
+    let _serial = serial();
     start_saving();
     let owner = IString::from("a resident string shared by two values");
     let value = document(&owner);
@@ -79,6 +87,7 @@ fn loading_start_creates_a_reader() {
 
 #[test]
 fn truncated_record_releases_reader_and_prevents_restart_until_next_load() {
+    let _serial = serial();
     start_saving();
     let owner = IString::from("a string kept until a malformed record");
     let value = document(&owner);
@@ -102,6 +111,7 @@ pub(super) fn inline_record(value: &IValue) -> Vec<u8> {
 
 #[test]
 fn first_use_defines_a_string_and_later_uses_reference_it() {
+    let _serial = serial();
     start_saving();
     let text = "0123456789abcdefghijklmnopqrstuvwxyzABCD";
     assert_eq!(text.len(), 40);
@@ -123,10 +133,10 @@ fn first_use_defines_a_string_and_later_uses_reference_it() {
 
 #[test]
 fn full_dictionary_restarts_before_later_definitions_and_preserves_record_order() {
+    let _serial = serial();
     reset();
     SAVE_SESSION.set(Some(SaveSession::new(StreamEncoderConfig {
         table_budget_bytes: 84,
-        ..config()
     })));
     let owners: Vec<IString> = (0..8)
         .map(|i| IString::from(format!("reset string {i:04}")))
@@ -162,11 +172,11 @@ fn full_dictionary_restarts_before_later_definitions_and_preserves_record_order(
 }
 
 #[test]
-fn pending_reset_waits_through_cold_and_inline_values_and_releases_reader_handles() {
+fn pending_reset_waits_through_inline_values_and_releases_reader_handles() {
+    let _serial = serial();
     reset();
     SAVE_SESSION.set(Some(SaveSession::new(StreamEncoderConfig {
         table_budget_bytes: 84,
-        ..config()
     })));
     let owners: Vec<IString> = (0..4)
         .map(|i| IString::from(format!("pending reset string {i:04}")))
@@ -175,15 +185,9 @@ fn pending_reset_waits_through_cold_and_inline_values_and_releases_reader_handle
     let probe = IValue::from(owners[0].clone());
     let unpinned = probe.mem_allocated();
     let mut records: Vec<_> = docs.iter().map(|doc| record(doc, true)).collect();
-    let (cold, start) = encode_for_save(&docs[0], true, false);
-    records.push(cold[start..].to_vec());
-    assert_eq!(records.last().unwrap()[0], MARKER_STREAM);
     let inline = IValue::from(42);
     records.push(record(&inline, true));
     assert_eq!(records.last().unwrap(), &inline_record(&inline));
-    let (cold, start) = encode_for_save(&docs[0], true, false);
-    records.push(cold[start..].to_vec());
-    assert_eq!(records.last().unwrap(), &inline_record(&docs[0]));
     records.push(record(&docs[3], true));
     assert_eq!(records.last().unwrap()[0], 2);
     start_loading();
@@ -204,26 +208,8 @@ fn pending_reset_waits_through_cold_and_inline_values_and_releases_reader_handle
 }
 
 #[test]
-fn dictionary_resets_do_not_restart_the_definition_byte_allowance() {
-    reset();
-    SAVE_SESSION.set(Some(SaveSession::new(StreamEncoderConfig {
-        table_budget_bytes: 84,
-        max_def_bytes: 80,
-    })));
-    let owners: Vec<IString> = (0..12).map(|i| IString::from(format!("{i:016}"))).collect();
-    let docs: Vec<_> = owners.iter().map(document).collect();
-    let records: Vec<_> = docs.iter().map(|doc| record(doc, true)).collect();
-    let stats = SAVE_SESSION.with_borrow(|s| s.as_ref().unwrap().encoder.stats());
-    assert_eq!((stats.defs, stats.def_bytes), (5, 80));
-    assert!(records.iter().any(|bytes| bytes[0] == 2));
-    start_loading();
-    for (doc, bytes) in docs.iter().zip(&records) {
-        assert_eq!(decode_for_load(bytes, true).as_ref(), Ok(doc));
-    }
-}
-
-#[test]
 fn keys_values_nesting_and_typed_arrays_survive_the_stream() {
+    let _serial = serial();
     start_saving();
     let json = r#"{"a repeated object key, long enough to be shared":
         ["a repeated string value, also long enough","short","שלום שלום שלום",""],
@@ -261,6 +247,7 @@ fn keys_values_nesting_and_typed_arrays_survive_the_stream() {
 
 #[test]
 fn a_poisoned_session_writes_marker_zero_records() {
+    let _serial = serial();
     start_saving();
     let owner = IString::from("a string that a poisoned encoder must not define");
     let (first, second) = (document(&owner), document(&owner));
@@ -273,10 +260,10 @@ fn a_poisoned_session_writes_marker_zero_records() {
 
 #[test]
 fn a_small_budget_degrades_gradually_and_every_record_still_loads() {
+    let _serial = serial();
     reset();
     SAVE_SESSION.set(Some(SaveSession::new(StreamEncoderConfig {
         table_budget_bytes: 1500,
-        ..config()
     })));
     let owners: Vec<IString> = (0..64)
         .map(|index| IString::from(format!("budget string {index:04} used twice").as_str()))
@@ -289,10 +276,9 @@ fn a_small_budget_degrades_gradually_and_every_record_still_loads() {
     // stay inline in both uses, byte for byte what an unframed save writes.
     let mut frozen = StreamEncoder::new(StreamEncoderConfig {
         table_budget_bytes: 1500,
-        ..config()
     });
     for doc in &docs {
-        frozen.encode_into(&mut Vec::new(), doc, true);
+        frozen.encode_into(&mut Vec::new(), doc);
     }
     let stats = frozen.stats();
     assert!(stats.defs > 0 && stats.defs < 64, "{stats:?}");
@@ -314,6 +300,7 @@ fn a_small_budget_degrades_gradually_and_every_record_still_loads() {
 
 #[test]
 fn save_sessions_never_change_string_owner_counts() {
+    let _serial = serial();
     start_saving();
     let owner = IString::from("owner count watched during save");
     let (first, second) = (document(&owner), document(&owner));
@@ -327,11 +314,30 @@ fn save_sessions_never_change_string_owner_counts() {
 }
 
 #[test]
-fn markers_three_and_unknown_are_refused() {
+fn a_self_contained_record_is_refused_when_its_ids_do_not_resolve() {
+    let _serial = serial();
+    // A reference before any definition, a definition under 8 bytes, and bytes after the value.
+    for cbor in [
+        &[0xC7, 0x00][..],
+        &[0xC6, 0x65, b's', b'h', b'o', b'r', b't'][..],
+        &[0xF6, 0x00][..],
+    ] {
+        let mut record = vec![MARKER_LOCAL];
+        record.extend_from_slice(cbor);
+        assert!(
+            matches!(decode_for_load(&record, false), Err(LoadError::Cbor(_))),
+            "{record:02x?}"
+        );
+    }
+}
+
+#[test]
+fn markers_four_and_above_are_refused() {
+    let _serial = serial();
     start_loading();
     let value: IValue = serde_json::from_str(r#"{"inline":true}"#).unwrap();
     let cbor = ijson::encode(&value);
-    for marker in [3u8, 4, 255] {
+    for marker in [4u8, 255] {
         let mut bytes = vec![marker];
         bytes.extend_from_slice(&cbor);
         assert_eq!(
@@ -347,6 +353,7 @@ fn markers_three_and_unknown_are_refused() {
 
 #[test]
 fn reset_records_without_definitions_or_with_invalid_references_are_refused() {
+    let _serial = serial();
     for payload in [&[0xf6][..], &[0xc7, 0], &[]] {
         start_loading();
         let mut bytes = vec![MARKER_RESET, 0, 0, 0, 0];
@@ -364,6 +371,7 @@ fn reset_records_without_definitions_or_with_invalid_references_are_refused() {
 
 #[test]
 fn stream_records_need_a_keyed_load_with_a_session() {
+    let _serial = serial();
     start_saving();
     let owner = IString::from("a string defined by a record loaded out of context");
     let defining = record(&document(&owner), true);
@@ -380,6 +388,7 @@ fn stream_records_need_a_keyed_load_with_a_session() {
 
 #[test]
 fn base_id_must_match_the_table_length() {
+    let _serial = serial();
     start_saving();
     let (a, b) = (
         IString::from("first string of the base id test"),
@@ -425,6 +434,7 @@ fn base_id_must_match_the_table_length() {
 
 #[test]
 fn a_failed_stream_document_releases_the_decoder_table() {
+    let _serial = serial();
     start_saving();
     let owner = IString::from("a string held by the decoder table until a document fails");
     let (first, second) = (document(&owner), document(&owner));
@@ -453,6 +463,7 @@ fn a_failed_stream_document_releases_the_decoder_table() {
 
 #[test]
 fn flex_io_threads_have_no_session() {
+    let _serial = serial();
     start_saving();
     start_loading();
     let text = "a string shared across the main thread and an IO thread";
@@ -474,6 +485,7 @@ fn flex_io_threads_have_no_session() {
 
 #[test]
 fn loading_events_arm_and_release_the_load_state() {
+    let _serial = serial();
     let owner = IString::from("a string defined by the load before a new START");
     start_saving();
     let defining = record(&document(&owner), true);
@@ -510,6 +522,7 @@ fn loading_events_arm_and_release_the_load_state() {
 
 #[test]
 fn defrag_leaves_the_string_cache_alone_while_a_stream_is_loading() {
+    let _serial = serial();
     start_saving();
     let owner = IString::from("a string that a decoder holds while defrag starts");
     let defining = record(&document(&owner), true);

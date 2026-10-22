@@ -14,40 +14,41 @@
 //! by `redis_json_module_create!`.
 
 use std::cell::{Cell, RefCell};
-use std::ffi::{c_int, c_void};
+use std::ffi::c_void;
 use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 
 use ijson::{
-    CborDecodeError, DocUse, IValue, StreamDecoder, StreamEncoder, StreamEncoderConfig,
-    StreamEncoderStats, StreamStrings, StringDictionary,
+    CborDecodeError, ContentDictionary, DocUse, IValue, StreamDecoder, StreamEncoder,
+    StreamEncoderConfig, StreamEncoderStats, StreamStrings, StringDictionary,
 };
 use redis_module::logging::{log_io_error, RedisLogLevel};
-use redis_module::raw::ModuleOptions;
 use redis_module::{raw, Context, Status};
 
 use crate::backward;
 
-// A string that several values share is written to an RDB once, where it is first used, and as a
-// small id afterwards; the ids are implicit, in the order of the first uses. The writer keeps
-// its table in a session that lives between persistence START and ENDED/FAILED events, and
-// the reader rebuilds the same table in a session of its own. A value outside such a stream
-// (DUMP, RESTORE, an IO thread) is always self-contained. A value that the core decodes during a
-// save only to write it and free it (Flex does so for the values it keeps on flash) may reference
-// the strings of the stream but defines none.
-// Content dictionaries own their strings, so external managers can define temporary values.
-
-// Existing Flex module option; the upstream redis-module bindings omit fork flags.
-const REQUIRE_LOADED_KEYS_IN_RAM: ModuleOptions = ModuleOptions::from_bits_retain(1 << 30);
+// Two ways to write a string that repeats.
+// A stream: a string that several values share is written to an RDB once, where it is first used,
+// and as a small id afterwards; the ids are implicit, in the order of the first uses. The writer
+// keeps its table in a session that lives between persistence START and ENDED/FAILED events, and
+// the reader rebuilds the same table in a session of its own. Records of a stream depend on the
+// ones before them.
+// A self-contained value (every save without a session: Flex, DUMP, MIGRATE, the ASM snapshot,
+// an IO thread): a fresh encoder writes a string that repeats inside the one value once, with ids
+// that start at 0 and end with the record. Nothing is shared between values, so a fresh decoder
+// reads it with no session and no key.
 
 // A version 5 value record starts with a marker.
-// 0: self-contained CBOR.
+// 0: plain CBOR.
 // 1: a base id (u32 LE),
 // then CBOR that defines and references the strings of one RDB stream (ijson's StreamEncoder).
 const MARKER_INLINE: u8 = 0;
 const MARKER_STREAM: u8 = 1;
 // Marker 2 clears the reader dictionary before new definitions; base IDs stay cumulative.
 const MARKER_RESET: u8 = 2;
+// Marker 3: self-contained CBOR that defines and references strings; its ids belong to this
+// record alone, so it has no base id and needs no session.
+const MARKER_LOCAL: u8 = 3;
 // The encoder appends after these bytes: the marker 1 header, or four unused bytes and marker 0.
 // Marker 2 uses the same header as marker 1.
 const STREAM_HEADER_LEN: usize = 5;
@@ -56,19 +57,9 @@ const STREAM_HEADER_LEN: usize = 5;
 // When it is reached the strings defined so far keep being referenced and new ones go inline.
 // After a budget miss, the next definition-capable document reuses the cleared table.
 pub const DEFAULT_RDB_DICTIONARY_MAX_BYTES: i64 = 256 * 1024 * 1024;
-pub const RDB_DICTIONARY_MAX_BYTES_CEILING: i64 = 1 << 40;
+pub const RDB_DICTIONARY_MAX_BYTES_CEILING: i64 = 1 << 40; // 1TB
 pub static RDB_DICTIONARY_MAX_BYTES: AtomicI64 = AtomicI64::new(DEFAULT_RDB_DICTIONARY_MAX_BYTES);
-// Bound on the bytes of the strings that a stream defines; 0 sets none. A reader keeps every
-// defined string until the end of the stream, even when Flex spills the values that hold them, so
-// this is also the most memory that the strings of a stream pin in a reader. Past it a string
-// stays inline, and the strings defined so far keep being referenced.
-// Dictionary resets release earlier handles; this allowance still counts the entire stream.
-pub const DEFAULT_RDB_DICTIONARY_MAX_DEF_BYTES: i64 = 0;
-pub static RDB_DICTIONARY_MAX_DEF_BYTES: AtomicI64 =
-    AtomicI64::new(DEFAULT_RDB_DICTIONARY_MAX_DEF_BYTES);
-// Both save modes use the configured address-table budget.
-
-// Whether the server runs Flex, for the log; set once by init().
+// Whether the server runs Flex; set once by init(). Flex never writes or reads a stream.
 static BIGREDIS_ENABLED: AtomicBool = AtomicBool::new(false);
 
 /// Creates a fresh dictionary for each save. Without a custom factory, saves use
@@ -101,12 +92,8 @@ thread_local! {
 struct SaveSession {
     encoder: Box<dyn SaveEncoder>,
     reset_pending: bool,
-    /// A context with its own client/database, used only by the saving thread. GetContextFromIO
-    /// has no client, so it cannot be used for SelectDb or IsKeyInRam.
-    flex_ctx: Option<*mut raw::RedisModuleCtx>,
     stream_docs: u64,
     inline_docs: u64,
-    lookup_only_docs: u64,
 }
 
 type EncodeCallback<'a> = dyn FnMut(&RdbStringEncoder<'_>, &mut Vec<u8>) -> Result<(), ()> + 'a;
@@ -115,13 +102,11 @@ type EncodeCallback<'a> = dyn FnMut(&RdbStringEncoder<'_>, &mut Vec<u8>) -> Resu
 trait SaveEncoder {
     fn stats(&self) -> StreamEncoderStats;
     fn is_poisoned(&self) -> bool;
-    fn borrows_strings(&self) -> bool;
     fn reset_if_needed(&mut self) -> bool;
-    fn encode_into(&mut self, out: &mut Vec<u8>, value: &IValue, allow: bool) -> DocUse;
+    fn encode_into(&mut self, out: &mut Vec<u8>, value: &IValue) -> DocUse;
     fn encode_with(
         &mut self,
         out: &mut Vec<u8>,
-        allow: bool,
         encode: &mut EncodeCallback<'_>,
     ) -> Result<DocUse, ()>;
     #[cfg(test)]
@@ -135,22 +120,18 @@ impl<D: StringDictionary> SaveEncoder for StreamEncoder<D> {
     fn is_poisoned(&self) -> bool {
         self.is_poisoned()
     }
-    fn borrows_strings(&self) -> bool {
-        self.borrows_strings()
-    }
     fn reset_if_needed(&mut self) -> bool {
         self.reset_if_needed()
     }
-    fn encode_into(&mut self, out: &mut Vec<u8>, value: &IValue, allow: bool) -> DocUse {
-        self.encode_into(out, value, allow)
+    fn encode_into(&mut self, out: &mut Vec<u8>, value: &IValue) -> DocUse {
+        self.encode_into(out, value)
     }
     fn encode_with(
         &mut self,
         out: &mut Vec<u8>,
-        allow: bool,
         encode: &mut EncodeCallback<'_>,
     ) -> Result<DocUse, ()> {
-        self.encode_with(out, allow, encode)
+        self.encode_with(out, encode)
     }
     #[cfg(test)]
     fn poison(&mut self) {
@@ -170,72 +151,40 @@ impl SaveSession {
         Self {
             encoder: make_encoder(config),
             reset_pending: false,
-            flex_ctx: None,
             stream_docs: 0,
             inline_docs: 0,
-            lookup_only_docs: 0,
-        }
-    }
-
-    /// Whether this value may add string addresses to the stream's dictionary.
-    fn allow_definitions(&self, rdb: *mut raw::RedisModuleIO) -> bool {
-        if !self.encoder.borrows_strings() {
-            return true;
-        }
-        let Some(ctx) = self.flex_ctx else {
-            return true;
-        };
-        // SAFETY: the SDK resolves this optional Flex API during module initialization.
-        let Some(is_key_in_ram) = (unsafe { raw::RedisModule_IsKeyInRam }) else {
-            return false;
-        };
-        // SAFETY: Redis supplies rdb and its borrowed key. Persistence runs with the main thread
-        // blocked or in its fork child, so no extra GIL lock is needed.
-        unsafe {
-            let key = raw::RedisModule_GetKeyNameFromIO.unwrap()(rdb);
-            let dbid = raw::RedisModule_GetDbIdFromIO.unwrap()(rdb);
-            !key.is_null()
-                && dbid >= 0
-                && raw::RedisModule_SelectDb.unwrap()(ctx, dbid) == raw::REDISMODULE_OK as c_int
-                && is_key_in_ram(ctx, key.cast_mut()) == 1
         }
     }
 
     /// Encodes a value of this stream as `bytes[start..]`. The encoder appends after the header
     /// bytes, so a document that uses no string of the stream skips the first four of them and
-    /// keeps the marker 0 that fills the last. With `allow_define=false`, a value may reference
-    /// existing definitions but adds no string addresses: temporary strings die with the value,
-    /// and their addresses can be reused.
-    fn encode(&mut self, value: &IValue, allow_define: bool) -> (Vec<u8>, usize) {
-        let (base_id, mut bytes) = self.begin_record(allow_define);
-        let used = self.encoder.encode_into(&mut bytes, value, allow_define);
+    /// keeps the marker 0 that fills the last.
+    fn encode(&mut self, value: &IValue) -> (Vec<u8>, usize) {
+        let (base_id, mut bytes) = self.begin_record();
+        let used = self.encoder.encode_into(&mut bytes, value);
         self.finish_record(bytes, base_id, used)
     }
 
     fn encode_with<E>(
         &mut self,
-        allow_define: bool,
         encode: impl FnOnce(&RdbStringEncoder<'_>, &mut Vec<u8>) -> Result<(), E>,
     ) -> Result<(Vec<u8>, usize), E> {
-        let (base_id, mut bytes) = self.begin_record(allow_define);
+        let (base_id, mut bytes) = self.begin_record();
         let mut encode = Some(encode);
         let mut error = None;
-        let used = self
-            .encoder
-            .encode_with(&mut bytes, allow_define, &mut |strings, out| {
-                encode.take().expect("one callback per document")(strings, out)
-                    .map_err(|e| error = Some(e))
-            });
+        let used = self.encoder.encode_with(&mut bytes, &mut |strings, out| {
+            encode.take().expect("one callback per document")(strings, out)
+                .map_err(|e| error = Some(e))
+        });
         match used {
             Ok(used) => Ok(self.finish_record(bytes, base_id, used)),
             Err(()) => Err(error.expect("callback error recorded above")),
         }
     }
 
-    fn begin_record(&mut self, allow_define: bool) -> (u32, Vec<u8>) {
+    fn begin_record(&mut self) -> (u32, Vec<u8>) {
         let base_id = self.encoder.stats().defs as u32;
-        self.reset_pending |= allow_define && self.encoder.reset_if_needed();
-        self.lookup_only_docs += u64::from(!allow_define);
+        self.reset_pending |= self.encoder.reset_if_needed();
         (base_id, vec![MARKER_INLINE; STREAM_HEADER_LEN])
     }
 
@@ -262,19 +211,10 @@ impl SaveSession {
     fn summary(&self, phase: &str) -> String {
         let stats = self.encoder.stats();
         format!(
-            "JSON RDB dictionary phase={phase} defs={} def_bytes={} refs={} stream_docs={} inline_docs={} lookup_only_docs={} poisoned={}",
+            "JSON RDB dictionary phase={phase} defs={} def_bytes={} refs={} stream_docs={} inline_docs={} poisoned={}",
             stats.defs, stats.def_bytes, stats.refs, self.stream_docs, self.inline_docs,
-            self.lookup_only_docs, self.encoder.is_poisoned(),
+            self.encoder.is_poisoned(),
         )
-    }
-}
-
-impl Drop for SaveSession {
-    fn drop(&mut self) {
-        if let Some(ctx) = self.flex_ctx {
-            // SAFETY: this session owns the detached context and no callback retains it.
-            unsafe { raw::RedisModule_FreeThreadSafeContext.unwrap()(ctx) };
-        }
     }
 }
 
@@ -347,10 +287,6 @@ pub(crate) fn init(ctx: &Context) -> Status {
     // bigredis-enabled is immutable; missing config on OSS means RAM-only Redis.
     let flex = crate::read_yes_no_config(ctx, "bigredis-enabled");
     BIGREDIS_ENABLED.store(flex, Ordering::Relaxed);
-    if flex {
-        // Decode keys before Flex can copy their RDB bytes directly to SSD.
-        ctx.set_module_options(ModuleOptions::HANDLE_IO_ERRORS | REQUIRE_LOADED_KEYS_IN_RAM);
-    }
     for (id, callback) in [
         (
             raw::REDISMODULE_EVENT_PERSISTENCE,
@@ -385,22 +321,45 @@ fn has_key(rdb: *mut raw::RedisModuleIO) -> bool {
     unsafe { !raw::RedisModule_GetKeyNameFromIO.unwrap()(rdb).is_null() }
 }
 
-/// A value outside any stream: marker 0 and the CBOR of the value.
+/// Settings of the encoder of one self-contained value. A budget of 0 defines nothing, so the
+/// record is plain.
+fn local_config() -> StreamEncoderConfig {
+    StreamEncoderConfig {
+        table_budget_bytes: config_value(&RDB_DICTIONARY_MAX_BYTES),
+    }
+}
+
+/// Whether a value with this many definitions and references is smaller than its plain form. A
+/// definition adds 1 byte (tag 6). A reference replaces text of 8 or more bytes (9 encoded) with
+/// tag 7 and an id of at most 5 bytes, so it saves at least 3.
+fn pays(used: DocUse) -> bool {
+    used.refs * 3 > used.defs
+}
+
+/// A value outside any stream. A fresh encoder defines the strings that repeat inside the value.
+/// The record keeps that form (marker 3) only when it is smaller than the plain one. Strings that
+/// other values share but this one holds once are defined and never referenced, which is what the
+/// size check pays for.
 fn encode_value(value: &IValue) -> Vec<u8> {
-    let mut bytes = vec![MARKER_INLINE];
-    ijson::encode_into(value, &mut bytes);
+    let mut bytes = vec![MARKER_LOCAL];
+    let used = StreamEncoder::new(local_config()).encode_into(&mut bytes, value);
+    if used == DocUse::default() {
+        // Nothing was defined: the bytes are the plain ones.
+        bytes[0] = MARKER_INLINE;
+    } else if !pays(used) {
+        bytes.clear();
+        bytes.push(MARKER_INLINE);
+        ijson::encode_into(value, &mut bytes);
+    }
     bytes
 }
 
 /// Encodes a value as `bytes[start..]`. A keyed value is encoded by the session of the save, when
-/// it has one. Saves without a session (the writer is off), keyless values, and poisoned
-/// encoders stay self-contained. `allow_define` controls whether this value may add definitions.
-fn encode_for_save(value: &IValue, keyed: bool, allow_define: bool) -> (Vec<u8>, usize) {
+/// it has one. Saves without a session (Flex, the writer is off), keyless values, and poisoned
+/// encoders stay self-contained.
+fn encode_for_save(value: &IValue, keyed: bool) -> (Vec<u8>, usize) {
     keyed
-        .then(|| {
-            SAVE_SESSION
-                .with_borrow_mut(|session| session.as_mut().map(|s| s.encode(value, allow_define)))
-        })
+        .then(|| SAVE_SESSION.with_borrow_mut(|session| session.as_mut().map(|s| s.encode(value))))
         .flatten()
         .unwrap_or_else(|| (encode_value(value), 0))
 }
@@ -409,13 +368,7 @@ pub(crate) fn save_value(rdb: *mut raw::RedisModuleIO, value: &IValue) {
     // SaveDataTypeToString/Serialize have no key and always remain self-contained.
     // DUMP, MIGRATE and the ASM slot snapshot do carry a key: the command filter ends the session
     // before any command runs, and the ASM child has none.
-    // Flex never inserts its temporary save objects into the keyspace.
-    let allow_define = SAVE_SESSION.with_borrow(|session| {
-        session
-            .as_ref()
-            .is_none_or(|session| session.allow_definitions(rdb))
-    });
-    let (bytes, start) = encode_for_save(value, has_key(rdb), allow_define);
+    let (bytes, start) = encode_for_save(value, has_key(rdb));
     // A failed write fails the whole save, so a record that was encoded but not written is never
     // followed by one that refers to the strings it defined.
     raw::save_slice(rdb, &bytes[start..]);
@@ -438,8 +391,11 @@ pub type RdbStringEncoder<'a> = StreamStrings<'a>;
 /// Dictionaries obey `json-rdb-dictionary-max-bytes` through their `insert` method.
 /// With [`ijson::ContentDictionary`], source strings need only live through this
 /// callback. Borrowing implementations must keep defined storage alive and
-/// unchanged for the stream; Flex temporary values cannot add such definitions.
-/// Unkeyed saves and saves outside a persistence session remain self-contained.
+/// unchanged for the stream.
+/// Unkeyed saves and saves outside a persistence session are self-contained: a string that
+/// repeats inside the value is written once. The callback runs a second time when the strings it
+/// defined do not pay for themselves and the plain form is written instead, so it must serialize
+/// the same value each time.
 ///
 /// Serialization errors write no record and disable subsequent references. The
 /// manager must propagate the error through its save callback so Redis aborts the save.
@@ -453,20 +409,26 @@ pub type RdbStringEncoder<'a> = StreamStrings<'a>;
 /// ```
 pub fn save_with<E>(
     rdb: *mut raw::RedisModuleIO,
-    encode: impl FnOnce(&RdbStringEncoder<'_>, &mut Vec<u8>) -> Result<(), E>,
+    mut encode: impl FnMut(&RdbStringEncoder<'_>, &mut Vec<u8>) -> Result<(), E>,
 ) -> Result<(), E> {
     let keyed = has_key(rdb);
     let (bytes, start) = SAVE_SESSION.with_borrow_mut(|slot| {
         if let Some(session) = slot.as_mut().filter(|_| keyed) {
-            let allow_define = session.allow_definitions(rdb);
-            session.encode_with(allow_define, encode)
+            session.encode_with(encode)
         } else {
-            let mut encoder = StreamEncoder::new(StreamEncoderConfig {
-                table_budget_bytes: 0,
-                max_def_bytes: 0,
-            });
-            let mut bytes = vec![MARKER_INLINE];
-            encoder.encode_with(&mut bytes, false, encode)?;
+            let mut bytes = vec![MARKER_LOCAL];
+            let used = StreamEncoder::with_dictionary(local_config(), ContentDictionary::default())
+                .encode_with(&mut bytes, &mut encode)?;
+            if used == DocUse::default() {
+                bytes[0] = MARKER_INLINE;
+            } else if !pays(used) {
+                bytes.clear();
+                bytes.push(MARKER_INLINE);
+                StreamEncoder::new(StreamEncoderConfig {
+                    table_budget_bytes: 0,
+                })
+                .encode_with(&mut bytes, &mut encode)?;
+            }
             Ok((bytes, 0))
         }
     })?;
@@ -545,6 +507,9 @@ fn decode_for_load(bytes: &[u8], keyed: bool) -> Result<IValue, LoadError> {
         Some((&MARKER_INLINE, cbor)) => {
             ijson::decode_with_depth_limit(cbor, limit_depth).map_err(LoadError::from)
         }
+        Some((&MARKER_LOCAL, cbor)) => StreamDecoder::new()
+            .decode(cbor, limit_depth)
+            .map_err(LoadError::from),
         Some((&marker @ (MARKER_STREAM | MARKER_RESET), record)) => {
             decode_stream_record(record, keyed, limit_depth, marker == MARKER_RESET)
         }
@@ -603,6 +568,17 @@ unsafe extern "C" fn command_filter(_ctx: *mut raw::RedisModuleCommandFilterCtx)
     SAVE_SESSION.set(None);
 }
 
+/// Whether this save may share strings across keys. A stream makes each record depend on the ones
+/// before it, so it is only for a save that Redis reads back through its loading events in order.
+/// Flex never writes one: it can keep any value on flash undecoded and decode it later alone.
+fn cross_key_stream_allowed(flex: bool, budget: usize) -> bool {
+    // TODO(replication): a save that feeds a replica fires the same event as a BGSAVE (RDB_START in
+    // the fork child), so the module cannot tell them apart. A consumer that converts the RDB into
+    // one RESTORE per key (Enterprise replica-of) cannot read a stream record. Ask the core to pass
+    // RDBFLAGS_REPLICATION in the persistence event data, and return false for such saves.
+    !flex && budget > 0
+}
+
 unsafe extern "C" fn persistence_event(
     ctx: *mut raw::RedisModuleCtx,
     _event: raw::RedisModuleEvent,
@@ -616,26 +592,24 @@ unsafe extern "C" fn persistence_event(
         | raw::REDISMODULE_SUBEVENT_PERSISTENCE_SYNC_RDB_START
         | raw::REDISMODULE_SUBEVENT_PERSISTENCE_SYNC_AOF_START => {
             let budget = config_value(&RDB_DICTIONARY_MAX_BYTES);
-            let max_def_bytes = config_value(&RDB_DICTIONARY_MAX_DEF_BYTES);
-            // A budget of 0 turns the writer off: no session, so every value is self-contained.
-            SAVE_SESSION.set((budget > 0).then(|| {
-                let mut session = SaveSession::new(StreamEncoderConfig {
+            let flex = BIGREDIS_ENABLED.load(Ordering::Relaxed);
+            // Without a session every value is self-contained.
+            SAVE_SESSION.set(cross_key_stream_allowed(flex, budget).then(|| {
+                SaveSession::new(StreamEncoderConfig {
                     table_budget_bytes: budget,
-                    max_def_bytes,
-                });
-                if BIGREDIS_ENABLED.load(Ordering::Relaxed) {
-                    // SAFETY: ctx belongs to the persistence callback. The detached context is owned
-                    // by this save session and is released by Drop.
-                    session.flex_ctx = Some(unsafe {
-                        raw::RedisModule_GetDetachedThreadSafeContext.unwrap()(ctx)
-                    });
-                }
-                session
+                })
             }));
-            log_event(ctx, &format!(
-                "JSON RDB dictionary phase=persistence_start status=armed flex={} budget_bytes={budget} max_def_bytes={max_def_bytes}",
-                BIGREDIS_ENABLED.load(Ordering::Relaxed),
-            ));
+            let mode = match (budget, flex) {
+                (0, _) => "plain reason=off",
+                (_, true) => "local reason=flex",
+                _ => "stream",
+            };
+            log_event(
+                ctx,
+                &format!(
+                    "JSON RDB dictionary phase=persistence_start mode={mode} budget_bytes={budget}"
+                ),
+            );
             return;
         }
         raw::REDISMODULE_SUBEVENT_PERSISTENCE_ENDED => "persistence_ended",
@@ -660,7 +634,9 @@ unsafe extern "C" fn loading_event(
         raw::REDISMODULE_SUBEVENT_LOADING_RDB_START
         | raw::REDISMODULE_SUBEVENT_LOADING_AOF_START
         | raw::REDISMODULE_SUBEVENT_LOADING_REPL_START => {
-            LOAD_SESSION.set(Some(LoadSession::new()));
+            // Flex never writes a stream and can keep a record undecoded, so it never reads one.
+            let session = (!BIGREDIS_ENABLED.load(Ordering::Relaxed)).then(LoadSession::new);
+            LOAD_SESSION.set(session);
         }
         raw::REDISMODULE_SUBEVENT_LOADING_ENDED | raw::REDISMODULE_SUBEVENT_LOADING_FAILED => {
             if let Some(session) = LOAD_SESSION.take() {

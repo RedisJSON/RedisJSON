@@ -36,11 +36,9 @@ RedisJSON is a [Redis](https://redis.io/) module that implements [ECMA-404 The J
 
 Read the docs at <https://redis.io/docs/latest/develop/data-types/json/>
 
-For the RDB shared-string stream, which writes a string shared by several documents
-once, where a save first reaches it, and refers to it afterwards, see the
-[implementation guide](docs/docs/use-share-string-in-rdb.md). It covers the
-RedisJSON and sibling ijson changes, the save and load flow, the wire format,
-settings, logs, limits and rollout gates, and uses existing Redis module APIs only.
+RedisJSON writes a string that several documents share once in the RDB and refers to it afterwards.
+See the [shared strings guide](docs/docs/use-share-string-in-rdb.md) for the save and load flow,
+the wire format, settings, logs, and limits.
 
 ## License
 

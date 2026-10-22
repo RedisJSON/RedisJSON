@@ -24,7 +24,6 @@ from includes import VALGRIND
 Defaults.decode_responses = True
 
 WRITER_BUDGET = 'json-rdb-dictionary-max-bytes'
-MAX_DEF_BYTES = 'json-rdb-dictionary-max-def-bytes'
 LOG_MARK = 'JSON RDB dictionary'
 
 RDB_OPCODE_AUX = 250
@@ -454,7 +453,6 @@ def test_dictionary_resets_with_tiny_table_round_trip(env):
                     summary = _save_and_read_summary(env, command)
                     if summary is not None:
                         env.assertGreater(_field(summary, 'defs'), 3, message=summary)
-                        env.assertEqual(_field(summary, 'lookup_only_docs'), 100, message=summary)
                     env.expect('DEBUG', 'RELOAD', 'NOSAVE').ok()
                     for key, document in documents.items():
                         env.assertEqual(json.loads(env.cmd('JSON.GET', key)), document)
@@ -692,7 +690,7 @@ def test_writer_off_saves_self_contained_records_and_still_loads_streams(env):
         env.assertEqual(_save(env), True)
         env.assertGreater(_rdb_size(env), stream_size * 4)
         lines = watch.lines()
-        env.assertTrue(any('phase=persistence_start status=armed' in line and 'budget_bytes=0 ' in line for line in lines),
+        env.assertTrue(any('phase=persistence_start mode=plain reason=off' in line and 'budget_bytes=0' in line for line in lines),
                        message=str(lines))
     finally:
         env.expect('CONFIG', 'SET', WRITER_BUDGET, original).ok()
@@ -1014,7 +1012,7 @@ def _summary_of_last_save(env, watch):
     began, or None. A save that a replica's synchronization starts can log in the same window."""
     lines = watch.lines()
     started = [line for line in lines
-               if 'phase=persistence_start status=armed' in line]
+               if 'phase=persistence_start' in line]
     env.assertTrue(started, message=f'no stream started: {lines}')
     return _last_summary(env, lines, _log_pid(started[-1])) if started else None
 
@@ -1025,111 +1023,6 @@ def _save_and_read_summary(env, command):
     if command == 'BGSAVE':
         _wait_for_bgsave(env)
     return _summary_of_last_save(env, watch)
-
-
-@_values_in_ram
-def test_flex_values_on_flash_define_no_string_and_reference_the_ones_in_ram(env):
-    env.skipOnCluster()
-    if env.useAof or not _is_flex(env):
-        env.skip()
-    env.expect('FLUSHALL').equal(True)
-    shared = _shared_text(seed=7, size=4096)
-    documents = {f'cold:{i}': {'shared': shared, 'step': i} for i in range(48)}
-    for key, document in documents.items():
-        env.expect('JSON.SET', key, '$', json.dumps(document)).ok()
-
-    def check_reload():
-        env.expect('DEBUG', 'RELOAD', 'NOSAVE').ok()
-        for key, document in documents.items():
-            env.assertEqual(json.loads(env.cmd('JSON.GET', key)), document, message=key)
-
-    # Every value is on flash, so no string is shared in RAM. The save decodes each value, writes
-    # it and frees it, and nothing in the RDB is shared: it is as large as it was before streams.
-    _put_values_on_flash(env, documents)
-    env.assertEqual(_save(env), True)
-    env.assertGreater(_rdb_size(env), len(shared) * len(documents) // 2)
-    check_reload()
-
-    # With a few values in RAM, which define the string, the values on flash reference it.
-    for command in ('SAVE', 'BGSAVE'):
-        _put_values_on_flash(env, documents, keep_in_ram=4)
-        # EXISTS materializes only metadata; the residency query must still classify this as cold.
-        metadata_key = list(documents)[4]
-        env.expect('EXISTS', metadata_key).equal(1)
-        metadata = env.cmd('DEBUG', 'BIGREDIS-KEY', metadata_key)
-        env.assertContains('meta-in-ram:yes', metadata)
-        env.assertContains('data-in-ram:no', metadata)
-        summary = _save_and_read_summary(env, command)
-        if summary is not None:
-            env.assertGreaterEqual(_field(summary, 'defs'), 1, message=summary)
-            env.assertGreaterEqual(_field(summary, 'refs'), len(documents) - 1, message=summary)
-            env.assertGreaterEqual(_field(summary, 'lookup_only_docs'), len(documents) - 4, message=summary)
-            env.assertContains('poisoned=false', summary)
-        env.assertLess(_rdb_size(env), len(shared) * 4, message=command)
-        for key in list(documents)[4:]:
-            env.assertContains('data-in-ram:no', env.cmd('DEBUG', 'BIGREDIS-KEY', key))
-        check_reload()
-
-
-@_values_in_ram
-def test_flex_values_on_flash_whose_strings_share_a_length_survive_a_save(env):
-    env.skipOnCluster()
-    if env.useAof or not _is_flex(env):
-        env.skip()
-    env.expect('FLUSHALL').equal(True)
-
-    def text(i):
-        return hashlib.sha256(f'{i}:a'.encode()).hexdigest() + hashlib.sha256(f'{i}:b'.encode()).hexdigest()
-
-    # Each value repeats one 128 byte string, so it has two owners while the save holds it decoded,
-    # and the strings of all the values have one size. The save frees each value right after it
-    # writes it, and the allocator hands the next value the address that the last one held. One
-    # value stays in RAM so that the save has a string to define at all.
-    documents = {f'reuse:{i}': {'first': text(i), 'second': text(i), 'n': i} for i in range(300)}
-    connection = env.getConnection()
-    commands = [('JSON.SET', key, '$', json.dumps(document)) for key, document in documents.items()]
-    env.assertEqual(set(_pipelined(connection, commands)), {'OK'})
-    for command in ('BGSAVE', 'SAVE'):
-        _put_values_on_flash(env, documents, keep_in_ram=1)
-        summary = _save_and_read_summary(env, command)
-        if summary is not None:
-            env.assertEqual(_field(summary, 'lookup_only_docs'), len(documents) - 1, message=summary)
-            env.assertEqual(_field(summary, 'defs'), 1, message=summary)
-            env.assertContains('poisoned=false', summary)
-        env.expect('DEBUG', 'RELOAD', 'NOSAVE').ok()
-        replies = _pipelined(connection, [('JSON.GET', key) for key in documents])
-        wrong = [key for key, reply in zip(documents, replies) if json.loads(reply) != documents[key]]
-        env.assertEqual(wrong, [], message=f'{command}: values that read back with another string')
-
-
-@_values_in_ram
-def test_flex_loads_a_stream_while_it_spills_every_value(env):
-    env.skipOnCluster()
-    if env.useAof or not _is_flex(env):
-        env.skip()
-    env.expect('FLUSHALL').equal(True)
-    pool = [_shared_text(seed=10 + i, size=8192) for i in range(3)]
-    documents = {f'spill:{i}': {'a': pool[i % 3], 'b': pool[(i + 1) % 3], 'n': i} for i in range(64)}
-    for key, document in documents.items():
-        env.expect('JSON.SET', key, '$', json.dumps(document)).ok()
-    env.assertEqual(_save(env), True)
-    rdb = _rdb_bytes(env)
-    env.assertLess(len(rdb), sum(len(pool[i]) for i in range(3)) * 3)
-
-    def read_documents(connection):
-        for key, document in documents.items():
-            env.assertEqual(json.loads(connection.execute_command('JSON.GET', key)), document,
-                            message=key)
-        on_flash = sum('data-in-ram:no' in connection.execute_command('DEBUG', 'BIGREDIS-KEY', key)
-                       for key in documents)
-        env.assertGreater(on_flash, 0, message='the load must spill with a RAM limit of zero keys')
-
-    # The server that loads it runs with the Flex harness setting, a RAM limit of zero keys, so each
-    # value is written to flash as soon as it is loaded while the definitions stay pinned.
-    outcome, lines = _load_rdb_in_new_server(env, rdb, read_documents)
-    env.assertEqual(outcome, 'up', message=str(lines))
-    env.assertTrue(any('phase=loading_ended' in line for line in lines),
-                   message=str(lines))
 
 
 @_values_in_ram
@@ -1239,143 +1132,6 @@ def test_shared_dictionary_full_replication_load(env):
 
 
 @_values_in_ram
-def test_flex_full_replication_with_values_on_flash(env):
-    env.skipOnCluster()
-    if not env.useSlaves or not _is_flex(env):
-        env.skip()
-    # A master with most of its values on flash writes them again, decoded, for a replica that loads
-    # from a file, and copies their bytes for one that loads straight from the socket. The replica
-    # reads both kinds of record in the one stream.
-    for master_diskless, replica_load in (('no', 'disabled'), ('yes', 'disabled'),
-                                          ('yes', 'on-empty-db')):
-        _full_sync(env, master_diskless, replica_load, on_flash=True)
-
-
-@_values_in_ram
-def test_flex_loads_a_stream_with_a_ram_limit_in_bytes(env):
-    env.skipOnCluster()
-    flex_binary = os.environ.get('FLEX_REDIS_SERVER')
-    if env.useAof or not _is_flex(env) or not flex_binary:
-        env.skip()
-    env.expect('FLUSHALL').equal(True)
-    # Every string is defined once and referenced once, so the stream holds `count` MiB of
-    # strings that the reader pins until its end, however many of its values Flex has spilled.
-    size, count = 1 << 20, 48
-    documents = {}
-    for i in range(count):
-        text = _shared_text(seed=100 + i, size=size)
-        documents[f'pin:{i}'] = {'a': text, 'b': text, 'n': i}
-        env.expect('JSON.SET', f'pin:{i}', '$', json.dumps(documents[f'pin:{i}'])).ok()
-    env.assertEqual(_save(env), True)
-    rdb = _rdb_bytes(env)
-    env.assertLess(len(rdb), count * size * 3 // 2)
-
-    def read_documents(connection):
-        for key, document in documents.items():
-            env.assertEqual(json.loads(connection.execute_command('JSON.GET', key)), document,
-                            message=key)
-
-    def load(limit_mb, data=rdb):
-        # The core without the harness wrapper, whose zero key limit would hide the byte limit.
-        store = tempfile.mkdtemp(prefix='flexstore')
-        try:
-            return _load_rdb_in_new_server(
-                env, data, read_documents, binary=flex_binary,
-                extra_args=('--bigredis-enabled', 'yes', '--bigredis-driver', 'speedb',
-                            '--bigredis-path', store, '--bigredis-use-async', 'yes',
-                            '--bigredis-driver-memtable_memory_budget_forced', '8388608',
-                            '--bigredis-max-ram-keys', '-1', '--bigredis-max-ram', f'{limit_mb}mb'))
-        finally:
-            shutil.rmtree(store, ignore_errors=True)
-
-    # Four times the strings of the stream leaves room for them and for the values in flight.
-    outcome, lines = load(4 * count)
-    env.assertEqual(outcome, 'up', message='\n'.join(lines[-20:]))
-    # A limit near or under the size of the strings is measured, not asserted: the pinned strings
-    # are RAM that Flex cannot free by spilling values.
-    def report(what, limit, outcome, lines):
-        reasons = [line for line in lines if re.search(r'out of ram|fatal|error|panic|abort', line, re.I)]
-        env.debugPrint(f'{what}, RAM limit {limit} MiB: {outcome}; '
-                       f'{" | ".join((reasons or lines)[-4:])}', force=True)
-
-    for limit in (3 * count // 2, count // 2):
-        report(f'{count} MiB of pinned strings', limit, *load(limit))
-    # The same values written in full, at the smallest limit, for comparison.
-    original = env.getConnection().config_get(WRITER_BUDGET)[WRITER_BUDGET]
-    try:
-        env.expect('CONFIG', 'SET', WRITER_BUDGET, '0').ok()
-        env.assertEqual(_save(env), True)
-        inline_rdb = _rdb_bytes(env)
-    finally:
-        env.expect('CONFIG', 'SET', WRITER_BUDGET, original).ok()
-    inline_outcome, inline_lines = load(count // 2, inline_rdb)
-    report('the same values in full', count // 2, inline_outcome, inline_lines)
-
-    # The original expectation below omitted allocator, decoder and Flex buffer overhead.
-    # A bound on the strings that the stream defines keeps what it pins within the limit: a quarter
-    # of it loads wherever the same values in full load.
-    original = env.getConnection().config_get(MAX_DEF_BYTES)[MAX_DEF_BYTES]
-    try:
-        env.expect('CONFIG', 'SET', MAX_DEF_BYTES, f'{count // 8}mb').ok()
-        summary = _save_and_read_summary(env, 'SAVE')
-        env.assertTrue(summary is not None, message='missing capped writer counters')
-        env.assertEqual(_field(summary, 'def_bytes'), (count // 8) * size, message=summary)
-        capped_rdb = _rdb_bytes(env)
-    finally:
-        env.expect('CONFIG', 'SET', MAX_DEF_BYTES, original).ok()
-    env.assertLess(len(capped_rdb), len(inline_rdb))
-    capped_outcome, capped_lines = load(count // 2, capped_rdb)
-    report(f'a stream that defines at most {count // 8} MiB', count // 2, capped_outcome, capped_lines)
-    # Keep the 24 MiB probe diagnostic; require sufficient headroom for transient allocations.
-    # The unbounded control must still fail, so this cannot pass by making every load fit.
-    limit = 40
-    for label, data, expected in (('inline', inline_rdb, 'up'),
-                                  ('capped', capped_rdb, 'up'),
-                                  ('unbounded', rdb, 'exited')):
-        outcome, lines = load(limit, data)
-        report(label, limit, outcome, lines)
-        env.assertEqual(outcome, expected, message='\n'.join(lines[-20:]))
-        if expected == 'exited':
-            env.assertTrue(any('Out of RAM reading RDB file' in line for line in lines),
-                           message='\n'.join(lines[-20:]))
-
-
-
-@_values_in_ram
-def test_a_stream_defines_no_more_bytes_than_the_cap_allows(env):
-    env.skipOnCluster()
-    if env.useAof:
-        env.skip()
-    env.expect('FLUSHALL').equal(True)
-    # Sixteen strings of 8 KiB, each in two documents, and a cap that holds five of them.
-    texts = [_shared_text(seed=200 + i, size=8192) for i in range(16)]
-    documents = {f'cap:{i}:{copy}': {'text': texts[i], 'copy': copy}
-                 for copy in range(2) for i in range(16)}
-    for key, document in documents.items():
-        env.expect('JSON.SET', key, '$', json.dumps(document)).ok()
-    cap = 5 * 8192
-    original = env.getConnection().config_get(MAX_DEF_BYTES)[MAX_DEF_BYTES]
-    try:
-        unbounded_size, inline_size = _save_sizes(env)
-        env.expect('CONFIG', 'SET', MAX_DEF_BYTES, str(cap)).ok()
-        summary = _save_and_read_summary(env, 'SAVE')
-        capped_size = _rdb_size(env)
-        if summary is not None:
-            env.assertLessEqual(_field(summary, 'def_bytes'), cap, message=summary)
-            env.assertEqual(_field(summary, 'defs'), 5, message=summary)
-            env.assertEqual(_field(summary, 'inline_docs'), 22, message=summary)
-            env.assertGreater(_field(summary, 'refs'), 0, message=summary)
-        # Between the stream with no bound and the one without a stream, and every value loads.
-        env.assertLess(unbounded_size, capped_size)
-        env.assertLess(capped_size, inline_size)
-        env.expect('DEBUG', 'RELOAD', 'NOSAVE').ok()
-        for key, document in documents.items():
-            env.assertEqual(json.loads(env.cmd('JSON.GET', key)), document, message=key)
-    finally:
-        env.expect('CONFIG', 'SET', MAX_DEF_BYTES, original).ok()
-
-
-@_values_in_ram
 def test_failed_save_releases_dictionary_and_next_save_restarts(env):
     env.skipOnCluster()
     if env.useAof:
@@ -1404,3 +1160,34 @@ def test_failed_save_releases_dictionary_and_next_save_restarts(env):
     env.expect('DEBUG', 'RELOAD', 'NOSAVE').ok()
     for i in range(12):
         env.assertEqual(json.loads(env.cmd('JSON.GET', f'retry:{i}')), document)
+
+
+@_values_in_ram
+def test_dump_writes_a_string_that_repeats_inside_one_value_once(env):
+    env.skipOnCluster()
+    if env.useAof:
+        env.skip()
+    env.expect('FLUSHALL').equal(True)
+    key_name = 'a repeated object key that is long enough to be shared'
+    document = {'items': [{key_name: i} for i in range(200)]}
+    env.expect('JSON.SET', 'doc', '$', json.dumps(document)).ok()
+    connection = _binary_connection(env)
+    config = env.getConnection()
+    compression = config.config_get('rdbcompression')['rdbcompression']
+    budget = config.config_get(WRITER_BUDGET)[WRITER_BUDGET]
+    try:
+        # LZF would shrink the repeated keys of the payload by itself.
+        env.expect('CONFIG', 'SET', 'rdbcompression', 'no').ok()
+        env.expect('CONFIG', 'SET', WRITER_BUDGET, '0').ok()
+        written_in_full = connection.execute_command('DUMP', 'doc')
+        env.expect('CONFIG', 'SET', WRITER_BUDGET, budget).ok()
+        shared = connection.execute_command('DUMP', 'doc')
+        env.assertLess(len(shared), len(written_in_full) // 2)
+        # The payload stands alone: a server that holds no other key reads it back.
+        env.expect('FLUSHALL').equal(True)
+        connection.execute_command('RESTORE', 'restored', 0, shared)
+        env.assertEqual(json.loads(env.cmd('JSON.GET', 'restored')), document)
+    finally:
+        env.cmd('CONFIG', 'SET', WRITER_BUDGET, budget)
+        env.cmd('CONFIG', 'SET', 'rdbcompression', compression)
+        connection.close()
