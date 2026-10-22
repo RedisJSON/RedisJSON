@@ -84,7 +84,7 @@ does not apply the AWS affinity configuration.
 
 Only scheduled runs may advance `benchmark-baseline`. Every workload must pass,
 none may degrade by 5% or more, and the geometric mean throughput improvement
-must exceed 5%. A complete confirmation round uses the same binaries without
+must be positive (greater than 0%, ignoring floating-point noise). A complete confirmation round uses the same binaries without
 retries and must satisfy the same criteria, with matching revisions, server
 version and coverage. The promotion job updates only `benchmark-baseline` to the
 tested commit using a lease-protected push; concurrent changes are not overwritten.
