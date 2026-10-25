@@ -56,7 +56,7 @@ const STREAM_HEADER_LEN: usize = 5;
 // Ceiling on the table the writer builds in the saving process; 0 turns the writer off.
 // When it is reached the strings defined so far keep being referenced and new ones go inline.
 // After a budget miss, the next definition-capable document reuses the cleared table.
-pub const DEFAULT_RDB_DICTIONARY_MAX_BYTES: i64 = 256 * 1024 * 1024;
+pub const DEFAULT_RDB_DICTIONARY_MAX_BYTES: i64 = 1024 * 1024 * 1024;
 pub const RDB_DICTIONARY_MAX_BYTES_CEILING: i64 = 1 << 40; // 1TB
 pub static RDB_DICTIONARY_MAX_BYTES: AtomicI64 = AtomicI64::new(DEFAULT_RDB_DICTIONARY_MAX_BYTES);
 // Whether the server runs Flex; set once by init(). Flex never writes or reads a stream.
@@ -95,6 +95,8 @@ thread_local! {
 struct SaveSession {
     encoder: Box<dyn SaveEncoder>,
     reset_pending: bool,
+    // Times the table filled up and was cleared; a save that logs any ran into the ceiling.
+    resets: u64,
     stream_docs: u64,
     inline_docs: u64,
 }
@@ -154,6 +156,7 @@ impl SaveSession {
         Self {
             encoder: make_encoder(config),
             reset_pending: false,
+            resets: 0,
             stream_docs: 0,
             inline_docs: 0,
         }
@@ -187,7 +190,10 @@ impl SaveSession {
 
     fn begin_record(&mut self) -> (u32, Vec<u8>) {
         let base_id = self.encoder.stats().defs as u32;
-        self.reset_pending |= self.encoder.reset_if_needed();
+        if self.encoder.reset_if_needed() {
+            self.reset_pending = true;
+            self.resets += 1;
+        }
         (base_id, vec![MARKER_INLINE; STREAM_HEADER_LEN])
     }
 
@@ -214,8 +220,8 @@ impl SaveSession {
     fn summary(&self, phase: &str) -> String {
         let stats = self.encoder.stats();
         format!(
-            "JSON RDB dictionary phase={phase} defs={} def_bytes={} refs={} stream_docs={} inline_docs={} poisoned={}",
-            stats.defs, stats.def_bytes, stats.refs, self.stream_docs, self.inline_docs,
+            "JSON RDB dictionary phase={phase} defs={} def_bytes={} refs={} resets={} stream_docs={} inline_docs={} poisoned={}",
+            stats.defs, stats.def_bytes, stats.refs, self.resets, self.stream_docs, self.inline_docs,
             self.encoder.is_poisoned(),
         )
     }

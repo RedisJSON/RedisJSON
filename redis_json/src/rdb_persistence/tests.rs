@@ -135,6 +135,12 @@ fn full_dictionary_restarts_before_later_definitions_and_preserves_record_order(
         SAVE_SESSION.with_borrow(|s| s.as_ref().unwrap().encoder.stats().defs),
         8
     );
+    // Both marker 2 records follow a reset, and the end-of-save log counts them.
+    SAVE_SESSION.with_borrow(|s| {
+        let session = s.as_ref().unwrap();
+        assert_eq!(session.resets, 2);
+        assert!(session.summary("persistence_ended").contains(" resets=2 "));
+    });
     start_loading();
     let mut loaded = Vec::new();
     for (doc, bytes) in docs.iter().zip(&records) {

@@ -252,7 +252,7 @@ another module invokes.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `json-rdb-dictionary-max-bytes` | 256 MiB | Ceiling on the heap that a stream's address table uses. The old and the new allocation both count while the table grows. After an eligible definition misses this budget, the table is cleared and reused between documents. 0 turns string sharing off, across keys and inside a value. The reader always accepts. Range 0 to 2^40. |
+| `json-rdb-dictionary-max-bytes` | 1 GiB | Ceiling on the heap that a stream's address table uses. The old and the new allocation both count while the table grows. When an eligible definition misses this budget, the rest of that document keeps its new strings inline, and the table is cleared before the next document and reused. 0 turns string sharing off, across keys and inside a value. The reader always accepts. Range 0 to 2^40. |
 
 The setting changes at runtime with `CONFIG SET`, and units such as `128mb` work. A BGSAVE child
 keeps the value it inherited at fork. A module argument skips the range check of `CONFIG SET`, so
@@ -282,7 +282,7 @@ Children have no INFO channel, so each save and load logs lines that start with
 | Line | Fields |
 |---|---|
 | `persistence_start` | `mode=stream`, `mode=local reason=flex` or `mode=plain reason=off`, then `budget_bytes` |
-| `persistence_ended` / `persistence_failed` | `defs def_bytes refs stream_docs inline_docs poisoned`. A stream save that wrote a JSON value emits it. |
+| `persistence_ended` / `persistence_failed` | `defs def_bytes refs resets stream_docs inline_docs poisoned`. A stream save that wrote a JSON value emits it. `resets` counts how often the table filled up and was cleared. Above 0 means the save ran into `json-rdb-dictionary-max-bytes`, so raise it to share more. |
 | `loading_ended` / `loading_failed` | `defs def_bytes refs stream_docs`, when the load read a stream record |
 | `load` | `status=refused reason=...` with `marker_N`, `no_stream`, `base_id_mismatch` or `cbor_...`. The level is warning while loading. |
 
@@ -296,7 +296,8 @@ not dataset copy-on-write.
 
 - **Memory.** A single pass that shares strings across keys must remember each repeated string
   between its first and last use, and Redis saves in hash order. The table costs about 22 to 36
-  bytes per distinct shared string. The loader keeps 8 bytes per definition in the current
+  bytes per distinct shared string, so the default ceiling of 1 GiB holds about 30 to 49 million
+  of them. The loader keeps 8 bytes per definition in the current
   dictionary. Resets keep the table's capacity and release the reader's old string handles.
 - **Small strings.** Strings from 8 bytes up are shared, object keys included. A reference replaces
   only 9 to 64 bytes with 2 to 6, and every distinct string costs a table entry. A tiny document
