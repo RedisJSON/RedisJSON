@@ -9,7 +9,7 @@ redis-module = { git = "https://github.com/RedisLabsModules/redismodule-rs", rev
     "bindgen-runtime",
 ] }
 redis-module-macros = { git = "https://github.com/RedisLabsModules/redismodule-rs", rev = "cca53606a1b8bfaa78f96399cb10bb9d3a1f1099" }
-ijson = { git = "https://github.com/RedisJSON/ijson", rev = "edef94dd7f18ec898a75cec95f55b2631d8ec73c", default-features = false }
+ijson = { git = "https://github.com/RedisJSON/ijson", branch = "rdb_strings_firstuse", default-features = false }
 # Pin serde_json below the version range that switched float formatting (ryu -> zmij),
 # to keep exponent formatting stable (e.g. `e308` vs `e+308`) and avoid test churn on `cargo update`.
 serde_json = { version = ">=1.0.0, <1.0.147", features = ["unbounded_depth"] }
@@ -27,7 +27,3 @@ license = "Redis Source Available License 2.0 (RSALv2) or the Server Side Public
 
 [profile.release]
 debug = 1
-
-# Use the sibling codec implementation until its string stream API is published.
-[patch."https://github.com/RedisJSON/ijson"]
-ijson = { path = "../ijson" }
