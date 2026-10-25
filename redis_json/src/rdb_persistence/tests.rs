@@ -56,6 +56,11 @@ pub(super) fn persistence(subevent: u64) {
     unsafe { persistence_event(std::ptr::null_mut(), EVENT, subevent, std::ptr::null_mut()) };
 }
 
+pub(super) fn slot_migration(subevent: u64) {
+    // SAFETY: the callback only reads subevent; pointer arguments are unused.
+    unsafe { slot_migration_event(std::ptr::null_mut(), EVENT, subevent, std::ptr::null_mut()) };
+}
+
 pub(super) fn loading(subevent: u64) {
     // SAFETY: the callback only reads subevent; pointer arguments are unused.
     unsafe { loading_event(std::ptr::null_mut(), EVENT, subevent, std::ptr::null_mut()) };

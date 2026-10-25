@@ -12,7 +12,7 @@
 
 use super::tests::{
     document, inline_record, load_session_exists, loading, persistence, reset, save_session_exists,
-    serial,
+    serial, slot_migration,
 };
 use super::*;
 use ijson::{IArray, IString};
@@ -136,6 +136,7 @@ impl Server {
         KEYED.set(true);
         RDB_DICTIONARY_MAX_BYTES.store(DEFAULT_RDB_DICTIONARY_MAX_BYTES, Ordering::Relaxed);
         BIGREDIS_ENABLED.store(false, Ordering::Relaxed);
+        ASM_EXPORTS.store(0, Ordering::Relaxed);
         backward::LEGACY_RDB_DEPTH_LIMIT.store(false, Ordering::Relaxed);
     }
 
@@ -720,12 +721,71 @@ fn a_budget_of_zero_turns_sharing_off_inside_a_value_as_well() {
 
 #[test]
 fn only_a_save_that_is_not_flex_and_has_a_budget_may_stream() {
-    for (flex, budget, stream) in [
-        (false, 1, true),
-        (false, 0, false),
-        (true, 1, false),
-        (true, 0, false),
+    for (flex, budget, asm_export, stream) in [
+        (false, 1, false, true),
+        (false, 0, false, false),
+        (true, 1, false, false),
+        (true, 0, false, false),
+        (false, 1, true, false),
     ] {
-        assert_eq!(cross_key_stream_allowed(flex, budget), stream);
+        assert_eq!(cross_key_stream_allowed(flex, budget, asm_export), stream);
+    }
+}
+
+#[test]
+fn a_save_while_slots_are_exported_never_streams() {
+    let server = Server::start();
+    let (_owner, docs) = shared_documents("a string that two keys share while slots move", 2);
+    for end in [
+        raw::REDISMODULE_SUBEVENT_CLUSTER_SLOT_MIGRATION_MIGRATE_COMPLETED,
+        raw::REDISMODULE_SUBEVENT_CLUSTER_SLOT_MIGRATION_MIGRATE_FAILED,
+    ] {
+        slot_migration(raw::REDISMODULE_SUBEVENT_CLUSTER_SLOT_MIGRATION_MIGRATE_STARTED);
+        server.start_save();
+        assert!(!save_session_exists());
+        assert_eq!(server.save_record(&docs[0]), inline_record(&docs[0]));
+        server.end_save();
+
+        slot_migration(end);
+        server.start_save();
+        assert!(save_session_exists());
+        assert_eq!(server.save_record(&docs[0])[0], MARKER_STREAM);
+        server.end_save();
+    }
+}
+
+#[test]
+fn a_save_streams_again_only_after_every_export_has_ended() {
+    let server = Server::start();
+    // The end of a task that began before the module loaded must not count below zero.
+    slot_migration(raw::REDISMODULE_SUBEVENT_CLUSTER_SLOT_MIGRATION_MIGRATE_COMPLETED);
+    for event in [
+        raw::REDISMODULE_SUBEVENT_CLUSTER_SLOT_MIGRATION_MIGRATE_STARTED,
+        raw::REDISMODULE_SUBEVENT_CLUSTER_SLOT_MIGRATION_MIGRATE_STARTED,
+        raw::REDISMODULE_SUBEVENT_CLUSTER_SLOT_MIGRATION_MIGRATE_FAILED,
+    ] {
+        slot_migration(event);
+    }
+    server.start_save();
+    assert!(!save_session_exists());
+    server.end_save();
+    slot_migration(raw::REDISMODULE_SUBEVENT_CLUSTER_SLOT_MIGRATION_MIGRATE_COMPLETED);
+    server.start_save();
+    assert!(save_session_exists());
+    server.end_save();
+}
+
+#[test]
+fn the_import_side_of_a_slot_migration_does_not_stop_the_stream() {
+    let server = Server::start();
+    for event in [
+        raw::REDISMODULE_SUBEVENT_CLUSTER_SLOT_MIGRATION_IMPORT_STARTED,
+        raw::REDISMODULE_SUBEVENT_CLUSTER_SLOT_MIGRATION_IMPORT_FAILED,
+        raw::REDISMODULE_SUBEVENT_CLUSTER_SLOT_MIGRATION_IMPORT_COMPLETED,
+    ] {
+        slot_migration(event);
+        server.start_save();
+        assert!(save_session_exists());
+        server.end_save();
     }
 }

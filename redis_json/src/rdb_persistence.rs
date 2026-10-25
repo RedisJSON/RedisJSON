@@ -16,7 +16,7 @@
 use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
 use std::fmt;
-use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicUsize, Ordering};
 
 use ijson::{
     CborDecodeError, ContentDictionary, DocUse, IValue, StreamDecoder, StreamEncoder,
@@ -61,6 +61,9 @@ pub const RDB_DICTIONARY_MAX_BYTES_CEILING: i64 = 1 << 40; // 1TB
 pub static RDB_DICTIONARY_MAX_BYTES: AtomicI64 = AtomicI64::new(DEFAULT_RDB_DICTIONARY_MAX_BYTES);
 // Whether the server runs Flex; set once by init(). Flex never writes or reads a stream.
 static BIGREDIS_ENABLED: AtomicBool = AtomicBool::new(false);
+// Slot migrations this node is exporting. A fork child started meanwhile may write the migration
+// snapshot, which the destination loads without a session, so such a save never streams.
+static ASM_EXPORTS: AtomicUsize = AtomicUsize::new(0);
 
 /// Creates a fresh dictionary for each save. Without a custom factory, saves use
 /// [`ijson::AddressDictionary`]; custom factories may supply any [`StringDictionary`].
@@ -302,6 +305,12 @@ pub(crate) fn init(ctx: &Context) -> Status {
             return Status::Err;
         }
     }
+    // A server without atomic slot migration has no such event and no snapshot to protect.
+    let migration = raw::RedisModuleEvent {
+        id: raw::REDISMODULE_EVENT_CLUSTER_SLOT_MIGRATION,
+        dataver: 1,
+    };
+    let _ = raw::subscribe_to_server_event(ctx.ctx, migration, Some(slot_migration_event));
     // A command can be invoked by another module during SAVE, or after an aborted
     // module-initiated RdbSave that did not publish a persistence-ended event.
     // Stop sharing before such a command can produce a standalone DUMP/MIGRATE.
@@ -571,12 +580,34 @@ unsafe extern "C" fn command_filter(_ctx: *mut raw::RedisModuleCommandFilterCtx)
 /// Whether this save may share strings across keys. A stream makes each record depend on the ones
 /// before it, so it is only for a save that Redis reads back through its loading events in order.
 /// Flex never writes one: it can keep any value on flash undecoded and decode it later alone.
-fn cross_key_stream_allowed(flex: bool, budget: usize) -> bool {
-    // TODO(replication): a save that feeds a replica fires the same event as a BGSAVE (RDB_START in
-    // the fork child), so the module cannot tell them apart. A consumer that converts the RDB into
-    // one RESTORE per key (Enterprise replica-of) cannot read a stream record. Ask the core to pass
-    // RDBFLAGS_REPLICATION in the persistence event data, and return false for such saves.
-    !flex && budget > 0
+/// Neither does a save while this node exports slots: the destination loads that snapshot without
+/// a session.
+fn cross_key_stream_allowed(flex: bool, budget: usize, asm_export: bool) -> bool {
+    // TODO(replica-of): a save that feeds an Enterprise replica-of syncer fires the same event as a
+    // BGSAVE or a replica sync (RDB_START in the fork child), so the module cannot tell them apart.
+    // The syncer converts the RDB into one RESTORE per key and cannot read a stream record. It must
+    // first tell the core, and the core the module, that it is such a consumer.
+    !flex && budget > 0 && !asm_export
+}
+
+unsafe extern "C" fn slot_migration_event(
+    _ctx: *mut raw::RedisModuleCtx,
+    _event: raw::RedisModuleEvent,
+    subevent: u64,
+    _data: *mut c_void,
+) {
+    match subevent {
+        raw::REDISMODULE_SUBEVENT_CLUSTER_SLOT_MIGRATION_MIGRATE_STARTED => {
+            ASM_EXPORTS.fetch_add(1, Ordering::Relaxed);
+        }
+        raw::REDISMODULE_SUBEVENT_CLUSTER_SLOT_MIGRATION_MIGRATE_COMPLETED
+        | raw::REDISMODULE_SUBEVENT_CLUSTER_SLOT_MIGRATION_MIGRATE_FAILED => {
+            // A module loaded while a task runs sees its end without its start.
+            let _ = ASM_EXPORTS
+                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_sub(1));
+        }
+        _ => {}
+    }
 }
 
 unsafe extern "C" fn persistence_event(
@@ -593,15 +624,17 @@ unsafe extern "C" fn persistence_event(
         | raw::REDISMODULE_SUBEVENT_PERSISTENCE_SYNC_AOF_START => {
             let budget = config_value(&RDB_DICTIONARY_MAX_BYTES);
             let flex = BIGREDIS_ENABLED.load(Ordering::Relaxed);
+            let asm_export = ASM_EXPORTS.load(Ordering::Relaxed) > 0;
             // Without a session every value is self-contained.
-            SAVE_SESSION.set(cross_key_stream_allowed(flex, budget).then(|| {
+            SAVE_SESSION.set(cross_key_stream_allowed(flex, budget, asm_export).then(|| {
                 SaveSession::new(StreamEncoderConfig {
                     table_budget_bytes: budget,
                 })
             }));
-            let mode = match (budget, flex) {
-                (0, _) => "plain reason=off",
-                (_, true) => "local reason=flex",
+            let mode = match (budget, flex, asm_export) {
+                (0, _, _) => "plain reason=off",
+                (_, true, _) => "local reason=flex",
+                (_, _, true) => "local reason=asm",
                 _ => "stream",
             };
             log_event(

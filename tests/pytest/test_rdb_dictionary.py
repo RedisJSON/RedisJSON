@@ -1079,19 +1079,21 @@ def test_shared_dictionary_in_aof_rdb_preamble(env):
         connection.config_set('aof-use-rdb-preamble', original)
 
 
-def _full_sync(env, master_diskless, replica_load, on_flash=False):
+def _full_sync(env, master_diskless, replica_load, on_flash=False, writer_off=False):
     master = env.getConnection()
     replica = env.getSlaveConnection()
     port = master.info('server')['tcp_port']
     document = {'checkpoint_content': f'shared {master_diskless} {replica_load} contents ' * 256}
     original = {
         'master': {name: master.config_get(name)[name]
-                   for name in ('repl-diskless-sync', 'repl-diskless-sync-delay')},
+                   for name in ('repl-diskless-sync', 'repl-diskless-sync-delay', WRITER_BUDGET)},
         'replica': replica.config_get('repl-diskless-load')['repl-diskless-load'],
     }
     master_watch = _LogWatch(env, 'master')
     replica_watch = _LogWatch(env, 'slave')
     try:
+        if writer_off:
+            master.config_set(WRITER_BUDGET, '0')
         master.config_set('repl-diskless-sync', master_diskless)
         master.config_set('repl-diskless-sync-delay', '0')
         replica.config_set('repl-diskless-load', replica_load)
@@ -1113,17 +1115,28 @@ def _full_sync(env, master_diskless, replica_load, on_flash=False):
         for i in range(32):
             env.assertEqual(json.loads(replica.execute_command('JSON.GET', f'checkpoint:{i}')),
                             document)
+        lines = replica_watch.lines()
+        if writer_off:
+            # The child wrote plain records, so the replica read no stream and has nothing to end.
+            master_lines = master_watch.lines()
+            env.assertTrue(any('phase=persistence_start mode=plain reason=off' in line
+                               for line in master_lines), message=str(master_lines))
+            env.assertFalse(any('mode=stream' in line for line in master_lines),
+                            message=str(master_lines))
+            env.assertFalse(any('phase=loading_ended' in line for line in lines),
+                            message=str(lines))
+            return
         # The master saved a stream in a child, and the replica completed its load. With the values
         # on flash only the four in RAM are certain to reference the definitions (the key and the
         # string): Flex copies the bytes of the others for a replica that loads straight from the
         # socket.
         _expect_stream_logs(env, master_watch, min_refs=3 if on_flash else 31)
-        lines = replica_watch.lines()
         # Flex arms no load session, so it logs no end of a stream load.
         if not _is_flex(env):
             env.assertTrue(any('phase=loading_ended' in line for line in lines),
                            message=str(lines))
     finally:
+        master.config_set(WRITER_BUDGET, original['master'][WRITER_BUDGET])
         master.config_set('repl-diskless-sync', original['master']['repl-diskless-sync'])
         master.config_set('repl-diskless-sync-delay', original['master']['repl-diskless-sync-delay'])
         replica.config_set('repl-diskless-load', original['replica'])
@@ -1145,6 +1158,17 @@ def test_shared_dictionary_full_replication_load(env):
         variants = variants[:-1]
     for master_diskless, replica_load in variants:
         _full_sync(env, master_diskless, replica_load)
+
+
+@_values_in_ram
+def test_writer_off_master_feeds_a_replica_plain_records(env):
+    # The workaround for a replica-of source: a master with the writer off syncs a replica from a
+    # child that writes no stream, whether the RDB goes through a file or the socket.
+    env.skipOnCluster()
+    if not env.useSlaves:
+        env.skip()
+    for master_diskless, replica_load in [('no', 'disabled'), ('yes', 'on-empty-db')]:
+        _full_sync(env, master_diskless, replica_load, writer_off=True)
 
 
 @_values_in_ram
