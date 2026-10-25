@@ -96,7 +96,7 @@ jobs:
           cp benchmark-baseline/target/release/librejson.so benchmark-bundle/baseline.so
           cp benchmark-pr/target/release/librejson.so benchmark-bundle/pr.so
           cp benchmark-redis/src/redis-server benchmark-redis/src/redis-benchmark benchmark-memtier/memtier_benchmark benchmark-bundle/bin/
-          cp -R benchmark-baseline/tests/benchmarks benchmark-bundle/suite
+          cp -R benchmark-pr/tests/benchmarks benchmark-bundle/suite
           cp benchmark-revisions.json benchmark-bundle/
           python benchmark-pr/tests/benchmarks/benchmark_jobs.py plan --bundle benchmark-bundle --shards 5
           tar -czf benchmark-bundle.tar.gz benchmark-bundle
