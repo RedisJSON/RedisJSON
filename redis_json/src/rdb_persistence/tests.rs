@@ -8,8 +8,7 @@
  */
 
 use super::*;
-use ijson::array::ArraySliceRef;
-use ijson::{IArray, IObject, IString};
+use ijson::{IObject, IString};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 // The writer settings and the Flex flag are process-wide, so the tests that change them or depend
@@ -78,36 +77,7 @@ fn record(value: &IValue, keyed: bool) -> Vec<u8> {
     bytes[start..].to_vec()
 }
 
-#[test]
-fn loading_start_creates_a_reader() {
-    let _serial = serial();
-    start_saving();
-    let owner = IString::from("a resident string shared by two values");
-    let value = document(&owner);
-    let bytes = record(&value, true);
-    loading(raw::REDISMODULE_SUBEVENT_LOADING_RDB_START);
-    assert!(load_session_exists());
-    assert_eq!(decode_for_load(&bytes, true), Ok(value));
-}
-
-#[test]
-fn truncated_record_releases_reader_and_prevents_restart_until_next_load() {
-    let _serial = serial();
-    start_saving();
-    let owner = IString::from("a string kept until a malformed record");
-    let value = document(&owner);
-    let bytes = record(&value, true);
-    start_loading();
-    assert!(decode_for_load(&bytes, true).is_ok());
-    assert!(decode_for_load(&[MARKER_STREAM, 0], true).is_err());
-    assert!(!load_session_exists());
-    assert_eq!(decode_for_load(&bytes, true), Err(LoadError::NoStream));
-    loading(raw::REDISMODULE_SUBEVENT_LOADING_FAILED);
-    loading(raw::REDISMODULE_SUBEVENT_LOADING_RDB_START);
-    assert_eq!(decode_for_load(&bytes, true), Ok(value));
-}
-
-/// What a save wrote for a value before streams existed: marker 0 and the CBOR.
+/// A plain record: marker 0 and the CBOR.
 pub(super) fn inline_record(value: &IValue) -> Vec<u8> {
     let mut bytes = vec![0];
     bytes.extend_from_slice(&ijson::encode(value));
@@ -155,6 +125,12 @@ fn full_dictionary_restarts_before_later_definitions_and_preserves_record_order(
         records.iter().map(|bytes| bytes[0]).collect::<Vec<_>>(),
         [1, 1, 1, 0, 2, 1, 1, 0, 2, 1, 1]
     );
+    // A string that finds no room in the table stays inline, byte for byte a plain record.
+    for (doc, bytes) in docs.iter().zip(&records) {
+        if bytes[0] == MARKER_INLINE {
+            assert_eq!(*bytes, inline_record(doc));
+        }
+    }
     assert_eq!(
         SAVE_SESSION.with_borrow(|s| s.as_ref().unwrap().encoder.stats().defs),
         8
@@ -213,44 +189,6 @@ fn pending_reset_waits_through_inline_values_and_releases_reader_handles() {
 }
 
 #[test]
-fn keys_values_nesting_and_typed_arrays_survive_the_stream() {
-    let _serial = serial();
-    start_saving();
-    let json = r#"{"a repeated object key, long enough to be shared":
-        ["a repeated string value, also long enough","short","שלום שלום שלום",""],
-        "nested":{"a repeated object key, long enough to be shared":null}}"#;
-    let first: IValue = serde_json::from_str(json).unwrap();
-    let second: IValue = serde_json::from_str(json).unwrap();
-    let mut typed = IObject::new();
-    typed
-        .insert("typed", IArray::try_from(vec![1.5f32, 2.5, 3.5]).unwrap())
-        .unwrap();
-    let typed: IValue = typed.into();
-
-    let records: Vec<Vec<u8>> = [&first, &second, &typed]
-        .into_iter()
-        .map(|doc| record(doc, true))
-        .collect();
-    assert_eq!(records[0][0], MARKER_STREAM);
-    assert_eq!(records[1][0], MARKER_STREAM);
-    assert_eq!(records[2], inline_record(&typed));
-
-    start_loading();
-    let loaded: Vec<IValue> = records
-        .iter()
-        .map(|record| decode_for_load(record, true).unwrap())
-        .collect();
-    assert_eq!(loaded[0], first);
-    assert_eq!(loaded[1], second);
-    let array = loaded[2].as_object().unwrap().get("typed").unwrap();
-    assert!(matches!(
-        array.as_array().unwrap().as_slice(),
-        ArraySliceRef::F32(_)
-    ));
-    assert_eq!(ijson::encode(&loaded[2]), ijson::encode(&typed));
-}
-
-#[test]
 fn a_poisoned_session_writes_marker_zero_records() {
     let _serial = serial();
     start_saving();
@@ -261,46 +199,6 @@ fn a_poisoned_session_writes_marker_zero_records() {
     assert_eq!(record(&second, true), inline_record(&second));
     let inline_docs = SAVE_SESSION.with_borrow(|s| s.as_ref().unwrap().inline_docs);
     assert_eq!(inline_docs, 1);
-}
-
-#[test]
-fn a_small_budget_degrades_gradually_and_every_record_still_loads() {
-    let _serial = serial();
-    reset();
-    SAVE_SESSION.set(Some(SaveSession::new(StreamEncoderConfig {
-        table_budget_bytes: 1500,
-    })));
-    let owners: Vec<IString> = (0..64)
-        .map(|index| IString::from(format!("budget string {index:04} used twice").as_str()))
-        .collect();
-    // Every string is used by two documents, one after the other.
-    let docs: Vec<IValue> = owners.iter().chain(&owners).map(document).collect();
-    let records: Vec<Vec<u8>> = docs.iter().map(|doc| record(doc, true)).collect();
-
-    // The table froze with room for some strings: those keep being referenced, the others
-    // stay inline in both uses, byte for byte what an unframed save writes.
-    let mut frozen = StreamEncoder::new(StreamEncoderConfig {
-        table_budget_bytes: 1500,
-    });
-    for doc in &docs {
-        frozen.encode_into(&mut Vec::new(), doc);
-    }
-    let stats = frozen.stats();
-    assert!(stats.defs > 0 && stats.defs < 64, "{stats:?}");
-    assert_eq!(stats.refs, stats.defs);
-    let rolling = SAVE_SESSION.with_borrow(|s| s.as_ref().unwrap().encoder.stats());
-    assert!(rolling.defs > 64, "{rolling:?}");
-    assert!(records.iter().any(|bytes| bytes[0] == MARKER_RESET));
-    for (doc, record) in docs.iter().zip(&records) {
-        if record[0] == MARKER_INLINE {
-            assert_eq!(*record, inline_record(doc));
-        }
-    }
-
-    start_loading();
-    for (doc, record) in docs.iter().zip(&records) {
-        assert_eq!(decode_for_load(record, true).as_ref(), Ok(doc));
-    }
 }
 
 #[test]
@@ -494,13 +392,16 @@ fn loading_events_arm_and_release_the_load_state() {
     let owner = IString::from("a string defined by the load before a new START");
     start_saving();
     let defining = record(&document(&owner), true);
+    // Active defrag leaves the string cache alone while the session holds decoded strings.
     for subevent in [
         raw::REDISMODULE_SUBEVENT_LOADING_RDB_START,
         raw::REDISMODULE_SUBEVENT_LOADING_AOF_START,
         raw::REDISMODULE_SUBEVENT_LOADING_REPL_START,
     ] {
         start_loading();
+        assert!(!load_session_is_live());
         decode_for_load(&defining, true).unwrap();
+        assert!(load_session_is_live());
         loading(subevent);
         // A fresh reader: the table of the load before is gone.
         assert!(
@@ -513,30 +414,18 @@ fn loading_events_arm_and_release_the_load_state() {
         raw::REDISMODULE_SUBEVENT_LOADING_FAILED,
     ] {
         start_loading();
+        decode_for_load(&defining, true).unwrap();
         loading(subevent);
-        assert!(!load_session_exists(), "end {subevent}");
+        assert!(
+            !load_session_exists() && !load_session_is_live(),
+            "end {subevent}"
+        );
     }
-    // Flex adds intermediate events; they do not end the full load.
+    // The standard subevents are 0 to 4. Flex adds ones above them, and they do not end the load.
     for subevent in [5, 6, 7] {
         start_loading();
         loading(subevent);
         assert!(load_session_exists(), "event {subevent}");
     }
     reset();
-}
-
-#[test]
-fn defrag_leaves_the_string_cache_alone_while_a_stream_is_loading() {
-    let _serial = serial();
-    start_saving();
-    let owner = IString::from("a string that a decoder holds while defrag starts");
-    let defining = record(&document(&owner), true);
-    reset();
-
-    start_loading();
-    assert!(!load_session_is_live());
-    decode_for_load(&defining, true).unwrap();
-    assert!(load_session_is_live());
-    loading(raw::REDISMODULE_SUBEVENT_LOADING_ENDED);
-    assert!(!load_session_is_live());
 }

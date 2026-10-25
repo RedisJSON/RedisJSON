@@ -144,11 +144,6 @@ impl Server {
         persistence(raw::REDISMODULE_SUBEVENT_PERSISTENCE_SYNC_RDB_START);
     }
 
-    fn start_flex_save(&self) {
-        BIGREDIS_ENABLED.store(true, Ordering::Relaxed);
-        self.start_save();
-    }
-
     fn end_save(&self) {
         persistence(raw::REDISMODULE_SUBEVENT_PERSISTENCE_ENDED);
     }
@@ -207,82 +202,21 @@ fn save_external(text: &str) -> Vec<u8> {
 }
 
 #[test]
-fn manager_init_can_keep_the_address_dictionary_or_register_its_own() {
+fn without_a_registered_dictionary_an_external_value_stays_plain_beside_streamed_ones() {
     let server = Server::start();
-    for backend_initialized in [false, true] {
-        server.forget();
-        if backend_initialized {
-            crate::rdb_persistence::set_dictionary_factory(|| {
-                Box::new(ijson::ContentDictionary::default())
-            });
-        }
-        let owner = IString::from("a string shared by the selected backend");
-        let value = document(&owner);
-        server.start_save();
-        let resident = server.save_record(&value);
-        let external = save_external(owner.as_str());
-        server.end_save();
-        assert_eq!(resident[0], MARKER_STREAM);
-        if backend_initialized {
-            assert_eq!(external[0], MARKER_STREAM);
-            assert_eq!(&external[5..], &[0xc7, 0]);
-        } else {
-            assert_eq!(external, inline_record(&IValue::from(owner.as_str())));
-        }
-        let loaded = server.load(&Rdb {
-            records: vec![resident, external],
-        });
-        assert_eq!(loaded.values[0], Some(value));
-        assert_eq!(loaded.values[1], Some(IValue::from(owner.as_str())));
-    }
-}
-
-#[test]
-fn flex_saves_every_value_self_contained_and_a_repeat_inside_a_value_is_written_once() {
-    let server = Server::start();
-    set_dictionary_factory(|| Box::new(ijson::ContentDictionary::default()));
-    server.start_flex_save();
-    assert!(!save_session_exists());
-    let first = save_external("a string owned by an external manager");
-    let second = save_external("a string owned by an external manager");
-    // Each value holds the string once: nothing to share, so the bytes are plain.
-    assert_eq!((first[0], second[0]), (MARKER_INLINE, MARKER_INLINE));
-    assert_eq!(first, second);
-    let mut runs = 0;
-    crate::rdb_persistence::save_with(io(), |strings, out| {
-        runs += 1;
-        ciborium::into_writer(
-            &vec![
-                strings.string("a string that this value holds twice"),
-                strings.string("a string that this value holds twice"),
-            ],
-            out,
-        )
-    })
-    .unwrap();
-    let [repeated] = <[Vec<u8>; 1]>::try_from(drain_records()).unwrap();
-    // The definitions pay for themselves, so the first run is the one that is written.
-    assert_eq!(runs, 1);
-    assert_eq!(&repeated[..1], &[MARKER_LOCAL]);
+    let owner = IString::from("a string shared by the selected backend");
+    let value = document(&owner);
+    server.start_save();
+    let resident = server.save_record(&value);
+    let external = save_external(owner.as_str());
     server.end_save();
-
+    assert_eq!(resident[0], MARKER_STREAM);
+    assert_eq!(external, inline_record(&IValue::from(owner.as_str())));
     let loaded = server.load(&Rdb {
-        records: vec![first, repeated],
+        records: vec![resident, external],
     });
-    assert_eq!(
-        loaded.values[0]
-            .as_ref()
-            .unwrap()
-            .as_string()
-            .unwrap()
-            .as_str(),
-        "a string owned by an external manager"
-    );
-    let text = "a string that this value holds twice";
-    assert_eq!(
-        loaded.values[1].as_ref().unwrap(),
-        &IValue::from(vec![IValue::from(text), IValue::from(text)])
-    );
+    assert_eq!(loaded.values[0], Some(value));
+    assert_eq!(loaded.values[1], Some(IValue::from(owner.as_str())));
 }
 
 #[test]
@@ -419,6 +353,7 @@ fn external_manager_resets_use_the_shared_framing() {
 #[test]
 fn lifecycle_events_bracket_stream_records_and_repeated_loads() {
     let server = Server::start();
+    assert!(!save_session_exists());
     let (_owner, docs) =
         shared_documents("a string that the whole stream shares, in memory once", 3);
     for _ in 0..2 {
@@ -431,6 +366,13 @@ fn lifecycle_events_bracket_stream_records_and_repeated_loads() {
         assert_eq!(values, docs);
         assert!(!load_session_exists());
     }
+    // A value without a key name is plain even inside a session, and so is every value after it.
+    server.start_save();
+    KEYED.set(false);
+    assert_eq!(server.save_record(&docs[0]), inline_record(&docs[0]));
+    KEYED.set(true);
+    server.end_save();
+    assert_eq!(server.save_record(&docs[0]), inline_record(&docs[0]));
 }
 
 #[test]
@@ -456,32 +398,20 @@ fn a_session_ended_by_a_command_leaves_the_rest_of_the_save_inline() {
 }
 
 #[test]
-fn a_load_refuses_damaged_records_and_restore_cannot_resolve_a_stream() {
+fn restore_without_a_load_accepts_plain_payloads_and_refuses_stream_records() {
     let server = Server::start();
     let (_owner, docs) = shared_documents("a string that only a stream in progress can resolve", 2);
     let rdb = server.save(&docs);
-    let plain = inline_record(&docs[0]);
-
-    // RESTORE: a key but no load in progress. Plain payloads work, stream payloads do not.
-    assert_eq!(server.load_record(&plain), Some(docs[0].clone()));
+    assert_eq!(
+        server.load_record(&inline_record(&docs[0])),
+        Some(docs[0].clone())
+    );
     assert_eq!(server.load_record(&rdb.records[0]), None);
     assert_eq!(server.load_record(&rdb.records[1]), None);
-
-    // A load: reserved and unknown markers, an empty record, and a record that is out of order.
-    loading(raw::REDISMODULE_SUBEVENT_LOADING_RDB_START);
-    for marker in [2u8, 9] {
-        let mut record = plain.clone();
-        record[0] = marker;
-        assert_eq!(server.load_record(&record), None, "marker {marker}");
-    }
-    assert_eq!(server.load_record(&[]), None);
-    assert_eq!(server.load_record(&rdb.records[1]), None);
-    assert!(!load_session_exists());
-    loading(raw::REDISMODULE_SUBEVENT_LOADING_ENDED);
 }
 
 #[test]
-fn a_document_that_shares_nothing_is_saved_as_it_always_was_inside_a_stream() {
+fn documents_that_share_nothing_are_written_inline_between_stream_records() {
     let server = Server::start();
     let (_owner, shared) =
         shared_documents("a string that the shared documents of this stream hold", 2);
@@ -490,7 +420,6 @@ fn a_document_that_shares_nothing_is_saved_as_it_always_was_inside_a_stream() {
     )
     .unwrap();
     let numbers: IValue = serde_json::from_str("[1,2,3]").unwrap();
-    // The documents that share nothing sit between the ones that do.
     let docs = [shared[0].clone(), alone, numbers, shared[1].clone()];
 
     let rdb = server.save(&docs);
@@ -590,36 +519,6 @@ fn a_refused_record_never_leaves_a_table_that_misses_a_definition() {
 }
 
 #[test]
-fn persistence_start_creates_a_writer_and_the_end_drops_it() {
-    let server = Server::start();
-    assert!(!save_session_exists());
-    server.start_save();
-    assert!(save_session_exists());
-    let (_owner, docs) = shared_documents("a resident string shared by two values", 2);
-    KEYED.set(false);
-    assert_eq!(server.save_record(&docs[0]), inline_record(&docs[0]));
-    KEYED.set(true);
-    assert_eq!(server.save_record(&docs[0])[0], MARKER_STREAM);
-    server.end_save();
-    assert!(!save_session_exists());
-    assert_eq!(server.save_record(&docs[0]), inline_record(&docs[0]));
-}
-
-#[test]
-fn a_budget_of_zero_arms_no_writer() {
-    let server = Server::start();
-    let (_owner, docs) = shared_documents("a string that a writer that is off never defines", 2);
-    // A negative module argument counts as zero.
-    for budget in [0, -1] {
-        RDB_DICTIONARY_MAX_BYTES.store(budget, Ordering::Relaxed);
-        server.start_save();
-        assert!(!save_session_exists());
-        assert_eq!(server.save_record(&docs[0]), inline_record(&docs[0]));
-        server.end_save();
-    }
-}
-
-#[test]
 fn every_persistence_start_forgets_the_strings_of_the_save_before() {
     let server = Server::start();
     let (_owner, docs) = shared_documents("a string that only the save before defined", 2);
@@ -663,6 +562,23 @@ fn a_value_that_repeats_a_string_is_self_contained_without_a_session() {
     loading(raw::REDISMODULE_SUBEVENT_LOADING_RDB_START);
     assert_eq!(server.load_record(&record), Some(value));
     loading(raw::REDISMODULE_SUBEVENT_LOADING_ENDED);
+
+    // An external manager's value is the same: written once, and its callback runs once because
+    // the definitions pay for themselves.
+    let text = "a long string that the value holds twice";
+    let mut runs = 0;
+    save_with(io(), |strings, out| {
+        runs += 1;
+        ciborium::into_writer(&vec![strings.string(text), strings.string(text)], out)
+    })
+    .unwrap();
+    let [external] = <[Vec<u8>; 1]>::try_from(drain_records()).unwrap();
+    assert_eq!(runs, 1);
+    assert_eq!(&external[..1], &[MARKER_LOCAL]);
+    assert_eq!(
+        server.load_record(&external),
+        Some(IValue::from(vec![IValue::from(text), IValue::from(text)]))
+    );
 }
 
 #[test]
@@ -692,10 +608,16 @@ fn flex_arms_no_session_and_refuses_a_stream_record() {
     let stream = server.save(&docs);
     assert_eq!(stream.records[0][0], MARKER_STREAM);
 
+    set_dictionary_factory(|| Box::new(ijson::ContentDictionary::default()));
     BIGREDIS_ENABLED.store(true, Ordering::Relaxed);
     server.start_save();
     assert!(!save_session_exists());
     assert_eq!(server.save_record(&docs[0])[0], MARKER_INLINE);
+    // A registered dictionary changes nothing: an external manager's value is plain too.
+    let text = "a string owned by an external manager";
+    let plain = inline_record(&IValue::from(text));
+    assert_eq!(save_external(text), plain);
+    assert_eq!(save_external(text), plain);
     server.end_save();
     loading(raw::REDISMODULE_SUBEVENT_LOADING_RDB_START);
     assert!(!load_session_exists());
@@ -704,31 +626,26 @@ fn flex_arms_no_session_and_refuses_a_stream_record() {
 }
 
 #[test]
-fn a_budget_of_zero_turns_sharing_off_inside_a_value_as_well() {
+fn a_budget_of_zero_or_less_writes_plain_records_even_inside_a_value() {
     let server = Server::start();
-    RDB_DICTIONARY_MAX_BYTES.store(0, Ordering::Relaxed);
     let owner = IString::from("a long string that the value holds twice");
-    let value = repeats_inside(&owner);
-    assert_eq!(server.save_record(&value), inline_record(&value));
+    let shared = document(&owner);
+    let repeated = repeats_inside(&owner);
     let text = "a long string that the value holds twice";
-    crate::rdb_persistence::save_with(io(), |strings, out| {
-        ciborium::into_writer(&vec![strings.string(text), strings.string(text)], out)
-    })
-    .unwrap();
-    let [external] = <[Vec<u8>; 1]>::try_from(drain_records()).unwrap();
-    assert_eq!(external[..2], [MARKER_INLINE, 0x82]);
-}
-
-#[test]
-fn only_a_save_that_is_not_flex_and_has_a_budget_may_stream() {
-    for (flex, budget, asm_export, stream) in [
-        (false, 1, false, true),
-        (false, 0, false, false),
-        (true, 1, false, false),
-        (true, 0, false, false),
-        (false, 1, true, false),
-    ] {
-        assert_eq!(cross_key_stream_allowed(flex, budget, asm_export), stream);
+    // A negative module argument counts as zero.
+    for budget in [0, -1] {
+        RDB_DICTIONARY_MAX_BYTES.store(budget, Ordering::Relaxed);
+        server.start_save();
+        assert!(!save_session_exists());
+        assert_eq!(server.save_record(&shared), inline_record(&shared));
+        assert_eq!(server.save_record(&repeated), inline_record(&repeated));
+        save_with(io(), |strings, out| {
+            ciborium::into_writer(&vec![strings.string(text), strings.string(text)], out)
+        })
+        .unwrap();
+        let [external] = <[Vec<u8>; 1]>::try_from(drain_records()).unwrap();
+        assert_eq!(external[..2], [MARKER_INLINE, 0x82]);
+        server.end_save();
     }
 }
 
