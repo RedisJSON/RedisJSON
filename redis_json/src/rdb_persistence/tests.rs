@@ -55,6 +55,19 @@ pub(super) fn persistence(subevent: u64) {
     unsafe { persistence_event(std::ptr::null_mut(), EVENT, subevent, std::ptr::null_mut()) };
 }
 
+pub(super) fn persistence_with_flags(subevent: u64, flags: u64) {
+    let mut info = raw::RedisModulePersistenceInfo { version: 1, flags };
+    // SAFETY: the callback only reads subevent and the info, which outlives the call.
+    unsafe {
+        persistence_event(
+            std::ptr::null_mut(),
+            EVENT,
+            subevent,
+            std::ptr::from_mut(&mut info).cast(),
+        )
+    };
+}
+
 pub(super) fn slot_migration(subevent: u64) {
     // SAFETY: the callback only reads subevent; pointer arguments are unused.
     unsafe { slot_migration_event(std::ptr::null_mut(), EVENT, subevent, std::ptr::null_mut()) };

@@ -11,8 +11,8 @@
 // API that keeps what a save writes in memory and hands it back to the load.
 
 use super::tests::{
-    document, inline_record, load_session_exists, loading, persistence, reset, save_session_exists,
-    serial, slot_migration,
+    document, inline_record, load_session_exists, loading, persistence, persistence_with_flags,
+    reset, save_session_exists, serial, slot_migration,
 };
 use super::*;
 use ijson::{IArray, IString};
@@ -669,6 +669,27 @@ fn a_save_while_slots_are_exported_never_streams() {
         assert_eq!(server.save_record(&docs[0])[0], MARKER_STREAM);
         server.end_save();
     }
+}
+
+#[test]
+fn a_save_for_a_syncer_never_streams() {
+    let server = Server::start();
+    let (_owner, docs) = shared_documents("a string that two keys share for a syncer", 2);
+    persistence_with_flags(
+        raw::REDISMODULE_SUBEVENT_PERSISTENCE_RDB_START,
+        u64::from(raw::REDISMODULE_PERSISTENCE_FLAG_SYNCER),
+    );
+    assert!(!save_session_exists());
+    assert_eq!(server.save_record(&docs[0]), inline_record(&docs[0]));
+    server.end_save();
+
+    // Flags the module does not know are ignored, and a core without the flag passes no data.
+    persistence_with_flags(raw::REDISMODULE_SUBEVENT_PERSISTENCE_RDB_START, 1 << 8);
+    assert!(save_session_exists());
+    server.end_save();
+    server.start_save();
+    assert!(save_session_exists());
+    server.end_save();
 }
 
 #[test]

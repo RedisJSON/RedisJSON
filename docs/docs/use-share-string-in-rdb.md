@@ -24,12 +24,13 @@ documents, or the number of occurrences.
 | SAVE, shutdown, `DEBUG RELOAD`, AOF preamble, BGSAVE on RoR | stream |
 | Any save on Flex (`bigredis-enabled`) | self-contained |
 | Any save that starts while this node exports slots (atomic slot migration) | self-contained |
+| Any save for an Enterprise replica-of syncer, on a core that sets the syncer flag | self-contained |
 | DUMP, MIGRATE, the ASM slot snapshot, Flex IO threads, saves without a key | self-contained |
 | `json-rdb-dictionary-max-bytes` set to 0 | plain CBOR, nothing shared |
 
 `cross_key_stream_allowed` in `rdb_persistence.rs` is the only place that decides. It reads
-the budget, whether the server is Flex, and whether a slot migration is exporting from this node
-when a save starts. The module counts exports from the `MIGRATE_STARTED`, `MIGRATE_COMPLETED` and
+the budget, whether the server is Flex, whether a slot migration is exporting from this node, and
+whether the core flagged the save as one for a syncer, when a save starts. The module counts exports from the `MIGRATE_STARTED`, `MIGRATE_COMPLETED` and
 `MIGRATE_FAILED` subevents of `RedisModuleEvent_ClusterSlotMigration`. A fork child inherits the
 count, so the snapshot child of a migration never opens a session. A server without atomic slot
 migration has no such event, and the module loads without it.
@@ -38,14 +39,18 @@ migration has no such event, and the module loads without it.
 
 An Enterprise replica-of destination cannot read a stream. Its syncer converts the source's RDB
 into one RESTORE per key, and a RESTORE has no load session, so the destination refuses a stream
-record and the sync fails. The module cannot tell such a sync from a BGSAVE: both fire `RDB_START`
-in the fork child, with no flag. A database that is the source of a replica-of must therefore not
-write a stream. Set `json-rdb-dictionary-max-bytes` to 0 on it with `CONFIG SET`; the next save
-writes plain CBOR. Flex writes no stream and needs no setting.
+record and the sync fails.
 
-TODO(replica-of): the syncer has to tell the core, and the core the module, that it cannot read
-cross-key records. Until it can, the setting above is the only protection. An ordinary Redis
-replica loads the stream in order with a session and needs nothing.
+The syncer sends `REPLCONF SYNCER 1` to the source, and the core passes
+`REDISMODULE_PERSISTENCE_FLAG_SYNCER` in the `RedisModulePersistenceInfo` of the persistence
+start event for a save that feeds it. The module then writes self-contained records. The core
+keeps such a save apart from a save for ordinary replicas, so the two never share one. An ordinary
+Redis replica loads the stream in order with a session and needs nothing.
+
+A core or syncer that predates the flag passes no data, and the module cannot tell a syncer save
+from a BGSAVE. A database that is the source of a replica-of on such a version must not write a
+stream. Set `json-rdb-dictionary-max-bytes` to 0 on it with `CONFIG SET`; the next save writes
+plain CBOR. Flex writes no stream and needs no setting.
 
 ## How a stream works
 
@@ -281,7 +286,7 @@ Children have no INFO channel, so each save and load logs lines that start with
 
 | Line | Fields |
 |---|---|
-| `persistence_start` | `mode=stream`, `mode=local reason=flex` or `mode=plain reason=off`, then `budget_bytes` |
+| `persistence_start` | `mode=stream`, `mode=local reason=flex`, `mode=local reason=asm`, `mode=local reason=syncer` or `mode=plain reason=off`, then `budget_bytes` |
 | `persistence_ended` / `persistence_failed` | `defs def_bytes refs resets stream_docs inline_docs poisoned`. A stream save that wrote a JSON value emits it. `resets` counts how often the table filled up and was cleared. Above 0 means the save ran into `json-rdb-dictionary-max-bytes`, so raise it to share more. |
 | `loading_ended` / `loading_failed` | `defs def_bytes refs stream_docs`, when the load read a stream record |
 | `load` | `status=refused reason=...` with `marker_N`, `no_stream`, `base_id_mismatch` or `cbor_...`. The level is warning while loading. |
@@ -328,7 +333,7 @@ Implementation does not wait for these. Turning the writer on by default does.
   consume module values through RESTORE conversion (`rdb.c`, `rl_syncer`, `rl_rdbloader`)? A
   stream record cannot decode there, and the module cannot tell its consumer. If any of them
   does, the options are a per-database opt-out and a fresh self-contained save before every
-  export, or the syncer signal in the TODO above. Strings of 8 bytes and up are shared, object
+  export, or the syncer signal described under Replica-of. Strings of 8 bytes and up are shared, object
   keys included, so a stream is written for nearly every dataset that repeats a key.
 - **G2.** The production `rdbcompression` and `bigredis-compression` values on Flex. The default
   pair takes the path that re-serializes values.
