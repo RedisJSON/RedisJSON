@@ -90,6 +90,12 @@ thread_local! {
     static LOAD_SESSION: RefCell<Option<LoadSession>> = const { RefCell::new(None) };
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Messages logged through an IO handle, which tests check.
+    static IO_LOGS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+}
+
 /// The writer of one RDB stream. Dropping it forgets which strings were defined, so every later
 /// record of the stream is self-contained.
 struct SaveSession {
@@ -278,6 +284,8 @@ fn config_value(setting: &AtomicI64) -> usize {
 fn log_io(rdb: *mut raw::RedisModuleIO, level: RedisLogLevel, message: &str) {
     if cfg!(test) {
         assert!(!message.contains('%'), "{message}");
+        #[cfg(test)]
+        IO_LOGS.with_borrow_mut(|logs| logs.push(message.to_owned()));
     } else {
         log_io_error(rdb, level, message);
     }
@@ -455,7 +463,9 @@ pub fn save_with<E>(
 /// Refusing a record while a file loads stops the server, and its exit status can be 0: the RDB
 /// checker it runs on the file skips module values. The log line is the only sign of the cause.
 #[derive(Debug, PartialEq, Eq)]
-enum LoadError {
+pub(crate) enum LoadError {
+    /// Redis could not read the record. It reports the read error itself.
+    ShortRead,
     /// A marker that is reserved or unknown.
     Marker(u8),
     /// A stream record outside a keyed load that armed a session.
@@ -478,6 +488,7 @@ impl From<CborDecodeError> for LoadError {
 impl fmt::Display for LoadError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::ShortRead => f.write_str("short_read"),
             Self::Marker(marker) => write!(f, "marker_{marker}"),
             Self::NoStream => f.write_str("no_stream"),
             Self::BaseId { expected, found } => {
@@ -488,18 +499,13 @@ impl fmt::Display for LoadError {
     }
 }
 
+/// Loads one value record of this module's type and logs a refusal through `rdb`.
 pub(crate) fn load_value(rdb: *mut raw::RedisModuleIO) -> Option<IValue> {
     // A stream record that fails releases the session, so ask before decoding.
     let loading = LOAD_SESSION.with_borrow(Option::is_some);
-    let bytes = match raw::load_string_buffer(rdb) {
-        Ok(bytes) => bytes,
-        Err(_) => {
-            LOAD_SESSION.set(None);
-            return None;
-        }
-    };
-    match decode_for_load(bytes.as_ref(), has_key(rdb)) {
+    match read_value(rdb) {
         Ok(value) => Some(value),
+        Err(LoadError::ShortRead) => None,
         Err(error) => {
             let level = if loading {
                 RedisLogLevel::Warning
@@ -514,6 +520,17 @@ pub(crate) fn load_value(rdb: *mut raw::RedisModuleIO) -> Option<IValue> {
             None
         }
     }
+}
+
+/// Loads one value record without logging through `rdb`. Another manager's loader passes an IO
+/// that may have no module type, such as CRDT's standard RDB load, and logging through that IO
+/// crashes the server. The caller reports the error with its own context.
+pub(crate) fn read_value(rdb: *mut raw::RedisModuleIO) -> Result<IValue, LoadError> {
+    let bytes = raw::load_string_buffer(rdb).map_err(|_| {
+        LOAD_SESSION.set(None);
+        LoadError::ShortRead
+    })?;
+    decode_for_load(bytes.as_ref(), has_key(rdb))
 }
 
 fn decode_for_load(bytes: &[u8], keyed: bool) -> Result<IValue, LoadError> {

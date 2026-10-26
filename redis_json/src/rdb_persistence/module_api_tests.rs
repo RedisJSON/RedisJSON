@@ -465,6 +465,24 @@ fn the_legacy_depth_limit_applies_to_stream_records_as_it_does_to_inline_ones() 
 }
 
 #[test]
+fn the_library_loader_reports_a_refused_record_without_logging_through_the_io() {
+    // CRDT's standard RDB load passes an IO with no module type, and logging through it crashes.
+    let server = Server::start();
+    let (_owner, docs) = shared_documents("a string a RESTORE cannot resolve without a stream", 2);
+    let rdb = server.save(&docs);
+    IO_LOGS.set(Vec::new());
+
+    feed(vec![rdb.records[1].clone()]);
+    let error = crate::redisjson::type_methods::value_rdb_load_json(io(), 5).unwrap_err();
+    assert!(error.to_string().contains("no_stream"), "{error}");
+    assert_eq!(IO_LOGS.take(), Vec::<String>::new());
+
+    // The module's own type still logs the refusal through the IO.
+    assert!(server.load_record(&rdb.records[1]).is_none());
+    assert_eq!(IO_LOGS.take().len(), 1);
+}
+
+#[test]
 fn a_short_io_read_prevents_decoder_restart_until_a_new_loading_event() {
     let server = Server::start();
     let (_owner, docs) = shared_documents("a definition that cannot restart a failed load", 2);

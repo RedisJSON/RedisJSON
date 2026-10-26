@@ -302,9 +302,10 @@ pub mod type_methods {
                 serde_json::to_string(&value)?
             }
             5 => {
-                let value = crate::rdb_persistence::load_value(rdb).ok_or(RedisError::Str(
-                    "invalid JSON RDB value or missing string stream",
-                ))?;
+                // The caller logs the error: its IO may not be one this module can log through.
+                let value = crate::rdb_persistence::read_value(rdb).map_err(|error| {
+                    RedisError::String(format!("invalid JSON RDB value: {error}"))
+                })?;
                 serde_json::to_string(&value)?
             }
             _ => return Err(RedisError::String(format!("unsupported encver {encver}"))),
