@@ -26,7 +26,7 @@ documents, or the number of occurrences.
 | Any save that starts while this node exports slots (atomic slot migration) | self-contained |
 | Any save for an Enterprise replica-of syncer, on a core that sets the syncer flag | self-contained |
 | DUMP, MIGRATE, the ASM slot snapshot, Flex IO threads, saves without a key | self-contained |
-| `json-rdb-dictionary-max-bytes` set to 0 | plain CBOR, nothing shared |
+| `json-rdb-dictionary-max-memory-percent` set to 0 | plain CBOR, nothing shared |
 
 `cross_key_stream_allowed` in `rdb_persistence.rs` is the only place that decides. It reads
 the budget, whether the server is Flex, whether a slot migration is exporting from this node, and
@@ -49,7 +49,7 @@ Redis replica loads the stream in order with a session and needs nothing.
 
 A core or syncer that predates the flag passes no data, and the module cannot tell a syncer save
 from a BGSAVE. A database that is the source of a replica-of on such a version must not write a
-stream. Set `json-rdb-dictionary-max-bytes` to 0 on it with `CONFIG SET`; the next save writes
+stream. Set `json-rdb-dictionary-max-memory-percent` to 0 on it with `CONFIG SET`; the next save writes
 plain CBOR. Flex writes no stream and needs no setting.
 
 ## How a stream works
@@ -101,12 +101,14 @@ reuses the stream's tags 6 and 7 but carries no base id and shares nothing with 
   definition's id. Ids belong to the value and start at 0.
 - The owner count is process-wide, so a string that other values share but this value holds once
   is defined and never referenced. The writer therefore keeps the record only when it is smaller
-  than the plain form: a definition adds 1 byte (tag 6), and a reference saves at least 3, so
-  the record is kept when `3 * references > definitions`. Otherwise the writer encodes the value
+  than the plain form: a definition adds 1 byte (tag 6), and the encoder counts the exact bytes
+  each reference saves over its text, so the record is kept when those savings exceed the number
+  of definitions. Otherwise the writer encodes the value
   again as plain marker 0. A value with no definition at all is already plain, and the writer
   only changes the marker.
-- The table lives for one encoding call and is dropped before the call returns. A budget of 0
-  defines nothing, so every value is plain.
+- The table lives for one encoding call and is dropped before the call returns. It has no
+  ceiling of its own, since it is smaller than the value it encodes. With the writer off
+  (`json-rdb-dictionary-max-memory-percent` 0) it defines nothing, so every value is plain.
 - `save_with` identifies strings by content with a `ContentDictionary`, and runs its callback a
   second time when it falls back to the plain form.
 - The reader creates a fresh `StreamDecoder` per record and drops it after the call. It never
@@ -155,9 +157,13 @@ rejson::rdb_persistence::save_with(
 HDT can read RDBs that this module writes, and this module can read HDT's standard JSON-compatible
 RDBs, as long as both implement the complete v5 framing and loading lifecycle. The dictionary policy
 does not need to match, because a reader builds its own `IString` table from definitions and
-resolves references in order. An HDT adapter must write through `save_with` for standard exports and
-keep the shared loading lifecycle for imports. Native HDT and CRDT persistence is a separate format
-that this module does not change.
+resolves references in order. Native HDT and CRDT persistence is a separate format that this module
+does not change, so an Active-Active database never writes a stream for its own persistence.
+
+HDT writes its standard exports through `save_self_contained`. Every consumer of a standard export
+reads it one key at a time (backup restore and import run `rl_rdbloader`, which issues one RESTORE
+per key), so a stream record there could never be read. `save_self_contained` writes marker 3 when
+strings that repeat inside the value pay, otherwise marker 0, and leaves the save's stream alone.
 
 ## Wire format
 
@@ -257,11 +263,13 @@ another module invokes.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `json-rdb-dictionary-max-bytes` | 1 GiB | Ceiling on the heap that a stream's address table uses. The old and the new allocation both count while the table grows. When an eligible definition misses this budget, the rest of that document keeps its new strings inline, and the table is cleared before the next document and reused. 0 turns string sharing off, across keys and inside a value. The reader always accepts. Range 0 to 2^40. |
+| `json-rdb-dictionary-max-memory-percent` | 20 | Ceiling on the heap that a stream's address table uses, as a percentage of `used_memory` when the save starts. The old and the new allocation both count while the table grows. When an eligible definition misses this budget, the rest of that document keeps its new strings inline, and the table is cleared before the next document and reused. 0 turns string sharing off, across keys and inside a value. The reader always accepts. Range 0 to 100. |
 
-The setting changes at runtime with `CONFIG SET`, and units such as `128mb` work. A BGSAVE child
-keeps the value it inherited at fork. A module argument skips the range check of `CONFIG SET`, so
-a value outside the range counts as its nearest bound, and a negative budget turns sharing off.
+The setting changes at runtime with `CONFIG SET`. Each save reads it, and `used_memory`, at
+persistence START; for a BGSAVE that is in the child, which sees the memory of the fork. The
+extra memory a save needs at its peak is therefore at most this share of the dataset. A module
+argument skips the range check of `CONFIG SET`, so a value outside the range counts as its nearest
+bound, and a negative value turns sharing off.
 
 When an eligible definition does not fit the table budget, existing entries keep being referenced
 for the rest of that document and new strings stay inline. Before the next document, the writer
@@ -286,10 +294,10 @@ Children have no INFO channel, so each save and load logs lines that start with
 
 | Line | Fields |
 |---|---|
-| `persistence_start` | `mode=stream`, `mode=local reason=flex`, `mode=local reason=asm`, `mode=local reason=syncer` or `mode=plain reason=off`, then `budget_bytes` |
-| `persistence_ended` / `persistence_failed` | `defs def_bytes refs resets stream_docs inline_docs poisoned`. A stream save that wrote a JSON value emits it. `resets` counts how often the table filled up and was cleared. Above 0 means the save ran into `json-rdb-dictionary-max-bytes`, so raise it to share more. |
+| `persistence_start` | `mode=stream`, `mode=local reason=budget`, `mode=local reason=flex`, `mode=local reason=asm`, `mode=local reason=syncer` or `mode=plain reason=off`, then `percent` and `budget_bytes`. `reason=budget` means the share of the memory left no room for a table. |
+| `persistence_ended` / `persistence_failed` | `defs def_bytes refs resets stream_docs inline_docs poisoned`. A stream save that wrote a JSON value emits it. `resets` counts how often the table filled up and was cleared. Above 0 means the save ran into `json-rdb-dictionary-max-memory-percent`, so raise it to share more. |
 | `loading_ended` / `loading_failed` | `defs def_bytes refs stream_docs`, when the load read a stream record |
-| `load` | `status=refused reason=...` with `marker_N`, `no_stream`, `base_id_mismatch` or `cbor_...`. The level is warning while loading. |
+| `load` | `status=refused reason=...` with `marker_N`, `no_stream`, `base_id_mismatch` or `cbor_...`. The level is warning while loading. Outside a load, `no_stream` adds `refusals=N` and is a warning when N is a power of two, otherwise verbose. |
 
 Persistence summaries follow the core's completion or failure event. A refused record while a file
 loads stops the server. The exit status can be 0, because the RDB checker that Redis runs skips

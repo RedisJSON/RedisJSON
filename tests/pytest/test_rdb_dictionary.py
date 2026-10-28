@@ -24,7 +24,9 @@ from includes import VALGRIND
 
 Defaults.decode_responses = True
 
-WRITER_BUDGET = 'json-rdb-dictionary-max-bytes'
+WRITER_BUDGET = 'json-rdb-dictionary-max-memory-percent'
+# Keys with a string each of them repeats: their table outgrows 1% of a test server's memory.
+RESET_KEYS = 3000
 LOG_MARK = 'JSON RDB dictionary'
 
 RDB_OPCODE_AUX = 250
@@ -441,7 +443,7 @@ def _key_save_delay(env, microseconds):
 
 def _uncompressed_rdb(env, budget=None):
     """The RDB of a SAVE without compression, so that its records are plain bytes, written with
-    the writer budget `budget` when given."""
+    the writer percentage `budget` when given."""
     connection = env.getConnection()
     original = {name: connection.config_get(name)[name] for name in ('rdbcompression', WRITER_BUDGET)}
     try:
@@ -461,11 +463,11 @@ def test_dictionary_resets_with_tiny_table_round_trip(env):
     connection = env.getConnection()
     original = {name: connection.config_get(name)[name] for name in (WRITER_BUDGET, 'rdbcompression')}
     documents = {}
-    for i in range(60):
+    for i in range(RESET_KEYS):
         text = hashlib.sha256(f'reset:{i}'.encode()).hexdigest()
         documents[f'reset:{i}'] = {'a': text, 'b': text}
     try:
-        connection.config_set(WRITER_BUDGET, 84)
+        connection.config_set(WRITER_BUDGET, 1)
         connection.config_set('rdbcompression', 'no')
         _set_documents(env, documents)
         summary = _save_and_read_summary(env, 'SAVE')
@@ -484,7 +486,7 @@ def test_dictionary_resets_with_tiny_table_round_trip(env):
 
 
 @_values_in_ram
-def test_writer_off_or_too_small_budget_writes_self_contained_records(env):
+def test_writer_off_writes_self_contained_records(env):
     _start_clean(env)
     original = env.getConnection().config_get(WRITER_BUDGET)[WRITER_BUDGET]
     shared = _shared_text()
@@ -496,7 +498,7 @@ def test_writer_off_or_too_small_budget_writes_self_contained_records(env):
             env.assertEqual(json.loads(env.cmd('JSON.GET', key)), document)
 
     try:
-        for invalid in ('-1', str(1024 ** 4 + 1)):
+        for invalid in ('-1', '101'):
             env.expect('CONFIG', 'SET', WRITER_BUDGET, invalid).raiseError()
 
         # With the writer off a save has no module AUX and every record stands alone.
@@ -510,15 +512,6 @@ def test_writer_off_or_too_small_budget_writes_self_contained_records(env):
 
         # The reader needs nothing from the writer setting: the stream RDB left on disk loads.
         env.expect('CONFIG', 'SET', WRITER_BUDGET, '0').ok()
-        env.expect('DEBUG', 'RELOAD', 'NOSAVE').ok()
-        read_documents()
-
-        # Too small a budget defines nothing: every record stays self-contained,
-        # and the reader loads it all the same.
-        env.expect('CONFIG', 'SET', WRITER_BUDGET, '1').ok()
-        env.assertEqual(_save(env), True)
-        env.assertLessEqual(_rdb_size(env), inline_size + inline_size // 20)
-        env.assertGreater(_rdb_size(env) * 2, inline_size)
         env.expect('DEBUG', 'RELOAD', 'NOSAVE').ok()
         read_documents()
     finally:
@@ -625,14 +618,14 @@ def test_a_damaged_stream_rdb_is_refused_when_it_loads(env):
                    message=str(lines))
     cases = _damaged_stream_rdbs(rdb)
 
-    # A reset record has to start with a definition. A budget of 84 bytes makes the table reset.
+    # A reset record has to start with a definition. At 1% of the memory the table resets.
     env.expect('FLUSHALL').equal(True)
     resets = {}
-    for i in range(16):
+    for i in range(RESET_KEYS):
         text = f'string that is repeated within key {i:04}'
         resets[f'reset:{i}'] = [text, text]
     _set_documents(env, resets)
-    reset_rdb = _uncompressed_rdb(env, 84)
+    reset_rdb = _uncompressed_rdb(env, 1)
     outcome, lines = _load_rdb_in_new_server(env, reset_rdb)
     env.assertEqual(outcome, 'up', message=str(lines))
     cases['reset without a definition'] = (

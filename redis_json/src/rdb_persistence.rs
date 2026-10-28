@@ -53,12 +53,13 @@ const MARKER_LOCAL: u8 = 3;
 // Marker 2 uses the same header as marker 1.
 const STREAM_HEADER_LEN: usize = 5;
 
-// Ceiling on the table the writer builds in the saving process; 0 turns the writer off.
+// Ceiling on the table the writer builds in the saving process, as a share of the memory Redis
+// uses when the save starts, so the table grows with the dataset; 0 turns the writer off.
 // When it is reached the strings defined so far keep being referenced and new ones go inline.
 // After a budget miss, the next definition-capable document reuses the cleared table.
-pub const DEFAULT_RDB_DICTIONARY_MAX_BYTES: i64 = 1024 * 1024 * 1024;
-pub const RDB_DICTIONARY_MAX_BYTES_CEILING: i64 = 1 << 40; // 1TB
-pub static RDB_DICTIONARY_MAX_BYTES: AtomicI64 = AtomicI64::new(DEFAULT_RDB_DICTIONARY_MAX_BYTES);
+pub const DEFAULT_RDB_DICTIONARY_MAX_MEMORY_PERCENT: i64 = 20;
+pub static RDB_DICTIONARY_MAX_MEMORY_PERCENT: AtomicI64 =
+    AtomicI64::new(DEFAULT_RDB_DICTIONARY_MAX_MEMORY_PERCENT);
 // Whether the server runs Flex; set once by init(). Flex never writes or reads a stream.
 static BIGREDIS_ENABLED: AtomicBool = AtomicBool::new(false);
 // Slot migrations this node is exporting. A fork child started meanwhile may write the migration
@@ -88,12 +89,16 @@ thread_local! {
     // from loading START to the end of the load, or until a stream record fails.
     static SAVE_SESSION: RefCell<Option<SaveSession>> = const { RefCell::new(None) };
     static LOAD_SESSION: RefCell<Option<LoadSession>> = const { RefCell::new(None) };
+    /// Stream records refused outside a load, which RESTORE and per-key importers cause.
+    static NO_STREAM_REFUSALS: Cell<u64> = const { Cell::new(0) };
 }
 
 #[cfg(test)]
 thread_local! {
     /// Messages logged through an IO handle, which tests check.
     static IO_LOGS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    /// What the server reports as used memory; a unit test has no server to ask.
+    static USED_MEMORY_FOR_TESTS: Cell<Option<u64>> = const { Cell::new(None) };
 }
 
 /// The writer of one RDB stream. Dropping it forgets which strings were defined, so every later
@@ -266,16 +271,35 @@ pub(crate) fn load_session_is_live() -> bool {
     })
 }
 
-// A module argument skips the range check of CONFIG SET, so a value outside the range of its
-// setting counts as the nearest bound: a negative budget switches the writer off instead of
-// lifting its ceiling.
-fn config_value(setting: &AtomicI64) -> usize {
-    usize::try_from(
-        setting
-            .load(Ordering::Relaxed)
-            .clamp(0, RDB_DICTIONARY_MAX_BYTES_CEILING),
-    )
-    .unwrap_or(usize::MAX)
+// A module argument skips the range check of CONFIG SET, so a value outside 0 to 100 counts as
+// the nearest bound: a negative percentage switches the writer off.
+fn memory_percent() -> usize {
+    RDB_DICTIONARY_MAX_MEMORY_PERCENT
+        .load(Ordering::Relaxed)
+        .clamp(0, 100) as usize
+}
+
+/// The table budget of one save: `percent` of `used_memory`. A server that does not report its
+/// memory gets no table.
+fn save_budget(percent: usize, used_memory: Option<u64>) -> usize {
+    used_memory.map_or(0, |used| {
+        usize::try_from(u128::from(used) * percent as u128 / 100).unwrap_or(usize::MAX)
+    })
+}
+
+fn used_memory(ctx: *mut raw::RedisModuleCtx) -> Option<u64> {
+    #[cfg(test)]
+    {
+        let _ = ctx;
+        USED_MEMORY_FOR_TESTS.get()
+    }
+    #[cfg(not(test))]
+    {
+        let used = Context::new(ctx)
+            .server_info("memory")
+            .field("used_memory")?;
+        used.try_as_str().ok()?.parse().ok()
+    }
 }
 
 // The module API that logs does not exist under cargo test, where the message is only checked:
@@ -285,7 +309,7 @@ fn log_io(rdb: *mut raw::RedisModuleIO, level: RedisLogLevel, message: &str) {
     if cfg!(test) {
         assert!(!message.contains('%'), "{message}");
         #[cfg(test)]
-        IO_LOGS.with_borrow_mut(|logs| logs.push(message.to_owned()));
+        IO_LOGS.with_borrow_mut(|logs| logs.push(format!("{} {message}", level.as_ref())));
     } else {
         log_io_error(rdb, level, message);
     }
@@ -344,19 +368,17 @@ fn has_key(rdb: *mut raw::RedisModuleIO) -> bool {
     unsafe { !raw::RedisModule_GetKeyNameFromIO.unwrap()(rdb).is_null() }
 }
 
-/// Settings of the encoder of one self-contained value. A budget of 0 defines nothing, so the
-/// record is plain.
+/// Settings of the encoder of one self-contained value. With the writer off it defines nothing,
+/// so the record is plain.
 fn local_config() -> StreamEncoderConfig {
     StreamEncoderConfig {
-        table_budget_bytes: config_value(&RDB_DICTIONARY_MAX_BYTES),
+        table_budget_bytes: if memory_percent() == 0 { 0 } else { usize::MAX },
     }
 }
 
-/// Whether a value with this many definitions and references is smaller than its plain form. A
-/// definition adds 1 byte (tag 6). A reference replaces text of 8 or more bytes (9 encoded) with
-/// tag 7 and an id of at most 5 bytes, so it saves at least 3.
-fn pays(used: DocUse) -> bool {
-    used.refs * 3 > used.defs
+/// Whether the value that a fresh encoder wrote is smaller than its plain form.
+fn pays(stats: StreamEncoderStats) -> bool {
+    stats.saved_bytes > stats.defs
 }
 
 /// A value outside any stream. A fresh encoder defines the strings that repeat inside the value.
@@ -365,11 +387,12 @@ fn pays(used: DocUse) -> bool {
 /// size check pays for.
 fn encode_value(value: &IValue) -> Vec<u8> {
     let mut bytes = vec![MARKER_LOCAL];
-    let used = StreamEncoder::new(local_config()).encode_into(&mut bytes, value);
+    let mut encoder = StreamEncoder::new(local_config());
+    let used = encoder.encode_into(&mut bytes, value);
     if used == DocUse::default() {
         // Nothing was defined: the bytes are the plain ones.
         bytes[0] = MARKER_INLINE;
-    } else if !pays(used) {
+    } else if !pays(encoder.stats()) {
         bytes.clear();
         bytes.push(MARKER_INLINE);
         ijson::encode_into(value, &mut bytes);
@@ -411,7 +434,8 @@ pub type RdbStringEncoder<'a> = StreamStrings<'a>;
 /// the dictionary once at initialization; omitting it uses [`ijson::AddressDictionary`].
 /// Every manager in a save shares that dictionary.
 ///
-/// Dictionaries obey `json-rdb-dictionary-max-bytes` through their `insert` method.
+/// Dictionaries obey the budget from `json-rdb-dictionary-max-memory-percent` through their
+/// `insert` method.
 /// With [`ijson::ContentDictionary`], source strings need only live through this
 /// callback. Borrowing implementations must keep defined storage alive and
 /// unchanged for the stream.
@@ -432,31 +456,51 @@ pub type RdbStringEncoder<'a> = StreamStrings<'a>;
 /// ```
 pub fn save_with<E>(
     rdb: *mut raw::RedisModuleIO,
-    mut encode: impl FnMut(&RdbStringEncoder<'_>, &mut Vec<u8>) -> Result<(), E>,
+    encode: impl FnMut(&RdbStringEncoder<'_>, &mut Vec<u8>) -> Result<(), E>,
 ) -> Result<(), E> {
     let keyed = has_key(rdb);
     let (bytes, start) = SAVE_SESSION.with_borrow_mut(|slot| {
         if let Some(session) = slot.as_mut().filter(|_| keyed) {
             session.encode_with(encode)
         } else {
-            let mut bytes = vec![MARKER_LOCAL];
-            let used = StreamEncoder::with_dictionary(local_config(), ContentDictionary::default())
-                .encode_with(&mut bytes, &mut encode)?;
-            if used == DocUse::default() {
-                bytes[0] = MARKER_INLINE;
-            } else if !pays(used) {
-                bytes.clear();
-                bytes.push(MARKER_INLINE);
-                StreamEncoder::new(StreamEncoderConfig {
-                    table_budget_bytes: 0,
-                })
-                .encode_with(&mut bytes, &mut encode)?;
-            }
-            Ok((bytes, 0))
+            encode_self_contained(encode).map(|bytes| (bytes, 0))
         }
     })?;
     raw::save_slice(rdb, &bytes[start..]);
     Ok(())
+}
+
+/// Saves one external manager value as a self-contained record, even during a save that
+/// streams. Use it for a format that is only ever read one key at a time, such as a standard RDB
+/// export that is imported through RESTORE. The callback follows the rules of [`save_with`],
+/// and the stream's table of shared strings is neither read nor changed.
+pub fn save_self_contained<E>(
+    rdb: *mut raw::RedisModuleIO,
+    encode: impl FnMut(&RdbStringEncoder<'_>, &mut Vec<u8>) -> Result<(), E>,
+) -> Result<(), E> {
+    let bytes = encode_self_contained(encode)?;
+    raw::save_slice(rdb, &bytes);
+    Ok(())
+}
+
+/// Marker 3 when the strings that repeat inside the value pay for their definitions, else plain.
+fn encode_self_contained<E>(
+    mut encode: impl FnMut(&RdbStringEncoder<'_>, &mut Vec<u8>) -> Result<(), E>,
+) -> Result<Vec<u8>, E> {
+    let mut bytes = vec![MARKER_LOCAL];
+    let mut encoder = StreamEncoder::with_dictionary(local_config(), ContentDictionary::default());
+    let used = encoder.encode_with(&mut bytes, &mut encode)?;
+    if used == DocUse::default() {
+        bytes[0] = MARKER_INLINE;
+    } else if !pays(encoder.stats()) {
+        bytes.clear();
+        bytes.push(MARKER_INLINE);
+        StreamEncoder::new(StreamEncoderConfig {
+            table_budget_bytes: 0,
+        })
+        .encode_with(&mut bytes, &mut encode)?;
+    }
+    Ok(bytes)
 }
 
 /// Why a value record was refused. Redis only learns that the load failed, so this is logged.
@@ -507,16 +551,25 @@ pub(crate) fn load_value(rdb: *mut raw::RedisModuleIO) -> Option<IValue> {
         Ok(value) => Some(value),
         Err(LoadError::ShortRead) => None,
         Err(error) => {
+            let mut message =
+                format!("JSON RDB dictionary phase=load status=refused reason={error}");
             let level = if loading {
                 RedisLogLevel::Warning
+            } else if error == LoadError::NoStream {
+                // The RDB went to a consumer that reads it key by key. Every such key fails, so
+                // warn at the 1st, 2nd, 4th, ... refusal to keep the log readable.
+                let refusals = NO_STREAM_REFUSALS.get() + 1;
+                NO_STREAM_REFUSALS.set(refusals);
+                message.push_str(&format!(" refusals={refusals}"));
+                if refusals.is_power_of_two() {
+                    RedisLogLevel::Warning
+                } else {
+                    RedisLogLevel::Verbose
+                }
             } else {
                 RedisLogLevel::Verbose
             };
-            log_io(
-                rdb,
-                level,
-                &format!("JSON RDB dictionary phase=load status=refused reason={error}"),
-            );
+            log_io(rdb, level, &message);
             None
         }
     }
@@ -654,7 +707,8 @@ unsafe extern "C" fn persistence_event(
         | raw::REDISMODULE_SUBEVENT_PERSISTENCE_AOF_START
         | raw::REDISMODULE_SUBEVENT_PERSISTENCE_SYNC_RDB_START
         | raw::REDISMODULE_SUBEVENT_PERSISTENCE_SYNC_AOF_START => {
-            let budget = config_value(&RDB_DICTIONARY_MAX_BYTES);
+            let percent = memory_percent();
+            let budget = save_budget(percent, used_memory(ctx));
             let flex = BIGREDIS_ENABLED.load(Ordering::Relaxed);
             let asm_export = ASM_EXPORTS.load(Ordering::Relaxed) > 0;
             // Without a session every value is self-contained.
@@ -667,17 +721,18 @@ unsafe extern "C" fn persistence_event(
                     })
                 }),
             );
-            let mode = match (budget, flex, asm_export, syncer) {
+            let mode = match (percent, budget, flex, asm_export, syncer) {
                 (0, ..) => "plain reason=off",
-                (_, true, ..) => "local reason=flex",
-                (_, _, true, _) => "local reason=asm",
-                (_, _, _, true) => "local reason=syncer",
+                (_, 0, ..) => "local reason=budget",
+                (_, _, true, ..) => "local reason=flex",
+                (_, _, _, true, _) => "local reason=asm",
+                (_, _, _, _, true) => "local reason=syncer",
                 _ => "stream",
             };
             log_event(
                 ctx,
                 &format!(
-                    "JSON RDB dictionary phase=persistence_start mode={mode} budget_bytes={budget}"
+                    "JSON RDB dictionary phase=persistence_start mode={mode} percent={percent} budget_bytes={budget}"
                 ),
             );
             return;

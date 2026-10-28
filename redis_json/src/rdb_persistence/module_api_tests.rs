@@ -15,7 +15,7 @@ use super::tests::{
     reset, save_session_exists, serial, slot_migration,
 };
 use super::*;
-use ijson::{IArray, IString};
+use ijson::{IArray, IObject, IString};
 use json_path::select_value::MAX_DEPTH;
 use std::cell::Cell;
 use std::collections::VecDeque;
@@ -134,7 +134,10 @@ impl Server {
         reset();
         feed(Vec::new());
         KEYED.set(true);
-        RDB_DICTIONARY_MAX_BYTES.store(DEFAULT_RDB_DICTIONARY_MAX_BYTES, Ordering::Relaxed);
+        RDB_DICTIONARY_MAX_MEMORY_PERCENT
+            .store(DEFAULT_RDB_DICTIONARY_MAX_MEMORY_PERCENT, Ordering::Relaxed);
+        // 20% of it is far more than any table a test builds.
+        USED_MEMORY_FOR_TESTS.set(Some(1 << 32));
         BIGREDIS_ENABLED.store(false, Ordering::Relaxed);
         ASM_EXPORTS.store(0, Ordering::Relaxed);
         backward::LEGACY_RDB_DEPTH_LIMIT.store(false, Ordering::Relaxed);
@@ -199,6 +202,40 @@ fn save_external(text: &str) -> Vec<u8> {
     .unwrap();
     let [record] = <[Vec<u8>; 1]>::try_from(drain_records()).unwrap();
     record
+}
+
+#[test]
+fn a_self_contained_save_ignores_the_stream_session() {
+    let server = Server::start();
+    let (_owner, docs) = shared_documents("a string the stream defines before and after", 2);
+    server.start_save();
+    assert_eq!(server.save_record(&docs[0])[0], MARKER_STREAM);
+
+    let text = "a string repeated inside one self-contained value";
+    let save = |texts: &[&str]| {
+        save_self_contained(io(), |strings, out| {
+            let values: Vec<_> = texts.iter().map(|text| strings.string(*text)).collect();
+            ciborium::into_writer(&values, out)
+        })
+        .unwrap();
+        let [record] = <[Vec<u8>; 1]>::try_from(drain_records()).unwrap();
+        record
+    };
+    let repeated = save(&[text, text, text]);
+    assert_eq!(repeated[0], MARKER_LOCAL);
+    let unique = save(&[text]);
+    assert_eq!(unique[0], MARKER_INLINE);
+    // Each record reads alone, as a RESTORE of a standard export would.
+    for record in [&repeated, &unique] {
+        assert!(decode_for_load(record, false).is_ok());
+    }
+
+    // The stream goes on as if the self-contained values were not there: one definition so far.
+    assert_eq!(
+        server.save_record(&docs[1])[..5],
+        [MARKER_STREAM, 1, 0, 0, 0]
+    );
+    server.end_save();
 }
 
 #[test]
@@ -336,7 +373,8 @@ fn managers_configure_their_dictionary_once_and_each_save_gets_a_fresh_instance(
 fn external_manager_resets_use_the_shared_framing() {
     let server = Server::start();
     set_dictionary_factory(|| Box::new(ijson::ContentDictionary::default()));
-    RDB_DICTIONARY_MAX_BYTES.store(256, Ordering::Relaxed);
+    // 20% of 1280 bytes.
+    USED_MEMORY_FOR_TESTS.set(Some(1280));
     server.start_save();
     let texts: Vec<_> = (0..10)
         .map(|i| format!("{i:04}{}", "x".repeat(96)))
@@ -483,6 +521,28 @@ fn the_library_loader_reports_a_refused_record_without_logging_through_the_io() 
 }
 
 #[test]
+fn stream_records_refused_outside_a_load_warn_at_growing_intervals() {
+    // A RESTORE of a stream record means the RDB went to a consumer that reads key by key.
+    let server = Server::start();
+    let (_owner, docs) = shared_documents("a string a RESTORE cannot resolve without a stream", 2);
+    let rdb = server.save(&docs);
+    IO_LOGS.set(Vec::new());
+    for _ in 0..8 {
+        assert!(server.load_record(&rdb.records[1]).is_none());
+    }
+    let warnings: Vec<String> = IO_LOGS
+        .take()
+        .into_iter()
+        .filter(|log| log.starts_with("warning "))
+        .collect();
+    assert_eq!(warnings.len(), 4, "{warnings:?}");
+    assert!(
+        warnings[3].ends_with("reason=no_stream refusals=8"),
+        "{warnings:?}"
+    );
+}
+
+#[test]
 fn a_short_io_read_prevents_decoder_restart_until_a_new_loading_event() {
     let server = Server::start();
     let (_owner, docs) = shared_documents("a definition that cannot restart a failed load", 2);
@@ -600,6 +660,45 @@ fn a_value_that_repeats_a_string_is_self_contained_without_a_session() {
 }
 
 #[test]
+fn one_large_repeated_string_pays_for_many_definitions_that_are_never_referenced() {
+    let server = Server::start();
+    // The field names are shared with a retained clone, so each is defined and never referenced
+    // inside the value. Referencing the large string once saves far more than they cost.
+    let large = IString::from("x".repeat(256 * 1024));
+    let mut object = IObject::new();
+    for i in 0..20 {
+        object
+            .insert(format!("shared_field_{i:02}"), IValue::from(i))
+            .unwrap();
+    }
+    object.insert("large_pair", repeats_inside(&large)).unwrap();
+    let value = IValue::from(object);
+    let _retained = value.clone();
+    let record = server.save_record(&value);
+    assert_eq!(&record[..1], &[MARKER_LOCAL]);
+    assert!(record.len() < inline_record(&value).len() / 2 + 1024);
+    assert_eq!(server.load_record(&record), Some(value));
+
+    // The same for an external manager, whose dictionary defines every long string.
+    let names: Vec<String> = (0..20).map(|i| format!("shared_field_{i:02}")).collect();
+    save_with(io(), |strings, out| {
+        let fields: Vec<_> = names
+            .iter()
+            .map(|name| (strings.string(name.as_str()), 0))
+            .collect();
+        let pair = vec![
+            strings.string(large.as_str()),
+            strings.string(large.as_str()),
+        ];
+        ciborium::into_writer(&(fields, pair), out)
+    })
+    .unwrap();
+    let [external] = <[Vec<u8>; 1]>::try_from(drain_records()).unwrap();
+    assert_eq!(&external[..1], &[MARKER_LOCAL]);
+    assert!(external.len() < 2 * large.len());
+}
+
+#[test]
 fn a_self_contained_record_never_touches_the_ids_of_a_stream() {
     let server = Server::start();
     let first = IString::from("the first string of the stream, shared");
@@ -644,15 +743,45 @@ fn flex_arms_no_session_and_refuses_a_stream_record() {
 }
 
 #[test]
-fn a_budget_of_zero_or_less_writes_plain_records_even_inside_a_value() {
+fn the_save_budget_is_a_share_of_the_memory_the_server_uses() {
+    assert_eq!(save_budget(20, Some(1000)), 200);
+    assert_eq!(save_budget(100, Some(1000)), 1000);
+    // A server that does not report its memory gets no table.
+    assert_eq!(save_budget(20, None), 0);
+    assert_eq!(
+        save_budget(100, Some(u64::MAX)),
+        usize::try_from(u64::MAX).unwrap_or(usize::MAX)
+    );
+}
+
+#[test]
+fn a_save_streams_only_when_its_memory_share_leaves_room_for_a_table() {
+    let server = Server::start();
+    server.start_save();
+    assert!(save_session_exists());
+    // 20% of 4 bytes is no table at all, and neither is a server that reports no memory.
+    for used in [Some(4), None] {
+        USED_MEMORY_FOR_TESTS.set(used);
+        server.start_save();
+        assert!(!save_session_exists());
+    }
+    // A module argument above 100 counts as 100.
+    RDB_DICTIONARY_MAX_MEMORY_PERCENT.store(500, Ordering::Relaxed);
+    USED_MEMORY_FOR_TESTS.set(Some(1 << 20));
+    server.start_save();
+    assert!(save_session_exists());
+}
+
+#[test]
+fn a_percentage_of_zero_or_less_writes_plain_records_even_inside_a_value() {
     let server = Server::start();
     let owner = IString::from("a long string that the value holds twice");
     let shared = document(&owner);
     let repeated = repeats_inside(&owner);
     let text = "a long string that the value holds twice";
     // A negative module argument counts as zero.
-    for budget in [0, -1] {
-        RDB_DICTIONARY_MAX_BYTES.store(budget, Ordering::Relaxed);
+    for percent in [0, -1] {
+        RDB_DICTIONARY_MAX_MEMORY_PERCENT.store(percent, Ordering::Relaxed);
         server.start_save();
         assert!(!save_session_exists());
         assert_eq!(server.save_record(&shared), inline_record(&shared));

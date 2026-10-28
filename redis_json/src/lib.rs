@@ -63,7 +63,7 @@ pub mod number;
 pub mod rdb_persistence;
 #[doc(hidden)]
 pub use rdb_persistence::{
-    DEFAULT_RDB_DICTIONARY_MAX_BYTES, RDB_DICTIONARY_MAX_BYTES, RDB_DICTIONARY_MAX_BYTES_CEILING,
+    DEFAULT_RDB_DICTIONARY_MAX_MEMORY_PERCENT, RDB_DICTIONARY_MAX_MEMORY_PERCENT,
 };
 pub mod redisjson;
 
@@ -432,13 +432,12 @@ macro_rules! redis_json_module_create {
             info: $info_func,
             configurations: [
                 i64: [[
-                    "json-rdb-dictionary-max-bytes",
-                    &$crate::RDB_DICTIONARY_MAX_BYTES,
-                    $crate::DEFAULT_RDB_DICTIONARY_MAX_BYTES,
+                    "json-rdb-dictionary-max-memory-percent",
+                    &$crate::RDB_DICTIONARY_MAX_MEMORY_PERCENT,
+                    $crate::DEFAULT_RDB_DICTIONARY_MAX_MEMORY_PERCENT,
                     0,
-                    $crate::RDB_DICTIONARY_MAX_BYTES_CEILING,
-                    ::redis_module::configuration::ConfigurationFlags::UNPREFIXED
-                        | ::redis_module::configuration::ConfigurationFlags::MEMORY,
+                    100,
+                    ::redis_module::configuration::ConfigurationFlags::UNPREFIXED,
                     None
                 ]],
                 string: [],
