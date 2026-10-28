@@ -6,6 +6,7 @@ import os
 import random
 import re
 import shutil
+import socket
 import string
 import struct
 import subprocess
@@ -912,3 +913,71 @@ def test_failed_save_releases_dictionary_and_next_save_restarts(env):
     env.expect('DEBUG', 'RELOAD', 'NOSAVE').ok()
     for i in range(12):
         env.assertEqual(json.loads(env.cmd('JSON.GET', f'retry:{i}')), document)
+
+
+def _full_sync_rdb(env):
+    """The RDB the master sends a replica that asks with a plain SYNC, as a replica-of syncer does
+    when its source cannot tell it is a syncer (an OSS Redis has no REPLCONF syncer)."""
+    options = env.getConnection().connection_pool.connection_kwargs
+    if 'path' in options:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.connect(options['path'])
+    else:
+        sock = socket.create_connection((options.get('host', 'localhost'), options['port']))
+    try:
+        sock.settimeout(60)
+        if options.get('password'):
+            sock.sendall(f'AUTH {options["password"]}\r\n'.encode())
+            reply = sock.recv(64)
+            assert reply.startswith(b'+OK'), reply
+        # No capa eof: the master sends `$<length>` and the RDB.
+        sock.sendall(b'SYNC\r\n')
+        buffer = b''
+        while b'\r\n' not in buffer.lstrip(b'\n'):
+            buffer += sock.recv(4096)
+        buffer = buffer.lstrip(b'\n')
+        header, rdb = buffer.split(b'\r\n', 1)
+        assert header.startswith(b'$'), header
+        length = int(header[1:])
+        while len(rdb) < length:
+            rdb += sock.recv(length - len(rdb))
+        return rdb[:length]
+    finally:
+        sock.close()
+
+
+@_values_in_ram
+def test_a_full_sync_rdb_restores_key_by_key(env):
+    """A replica-of syncer and an RDB import split the RDB into one RESTORE per key. Every key a
+    full sync sends must restore that way."""
+    _start_clean(env)
+    if env.useTLS:
+        env.skip()
+    shared = _shared_text(seed=19114)
+    documents = {f'sync:{i}': {'shared': shared, 'step': i} for i in range(16)}
+    _set_documents(env, documents)
+    connection = _binary_connection(env)
+    original = env.getConnection().config_get('rdbcompression')['rdbcompression']
+    try:
+        genuine = connection.execute_command('DUMP', 'sync:0')
+        env.getConnection().config_set('rdbcompression', 'no')
+        rdb = _retry_while_saving(lambda: _full_sync_rdb(env))
+        records = [rdb[slice(*value['record'])] for value in _parse_rdb(rdb)]
+        env.assertEqual(len(records), len(documents))
+
+        env.expect('FLUSHALL').equal(True)
+        refused = []
+        for i, record in enumerate(records):
+            try:
+                connection.execute_command('RESTORE', f'restored:{i}', 0,
+                                           _restore_payload(genuine, record))
+            except ResponseError as error:
+                refused.append((i, record[0], str(error)))
+        env.assertEqual(refused, [], message=f'{len(refused)} of {len(records)} keys refused')
+        restored = [json.loads(env.cmd('JSON.GET', f'restored:{i}')) for i in range(len(records))
+                    if env.cmd('EXISTS', f'restored:{i}')]
+        env.assertEqual(sorted(restored, key=lambda d: d['step']),
+                        sorted(documents.values(), key=lambda d: d['step']))
+    finally:
+        env.getConnection().config_set('rdbcompression', original)
+        connection.close()

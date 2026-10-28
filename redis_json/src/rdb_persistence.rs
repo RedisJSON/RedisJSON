@@ -18,10 +18,9 @@ use std::ffi::c_void;
 use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicUsize, Ordering};
 
-use ijson::{
-    CborDecodeError, ContentDictionary, DocUse, IValue, StreamDecoder, StreamEncoder,
-    StreamEncoderConfig, StreamEncoderStats, StreamStrings, StringDictionary,
-};
+use ijson::{CborDecodeError, IValue, StreamEncoderStats, StreamStrings, StringDictionary};
+#[doc(hidden)]
+pub use ijson::{ContentDictionary, DocUse, StreamDecoder, StreamEncoder, StreamEncoderConfig};
 use redis_module::logging::{log_io_error, RedisLogLevel};
 use redis_module::{raw, Context, Status};
 
