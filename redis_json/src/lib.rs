@@ -427,8 +427,7 @@ macro_rules! redis_json_module_create {
                     "json-auto-create-deep-paths",
                     &$crate::auto_create::AUTO_CREATE_DEEP_PATHS,
                     false,
-                    ::redis_module::configuration::ConfigurationFlags::IMMUTABLE
-                        | ::redis_module::configuration::ConfigurationFlags::UNPREFIXED,
+                    ::redis_module::configuration::ConfigurationFlags::UNPREFIXED,
                     None
                 ], [
                     "json-legacy-rdb-depth-limit",
