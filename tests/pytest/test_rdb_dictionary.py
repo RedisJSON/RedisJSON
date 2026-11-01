@@ -979,7 +979,8 @@ def test_a_full_sync_rdb_restores_key_by_key_only_without_cross_key_strings(env)
     the writer off on such a source is the workaround. This pins the gap: if the default stops
     sharing across keys, the first check fails and this test should require every key to restore."""
     _start_clean(env)
-    if env.useTLS:
+    # Flex writes every value self-contained, and its RDB holds records `_parse_rdb` does not read.
+    if env.useTLS or _is_flex(env):
         env.skip()
     shared = _shared_text(seed=19114)
     documents = {f'sync:{i}': {'shared': shared, 'step': i} for i in range(16)}
@@ -991,10 +992,8 @@ def test_a_full_sync_rdb_restores_key_by_key_only_without_cross_key_strings(env)
         genuine = connection.execute_command('DUMP', 'sync:0')
         env.getConnection().config_set('rdbcompression', 'no')
         refused = _restore_full_sync_key_by_key(env, connection, genuine, documents)
-        if not _is_flex(env):
-            # Flex writes every value self-contained, so it never refuses one.
-            env.assertEqual(sorted(set(refused)), [MARKER_STREAM], message=f'{len(refused)} refused')
-            env.assertEqual(len(refused), len(documents))
+        env.assertEqual(sorted(set(refused)), [MARKER_STREAM], message=f'{len(refused)} refused')
+        env.assertEqual(len(refused), len(documents))
         env.getConnection().config_set(WRITER_BUDGET, '0')
         env.assertEqual(_restore_full_sync_key_by_key(env, connection, genuine, documents), [])
     finally:
