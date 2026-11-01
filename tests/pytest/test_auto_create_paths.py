@@ -2,8 +2,7 @@
 """
 Auto-creation of deep paths.
 
-`json-auto-create-deep-paths` is IMMUTABLE, so it cannot be toggled inside a
-running env. Rather than keep two parallel files, every case below states its
+Rather than keep two parallel files, every case below states its
 expectation for *both* modes in one place, and two thin runners replay the whole
 table against an enabled and a disabled env. The disabled column doubles as the
 regression guard for today's behavior.
@@ -377,10 +376,20 @@ def test_all_cases_with_auto_create_enabled():
     env = _env(True)
     env.expect('CONFIG', 'GET', 'json-auto-create-deep-paths').equal(
         ['json-auto-create-deep-paths', 'yes'])
-    # load-time only
-    env.expect('CONFIG', 'SET', 'json-auto-create-deep-paths', 'no').raiseError()
     for c in CASES:
         _check(env, c, c.on, c.doc_on, c.doc2_on, 'ON')
+
+
+def test_config_set_toggles_at_runtime():
+    env = _env(False)
+    env.expect('CONFIG', 'SET', 'json-auto-create-deep-paths', 'yes').ok()
+    env.expect('CONFIG', 'GET', 'json-auto-create-deep-paths').equal(
+        ['json-auto-create-deep-paths', 'yes'])
+    for c in CASES:
+        _check(env, c, c.on, c.doc_on, c.doc2_on, 'ON')
+    env.expect('CONFIG', 'SET', 'json-auto-create-deep-paths', 'no').ok()
+    for c in CASES:
+        _check(env, c, c.off, c.doc_off, c.doc2_off, 'OFF')
 
 
 def test_all_cases_with_auto_create_disabled():
