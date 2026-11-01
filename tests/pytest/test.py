@@ -1461,6 +1461,16 @@ def testMSET(env):
 
     env.expect("JSON.MSET", "same{s}", '$.a.b', '1', "same{s}", '$.a.c', '2').ok()
     env.expect("JSON.GET", "same{s}", '$').equal('[{"a":{"b":1,"c":2}}]')
+
+    env.expect("JSON.MSET", "mix{s}", '$.a.b', '1', "other{s}", '$.x', '0', "mix{s}", '$.a.c', '2', "mix{s}", '$.d', '3').ok()
+    env.expect("JSON.GET", "mix{s}", '$').equal('[{"a":{"b":1,"c":2},"d":3}]')
+    env.expect("JSON.GET", "other{s}", '$').equal('[{"x":0}]')
+
+    # Later ancestor overwrite must apply against the live document, not the
+    # parse-time dict_add plan (which no-ops once $.a.b has created `a`).
+    env.expect("JSON.SET", "anc{s}", '$', '{}').ok()
+    env.expect("JSON.MSET", "anc{s}", '$.a.b', '1', "anc{s}", '$.a', '2').ok()
+    env.expect("JSON.GET", "anc{s}", '$').equal('[{"a":2}]')
     env.expect('CONFIG', 'SET', 'ReJSON.auto-path-create', 'no').equal('OK')
 
 

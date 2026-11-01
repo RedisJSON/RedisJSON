@@ -72,8 +72,15 @@ pub const REDIS_JSON_TYPE_VERSION: i32 = 4;
 
 pub static AUTO_PATH_CREATE: AtomicBool = AtomicBool::new(false);
 
-pub fn auto_path_create_enabled() -> bool {
+/// Nested path materialization follows `ReJSON.auto-path-create` for client
+/// commands. Replication and AOF replay always materialize: those streams
+/// replay the original `JSON.SET`/`JSON.MERGE`/`JSON.MSET`, and a replica
+/// (or AOF load) with the default `no` would otherwise diverge.
+pub fn auto_path_create_enabled(ctx: &Context) -> bool {
     AUTO_PATH_CREATE.load(Ordering::Relaxed)
+        || ctx
+            .get_flags()
+            .intersects(redis_module::ContextFlags::REPLICATED | redis_module::ContextFlags::LOADING)
 }
 
 pub static REDIS_JSON_TYPE: RedisType = RedisType::new(
