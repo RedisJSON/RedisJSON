@@ -10,10 +10,6 @@ regression guard for today's behavior.
 RLTest reuses one server per set of env params, so the two modes cannot be live
 at the same time -- hence one env per test function rather than a pair inside
 each test.
-
-An existing env (a Redis Enterprise database, say) was loaded with whatever
-config it has and ignores `moduleArgs`, so there each test runs only if the
-server is in the mode it was written for.
 """
 
 import json
@@ -21,9 +17,6 @@ import time
 from collections import namedtuple
 
 from RLTest import Env, Defaults
-from redis import ResponseError
-
-from common import skipOnExistingEnv
 
 Defaults.decode_responses = True
 
@@ -64,32 +57,8 @@ def case(doc, cmd, on, off, doc_on=None, doc_off=None,
 def _env(enabled, **kwargs):
     # noDefaultModuleArgs: don't merge the global --module-args on top of ours.
     if enabled:
-        env = Env(moduleArgs=AUTO_CREATE_ARGS, noDefaultModuleArgs=True, **kwargs)
-    else:
-        env = Env(noDefaultModuleArgs=True, **kwargs)
-    if 'existing' in env.env and _auto_create_active(env) != enabled:
-        env.skip()
-    return env
-
-
-def _auto_create_active(env):
-    """Probe the mode with a write that needs a missing object level. A proxy in
-    front of the server may not answer CONFIG GET for a module config."""
-    probe = 'probe{s}'
-    env.cmd('DEL', probe)
-    try:
-        return env.cmd('JSON.SET', probe, '$.a.b', '1') == OK
-    except ResponseError:  # new objects must be created at the root
-        return False
-    finally:
-        env.cmd('DEL', probe)
-
-
-def _check_config(env, value):
-    if 'existing' in env.env:
-        return  # already probed by _env
-    env.expect('CONFIG', 'GET', 'json-auto-create-deep-paths').equal(
-        ['json-auto-create-deep-paths', value])
+        return Env(moduleArgs=AUTO_CREATE_ARGS, noDefaultModuleArgs=True, **kwargs)
+    return Env(noDefaultModuleArgs=True, **kwargs)
 
 
 def _check(env, c, expected, expected_doc, expected_doc2, mode):
@@ -427,16 +396,14 @@ CASES = [
 
 def test_all_cases_with_auto_create_enabled():
     env = _env(True)
-    _check_config(env, 'yes')
+    env.expect('CONFIG', 'GET', 'json-auto-create-deep-paths').equal(
+        ['json-auto-create-deep-paths', 'yes'])
     for c in CASES:
         _check(env, c, c.on, c.doc_on, c.doc2_on, 'ON')
 
 
 def test_config_set_toggles_at_runtime():
     env = _env(False)
-    # A proxy may not pass CONFIG SET through, and switching a shared existing
-    # env would change the mode the other tests were selected for.
-    skipOnExistingEnv(env)
     env.expect('CONFIG', 'SET', 'json-auto-create-deep-paths', 'yes').ok()
     env.expect('CONFIG', 'GET', 'json-auto-create-deep-paths').equal(
         ['json-auto-create-deep-paths', 'yes'])
@@ -450,7 +417,8 @@ def test_config_set_toggles_at_runtime():
 def test_all_cases_with_auto_create_disabled():
     """The disabled column is the regression guard for today's behavior."""
     env = _env(False)
-    _check_config(env, 'no')
+    env.expect('CONFIG', 'GET', 'json-auto-create-deep-paths').equal(
+        ['json-auto-create-deep-paths', 'no'])
     for c in CASES:
         _check(env, c, c.off, c.doc_off, c.doc2_off, 'OFF')
 
@@ -516,7 +484,6 @@ def test_created_documents_survive_aof_replay():
     """
     env = _env(True)
     env.skipOnCluster()
-    skipOnExistingEnv(env)  # DEBUG LOADAOF
     env.cmd('DEL', KEY, KEY2)
     enabled_here = not env.useAof
     if enabled_here:
