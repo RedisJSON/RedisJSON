@@ -521,8 +521,10 @@ def test_creation_notifies_once():
             env.assertEqual(pubsub.get_message(timeout=1)['type'], 'psubscribe')
 
             def events():
+                # The marker's event comes after every event of the command before it.
+                con.execute_command('SET', 'mark{s}', '1')
                 received = []
-                while (msg := pubsub.get_message(timeout=0.2)) is not None:
+                while (msg := pubsub.get_message(timeout=5))['data'] != 'mark{s}':
                     received.append((msg['channel'].split(':', 1)[1], msg['data']))
                 return received
 
@@ -549,6 +551,7 @@ def test_creation_notifies_once():
             env.assertEqual(con.execute_command('JSON.GET', KEY), '{"s":3}')
     finally:
         con.execute_command('CONFIG', 'SET', 'notify-keyspace-events', '')
+        con.execute_command('DEL', 'mark{s}')
 
 
 AUTO_CREATE_LIB = """#!lua name=auto_create
