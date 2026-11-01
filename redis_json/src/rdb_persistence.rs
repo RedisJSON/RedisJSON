@@ -657,21 +657,28 @@ unsafe extern "C" fn command_filter(_ctx: *mut raw::RedisModuleCommandFilterCtx)
 /// Flex never writes one: it can keep any value on flash undecoded and decode it later alone.
 /// Neither does a save while this node exports slots: the destination loads that snapshot without
 /// a session. Neither does a save for a syncer, which an Enterprise replica-of uses: it converts
-/// the RDB into one RESTORE per key and cannot read a stream record. The core says so in the flags
-/// of the persistence event.
-fn cross_key_stream_allowed(flex: bool, budget: usize, asm_export: bool, syncer: bool) -> bool {
-    !flex && budget > 0 && !asm_export && !syncer
+/// the RDB into one RESTORE per key and cannot read a stream record. Nor a standard RDB (a backup
+/// or an export), which import also restores one key at a time. The core says so in the flags of
+/// the persistence event.
+fn cross_key_stream_allowed(
+    flex: bool,
+    budget: usize,
+    asm_export: bool,
+    syncer: bool,
+    stdrdb: bool,
+) -> bool {
+    !flex && budget > 0 && !asm_export && !syncer && !stdrdb
 }
 
-/// Whether the core marked this save as one that feeds a syncer. A core that predates the flag
-/// passes no data.
+/// The flags the core set on this save, `REDISMODULE_PERSISTENCE_FLAG_*`. A core that predates
+/// them passes no data, which reads as none.
 ///
 /// # Safety
 /// `data` is null or points to the `RedisModulePersistenceInfo` the core passed to the callback.
-unsafe fn saves_for_syncer(data: *mut c_void) -> bool {
+unsafe fn persistence_flags(data: *mut c_void) -> u64 {
     // SAFETY: the caller guarantees `data` is null or valid for reads.
     let info = unsafe { data.cast::<raw::RedisModulePersistenceInfo>().as_ref() };
-    info.is_some_and(|info| info.flags & u64::from(raw::REDISMODULE_PERSISTENCE_FLAG_SYNCER) != 0)
+    info.map_or(0, |info| info.flags)
 }
 
 unsafe extern "C" fn slot_migration_event(
@@ -712,20 +719,23 @@ unsafe extern "C" fn persistence_event(
             let asm_export = ASM_EXPORTS.load(Ordering::Relaxed) > 0;
             // Without a session every value is self-contained.
             // SAFETY: the core passes null or a `RedisModulePersistenceInfo` for these subevents.
-            let syncer = unsafe { saves_for_syncer(data) };
+            let flags = unsafe { persistence_flags(data) };
+            let syncer = flags & u64::from(raw::REDISMODULE_PERSISTENCE_FLAG_SYNCER) != 0;
+            let stdrdb = flags & u64::from(raw::REDISMODULE_PERSISTENCE_FLAG_STDRDB) != 0;
             SAVE_SESSION.set(
-                cross_key_stream_allowed(flex, budget, asm_export, syncer).then(|| {
+                cross_key_stream_allowed(flex, budget, asm_export, syncer, stdrdb).then(|| {
                     SaveSession::new(StreamEncoderConfig {
                         table_budget_bytes: budget,
                     })
                 }),
             );
-            let mode = match (percent, budget, flex, asm_export, syncer) {
+            let mode = match (percent, budget, flex, asm_export, syncer, stdrdb) {
                 (0, ..) => "plain reason=off",
                 (_, 0, ..) => "local reason=budget",
                 (_, _, true, ..) => "local reason=flex",
-                (_, _, _, true, _) => "local reason=asm",
-                (_, _, _, _, true) => "local reason=syncer",
+                (_, _, _, true, ..) => "local reason=asm",
+                (_, _, _, _, true, _) => "local reason=syncer",
+                (_, _, _, _, _, true) => "local reason=stdrdb",
                 _ => "stream",
             };
             log_event(

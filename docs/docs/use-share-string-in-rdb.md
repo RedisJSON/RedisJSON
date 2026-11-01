@@ -25,12 +25,13 @@ documents, or the number of occurrences.
 | Any save on Flex (`bigredis-enabled`) | self-contained |
 | Any save that starts while this node exports slots (atomic slot migration) | self-contained |
 | Any save for an Enterprise replica-of syncer, on a core that sets the syncer flag | self-contained |
+| Any standard RDB (Enterprise backup and export, `REPLCONF REQ STDRDB`), on a core that sets the standard-RDB flag | self-contained |
 | DUMP, MIGRATE, the ASM slot snapshot, Flex IO threads, saves without a key | self-contained |
 | `json-rdb-dictionary-max-memory-percent` set to 0 | plain CBOR, nothing shared |
 
 `cross_key_stream_allowed` in `rdb_persistence.rs` is the only place that decides. It reads
 the budget, whether the server is Flex, whether a slot migration is exporting from this node, and
-whether the core flagged the save as one for a syncer, when a save starts. The module counts exports from the `MIGRATE_STARTED`, `MIGRATE_COMPLETED` and
+whether the core flagged the save as one for a syncer or as a standard RDB, when a save starts. The module counts exports from the `MIGRATE_STARTED`, `MIGRATE_COMPLETED` and
 `MIGRATE_FAILED` subevents of `RedisModuleEvent_ClusterSlotMigration`. A fork child inherits the
 count, so the snapshot child of a migration never opens a session. A server without atomic slot
 migration has no such event, and the module loads without it.
@@ -51,6 +52,15 @@ A core or syncer that predates the flag passes no data, and the module cannot te
 from a BGSAVE. A database that is the source of a replica-of on such a version must not write a
 stream. Set `json-rdb-dictionary-max-memory-percent` to 0 on it with `CONFIG SET`; the next save writes
 plain CBOR. Flex writes no stream and needs no setting.
+
+## Backup and export
+
+An Enterprise backup or export takes the RDB from a replication handshake that sends
+`REPLCONF REQ STDRDB`, and backup restore and import read it back with one RESTORE per key, so a
+stream record in it could never be read. The core passes `REDISMODULE_PERSISTENCE_FLAG_STDRDB` in
+the persistence start event of such a save, and the module writes self-contained records. Such a
+save is never shared with ordinary replicas either. A core that predates the flag passes no data;
+on it, set `json-rdb-dictionary-max-memory-percent` to 0 before a backup that must be restorable.
 
 ## How a stream works
 
@@ -294,7 +304,7 @@ Children have no INFO channel, so each save and load logs lines that start with
 
 | Line | Fields |
 |---|---|
-| `persistence_start` | `mode=stream`, `mode=local reason=budget`, `mode=local reason=flex`, `mode=local reason=asm`, `mode=local reason=syncer` or `mode=plain reason=off`, then `percent` and `budget_bytes`. `reason=budget` means the share of the memory left no room for a table. |
+| `persistence_start` | `mode=stream`, `mode=local reason=budget`, `mode=local reason=flex`, `mode=local reason=asm`, `mode=local reason=syncer`, `mode=local reason=stdrdb` or `mode=plain reason=off`, then `percent` and `budget_bytes`. `reason=budget` means the share of the memory left no room for a table. |
 | `persistence_ended` / `persistence_failed` | `defs def_bytes refs resets stream_docs inline_docs poisoned`. A stream save that wrote a JSON value emits it. `resets` counts how often the table filled up and was cleared. Above 0 means the save ran into `json-rdb-dictionary-max-memory-percent`, so raise it to share more. |
 | `loading_ended` / `loading_failed` | `defs def_bytes refs stream_docs`, when the load read a stream record |
 | `load` | `status=refused reason=...` with `marker_N`, `no_stream`, `base_id_mismatch` or `cbor_...`. The level is warning while loading. Outside a load, `no_stream` adds `refusals=N` and is a warning when N is a power of two, otherwise verbose. |

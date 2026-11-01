@@ -971,13 +971,19 @@ def test_a_full_sync_rdb_restores_key_by_key(env):
             try:
                 connection.execute_command('RESTORE', f'restored:{i}', 0,
                                            _restore_payload(genuine, record))
-            except ResponseError as error:
-                refused.append((i, record[0], str(error)))
-        env.assertEqual(refused, [], message=f'{len(refused)} of {len(records)} keys refused')
-        restored = [json.loads(env.cmd('JSON.GET', f'restored:{i}')) for i in range(len(records))
-                    if env.cmd('EXISTS', f'restored:{i}')]
-        env.assertEqual(sorted(restored, key=lambda d: d['step']),
-                        sorted(documents.values(), key=lambda d: d['step']))
+            except ResponseError:
+                refused.append(i)
+        # Indexes and markers only: the documents are kilobytes each.
+        env.assertEqual(len(refused), 0, message=f'{len(refused)} of {len(records)} keys refused, '
+                        f'markers {sorted({records[i][0] for i in refused})}')
+        steps = sorted(json.loads(env.cmd('JSON.GET', f'restored:{i}'))['step']
+                       for i in range(len(records)) if env.cmd('EXISTS', f'restored:{i}'))
+        env.assertEqual(steps, list(range(len(documents))))
+        for i in range(len(records)):
+            if env.cmd('EXISTS', f'restored:{i}'):
+                restored = json.loads(env.cmd('JSON.GET', f'restored:{i}'))
+                env.assertTrue(restored == documents[f'sync:{restored["step"]}'],
+                               message=f'restored:{i} differs')
     finally:
         env.getConnection().config_set('rdbcompression', original)
         connection.close()

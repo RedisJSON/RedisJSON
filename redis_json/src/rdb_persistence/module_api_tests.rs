@@ -840,6 +840,24 @@ fn a_save_for_a_syncer_never_streams() {
 }
 
 #[test]
+fn a_standard_rdb_save_never_streams() {
+    // A backup or export (REPLCONF REQ STDRDB) is imported one key at a time.
+    let server = Server::start();
+    let (_owner, docs) = shared_documents("a string that two keys share for a backup", 2);
+    persistence_with_flags(
+        raw::REDISMODULE_SUBEVENT_PERSISTENCE_RDB_START,
+        u64::from(raw::REDISMODULE_PERSISTENCE_FLAG_STDRDB),
+    );
+    assert!(!save_session_exists());
+    assert_eq!(server.save_record(&docs[0]), inline_record(&docs[0]));
+    server.end_save();
+
+    server.start_save();
+    assert!(save_session_exists());
+    server.end_save();
+}
+
+#[test]
 fn a_save_streams_again_only_after_every_export_has_ended() {
     let server = Server::start();
     // The end of a task that began before the module loaded must not count below zero.
