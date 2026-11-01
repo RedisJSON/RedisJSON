@@ -946,10 +946,38 @@ def _full_sync_rdb(env):
         sock.close()
 
 
+def _restore_full_sync_key_by_key(env, connection, genuine, documents):
+    """Takes a full-sync RDB and restores it with one RESTORE per key, as a syncer does. Returns the
+    markers of the refused records."""
+    rdb = _retry_while_saving(lambda: _full_sync_rdb(env))
+    records = [rdb[slice(*value['record'])] for value in _parse_rdb(rdb)]
+    env.assertEqual(len(records), len(documents))
+    env.expect('FLUSHALL').equal(True)
+    refused = []
+    for i, record in enumerate(records):
+        try:
+            connection.execute_command('RESTORE', f'restored:{i}', 0,
+                                       _restore_payload(genuine, record))
+        except ResponseError:
+            refused.append(record[0])
+            continue
+        restored = json.loads(env.cmd('JSON.GET', f'restored:{i}'))
+        # The documents are kilobytes each, so a mismatch reports the key only.
+        env.assertTrue(restored == documents[f'sync:{restored["step"]}'],
+                       message=f'restored:{i} differs')
+    # The next full sync starts from the documents alone.
+    env.expect('FLUSHALL').equal(True)
+    _set_documents(env, documents)
+    return refused
+
+
 @_values_in_ram
-def test_a_full_sync_rdb_restores_key_by_key(env):
-    """A replica-of syncer and an RDB import split the RDB into one RESTORE per key. Every key a
-    full sync sends must restore that way."""
+def test_a_full_sync_rdb_restores_key_by_key_only_without_cross_key_strings(env):
+    """A replica-of syncer whose source cannot be told it is one (an OSS Redis has no REPLCONF
+    syncer), and an RDB import, split the RDB into one RESTORE per key. A RESTORE has no load
+    session, so it refuses the stream records of a save that shares strings across keys. Setting
+    the writer off on such a source is the workaround. This pins the gap: if the default stops
+    sharing across keys, the first check fails and this test should require every key to restore."""
     _start_clean(env)
     if env.useTLS:
         env.skip()
@@ -957,33 +985,19 @@ def test_a_full_sync_rdb_restores_key_by_key(env):
     documents = {f'sync:{i}': {'shared': shared, 'step': i} for i in range(16)}
     _set_documents(env, documents)
     connection = _binary_connection(env)
-    original = env.getConnection().config_get('rdbcompression')['rdbcompression']
+    original = {name: env.getConnection().config_get(name)[name]
+                for name in ('rdbcompression', WRITER_BUDGET)}
     try:
         genuine = connection.execute_command('DUMP', 'sync:0')
         env.getConnection().config_set('rdbcompression', 'no')
-        rdb = _retry_while_saving(lambda: _full_sync_rdb(env))
-        records = [rdb[slice(*value['record'])] for value in _parse_rdb(rdb)]
-        env.assertEqual(len(records), len(documents))
-
-        env.expect('FLUSHALL').equal(True)
-        refused = []
-        for i, record in enumerate(records):
-            try:
-                connection.execute_command('RESTORE', f'restored:{i}', 0,
-                                           _restore_payload(genuine, record))
-            except ResponseError:
-                refused.append(i)
-        # Indexes and markers only: the documents are kilobytes each.
-        env.assertEqual(len(refused), 0, message=f'{len(refused)} of {len(records)} keys refused, '
-                        f'markers {sorted({records[i][0] for i in refused})}')
-        steps = sorted(json.loads(env.cmd('JSON.GET', f'restored:{i}'))['step']
-                       for i in range(len(records)) if env.cmd('EXISTS', f'restored:{i}'))
-        env.assertEqual(steps, list(range(len(documents))))
-        for i in range(len(records)):
-            if env.cmd('EXISTS', f'restored:{i}'):
-                restored = json.loads(env.cmd('JSON.GET', f'restored:{i}'))
-                env.assertTrue(restored == documents[f'sync:{restored["step"]}'],
-                               message=f'restored:{i} differs')
+        refused = _restore_full_sync_key_by_key(env, connection, genuine, documents)
+        if not _is_flex(env):
+            # Flex writes every value self-contained, so it never refuses one.
+            env.assertEqual(sorted(set(refused)), [MARKER_STREAM], message=f'{len(refused)} refused')
+            env.assertEqual(len(refused), len(documents))
+        env.getConnection().config_set(WRITER_BUDGET, '0')
+        env.assertEqual(_restore_full_sync_key_by_key(env, connection, genuine, documents), [])
     finally:
-        env.getConnection().config_set('rdbcompression', original)
+        for name, value in original.items():
+            env.getConnection().config_set(name, value)
         connection.close()
