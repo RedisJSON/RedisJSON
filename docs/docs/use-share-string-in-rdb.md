@@ -319,9 +319,12 @@ not dataset copy-on-write.
 
 - **Memory.** A single pass that shares strings across keys must remember each repeated string
   between its first and last use, and Redis saves in hash order. The table costs about 22 to 36
-  bytes per distinct shared string, so the default ceiling of 1 GiB holds about 30 to 49 million
-  of them. The loader keeps 8 bytes per definition in the current
-  dictionary. Resets keep the table's capacity and release the reader's old string handles.
+  bytes per distinct shared string. The ceiling is a share of `used_memory` with no absolute cap:
+  at the default 20%, each GB that Redis uses allows a table of about 200 MB, which holds about 6
+  to 9 million such strings. The table is new memory in the saving process, a BGSAVE, AOF rewrite
+  or full-sync child, on top of its copy-on-write pages, so a large shard needs the headroom for
+  it or a lower percentage. The loader keeps 8 bytes per definition in the current dictionary.
+  Resets keep the table's capacity and release the reader's old string handles.
 - **Small strings.** Strings from 8 bytes up are shared, object keys included. A reference replaces
   only 9 to 64 bytes with 2 to 6, and every distinct string costs a table entry. A tiny document
   whose only shared string is held by two documents gets larger when that string is under 12
@@ -333,32 +336,47 @@ not dataset copy-on-write.
   sliced out by key, or reordered. A stream RDB is read only through Redis loading with this
   module.
 - **Versions.** Encoding version 5 is unreadable by modules that predate it, even when sharing
-  is off.
+  is off: every build of this module writes it. Upgrade every node that may load this module's
+  RDBs (replicas, then the master) before the first save, and plan no rollback to an earlier
+  module once a version 5 RDB has been written.
 - **Flex.** Every Flex value is self-contained, so a Flex save shares strings only inside one value.
   Flex can keep a value on flash undecoded and decode it later, alone, with no record before it, so
   a stream record cannot be resolved there. The module never writes a stream on Flex, never arms a
   load session there (a stream record that reaches Flex fails as `no_stream`), and does not set
   `REQUIRE_LOADED_KEYS_IN_RAM`, which would disable direct-to-disk loading for every key of every
-  type. An RDB that a RoR server wrote as a stream is not loadable on Flex.
+  type. An RDB that a RoR server wrote as a stream is not loadable on Flex, and the writer cannot
+  tell that a Flex node will read it: a RoR master that full-syncs a Flex replica, or a RoR
+  `dump.rdb` loaded on Flex, fails the load with `no_stream`. Before such a move, set
+  `json-rdb-dictionary-max-memory-percent` to 0 on the RoR source and save again.
 - **Expired keys.** A stream with many expired keys holds their strings until a reset or the end of
   the stream, because the core decodes every value before it can drop it.
 
-## Open questions before the writer is on by default
+## Readers that take one key at a time
 
-Implementation does not wait for these. Turning the writer on by default does.
+A RESTORE has no load session, so any consumer that turns an RDB into one RESTORE per key refuses
+the stream records of a save that shares strings across keys. Enterprise import and backup restore
+work that way (`rl_rdbloader` with librdb, which always restores module values with RESTORE), and
+so does the replica-of syncer. The module writes self-contained records when the core says the
+save feeds such a consumer: the syncer flag (see Replica-of) and the standard RDB flag (see Backup
+and export). It cannot tell in these cases, and the RDB must then be written with
+`json-rdb-dictionary-max-memory-percent` set to 0:
 
-- **G1.** Do Enterprise replica-of, Active-Active, ASM scale-out, and import or backup-restore
-  consume module values through RESTORE conversion (`rdb.c`, `rl_syncer`, `rl_rdbloader`)? A
-  stream record cannot decode there, and the module cannot tell its consumer. If any of them
-  does, the options are a per-database opt-out and a fresh self-contained save before every
-  export, or the syncer signal described under Replica-of. Strings of 8 bytes and up are shared, object
-  keys included, so a stream is written for nearly every dataset that repeats a key.
+- A core that passes no persistence information, such as an Enterprise release whose core
+  predates the flags, writes stream records even for a backup or a replica-of source.
+- A `dump.rdb` that an OSS Redis or any other server saved, imported into Enterprise or Cloud or
+  loaded with a per-key tool (librdb, redis-shake, RIOT).
+- A replica-of from an OSS Redis source, which has no `REPLCONF SYNCER`.
+- A compressed replica-of without atomic slot migration. Its syncer does not announce
+  `capa eof`, which the core requires of a flagged replica, so it does not send the flag.
+- A RoR source that a Flex node reads (see Flex under Limits).
+
+## Open questions
+
 - **G2.** The production `rdbcompression` and `bigredis-compression` values on Flex. The default
   pair takes the path that re-serializes values.
 - **G3.** The real number of distinct shared strings, their sizes, and their multiplicity in the
   target datasets. A customer on RedisJSON 8.6.5 stores JSON text (encoding version 3), so
   delivering there needs a CBOR release.
-- Roll out readers first, then writers.
 
 ## Source and tests
 

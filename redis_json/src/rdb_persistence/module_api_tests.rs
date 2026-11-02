@@ -21,6 +21,7 @@ use std::cell::Cell;
 use std::collections::VecDeque;
 use std::ffi::{c_char, c_int};
 use std::sync::{MutexGuard, Once};
+use std::time::Duration;
 
 thread_local! {
     /// What a callback wrote with one call, or reads with one call.
@@ -540,6 +541,44 @@ fn stream_records_refused_outside_a_load_warn_at_growing_intervals() {
         warnings[3].ends_with("reason=no_stream refusals=8"),
         "{warnings:?}"
     );
+}
+
+#[test]
+fn a_refusal_while_the_server_loads_without_a_session_is_a_warning() {
+    // Flex arms no load session, so a refused record of a file or replica load stops the load.
+    let server = Server::start();
+    let (_owner, docs) = shared_documents("a string a Flex load cannot resolve", 2);
+    let rdb = server.save(&docs);
+    SERVER_LOADING_FOR_TESTS.set(true);
+    IO_LOGS.set(Vec::new());
+    for _ in 0..3 {
+        assert!(server.load_record(&rdb.records[1]).is_none());
+    }
+    let logs = IO_LOGS.take();
+    assert_eq!(logs.len(), 3, "{logs:?}");
+    assert!(
+        logs.iter().all(|log| log.starts_with("warning ")),
+        "{logs:?}"
+    );
+}
+
+#[test]
+fn the_no_stream_count_restarts_after_a_quiet_period() {
+    // Every incident, such as one import, warns at its own first refusal.
+    let server = Server::start();
+    let (_owner, docs) = shared_documents("a string two imports cannot resolve", 2);
+    let rdb = server.save(&docs);
+    for _ in 0..3 {
+        assert!(server.load_record(&rdb.records[1]).is_none());
+    }
+    let quiet = NO_STREAM_INCIDENT_GAP + Duration::from_secs(1);
+    NO_STREAM_LAST_REFUSAL.set(NO_STREAM_LAST_REFUSAL.get().map(|last| last - quiet));
+    IO_LOGS.set(Vec::new());
+    assert!(server.load_record(&rdb.records[1]).is_none());
+    let logs = IO_LOGS.take();
+    assert_eq!(logs.len(), 1, "{logs:?}");
+    assert!(logs[0].starts_with("warning "), "{logs:?}");
+    assert!(logs[0].ends_with("reason=no_stream refusals=1"), "{logs:?}");
 }
 
 #[test]

@@ -17,6 +17,7 @@ use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
 use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
 
 use ijson::{CborDecodeError, IValue, StreamEncoderStats, StreamStrings, StringDictionary};
 #[doc(hidden)]
@@ -90,7 +91,12 @@ thread_local! {
     static LOAD_SESSION: RefCell<Option<LoadSession>> = const { RefCell::new(None) };
     /// Stream records refused outside a load, which RESTORE and per-key importers cause.
     static NO_STREAM_REFUSALS: Cell<u64> = const { Cell::new(0) };
+    /// When the last of them was refused.
+    static NO_STREAM_LAST_REFUSAL: Cell<Option<Instant>> = const { Cell::new(None) };
 }
+
+/// A refusal this long after the previous one starts a new incident, whose count starts at 1.
+const NO_STREAM_INCIDENT_GAP: Duration = Duration::from_secs(60);
 
 #[cfg(test)]
 thread_local! {
@@ -98,6 +104,8 @@ thread_local! {
     static IO_LOGS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
     /// What the server reports as used memory; a unit test has no server to ask.
     static USED_MEMORY_FOR_TESTS: Cell<Option<u64>> = const { Cell::new(None) };
+    /// Whether the server is loading a file or a replica stream.
+    static SERVER_LOADING_FOR_TESTS: Cell<bool> = const { Cell::new(false) };
 }
 
 /// The writer of one RDB stream. Dropping it forgets which strings were defined, so every later
@@ -542,10 +550,31 @@ impl fmt::Display for LoadError {
     }
 }
 
+/// Whether the server is loading a file or a replica stream, as opposed to running RESTORE.
+fn server_is_loading(rdb: *mut raw::RedisModuleIO) -> bool {
+    #[cfg(test)]
+    {
+        let _ = rdb;
+        SERVER_LOADING_FOR_TESTS.get()
+    }
+    #[cfg(not(test))]
+    {
+        // SAFETY: `rdb` is the IO handle the core passed to this type's load callback, which runs
+        // on the main thread; the context it returns lives as long as the handle.
+        let ctx = unsafe {
+            raw::RedisModule_GetContextFromIO.expect("the module API is initialized")(rdb)
+        };
+        Context::new(ctx)
+            .get_flags()
+            .contains(redis_module::ContextFlags::LOADING)
+    }
+}
+
 /// Loads one value record of this module's type and logs a refusal through `rdb`.
 pub(crate) fn load_value(rdb: *mut raw::RedisModuleIO) -> Option<IValue> {
-    // A stream record that fails releases the session, so ask before decoding.
-    let loading = LOAD_SESSION.with_borrow(Option::is_some);
+    // A stream record that fails releases the session, so ask before decoding. Flex loads arm no
+    // session, so the server's own loading flag counts as well.
+    let loading = LOAD_SESSION.with_borrow(Option::is_some) || server_is_loading(rdb);
     match read_value(rdb) {
         Ok(value) => Some(value),
         Err(LoadError::ShortRead) => None,
@@ -556,9 +585,18 @@ pub(crate) fn load_value(rdb: *mut raw::RedisModuleIO) -> Option<IValue> {
                 RedisLogLevel::Warning
             } else if error == LoadError::NoStream {
                 // The RDB went to a consumer that reads it key by key. Every such key fails, so
-                // warn at the 1st, 2nd, 4th, ... refusal to keep the log readable.
-                let refusals = NO_STREAM_REFUSALS.get() + 1;
+                // warn at the 1st, 2nd, 4th, ... refusal of an incident to keep the log readable.
+                let now = Instant::now();
+                let new_incident = NO_STREAM_LAST_REFUSAL
+                    .get()
+                    .is_none_or(|last| now.duration_since(last) >= NO_STREAM_INCIDENT_GAP);
+                let refusals = if new_incident {
+                    1
+                } else {
+                    NO_STREAM_REFUSALS.get() + 1
+                };
                 NO_STREAM_REFUSALS.set(refusals);
+                NO_STREAM_LAST_REFUSAL.set(Some(now));
                 message.push_str(&format!(" refusals={refusals}"));
                 if refusals.is_power_of_two() {
                     RedisLogLevel::Warning

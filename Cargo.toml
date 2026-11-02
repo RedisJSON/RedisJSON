@@ -9,7 +9,7 @@ redis-module = { git = "https://github.com/RedisLabsModules/redismodule-rs", rev
     "bindgen-runtime",
 ] }
 redis-module-macros = { git = "https://github.com/RedisLabsModules/redismodule-rs", rev = "a383429360733936751bed5758648b01e48e7e55" }
-ijson = { git = "https://github.com/RedisJSON/ijson", branch = "rdb_strings_firstuse", default-features = false }
+ijson = { git = "https://github.com/RedisJSON/ijson", rev = "6484ffaf92d2bcecc45ebbcd4e4a977b3dbc536a", default-features = false }
 # Pin serde_json below the version range that switched float formatting (ryu -> zmij),
 # to keep exponent formatting stable (e.g. `e308` vs `e+308`) and avoid test churn on `cargo update`.
 serde_json = { version = ">=1.0.0, <1.0.147", features = ["unbounded_depth"] }

@@ -32,6 +32,8 @@ pub(super) fn reset() {
     LOAD_SESSION.set(None);
     DICTIONARY_FACTORY.set(None);
     NO_STREAM_REFUSALS.set(0);
+    NO_STREAM_LAST_REFUSAL.set(None);
+    SERVER_LOADING_FOR_TESTS.set(false);
 }
 
 fn start_saving() {
