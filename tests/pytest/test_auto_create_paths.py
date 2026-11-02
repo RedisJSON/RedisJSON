@@ -54,11 +54,11 @@ def case(doc, cmd, on, off, doc_on=None, doc_off=None,
     return Case(doc, cmd, on, off, doc_on, doc_off, doc2, doc2_on, doc2_off)
 
 
-def _env(enabled):
+def _env(enabled, **kwargs):
     # noDefaultModuleArgs: don't merge the global --module-args on top of ours.
     if enabled:
-        return Env(moduleArgs=AUTO_CREATE_ARGS, noDefaultModuleArgs=True)
-    return Env(noDefaultModuleArgs=True)
+        return Env(moduleArgs=AUTO_CREATE_ARGS, noDefaultModuleArgs=True, **kwargs)
+    return Env(noDefaultModuleArgs=True, **kwargs)
 
 
 def _check(env, c, expected, expected_doc, expected_doc2, mode):
@@ -334,6 +334,28 @@ CASES = [
     case('{"a":"str"}', ('JSON.NUMINCRBY', KEY, '$.a', '"5"'),
          '[null]', '[null]', '[{"a":"str"}]', '[{"a":"str"}]'),
 
+    # ------ bracket notation: a created key keeps its exact name ------
+    case('{}', ('JSON.SET', KEY, '$["a.b"].c', '5'),
+         OK, NIL, '[{"a.b":{"c":5}}]', '[{}]'),
+    case('{}', ('JSON.SET', KEY, "$['x y']['z']", '5'),
+         OK, NIL, '[{"x y":{"z":5}}]', '[{}]'),
+    case('{}', ('JSON.SET', KEY, '$["q\\"t"].v', '5'),
+         OK, NIL, '[{"q\\"t":{"v":5}}]', '[{}]'),
+    case('{}', ('JSON.SET', KEY, '$["שלום"].v', '5'),
+         OK, NIL, '[{"שלום":{"v":5}}]', '[{}]'),
+    case('{}', ('JSON.SET', KEY, '$[""].v', '5'),
+         OK, NIL, '[{"":{"v":5}}]', '[{}]'),
+    # a quoted number is an object key, never an array index
+    case('{}', ('JSON.SET', KEY, '$["0"].v', '5'),
+         OK, NIL, '[{"0":{"v":5}}]', '[{}]'),
+    # an existing dotted key is descended into, not split
+    case('{"a.b":{}}', ('JSON.SET', KEY, '$["a.b"].c.d', '5'),
+         OK, NIL, '[{"a.b":{"c":{"d":5}}}]', '[{"a.b":{}}]'),
+    case('{"a.b":{}}', ('JSON.ARRAPPEND', KEY, '$["a.b"]["x y"]', '1'),
+         [1], [], '[{"a.b":{"x y":[1]}}]', '[{"a.b":{}}]'),
+    case(None, ('JSON.SET', KEY, '$["a.b"]["c d"]', '5'),
+         OK, ERR('new objects must be created at the root'), '[{"a.b":{"c d":5}}]'),
+
     # ---------------- legacy and projection paths ----------------
     # legacy (dot) paths create too
     case('{"a":{}}', ('JSON.SET', KEY, '.a.b.c', '5'),
@@ -405,10 +427,167 @@ def test_numincrby_creates_under_resp3():
     """The seed lands above the RESP2/RESP3 split in `json_num_op`, so the two
     protocols differ only in the shape of the reply, never in what was created.
     """
-    env = Env(protocol=3, moduleArgs=AUTO_CREATE_ARGS, noDefaultModuleArgs=True)
+    env = _env(True, protocol=3)
     env.expect('JSON.SET', KEY, '$', '{"a":{}}').ok()
     env.expect('JSON.NUMINCRBY', KEY, '$.a.b', '5').equal([5])
     env.expect('JSON.GET', KEY, '$').equal('[{"a":{"b":5}}]')
+
+
+#: One creating write per command, each into a branch of its own. The first one
+#: builds KEY from nothing, and JSON.MSET builds KEY2 the same way.
+CREATING_WRITES = (
+    (('JSON.SET', KEY, '$.set.a.b', '1'), OK),
+    (('JSON.MSET', KEY, '$.mset.a.b', '2', KEY2, '$.other.a', '3'), OK),
+    (('JSON.MERGE', KEY, '$.merge.a.b', '{"c":4}'), OK),
+    (('JSON.ARRAPPEND', KEY, '$.arr.a.b', '5'), [1]),
+    (('JSON.ARRINSERT', KEY, '$.ins.a.b', '0', '6'), [1]),
+    (('JSON.NUMINCRBY', KEY, '$.num.a.b', '7'), '[7]'),
+    (('JSON.STRAPPEND', KEY, '$.str.a.b', '"x"'), [1]),
+)
+CREATED_DOC = {'set': {'a': {'b': 1}}, 'mset': {'a': {'b': 2}}, 'merge': {'a': {'b': {'c': 4}}},
+               'arr': {'a': {'b': [5]}}, 'ins': {'a': {'b': [6]}}, 'num': {'a': {'b': 7}},
+               'str': {'a': {'b': 'x'}}}
+CREATED_DOC2 = {'other': {'a': 3}}
+
+
+def _assert_created_docs(env, message):
+    env.assertEqual(json.loads(env.cmd('JSON.GET', KEY)), CREATED_DOC, message=message)
+    env.assertEqual(json.loads(env.cmd('JSON.GET', KEY2)), CREATED_DOC2, message=message)
+
+
+def test_creation_replies_under_resp3():
+    env = _env(True, protocol=3)
+    env.cmd('DEL', KEY, KEY2)
+    for args, reply in CREATING_WRITES:
+        # RESP2 answers a JSONPath NUMINCRBY with a JSON string, RESP3 with an array.
+        expected = json.loads(reply) if args[0] == 'JSON.NUMINCRBY' else reply
+        env.expect(*args).equal(expected)
+    _assert_created_docs(env, 'RESP3')
+
+
+def _wait_aof_rewrite(env, timeout=10):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        info = env.cmd('INFO', 'persistence')
+        if not info['aof_rewrite_in_progress'] and not info['aof_rewrite_scheduled']:
+            env.assertEqual(info['aof_last_bgrewrite_status'], 'ok')
+            return
+        time.sleep(0.1)
+    env.assertTrue(False, message='AOF rewrite did not finish')
+
+
+def test_created_documents_survive_aof_replay():
+    """The AOF records each write verbatim, so a replay re-runs it and has to
+    create the same levels again. RedisJSON has no aof_rewrite callback, so a
+    rewrite keeps the RDB preamble: the writes before it reload from the RDB
+    part, the writes after it replay from the incremental file.
+    """
+    env = _env(True)
+    env.skipOnCluster()
+    env.cmd('DEL', KEY, KEY2)
+    enabled_here = not env.useAof
+    if enabled_here:
+        env.cmd('CONFIG', 'SET', 'appendonly', 'yes')
+    try:
+        _wait_aof_rewrite(env)
+        half = len(CREATING_WRITES) // 2
+        for args, reply in CREATING_WRITES[:half]:
+            env.expect(*args).equal(reply)
+        env.cmd('BGREWRITEAOF')
+        _wait_aof_rewrite(env)
+        for args, reply in CREATING_WRITES[half:]:
+            env.expect(*args).equal(reply)
+        _assert_created_docs(env, 'before LOADAOF')
+        env.cmd('DEBUG', 'LOADAOF')
+        _assert_created_docs(env, 'after LOADAOF')
+    finally:
+        if enabled_here:
+            env.cmd('CONFIG', 'SET', 'appendonly', 'no')
+
+
+def test_creation_notifies_once():
+    """Creating the missing levels is part of one write, so it fires the
+    command's usual keyspace event once, and a write that creates nothing fires
+    none. RediSearch indexes JSON documents through these events.
+    """
+    env = _env(True)
+    env.skipOnCluster()
+    con = env.getConnection()
+    con.execute_command('DEL', KEY, KEY2)
+    con.execute_command('CONFIG', 'SET', 'notify-keyspace-events', 'KEA')
+    try:
+        with con.pubsub() as pubsub:
+            pubsub.psubscribe('__keyevent@0__:*')
+            env.assertEqual(pubsub.get_message(timeout=1)['type'], 'psubscribe')
+
+            def events():
+                # The marker's event comes after every event of the command before it.
+                con.execute_command('SET', 'mark{s}', '1')
+                received = []
+                while (msg := pubsub.get_message(timeout=5))['data'] != 'mark{s}':
+                    received.append((msg['channel'].split(':', 1)[1], msg['data']))
+                return received
+
+            for args, _ in CREATING_WRITES:
+                con.execute_command(*args)
+                keys = (KEY, KEY2) if args[0] == 'JSON.MSET' else (KEY,)
+                env.assertEqual(events(), [(args[0].lower(), key) for key in keys], message=args)
+
+            # A scalar in the way, or XX, leaves nothing to create.
+            con.execute_command('JSON.SET', KEY, '$', '{"s":3}')
+            events()
+            for args, reply in (
+                (('JSON.SET', KEY, '$.s.a.b', '1'), NIL),
+                (('JSON.SET', KEY, '$.x.a.b', '1', 'XX'), NIL),
+                (('JSON.MSET', KEY, '$.s.a.b', '1'), NIL),
+                (('JSON.MERGE', KEY, '$.s.a.b', '1'), NIL),
+                (('JSON.ARRAPPEND', KEY, '$.s.a.b', '1'), []),
+                (('JSON.ARRINSERT', KEY, '$.s.a.b', '0', '1'), []),
+                (('JSON.NUMINCRBY', KEY, '$.s.a.b', '1'), '[]'),
+                (('JSON.STRAPPEND', KEY, '$.s.a.b', '"x"'), []),
+            ):
+                env.assertEqual(con.execute_command(*args), reply, message=args)
+                env.assertEqual(events(), [], message=args)
+            env.assertEqual(con.execute_command('JSON.GET', KEY), '{"s":3}')
+    finally:
+        con.execute_command('CONFIG', 'SET', 'notify-keyspace-events', '')
+        con.execute_command('DEL', 'mark{s}')
+
+
+AUTO_CREATE_LIB = """#!lua name=auto_create
+redis.register_function('auto_create_incr', function(keys)
+    return redis.call('JSON.NUMINCRBY', keys[1], '$.fn.n', '4')
+end)
+"""
+
+
+def test_creation_in_transactions_and_scripts_replicates():
+    """A creating write inside MULTI/EXEC, a Lua script or a function still
+    replicates verbatim, so the replica creates the same levels.
+    """
+    env = _env(True)
+    if not env.useSlaves:
+        env.skip()
+    env.skipOnCluster()
+    con = env.getConnection()
+    con.execute_command('DEL', KEY)
+    with con.pipeline(transaction=True) as pipe:
+        pipe.execute_command('JSON.SET', KEY, '$.multi.a', '1')
+        pipe.execute_command('JSON.ARRAPPEND', KEY, '$.multi.b.arr', '2')
+        pipe.execute_command('JSON.NUMINCRBY', KEY, '$.multi.c.n', '3')
+        env.assertEqual(pipe.execute(), [OK, [1], '[3]'])
+    env.assertEqual(con.execute_command(
+        'EVAL', "return redis.call('JSON.MERGE', KEYS[1], '$.lua.a', '{\"b\":3}')", 1, KEY), OK)
+    con.execute_command('FUNCTION', 'LOAD', 'REPLACE', AUTO_CREATE_LIB)
+    try:
+        env.assertEqual(con.execute_command('FCALL', 'auto_create_incr', 1, KEY), '[4]')
+    finally:
+        con.execute_command('FUNCTION', 'DELETE', 'auto_create')
+
+    expected = {'multi': {'a': 1, 'b': {'arr': [2]}, 'c': {'n': 3}}, 'lua': {'a': {'b': 3}}, 'fn': {'n': 4}}
+    env.assertEqual(json.loads(con.execute_command('JSON.GET', KEY)), expected)
+    con.execute_command('WAIT', '1', '10000')
+    env.assertEqual(json.loads(env.getSlaveConnection().execute_command('JSON.GET', KEY)), expected)
 
 
 def test_created_document_survives_rdb_reload():
