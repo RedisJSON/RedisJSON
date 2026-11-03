@@ -65,6 +65,9 @@ static BIGREDIS_ENABLED: AtomicBool = AtomicBool::new(false);
 // Slot migrations this node is exporting. A fork child started meanwhile may write the migration
 // snapshot, which the destination loads without a session, so such a save never streams.
 static ASM_EXPORTS: AtomicUsize = AtomicUsize::new(0);
+// Whether a save on a core that passes no persistence info never streams; set by
+// require_persistence_flags(). Such a core cannot say that a save feeds a syncer or a backup.
+static PERSISTENCE_FLAGS_REQUIRED: AtomicBool = AtomicBool::new(false);
 
 /// Creates a fresh dictionary for each save. Without a custom factory, saves use
 /// [`ijson::AddressDictionary`]; custom factories may supply any [`StringDictionary`].
@@ -77,6 +80,15 @@ pub type DictionaryFactory = fn() -> Box<dyn StringDictionary>;
 /// dictionary from this factory and uses it for the entire stream.
 pub fn set_dictionary_factory(factory: DictionaryFactory) {
     DICTIONARY_FACTORY.set(Some(factory));
+}
+
+/// Writes every value self-contained on a core that passes no persistence info, as a core that
+/// predates `REDISMODULE_PERSISTENCE_FLAG_SYNCER` and `REDISMODULE_PERSISTENCE_FLAG_STDRDB` does.
+/// For a build that runs on Redis Enterprise, where such a save may feed a syncer or a backup
+/// that is restored one key at a time. Without this call, as on OSS, such a save streams.
+/// Call only from the module's `init` callback, on the Redis main thread.
+pub fn require_persistence_flags() {
+    PERSISTENCE_FLAGS_REQUIRED.store(true, Ordering::Relaxed);
 }
 
 thread_local! {
@@ -697,15 +709,16 @@ unsafe extern "C" fn command_filter(_ctx: *mut raw::RedisModuleCommandFilterCtx)
 /// a session. Neither does a save for a syncer, which an Enterprise replica-of uses: it converts
 /// the RDB into one RESTORE per key and cannot read a stream record. Nor a standard RDB (a backup
 /// or an export), which import also restores one key at a time. The core says so in the flags of
-/// the persistence event.
+/// the persistence event. A build that requires the flags never streams on a core without them.
 fn cross_key_stream_allowed(
     flex: bool,
     budget: usize,
     asm_export: bool,
     syncer: bool,
     stdrdb: bool,
+    unflagged: bool,
 ) -> bool {
-    !flex && budget > 0 && !asm_export && !syncer && !stdrdb
+    !flex && budget > 0 && !asm_export && !syncer && !stdrdb && !unflagged
 }
 
 /// The flags the core set on this save, `REDISMODULE_PERSISTENCE_FLAG_*`. A core that predates
@@ -760,20 +773,24 @@ unsafe extern "C" fn persistence_event(
             let flags = unsafe { persistence_flags(data) };
             let syncer = flags & u64::from(raw::REDISMODULE_PERSISTENCE_FLAG_SYNCER) != 0;
             let stdrdb = flags & u64::from(raw::REDISMODULE_PERSISTENCE_FLAG_STDRDB) != 0;
+            let unflagged = data.is_null() && PERSISTENCE_FLAGS_REQUIRED.load(Ordering::Relaxed);
             SAVE_SESSION.set(
-                cross_key_stream_allowed(flex, budget, asm_export, syncer, stdrdb).then(|| {
-                    SaveSession::new(StreamEncoderConfig {
-                        table_budget_bytes: budget,
-                    })
-                }),
+                cross_key_stream_allowed(flex, budget, asm_export, syncer, stdrdb, unflagged).then(
+                    || {
+                        SaveSession::new(StreamEncoderConfig {
+                            table_budget_bytes: budget,
+                        })
+                    },
+                ),
             );
-            let mode = match (percent, budget, flex, asm_export, syncer, stdrdb) {
+            let mode = match (percent, budget, flex, asm_export, syncer, stdrdb, unflagged) {
                 (0, ..) => "plain reason=off",
                 (_, 0, ..) => "local reason=budget",
                 (_, _, true, ..) => "local reason=flex",
                 (_, _, _, true, ..) => "local reason=asm",
-                (_, _, _, _, true, _) => "local reason=syncer",
-                (_, _, _, _, _, true) => "local reason=stdrdb",
+                (_, _, _, _, true, ..) => "local reason=syncer",
+                (_, _, _, _, _, true, _) => "local reason=stdrdb",
+                (.., true) => "local reason=no_flags",
                 _ => "stream",
             };
             log_event(

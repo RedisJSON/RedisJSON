@@ -304,7 +304,7 @@ Children have no INFO channel, so each save and load logs lines that start with
 
 | Line | Fields |
 |---|---|
-| `persistence_start` | `mode=stream`, `mode=local reason=budget`, `mode=local reason=flex`, `mode=local reason=asm`, `mode=local reason=syncer`, `mode=local reason=stdrdb` or `mode=plain reason=off`, then `percent` and `budget_bytes`. `reason=budget` means the share of the memory left no room for a table. |
+| `persistence_start` | `mode=stream`, `mode=local reason=budget`, `mode=local reason=flex`, `mode=local reason=asm`, `mode=local reason=syncer`, `mode=local reason=stdrdb`, `mode=local reason=no_flags` or `mode=plain reason=off`, then `percent` and `budget_bytes`. `reason=budget` means the share of the memory left no room for a table. |
 | `persistence_ended` / `persistence_failed` | `defs def_bytes refs resets stream_docs inline_docs poisoned`. A stream save that wrote a JSON value emits it. `resets` counts how often the table filled up and was cleared. Above 0 means the save ran into `json-rdb-dictionary-max-memory-percent`, so raise it to share more. |
 | `loading_ended` / `loading_failed` | `defs def_bytes refs stream_docs`, when the load read a stream record |
 | `load` | `status=refused reason=...` with `marker_N`, `no_stream`, `base_id_mismatch` or `cbor_...`. The level is warning while loading. Outside a load, `no_stream` adds `refusals=N` and is a warning when N is a power of two, otherwise verbose. |
@@ -362,7 +362,9 @@ and export). It cannot tell in these cases, and the RDB must then be written wit
 `json-rdb-dictionary-max-memory-percent` set to 0:
 
 - A core that passes no persistence information, such as an Enterprise release whose core
-  predates the flags, writes stream records even for a backup or a replica-of source.
+  predates the flags, writes stream records even for a backup or a replica-of source. A build
+  that calls `rdb_persistence::require_persistence_flags()` from its `init`, as the Enterprise
+  build does, writes every value self-contained on such a core instead (`reason=no_flags`).
 - A `dump.rdb` that an OSS Redis or any other server saved, imported into Enterprise or Cloud or
   loaded with a per-key tool (librdb, redis-shake, RIOT).
 - A replica-of from an OSS Redis source, which has no `REPLCONF SYNCER`.
