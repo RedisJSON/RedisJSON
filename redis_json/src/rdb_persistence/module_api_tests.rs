@@ -141,6 +141,7 @@ impl Server {
         USED_MEMORY_FOR_TESTS.set(Some(1 << 32));
         BIGREDIS_ENABLED.store(false, Ordering::Relaxed);
         ASM_EXPORTS.store(0, Ordering::Relaxed);
+        PERSISTENCE_FLAGS_REQUIRED.store(false, Ordering::Relaxed);
         backward::LEGACY_RDB_DEPTH_LIMIT.store(false, Ordering::Relaxed);
     }
 
@@ -892,6 +893,23 @@ fn a_standard_rdb_save_never_streams() {
     server.end_save();
 
     server.start_save();
+    assert!(save_session_exists());
+    server.end_save();
+}
+
+#[test]
+fn a_save_without_persistence_info_never_streams_when_the_flags_are_required() {
+    // An Enterprise build cannot tell a backup or a syncer save on a core that predates the flags.
+    let server = Server::start();
+    let (_owner, docs) = shared_documents("a string that two keys share on an older core", 2);
+    require_persistence_flags();
+    server.start_save();
+    assert!(!save_session_exists());
+    assert_eq!(server.save_record(&docs[0]), inline_record(&docs[0]));
+    server.end_save();
+
+    // A core with the flags still streams an ordinary save.
+    persistence_with_flags(raw::REDISMODULE_SUBEVENT_PERSISTENCE_RDB_START, 0);
     assert!(save_session_exists());
     server.end_save();
 }
