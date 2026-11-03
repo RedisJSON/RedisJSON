@@ -705,7 +705,7 @@ def test_config_set_is_not_replicated():
         # not inside the full-sync RDB.
         env.expect('WAIT', '1', '10000').equal(1)
         env.expect('JSON.SET', KEY, '$.a.b.c', '1').ok()
-        env.cmd('WAIT', '1', '10000')
+        env.expect('WAIT', '1', '10000').equal(1)
         env.expect('JSON.GET', KEY).equal('{"a":{"b":{"c":1}}}')
         env.assertEqual(replica.execute_command('JSON.GET', KEY), '{}')
     finally:
