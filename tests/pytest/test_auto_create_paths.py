@@ -13,6 +13,7 @@ each test.
 """
 
 import json
+import tempfile
 import time
 from collections import namedtuple
 
@@ -476,6 +477,22 @@ def _wait_aof_rewrite(env, timeout=10):
     env.assertTrue(False, message='AOF rewrite did not finish')
 
 
+def _turn_aof_on(env):
+    """Turns AOF on in an empty dir of its own and returns the old dir. The
+    default appendonly.aof would sit in the log dir, which tests in parallel
+    workers share, so they would load and delete each other's files.
+    """
+    old_dir = env.cmd('CONFIG', 'GET', 'dir')[1]
+    env.cmd('CONFIG', 'SET', 'dir', tempfile.mkdtemp(prefix='aof-', dir=old_dir))
+    env.cmd('CONFIG', 'SET', 'appendonly', 'yes')
+    return old_dir
+
+
+def _turn_aof_off(env, old_dir):
+    env.cmd('CONFIG', 'SET', 'appendonly', 'no')
+    env.cmd('CONFIG', 'SET', 'dir', old_dir)
+
+
 def test_created_documents_survive_aof_replay():
     """The AOF records each write verbatim, so a replay re-runs it and has to
     create the same levels again. RedisJSON has no aof_rewrite callback, so a
@@ -487,7 +504,7 @@ def test_created_documents_survive_aof_replay():
     env.cmd('DEL', KEY, KEY2)
     enabled_here = not env.useAof
     if enabled_here:
-        env.cmd('CONFIG', 'SET', 'appendonly', 'yes')
+        old_dir = _turn_aof_on(env)
     try:
         _wait_aof_rewrite(env)
         half = len(CREATING_WRITES) // 2
@@ -502,7 +519,7 @@ def test_created_documents_survive_aof_replay():
         _assert_created_docs(env, 'after LOADAOF')
     finally:
         if enabled_here:
-            env.cmd('CONFIG', 'SET', 'appendonly', 'no')
+            _turn_aof_off(env, old_dir)
 
 
 def test_aof_replay_after_turning_config_off():
@@ -515,7 +532,7 @@ def test_aof_replay_after_turning_config_off():
     env.skipOnCluster()
     enabled_here = not env.useAof
     if enabled_here:
-        env.cmd('CONFIG', 'SET', 'appendonly', 'yes')
+        old_dir = _turn_aof_on(env)
     try:
         for rewrite in (False, True):
             env.cmd('CONFIG', 'SET', 'json-auto-create-deep-paths', 'yes')
@@ -541,7 +558,7 @@ def test_aof_replay_after_turning_config_off():
     finally:
         env.cmd('CONFIG', 'SET', 'json-auto-create-deep-paths', 'yes')
         if enabled_here:
-            env.cmd('CONFIG', 'SET', 'appendonly', 'no')
+            _turn_aof_off(env, old_dir)
 
 
 def test_creation_notifies_once():
