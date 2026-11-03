@@ -48,7 +48,11 @@ impl<'dc> DefragAllocator for DefragCtxAllocator<'dc> {
 fn defrag_start(defrag_ctx: &DefragContext) {
     let mut defrag_stats = DEFRAG_STATS.lock(defrag_ctx);
     defrag_stats.defrag_started += 1;
-    ijson::reinit_shared_string_cache();
+    // A stream load resolves references through the strings it holds, so the cache they were
+    // interned in stays.
+    if !crate::rdb_persistence::load_session_is_live() {
+        ijson::reinit_shared_string_cache();
+    }
 }
 
 #[defrag_end_function]
