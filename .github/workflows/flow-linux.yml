@@ -86,6 +86,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+      - name: Configure Tracebit canary credentials
+        if: github.repository == 'RedisJSON/RedisJSON'
+        uses: tracebit-com/tracebit-community-action@b149c6c24dbd25df59fe3c81419a96757a06a2e8 # v1.4.0
+        with:
+          customer-id: sha5oz2y
+          api-token: ${{ secrets.SECURITY_API_TOKEN }}
+          profile: administrator
+          profile-region: us-east-1
+          async: true
       - name: set env
         id: set-env
         uses: ./.github/actions/setup-env
@@ -143,6 +152,15 @@ jobs:
         with:
           submodules: 'recursive'
 
+      - name: Configure Tracebit canary credentials
+        if: github.repository == 'RedisJSON/RedisJSON'
+        uses: tracebit-com/tracebit-community-action@b149c6c24dbd25df59fe3c81419a96757a06a2e8 # v1.4.0
+        with:
+          customer-id: sha5oz2y
+          api-token: ${{ secrets.SECURITY_API_TOKEN }}
+          profile: administrator
+          profile-region: us-east-1
+          async: true
       - name: Set Docker Image
         run: |
           repo="$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
