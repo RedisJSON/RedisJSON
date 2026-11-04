@@ -481,9 +481,13 @@ def _turn_aof_on(env):
     """Turns AOF on in an empty dir of its own and returns the old dir. The
     default appendonly.aof would sit in the log dir, which tests in parallel
     workers share, so they would load and delete each other's files.
+    The server's log moves to that dir as well while AOF is on, since Redis
+    reopens the log file by its relative name, so the dir is printed.
     """
     old_dir = env.cmd('CONFIG', 'GET', 'dir')[1]
-    env.cmd('CONFIG', 'SET', 'dir', tempfile.mkdtemp(prefix='aof-', dir=old_dir))
+    aof_dir = tempfile.mkdtemp(prefix='aof-', dir=old_dir)
+    env.debugPrint(f'AOF dir, and the server log while AOF is on: {aof_dir}', force=True)
+    env.cmd('CONFIG', 'SET', 'dir', aof_dir)
     env.cmd('CONFIG', 'SET', 'appendonly', 'yes')
     return old_dir
 
@@ -687,14 +691,16 @@ def test_created_paths_replicate():
 
 def test_config_set_is_not_replicated():
     """CONFIG SET changes only the node it runs on, but writes reach the replica
-    verbatim. A replica left off refuses the creation, and the two diverge
-    without an error (the warning in module.conf).
+    verbatim. A replica left off refuses the creation, and the two diverge (the
+    warning in module.conf). On an existing key the replica answers nil, so there
+    is no error. On a missing key it fails the write with "new objects must be
+    created at the root" and never creates the key.
     """
     env = _env(False)
     if not env.useSlaves:
         env.skip()
     env.skipOnCluster()
-    env.cmd('DEL', KEY)
+    env.cmd('DEL', KEY, KEY2)
     replica = env.getSlaveConnection()
     env.expect('CONFIG', 'SET', 'json-auto-create-deep-paths', 'yes').ok()
     try:
@@ -704,10 +710,16 @@ def test_config_set_is_not_replicated():
         # Once the replica has this, the next write reaches it as a command,
         # not inside the full-sync RDB.
         env.expect('WAIT', '1', '10000').equal(1)
+        errors = replica.execute_command('INFO', 'stats')['unexpected_error_replies']
         env.expect('JSON.SET', KEY, '$.a.b.c', '1').ok()
+        env.expect('JSON.SET', KEY2, '$.a.b', '1').ok()
         env.expect('WAIT', '1', '10000').equal(1)
         env.expect('JSON.GET', KEY).equal('{"a":{"b":{"c":1}}}')
         env.assertEqual(replica.execute_command('JSON.GET', KEY), '{}')
+        env.expect('JSON.GET', KEY2).equal('{"a":{"b":1}}')
+        env.assertEqual(replica.execute_command('EXISTS', KEY2), 0)
+        # Only the missing key's write failed on the replica.
+        env.assertEqual(replica.execute_command('INFO', 'stats')['unexpected_error_replies'], errors + 1)
     finally:
         env.cmd('CONFIG', 'SET', 'json-auto-create-deep-paths', 'no')
 
