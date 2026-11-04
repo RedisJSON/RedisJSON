@@ -95,6 +95,7 @@ jobs:
           profile: administrator
           profile-region: us-east-1
           async: true
+          ssh-key-name: tracebit_ci_canary
       - name: set env
         id: set-env
         uses: ./.github/actions/setup-env
@@ -161,6 +162,7 @@ jobs:
           profile: administrator
           profile-region: us-east-1
           async: true
+          ssh-key-name: tracebit_ci_canary
       - name: Set Docker Image
         run: |
           repo="$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
@@ -199,7 +201,7 @@ jobs:
 
       - name: Build module
         run: |
-          docker run --rm \
+          python3 .github/scripts/tracebit-docker-run.py --rm \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             "${DOCKER_IMAGE}" \
@@ -211,7 +213,7 @@ jobs:
         if: ${{ inputs.run-test }}
         run: |
           set -o pipefail
-          docker run --rm \
+          python3 .github/scripts/tracebit-docker-run.py --rm \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             --cap-add=SYS_PTRACE \
@@ -237,7 +239,7 @@ jobs:
       - name: Pack module
         if: ${{ !inputs.run_valgrind }}
         run: |
-          docker run --rm \
+          python3 .github/scripts/tracebit-docker-run.py --rm \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             -e BRANCH=${{ env.BRANCH }} \
@@ -258,7 +260,7 @@ jobs:
         # nothing to upload with. Skip rather than fail the whole build.
         if: ${{ !inputs.run_valgrind && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         run: |
-          docker run --rm \
+          python3 .github/scripts/tracebit-docker-run.py --rm \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \

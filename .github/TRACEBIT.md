@@ -14,12 +14,28 @@ secret retain Tracebit's warning-and-skip behavior.
 
 ## Coverage boundary
 
-The action injects canaries into the environment where GitHub runs the job's
-steps, including GitHub-managed job containers. It does not automatically inject
-canaries into nested `docker run` / `docker build` environments, FreeBSD VMs, or
-remote benchmark machines. Extending that coverage is pending Security's
-recommendation from Tracebit; runner coverage alone is not full build coverage.
-Do not copy the Tracebit API token into images or build artifacts.
+The action injects canaries into the runner and GitHub-managed job containers.
+Linux build/test/package, coverage, and random-traffic `docker run` steps use
+`.github/scripts/tracebit-docker-run.py` to forward canaries, following Tracebit's
+container guidance. These images run as root; the mounts target `/root`.
+
+The helper reconstructs only the canary AWS profile and mounts the dedicated
+`tracebit_ci_canary` SSH key and its canary-only config read-only. Temporary files
+live outside the workspace and are removed when the container command exits,
+including failure and cancellation. Runner AWS profiles and unrelated SSH keys
+are never copied. Prefixed AWS and optional npm/PyPI canary variables are passed
+by name, keeping their values out of Docker's command line. npm/PyPI variables
+are forwarded only when the action supplies them; their config files are not
+mounted. The Tracebit API token is never passed to Docker.
+
+When no canaries are available (including fork PRs without secrets), the helper
+runs the original container command without extra mounts or variables. It
+preserves Docker's exit status. Canary use requires internet access to alert;
+Tracebit associates alerts with the workflow run, not a separate container.
+
+Dockerfile `RUN` steps during `docker build`, FreeBSD VMs, and remote benchmark
+machines remain outside this coverage. Docker build integration still needs
+Tracebit/Security confirmation. Do not put canaries in image layers or artifacts.
 
 ## Rollout validation
 
@@ -33,5 +49,6 @@ Do not copy the Tracebit API token into images or build artifacts.
 - Have the Security project owner verify repository/workflow coverage in the
   Tracebit console. Do not exercise canary credentials against AWS or SSH as a
   routine test; their use triggers an incident alert.
-- Resolve nested-container coverage with Security before declaring the rollout
-  complete.
+- Confirm container forwarding in a trusted CI run and have Security verify
+  coverage. Resolve Docker image-build/other isolated environments before
+  declaring full build coverage.
