@@ -20,7 +20,7 @@ use json_path::select_value::{SelectValue, SelectValueType, ValueRef};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use json_path::{calc_once_with_paths, compile, json_path::UserPathTracker};
@@ -88,6 +88,35 @@ impl<'a, V: SelectValue> Serialize for Values<'a, V> {
 fn is_resp3(ctx: &Context) -> bool {
     ctx.get_flags()
         .contains(redis_module::ContextFlags::FLAGS_RESP3)
+}
+
+/// Serialize the document root for effect-based replication.
+fn serialize_holder_root<M: Manager>(redis_key: &mut M::WriteHolder) -> RedisResult<String>
+where
+    M::V: Serialize,
+{
+    let doc = redis_key
+        .get_value()?
+        .ok_or_else(RedisError::nonexistent_key)?;
+    KeyValue::<M::V>::serialize_object(doc, &ReplyFormatOptions::default())
+}
+
+/// Nested path creates depend on `ReJSON.auto-path-create`. Replicate the
+/// resulting root document as `JSON.SET key $ <json>` so replicas/AOF do not
+/// need matching config (and so primary no-ops are not turned into creates).
+fn replicate_nested_create_as_root_set<M: Manager>(
+    ctx: &Context,
+    key: &RedisString,
+    redis_key: &mut M::WriteHolder,
+) -> RedisResult<()>
+where
+    M::V: Serialize,
+{
+    let json = serialize_holder_root::<M>(redis_key)?;
+    let root = ctx.create_string("$");
+    let payload = ctx.create_string(json);
+    ctx.replicate("JSON.SET", &[key, &root, &payload]);
+    Ok(())
 }
 
 ///
@@ -390,6 +419,7 @@ pub fn json_set_command_impl<M: Manager>(
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;
+    let key_name = key.clone();
     let path = Path::new(args.next_str()?);
     let value = args.next_str()?;
 
@@ -440,21 +470,17 @@ pub fn json_set_command_impl<M: Manager>(
                 }
             } else {
                 let can_auto_create =
-                    op != SetOptions::AlreadyExists && crate::auto_path_create_enabled(ctx);
+                    op != SetOptions::AlreadyExists && crate::auto_path_create_enabled();
                 let update_info = KeyValue::new(doc).find_paths(path.get_path(), op)?;
                 if update_info.is_empty() {
                     if can_auto_create {
-                        match static_object_path_keys(path.get_path()) {
-                            Ok(keys) => {
-                                if redis_key.set_value_creating_path(&keys, val)? {
-                                    redis_key.notify_keyspace_event(ctx, "json.set")?;
-                                    manager.apply_changes(ctx);
-                                    REDIS_OK
-                                } else {
-                                    Ok(RedisValue::Null)
-                                }
-                            }
-                            Err(_) => Ok(RedisValue::Null),
+                        let keys = static_object_path_keys(path.get_path())?;
+                        if redis_key.set_value_creating_path(&keys, val)? {
+                            redis_key.notify_keyspace_event(ctx, "json.set")?;
+                            replicate_nested_create_as_root_set::<M>(ctx, &key_name, &mut redis_key)?;
+                            REDIS_OK
+                        } else {
+                            Ok(RedisValue::Null)
                         }
                     } else {
                         Ok(RedisValue::Null)
@@ -481,12 +507,12 @@ pub fn json_set_command_impl<M: Manager>(
                 redis_key.notify_keyspace_event(ctx, "json.set")?;
                 manager.apply_changes(ctx);
                 REDIS_OK
-            } else if crate::auto_path_create_enabled(ctx) {
+            } else if crate::auto_path_create_enabled() {
                 let keys = static_object_path_keys(path.get_path())?;
                 let final_val = manager.wrap_in_object_path(&keys, val)?;
                 redis_key.set_value(Vec::new(), final_val)?;
                 redis_key.notify_keyspace_event(ctx, "json.set")?;
-                manager.apply_changes(ctx);
+                replicate_nested_create_as_root_set::<M>(ctx, &key_name, &mut redis_key)?;
                 REDIS_OK
             } else {
                 Err(RedisError::Str(
@@ -577,6 +603,7 @@ pub fn json_merge_command_impl<M: Manager>(
     let mut args = args.into_iter().skip(1);
 
     let key = args.next_arg()?;
+    let key_name = key.clone();
     let path = Path::new(args.next_str()?);
     let value = args.next_str()?;
 
@@ -632,18 +659,15 @@ pub fn json_merge_command_impl<M: Manager>(
                     } else {
                         Ok(RedisValue::Null)
                     }
-                } else if crate::auto_path_create_enabled(ctx) {
-                    match static_object_path_keys(path.get_path()) {
-                        Ok(keys) => {
-                            if redis_key.set_value_creating_path(&keys, val)? {
-                                redis_key.notify_keyspace_event(ctx, "json.merge")?;
-                                manager.apply_changes(ctx);
-                                REDIS_OK
-                            } else {
-                                Ok(RedisValue::Null)
-                            }
-                        }
-                        Err(_) => Ok(RedisValue::Null),
+                } else if crate::auto_path_create_enabled() {
+                    let keys = static_object_path_keys(path.get_path())?;
+                    if redis_key.set_value_creating_path(&keys, val)? {
+                        redis_key.notify_keyspace_event(ctx, "json.merge")?;
+                        // Effect as root SET: replica/AOF need not share auto-create config.
+                        replicate_nested_create_as_root_set::<M>(ctx, &key_name, &mut redis_key)?;
+                        REDIS_OK
+                    } else {
+                        Ok(RedisValue::Null)
                     }
                 } else {
                     Ok(RedisValue::Null)
@@ -656,12 +680,12 @@ pub fn json_merge_command_impl<M: Manager>(
                 redis_key.notify_keyspace_event(ctx, "json.merge")?;
                 manager.apply_changes(ctx);
                 REDIS_OK
-            } else if crate::auto_path_create_enabled(ctx) {
+            } else if crate::auto_path_create_enabled() {
                 let keys = static_object_path_keys(path.get_path())?;
                 let final_val = manager.wrap_in_object_path(&keys, val)?;
                 redis_key.set_value(Vec::new(), final_val)?;
                 redis_key.notify_keyspace_event(ctx, "json.merge")?;
-                manager.apply_changes(ctx);
+                replicate_nested_create_as_root_set::<M>(ctx, &key_name, &mut redis_key)?;
                 REDIS_OK
             } else {
                 Err(RedisError::Str(
@@ -726,60 +750,101 @@ pub fn json_mset_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
-) -> RedisResult {
+) -> RedisResult
+where
+    M::V: Serialize,
+{
     let mut args = args.into_iter().skip(1);
 
     if args.len() < 3 {
         return Err(RedisError::WrongArity);
     }
 
-    // Validate only: paths and JSON must be well-formed, and new keys still
-    // require a root path unless auto-create (or replication/AOF) is on.
-    // Apply re-reads the live document so later triplets see earlier writes.
+    // Validate before any mutation so path / JSON errors never leave
+    // unreplicated partial writes. Apply still re-reads the live document so
+    // later triplets see earlier writes on the same key.
     let mut parsed: Vec<(RedisString, String, String)> = Vec::new();
     while let Ok(key) = args.next_arg() {
         let mut redis_key = manager.open_key_write(ctx, key.clone())?;
-        let exists = redis_key.get_value()?.is_some();
+        let key_value = redis_key.get_value()?;
 
         let path_str = args.next_str()?.to_string();
         let path = Path::new(&path_str);
-        if path != JSON_ROOT_PATH && !exists {
-            if crate::auto_path_create_enabled(ctx) {
-                static_object_path_keys(path.get_path())?;
-            } else {
-                return Err(RedisError::Str(
-                    "ERR new objects must be created at the root",
-                ));
+        let value_str = args.next_str()?.to_string();
+        let val = manager.from_str(&value_str, Format::JSON, true, None)?;
+
+        if path != JSON_ROOT_PATH {
+            match key_value {
+                Some(existing) => {
+                    let updates =
+                        KeyValue::new(existing).find_paths(path.get_path(), SetOptions::None)?;
+                    if updates.is_empty() && crate::auto_path_create_enabled() {
+                        let keys = static_object_path_keys(path.get_path())?;
+                        // Fail depth / wrap errors before any triplet mutates state
+                        // (JSON.SET surfaces these; MSET must not swallow them as nil).
+                        let _ = manager.wrap_in_object_path(&keys, val)?;
+                    }
+                }
+                None => {
+                    if crate::auto_path_create_enabled() {
+                        let keys = static_object_path_keys(path.get_path())?;
+                        let _ = manager.wrap_in_object_path(&keys, val)?;
+                    } else {
+                        return Err(RedisError::Str(
+                            "ERR new objects must be created at the root",
+                        ));
+                    }
+                }
             }
         }
 
-        let value_str = args.next_str()?.to_string();
-        let _ = manager.from_str(&value_str, Format::JSON, true, None)?;
         parsed.push((key, path_str, value_str));
     }
 
-    let mut holders: HashMap<String, M::WriteHolder> = HashMap::new();
+    struct MsetHolder<W> {
+        key: RedisString,
+        write: W,
+    }
+
+    let mut holders: HashMap<String, MsetHolder<M::WriteHolder>> = HashMap::new();
+    let mut touched: HashSet<String> = HashSet::new();
+    let mut nested_create_used = false;
     let mut all_updated = true;
     for (key, path_str, value_str) in parsed {
-        let redis_key = match holders.entry(key.to_string()) {
+        let name = key.to_string();
+        let holder = match holders.entry(name.clone()) {
             std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
             std::collections::hash_map::Entry::Vacant(e) => {
-                e.insert(manager.open_key_write(ctx, key)?)
+                let key_name = key.clone();
+                e.insert(MsetHolder {
+                    key: key_name,
+                    write: manager.open_key_write(ctx, key)?,
+                })
             }
         };
 
         let value = manager.from_str(&value_str, Format::JSON, true, None)?;
         let path = Path::new(&path_str);
-        let (any_updated, key_all_updated) =
-            mset_apply_triplet(&manager, ctx, redis_key, &path, value)?;
+        let (any_updated, key_all_updated, used_create) =
+            mset_apply_triplet(&manager, &mut holder.write, &path, value);
+        nested_create_used |= used_create;
 
         if any_updated {
-            redis_key.notify_keyspace_event(ctx, "json.mset")?;
+            holder.write.notify_keyspace_event(ctx, "json.mset")?;
+            touched.insert(name);
         }
         all_updated &= key_all_updated;
     }
 
-    manager.apply_changes(ctx);
+    if nested_create_used {
+        // Config-independent effect: final root docs for keys we actually wrote.
+        for name in &touched {
+            let holder = holders.get_mut(name).expect("touched key has a holder");
+            replicate_nested_create_as_root_set::<M>(ctx, &holder.key, &mut holder.write)?;
+        }
+    } else {
+        manager.apply_changes(ctx);
+    }
     if all_updated {
         REDIS_OK
     } else {
@@ -830,46 +895,59 @@ impl From<bool> for ApplyUpdatesResult {
     }
 }
 
-/// Apply one MSET triplet against the current document. Nested creates that
-/// fail (depth, type mismatch) are treated as a missed update so earlier
-/// writes in this command still replicate.
+/// Apply one MSET triplet against the current document.
+/// Returns `(any_updated, all_updated, used_nested_create)`.
+/// Path / depth / type failures are treated as a missed update so earlier
+/// writes in this command still reach `apply_changes` / effect replication.
 fn mset_apply_triplet<M: Manager>(
     manager: &M,
-    ctx: &Context,
     redis_key: &mut M::WriteHolder,
     path: &Path,
     value: M::O,
-) -> RedisResult<(bool, bool)> {
+) -> (bool, bool, bool) {
     if path == &JSON_ROOT_PATH {
         let updated = redis_key.set_value(Vec::new(), value).unwrap_or(false);
-        return Ok((updated, updated));
+        return (updated, updated, false);
     }
 
-    let updates = match redis_key.get_value()? {
-        Some(doc) => KeyValue::new(doc).find_paths(path.get_path(), SetOptions::None)?,
-        None => Vec::new(),
+    let updates = match redis_key.get_value() {
+        Ok(Some(doc)) => match KeyValue::new(doc).find_paths(path.get_path(), SetOptions::None) {
+            Ok(u) => u,
+            Err(_) => return (false, false, false),
+        },
+        Ok(None) => Vec::new(),
+        Err(_) => return (false, false, false),
     };
     if !updates.is_empty() {
         let result = apply_updates::<M>(redis_key, value, updates);
-        return Ok((result.any_updated(), result.all_updated()));
+        return (result.any_updated(), result.all_updated(), false);
     }
 
-    if !crate::auto_path_create_enabled(ctx) {
-        return Ok((false, false));
+    if !crate::auto_path_create_enabled() {
+        return (false, false, false);
     }
     let Ok(keys) = static_object_path_keys(path.get_path()) else {
-        return Ok((false, false));
+        return (false, false, false);
     };
-    if redis_key.get_value()?.is_none() {
-        let empty = manager.from_str("{}", Format::JSON, true, None)?;
-        if !redis_key.set_value(Vec::new(), empty).unwrap_or(false) {
-            return Ok((false, false));
+
+    match redis_key.get_value() {
+        Ok(None) => {
+            // Build the full nested object first so a depth failure does not
+            // leave an empty `{}` key behind.
+            let Ok(nested) = manager.wrap_in_object_path(&keys, value) else {
+                return (false, false, false);
+            };
+            let updated = redis_key.set_value(Vec::new(), nested).unwrap_or(false);
+            (updated, updated, updated)
         }
+        Ok(Some(_)) => {
+            let updated = redis_key
+                .set_value_creating_path(&keys, value)
+                .unwrap_or(false);
+            (updated, updated, updated)
+        }
+        Err(_) => (false, false, false),
     }
-    let updated = redis_key
-        .set_value_creating_path(&keys, value)
-        .unwrap_or(false);
-    Ok((updated, updated))
 }
 
 fn apply_updates<M: Manager>(
