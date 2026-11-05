@@ -13,6 +13,7 @@ each test.
 """
 
 import json
+import tempfile
 import time
 from collections import namedtuple
 
@@ -476,6 +477,26 @@ def _wait_aof_rewrite(env, timeout=10):
     env.assertTrue(False, message='AOF rewrite did not finish')
 
 
+def _turn_aof_on(env):
+    """Turns AOF on in an empty dir of its own and returns the old dir. The
+    default appendonly.aof would sit in the log dir, which tests in parallel
+    workers share, so they would load and delete each other's files.
+    The server's log moves to that dir as well while AOF is on, since Redis
+    reopens the log file by its relative name, so the dir is printed.
+    """
+    old_dir = env.cmd('CONFIG', 'GET', 'dir')[1]
+    aof_dir = tempfile.mkdtemp(prefix='aof-', dir=old_dir)
+    env.debugPrint(f'AOF dir, and the server log while AOF is on: {aof_dir}', force=True)
+    env.cmd('CONFIG', 'SET', 'dir', aof_dir)
+    env.cmd('CONFIG', 'SET', 'appendonly', 'yes')
+    return old_dir
+
+
+def _turn_aof_off(env, old_dir):
+    env.cmd('CONFIG', 'SET', 'appendonly', 'no')
+    env.cmd('CONFIG', 'SET', 'dir', old_dir)
+
+
 def test_created_documents_survive_aof_replay():
     """The AOF records each write verbatim, so a replay re-runs it and has to
     create the same levels again. RedisJSON has no aof_rewrite callback, so a
@@ -487,7 +508,7 @@ def test_created_documents_survive_aof_replay():
     env.cmd('DEL', KEY, KEY2)
     enabled_here = not env.useAof
     if enabled_here:
-        env.cmd('CONFIG', 'SET', 'appendonly', 'yes')
+        old_dir = _turn_aof_on(env)
     try:
         _wait_aof_rewrite(env)
         half = len(CREATING_WRITES) // 2
@@ -502,7 +523,46 @@ def test_created_documents_survive_aof_replay():
         _assert_created_docs(env, 'after LOADAOF')
     finally:
         if enabled_here:
-            env.cmd('CONFIG', 'SET', 'appendonly', 'no')
+            _turn_aof_off(env, old_dir)
+
+
+def test_aof_replay_after_turning_config_off():
+    """The AOF holds the creating commands, not their result, so a replay after
+    the config is turned off creates nothing and the created levels are gone. A
+    rewrite after the change stores the documents themselves (the RDB
+    preamble), so they survive the replay.
+    """
+    env = _env(True)
+    env.skipOnCluster()
+    enabled_here = not env.useAof
+    if enabled_here:
+        old_dir = _turn_aof_on(env)
+    try:
+        for rewrite in (False, True):
+            env.cmd('CONFIG', 'SET', 'json-auto-create-deep-paths', 'yes')
+            env.cmd('DEL', KEY, KEY2)
+            # Start from a fresh base, so the replay holds only the writes below.
+            _wait_aof_rewrite(env)
+            env.cmd('BGREWRITEAOF')
+            _wait_aof_rewrite(env)
+            for key in (KEY, KEY2):
+                env.expect('JSON.SET', key, '$', '{}').ok()
+            for args, reply in CREATING_WRITES:
+                env.expect(*args).equal(reply)
+            env.cmd('CONFIG', 'SET', 'json-auto-create-deep-paths', 'no')
+            if rewrite:
+                env.cmd('BGREWRITEAOF')
+                _wait_aof_rewrite(env)
+            env.cmd('DEBUG', 'LOADAOF')
+            if rewrite:
+                _assert_created_docs(env, 'rewritten after turning it off')
+            else:
+                for key in (KEY, KEY2):
+                    env.expect('JSON.GET', key).equal('{}')
+    finally:
+        env.cmd('CONFIG', 'SET', 'json-auto-create-deep-paths', 'yes')
+        if enabled_here:
+            _turn_aof_off(env, old_dir)
 
 
 def test_creation_notifies_once():
@@ -607,7 +667,7 @@ def test_created_paths_replicate():
     """`apply_changes` replicates verbatim, so the replica re-runs the command
     and has to auto-create the structure itself. That converges only because
     both nodes were loaded with the config on -- a mismatched pair is
-    divergent by design (R5) and is deliberately not asserted.
+    divergent by design (R5), see test_config_set_is_not_replicated.
     """
     env = _env(True)
     if not env.useSlaves:
@@ -627,6 +687,41 @@ def test_created_paths_replicate():
     env.expect('JSON.ARRAPPEND', KEY, '$[?(@ == {})].n', '1').equal([1])
     env.cmd('WAIT', '1', '10000')
     env.assertEqual(replica.execute_command('JSON.GET', KEY, '$'), '[{"a":{"n":[1]}}]')
+
+
+def test_config_set_is_not_replicated():
+    """CONFIG SET changes only the node it runs on, but writes reach the replica
+    verbatim. A replica left off refuses the creation, and the two diverge (the
+    warning in module.conf). On an existing key the replica answers nil, so there
+    is no error. On a missing key it fails the write with "new objects must be
+    created at the root" and never creates the key.
+    """
+    env = _env(False)
+    if not env.useSlaves:
+        env.skip()
+    env.skipOnCluster()
+    env.cmd('DEL', KEY, KEY2)
+    replica = env.getSlaveConnection()
+    env.expect('CONFIG', 'SET', 'json-auto-create-deep-paths', 'yes').ok()
+    try:
+        env.assertEqual(replica.execute_command('CONFIG', 'GET', 'json-auto-create-deep-paths'),
+                        ['json-auto-create-deep-paths', 'no'])
+        env.expect('JSON.SET', KEY, '$', '{}').ok()
+        # Once the replica has this, the next write reaches it as a command,
+        # not inside the full-sync RDB.
+        env.expect('WAIT', '1', '10000').equal(1)
+        errors = replica.execute_command('INFO', 'stats')['unexpected_error_replies']
+        env.expect('JSON.SET', KEY, '$.a.b.c', '1').ok()
+        env.expect('JSON.SET', KEY2, '$.a.b', '1').ok()
+        env.expect('WAIT', '1', '10000').equal(1)
+        env.expect('JSON.GET', KEY).equal('{"a":{"b":{"c":1}}}')
+        env.assertEqual(replica.execute_command('JSON.GET', KEY), '{}')
+        env.expect('JSON.GET', KEY2).equal('{"a":{"b":1}}')
+        env.assertEqual(replica.execute_command('EXISTS', KEY2), 0)
+        # Only the missing key's write failed on the replica.
+        env.assertEqual(replica.execute_command('INFO', 'stats')['unexpected_error_replies'], errors + 1)
+    finally:
+        env.cmd('CONFIG', 'SET', 'json-auto-create-deep-paths', 'no')
 
 
 def _nested(depth):
