@@ -157,7 +157,6 @@ def testSetWithNotExistPathShouldSucceed(env):
     r.assertOk(r.execute_command('JSON.SET', 'test', '$.a.b.c', '1'))
     r.assertEqual(json.loads(r.execute_command('JSON.GET', 'test', '.')), {"a": {"b": {"c": 1}}})
 
-    # Invalid nested-create paths error on existing keys too (same as missing keys)
     r.expect('JSON.SET', 'test', '$.x[0].y', '1').raiseError().contains('new objects must be created at the root')
     r.assertEqual(json.loads(r.execute_command('JSON.GET', 'test', '.')), {"a": {"b": {"c": 1}}})
 
@@ -1470,13 +1469,10 @@ def testMSET(env):
     env.expect("JSON.GET", "mix{s}", '$').equal('[{"a":{"b":1,"c":2},"d":3}]')
     env.expect("JSON.GET", "other{s}", '$').equal('[{"x":0}]')
 
-    # Later ancestor overwrite must apply against the live document, not the
-    # parse-time dict_add plan (which no-ops once $.a.b has created `a`).
     env.expect("JSON.SET", "anc{s}", '$', '{}').ok()
     env.expect("JSON.MSET", "anc{s}", '$.a.b', '1', "anc{s}", '$.a', '2').ok()
     env.expect("JSON.GET", "anc{s}", '$').equal('[{"a":2}]')
 
-    # Invalid nested-create path on an existing key fails before any write
     env.expect("JSON.SET", "badpath{s}", '$', '{}').ok()
     env.expect("JSON.MSET", "badpath{s}", '$.ok', '1', "badpath{s}", '$.a[0].b', '2').raiseError().contains('new objects must be created at the root')
     env.expect("JSON.GET", "badpath{s}", '$').equal('[{}]')

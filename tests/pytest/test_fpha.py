@@ -8,6 +8,18 @@ from RLTest import Defaults
 Defaults.decode_responses = True
 
 
+def test_fpha_auto_path_create_preserves_typed_leaf(env):
+    env.expect("CONFIG", "SET", "ReJSON.auto-path-create", "yes").equal("OK")
+    env.expect(
+        "JSON.SET", "fpha_nest", "$.arr", "[10.0, 20.0, 30.0]", "FPHA", "FP16"
+    ).ok()
+    env.expect("JSON.GET", "fpha_nest", "$").equal('[{"arr":[10.0,20.0,30.0]}]')
+    env.expect("JSON.ARRAPPEND", "fpha_nest", "$.arr", "1e10").raiseError().contains(
+        "value out of range"
+    )
+    env.expect("CONFIG", "SET", "ReJSON.auto-path-create", "no").equal("OK")
+
+
 def test_fpha_basic_fp32(env):
     """Test JSON.SET with FPHA FP32 option"""
     env.expect(

@@ -407,8 +407,7 @@ impl<'a> IValueKeyHolderWrite<'a> {
             val.data = data
         } else {
             self.key.set_value(&REDIS_JSON_TYPE, RedisJSON { data })?;
-            // `set_value` does not populate `self.val`; later ops on this holder
-            // (JSON.MSET nested creates) must see the document we just stored.
+            // `set_value` does not fill `self.val`; later MSET ops on this holder need it.
             self.val = self.key.get_value::<RedisJSON<IValue>>(&REDIS_JSON_TYPE)?;
         }
         Ok(true)

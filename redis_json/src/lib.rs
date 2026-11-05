@@ -383,7 +383,14 @@ macro_rules! redis_json_module_create {
             // safe to call once during OnLoad after configs are registered.
             unsafe {
                 if let Some(load_config) = redis_module::raw::RedisModule_LoadConfigs {
-                    load_config(ctx.ctx);
+                    let rc = load_config(ctx.ctx);
+                    if redis_module::raw::Status::from(rc) != redis_module::raw::Status::Ok {
+                        ctx.log(
+                            RedisLogLevel::Warning,
+                            "Failed loading module configuration (check ReJSON.* values in redis.conf)",
+                        );
+                        return Status::Err;
+                    }
                 }
             }
 

@@ -90,7 +90,6 @@ fn is_resp3(ctx: &Context) -> bool {
         .contains(redis_module::ContextFlags::FLAGS_RESP3)
 }
 
-/// Serialize the document root for effect-based replication.
 fn serialize_holder_root<M: Manager>(redis_key: &mut M::WriteHolder) -> RedisResult<String>
 where
     M::V: Serialize,
@@ -101,13 +100,22 @@ where
     KeyValue::<M::V>::serialize_object(doc, &ReplyFormatOptions::default())
 }
 
-/// Nested path creates depend on `ReJSON.auto-path-create`. Replicate the
-/// resulting root document as `JSON.SET key $ <json>` so replicas/AOF do not
-/// need matching config (and so primary no-ops are not turned into creates).
+fn fpha_type_token(ft: FloatType) -> &'static str {
+    match ft {
+        FloatType::BF16 => "BF16",
+        FloatType::F16 => "FP16",
+        FloatType::F32 => "FP32",
+        FloatType::F64 => "FP64",
+    }
+}
+
+/// Replicate a nested create as `JSON.SET key $ <doc>` so replicas do not need
+/// `auto-path-create`. A follow-up `FPHA` SET keeps typed floats on the leaf.
 fn replicate_nested_create_as_root_set<M: Manager>(
     ctx: &Context,
     key: &RedisString,
     redis_key: &mut M::WriteHolder,
+    fpha_leaf: Option<(&str, &str, FloatType)>,
 ) -> RedisResult<()>
 where
     M::V: Serialize,
@@ -116,6 +124,13 @@ where
     let root = ctx.create_string("$");
     let payload = ctx.create_string(json);
     ctx.replicate("JSON.SET", &[key, &root, &payload]);
+    if let Some((path, value, ft)) = fpha_leaf {
+        let path_s = ctx.create_string(path);
+        let value_s = ctx.create_string(value);
+        let fpha = ctx.create_string("FPHA");
+        let ft_s = ctx.create_string(fpha_type_token(ft));
+        ctx.replicate("JSON.SET", &[key, &path_s, &value_s, &fpha, &ft_s]);
+    }
     Ok(())
 }
 
@@ -477,7 +492,14 @@ pub fn json_set_command_impl<M: Manager>(
                         let keys = static_object_path_keys(path.get_path())?;
                         if redis_key.set_value_creating_path(&keys, val)? {
                             redis_key.notify_keyspace_event(ctx, "json.set")?;
-                            replicate_nested_create_as_root_set::<M>(ctx, &key_name, &mut redis_key)?;
+                            let fpha_leaf =
+                                fpha_type.map(|ft| (path.get_path(), value, ft));
+                            replicate_nested_create_as_root_set::<M>(
+                                ctx,
+                                &key_name,
+                                &mut redis_key,
+                                fpha_leaf,
+                            )?;
                             REDIS_OK
                         } else {
                             Ok(RedisValue::Null)
@@ -512,7 +534,13 @@ pub fn json_set_command_impl<M: Manager>(
                 let final_val = manager.wrap_in_object_path(&keys, val)?;
                 redis_key.set_value(Vec::new(), final_val)?;
                 redis_key.notify_keyspace_event(ctx, "json.set")?;
-                replicate_nested_create_as_root_set::<M>(ctx, &key_name, &mut redis_key)?;
+                let fpha_leaf = fpha_type.map(|ft| (path.get_path(), value, ft));
+                replicate_nested_create_as_root_set::<M>(
+                    ctx,
+                    &key_name,
+                    &mut redis_key,
+                    fpha_leaf,
+                )?;
                 REDIS_OK
             } else {
                 Err(RedisError::Str(
@@ -663,8 +691,12 @@ pub fn json_merge_command_impl<M: Manager>(
                     let keys = static_object_path_keys(path.get_path())?;
                     if redis_key.set_value_creating_path(&keys, val)? {
                         redis_key.notify_keyspace_event(ctx, "json.merge")?;
-                        // Effect as root SET: replica/AOF need not share auto-create config.
-                        replicate_nested_create_as_root_set::<M>(ctx, &key_name, &mut redis_key)?;
+                        replicate_nested_create_as_root_set::<M>(
+                            ctx,
+                            &key_name,
+                            &mut redis_key,
+                            None,
+                        )?;
                         REDIS_OK
                     } else {
                         Ok(RedisValue::Null)
@@ -685,7 +717,12 @@ pub fn json_merge_command_impl<M: Manager>(
                 let final_val = manager.wrap_in_object_path(&keys, val)?;
                 redis_key.set_value(Vec::new(), final_val)?;
                 redis_key.notify_keyspace_event(ctx, "json.merge")?;
-                replicate_nested_create_as_root_set::<M>(ctx, &key_name, &mut redis_key)?;
+                replicate_nested_create_as_root_set::<M>(
+                    ctx,
+                    &key_name,
+                    &mut redis_key,
+                    None,
+                )?;
                 REDIS_OK
             } else {
                 Err(RedisError::Str(
@@ -760,9 +797,6 @@ where
         return Err(RedisError::WrongArity);
     }
 
-    // Validate before any mutation so path / JSON errors never leave
-    // unreplicated partial writes. Apply still re-reads the live document so
-    // later triplets see earlier writes on the same key.
     let mut parsed: Vec<(RedisString, String, String)> = Vec::new();
     while let Ok(key) = args.next_arg() {
         let mut redis_key = manager.open_key_write(ctx, key.clone())?;
@@ -780,8 +814,6 @@ where
                         KeyValue::new(existing).find_paths(path.get_path(), SetOptions::None)?;
                     if updates.is_empty() && crate::auto_path_create_enabled() {
                         let keys = static_object_path_keys(path.get_path())?;
-                        // Fail depth / wrap errors before any triplet mutates state
-                        // (JSON.SET surfaces these; MSET must not swallow them as nil).
                         let _ = manager.wrap_in_object_path(&keys, val)?;
                     }
                 }
@@ -837,10 +869,16 @@ where
     }
 
     if nested_create_used {
-        // Config-independent effect: final root docs for keys we actually wrote.
+        let mut payloads: Vec<(RedisString, String)> = Vec::with_capacity(touched.len());
         for name in &touched {
             let holder = holders.get_mut(name).expect("touched key has a holder");
-            replicate_nested_create_as_root_set::<M>(ctx, &holder.key, &mut holder.write)?;
+            let json = serialize_holder_root::<M>(&mut holder.write)?;
+            payloads.push((holder.key.clone(), json));
+        }
+        let root = ctx.create_string("$");
+        for (key, json) in payloads {
+            let payload = ctx.create_string(json);
+            ctx.replicate("JSON.SET", &[&key, &root, &payload]);
         }
     } else {
         manager.apply_changes(ctx);
@@ -895,10 +933,6 @@ impl From<bool> for ApplyUpdatesResult {
     }
 }
 
-/// Apply one MSET triplet against the current document.
-/// Returns `(any_updated, all_updated, used_nested_create)`.
-/// Path / depth / type failures are treated as a missed update so earlier
-/// writes in this command still reach `apply_changes` / effect replication.
 fn mset_apply_triplet<M: Manager>(
     manager: &M,
     redis_key: &mut M::WriteHolder,
@@ -932,8 +966,6 @@ fn mset_apply_triplet<M: Manager>(
 
     match redis_key.get_value() {
         Ok(None) => {
-            // Build the full nested object first so a depth failure does not
-            // leave an empty `{}` key behind.
             let Ok(nested) = manager.wrap_in_object_path(&keys, value) else {
                 return (false, false, false);
             };
