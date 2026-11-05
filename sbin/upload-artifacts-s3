@@ -24,6 +24,13 @@ fi
 
 export AWS_REGION="us-east-1"
 
+# Keep real upload credentials separate from read-only Tracebit canary files.
+# This directory is private to the disposable upload container, not /workspace.
+UPLOAD_AWS_DIR=$(mktemp -d)
+trap 'rm -rf "$UPLOAD_AWS_DIR"' EXIT
+export AWS_SHARED_CREDENTIALS_FILE="$UPLOAD_AWS_DIR/credentials"
+export AWS_CONFIG_FILE="$UPLOAD_AWS_DIR/config"
+
 echo "Configuring AWS CLI..."
 pip3 install -q --upgrade pip
 pip3 install -q --no-cache-dir awscli
