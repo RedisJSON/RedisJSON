@@ -149,19 +149,39 @@ jobs:
 
       - name: Run Random Traffic
         run: |
-          bash .github/scripts/tracebit-docker.sh run --rm \
+          bash .github/scripts/tracebit-docker.sh run --rm --init \
             -v "${GITHUB_WORKSPACE}:/workspace" \
             -w /workspace \
             "${DOCKER_IMAGE}" \
             bash -ec '
+              redis_pid=
+              generator_pid=
+              monitor_pid=
+              cleanup() {
+                status=$?
+                trap - EXIT
+                for pid in "$monitor_pid" "$generator_pid" "$redis_pid"; do
+                  if [ -n "$pid" ]; then
+                    kill "$pid" 2>/dev/null || true
+                  fi
+                done
+                exit "$status"
+              }
+              trap cleanup EXIT
+              trap "exit 130" INT
+              trap "exit 143" TERM
               pip install redis-command-generator
               MODULE=$(realpath ./target/release/rejson.so)
               echo "Loading module: $MODULE"
               redis-server --loadmodule $MODULE --port 6379 &
+              redis_pid=$!
               sleep 2
-              python3 -m redis_command_generator.JsonGen --hosts localhost:6379 --verbose --max_cmd_cnt 1000000 > random_traffic.txt
+              python3 -m redis_command_generator.JsonGen --hosts localhost:6379 --verbose --max_cmd_cnt 1000000 > random_traffic.txt &
+              generator_pid=$!
+              python3 -u sbin/random-traffic-monitor.py "$redis_pid" "$generator_pid" &
+              monitor_pid=$!
+              wait "$generator_pid"
               tail -n 100 random_traffic.txt
-              pkill -f redis-server || true
             '
 
       - name: Upload random traffic
@@ -169,4 +189,6 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: random-traffic-${{ needs.pick-os.outputs.os }}-log
-          path: random_traffic.txt
+          path: |
+            random_traffic.txt
+            diagnostics.log
