@@ -20,7 +20,7 @@ RUN chmod +x /workspace/.install/install_redis.sh && REDIS_REF=${REDIS_REF} SANI
 
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh
 ENV PATH="/usr/local/bin:${PATH}"
-RUN uv venv --python=3.11 /opt/.venv
+RUN uv venv --python=3.14 /opt/.venv
 ENV VIRTUAL_ENV=/opt/.venv
 ENV PATH="/opt/.venv/bin:${PATH}"
 COPY requirements_docker.txt /workspace/requirements.txt
