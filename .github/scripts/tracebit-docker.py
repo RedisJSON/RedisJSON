@@ -119,7 +119,7 @@ def prepare(root, mode, arguments):
         if ignore.is_symlink():
             raise ValueError("Dockerfile-specific ignore files must not be symlinks")
         if ignore.is_file():
-            (root / "Dockerfile.dockerignore").write_bytes(ignore.read_bytes())
+            shutil.copyfile(ignore, root / "Dockerfile.dockerignore")
         arguments[index] = str(generated)
         print(f"Tracebit: covering {count} Dockerfile RUN instructions with BuildKit secrets", flush=True, file=sys.stderr)
     elif options:

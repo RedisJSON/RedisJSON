@@ -68,7 +68,7 @@ class ContainerTests(unittest.TestCase):
         original = self.root / "Dockerfile.example"
         original.write_text('FROM alpine\nRUN echo one \\\n && echo two\nRUN ["echo", "three"]\n')
         ignore = Path(str(original) + ".dockerignore")
-        ignore.write_text("private/\n")
+        ignore.write_text("private/\n../../outside\n")
         for mode in ("build", "buildx"):
             args = self.prepare(mode, ["-f", str(original), "--build-arg", "VERSION=1", "."])
             generated = Path(args[args.index("-f") + 1]).read_text()
@@ -76,7 +76,7 @@ class ContainerTests(unittest.TestCase):
             self.assertIn("env=__AWS__ACCESS_KEY_ID", generated)
             self.assertIn('RUN ["echo", "three"]', original.read_text())
             self.assertIn('--build-arg', args)
-            self.assertEqual((self.stage / "Dockerfile.dockerignore").read_text(), "private/\n")
+            self.assertEqual((self.stage / "Dockerfile.dockerignore").read_text(), "private/\n../../outside\n")
             for value in ("fake-id", "fake-secret", "fake-session", "fake-private-key", "never-forward-this"):
                 self.assertNotIn(value, generated)
                 self.assertNotIn(value, " ".join(args))
