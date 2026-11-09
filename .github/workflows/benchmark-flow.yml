@@ -94,6 +94,9 @@ jobs:
         # when a run comes in below one (results_dict_kpi_check). Swallowing the
         # exit code here would make the baseline gate decorative.
         env:
+          PERFORMANCE_RTS_AUTH: ${{ secrets.PERFORMANCE_RTS_AUTH }}
+          PERFORMANCE_RTS_HOST: ${{ secrets.PERFORMANCE_RTS_HOST }}
+          PERFORMANCE_RTS_PORT: ${{ secrets.PERFORMANCE_RTS_PORT }}
           # Hard-coded
           PERF_CALLGRAPH_MODE: dwarf
           MAX_PROFILERS: 1
@@ -128,9 +131,9 @@ jobs:
               --allowed-envs ${{ inputs.allowed_envs }}
               --allowed-setups ${{ inputs.allowed_setups }}
               --push_results_redistimeseries
-              --redistimeseries_host ${{ secrets.PERFORMANCE_RTS_HOST }}
-              --redistimeseries_port ${{ secrets.PERFORMANCE_RTS_PORT }}
-              --redistimeseries_pass '${{ secrets.PERFORMANCE_RTS_AUTH }}'
+              --redistimeseries_host "${PERFORMANCE_RTS_HOST}"
+              --redistimeseries_port "${PERFORMANCE_RTS_PORT}"
+              --redistimeseries_pass "${PERFORMANCE_RTS_AUTH}"
 
       # Kept so a baseline bump can be proposed off a run's own numbers
       # (tests/benchmarks/update_kpis.py) without re-running the benchmarks.
@@ -153,6 +156,9 @@ jobs:
         if: always() && github.event.number
         continue-on-error: true
         env:
+          PERFORMANCE_RTS_AUTH: ${{ secrets.PERFORMANCE_RTS_AUTH }}
+          PERFORMANCE_RTS_HOST: ${{ secrets.PERFORMANCE_RTS_HOST }}
+          PERFORMANCE_RTS_PORT: ${{ secrets.PERFORMANCE_RTS_PORT }}
           PERFORMANCE_GH_TOKEN: ${{ secrets.PERFORMANCE_GH_TOKEN }}
           PERFORMANCE_WH_TOKEN: ${{ secrets.PERFORMANCE_WH_TOKEN }}
         run: redisbench-admin compare
@@ -160,6 +166,6 @@ jobs:
               --comparison-branch ${{ github.head_ref || github.ref_name }}
               --auto-approve
               --pull-request ${{ github.event.number }}
-              --redistimeseries_host ${{ secrets.PERFORMANCE_RTS_HOST }}
-              --redistimeseries_port ${{ secrets.PERFORMANCE_RTS_PORT }}
-              --redistimeseries_pass '${{ secrets.PERFORMANCE_RTS_AUTH }}'
+              --redistimeseries_host "${PERFORMANCE_RTS_HOST}"
+              --redistimeseries_port "${PERFORMANCE_RTS_PORT}"
+              --redistimeseries_pass "${PERFORMANCE_RTS_AUTH}"

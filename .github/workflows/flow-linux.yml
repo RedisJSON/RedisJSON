@@ -259,12 +259,15 @@ jobs:
         # Pull requests from forks never get the repository secrets, so there is
         # nothing to upload with. Skip rather than fail the whole build.
         if: ${{ !inputs.run_valgrind && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           bash .github/scripts/tracebit-docker.sh run --rm \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
-            -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
-            -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
+            -e AWS_ACCESS_KEY_ID \
+            -e AWS_SECRET_ACCESS_KEY \
             -e GITHUB_REF=${{ github.ref }} \
             -e BETA_VERSION=${{ inputs.beta-version }} \
             "${DOCKER_IMAGE}" \
