@@ -64,7 +64,7 @@ RUN test -s /root/.aws/credentials && test -n "$__AWS__SESSION_TOKEN" \\
             cache = root / "cache"
             run("bash", str(wrapper), "buildx", "--builder", builder, "--network=none", "--load",
                 "--cache-to", f"type=local,dest={cache},mode=max,compression=gzip,force-compression=true",
-                "-f", str(source), "-t", tag, str(context), env=env)
+                "-f", str(source), "-t", tag, str(context), env=env, cwd=context)
             assert not list(staging.iterdir()), "Staging files survived build"
             # Secrets must not be available in the finished container.
             run("docker", "run", "--rm", "--network=none", tag, "sh", "-ec",
@@ -90,7 +90,7 @@ RUN test -s /root/.aws/credentials && test -n "$__AWS__SESSION_TOKEN" \\
             clean_home = root / "clean-home"
             clean_home.mkdir()
             clean_env["HOME"] = str(clean_home)
-            run("bash", str(wrapper), "build", "--network=none", "-f", str(source), "-t", tag, str(context), env=clean_env)
+            run("bash", str(wrapper), "build", "--network=none", "-f", str(source), "-t", tag, str(context), env=clean_env, cwd=context)
             result = subprocess.run(["bash", str(wrapper), "run", "--rm", "--network=none", tag, "sh", "-c", "exit 23"], env=env)
             assert result.returncode == 23, "Docker exit status was changed"
             assert not list(staging.iterdir()), "Staging files survived failed container"

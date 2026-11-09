@@ -5,7 +5,9 @@ import os
 from pathlib import Path
 import re
 import shlex
+import shutil
 import sys
+import tempfile
 
 AWS_NAMES = ("ACCESS_KEY_ID", "SECRET_ACCESS_KEY", "SESSION_TOKEN", "REGION", "DEFAULT_REGION", "PROFILE")
 ENV_NAMES = tuple("__AWS__" + name for name in AWS_NAMES) + ("__NPM__TOKEN", "__PYPI__TOKEN")
@@ -91,7 +93,15 @@ def prepare(root, mode, arguments):
         if len(file_options) != 1 or file_options[0] + 1 >= len(arguments):
             raise ValueError("Build coverage requires one explicit -f/--file Dockerfile")
         index = file_options[0] + 1
-        source = Path(arguments[index])
+        requested = Path(arguments[index]).resolve()
+        # Select a discovered local file rather than using a caller-controlled
+        # pathname for I/O. Dockerfiles outside this context are unsupported.
+        source = next((candidate for candidate in Path.cwd().glob("Dockerfile*")
+                       if re.fullmatch(r"Dockerfile(?:\.[a-zA-Z0-9_-]+)?", candidate.name)
+                       and not candidate.is_symlink() and candidate.is_file()
+                       and candidate.resolve() == requested), None)
+        if source is None:
+            raise ValueError("Dockerfile must be a regular file in the current build context")
         dockerfile = source.read_text()
         if re.search(r"(?im)^\s*#\s*escape\s*=|^\s*RUN\b[^\n]*<<", dockerfile):
             raise ValueError("Backtick escapes and heredoc RUN instructions need explicit coverage review")
@@ -106,17 +116,25 @@ def prepare(root, mode, arguments):
         generated.write_text(dockerfile)
         # Preserve per-Dockerfile context exclusions, if present.
         ignore = Path(str(source) + ".dockerignore")
+        if ignore.is_symlink():
+            raise ValueError("Dockerfile-specific ignore files must not be symlinks")
         if ignore.is_file():
             (root / "Dockerfile.dockerignore").write_bytes(ignore.read_bytes())
         arguments[index] = str(generated)
-        print(f"Tracebit: covering {count} Dockerfile RUN instructions with BuildKit secrets", flush=True)
+        print(f"Tracebit: covering {count} Dockerfile RUN instructions with BuildKit secrets", flush=True, file=sys.stderr)
     elif options:
-        print("Tracebit: forwarding canaries into build container", flush=True)
+        print("Tracebit: forwarding canaries into build container", flush=True, file=sys.stderr)
     else:
-        print("Tracebit: no canaries available; running Docker unchanged", flush=True)
+        print("Tracebit: no canaries available; running Docker unchanged", flush=True, file=sys.stderr)
     # NUL-delimited argv is consumed as an array by bash; no eval or shell parsing.
     (root / "arguments").write_bytes(b"".join(arg.encode() + b"\0" for arg in options + arguments))
 
 
 if __name__ == "__main__":
-    prepare(Path(sys.argv[1]), sys.argv[2], sys.argv[3:])
+    directory = Path(tempfile.mkdtemp(prefix="tracebit-container.", dir=os.environ.get("RUNNER_TEMP")))
+    try:
+        prepare(directory, sys.argv[1], sys.argv[2:])
+    except BaseException:
+        shutil.rmtree(directory)
+        raise
+    print(directory)

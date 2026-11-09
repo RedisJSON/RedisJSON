@@ -8,11 +8,10 @@ case "$mode" in
     buildx) command=(docker buildx build) ;;
     *) echo "Unsupported Docker mode: $mode" >&2; exit 2 ;;
 esac
-staging=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/tracebit-container.XXXXXX")
-trap 'rm -rf "$staging"' EXIT
+trap 'if [[ -n "${staging:-}" ]]; then rm -rf "$staging"; fi' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-python3 "$(dirname "${BASH_SOURCE[0]}")/tracebit-docker.py" "$staging" "$mode" "$@"
+staging=$(python3 "$(dirname "${BASH_SOURCE[0]}")/tracebit-docker.py" "$mode" "$@")
 arguments=()
 while IFS= read -r -d '' argument; do
     arguments+=("$argument")

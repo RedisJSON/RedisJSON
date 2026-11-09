@@ -21,6 +21,9 @@ class ContainerTests(unittest.TestCase):
         self.home.mkdir()
         self.stage = self.root / "stage"
         self.stage.mkdir()
+        self.previous_cwd = Path.cwd()
+        os.chdir(self.root)
+        self.addCleanup(os.chdir, self.previous_cwd)
         self.env = {"HOME": str(self.home), "RUNNER_TEMP": str(self.root), "PATH": os.environ["PATH"]}
 
     def prepare(self, mode="run", args=None):
@@ -86,6 +89,17 @@ class ContainerTests(unittest.TestCase):
         target.write_text("unrelated")
         (ssh / helper.KEY_NAME).symlink_to(target)
         self.assertNotIn("--mount", self.prepare())
+
+    def test_build_rejects_outside_context_and_symlink_dockerfiles(self):
+        self.canaries()
+        outside = self.home / "Dockerfile"
+        outside.write_text("FROM alpine\nRUN echo unsafe\n")
+        with self.assertRaises(ValueError):
+            self.prepare("build", ["-f", str(outside), "."])
+        alias = self.root / "Dockerfile.link"
+        alias.symlink_to(outside)
+        with self.assertRaises(ValueError):
+            self.prepare("build", ["-f", str(alias), "."])
 
     def test_unsupported_build_fails_before_docker(self):
         self.canaries()
