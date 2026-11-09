@@ -12,43 +12,58 @@ The repository condition limits deployment to this public repository when the
 workflows are copied to forks or private mirrors. Fork pull requests with no
 secret retain Tracebit's warning-and-skip behavior.
 
-## Coverage boundary
+## Docker coverage
 
-The action injects canaries into the runner and GitHub-managed job containers.
-Linux build/test/package, coverage, and random-traffic `docker run` steps use
-`.github/scripts/tracebit-docker-run.py` to forward canaries, following Tracebit's
-container guidance. These images run as root; the mounts target `/root`.
+Linux builds, tests, packaging, coverage, random-traffic tests, and image
+publication use `.github/scripts/tracebit-docker.sh`. The wrapper supports
+`run`, `build`, and `buildx` (meaning `docker buildx build`). Python only prepares
+canary files and NUL-delimited arguments; bash executes a fixed Docker command
+with quoted array arguments, without eval or shell interpretation of arguments.
 
-The helper reconstructs only the canary AWS profile and mounts the dedicated
-`tracebit_ci_canary` SSH key and its canary-only config read-only. Temporary files
-live outside the workspace and are removed when the container command exits,
-including failure and cancellation. Runner AWS profiles and unrelated SSH keys
-are never copied. Prefixed AWS and optional npm/PyPI canary variables are passed
-by name, keeping their values out of Docker's command line. npm/PyPI variables
-are forwarded only when the action supplies them; their config files are not
-mounted. The Tracebit API token is never passed to Docker.
+For `docker run`, the helper reconstructs the canary AWS profile and the dedicated
+`tracebit_ci_canary` SSH key/config and mounts them read-only under `/root`.
+It forwards prefixed AWS and optional npm/PyPI canary environment variables by
+name. It never copies unrelated runner credentials or passes SECURITY_API_TOKEN.
+Real S3 upload credentials use a separate temporary location inside the upload
+container in JSON/Bloom, so their AWS CLI configuration does not write over the
+read-only canary files.
 
-When no canaries are available (including fork PRs without secrets), the helper
-runs the original container command without extra mounts or variables. It
-preserves Docker's exit status. Canary use requires internet access to alert;
-Tracebit associates alerts with the workflow run, not a separate container.
+For image builds, the helper creates a temporary copy of the selected Dockerfile
+and adds BuildKit secret mounts to every RUN instruction. Files and environment
+variables exist only during those instructions. The Dockerfile frontend is 1.10
+for secret environment mounts. No credential values are written into Dockerfile
+ARG/ENV/COPY instructions or command-line arguments. Both ordinary builds and
+buildx publication use the same preparation. The original Dockerfile and build
+context remain unchanged, including Dockerfile-specific ignore rules.
 
-Dockerfile `RUN` steps during `docker build`, FreeBSD VMs, and remote benchmark
-machines remain outside this coverage. Docker build integration still needs
-Tracebit/Security confirmation. Do not put canaries in image layers or artifacts.
+Only the existing local, root-user CI Dockerfiles with an explicit -f/--file are
+supported. Backtick escape directives and RUN heredocs require explicit review.
+Temporary files live outside the build context and are removed on exit, failure,
+or cancellation. Without canaries, including fork PRs without secrets, Docker
+runs unchanged. Cache hits and prebuilt images skip the corresponding RUN steps;
+we do not force them to execute. Secrets do not persist automatically, but build
+commands must not copy them into outputs or print them.
 
-## Rollout validation
+Tracebit v1.4.0 exports AWS canaries under `__AWS__`, not `AWS_`. The real AWS
+credential environment remains separate. Optional npm/PyPI variables are passed
+only when supplied by Tracebit; their config files are not mounted.
 
-- Install the Secure Pipelines GitHub App for this repository with read access
-  to Actions and metadata, and provision `SECURITY_API_TOKEN` through GitHub
-  Actions secrets.
-- Inspect a trusted CI run to confirm the Tracebit step deploys canaries;
-  verify jobs reached through reusable workflows as well as direct jobs.
-- Confirm fork PR jobs still run without access to the token and report the
-  expected skip rather than failing.
-- Have the Security project owner verify repository/workflow coverage in the
-  Tracebit console. Do not exercise canary credentials against AWS or SSH as a
-  routine test; their use triggers an incident alert.
-- Confirm container forwarding in a trusted CI run and have Security verify
-  coverage. Resolve Docker image-build/other isolated environments before
-  declaring full build coverage.
+## Validation and remaining scope
+
+The Tracebit container validation workflow runs offline regression tests and
+real Docker/BuildKit tests using inert fixtures. It checks read-only mounts,
+argument preservation, missing credentials, exit status, cleanup, and scans the
+fixture image, history, and exported max-mode build cache for fixture secrets.
+Build RUN instructions and test containers have networking disabled. Public
+builder/base images may be downloaded. These tests do not exercise live canaries
+against AWS or SSH. Run locally with:
+
+```sh
+python3 .github/scripts/test_tracebit_container.py
+python3 .github/scripts/test_tracebit_buildkit.py
+```
+
+Security must confirm trusted-run coverage in the Tracebit console. Alerts need
+internet access; the console associates the shared credential with the workflow
+run and does not distinguish host from container. FreeBSD VMs and remote
+benchmark machines remain outside this coverage.
