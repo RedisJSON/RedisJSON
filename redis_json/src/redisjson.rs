@@ -20,7 +20,6 @@ use std::os::raw::{c_int, c_void};
 use crate::backward;
 use crate::ivalue_manager::RedisIValueJsonKeyManager;
 use crate::manager::Manager;
-use serde::Serialize;
 use std::fmt;
 use std::fmt::Display;
 use std::marker::PhantomData;
@@ -250,6 +249,7 @@ pub mod type_methods {
     ) -> Option<RedisJSON<ijson::IValue>> {
         let limit_depth = backward::legacy_rdb_depth_limit_enabled();
         match encver {
+            5 => crate::rdb_persistence::load_value(rdb).map(|data| RedisJSON { data }),
             4 => {
                 let buf = raw::load_string_buffer(rdb).ok()?;
                 let data = ijson::decode_with_depth_limit(buf.as_ref(), limit_depth).ok()?;
@@ -274,9 +274,7 @@ pub mod type_methods {
             0 => {
                 let v = backward::json_rdb_load(rdb)?;
 
-                let mut out = serde_json::Serializer::new(Vec::new());
-                v.serialize(&mut out)?;
-                String::from_utf8(out.into_inner())?
+                serde_json::to_string(&v)?
             }
             2 => {
                 let data = raw::load_string(rdb)?;
@@ -301,9 +299,14 @@ pub mod type_methods {
                     backward::legacy_rdb_depth_limit_enabled(),
                 )
                 .map_err(|e| RedisError::String(e.to_string()))?;
-                let mut out = serde_json::Serializer::new(Vec::new());
-                value.serialize(&mut out)?;
-                String::from_utf8(out.into_inner())?
+                serde_json::to_string(&value)?
+            }
+            5 => {
+                // The caller logs the error: its IO may not be one this module can log through.
+                let value = crate::rdb_persistence::read_value(rdb).map_err(|error| {
+                    RedisError::String(format!("invalid JSON RDB value: {error}"))
+                })?;
+                serde_json::to_string(&value)?
             }
             _ => return Err(RedisError::String(format!("unsupported encver {encver}"))),
         })
@@ -324,9 +327,9 @@ pub mod type_methods {
     /// # Safety
     #[allow(non_snake_case, unused)]
     pub unsafe extern "C" fn rdb_save(rdb: *mut raw::RedisModuleIO, value: *mut c_void) {
+        // SAFETY: Redis passes the live value registered under REDIS_JSON_TYPE.
         let v = unsafe { &*value.cast::<RedisJSON<ijson::IValue>>() };
-        let binary = ijson::encode(&v.data);
-        raw::save_slice(rdb, &binary);
+        crate::rdb_persistence::save_value(rdb, &v.data);
     }
 
     /// # Safety
