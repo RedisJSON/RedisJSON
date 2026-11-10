@@ -51,6 +51,18 @@ pub trait WriteHolder<O: Clone, V: SelectValue> {
     fn str_append(&mut self, path: Vec<String>, val: String) -> RedisResult<usize>;
     fn arr_append(&mut self, path: Vec<String>, args: Vec<O>) -> RedisResult<usize>;
     fn arr_insert(&mut self, path: Vec<String>, args: &[O], index: i64) -> RedisResult<usize>;
+    /// Insert using the maximum depth already calculated for `args`.
+    /// Backends may reuse that depth instead of traversing the operands again.
+    fn arr_insert_with_depth(
+        &mut self,
+        path: Vec<String>,
+        args: &[O],
+        index: i64,
+        _operand_depth: usize,
+    ) -> RedisResult<usize> {
+        self.arr_insert(path, args, index)
+    }
+
     fn arr_pop<C: FnOnce(Option<&V>) -> RedisResult>(
         &mut self,
         path: Vec<String>,

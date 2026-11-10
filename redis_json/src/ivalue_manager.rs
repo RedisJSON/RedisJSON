@@ -534,6 +534,21 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
     }
 
     fn arr_insert(&mut self, paths: Vec<String>, args: &[IValue], idx: i64) -> RedisResult<usize> {
+        let operand_depth = args
+            .iter()
+            .map(SelectValue::calculate_value_depth)
+            .max()
+            .unwrap_or(0);
+        self.arr_insert_with_depth(paths, args, idx, operand_depth)
+    }
+
+    fn arr_insert_with_depth(
+        &mut self,
+        paths: Vec<String>,
+        args: &[IValue],
+        idx: i64,
+        operand_depth: usize,
+    ) -> RedisResult<usize> {
         self.do_op(paths, |v, depth| {
             let PathValue::IValue(v) = v else {
                 return Err(crate::manager::err_bad_object());
@@ -541,10 +556,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             v.as_array_mut()
                 .map(|arr| {
                     let idx = crate::array_index::insertion_index(idx, arr.len() as usize)?;
-                    if args
-                        .iter()
-                        .any(|arg| depth + 1 + arg.calculate_value_depth() >= MAX_DEPTH)
-                    {
+                    if depth + 1 + operand_depth >= MAX_DEPTH {
                         return Err(err_recursion_limit_exceeded());
                     }
 

@@ -2458,9 +2458,10 @@ pub fn json_arr_insert_command_impl<M: Manager>(
             paths.into_iter().flatten().collect(),
             index,
             args,
+            operand_depth,
         )
     } else {
-        json_arr_insert_impl(manager, &mut redis_key, ctx, paths, index, args)
+        json_arr_insert_impl(manager, &mut redis_key, ctx, paths, index, args, operand_depth)
     }
 }
 
@@ -2471,6 +2472,7 @@ fn json_arr_insert_impl<M: Manager>(
     paths: Vec<Option<Vec<String>>>,
     index: i64,
     args: Vec<M::O>,
+    operand_depth: usize,
 ) -> RedisResult {
     let mut res = vec![RedisValue::Null; paths.len()];
     let mut need_notify = false;
@@ -2484,7 +2486,7 @@ fn json_arr_insert_impl<M: Manager>(
 
     for (orig_idx, p) in indexed {
         need_notify = true;
-        res[orig_idx] = (redis_key.arr_insert(p, &args, index)? as i64).into();
+        res[orig_idx] = (redis_key.arr_insert_with_depth(p, &args, index, operand_depth)? as i64).into();
     }
 
     if need_notify {
@@ -2501,14 +2503,15 @@ fn json_arr_insert_legacy<M: Manager>(
     mut paths: Vec<Vec<String>>,
     index: i64,
     args: Vec<M::O>,
+    operand_depth: usize,
 ) -> RedisResult {
     if paths.is_empty() {
         return Err(err_invalid_path_or("not an array"));
     }
     paths.sort_by(|v1, v2| compare_paths_for_mutation(v1, v2));
-    let res = paths
-        .into_iter()
-        .try_fold(0, |_, p| redis_key.arr_insert(p, &args, index))?;
+    let res = paths.into_iter().try_fold(0, |_, p| {
+        redis_key.arr_insert_with_depth(p, &args, index, operand_depth)
+    })?;
     redis_key.notify_keyspace_event(ctx, "json.arrinsert")?;
     manager.apply_changes(ctx);
     Ok(res.into())

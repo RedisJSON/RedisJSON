@@ -2728,3 +2728,14 @@ def testJsonDicLimitsInMerge(env):
 #
 #         res = r.cmd('JSON.GET', 'myDoc', 'foo')
 #         r.assertEqual(0, cacheItems())
+
+
+def testArrInsertMultipleOperandDepths(env):
+    for path in ('$.*', '.*'):
+        env.expect('JSON.SET', 'doc', '$', '{"a":[],"b":[]}').ok()
+        # Maximum depth must include every operand, not just the first one.
+        too_deep = '[' * 126 + '0' + ']' * 126
+        env.expect('JSON.ARRINSERT', 'doc', path, 0, '1', too_deep).raiseError().contains('recursion limit exceeded')
+        env.expect('JSON.GET', 'doc').equal('{"a":[],"b":[]}')
+        env.expect('JSON.ARRINSERT', 'doc', path, 0, '1', '{"nested":[2]}').equal([2, 2] if path.startswith('$') else 2)
+        env.expect('JSON.GET', 'doc').equal('{"a":[1,{"nested":[2]}],"b":[1,{"nested":[2]}]}')
