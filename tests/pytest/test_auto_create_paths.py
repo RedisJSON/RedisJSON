@@ -1171,3 +1171,17 @@ def test_mset_does_not_notify_when_nothing_was_written():
         env.assertEqual(None, r.execute_command('JSON.MSET', KEY, DEEP, '5'))
         env.assertEqual(None, pubsub.get_message(timeout=1))
         env.assertEqual('[{"keep":1}]', r.execute_command('JSON.GET', KEY, '$'))
+
+
+def test_arrinsert_validates_existing_depth_before_seeding():
+    env = _env(True)
+    operand = '[' * 125 + '0' + ']' * 125
+    for path in ('$..y', '..y'):
+        for doc in ('{"a":{"y":[]},"b":{"c":{"y":[]}}}',
+                    '{"a":{},"b":{"c":{"y":[]}}}'):
+            env.expect('JSON.SET', KEY, '$', doc).ok()
+            env.expect('JSON.ARRINSERT', KEY, path, 0, operand).raiseError().contains('recursion limit exceeded')
+            env.expect('JSON.GET', KEY).equal(doc)
+    env.expect('JSON.SET', KEY, '$', '{"a":{"y":[1]},"b":{}}').ok()
+    env.expect('JSON.ARRINSERT', KEY, '$.*.y', 0, '99').equal([2, 1])
+    env.expect('JSON.GET', KEY).equal('{"a":{"y":[99,1]},"b":{"y":[99]}}')

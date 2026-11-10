@@ -2416,42 +2416,39 @@ pub fn json_arr_insert_command_impl<M: Manager>(
             Ok(acc)
         })?;
     let mut redis_key = manager.open_key_write(ctx, key)?;
-    let root = redis_key
-        .get_value()?
-        .ok_or_else(RedisError::nonexistent_key)?;
-    let mut paths = Vec::new();
     let operand_depth = args
         .iter()
         .map(|arg| arg.borrow().calculate_value_depth())
         .max()
         .unwrap_or(0);
-    // Validate every existing target before inserting or creating missing arrays.
-    for (value, target) in get_all_values_and_paths(path.get_path(), root)? {
-        if value.get_type() != SelectValueType::Array {
-            paths.push(None);
-            continue;
-        }
-        crate::array_index::insertion_index(index, value.len().unwrap())?;
-        if target.len() + 1 + operand_depth >= json_path::select_value::MAX_DEPTH {
-            return Err(crate::manager::err_recursion_limit_exceeded());
-        }
-        paths.push(Some(target));
-    }
-    // A created array is empty, so 0 is the only index an insert into it
-    // can satisfy. Any other index keeps today's out-of-range error, rather
-    // than failing the command with a stray `[]` left behind.
-    let create = index == 0;
-    let paths = if create && auto_create_enabled() {
+    let paths = if index == 0 && auto_create_enabled() {
+        // Index zero is valid for every array, including newly created ones.
+        // The creation pass validates depths before attaching any missing paths.
         seed_missing_paths(
             &manager,
             &mut redis_key,
             ctx,
             "json.arrinsert",
             path.get_path(),
-            Seed::EmptyArray { items: &args },
+            Seed::InsertArray { operand_depth },
         )?
     } else {
-        paths
+        let root = redis_key
+            .get_value()?
+            .ok_or_else(RedisError::nonexistent_key)?;
+        get_all_values_and_paths(path.get_path(), root)?
+            .into_iter()
+            .map(|(value, target)| {
+                if value.get_type() != SelectValueType::Array {
+                    return Ok(None);
+                }
+                crate::array_index::insertion_index(index, value.len().unwrap())?;
+                if target.len() + 1 + operand_depth >= json_path::select_value::MAX_DEPTH {
+                    return Err(crate::manager::err_recursion_limit_exceeded());
+                }
+                Ok(Some(target))
+            })
+            .collect::<RedisResult<Vec<_>>>()?
     };
     if path.is_legacy() {
         json_arr_insert_legacy(

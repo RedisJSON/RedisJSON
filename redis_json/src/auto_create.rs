@@ -712,6 +712,8 @@ fn node_at<'a, V: SelectValue>(node: &'a V, path: &[String]) -> Option<&'a V> {
 pub(crate) enum Seed<'a, O> {
     /// `JSON.ARRAPPEND`, `JSON.ARRINSERT`
     EmptyArray { items: &'a [O] },
+    /// ARRINSERT at index zero: bounds are always valid; validate all target depths.
+    InsertArray { operand_depth: usize },
     /// `JSON.NUMINCRBY` -- `0 + n == n`. `MULTBY`/`POWBY` get no seed at all:
     /// `0 * n` and `0 ^ n` would fabricate a wrong answer.
     Zero { increment: &'a str },
@@ -722,7 +724,7 @@ pub(crate) enum Seed<'a, O> {
 impl<O> Seed<'_, O> {
     fn accepts(&self, value_type: SelectValueType) -> bool {
         match self {
-            Self::EmptyArray { .. } => value_type == SelectValueType::Array,
+            Self::EmptyArray { .. } | Self::InsertArray { .. } => value_type == SelectValueType::Array,
             Self::Zero { .. } => {
                 matches!(value_type, SelectValueType::Long | SelectValueType::Double)
             }
@@ -732,7 +734,7 @@ impl<O> Seed<'_, O> {
 
     const fn as_json(&self) -> &'static str {
         match self {
-            Self::EmptyArray { .. } => "[]",
+            Self::EmptyArray { .. } | Self::InsertArray { .. } => "[]",
             Self::Zero { .. } => "0",
             Self::EmptyString { .. } => "\"\"",
         }
@@ -743,7 +745,7 @@ impl<O> Seed<'_, O> {
     /// has already parsed it.
     fn operand(&self) -> Option<&str> {
         match self {
-            Self::EmptyArray { .. } => None,
+            Self::EmptyArray { .. } | Self::InsertArray { .. } => None,
             Self::Zero { increment } => Some(increment),
             Self::EmptyString { suffix } => Some(suffix),
         }
@@ -830,6 +832,15 @@ pub(crate) fn seed_missing_paths<M: Manager>(
                 .then_some(target.path),
         );
     })?;
+    if let Seed::InsertArray { operand_depth } = &seed {
+        if paths
+            .iter()
+            .flatten()
+            .any(|path| path.len() + 1 + operand_depth >= MAX_DEPTH)
+        {
+            return Err(err_recursion_limit_exceeded());
+        }
+    }
     if additions.as_ref().is_ok_and(Vec::is_empty) {
         return Ok(paths);
     }
