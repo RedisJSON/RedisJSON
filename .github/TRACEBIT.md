@@ -8,9 +8,11 @@ The action uses the repository's `SECURITY_API_TOKEN` Actions secret, customer
 The step runs immediately after checkout when checkout is the first step, or
 first otherwise so dependency installation is covered. Reusable workflow calls
 forward the token; explicit secret mappings retain their existing restrictions.
-The repository condition limits deployment to this public repository when the
-workflows are copied to forks or private mirrors. Fork pull requests with no
-secret retain Tracebit's warning-and-skip behavior.
+The repository condition skips the main step outside this public repository; it
+does not prevent the action's pre phase from running. GitHub withholds repository
+secrets from ordinary fork pull-request workflows, so those runs retain Tracebit's
+warning-and-skip behavior. A fork or mirror that configures its own token is
+responsible for its own Tracebit usage.
 
 ## Docker coverage
 
@@ -68,14 +70,10 @@ internet access; the console associates the shared credential with the workflow
 run and does not distinguish host from container. FreeBSD VMs and remote
 benchmark machines remain outside this coverage.
 
-### Preparation failures and repository scope
+### Preparation failures
 
 If staging canaries or preparing a Dockerfile fails, the wrapper emits a warning,
 cleans partial staging, and runs the original Docker command without additional
 canary mounts or environment flags. Docker's exit status is preserved. The warning
 means container coverage is absent for that invocation; investigate it rather than
 treating a green build as proof of coverage. Exception contents are not logged.
-
-The API-token input is empty outside this repository, in addition to the step
-condition. The pinned action's pre phase checks for an empty token before requesting
-credentials. This also protects mirrors that define SECURITY_API_TOKEN.
