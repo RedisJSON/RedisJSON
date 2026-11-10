@@ -540,12 +540,7 @@ impl<'a> WriteHolder<IValue, IValue> for IValueKeyHolderWrite<'a> {
             };
             v.as_array_mut()
                 .map(|arr| {
-                    // Verify legal index in bounds
-                    let len = arr.len() as _;
-                    let idx = if idx < 0 { len + idx } else { idx };
-                    if !(0..=len).contains(&idx) {
-                        return Err(RedisError::Str("ERR index out of bounds"));
-                    }
+                    let idx = crate::array_index::insertion_index(idx, arr.len() as usize)?;
                     if args
                         .iter()
                         .any(|arg| depth + 1 + arg.calculate_value_depth() >= MAX_DEPTH)

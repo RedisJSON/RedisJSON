@@ -7,6 +7,15 @@
  * GNU Affero General Public License v3 (AGPLv3).
  */
 
+pub(crate) fn insertion_index(index: i64, len: usize) -> redis_module::RedisResult<usize> {
+    let len = len as i64;
+    let index = if index < 0 { len + index } else { index };
+    if !(0..=len).contains(&index) {
+        return Err(redis_module::RedisError::Str("ERR index out of bounds"));
+    }
+    Ok(index as usize)
+}
+
 pub trait ArrayIndex {
     fn normalize(self, len: i64) -> usize;
 }
@@ -27,6 +36,23 @@ impl ArrayIndex for i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_insertion_index() {
+        for (index, len, expected) in [(0, 0, 0), (3, 3, 3), (-1, 3, 2), (-3, 3, 0)] {
+            assert_eq!(insertion_index(index, len).unwrap(), expected);
+        }
+        for (index, len) in [
+            (1, 0),
+            (-1, 0),
+            (4, 3),
+            (-4, 3),
+            (i64::MIN, 3),
+            (i64::MAX, 3),
+        ] {
+            assert!(insertion_index(index, len).is_err());
+        }
+    }
 
     #[test]
     fn test_index() {
