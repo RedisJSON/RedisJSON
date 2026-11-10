@@ -3,11 +3,13 @@ on:
   pull_request:
     paths:
       - '.github/**'
+      - 'Dockerfile*'
       - 'sbin/upload-artifacts-s3'
   push:
     branches: [master]
     paths:
       - '.github/**'
+      - 'Dockerfile*'
       - 'sbin/upload-artifacts-s3'
 permissions:
   contents: read

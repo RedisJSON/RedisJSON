@@ -77,3 +77,10 @@ cleans partial staging, and runs the original Docker command without additional
 canary mounts or environment flags. Docker's exit status is preserved. The warning
 means container coverage is absent for that invocation; investigate it rather than
 treating a green build as proof of coverage. Exception contents are not logged.
+
+Validation also runs on root `Dockerfile*` changes. The offline suite calls
+`prepare` directly for every root Dockerfile in both build modes using inert
+canaries, and checks that every RUN instruction receives secret mounts. This
+check fails on unsupported Dockerfiles instead of using the production fallback.
+Dockerfile-specific `.dockerignore` files trigger validation but are not parsed
+as Dockerfiles.

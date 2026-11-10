@@ -1,11 +1,14 @@
 """Offline regression tests. All credentials are inert fixtures."""
 import importlib.util
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 spec = importlib.util.spec_from_file_location("helper", Path(__file__).with_name("tracebit-docker.py"))
 helper = importlib.util.module_from_spec(spec)
@@ -80,6 +83,31 @@ class ContainerTests(unittest.TestCase):
             for value in ("fake-id", "fake-secret", "fake-session", "fake-private-key", "never-forward-this"):
                 self.assertNotIn(value, generated)
                 self.assertNotIn(value, " ".join(args))
+
+    def test_all_repository_dockerfiles_can_be_instrumented(self):
+        self.canaries()
+        # Use the real checkout, not a copied fixture: additions and unsupported
+        # Dockerfile syntax must fail validation instead of taking the fallback.
+        dockerfiles = sorted(p for p in REPO_ROOT.glob("Dockerfile*")
+                             if not p.name.endswith(".dockerignore"))
+        self.assertTrue(dockerfiles, "No root Dockerfiles found")
+        os.chdir(REPO_ROOT)
+        for dockerfile in dockerfiles:
+            for mode in ("build", "buildx"):
+                with self.subTest(dockerfile=dockerfile.name, mode=mode):
+                    with tempfile.TemporaryDirectory(dir=self.root) as staging:
+                        stage = Path(staging)
+                        with patch.dict(os.environ, self.env, clear=True):
+                            helper.prepare(stage, mode, ["-f", dockerfile.name, "."])
+                        args = (stage / "arguments").read_bytes().decode().split("\0")[:-1]
+                        self.assertIn("--secret", args)
+                        generated = Path(args[args.index("-f") + 1])
+                        self.assertEqual(generated, stage / "Dockerfile")
+                        original_runs = re.findall(r"(?im)^\s*RUN[ \t]+", dockerfile.read_text())
+                        instrumented_runs = re.findall(
+                            r"(?im)^RUN --mount=type=secret,", generated.read_text())
+                        self.assertTrue(original_runs, "No RUN instructions covered")
+                        self.assertEqual(len(instrumented_runs), len(original_runs))
 
     def test_incomplete_aws_and_symlink_key_are_not_mounted(self):
         self.env["__AWS__ACCESS_KEY_ID"] = "fake-id"
