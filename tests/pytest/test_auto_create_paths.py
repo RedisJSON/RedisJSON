@@ -1185,3 +1185,39 @@ def test_arrinsert_validates_existing_depth_before_seeding():
     env.expect('JSON.SET', KEY, '$', '{"a":{"y":[1]},"b":{}}').ok()
     env.expect('JSON.ARRINSERT', KEY, '$.*.y', 0, '99').equal([2, 1])
     env.expect('JSON.GET', KEY).equal('{"a":{"y":[99,1]},"b":{"y":[99]}}')
+
+
+def test_arrinsert_failures_preserve_replica_and_aof():
+    env = _env(True)
+    env.skipOnCluster()
+    if not env.useSlaves and not env.useAof:
+        env.skip()
+        return
+    deep = '[' * 125 + '0' + ']' * 125
+    cases = [
+        ('{"a":[1],"b":[],"c":[3]}', '$.*', 1, '99', 'index out of bounds'),
+        ('{"a":[1],"b":[],"c":[3]}', '.*', -1, '99', 'index out of bounds'),
+        ('{"a":[],"b":{"c":[]}}', '$..*', 0, deep, 'recursion limit exceeded'),
+        ('{"a":{},"b":{"c":{"y":[]}}}', '$..y', 0, deep, 'recursion limit exceeded'),
+    ]
+    expected = {}
+    for i, (doc, path, index, operand, error) in enumerate(cases):
+        key = f'arrinsert-failure:{i}{{s}}'
+        env.expect('JSON.SET', key, '$', doc).ok()
+        env.expect('JSON.ARRINSERT', key, path, index, operand).raiseError().contains(error)
+        env.expect('JSON.GET', key).equal(doc)
+        expected[key] = doc
+    # A successful write after failures must still be propagated and replayed.
+    key = 'arrinsert-success{s}'
+    env.expect('JSON.SET', key, '$', '{"a":{"y":[1]},"b":{}}').ok()
+    env.expect('JSON.ARRINSERT', key, '$.*.y', 0, '{"n":[2]}').equal([2, 1])
+    expected[key] = '{"a":{"y":[{"n":[2]},1]},"b":{"y":[{"n":[2]}]}}'
+    if env.useSlaves:
+        env.expect('WAIT', 1, 10000).equal(1)
+        replica = env.getSlaveConnection()
+        for key, doc in expected.items():
+            env.assertEqual(replica.execute_command('JSON.GET', key), doc)
+    if env.useAof:
+        env.cmd('DEBUG', 'LOADAOF')
+        for key, doc in expected.items():
+            env.expect('JSON.GET', key).equal(doc)
