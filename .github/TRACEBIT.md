@@ -67,3 +67,15 @@ Security must confirm trusted-run coverage in the Tracebit console. Alerts need
 internet access; the console associates the shared credential with the workflow
 run and does not distinguish host from container. FreeBSD VMs and remote
 benchmark machines remain outside this coverage.
+
+### Preparation failures and repository scope
+
+If staging canaries or preparing a Dockerfile fails, the wrapper emits a warning,
+cleans partial staging, and runs the original Docker command without additional
+canary mounts or environment flags. Docker's exit status is preserved. The warning
+means container coverage is absent for that invocation; investigate it rather than
+treating a green build as proof of coverage. Exception contents are not logged.
+
+The API-token input is empty outside this repository, in addition to the step
+condition. The pinned action's pre phase checks for an empty token before requesting
+credentials. This also protects mirrors that define SECURITY_API_TOKEN.

@@ -110,6 +110,39 @@ class ContainerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.prepare("build", ["-f", str(source), "."])
 
+    def test_preparation_failure_runs_original_docker_and_cleans_up(self):
+        self.canaries()
+        bindir = self.root / "bin"
+        bindir.mkdir()
+        docker = bindir / "docker"
+        docker.write_text("#!/bin/bash\nprintf '%s\\0' \"$@\" > \"$ARGV_FILE\"\nexit 23\n")
+        docker.chmod(0o700)
+        argv_file = self.root / "argv"
+        env = dict(self.env, PATH=str(bindir) + os.pathsep + self.env["PATH"],
+                   ARGV_FILE=str(argv_file))
+        wrapper = Path(__file__).with_name("tracebit-docker.sh").resolve()
+        (self.home / ".ssh/config").write_text('ProxyCommand sh -c "private-config-marker\n')
+        for mode, prefix in (("run", ["run"]), ("build", ["build"]),
+                             ("buildx", ["buildx", "build"])):
+            with self.subTest(mode=mode):
+                original = ["--label", "$(touch sentinel); literal", "."]
+                result = subprocess.run(["bash", str(wrapper), mode, *original],
+                                        env=env, cwd=self.root, capture_output=True)
+                self.assertEqual(result.returncode, 23, result.stderr)
+                self.assertEqual(argv_file.read_bytes().decode().split("\0")[:-1],
+                                 prefix + original)
+                self.assertIn(b"::warning::", result.stderr)
+                self.assertNotIn(b"private-config-marker", result.stderr)
+                self.assertNotIn(b"fake-secret", result.stderr)
+                self.assertFalse((self.root / "sentinel").exists())
+                self.assertFalse(list(self.root.glob("tracebit-container.*")))
+        # Failure before a staging directory exists must also preserve Docker.
+        env["RUNNER_TEMP"] = str(self.root / "missing-directory")
+        result = subprocess.run(["bash", str(wrapper), "run", "image"],
+                                env=env, cwd=self.root, capture_output=True)
+        self.assertEqual(result.returncode, 23, result.stderr)
+        self.assertEqual(argv_file.read_bytes(), b"run\0image\0")
+
     def test_shell_preserves_arguments_exit_status_and_cleans_up(self):
         # A fake Docker executable inspects argv without executing supplied text.
         bindir = self.root / "bin"
