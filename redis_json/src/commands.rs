@@ -24,6 +24,7 @@ use ijson::FloatType;
 use json_path::select_value::{SelectValue, SelectValueType, ValueRef};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
+use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -2415,11 +2416,32 @@ pub fn json_arr_insert_command_impl<M: Manager>(
             Ok(acc)
         })?;
     let mut redis_key = manager.open_key_write(ctx, key)?;
+    let root = redis_key
+        .get_value()?
+        .ok_or_else(RedisError::nonexistent_key)?;
+    let mut paths = Vec::new();
+    let operand_depth = args
+        .iter()
+        .map(|arg| arg.borrow().calculate_value_depth())
+        .max()
+        .unwrap_or(0);
+    // Validate every existing target before inserting or creating missing arrays.
+    for (value, target) in get_all_values_and_paths(path.get_path(), root)? {
+        if value.get_type() != SelectValueType::Array {
+            paths.push(None);
+            continue;
+        }
+        crate::array_index::insertion_index(index, value.len().unwrap())?;
+        if target.len() + 1 + operand_depth >= json_path::select_value::MAX_DEPTH {
+            return Err(crate::manager::err_recursion_limit_exceeded());
+        }
+        paths.push(Some(target));
+    }
     // A created array is empty, so 0 is the only index an insert into it
     // can satisfy. Any other index keeps today's out-of-range error, rather
     // than failing the command with a stray `[]` left behind.
     let create = index == 0;
-    let paths = if create {
+    let paths = if create && auto_create_enabled() {
         seed_missing_paths(
             &manager,
             &mut redis_key,
@@ -2429,12 +2451,7 @@ pub fn json_arr_insert_command_impl<M: Manager>(
             Seed::EmptyArray { items: &args },
         )?
     } else {
-        let root = redis_key
-            .get_value()?
-            .ok_or_else(RedisError::nonexistent_key)?;
-        find_all_paths(path.get_path(), root, |v| {
-            v.get_type() == SelectValueType::Array
-        })?
+        paths
     };
     if path.is_legacy() {
         json_arr_insert_legacy(

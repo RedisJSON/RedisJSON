@@ -976,6 +976,25 @@ def testArrInsertCommand(env):
         r.assertEqual(r.execute_command('JSON.GET', 'test', jpath), '[3,5,2,7,{"A":"Z"},9,6,1,4]')
 
 
+def testArrInsertOutOfBoundsIsAtomic(env):
+    for path in ('$..y', '..y'):
+        for index in (1, -1, 2, -2):
+            doc = '{"a":{"y":[1,2]},"b":{"y":[]},"c":{"y":[3,4]}}'
+            env.expect('JSON.SET', 'doc', '$', doc).ok()
+            env.expect('JSON.ARRINSERT', 'doc', path, index, '99').raiseError().contains('index out of bounds')
+            env.expect('JSON.GET', 'doc').equal(doc)
+
+
+def testArrInsertDepthErrorIsAtomic(env):
+    # The first array accepts the operand; the deeper target must reject it.
+    operand = '[' * 125 + '0' + ']' * 125
+    doc = '{"a":[],"b":{"c":[]}}'
+    for path in ('$..*', '..*'):
+        env.expect('JSON.SET', 'doc', '$', doc).ok()
+        env.expect('JSON.ARRINSERT', 'doc', path, 0, operand).raiseError().contains('recursion limit exceeded')
+        env.expect('JSON.GET', 'doc').equal(doc)
+
+
 def testArrIndexMixCommand(env):
     """Test JSON.ARRINDEX command with mixed values"""
     r = env
