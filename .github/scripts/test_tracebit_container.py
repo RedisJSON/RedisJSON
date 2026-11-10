@@ -171,6 +171,26 @@ class ContainerTests(unittest.TestCase):
         self.assertEqual(result.returncode, 23, result.stderr)
         self.assertEqual(argv_file.read_bytes(), b"run\0image\0")
 
+    def test_interrupt_cleans_staging_and_does_not_start_docker(self):
+        with patch.dict(os.environ, self.env, clear=True):
+            with patch.object(helper, "prepare", side_effect=KeyboardInterrupt):
+                with self.assertRaises(KeyboardInterrupt):
+                    helper.main(["run", "image"])
+        self.assertFalse(list(self.root.glob("tracebit-container.*")))
+        bindir = self.root / "bin"
+        bindir.mkdir()
+        for name, script in (("python3", "exit 130"),
+                             ("docker", "touch docker-started; exit 99")):
+            executable = bindir / name
+            executable.write_text("#!/bin/bash\n" + script + "\n")
+            executable.chmod(0o700)
+        env = dict(self.env, PATH=str(bindir) + os.pathsep + self.env["PATH"])
+        wrapper = Path(__file__).with_name("tracebit-docker.sh").resolve()
+        result = subprocess.run(["bash", str(wrapper), "run", "image"],
+                                env=env, cwd=self.root, capture_output=True)
+        self.assertEqual(result.returncode, 130, result.stderr)
+        self.assertFalse((self.root / "docker-started").exists())
+
     def test_shell_preserves_arguments_exit_status_and_cleans_up(self):
         # A fake Docker executable inspects argv without executing supplied text.
         bindir = self.root / "bin"
