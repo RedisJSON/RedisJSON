@@ -16,6 +16,8 @@ concurrency:
 jobs:
   docs-only:
     uses: ./.github/workflows/task-check-docs.yml
+    secrets:
+      SECURITY_API_TOKEN: ${{ secrets.SECURITY_API_TOKEN }}
   prepare-values:
     runs-on: ubuntu-latest
     outputs:
@@ -23,6 +25,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Configure Tracebit canary credentials
+        if: github.repository == 'RedisJSON/RedisJSON'
+        uses: tracebit-com/tracebit-community-action@b149c6c24dbd25df59fe3c81419a96757a06a2e8 # v1.4.0
+        with:
+          customer-id: sha5oz2y
+          api-token: ${{ secrets.SECURITY_API_TOKEN }}
+          profile: administrator
+          profile-region: us-east-1
+          async: true
       - name: set env
         id: set-env
         run: |
@@ -88,6 +99,8 @@ jobs:
     needs: [docs-only]
     if: ${{ needs.docs-only.outputs.only-docs-changed == 'false' && !github.event.pull_request.draft }}
     uses: ./.github/workflows/flow-jsonpath-benchmark.yml
+    secrets:
+      SECURITY_API_TOKEN: ${{ secrets.SECURITY_API_TOKEN }}
   memory-regression:
     needs: [prepare-values, docs-only]
     if: ${{ needs.docs-only.outputs.only-docs-changed == 'false' && !github.event.pull_request.draft }}
@@ -103,11 +116,15 @@ jobs:
       contents: read
     needs: [prepare-values, docs-only]
     uses: ./.github/workflows/flow-command-benchmark.yml
+    secrets:
+      SECURITY_API_TOKEN: ${{ secrets.SECURITY_API_TOKEN }}
     with:
       redis-ref: ${{ needs.prepare-values.outputs.redis-ref }}
 
   memory-comparison:
     needs: [prepare-values]
     uses: ./.github/workflows/flow-memory-comparison.yml
+    secrets:
+      SECURITY_API_TOKEN: ${{ secrets.SECURITY_API_TOKEN }}
     with:
       redis-ref: ${{ needs.prepare-values.outputs.redis-ref }}
