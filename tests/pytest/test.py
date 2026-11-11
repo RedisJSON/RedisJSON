@@ -34,7 +34,6 @@ json_ignore = [
     'pass-json-parser-0007.json',   # UTF-8 to Unicode
     'pass-json-parser-0012.json',   # UTF-8 to Unicode
     'pass-jsonsl-1.json',           # big numbers
-    'pass-jsonsl-yelp.json',        # float precision
 ]
 
 # Some basic documents to use in the tests
@@ -1473,6 +1472,13 @@ def testSetGetComparePassJSONCaseFiles(env):
                     raw = r.execute_command('JSON.GET', jsonfile)
                     d2 = json.loads(raw)
                     r.assertEqual(d1, d2, message=path)
+
+def test_json_set_stores_doubles_exactly(env):
+    """JSON.SET parses doubles exactly, so JSON.GET returns the value it was given (https://github.com/RedisJSON/RedisJSON/issues/1690)"""
+    # Without exact parsing, each of these was stored as an adjacent double, e.g. 0.9999999999999999 as 1.0.
+    for value in ['0.9999999999999999', '0.36995516654807925', '0.47274908866546683', '0.9210986675838745', '0.9355867217045211', '0.09745430973087721']:
+        env.expect('JSON.SET', 'doc', '$', value).ok()
+        env.expect('JSON.GET', 'doc', '$').equal(f'[{value}]')
 
 def testIssue_13(env):
     """https://github.com/RedisJSON/RedisJSON/issues/13"""
