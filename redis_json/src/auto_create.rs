@@ -727,7 +727,9 @@ pub(crate) enum Seed<'a, O> {
 impl<O> Seed<'_, O> {
     fn accepts(&self, value_type: SelectValueType) -> bool {
         match self {
-            Self::EmptyArray { .. } | Self::InsertArray { .. } => value_type == SelectValueType::Array,
+            Self::EmptyArray { .. } | Self::InsertArray { .. } => {
+                value_type == SelectValueType::Array
+            }
             Self::Zero { .. } => {
                 matches!(value_type, SelectValueType::Long | SelectValueType::Double)
             }

@@ -2461,7 +2461,15 @@ pub fn json_arr_insert_command_impl<M: Manager>(
             operand_depth,
         )
     } else {
-        json_arr_insert_impl(manager, &mut redis_key, ctx, paths, index, args, operand_depth)
+        json_arr_insert_impl(
+            manager,
+            &mut redis_key,
+            ctx,
+            paths,
+            index,
+            args,
+            operand_depth,
+        )
     }
 }
 
@@ -2486,7 +2494,8 @@ fn json_arr_insert_impl<M: Manager>(
 
     for (orig_idx, p) in indexed {
         need_notify = true;
-        res[orig_idx] = (redis_key.arr_insert_with_depth(p, &args, index, operand_depth)? as i64).into();
+        res[orig_idx] =
+            (redis_key.arr_insert_with_depth(p, &args, index, operand_depth)? as i64).into();
     }
 
     if need_notify {
