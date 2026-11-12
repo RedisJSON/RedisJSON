@@ -130,11 +130,22 @@ def prepare(root, mode, arguments):
     (root / "arguments").write_bytes(b"".join(arg.encode() + b"\0" for arg in options + arguments))
 
 
-if __name__ == "__main__":
-    directory = Path(tempfile.mkdtemp(prefix="tracebit-container.", dir=os.environ.get("RUNNER_TEMP")))
+def main(arguments):
+    directory = None
     try:
-        prepare(directory, sys.argv[1], sys.argv[2:])
-    except BaseException:
-        shutil.rmtree(directory)
-        raise
+        directory = Path(tempfile.mkdtemp(prefix="tracebit-container.", dir=os.environ.get("RUNNER_TEMP")))
+        prepare(directory, arguments[0], arguments[1:])
+    except BaseException as error:
+        # Do not log exception text: it can contain SSH config or credentials.
+        if directory is not None:
+            shutil.rmtree(directory, ignore_errors=True)
+        if not isinstance(error, Exception):
+            raise
+        print(f"Tracebit: preparation failed ({type(error).__name__})", file=sys.stderr)
+        return 1
     print(directory)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

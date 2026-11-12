@@ -8,9 +8,11 @@ The action uses the repository's `SECURITY_API_TOKEN` Actions secret, customer
 The step runs immediately after checkout when checkout is the first step, or
 first otherwise so dependency installation is covered. Reusable workflow calls
 forward the token; explicit secret mappings retain their existing restrictions.
-The repository condition limits deployment to this public repository when the
-workflows are copied to forks or private mirrors. Fork pull requests with no
-secret retain Tracebit's warning-and-skip behavior.
+The repository condition skips the main step outside this public repository; it
+does not prevent the action's pre phase from running. GitHub withholds repository
+secrets from ordinary fork pull-request workflows, so those runs retain Tracebit's
+warning-and-skip behavior. A fork or mirror that configures its own token is
+responsible for its own Tracebit usage.
 
 ## Docker coverage
 
@@ -67,3 +69,18 @@ Security must confirm trusted-run coverage in the Tracebit console. Alerts need
 internet access; the console associates the shared credential with the workflow
 run and does not distinguish host from container. FreeBSD VMs and remote
 benchmark machines remain outside this coverage.
+
+### Preparation failures
+
+If staging canaries or preparing a Dockerfile fails, the wrapper emits a warning,
+cleans partial staging, and runs the original Docker command without additional
+canary mounts or environment flags. Docker's exit status is preserved. The warning
+means container coverage is absent for that invocation; investigate it rather than
+treating a green build as proof of coverage. Exception contents are not logged.
+
+Validation also runs on root `Dockerfile*` changes. The offline suite calls
+`prepare` directly for every root Dockerfile in both build modes using inert
+canaries, and checks that every RUN instruction receives secret mounts. This
+check fails on unsupported Dockerfiles instead of using the production fallback.
+Dockerfile-specific `.dockerignore` files trigger validation but are not parsed
+as Dockerfiles.

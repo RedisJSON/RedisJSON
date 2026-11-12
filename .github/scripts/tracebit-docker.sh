@@ -11,7 +11,18 @@ esac
 trap 'if [[ -n "${staging:-}" ]]; then rm -rf "$staging"; fi' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-staging=$(python3 "$(dirname "${BASH_SOURCE[0]}")/tracebit-docker.py" "$mode" "$@")
+if staging=$(python3 "$(dirname "${BASH_SOURCE[0]}")/tracebit-docker.py" "$mode" "$@"); then
+    :
+else
+    status=$?
+    # Preserve cancellation; do not start Docker after an interrupted preparation.
+    if (( status >= 128 )); then
+        exit "$status"
+    fi
+    echo "::warning::Tracebit container preparation failed; running Docker unchanged without container canaries." >&2
+    "${command[@]}" "$@"
+    exit $?
+fi
 arguments=()
 while IFS= read -r -d '' argument; do
     arguments+=("$argument")
