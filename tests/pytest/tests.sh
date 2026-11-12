@@ -271,7 +271,7 @@ setup_coverage() {
 
 run_env() {
 	if [[ $COORD == oss ]]; then
-		oss_cluster_args="--env oss-cluster --shards-count $SHARDS"
+		oss_cluster_args="--env oss-cluster --shards-count $SHARDS $CLUSTER_BUS_ARGS"
 		RLTEST_ARGS+=" ${oss_cluster_args}"
 	fi
 
@@ -610,6 +610,13 @@ fi
 
 #------------------------------------------------------------------------------------- Env only
 
+# Redis8.12 requires this opt-out for isolated, unauthenticated cluster tests.
+# Instrumented tests use Redis7.4, which does not recognize the directive.
+CLUSTER_BUS_DEFAULT=no
+[[ $VG == 1 || -n $SAN ]] && CLUSTER_BUS_DEFAULT=""
+CLUSTER_BUS_ARGS="--cluster_bus_port_protected_mode ${CLUSTER_BUS_PROTECTED_MODE-$CLUSTER_BUS_DEFAULT}"
+[[ -z ${CLUSTER_BUS_PROTECTED_MODE-$CLUSTER_BUS_DEFAULT} ]] && CLUSTER_BUS_ARGS=""
+
 if [[ $ENV_ONLY == 1 ]]; then
 	run_env
 	exit 0
@@ -637,7 +644,7 @@ if [[ $AOF == 1 ]]; then
 	{ (RLTEST_ARGS="${RLTEST_ARGS} --use-aof" run_tests "--use-aof"); (( E |= $? )); } || true
 fi
 if [[ $CLUSTER == 1 ]]; then
-	{ (RLTEST_ARGS="${RLTEST_ARGS} --env oss-cluster --shards-count 1" run_tests "--env oss-cluster"); (( E |= $? )); } || true
+	{ (RLTEST_ARGS="${RLTEST_ARGS} --env oss-cluster --shards-count 1 $CLUSTER_BUS_ARGS" run_tests "--env oss-cluster"); (( E |= $? )); } || true
 fi
 
 #-------------------------------------------------------------------------------------- Summary
