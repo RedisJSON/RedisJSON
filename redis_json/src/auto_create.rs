@@ -710,9 +710,12 @@ fn node_at<'a, V: SelectValue>(node: &'a V, path: &[String]) -> Option<&'a V> {
 /// their own type to act on.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Seed<'a, O> {
-    /// `JSON.ARRAPPEND`, `JSON.ARRINSERT`
+    /// `JSON.ARRAPPEND`
     EmptyArray { items: &'a [O] },
-    /// ARRINSERT at index zero: bounds are always valid; validate all target depths.
+    /// ARRINSERT at index zero, which is valid for both existing and new arrays.
+    /// Unlike EmptyArray, this validates every target's insertion depth even when
+    /// no paths need creating, so a later depth error cannot leave earlier arrays
+    /// modified. Reuses the operand depth already computed by the command.
     InsertArray { operand_depth: usize },
     /// `JSON.NUMINCRBY` -- `0 + n == n`. `MULTBY`/`POWBY` get no seed at all:
     /// `0 * n` and `0 ^ n` would fabricate a wrong answer.
