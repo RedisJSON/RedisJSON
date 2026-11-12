@@ -2442,7 +2442,7 @@ pub fn json_arr_insert_command_impl<M: Manager>(
                 if value.get_type() != SelectValueType::Array {
                     return Ok(None);
                 }
-                crate::array_index::insertion_index(index, value.len().unwrap())?;
+                let _ = crate::array_index::insertion_index(index, value.len().unwrap())?;
                 if target.len() + 1 + operand_depth >= json_path::select_value::MAX_DEPTH {
                     return Err(crate::manager::err_recursion_limit_exceeded());
                 }
