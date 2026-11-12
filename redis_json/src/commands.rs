@@ -24,6 +24,7 @@ use ijson::FloatType;
 use json_path::select_value::{SelectValue, SelectValueType, ValueRef};
 use redis_module::{Context, RedisValue};
 use redis_module::{NextArg, RedisError, RedisResult, RedisString, REDIS_OK};
+use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -2415,26 +2416,39 @@ pub fn json_arr_insert_command_impl<M: Manager>(
             Ok(acc)
         })?;
     let mut redis_key = manager.open_key_write(ctx, key)?;
-    // A created array is empty, so 0 is the only index an insert into it
-    // can satisfy. Any other index keeps today's out-of-range error, rather
-    // than failing the command with a stray `[]` left behind.
-    let create = index == 0;
-    let paths = if create {
+    let operand_depth = args
+        .iter()
+        .map(|arg| arg.borrow().calculate_value_depth())
+        .max()
+        .unwrap_or(0);
+    let paths = if index == 0 && auto_create_enabled() {
+        // Index zero is valid for every array, including newly created ones.
+        // The creation pass validates depths before attaching any missing paths.
         seed_missing_paths(
             &manager,
             &mut redis_key,
             ctx,
             "json.arrinsert",
             path.get_path(),
-            Seed::EmptyArray { items: &args },
+            Seed::InsertArray { operand_depth },
         )?
     } else {
         let root = redis_key
             .get_value()?
             .ok_or_else(RedisError::nonexistent_key)?;
-        find_all_paths(path.get_path(), root, |v| {
-            v.get_type() == SelectValueType::Array
-        })?
+        get_all_values_and_paths(path.get_path(), root)?
+            .into_iter()
+            .map(|(value, target)| {
+                if value.get_type() != SelectValueType::Array {
+                    return Ok(None);
+                }
+                let _ = crate::array_index::insertion_index(index, value.len().unwrap())?;
+                if target.len() + 1 + operand_depth >= json_path::select_value::MAX_DEPTH {
+                    return Err(crate::manager::err_recursion_limit_exceeded());
+                }
+                Ok(Some(target))
+            })
+            .collect::<RedisResult<Vec<_>>>()?
     };
     if path.is_legacy() {
         json_arr_insert_legacy(
@@ -2444,9 +2458,18 @@ pub fn json_arr_insert_command_impl<M: Manager>(
             paths.into_iter().flatten().collect(),
             index,
             args,
+            operand_depth,
         )
     } else {
-        json_arr_insert_impl(manager, &mut redis_key, ctx, paths, index, args)
+        json_arr_insert_impl(
+            manager,
+            &mut redis_key,
+            ctx,
+            paths,
+            index,
+            args,
+            operand_depth,
+        )
     }
 }
 
@@ -2457,6 +2480,7 @@ fn json_arr_insert_impl<M: Manager>(
     paths: Vec<Option<Vec<String>>>,
     index: i64,
     args: Vec<M::O>,
+    operand_depth: usize,
 ) -> RedisResult {
     let mut res = vec![RedisValue::Null; paths.len()];
     let mut need_notify = false;
@@ -2470,7 +2494,8 @@ fn json_arr_insert_impl<M: Manager>(
 
     for (orig_idx, p) in indexed {
         need_notify = true;
-        res[orig_idx] = (redis_key.arr_insert(p, &args, index)? as i64).into();
+        res[orig_idx] =
+            (redis_key.arr_insert_with_depth(p, &args, index, operand_depth)? as i64).into();
     }
 
     if need_notify {
@@ -2487,14 +2512,15 @@ fn json_arr_insert_legacy<M: Manager>(
     mut paths: Vec<Vec<String>>,
     index: i64,
     args: Vec<M::O>,
+    operand_depth: usize,
 ) -> RedisResult {
     if paths.is_empty() {
         return Err(err_invalid_path_or("not an array"));
     }
     paths.sort_by(|v1, v2| compare_paths_for_mutation(v1, v2));
-    let res = paths
-        .into_iter()
-        .try_fold(0, |_, p| redis_key.arr_insert(p, &args, index))?;
+    let res = paths.into_iter().try_fold(0, |_, p| {
+        redis_key.arr_insert_with_depth(p, &args, index, operand_depth)
+    })?;
     redis_key.notify_keyspace_event(ctx, "json.arrinsert")?;
     manager.apply_changes(ctx);
     Ok(res.into())

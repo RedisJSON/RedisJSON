@@ -1,0 +1,20 @@
+version: 0.2
+name: "json_arrinsert_nested_operand"
+description: "Insert an object containing eight 32-element arrays into a 16-element array. Each request resets the document before insertion."
+
+# EVAL keeps reset + insert together under concurrent clients. Throughput includes
+# JSON.SET and Lua overhead; array lengths do not grow during measurement.
+dbconfig:
+  - module-configuration-parameters:
+      rejson:
+        json-auto-create-deep-paths: "no"
+clientconfig:
+  - tool: redis-benchmark
+  - min-tool-version: "6.2.0"
+  - parameters:
+    - clients: 16
+    - requests: 500000
+    - threads: 2
+    - pipeline: 1
+    - command: >-
+        "EVAL" "redis.call('JSON.SET',KEYS[1],'$',ARGV[1]);return redis.call('JSON.ARRINSERT',KEYS[1],ARGV[2],ARGV[3],ARGV[4])" "1" "arrinsert:bench" "[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]" "$" "1" "{\"items\":[[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31],[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31],[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31],[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31],[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31],[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31],[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31],[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31]]}"

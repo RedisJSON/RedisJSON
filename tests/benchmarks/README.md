@@ -63,6 +63,22 @@ Local comparisons (including Event CI) use a per-run Redis PID file to clean up
 unresponsive servers after verifying their executable and working directory.
 If cleanup cannot be verified, remaining measurements in that shard are skipped.
 
+## ARRINSERT regression workloads
+
+`json_arrinsert_multi_existing.yml` and
+`json_arrinsert_auto_create_existing.yml` insert a scalar at index zero into
+32 existing arrays selected by `$..y`, with auto-creation disabled and enabled,
+respectively. The fixture includes a root `y` array so recursive auto-creation
+does not add an unintended target. The enabled case covers the duplicate path-resolution regression
+found while fixing MOD-9116. `json_arrinsert_nested_operand.yml` inserts a nested
+object to cover repeated operand-depth calculation.
+
+Each request uses a Lua script to reset the document and then run ARRINSERT.
+This keeps the workload size fixed and prevents concurrent clients from inserting
+between another client's reset and insertion. Reported throughput includes the
+reset and Lua overhead, so it is not a measurement of ARRINSERT alone. All three
+workloads run on both modules through the existing YAML discovery and retry logic.
+
 ## Nightly AWS comparison
 
 Scheduled runs on master compare the pinned `benchmark-baseline` commit against
