@@ -104,3 +104,88 @@ def test_fpha_json_get_negative_short_floats(env):
         env.expect("JSON.GET", key, "$").equal(expected)
 
 
+
+
+# Each document is a single-element array stored with a numeric (typed) tag.
+TYPED_SINGLETONS = [
+    ("[0]",),
+    ("[-1]",),
+    ("[300]",),
+    ("[-300]",),
+    ("[70000]",),
+    ("[5000000000]",),
+    ("[1.5]",),
+    ("[1.5]", "FPHA", "FP16"),
+    ("[1.5]", "FPHA", "BF16"),
+    ("[1.5]", "FPHA", "FP32"),
+    ("[1.5]", "FPHA", "FP64"),
+]
+NON_NUMERIC_VALUES = ['{"a":1}', '"s"', "true", "null", "[1]"]
+
+
+def _set_typed_singleton(env, key, doc):
+    env.expect("JSON.SET", key, "$", '{"a":%s}' % doc[0], *doc[1:]).ok()
+
+
+def test_replace_sole_typed_element_with_non_numeric(env):
+    """MOD-20160: replacing the only element of a typed array with a non-number must not crash."""
+    for doc in TYPED_SINGLETONS:
+        for value in NON_NUMERIC_VALUES:
+            _set_typed_singleton(env, "k", doc)
+            env.expect("JSON.SET", "k", "$.a[0]", value).ok()
+            env.expect("JSON.GET", "k", "$.a").equal("[[%s]]" % value)
+
+            _set_typed_singleton(env, "k", doc)
+            env.expect("JSON.MSET", "k", "$.a[0]", value).ok()
+            env.expect("JSON.GET", "k", "$.a").equal("[[%s]]" % value)
+    env.expect("PING").noError()
+
+
+def test_add_non_numeric_to_emptied_typed_array(env):
+    """MOD-20160: an emptied typed array must accept non-numbers via ARRAPPEND/ARRINSERT."""
+    empty_commands = [
+        ("JSON.ARRPOP", "k", "$.a"),
+        ("JSON.ARRTRIM", "k", "$.a", "1", "0"),
+        ("JSON.DEL", "k", "$.a[0]"),
+        ("JSON.CLEAR", "k", "$.a"),
+    ]
+    for doc in TYPED_SINGLETONS:
+        for empty in empty_commands:
+            for value in NON_NUMERIC_VALUES:
+                _set_typed_singleton(env, "k", doc)
+                env.cmd(*empty)
+                env.expect("JSON.GET", "k", "$.a").equal("[[]]")
+                env.expect("JSON.ARRAPPEND", "k", "$.a", value, "7").equal([2])
+                env.expect("JSON.GET", "k", "$.a").equal("[[%s,7]]" % value)
+
+                _set_typed_singleton(env, "k", doc)
+                env.cmd(*empty)
+                env.expect("JSON.ARRINSERT", "k", "$.a", "0", value).equal([1])
+                env.expect("JSON.GET", "k", "$.a").equal("[[%s]]" % value)
+    env.expect("PING").noError()
+
+
+def test_numeric_replace_of_sole_typed_element(env):
+    """Numeric replacement of a typed singleton keeps working."""
+    env.expect("JSON.SET", "k", "$", "[0]").ok()
+    env.expect("JSON.SET", "k", "$[0]", "5").ok()
+    env.expect("JSON.GET", "k", "$").equal("[[5]]")
+    env.expect("JSON.SET", "k", "$[0]", "2.5").ok()
+    env.expect("JSON.GET", "k", "$").equal("[[2.5]]")
+    env.expect("JSON.SET", "k", "$", "[1.5]", "FPHA", "FP32").ok()
+    env.expect("JSON.SET", "k", "$[0]", "2.5").ok()
+    env.expect("JSON.GET", "k", "$").equal("[[2.5]]")
+
+
+def test_emptied_typed_array_survives_rdb_reload(env):
+    """An emptied typed array reloaded from RDB must accept non-numbers."""
+    env.skipOnCluster()
+    if env.useAof:
+        env.skip()
+
+    env.expect("JSON.SET", "k", "$", '{"a":[300]}').ok()
+    env.cmd("JSON.ARRPOP", "k", "$.a")
+    for _ in env.retry_with_rdb_reload():
+        env.expect("JSON.GET", "k", "$.a").equal("[[]]")
+    env.expect("JSON.ARRAPPEND", "k", "$.a", '{"b":1}').equal([1])
+    env.expect("JSON.GET", "k", "$.a").equal('[[{"b":1}]]')
