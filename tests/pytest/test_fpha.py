@@ -128,7 +128,7 @@ def _set_typed_singleton(env, key, doc):
 
 
 def test_replace_sole_typed_element_with_non_numeric(env):
-    """MOD-20160: replacing the only element of a typed array with a non-number must not crash."""
+    """Replacing the only element of a typed array with a non-number must not crash."""
     for doc in TYPED_SINGLETONS:
         for value in NON_NUMERIC_VALUES:
             _set_typed_singleton(env, "k", doc)
@@ -142,7 +142,7 @@ def test_replace_sole_typed_element_with_non_numeric(env):
 
 
 def test_add_non_numeric_to_emptied_typed_array(env):
-    """MOD-20160: an emptied typed array must accept non-numbers via ARRAPPEND/ARRINSERT."""
+    """An emptied typed array must accept non-numbers via ARRAPPEND/ARRINSERT."""
     empty_commands = [
         ("JSON.ARRPOP", "k", "$.a"),
         ("JSON.ARRTRIM", "k", "$.a", "1", "0"),
