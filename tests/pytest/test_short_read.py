@@ -11,13 +11,12 @@ import gevent.queue
 import gevent.server
 import gevent.socket
 import time
-from RLTest import Defaults
+from RLTest import Defaults, Env
 from enum import Enum, auto
 from common import TimeLimit
 
 
 Defaults.decode_responses = True
-Defaults.no_log = True
 
 CREATE_INDICES_TARGET_DIR = '/tmp/test'
 BASE_RDBS_URL = 'https://dev.cto.redis.s3.amazonaws.com/RediSearch/rdbs/'
@@ -420,7 +419,14 @@ class Debug:
         env.debugPrint(name + ': %d out of %d \n%s' % (self.dbg_ndx, total_len, self.dbg_str))
 
 
-def testShortReadJson(env):
+def testShortReadJson():
+    # Every truncated load writes to the server log, so only this test's servers log nowhere.
+    # Setting it for the module would silence the logs of every test in the run.
+    no_log, Defaults.no_log = Defaults.no_log, True
+    try:
+        env = Env()
+    finally:
+        Defaults.no_log = no_log
     env.skipOnVersionSmaller('6.2')  # Another alternative is to set env var SHORT_READ_BYTES_DELTA to be greater than 1 (in redis 6.0)
     env.skipOnCluster()
     if env.env.endswith('existing-env') and os.environ.get('CI'):
