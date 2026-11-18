@@ -44,7 +44,7 @@ use crate::commands::{
     json_del_command_impl, json_exist_command_impl, json_get_command_impl, json_merge_command_impl,
     json_mget_command_impl, json_mset_command_impl, json_num_incrby_command_impl,
     json_num_multby_command_impl, json_num_powby_command_impl, json_obj_keys_command_impl,
-    json_obj_len_command_impl, json_resp_command_impl, json_set_command_impl,
+    json_obj_len_command_impl, json_path_command_impl, json_resp_command_impl, json_set_command_impl,
     json_str_append_command_impl, json_str_len_command_impl, json_type_command_impl,
 };
 use crate::redisjson::Format;
@@ -239,6 +239,12 @@ macro_rules! redis_json_module_create {
         json_exist_command!(
             pub fn json_exist(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
                 json_command!(json_exist_command_impl)(ctx, args)
+            }
+        );
+
+        json_path_command!(
+            pub fn json_path(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+                json_command!(json_path_command_impl)(ctx, args)
             }
         );
 
