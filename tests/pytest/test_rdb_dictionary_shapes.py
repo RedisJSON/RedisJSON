@@ -22,10 +22,16 @@ WRITER_BUDGET = 'json-rdb-dictionary-max-memory-percent'
 LOG_MARK = 'JSON RDB dictionary'
 
 
+def _is_flex(env):
+    return env.getConnection().config_get('bigredis-enabled').get('bigredis-enabled') == 'yes'
+
+
 def _plain_env():
-    """A single server with the server log on. Replicas would start saves of their own."""
+    """A single server with the server log on. Replicas would start saves of their own, and Flex
+    saves each value on its own (`mode=local reason=flex`), so it writes no stream to check."""
     env = Env(decodeResponses=True)
-    if env.isCluster() or env.useSlaves or env.useAof or env.env.endswith('existing-env'):
+    if (env.isCluster() or env.useSlaves or env.useAof or env.env.endswith('existing-env') or
+            _is_flex(env)):
         env.skip()
     env.expect('FLUSHALL').equal(True)
     return env
