@@ -32,10 +32,18 @@ COMMON_STRINGS = 10
 COW_SLACK = 1 << 20
 
 
+def _is_flex(env):
+    return env.getConnection().config_get('bigredis-enabled').get('bigredis-enabled') == 'yes'
+
+
 def _plain_server(env):
-    """These tests read one server's log and settings, so they run only in the plain lane."""
-    if env.isCluster() or env.useAof or env.useSlaves or env.env.endswith('existing-env'):
+    """These tests read one server's log and settings, so they run only in the plain lane. Flex
+    saves each value on its own (`mode=local reason=flex`), so it writes no stream to check."""
+    if (env.isCluster() or env.useAof or env.useSlaves or env.env.endswith('existing-env') or
+            _is_flex(env)):
         env.skip()
+    # The counters of a save count every key the server holds.
+    env.expect('FLUSHALL').equal(True)
 
 
 class _ServerLog:
