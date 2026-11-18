@@ -221,11 +221,16 @@ def _load_rdb_in_new_server(env, rdb, inspect=None):
     return outcome, lines
 
 
+def _is_flex(env):
+    """Flex saves each value on its own (`mode=local reason=flex`), so it writes no stream to damage."""
+    return env.getConnection().config_get('bigredis-enabled').get('bigredis-enabled') == 'yes'
+
+
 def _skip_unless_new_servers_can_start(env):
     """The tests that load an edited file start a server of their own with the harness' command."""
     env.skipOnCluster()
     if (env.useAof or VALGRIND or env.useTLS or env.env.endswith('existing-env') or
-            not hasattr(env.envRunner, 'masterCmdArgs')):
+            not hasattr(env.envRunner, 'masterCmdArgs') or _is_flex(env)):
         env.skip()
 
 
@@ -417,7 +422,7 @@ def test_a_full_sync_cut_while_the_replica_loads_is_retried_and_loads_the_whole_
     env = Env(decodeResponses=True)
     env.skipOnCluster()
     # The server of the plain lane becomes the replica of a mock master.
-    if env.useSlaves or env.useAof or env.env.endswith('existing-env'):
+    if env.useSlaves or env.useAof or env.env.endswith('existing-env') or _is_flex(env):
         env.skip()
     connection = env.getConnection()
     original = connection.config_get('repl-diskless-load')['repl-diskless-load']
