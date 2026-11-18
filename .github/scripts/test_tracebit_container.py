@@ -1,11 +1,14 @@
 """Offline regression tests. All credentials are inert fixtures."""
 import importlib.util
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 spec = importlib.util.spec_from_file_location("helper", Path(__file__).with_name("tracebit-docker.py"))
 helper = importlib.util.module_from_spec(spec)
@@ -81,6 +84,31 @@ class ContainerTests(unittest.TestCase):
                 self.assertNotIn(value, generated)
                 self.assertNotIn(value, " ".join(args))
 
+    def test_all_repository_dockerfiles_can_be_instrumented(self):
+        self.canaries()
+        # Use the real checkout, not a copied fixture: additions and unsupported
+        # Dockerfile syntax must fail validation instead of taking the fallback.
+        dockerfiles = sorted(p for p in REPO_ROOT.glob("Dockerfile*")
+                             if not p.name.endswith(".dockerignore"))
+        self.assertTrue(dockerfiles, "No root Dockerfiles found")
+        os.chdir(REPO_ROOT)
+        for dockerfile in dockerfiles:
+            for mode in ("build", "buildx"):
+                with self.subTest(dockerfile=dockerfile.name, mode=mode):
+                    with tempfile.TemporaryDirectory(dir=self.root) as staging:
+                        stage = Path(staging)
+                        with patch.dict(os.environ, self.env, clear=True):
+                            helper.prepare(stage, mode, ["-f", dockerfile.name, "."])
+                        args = (stage / "arguments").read_bytes().decode().split("\0")[:-1]
+                        self.assertIn("--secret", args)
+                        generated = Path(args[args.index("-f") + 1])
+                        self.assertEqual(generated, stage / "Dockerfile")
+                        original_runs = re.findall(r"(?im)^\s*RUN[ \t]+", dockerfile.read_text())
+                        instrumented_runs = re.findall(
+                            r"(?im)^RUN --mount=type=secret,", generated.read_text())
+                        self.assertTrue(original_runs, "No RUN instructions covered")
+                        self.assertEqual(len(instrumented_runs), len(original_runs))
+
     def test_incomplete_aws_and_symlink_key_are_not_mounted(self):
         self.env["__AWS__ACCESS_KEY_ID"] = "fake-id"
         ssh = self.home / ".ssh"
@@ -109,6 +137,59 @@ class ContainerTests(unittest.TestCase):
         source.write_text("FROM alpine\nRUN <<EOF\necho hello\nEOF\n")
         with self.assertRaises(ValueError):
             self.prepare("build", ["-f", str(source), "."])
+
+    def test_preparation_failure_runs_original_docker_and_cleans_up(self):
+        self.canaries()
+        bindir = self.root / "bin"
+        bindir.mkdir()
+        docker = bindir / "docker"
+        docker.write_text("#!/bin/bash\nprintf '%s\\0' \"$@\" > \"$ARGV_FILE\"\nexit 23\n")
+        docker.chmod(0o700)
+        argv_file = self.root / "argv"
+        env = dict(self.env, PATH=str(bindir) + os.pathsep + self.env["PATH"],
+                   ARGV_FILE=str(argv_file))
+        wrapper = Path(__file__).with_name("tracebit-docker.sh").resolve()
+        (self.home / ".ssh/config").write_text('ProxyCommand sh -c "private-config-marker\n')
+        for mode, prefix in (("run", ["run"]), ("build", ["build"]),
+                             ("buildx", ["buildx", "build"])):
+            with self.subTest(mode=mode):
+                original = ["--label", "$(touch sentinel); literal", "."]
+                result = subprocess.run(["bash", str(wrapper), mode, *original],
+                                        env=env, cwd=self.root, capture_output=True)
+                self.assertEqual(result.returncode, 23, result.stderr)
+                self.assertEqual(argv_file.read_bytes().decode().split("\0")[:-1],
+                                 prefix + original)
+                self.assertIn(b"::warning::", result.stderr)
+                self.assertNotIn(b"private-config-marker", result.stderr)
+                self.assertNotIn(b"fake-secret", result.stderr)
+                self.assertFalse((self.root / "sentinel").exists())
+                self.assertFalse(list(self.root.glob("tracebit-container.*")))
+        # Failure before a staging directory exists must also preserve Docker.
+        env["RUNNER_TEMP"] = str(self.root / "missing-directory")
+        result = subprocess.run(["bash", str(wrapper), "run", "image"],
+                                env=env, cwd=self.root, capture_output=True)
+        self.assertEqual(result.returncode, 23, result.stderr)
+        self.assertEqual(argv_file.read_bytes(), b"run\0image\0")
+
+    def test_interrupt_cleans_staging_and_does_not_start_docker(self):
+        with patch.dict(os.environ, self.env, clear=True):
+            with patch.object(helper, "prepare", side_effect=KeyboardInterrupt):
+                with self.assertRaises(KeyboardInterrupt):
+                    helper.main(["run", "image"])
+        self.assertFalse(list(self.root.glob("tracebit-container.*")))
+        bindir = self.root / "bin"
+        bindir.mkdir()
+        for name, script in (("python3", "exit 130"),
+                             ("docker", "touch docker-started; exit 99")):
+            executable = bindir / name
+            executable.write_text("#!/bin/bash\n" + script + "\n")
+            executable.chmod(0o700)
+        env = dict(self.env, PATH=str(bindir) + os.pathsep + self.env["PATH"])
+        wrapper = Path(__file__).with_name("tracebit-docker.sh").resolve()
+        result = subprocess.run(["bash", str(wrapper), "run", "image"],
+                                env=env, cwd=self.root, capture_output=True)
+        self.assertEqual(result.returncode, 130, result.stderr)
+        self.assertFalse((self.root / "docker-started").exists())
 
     def test_shell_preserves_arguments_exit_status_and_cleans_up(self):
         # A fake Docker executable inspects argv without executing supplied text.
