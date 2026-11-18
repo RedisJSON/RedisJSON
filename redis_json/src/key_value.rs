@@ -1,10 +1,13 @@
 use itertools::Itertools;
 use std::collections::HashMap;
+use std::io::Write;
+use std::ops::ControlFlow;
 
 use json_path::{
     calc_once, calc_once_paths, calc_once_projection, compile,
-    json_path::Query,
+    json_path::{PTrackerElement, Query},
     select_value::{is_equal, SelectValue, SelectValueType, ValueRef},
+    visit_once_with_paths,
 };
 use redis_module::{redisvalue::RedisValueKey, RedisResult, RedisValue};
 use serde::Serialize;
@@ -168,7 +171,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    fn to_json_multi(
+    fn to_json_multi<const PATHS: bool>(
         &self,
         paths: Vec<Path>,
         format: &ReplyFormatOptions,
@@ -186,7 +189,9 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 .fold(HashMap::with_capacity(path_len), |mut acc, path: Path| {
                     // If we can't compile the path, we can't continue
                     if let Ok(query) = compile(path.get_path()) {
-                        let value = if query.is_projection() {
+                        let value = if PATHS {
+                            Some(Values::Computed(self.path_results(query)))
+                        } else if query.is_projection() {
                             // A projection always contributes a result: its computed values, or
                             // an empty array for Nothing (like a non-matching JSONPath) — never a
                             // missing-path error.
@@ -236,18 +241,25 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         Ok(res)
     }
 
-    fn to_resp3(&self, paths: Vec<Path>, format: &ReplyFormatOptions) -> RedisResult {
+    fn to_resp3<const PATHS: bool>(&self, paths: Vec<Path>, format: &ReplyFormatOptions) -> RedisResult {
         let results = paths
             .into_iter()
-            .map(|path: Path| self.to_resp3_path(&path, format))
+            .map(|path: Path| self.to_resp3_path::<PATHS>(&path, format))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(RedisValue::Array(results))
     }
 
-    pub fn to_resp3_path(&self, path: &Path, format: &ReplyFormatOptions) -> RedisResult {
+    pub fn to_resp3_path<const PATHS: bool>(
+        &self,
+        path: &Path,
+        format: &ReplyFormatOptions,
+    ) -> RedisResult {
         // Propagate a compile error (e.g. a malformed projection `$.a +`) rather than masking
         // it as an empty array, so RESP3 errors consistently with the RESP2 path.
         let q = compile(path.get_path())?;
+        if PATHS {
+            return Ok(Self::projection_to_resp3(self.path_results(q), format));
+        }
         if q.is_projection() {
             Ok(Self::projection_to_resp3(
                 calc_once_projection(q, self.val.as_ref()),
@@ -261,12 +273,16 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    fn to_json_single(
+    fn to_json_single<const PATHS: bool>(
         &self,
         path: &str,
         format: &ReplyFormatOptions,
         is_legacy: bool,
     ) -> RedisResult {
+        if PATHS {
+            let results = self.path_results(compile(path)?);
+            return Ok(Self::serialize_object(&results, format)?.into());
+        }
         let res = if is_legacy {
             self.to_string_single(path, format)?.into()
         } else if format.is_resp3_reply() {
@@ -357,16 +373,20 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    pub fn to_json(&self, paths: Vec<Path>, format: &ReplyFormatOptions) -> RedisResult {
+    pub fn to_json<const PATHS: bool>(
+        &self,
+        paths: Vec<Path>,
+        format: &ReplyFormatOptions,
+    ) -> RedisResult {
         let is_legacy = !paths.iter().any(|p| !p.is_legacy());
 
         // If we're using RESP3, we need to reply with an array of values
         if format.is_resp3_reply() {
-            self.to_resp3(paths, format)
+            self.to_resp3::<PATHS>(paths, format)
         } else if paths.len() > 1 {
-            self.to_json_multi(paths, format, is_legacy)
+            self.to_json_multi::<PATHS>(paths, format, is_legacy)
         } else {
-            self.to_json_single(paths[0].get_path(), format, is_legacy)
+            self.to_json_single::<PATHS>(paths[0].get_path(), format, is_legacy)
         }
     }
 
@@ -450,6 +470,47 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         } else {
             Self::serialize_object(&calc_once(query, self.val.as_ref()), format)
         }
+    }
+
+    fn path_results(&self, query: Query) -> Vec<Value> {
+        if query.is_projection() {
+            return calc_once_projection(query, self.val.as_ref())
+                .into_iter()
+                .map(|_| Value::Null)
+                .collect();
+        }
+        let mut paths = Vec::new();
+        let _ = visit_once_with_paths(query, self.val.as_ref(), |matched| {
+            let tracker = matched.path_tracker.expect("stored match has a path tracker");
+            let capacity = 1 + tracker
+                .elements
+                .iter()
+                .map(|element| match element {
+                    PTrackerElement::Key(key) => key.len() + 4,
+                    PTrackerElement::Index(_) => 22,
+                })
+                .sum::<usize>();
+            let mut path_bytes = Vec::with_capacity(capacity);
+            path_bytes.push(b'$');
+            for element in tracker.elements {
+                path_bytes.push(b'[');
+                match element {
+                    PTrackerElement::Key(key) => {
+                        serde_json::to_writer(&mut path_bytes, &key)
+                            .expect("serializing a string to a Vec cannot fail");
+                    }
+                    PTrackerElement::Index(index) => {
+                        write!(path_bytes, "{index}").expect("writing to a Vec cannot fail");
+                    }
+                }
+                path_bytes.push(b']');
+            }
+            paths.push(Value::String(
+                String::from_utf8(path_bytes).expect("JSON path is UTF-8"),
+            ));
+            ControlFlow::<()>::Continue(())
+        });
+        paths
     }
 
     pub fn get_type(&self, path: &str) -> RedisResult<String> {
