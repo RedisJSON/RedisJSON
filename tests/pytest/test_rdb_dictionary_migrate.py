@@ -67,14 +67,16 @@ def _source_and_target(env):
     return slot, source, target
 
 
-def _assert_documents(env, connection, documents):
-    """The server holds exactly the documents of its slots, as `documents` has them."""
-    keys = list(connection.scan_iter(count=1000))
-    env.assertGreater(len(keys), 1)
+def _keys(connection):
+    return set(connection.scan_iter(count=1000))
+
+
+def _assert_documents(env, connection, documents, keys):
+    """The server holds exactly `keys`, each as `documents` has it."""
+    env.assertEqual(_keys(connection), keys)
     for key in keys:
         env.assertEqual(json.loads(connection.execute_command('JSON.GET', key)), documents[key],
                         message=key)
-    return keys
 
 
 @contextmanager
@@ -170,9 +172,11 @@ def _expect_stream_load(env, log, min_refs):
 def _reload_and_check(env, shard, documents):
     """`DEBUG RELOAD` saves a stream and loads it back, and the documents come back."""
     connection = shard.getConnection()
+    keys = _keys(connection)
+    env.assertGreater(len(keys), 1)
     log = _ServerLog(env, shard)
     env.assertEqual(connection.execute_command('DEBUG', 'RELOAD'), 'OK')
-    keys = _assert_documents(env, connection, documents)
+    _assert_documents(env, connection, documents, keys)
     _expect_stream_save(env, log, min_refs=len(keys) - 1)
     _expect_stream_load(env, log, min_refs=len(keys) - 1)
 
@@ -185,6 +189,7 @@ def test_a_resharded_slot_keeps_its_shared_string_documents():
     source_connection, target_connection = source.getConnection(), target.getConnection()
     # The target holds documents of its own, read from a stream, before the slot arrives.
     _reload_and_check(env, target, other)
+    source_keys, target_keys = _keys(source_connection), _keys(target_connection)
     target_log = _ServerLog(env, target)
 
     keys = sorted(moving)
@@ -203,7 +208,9 @@ def test_a_resharded_slot_keeps_its_shared_string_documents():
 
     _expect_no_refusal(env, target_log)
     documents = {**moving, **other}
-    _assert_documents(env, target_connection, documents)
+    # Every moved key is on the target, and none is left on the source.
+    _assert_documents(env, target_connection, documents, target_keys | set(moving))
+    _assert_documents(env, source_connection, documents, source_keys - set(moving))
     for shard in (source, target):
         _reload_and_check(env, shard, documents)
 
@@ -216,6 +223,7 @@ def test_a_slot_moves_while_the_source_runs_a_bgsave():
     slot, source, target = _source_and_target(env)
     source_connection, target_connection = source.getConnection(), target.getConnection()
     source_keys = source_connection.dbsize()
+    target_keys = _keys(target_connection)
     source_log, target_log = _ServerLog(env, source), _ServerLog(env, target)
 
     # The child takes several seconds over the source's keys, so the slot moves during it.
@@ -232,5 +240,5 @@ def test_a_slot_moves_while_the_source_runs_a_bgsave():
     # The child saved the keys it had when it forked, the moving ones included.
     _expect_stream_save(env, source_log, min_refs=source_keys - 1)
     _expect_no_refusal(env, target_log)
-    _assert_documents(env, target_connection, documents)
+    _assert_documents(env, target_connection, documents, target_keys | set(moving))
     _reload_and_check(env, target, documents)

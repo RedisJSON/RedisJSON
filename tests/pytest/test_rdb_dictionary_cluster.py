@@ -46,26 +46,28 @@ def _documents():
 
 
 def _load_documents(env, documents):
+    """Writes `documents` through the cluster. Returns the keys of each shard, in shard order."""
     env.flush()
     cluster = env.getClusterConnectionIfNeeded()
     for key, document in documents.items():
         env.assertEqual(cluster.execute_command('JSON.SET', key, '$', json.dumps(document)), 'OK')
-    for shard in env.envRunner.shards:
+    shard_keys = [_shard_keys(shard.getConnection()) for shard in env.envRunner.shards]
+    env.assertEqual(set().union(*shard_keys), set(documents))
+    for keys in shard_keys:
         # Every shard needs keys of its own, or it writes no stream to check.
-        env.assertGreater(shard.getConnection().dbsize(), 1)
+        env.assertGreater(len(keys), 1)
+    return shard_keys
 
 
 def _shard_keys(connection):
-    return list(connection.scan_iter(count=1000))
+    return set(connection.scan_iter(count=1000))
 
 
-def _assert_shard_documents(env, connection, documents):
-    """The server holds exactly the documents of its slots, as they were written."""
-    keys = _shard_keys(connection)
-    env.assertGreater(len(keys), 1)
+def _assert_shard_documents(env, connection, documents, keys):
+    """The server holds exactly `keys`, each as written."""
+    env.assertEqual(_shard_keys(connection), keys)
     for key in keys:
         env.assertEqual(json.loads(connection.execute_command('JSON.GET', key)), documents[key])
-    return keys
 
 
 class _ServerLog:
@@ -157,7 +159,7 @@ def _wait_for_link(replica):
 def test_every_shard_saves_and_reloads_its_own_stream():
     env = _cluster_env()
     documents = _documents()
-    _load_documents(env, documents)
+    shard_keys = _load_documents(env, documents)
     for shard in env.envRunner.shards:
         master = shard.getConnection()
         keys = len(_shard_keys(master))
@@ -177,20 +179,20 @@ def test_every_shard_saves_and_reloads_its_own_stream():
                        message=f'stream RDB {stream_size} vs inline RDB {inline_size}')
 
     # A restart loads the RDB that the last SAVE wrote.
-    for shard in env.envRunner.shards:
+    for shard, keys in zip(env.envRunner.shards, shard_keys):
         log = _ServerLog(env, shard, 'master')
         shard.stopEnv()
         shard.startEnv()
         env.waitCluster()
-        keys = _assert_shard_documents(env, shard.getConnection(), documents)
+        _assert_shard_documents(env, shard.getConnection(), documents, keys)
         _expect_stream_load(env, log, min_refs=len(keys) - 1)
 
     # DEBUG RELOAD saves and loads again in one process, on the master and its replica.
-    for index, shard in enumerate(env.envRunner.shards, start=1):
+    for index, (shard, keys) in enumerate(zip(env.envRunner.shards, shard_keys), start=1):
         _wait_for_replica(env, shard.getConnection())
         log = _ServerLog(env, shard, 'master')
         _retry_while_saving(lambda: env.dumpAndReload(shardId=index))
-        keys = _assert_shard_documents(env, shard.getConnection(), documents)
+        _assert_shard_documents(env, shard.getConnection(), documents, keys)
         _expect_stream_save(env, log, min_refs=len(keys) - 1)
         _expect_stream_load(env, log, min_refs=len(keys) - 1)
 
@@ -198,8 +200,8 @@ def test_every_shard_saves_and_reloads_its_own_stream():
 def test_every_replica_full_syncs_a_stream_from_its_master():
     env = _cluster_env()
     documents = _documents()
-    _load_documents(env, documents)
-    for shard in env.envRunner.shards:
+    shard_keys = _load_documents(env, documents)
+    for shard, keys in zip(env.envRunner.shards, shard_keys):
         master = shard.getConnection()
         replica = shard.getSlaveConnection()
         _wait_for_replica(env, master)
@@ -218,17 +220,15 @@ def test_every_replica_full_syncs_a_stream_from_its_master():
                     time.sleep(0.01)
         finally:
             master.config_set('repl-diskless-sync-delay', delay)
-        keys = _shard_keys(master)
         _expect_stream_save(env, master_log, min_refs=len(keys) - 1)
         _expect_stream_load(env, replica_log, min_refs=len(keys) - 1)
-        for key in keys:
-            env.assertEqual(json.loads(replica.execute_command('JSON.GET', key)), documents[key])
+        _assert_shard_documents(env, replica, documents, keys)
 
 
 def test_a_promoted_replica_saves_and_reloads_its_own_stream():
     env = _cluster_env()
     documents = _documents()
-    _load_documents(env, documents)
+    keys = _load_documents(env, documents)[0]
     shard = env.envRunner.shards[0]
     master = shard.getConnection()
     replica = shard.getSlaveConnection()
@@ -239,11 +239,11 @@ def test_a_promoted_replica_saves_and_reloads_its_own_stream():
         # The promoted server writes its own stream from the strings it interned while it replicated.
         log = _ServerLog(env, shard, 'slave')
         env.assertTrue(_retry_while_saving(replica.save))
-        keys = _assert_shard_documents(env, replica, documents)
+        _assert_shard_documents(env, replica, documents, keys)
         _expect_stream_save(env, log, min_refs=len(keys) - 1)
         log = _ServerLog(env, shard, 'slave')
         _retry_while_saving(lambda: replica.execute_command('DEBUG', 'RELOAD'))
-        _assert_shard_documents(env, replica, documents)
+        _assert_shard_documents(env, replica, documents, keys)
         _expect_stream_load(env, log, min_refs=len(keys) - 1)
     finally:
         # Attach it back to its master, as the other tests expect.
