@@ -32,11 +32,19 @@ KEYS = 1000
 SHARED_STRINGS = 4
 
 
+def _is_flex(env):
+    return env.getConnection().config_get('bigredis-enabled').get('bigredis-enabled') == 'yes'
+
+
 def _plain_env():
     env = Env(decodeResponses=True)
-    # Other lanes run the AOF and replication paths in test_rdb_dictionary.py.
-    if env.isCluster() or env.useSlaves or env.useAof or env.env.endswith('existing-env'):
+    # Other lanes run the AOF and replication paths in test_rdb_dictionary.py. Flex saves each value
+    # on its own (`mode=local reason=flex`), so it writes no stream to check.
+    if (env.isCluster() or env.useSlaves or env.useAof or env.env.endswith('existing-env') or
+            _is_flex(env)):
         env.skip()
+    # The checks count every key the server holds.
+    env.expect('FLUSHALL').equal(True)
     return env
 
 
