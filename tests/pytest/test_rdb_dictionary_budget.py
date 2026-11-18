@@ -2,7 +2,7 @@
 
 `json-rdb-dictionary-max-memory-percent` caps the string table of one save at a share of the memory
 Redis uses when the save starts, and 0 turns sharing off. Each save reads it when it starts, and a
-module argument outside 0 to 100 counts as its nearest bound. A table that fills is cleared before
+module argument outside 0 to 100 must stop the module from loading. A table that fills is cleared before
 the next document that defines strings. These tests check each rule on one plain server, through
 the module's log lines and a reload of every document.
 """
@@ -12,10 +12,12 @@ import json
 import os
 import random
 import re
+import shutil
 import string
+import subprocess
+import tempfile
 import time
 
-from RLTest import Env
 from redis.exceptions import ResponseError
 
 from common import TimeLimit
@@ -193,38 +195,53 @@ def test_a_config_change_applies_from_the_next_save(env):
         connection.config_set(WRITER_BUDGET, original)
 
 
-def _save_with_module_argument(argument, start_line):
-    """A server whose module argument is out of range: its save logs `start_line`, and every
-    document reloads. Returns the env, its documents, the log, the save's start line and the
-    used_memory just before the save."""
-    env = Env(moduleArgs=f'{WRITER_BUDGET} {argument}', noDefaultModuleArgs=True,
-              decodeResponses=True)
+def _start_with_module_argument(env, argument):
+    """Starts a server of its own that loads the module with `argument` as the budget, waits until
+    it is ready or has stopped, then stops it. Returns whether it came up, and its log."""
+    runner = env.envRunner
+    directory = tempfile.mkdtemp(prefix='budget')
+    log_path = os.path.join(directory, 'redis.log')
+    command = [runner.redisBinaryPath, '--loadmodule', runner.modulePath[0], WRITER_BUDGET, argument,
+               '--port', '0', '--unixsocket', os.path.join(directory, 'redis.sock'), '--dir', directory,
+               '--logfile', log_path, '--save', '']
+    process = subprocess.Popen(command, cwd=directory, env=runner.masterOSEnv,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def log():
+        try:
+            with open(log_path, errors='replace') as file:
+                return file.read()
+        except OSError:
+            return ''
+
+    try:
+        with TimeLimit(60):
+            while process.poll() is None and 'Ready to accept connections' not in log():
+                time.sleep(0.05)
+        return process.poll() is None, log()
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            process.wait()
+        shutil.rmtree(directory, ignore_errors=True)
+
+
+def test_a_module_argument_that_does_not_parse_is_refused(env):
     _plain_server(env)
-    connection = env.getConnection()
-    documents = _shared_documents()
-    _set_documents(env, documents)
-    log = _ServerLog(env)
-    used_memory = connection.info('memory')['used_memory']
-    env.assertTrue(_retry_while_saving(connection.save))
-    start = log.last('persistence_start')
-    env.assertContains(start_line, start)
-    env.expect('DEBUG', 'RELOAD').ok()
-    _assert_documents(env, documents)
-    # CONFIG SET still checks the range.
-    env.expect('CONFIG', 'SET', WRITER_BUDGET, argument).raiseError()
-    env.expect('CONFIG', 'SET', WRITER_BUDGET, '100').ok()
-    return env, documents, log, start, used_memory
+    # The control: with a value in range the same command starts a server.
+    up, log = _start_with_module_argument(env, '100')
+    env.assertTrue(up, message=log)
+    up, log = _start_with_module_argument(env, 'abc')
+    env.assertFalse(up, message=log)
 
 
-def test_a_module_argument_above_100_counts_as_100():
-    env, documents, log, start, used_memory = _save_with_module_argument('150', 'mode=stream percent=100 ')
-    # The whole of used_memory, not 150% of it.
-    env.assertAlmostEqual(_field(start, 'budget_bytes'), used_memory, used_memory // 10, message=start)
-    env.assertGreaterEqual(_field(log.summary_of(start), 'refs'), len(documents) - 1)
-
-
-def test_a_negative_module_argument_turns_sharing_off():
-    _save_with_module_argument('-5', 'mode=plain reason=off percent=0 budget_bytes=0')
+def test_a_module_argument_outside_0_to_100_is_refused(env):
+    # Fails until MOD-21358 is fixed: the module does not check the range of a module argument yet,
+    # so these load and each save clamps the value.
+    _plain_server(env)
+    for argument in ('-1', '101'):
+        up, log = _start_with_module_argument(env, argument)
+        env.assertFalse(up, message=f'{argument}: {log}')
 
 
 def test_a_table_that_fills_resets_and_stays_within_its_budget(env):
