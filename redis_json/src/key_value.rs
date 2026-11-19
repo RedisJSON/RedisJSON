@@ -171,6 +171,33 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
+    fn read_results<const PATHS: bool>(
+        &self,
+        query: Query,
+        legacy: bool,
+    ) -> Option<Values<'_, V>> {
+        if PATHS {
+            Some(Values::Computed(self.path_results(query)))
+        } else if query.is_projection() {
+            Some(Values::Computed(calc_once_projection(query, self.val.as_ref())))
+        } else {
+            let results = calc_once(query, self.val.as_ref());
+            if legacy {
+                results.into_iter().next().map(Values::Single)
+            } else {
+                Some(Values::Multi(results))
+            }
+        }
+    }
+
+    fn results_to_resp3(results: Values<'_, V>, format: &ReplyFormatOptions) -> RedisValue {
+        match results {
+            Values::Single(value) => Self::value_to_resp3(value.as_ref(), format),
+            Values::Multi(values) => Self::values_to_resp3(&values, format),
+            Values::Computed(values) => Self::projection_to_resp3(values, format),
+        }
+    }
+
     fn to_json_multi<const PATHS: bool>(
         &self,
         paths: Vec<Path>,
@@ -189,24 +216,7 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 .fold(HashMap::with_capacity(path_len), |mut acc, path: Path| {
                     // If we can't compile the path, we can't continue
                     if let Ok(query) = compile(path.get_path()) {
-                        let value = if PATHS {
-                            Some(Values::Computed(self.path_results(query)))
-                        } else if query.is_projection() {
-                            // A projection always contributes a result: its computed values, or
-                            // an empty array for Nothing (like a non-matching JSONPath) — never a
-                            // missing-path error.
-                            Some(Values::Computed(calc_once_projection(
-                                query,
-                                self.val.as_ref(),
-                            )))
-                        } else {
-                            let results = calc_once(query, self.val.as_ref());
-                            if is_legacy {
-                                (!results.is_empty()).then(|| Values::Single(results[0].clone()))
-                            } else {
-                                Some(Values::Multi(results))
-                            }
-                        };
+                        let value = self.read_results::<PATHS>(query, is_legacy);
 
                         if value.is_none() && missing_path.is_none() {
                             missing_path = Some(path.get_original().to_string());
@@ -225,12 +235,9 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
                 .into_iter()
                 .map(|(k, v)| {
                     let key = RedisValueKey::String(k.to_string());
-                    let value = match v {
-                        Some(Values::Single(value)) => Self::value_to_resp3(value.as_ref(), format),
-                        Some(Values::Multi(values)) => Self::values_to_resp3(&values, format),
-                        Some(Values::Computed(vals)) => Self::projection_to_resp3(vals, format),
-                        None => RedisValue::Null,
-                    };
+                    let value = v.map_or(RedisValue::Null, |results| {
+                        Self::results_to_resp3(results, format)
+                    });
                     (key, value)
                 })
                 .collect();
@@ -257,20 +264,8 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         // Propagate a compile error (e.g. a malformed projection `$.a +`) rather than masking
         // it as an empty array, so RESP3 errors consistently with the RESP2 path.
         let q = compile(path.get_path())?;
-        if PATHS {
-            return Ok(Self::projection_to_resp3(self.path_results(q), format));
-        }
-        if q.is_projection() {
-            Ok(Self::projection_to_resp3(
-                calc_once_projection(q, self.val.as_ref()),
-                format,
-            ))
-        } else {
-            Ok(Self::values_to_resp3(
-                &calc_once(q, self.val.as_ref()),
-                format,
-            ))
-        }
+        let results = self.read_results::<PATHS>(q, false).ok_or_else(err_invalid_path)?;
+        Ok(Self::results_to_resp3(results, format))
     }
 
     fn to_json_single<const PATHS: bool>(
@@ -279,23 +274,10 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         format: &ReplyFormatOptions,
         is_legacy: bool,
     ) -> RedisResult {
-        if PATHS {
-            let results = self.path_results(compile(path)?);
-            return Ok(Self::serialize_object(&results, format)?.into());
-        }
-        let res = if is_legacy {
-            self.to_string_single(path, format)?.into()
-        } else if format.is_resp3_reply() {
-            let query = compile(path)?;
-            if query.is_projection() {
-                Self::projection_to_resp3(calc_once_projection(query, self.val.as_ref()), format)
-            } else {
-                Self::values_to_resp3(&calc_once(query, self.val.as_ref()), format)
-            }
-        } else {
-            self.to_string_multi(path, format)?.into()
-        };
-        Ok(res)
+        let results = self
+            .read_results::<PATHS>(compile(path)?, is_legacy)
+            .ok_or_else(err_invalid_path)?;
+        Ok(Self::serialize_object(&results, format)?.into())
     }
 
     fn values_to_resp3(values: &[ValueRef<'_, V>], format: &ReplyFormatOptions) -> RedisValue {
