@@ -15,7 +15,7 @@ def test_acl_json_commands(env):
         'json.del', 'json.get', 'json.mget', 'json.set', 'json.mset', 'json.type', 'json.numincrby', 'json.toggle',
         'json.nummultby', 'json.numpowby', 'json.strappend', 'json.strlen', 'json.arrappend', 'json.arrindex',
         'json.arrinsert', 'json.arrlen', 'json.arrpop', 'json.arrtrim', 'json.objkeys', 'json.objlen', 'json.clear',
-        'json.debug', 'json.forget', 'json.resp', 'json.merge', 'json.exist',
+        'json.debug', 'json.forget', 'json.resp', 'json.merge', 'json.exist', 'json.path',
     ]
 
     # Use a set since the order of the response is not consistent.
@@ -45,7 +45,7 @@ def test_acl_non_default_user(env):
 
     READ_JSON_COMMANDS = [
         'json.get', 'json.type', 'json.strlen', 'json.arrlen', 'json.objlen',
-        'json.debug', 'json.arrindex', 'json.objkeys', 'json.exist',
+        'json.debug', 'json.arrindex', 'json.objkeys', 'json.exist', 'json.path',
     ]
 
     # `testusr` should now be able to run `read` commands like `json.get'

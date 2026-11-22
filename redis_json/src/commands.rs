@@ -435,11 +435,17 @@ fn json_read_command_impl<M: Manager, const PATHS: bool>(
     }
 
     if paths.is_empty() {
-        paths.push(if PATHS { JSON_ROOT_PATH } else { Path::default() });
+        paths.push(if PATHS {
+            JSON_ROOT_PATH
+        } else {
+            Path::default()
+        });
     }
     // Keep PATH results as match arrays, without GET's legacy scalar/first-match semantics.
     if PATHS && paths.iter().any(Path::is_legacy) {
-        return Err(RedisError::Str("ERR JSON.PATH does not support legacy paths"));
+        return Err(RedisError::Str(
+            "ERR JSON.PATH does not support legacy paths",
+        ));
     }
 
     let key = manager.open_key_read(ctx, &key)?;

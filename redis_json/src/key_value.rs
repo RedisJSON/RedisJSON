@@ -171,15 +171,14 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
     }
 
-    fn read_results<const PATHS: bool>(
-        &self,
-        query: Query,
-        legacy: bool,
-    ) -> Option<Values<'_, V>> {
+    fn read_results<const PATHS: bool>(&self, query: Query, legacy: bool) -> Option<Values<'_, V>> {
         if PATHS {
             Some(Values::Computed(self.path_results(query)))
         } else if query.is_projection() {
-            Some(Values::Computed(calc_once_projection(query, self.val.as_ref())))
+            Some(Values::Computed(calc_once_projection(
+                query,
+                self.val.as_ref(),
+            )))
         } else {
             let results = calc_once(query, self.val.as_ref());
             if legacy {
@@ -248,7 +247,11 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         Ok(res)
     }
 
-    fn to_resp3<const PATHS: bool>(&self, paths: Vec<Path>, format: &ReplyFormatOptions) -> RedisResult {
+    fn to_resp3<const PATHS: bool>(
+        &self,
+        paths: Vec<Path>,
+        format: &ReplyFormatOptions,
+    ) -> RedisResult {
         let results = paths
             .into_iter()
             .map(|path: Path| self.to_resp3_path::<PATHS>(&path, format))
@@ -264,7 +267,9 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         // Propagate a compile error (e.g. a malformed projection `$.a +`) rather than masking
         // it as an empty array, so RESP3 errors consistently with the RESP2 path.
         let q = compile(path.get_path())?;
-        let results = self.read_results::<PATHS>(q, false).ok_or_else(err_invalid_path)?;
+        let results = self
+            .read_results::<PATHS>(q, false)
+            .ok_or_else(err_invalid_path)?;
         Ok(Self::results_to_resp3(results, format))
     }
 
@@ -463,7 +468,9 @@ impl<'a, V: SelectValue + 'a> KeyValue<'a, V> {
         }
         let mut paths = Vec::new();
         let _ = visit_once_with_paths(query, self.val.as_ref(), |matched| {
-            let tracker = matched.path_tracker.expect("stored match has a path tracker");
+            let tracker = matched
+                .path_tracker
+                .expect("stored match has a path tracker");
             let capacity = 1 + tracker
                 .elements
                 .iter()
