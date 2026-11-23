@@ -90,6 +90,19 @@ pub fn calc_once<'j, 'p, S: SelectValue>(q: Query<'j>, json: &'p S) -> Vec<Value
     .collect()
 }
 
+/// Test for a stored match without collecting values or tracking paths.
+/// The caller must reject projection queries before calling this function.
+pub fn exists<S: SelectValue>(q: Query<'_>, json: &S) -> bool {
+    PathCalculator::<DummyTrackerGenerator> {
+        query: None,
+        tracker_generator: None,
+    }
+    .visit_with_paths_on_root(ValueRef::Borrowed(json), q.root, &mut |_| {
+        std::ops::ControlFlow::Break(())
+    })
+    .is_break()
+}
+
 /// Calc once for a projection query (e.g. `$.a + 1`, `$arr.length()`, `$.obj.keys()`,
 /// `$.a.append(x)`): returns the flat list of computed values as impl-independent
 /// `serde_json::Value`s (empty for Nothing). A scalar projection yields a 1-element list;
