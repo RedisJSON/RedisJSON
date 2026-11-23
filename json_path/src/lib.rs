@@ -170,6 +170,51 @@ mod json_path_tests {
     use serde_json::Value;
 
     #[test]
+    fn exists_matches_stored_values() {
+        let doc = json!({"items": [null, false, 0, "", [], {}]});
+        for path in [
+            "$",
+            "$.items[*]",
+            "$.items[0]",
+            "$.items[1]",
+            "$.items[2]",
+            "$.items[3]",
+            "$.items[4]",
+            "$.items[5]",
+        ] {
+            assert!(crate::exists(crate::compile(path).unwrap(), &doc), "{path}");
+        }
+        for path in ["$.missing", "$.items[6]", "$.items[?@ == 42]"] {
+            assert!(
+                !crate::exists(crate::compile(path).unwrap(), &doc),
+                "{path}"
+            );
+        }
+    }
+
+    #[test]
+    fn exists_stops_after_first_match() {
+        let doc = json!({"items": [
+            {"value": "a", "pattern": "a"},
+            {"value": "b", "pattern": "b"},
+            {"value": "c", "pattern": "c"}
+        ]});
+        let path = "$.items[?match(@.value, @.pattern)]";
+
+        // Distinct patterns make each visited item observable through the existing counter.
+        json_path::REGEX_COMPILE_CALLS.with(|c| c.set(0));
+        assert!(crate::exists(crate::compile(path).unwrap(), &doc));
+        assert_eq!(json_path::REGEX_COMPILE_CALLS.with(|c| c.get()), 1);
+
+        json_path::REGEX_COMPILE_CALLS.with(|c| c.set(0));
+        assert_eq!(
+            crate::calc_once(crate::compile(path).unwrap(), &doc).len(),
+            3
+        );
+        assert_eq!(json_path::REGEX_COMPILE_CALLS.with(|c| c.get()), 3);
+    }
+
+    #[test]
     fn streaming_matches_preserve_order_duplicates_and_filter_isolation() {
         let doc = json!({
             "limit": 10,
