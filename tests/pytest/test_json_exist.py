@@ -27,4 +27,8 @@ def test_json_exist_errors():
     env.expect('JSON.EXIST', 'string', '$').raiseError()
     env.expect('JSON.EXIST', 'doc').raiseError()
     env.expect('JSON.EXIST', 'doc', '$', '$').raiseError()
+
+
+def test_json_exist_getkeys():
+    env = Env(decodeResponses=True)
     env.expect('COMMAND GETKEYS', 'JSON.EXIST', 'doc', '$').equal(['doc'])
