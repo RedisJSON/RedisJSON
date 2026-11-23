@@ -208,6 +208,7 @@ macro_rules! json_get_command {
 }
 /// JSON.EXIST <key> <path>
 #[macro_export]
+// rustfmt over-indents the command attribute on successive runs without this skip.
 #[rustfmt::skip]
 macro_rules! json_exist_command {
     ($item:item) => {

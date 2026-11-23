@@ -6,12 +6,12 @@ def test_json_exist_matches():
     for protocol in (2, 3):
         env = Env(protocol=protocol, decodeResponses=True)
         env.expect('JSON.SET', 'doc', '$', json.dumps(
-            {'items': [None, False, 0, '', [], {}]})).ok()
-        for path in ['$', '$.items[*]', '$.items[0,0]', '.items']:
+            {'items': [None, False, 0, '', [], {}], 'nested': {'x': 1}})).ok()
+        for path in ['$', '$.items[*]', '$.items[0,0]', '.items', '$..x']:
             env.expect('JSON.EXIST', 'doc', path).equal(1)
         for index in range(6):
             env.expect('JSON.EXIST', 'doc', '$.items[%d]' % index).equal(1)
-        for path in ['$.absent', '$.items[99]', '$.items[?(@ == 42)]']:
+        for path in ['$.absent', '$.items[99]', '$.items[?(@ == 42)]', '$..missing']:
             env.expect('JSON.EXIST', 'doc', path).equal(0)
         env.expect('JSON.EXIST', 'missing', '$').equal(0)
         env.expect('EXISTS', 'missing').equal(0)
