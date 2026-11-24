@@ -206,6 +206,66 @@ macro_rules! json_get_command {
         $item
     };
 }
+/// JSON.EXIST <key> <path>
+#[macro_export]
+// rustfmt over-indents the command attribute on successive runs without this skip.
+#[rustfmt::skip]
+macro_rules! json_exist_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
+            {
+                name: "json.exist",
+                flags: [ReadOnly],
+                acl_categories: [Read, Single("json")],
+                arity: 3,
+                complexity: "O(N) where N is the size of the JSON",
+                since: "99.99.99",
+                summary: "Check whether a path matches a stored JSON value",
+                key_spec: [
+                    {
+                        flags: [ReadOnly],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
+                    },
+                    {
+                        name: "path",
+                        arg_type: String,
+                    }
+                ]
+            }
+        )]
+        $item
+    };
+}
+
+pub fn json_exist_command_impl<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
+    let mut args = args.into_iter().skip(1);
+    let key = args.next_arg()?;
+    let path = Path::new(args.next_str()?);
+    args.done()?;
+    let query = compile(path.get_path())?;
+    if query.is_projection() {
+        return Err(err_projection_readonly());
+    }
+    let key = manager.open_key_read(ctx, &key)?;
+    let exists = match key.get_value()? {
+        Some(value) => json_path::exists(query, value),
+        None => false,
+    };
+    Ok(RedisValue::Integer(i64::from(exists)))
+}
+
 pub fn json_get_command_impl<M: Manager>(
     manager: M,
     ctx: &Context,

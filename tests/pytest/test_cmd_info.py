@@ -132,6 +132,21 @@ class testCommandDocsAndHelp:
             group="module",
         )
     
+    def test_command_docs_json_exist(self):
+        env = self.env
+        if server_version_is_less_than("7.0.0"):
+            env.skip()
+        assert_docs(
+            env,
+            "json.exist",
+            summary="Check whether a path matches a stored JSON value",
+            complexity="O(N) where N is the size of the JSON",
+            arity=3,
+            since="99.99.99",
+            group="module",
+            args=[("key", "key"), ("path", "string")],
+        )
+
     def test_command_docs_json_forget(self):
         env = self.env
         if server_version_is_less_than("7.0.0"):

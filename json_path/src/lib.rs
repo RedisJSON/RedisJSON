@@ -90,6 +90,19 @@ pub fn calc_once<'j, 'p, S: SelectValue>(q: Query<'j>, json: &'p S) -> Vec<Value
     .collect()
 }
 
+/// Test for a stored match without collecting values or tracking paths.
+/// The caller must reject projection queries before calling this function.
+pub fn exists<S: SelectValue>(q: Query<'_>, json: &S) -> bool {
+    PathCalculator::<DummyTrackerGenerator> {
+        query: None,
+        tracker_generator: None,
+    }
+    .visit_with_paths_on_root(ValueRef::Borrowed(json), q.root, &mut |_| {
+        std::ops::ControlFlow::Break(())
+    })
+    .is_break()
+}
+
 /// Calc once for a projection query (e.g. `$.a + 1`, `$arr.length()`, `$.obj.keys()`,
 /// `$.a.append(x)`): returns the flat list of computed values as impl-independent
 /// `serde_json::Value`s (empty for Nothing). A scalar projection yields a 1-element list;
@@ -155,6 +168,51 @@ mod json_path_tests {
     use crate::{create, create_with_generator};
     use serde_json::json;
     use serde_json::Value;
+
+    #[test]
+    fn exists_matches_stored_values() {
+        let doc = json!({"items": [null, false, 0, "", [], {}]});
+        for path in [
+            "$",
+            "$.items[*]",
+            "$.items[0]",
+            "$.items[1]",
+            "$.items[2]",
+            "$.items[3]",
+            "$.items[4]",
+            "$.items[5]",
+        ] {
+            assert!(crate::exists(crate::compile(path).unwrap(), &doc), "{path}");
+        }
+        for path in ["$.missing", "$.items[6]", "$.items[?@ == 42]"] {
+            assert!(
+                !crate::exists(crate::compile(path).unwrap(), &doc),
+                "{path}"
+            );
+        }
+    }
+
+    #[test]
+    fn exists_stops_after_first_match() {
+        let doc = json!({"items": [
+            {"value": "a", "pattern": "a"},
+            {"value": "b", "pattern": "b"},
+            {"value": "c", "pattern": "c"}
+        ]});
+        let path = "$.items[?match(@.value, @.pattern)]";
+
+        // Distinct patterns make each visited item observable through the existing counter.
+        json_path::REGEX_COMPILE_CALLS.with(|c| c.set(0));
+        assert!(crate::exists(crate::compile(path).unwrap(), &doc));
+        assert_eq!(json_path::REGEX_COMPILE_CALLS.with(|c| c.get()), 1);
+
+        json_path::REGEX_COMPILE_CALLS.with(|c| c.set(0));
+        assert_eq!(
+            crate::calc_once(crate::compile(path).unwrap(), &doc).len(),
+            3
+        );
+        assert_eq!(json_path::REGEX_COMPILE_CALLS.with(|c| c.get()), 3);
+    }
 
     #[test]
     fn streaming_matches_preserve_order_duplicates_and_filter_isolation() {
