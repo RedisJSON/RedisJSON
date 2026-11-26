@@ -181,10 +181,9 @@ def summary(results, baseline="baseline", candidate="pr"):
     lines = [
         "# RedisJSON command benchmarks: throughput", "",
         "Same workloads, sequential runs, fresh Redis per revision and test.",
-        "🟠 Benchmark name: retried because a previous pair differed by more than 5%; showing medians across all attempts.",
         "Change %: 🟢 improvement; 🟡 degradation below 5%; 🔴 degradation of 5% or more. Unchanged values are unmarked.",
         f"Each metric has {before_label}, {after_label}, and Change % columns. Higher throughput is better.",
-        "For retried tests, throughput columns show each revision’s median; Change % is the median of paired changes, not the change between those columns.",
+        "For repeated tests, throughput columns show each revision’s median; Change % is the median of paired changes, not the change between those columns.",
         f"{before_label} module SHA256: `{results['modules'][baseline]}`",
         f"{after_label} module SHA256: `{results['modules'][candidate]}`", "",
         '<table>',
@@ -193,12 +192,17 @@ def summary(results, baseline="baseline", candidate="pr"):
         '<tr>' + f'<th>{escape(before_label)}</th><th>{escape(after_label)}</th><th>Change %</th>' + '</tr></thead>',
         '<tbody>',
     ]
+    if any(value.get("attempt_count", 1) > 1 and "fixed_pairs" not in value
+           for pair in results["benchmarks"].values() for value in pair.values()):
+        lines.insert(4, "🟠 Benchmark name: retried because a previous pair differed by more than 5%; showing medians across all attempts.")
     for name, pair in results["benchmarks"].items():
         label = escape(name)
         attempts = max(value.get("attempt_count", 1) for value in pair.values())
         if attempts > 1:
             aggregation = " (median)" if "change_percent" in pair[candidate] else ""
-            label = "🟠 " + label + f"<br><small>{attempts} attempts{aggregation}</small>"
+            fixed = any("fixed_pairs" in value for value in pair.values())
+            unit = "pairs" if fixed else "attempts"
+            label = ("" if fixed else "🟠 ") + label + f"<br><small>{attempts} {unit}{aggregation}</small>"
         errors = [f"{revision}: {value['error']}" for revision, value in pair.items()
                   if "error" in value]
         if errors:
@@ -220,17 +224,21 @@ def summary(results, baseline="baseline", candidate="pr"):
     return "\n".join(lines) + "\n"
 
 
-def record_attempt(pair, directory, attempt, max_retries=3):
+def record_attempt(pair, directory, attempt, max_retries=3, fixed_pairs=None):
     history = directory / "attempts"
     history.mkdir(parents=True, exist_ok=True)
     (history / f"attempt-{attempt + 1}.json").write_text(json.dumps(pair, indent=2) + "\n")
     if any("error" in value for value in pair.values()):
         return False
     before, after = (value["ops_per_sec"] for value in pair.values())
-    if attempt == max_retries or (attempt == 0 and abs(after - before) * 100 <= before * 5):
+    limit = fixed_pairs - 1 if fixed_pairs is not None else max_retries
+    if attempt == limit or (fixed_pairs is None and attempt == 0 and abs(after - before) * 100 <= before * 5):
         return False
-    print(f"Retrying both runs for {directory.name}: change={(after / before - 1) * 100:+.2f}%, "
-          f"retry {attempt + 1}/{max_retries}", flush=True)
+    if fixed_pairs is not None:
+        print(f"Measuring pair {attempt + 2}/{fixed_pairs} for {directory.name}", flush=True)
+    else:
+        print(f"Retrying both runs for {directory.name}: change={(after / before - 1) * 100:+.2f}%, "
+              f"retry {attempt + 1}/{max_retries}", flush=True)
     archive = history / f"attempt-{attempt + 1}"
     archive.mkdir()
     for label in pair:
@@ -240,13 +248,15 @@ def record_attempt(pair, directory, attempt, max_retries=3):
     return True
 
 
-def run_pairs(specs, modules, output, run_fn, results, max_retries=3, abort_on=(), report_only_regressions=False):
+def run_pairs(specs, modules, output, run_fn, results, max_retries=3, abort_on=(), report_only_regressions=False, fixed_pairs=None):
+    if fixed_pairs is not None and fixed_pairs < 1:
+        raise ValueError("Pair count must be positive")
     failed = False
     aborted = False
     baseline, candidate = modules
     for spec in specs:
         attempts = []
-        for attempt in range(max_retries + 1):
+        for attempt in range(fixed_pairs if fixed_pairs is not None else max_retries + 1):
             # Keep result keys in baseline/candidate order even when execution is reversed.
             pair = results["benchmarks"][spec.stem] = {label: {} for label in modules}
             order = list(modules) if attempt % 2 == 0 else list(reversed(modules))
@@ -264,11 +274,13 @@ def run_pairs(specs, modules, output, run_fn, results, max_retries=3, abort_on=(
                     pair[label] = {"error": str(error)}
                     print(f"ERROR: {error}", flush=True)
                 finally:
+                    if fixed_pairs is not None:
+                        pair[label]["fixed_pairs"] = fixed_pairs
                     pair[label]["attempt_count"] = attempt + 1
                     pair[label]["run_seconds"] = round(time.monotonic() - started, 3)
                     (output / "comparison.json").write_text(json.dumps(results, indent=2) + "\n")
             attempts.append(pair)
-            if not record_attempt(pair, output / spec.stem, attempt, max_retries):
+            if not record_attempt(pair, output / spec.stem, attempt, max_retries, fixed_pairs):
                 break
         if len(attempts) > 1 and not any("error" in value for value in pair.values()):
             percent = median(100 * (item[candidate]["ops_per_sec"] - item[baseline]["ops_per_sec"])

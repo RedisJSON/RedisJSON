@@ -42,17 +42,20 @@ Temporary dataset copies escape non-ASCII JSON characters to work around the
 pinned runner's ASCII output parser; source fixtures and JSON values are unchanged.
 
 Reports contain throughput only. Percentage markers are 🟢 improvement,
-🟡 degradation below 5%, and 🔴 degradation of 5% or more. A difference strictly
+🟡 degradation below 5%, and 🔴 degradation of 5% or more.
+Event CI and local comparisons retain conditional retries: a difference strictly
 greater than 5% in either direction triggers three retries of both revisions,
 without stopping early if a later pair falls within 5%. Execution order alternates
 between baseline-first and candidate-first. 🟠 beside a test name indicates a retry.
-The report and promotion use the median of all paired percentage changes. Throughput
+Nightly always runs three measurement pairs per workload, regardless of the first
+result, alternating baseline-first and candidate-first, without conditional retries.
+The report and promotion use the median of the paired percentage changes. Throughput
 columns show each revision's median independently, so their ratio need not match
 the reported percentage. All original measurements remain under `attempts/`;
 the last run's logs stay in the label directory and earlier logs are archived.
 Execution errors stop retries and remain failures; incomplete sets are not aggregated.
 Final throughput degradation of 5% or more fails nightly comparisons and local runs,
-using the median paired change when retried. Event CI passes `--report-only-regressions`
+using the median paired change when repeated. Event CI passes `--report-only-regressions`
 to both shards and the merged report: regressions remain visible with the same markers
 and retries, but do not fail the jobs. Execution errors and invalid or missing results
 still fail Event CI. Improvements do not fail the comparison.
@@ -100,9 +103,9 @@ does not apply the AWS affinity configuration.
 
 Only scheduled runs may advance `benchmark-baseline`. Every workload must pass,
 none may degrade by 5% or more, and the geometric mean throughput improvement
-must be positive (greater than 0%, ignoring floating-point noise). A complete confirmation round uses the same binaries without
-retries and must satisfy the same criteria, with matching revisions, server
-version and coverage. The promotion job updates only `benchmark-baseline` to the
+must be positive (greater than 0%, ignoring floating-point noise). Nightly uses one round
+with three measurement pairs per workload and their median paired change, without
+a separate confirmation round. The promotion job updates only `benchmark-baseline` to the
 tested commit using a lease-protected push; concurrent changes are not overwritten.
 Branch protection must permit this update. Manual runs never promote the baseline.
 The nightly report's Master column denotes the candidate, including manual branches.
@@ -110,10 +113,9 @@ The nightly report's Master column denotes the candidate, including manual branc
 Merged reports verify workload coverage and binary identities. Logs, hashes,
 commit IDs and attempt histories are retained in Actions artifacts:
 `command-performance-<run>-<attempt>` for Event CI and
-`nightly-<initial|confirmation>-benchmarks-<run>` for nightly.
+`nightly-initial-benchmarks-<run>` for nightly.
 Failed jobs can reuse the shared build and successful shards when rerun.
-Nightly round artifacts use stable names across attempts, so confirmation reruns
-can reuse the initial report. Rerunning a report replaces its round artifact.
+Nightly artifacts use stable names across attempts. Rerunning a report replaces its artifact.
 
 ## Included benchmarks
 
@@ -135,10 +137,10 @@ input configuration. The local/Event CI and nightly comparison scripts remove
 modify the source YAML files. Their relative comparisons and nightly promotion
 criteria are described above.
 
-The initial nightly round also publishes final throughput for both branches to
+The nightly round also publishes final throughput for both branches to
 the existing Grafana RedisTimeSeries data source, using the legacy `circleci`
-environment, metric paths, and branch/commit series. After retries, the published
-throughput is each side's median. Confirmation rounds do not publish again.
+environment, metric paths, and branch/commit series. After the three pairs, the published
+throughput is each side's median.
 The build plan preserves the branch names and timestamp so report reruns replace
 the same samples. Execution-error pairs are skipped; invalid or missing shards
 block publication. Valid regressions are published even when the comparison fails.
@@ -147,8 +149,7 @@ The report job uses the existing `PERFORMANCE_RTS_HOST`, `PERFORMANCE_RTS_PORT`,
 and `PERFORMANCE_RTS_AUTH` secrets.
 
 The nightly comparison uploads merged reports as
-`nightly-initial-benchmarks-<run_id>` and, when a confirmation round runs,
-`nightly-confirmation-benchmarks-<run_id>`, with 30-day retention. It does not run
+`nightly-initial-benchmarks-<run_id>`, with 30-day retention. It does not run
 `update_kpis.py` or automatically open PRs to update YAML floors. The
 `benchmark-baseline` branch and the YAML floors are separate mechanisms.
 

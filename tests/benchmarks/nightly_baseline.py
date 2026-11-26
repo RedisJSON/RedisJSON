@@ -68,7 +68,7 @@ def evaluate(results):
     gain = math.expm1(sum(ratios) / len(ratios)) * 100
     eligible = gain > 1e-9  # Ignore floating-point noise around zero improvement.
     return eligible, (f'Geometric mean throughput change: {gain:+.2f}%. ' +
-                      ('Promotion criteria met (requires scheduled run and confirmation).' if eligible else
+                      ('Promotion criteria met (requires scheduled run on master).' if eligible else
                        'Overall improvement must be positive; baseline retained.'))
 
 
@@ -76,19 +76,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['resolve', 'evaluate'])
     parser.add_argument('results', type=Path, nargs='?')
-    parser.add_argument('--previous', type=Path)
     args = parser.parse_args()
     if args.command == 'resolve':
         resolve()
         return
     results = json.loads(args.results.read_text())
-    if args.previous:
-        previous = json.loads(args.previous.read_text())
-        for key in ('modules', 'revisions', 'redis'):
-            if results.get(key) != previous.get(key):
-                raise ValueError(f'Confirmation differs from initial round: {key}')
-        if set(results['benchmarks']) != set(previous['benchmarks']):
-            raise ValueError('Confirmation workload coverage differs from initial round')
     eligible, reason = evaluate(results)
     emit('eligible', str(eligible).lower())
     note(reason)

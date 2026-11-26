@@ -193,7 +193,7 @@ def compare(args):
         return value
 
     return run_pairs(specs, modules, output, run, results,
-                     max_retries=args.max_retries, abort_on=(RemoteResetError,))
+                     max_retries=args.max_retries, abort_on=(RemoteResetError,), fixed_pairs=args.pairs)
 
 
 def main():
@@ -206,6 +206,8 @@ def main():
     parser.add_argument('--master-dir', type=Path)
     parser.add_argument('--output', type=Path)
     parser.add_argument('--plan', type=Path)
+    parser.add_argument('--pairs', type=int, choices=range(1, 5),
+                        help='Fixed number of measurement pairs; overrides conditional retries')
     parser.add_argument('--max-retries', type=int, choices=range(4), default=3)
     parser.add_argument('--shard', type=int, default=0)
     args = parser.parse_args()

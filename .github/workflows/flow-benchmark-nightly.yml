@@ -127,21 +127,11 @@ jobs:
   initial:
     needs: build
     uses: ./.github/workflows/flow-benchmark-nightly-round.yml
-    with:
-      phase: initial
-    secrets: inherit
-
-  confirmation:
-    needs: initial
-    if: github.event_name == 'schedule' && github.ref == 'refs/heads/master' && needs.initial.outputs.eligible == 'true'
-    uses: ./.github/workflows/flow-benchmark-nightly-round.yml
-    with:
-      phase: confirmation
     secrets: inherit
 
   promote:
-    needs: [resolve, initial, confirmation]
-    if: github.event_name == 'schedule' && github.ref == 'refs/heads/master' && needs.initial.outputs.eligible == 'true' && needs.confirmation.outputs.eligible == 'true'
+    needs: [resolve, initial]
+    if: github.event_name == 'schedule' && github.ref == 'refs/heads/master' && needs.initial.outputs.eligible == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
