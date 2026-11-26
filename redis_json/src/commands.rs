@@ -266,7 +266,129 @@ pub fn json_exist_command_impl<M: Manager>(
     Ok(RedisValue::Integer(i64::from(exists)))
 }
 
+/// JSON.PATH <key> [INDENT indent] [NEWLINE newline] [SPACE space]
+///           [FORMAT {STRING|EXPAND1|EXPAND}] [path ...]
+#[macro_export]
+macro_rules! json_path_command {
+    ($item:item) => {
+        #[::redis_module_macros::command(
+            {
+                name: "json.path",
+                flags: [ReadOnly],
+                acl_categories: [Read, Single("json")],
+                arity: -2,
+                complexity: "O(N) where N is the size of the JSON",
+                since: "99.99.99",
+                summary: "Return the concrete paths of matched JSON values",
+                key_spec: [
+                    {
+                        flags: [ReadOnly],
+                        begin_search: Index({ index: 1 }),
+                        find_keys: Range({ last_key: 0, steps: 1, limit: 0 }),
+                    }
+                ],
+                args: [
+                    {
+                        name: "key",
+                        arg_type: Key,
+                        key_spec_index: 0,
+                    },
+                    {
+                        name: "indent",
+                        token: "INDENT",
+                        arg_type: Block,
+                        flags: [Optional],
+                        subargs: [
+                            {
+                                name: "indent",
+                                arg_type: String,
+                            }
+                        ]
+                    },
+                    {
+                        name: "newline",
+                        token: "NEWLINE",
+                        arg_type: Block,
+                        flags: [Optional],
+                        subargs: [
+                            {
+                                name: "newline",
+                                arg_type: String,
+                            }
+                        ]
+                    },
+                    {
+                        name: "space",
+                        token: "SPACE",
+                        arg_type: Block,
+                        flags: [Optional],
+                        subargs: [
+                            {
+                                name: "space",
+                                arg_type: String,
+                            }
+                        ]
+                    },
+                    {
+                        name: "format",
+                        token: "FORMAT",
+                        arg_type: Block,
+                        flags: [Optional],
+                        subargs: [
+                            {
+                                name: "format-token",
+                                arg_type: OneOf,
+                                subargs: [
+                                    {
+                                        name: "STRING",
+                                        arg_type: PureToken,
+                                        token: "STRING",
+                                    },
+                                    {
+                                        name: "EXPAND1",
+                                        arg_type: PureToken,
+                                        token: "EXPAND1",
+                                    },
+                                    {
+                                        name: "EXPAND",
+                                        arg_type: PureToken,
+                                        token: "EXPAND",
+                                    }
+                                ]
+
+                            }
+                        ]
+                    },
+                    {
+                        name: "path",
+                        arg_type: String,
+                        flags: [Optional, Multiple],
+                    }
+                ]
+            }
+        )]
+        $item
+    };
+}
+
 pub fn json_get_command_impl<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
+    json_read_command_impl::<M, false>(manager, ctx, args)
+}
+
+pub fn json_path_command_impl<M: Manager>(
+    manager: M,
+    ctx: &Context,
+    args: Vec<RedisString>,
+) -> RedisResult {
+    json_read_command_impl::<M, true>(manager, ctx, args)
+}
+
+// Specialize GET without path tracking or a per-match mode check.
+fn json_read_command_impl<M: Manager, const PATHS: bool>(
     manager: M,
     ctx: &Context,
     args: Vec<RedisString>,
@@ -312,14 +434,23 @@ pub fn json_get_command_impl<M: Manager>(
         };
     }
 
-    // path is optional -> no path found we use legacy root "."
     if paths.is_empty() {
-        paths.push(Path::default());
+        paths.push(if PATHS {
+            JSON_ROOT_PATH
+        } else {
+            Path::default()
+        });
+    }
+    // Keep PATH results as match arrays, without GET's legacy scalar/first-match semantics.
+    if PATHS && paths.iter().any(Path::is_legacy) {
+        return Err(RedisError::Str(
+            "ERR JSON.PATH does not support legacy paths",
+        ));
     }
 
     let key = manager.open_key_read(ctx, &key)?;
     let value = match key.get_value()? {
-        Some(doc) => KeyValue::new(doc).to_json(paths, &format_options)?,
+        Some(doc) => KeyValue::new(doc).to_json::<PATHS>(paths, &format_options)?,
         None => RedisValue::Null,
     };
 
